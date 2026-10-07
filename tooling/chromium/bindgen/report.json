@@ -1,5 +1,5 @@
 {
-  "bound": 4112,
+  "bound": 4490,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -700,16 +700,6 @@
       "interface": "Text",
       "member": "getBoxQuads/1",
       "why": "dictionary BoxQuadOptions has no member a C struct can carry"
-    },
-    {
-      "interface": "Document",
-      "member": "get implementation",
-      "why": "interface DOMImplementation is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "get doctype",
-      "why": "interface DocumentType is not bound"
     },
     {
       "interface": "Document",
@@ -2188,11 +2178,6 @@
     },
     {
       "interface": "Document",
-      "member": "createCDATASection/1",
-      "why": "interface CDATASection is not bound"
-    },
-    {
-      "interface": "Document",
       "member": "createElement/2",
       "why": "parameter type (DOMString or ElementCreationOptions)"
     },
@@ -2209,17 +2194,22 @@
     {
       "interface": "Document",
       "member": "createNodeIterator/3",
-      "why": "interface NodeIterator is not bound"
+      "why": "parameter type optional NodeFilter?"
     },
     {
       "interface": "Document",
-      "member": "createProcessingInstruction/2",
-      "why": "interface ProcessingInstruction is not bound"
+      "member": "createNodeIterator/1",
+      "why": "default `0xFFFFFFFF` of argument whatToShow"
     },
     {
       "interface": "Document",
       "member": "createTreeWalker/3",
-      "why": "interface TreeWalker is not bound"
+      "why": "parameter type optional NodeFilter?"
+    },
+    {
+      "interface": "Document",
+      "member": "createTreeWalker/1",
+      "why": "default `0xFFFFFFFF` of argument whatToShow"
     },
     {
       "interface": "Document",
@@ -4250,11 +4240,6 @@
       "interface": "InputEventInit",
       "member": "targetRanges",
       "why": "dictionary member of type optional sequence<StaticRange>"
-    },
-    {
-      "interface": "InputEvent",
-      "member": "get dataTransfer",
-      "why": "interface DataTransfer is not bound"
     },
     {
       "interface": "PointerEventInit",
@@ -6518,6 +6503,11 @@
     },
     {
       "interface": "CanvasRenderingContext2D",
+      "member": "get filter",
+      "why": "result type (DOMString or CanvasFilter)?"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
       "member": "get globalHDRHeadroom",
       "why": "[RuntimeEnabled]"
     },
@@ -7450,6 +7440,671 @@
       "interface": "HTMLLegendElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "DataTransfer",
+      "member": "get types",
+      "why": "result type FrozenArray<DOMString>"
+    },
+    {
+      "interface": "DataTransfer",
+      "member": "get files",
+      "why": "interface FileList is not bound"
+    },
+    {
+      "interface": "DataTransferItem",
+      "member": "getAsFile/0",
+      "why": "interface File is not bound"
+    },
+    {
+      "interface": "DataTransferItem",
+      "member": "getAsFileSystemHandle/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "DataTransferItem",
+      "member": "getAsString/1",
+      "why": "parameter type FunctionStringCallback?"
+    },
+    {
+      "interface": "DataTransferItem",
+      "member": "webkitGetAsEntry/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "DataTransferItemList",
+      "member": "add/1",
+      "why": "interface File is not bound"
+    },
+    {
+      "interface": "DragEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
+    },
+    {
+      "interface": "DragEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "DragEventInit",
+      "member": "region",
+      "why": "dictionary member of type optional DOMString?"
+    },
+    {
+      "interface": "DragEventInit",
+      "member": "relatedTarget",
+      "why": "dictionary member of type optional EventTarget?"
+    },
+    {
+      "interface": "DragEventInit",
+      "member": "dataTransfer",
+      "why": "dictionary member of type optional DataTransfer?"
+    },
+    {
+      "interface": "CompositionEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
+    },
+    {
+      "interface": "CompositionEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "CompositionEventInit",
+      "member": "data",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "TouchEventInit",
+      "member": "sourceCapabilities",
+      "why": "dictionary member of type optional InputDeviceCapabilities?"
+    },
+    {
+      "interface": "TouchEventInit",
+      "member": "view",
+      "why": "dictionary member of type optional Window?"
+    },
+    {
+      "interface": "TouchEventInit",
+      "member": "changedTouches",
+      "why": "dictionary member of type optional sequence<Touch>"
+    },
+    {
+      "interface": "TouchEventInit",
+      "member": "targetTouches",
+      "why": "dictionary member of type optional sequence<Touch>"
+    },
+    {
+      "interface": "TouchEventInit",
+      "member": "touches",
+      "why": "dictionary member of type optional sequence<Touch>"
+    },
+    {
+      "interface": "Touch",
+      "member": "constructor/1",
+      "why": "dictionary TouchInit's required member target (dictionary member of type EventTarget)"
+    },
+    {
+      "interface": "ClipboardEventInit",
+      "member": "clipboardData",
+      "why": "dictionary member of type optional DataTransfer?"
+    },
+    {
+      "interface": "AnimationEventInit",
+      "member": "animationName",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "AnimationEventInit",
+      "member": "pseudoElement",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "AnimationEvent",
+      "member": "get pseudoTarget",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "AnimationEvent",
+      "member": "get animation",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TransitionEventInit",
+      "member": "propertyName",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "TransitionEventInit",
+      "member": "pseudoElement",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "TransitionEvent",
+      "member": "get pseudoTarget",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "TransitionEvent",
+      "member": "get animation",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "SubmitEventInit",
+      "member": "submitter",
+      "why": "dictionary member of type optional HTMLElement?"
+    },
+    {
+      "interface": "SubmitEvent",
+      "member": "get agentInvoked",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "SubmitEvent",
+      "member": "respondWith/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HashChangeEventInit",
+      "member": "newURL",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "HashChangeEventInit",
+      "member": "oldURL",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "ErrorEventInit",
+      "member": "error",
+      "why": "dictionary member of type optional any"
+    },
+    {
+      "interface": "ErrorEventInit",
+      "member": "filename",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "ErrorEventInit",
+      "member": "message",
+      "why": "dictionary member of type optional DOMString"
+    },
+    {
+      "interface": "ErrorEvent",
+      "member": "get error",
+      "why": "result type any"
+    },
+    {
+      "interface": "FormData",
+      "member": "append/3",
+      "why": "interface Blob is not bound"
+    },
+    {
+      "interface": "FormData",
+      "member": "append/2",
+      "why": "interface Blob is not bound"
+    },
+    {
+      "interface": "FormData",
+      "member": "get/1",
+      "why": "result type FormDataEntryValue?"
+    },
+    {
+      "interface": "FormData",
+      "member": "getAll/1",
+      "why": "result type sequence<FormDataEntryValue>"
+    },
+    {
+      "interface": "FormData",
+      "member": "set/3",
+      "why": "interface Blob is not bound"
+    },
+    {
+      "interface": "FormData",
+      "member": "set/2",
+      "why": "interface Blob is not bound"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get loading",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "set loading",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get latencyHint",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "set latencyHint",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get audioTracks",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get videoTracks",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get textTracks",
+      "why": "interface TextTrackList is not bound"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get sinkId",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get mediaKeys",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get onencrypted",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get onencrypted",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "set onencrypted",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get onwaitingforkey",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get onwaitingforkey",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "set onwaitingforkey",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get remote",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get disableRemotePlayback",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "set disableRemotePlayback",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "get srcObject",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "set srcObject",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "addTextTrack/3",
+      "why": "interface TextTrack is not bound"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "captureStream/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "play/0",
+      "why": "result type Promise<undefined>"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "setMediaKeys/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLMediaElement",
+      "member": "setSinkId/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "get onenterpictureinpicture",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "get onenterpictureinpicture",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "set onenterpictureinpicture",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "get onleavepictureinpicture",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "get onleavepictureinpicture",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "set onleavepictureinpicture",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "get disablePictureInPicture",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "set disablePictureInPicture",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "cancelVideoFrameCallback/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "getVideoPlaybackQuality/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "requestPictureInPicture/0",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLVideoElement",
+      "member": "requestVideoFrameCallback/1",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLAudioElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "get connectionAllowlist",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "set connectionAllowlist",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "get featurePolicy",
+      "why": "interface PermissionsPolicy is not bound"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "get permissionsPolicy",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "get policy",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "set policy",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "get privateToken",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "set privateToken",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "get browsingTopics",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "set browsingTopics",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "get credentialless",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "set credentialless",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "get allowPaymentRequest",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLIFrameElement",
+      "member": "set allowPaymentRequest",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLLinkElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLStyleElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "get cacheHint",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "set cacheHint",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "get signature",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "set signature",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "get textContent",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "set textContent",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "get innerText",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "set innerText",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLScriptElement",
+      "member": "supports/1",
+      "why": "static"
+    },
+    {
+      "interface": "TreeWalker",
+      "member": "get filter",
+      "why": "result type NodeFilter?"
+    },
+    {
+      "interface": "NodeIterator",
+      "member": "get filter",
+      "why": "result type NodeFilter?"
+    },
+    {
+      "interface": "DOMImplementation",
+      "member": "createDocument/3",
+      "why": "interface XMLDocument is not bound"
+    },
+    {
+      "interface": "ProcessingInstruction",
+      "member": "getAttribute/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ProcessingInstruction",
+      "member": "getAttributeNames/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ProcessingInstruction",
+      "member": "hasAttribute/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ProcessingInstruction",
+      "member": "hasAttributes/0",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ProcessingInstruction",
+      "member": "removeAttribute/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ProcessingInstruction",
+      "member": "setAttribute/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ProcessingInstruction",
+      "member": "toggleAttribute/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "afterHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "afterHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "beforeHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "beforeHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "replaceWithHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "replaceWithHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "streamAfterHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "streamAfterHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "streamBeforeHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "streamBeforeHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "streamReplaceWithHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "DocumentType",
+      "member": "streamReplaceWithHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
     }
   ]
 }

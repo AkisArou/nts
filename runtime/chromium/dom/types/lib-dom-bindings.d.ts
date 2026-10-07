@@ -30,7 +30,7 @@ interface Animation {}
  */
 interface AnimationEffect {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" AnimationEvent
  * @ntsIs nts_dom_is 5
  */
 interface AnimationEvent {}
@@ -66,7 +66,7 @@ interface Blob {}
  */
 interface ByteLengthQueuingStrategy {}
 /**
- * @ntsBoundBy "nts:dom" Text
+ * @ntsBoundBy "nts:dom" CDATASection
  * @ntsIs nts_dom_is 18
  */
 interface CDATASection {}
@@ -334,7 +334,7 @@ interface CaretPosition {}
  */
 interface CharacterData {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" ClipboardEvent
  * @ntsIs nts_dom_is 101
  */
 interface ClipboardEvent {}
@@ -349,7 +349,7 @@ interface CommandEvent {}
  */
 interface Comment {}
 /**
- * @ntsBoundBy "nts:dom" UIEvent
+ * @ntsBoundBy "nts:dom" CompositionEvent
  * @ntsIs nts_dom_is 106
  */
 interface CompositionEvent {}
@@ -380,6 +380,7 @@ interface CustomStateSet {}
  */
 interface DOMException {}
 /**
+ * @ntsBoundBy "nts:dom" DOMImplementation
  * @ntsIs nts_dom_is 117
  */
 interface DOMImplementation {}
@@ -392,6 +393,7 @@ interface DOMMatrix {}
  */
 interface DOMMatrixReadOnly {}
 /**
+ * @ntsBoundBy "nts:dom" DOMParser
  * @ntsIs nts_dom_is 120
  */
 interface DOMParser {}
@@ -440,14 +442,17 @@ interface DOMStringMap {}
  */
 interface DOMTokenList {}
 /**
+ * @ntsBoundBy "nts:dom" DataTransfer
  * @ntsIs nts_dom_is 130
  */
 interface DataTransfer {}
 /**
+ * @ntsBoundBy "nts:dom" DataTransferItem
  * @ntsIs nts_dom_is 131
  */
 interface DataTransferItem {}
 /**
+ * @ntsBoundBy "nts:dom" DataTransferItemList
  * @ntsIs nts_dom_is 132
  */
 interface DataTransferItemList {}
@@ -466,12 +471,12 @@ interface DocumentFragment {}
  */
 interface DocumentTimeline {}
 /**
- * @ntsBoundBy "nts:dom" Node
+ * @ntsBoundBy "nts:dom" DocumentType
  * @ntsIs nts_dom_is 142
  */
 interface DocumentType {}
 /**
- * @ntsBoundBy "nts:dom" MouseEvent
+ * @ntsBoundBy "nts:dom" DragEvent
  * @ntsIs nts_dom_is 143
  */
 interface DragEvent {}
@@ -485,7 +490,7 @@ interface Element {}
  */
 interface ElementInternals {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" ErrorEvent
  * @ntsIs nts_dom_is 149
  */
 interface ErrorEvent {}
@@ -540,6 +545,7 @@ interface FontFaceSet {}
  */
 interface FontFaceSetLoadEvent {}
 /**
+ * @ntsBoundBy "nts:dom" FormData
  * @ntsIs nts_dom_is 166
  */
 interface FormData {}
@@ -583,7 +589,7 @@ interface HTMLAnchorElement {}
  */
 interface HTMLAreaElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLAudioElement
  * @ntsIs nts_dom_is 178
  */
 interface HTMLAudioElement {}
@@ -718,7 +724,7 @@ interface HTMLHeadingElement {}
  */
 interface HTMLHtmlElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLIFrameElement
  * @ntsIs nts_dom_is 209
  */
 interface HTMLIFrameElement {}
@@ -748,7 +754,7 @@ interface HTMLLabelElement {}
  */
 interface HTMLLegendElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLLinkElement
  * @ntsIs nts_dom_is 216
  */
 interface HTMLLinkElement {}
@@ -763,7 +769,7 @@ interface HTMLMapElement {}
  */
 interface HTMLMarqueeElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLMediaElement
  * @ntsIs nts_dom_is 220
  */
 interface HTMLMediaElement {}
@@ -848,7 +854,7 @@ interface HTMLProgressElement {}
  */
 interface HTMLQuoteElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLScriptElement
  * @ntsIs nts_dom_is 241
  */
 interface HTMLScriptElement {}
@@ -873,7 +879,7 @@ interface HTMLSourceElement {}
  */
 interface HTMLSpanElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLStyleElement
  * @ntsIs nts_dom_is 247
  */
 interface HTMLStyleElement {}
@@ -943,12 +949,12 @@ interface HTMLUListElement {}
  */
 interface HTMLUnknownElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLVideoElement
  * @ntsIs nts_dom_is 264
  */
 interface HTMLVideoElement {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" HashChangeEvent
  * @ntsIs nts_dom_is 265
  */
 interface HashChangeEvent {}
@@ -1020,6 +1026,7 @@ interface Location {}
  */
 interface MathMLElement {}
 /**
+ * @ntsBoundBy "nts:dom" MediaError
  * @ntsIs nts_dom_is 304
  */
 interface MediaError {}
@@ -1118,6 +1125,7 @@ interface Navigator {}
  */
 interface Node {}
 /**
+ * @ntsBoundBy "nts:dom" NodeIterator
  * @ntsIs nts_dom_is 335
  */
 interface NodeIterator {}
@@ -1142,7 +1150,7 @@ interface PageRevealEvent {}
  */
 interface PageSwapEvent {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" PageTransitionEvent
  * @ntsIs nts_dom_is 349
  */
 interface PageTransitionEvent {}
@@ -1210,12 +1218,12 @@ interface PointerEvent {}
  */
 interface PopStateEvent {}
 /**
- * @ntsBoundBy "nts:dom" CharacterData
+ * @ntsBoundBy "nts:dom" ProcessingInstruction
  * @ntsIs nts_dom_is 381
  */
 interface ProcessingInstruction {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" ProgressEvent
  * @ntsIs nts_dom_is 383
  */
 interface ProgressEvent {}
@@ -1801,7 +1809,7 @@ interface StyleSheet {}
  */
 interface StyleSheetList {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" SubmitEvent
  * @ntsIs nts_dom_is 524
  */
 interface SubmitEvent {}
@@ -1855,6 +1863,7 @@ interface TextTrackCueList {}
  */
 interface TextTrackList {}
 /**
+ * @ntsBoundBy "nts:dom" TimeRanges
  * @ntsIs nts_dom_is 543
  */
 interface TimeRanges {}
@@ -1864,15 +1873,17 @@ interface TimeRanges {}
  */
 interface ToggleEvent {}
 /**
+ * @ntsBoundBy "nts:dom" Touch
  * @ntsIs nts_dom_is 548
  */
 interface Touch {}
 /**
- * @ntsBoundBy "nts:dom" UIEvent
+ * @ntsBoundBy "nts:dom" TouchEvent
  * @ntsIs nts_dom_is 549
  */
 interface TouchEvent {}
 /**
+ * @ntsBoundBy "nts:dom" TouchList
  * @ntsIs nts_dom_is 550
  */
 interface TouchList {}
@@ -1890,11 +1901,12 @@ interface TransformStream {}
  */
 interface TransformStreamDefaultController {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" TransitionEvent
  * @ntsIs nts_dom_is 554
  */
 interface TransitionEvent {}
 /**
+ * @ntsBoundBy "nts:dom" TreeWalker
  * @ntsIs nts_dom_is 555
  */
 interface TreeWalker {}
@@ -2004,6 +2016,7 @@ interface XMLHttpRequestEventTarget {}
  */
 interface XMLHttpRequestUpload {}
 /**
+ * @ntsBoundBy "nts:dom" XMLSerializer
  * @ntsIs nts_dom_is 598
  */
 interface XMLSerializer {}

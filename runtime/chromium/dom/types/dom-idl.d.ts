@@ -16,23 +16,35 @@ declare module "nts:dom" {
   export type ImageSmoothingQuality = "low" | "medium" | "high";
   export type ScrollRestoration = "auto" | "manual";
   export type SelectionMode = "select" | "start" | "end" | "preserve";
+  export type SupportedType = "text/html" | "text/xml" | "application/xml" | "application/xhtml+xml" | "image/svg+xml";
+  export type AnimationEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; elapsedTime: c_double }, "NtsDomAnimationEventInit">;
   export type AssignedNodesOptions = Struct<{ flatten: CBool<c_uint8> }, "NtsDomAssignedNodesOptions">;
   export type CSSStyleSheetInit = Struct<{ alternate: CBool<c_uint8>; disabled: CBool<c_uint8> }, "NtsDomCSSStyleSheetInit">;
   export type CheckVisibilityOptions = Struct<{ checkOpacity: CBool<c_uint8>; checkVisibilityCSS: CBool<c_uint8> }, "NtsDomCheckVisibilityOptions">;
+  export type ClipboardEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomClipboardEventInit">;
+  export type CompositionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double }, "NtsDomCompositionEventInit">;
   export type CustomEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomCustomEventInit">;
   export type DOMMatrix2DInit = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double; e: c_double; f: c_double; m11: c_double; m12: c_double; m21: c_double; m22: c_double; m41: c_double; m42: c_double }, "NtsDomDOMMatrix2DInit">;
   export type DOMMatrixInit = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double; e: c_double; f: c_double; m11: c_double; m12: c_double; m21: c_double; m22: c_double; m41: c_double; m42: c_double; is2D: CBool<c_uint8>; m13: c_double; m14: c_double; m23: c_double; m24: c_double; m31: c_double; m32: c_double; m34: c_double; m43: c_double }, "NtsDomDOMMatrixInit">;
   export type DOMPointInit = Struct<{ x: c_double; y: c_double; z: c_double }, "NtsDomDOMPointInit">;
+  export type DragEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double }, "NtsDomDragEventInit">;
+  export type ErrorEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; colno: c_double; lineno: c_double }, "NtsDomErrorEventInit">;
   export type EventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomEventInit">;
   export type FocusEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double }, "NtsDomFocusEventInit">;
   export type FocusOptions = Struct<{ focusVisible: CBool<c_uint8>; preventScroll: CBool<c_uint8> }, "NtsDomFocusOptions">;
   export type GetHTMLOptions = Struct<{ serializableShadowRoots: CBool<c_uint8> }, "NtsDomGetHTMLOptions">;
   export type GetRootNodeOptions = Struct<{ composed: CBool<c_uint8> }, "NtsDomGetRootNodeOptions">;
+  export type HashChangeEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomHashChangeEventInit">;
   export type InputEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; isComposing: CBool<c_uint8> }, "NtsDomInputEventInit">;
   export type KeyboardEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; charCode: c_double; isComposing: CBool<c_uint8>; keyCode: c_double; location: c_double; repeat: CBool<c_uint8> }, "NtsDomKeyboardEventInit">;
   export type MouseEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double }, "NtsDomMouseEventInit">;
   export type MutationObserverInit = Struct<{ attributeOldValue: CBool<c_uint8>; attributes: CBool<c_uint8>; characterData: CBool<c_uint8>; characterDataOldValue: CBool<c_uint8>; childList: CBool<c_uint8>; subtree: CBool<c_uint8> }, "NtsDomMutationObserverInit">;
+  export type PageTransitionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; persisted: CBool<c_uint8> }, "NtsDomPageTransitionEventInit">;
   export type PointerEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double; altitudeAngle: c_double; azimuthAngle: c_double; isPrimary: CBool<c_uint8>; persistentDeviceId: c_double; pointerId: c_double; pressure: c_double; tangentialPressure: c_double; tiltX: c_double; tiltY: c_double; twist: c_double }, "NtsDomPointerEventInit">;
+  export type ProgressEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; lengthComputable: CBool<c_uint8>; loaded: c_double; total: c_double }, "NtsDomProgressEventInit">;
+  export type SubmitEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomSubmitEventInit">;
+  export type TouchEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8> }, "NtsDomTouchEventInit">;
+  export type TransitionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; elapsedTime: c_double }, "NtsDomTransitionEventInit">;
   export type UIEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double }, "NtsDomUIEventInit">;
   export type WheelEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double; deltaMode: c_double; deltaX: c_double; deltaY: c_double; deltaZ: c_double; wheelDeltaX: c_double; wheelDeltaY: c_double }, "NtsDomWheelEventInit">;
   export type DOMQuadSequence = HostClass<"NtsDomDOMQuadSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & DOMQuadSequenceMethods;
@@ -1284,41 +1296,11 @@ declare module "nts:dom" {
      */
     readonly nextElementSibling: Element | null;
     /**
-     * @ntsSymbol nts_dom_Element_after_sss
+     * @ntsSymbol nts_dom_Element_after_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_after_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_after_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_after_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_after_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_after_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    after(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_after_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -1326,29 +1308,41 @@ declare module "nts:dom" {
      */
     after(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_after_nnn
+     * @ntsSymbol nts_dom_Element_after_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    after(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_after_ss
+     * @ntsSymbol nts_dom_Element_after_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    after(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_after_sn
+     * @ntsSymbol nts_dom_Element_after_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    after(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_after_ns
+     * @ntsSymbol nts_dom_Element_after_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    after(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_after_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_after_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_after_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1356,11 +1350,23 @@ declare module "nts:dom" {
      */
     after(this: Element, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_after_s
+     * @ntsSymbol nts_dom_Element_after_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    after(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_after_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_after_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_after_n
      * @ntsThrows error nts_dom_exception_take_message
@@ -1368,53 +1374,17 @@ declare module "nts:dom" {
      */
     after(this: Element, nodes1: Node, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Element_after_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_Element_after_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     after(this: Element, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_append_sss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_append_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_append_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_append_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_append_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_append_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_append_nns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_append_nnn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1422,23 +1392,47 @@ declare module "nts:dom" {
      */
     append(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_append_ss
+     * @ntsSymbol nts_dom_Element_append_nns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_append_sn
+     * @ntsSymbol nts_dom_Element_append_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    append(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_append_ns
+     * @ntsSymbol nts_dom_Element_append_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_append_snn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_append_sns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_append_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_append_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_append_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1446,11 +1440,23 @@ declare module "nts:dom" {
      */
     append(this: Element, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_append_s
+     * @ntsSymbol nts_dom_Element_append_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_append_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_append_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_append_n
      * @ntsThrows error nts_dom_exception_take_message
@@ -1458,53 +1464,17 @@ declare module "nts:dom" {
      */
     append(this: Element, nodes1: Node, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Element_append_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_Element_append_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     append(this: Element, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_before_sss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_before_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_before_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_before_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_before_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_before_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_before_nns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_before_nnn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1512,23 +1482,47 @@ declare module "nts:dom" {
      */
     before(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_before_ss
+     * @ntsSymbol nts_dom_Element_before_nns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    before(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_before_sn
+     * @ntsSymbol nts_dom_Element_before_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    before(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_before_ns
+     * @ntsSymbol nts_dom_Element_before_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    before(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_before_snn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_before_sns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_before_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_before_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_before_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1536,17 +1530,35 @@ declare module "nts:dom" {
      */
     before(this: Element, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_before_s
+     * @ntsSymbol nts_dom_Element_before_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    before(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_before_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_before_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_before_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     before(this: Element, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_before_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_before_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -1668,41 +1680,11 @@ declare module "nts:dom" {
      */
     moveBefore(this: Element, node: Node, child: Node | null, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_prepend_sss
+     * @ntsSymbol nts_dom_Element_prepend_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_prepend_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_prepend_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_prepend_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_prepend_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_prepend_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_prepend_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -1710,29 +1692,41 @@ declare module "nts:dom" {
      */
     prepend(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_prepend_nnn
+     * @ntsSymbol nts_dom_Element_prepend_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_prepend_ss
+     * @ntsSymbol nts_dom_Element_prepend_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_prepend_sn
+     * @ntsSymbol nts_dom_Element_prepend_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_prepend_ns
+     * @ntsSymbol nts_dom_Element_prepend_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_prepend_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_prepend_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_prepend_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1740,17 +1734,35 @@ declare module "nts:dom" {
      */
     prepend(this: Element, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_prepend_s
+     * @ntsSymbol nts_dom_Element_prepend_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_prepend_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_prepend_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_prepend_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     prepend(this: Element, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_prepend_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_prepend_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -1796,41 +1808,11 @@ declare module "nts:dom" {
      */
     removeAttributeNode(this: Element, attr: Attr, error?: Ptr<DOMException | null>): Attr;
     /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_sss
+     * @ntsSymbol nts_dom_Element_replaceChildren_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_replaceChildren_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -1838,29 +1820,41 @@ declare module "nts:dom" {
      */
     replaceChildren(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_nnn
+     * @ntsSymbol nts_dom_Element_replaceChildren_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_ss
+     * @ntsSymbol nts_dom_Element_replaceChildren_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_sn
+     * @ntsSymbol nts_dom_Element_replaceChildren_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_ns
+     * @ntsSymbol nts_dom_Element_replaceChildren_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceChildren_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceChildren_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_replaceChildren_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1868,11 +1862,23 @@ declare module "nts:dom" {
      */
     replaceChildren(this: Element, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceChildren_s
+     * @ntsSymbol nts_dom_Element_replaceChildren_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceChildren_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceChildren_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_replaceChildren_n
      * @ntsThrows error nts_dom_exception_take_message
@@ -1880,53 +1886,17 @@ declare module "nts:dom" {
      */
     replaceChildren(this: Element, nodes1: Node, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Element_replaceChildren_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_Element_replaceChildren_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     replaceChildren(this: Element, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceWith_sss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceWith_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceWith_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceWith_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceWith_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceWith_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Element_replaceWith_nns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_replaceWith_nnn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1934,23 +1904,47 @@ declare module "nts:dom" {
      */
     replaceWith(this: Element, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceWith_ss
+     * @ntsSymbol nts_dom_Element_replaceWith_nns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: Element, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceWith_sn
+     * @ntsSymbol nts_dom_Element_replaceWith_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: Element, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceWith_ns
+     * @ntsSymbol nts_dom_Element_replaceWith_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: Element, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceWith_snn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: Element, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceWith_sns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: Element, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceWith_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: Element, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceWith_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: Element, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_replaceWith_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -1958,17 +1952,35 @@ declare module "nts:dom" {
      */
     replaceWith(this: Element, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Element_replaceWith_s
+     * @ntsSymbol nts_dom_Element_replaceWith_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: Element, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceWith_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: Element, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceWith_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: Element, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_replaceWith_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     replaceWith(this: Element, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_replaceWith_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: Element, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_replaceWith_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -2089,41 +2101,11 @@ declare module "nts:dom" {
      */
     readonly nextElementSibling: Element | null;
     /**
-     * @ntsSymbol nts_dom_CharacterData_after_sss
+     * @ntsSymbol nts_dom_CharacterData_after_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_after_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_after_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_after_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_after_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_after_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    after(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    after(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_after_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -2131,29 +2113,41 @@ declare module "nts:dom" {
      */
     after(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_after_nnn
+     * @ntsSymbol nts_dom_CharacterData_after_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    after(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_after_ss
+     * @ntsSymbol nts_dom_CharacterData_after_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: CharacterData, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    after(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_after_sn
+     * @ntsSymbol nts_dom_CharacterData_after_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: CharacterData, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    after(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_after_ns
+     * @ntsSymbol nts_dom_CharacterData_after_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: CharacterData, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    after(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_after_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_after_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_after_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -2161,17 +2155,35 @@ declare module "nts:dom" {
      */
     after(this: CharacterData, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_after_s
+     * @ntsSymbol nts_dom_CharacterData_after_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    after(this: CharacterData, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    after(this: CharacterData, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_after_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: CharacterData, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_after_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: CharacterData, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_after_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     after(this: CharacterData, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_after_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: CharacterData, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_after_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -2183,41 +2195,11 @@ declare module "nts:dom" {
      */
     appendData(this: CharacterData, data: StringView): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_before_sss
+     * @ntsSymbol nts_dom_CharacterData_before_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_before_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_before_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_before_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_before_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_before_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    before(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    before(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_before_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -2225,29 +2207,41 @@ declare module "nts:dom" {
      */
     before(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_before_nnn
+     * @ntsSymbol nts_dom_CharacterData_before_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    before(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_before_ss
+     * @ntsSymbol nts_dom_CharacterData_before_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: CharacterData, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    before(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_before_sn
+     * @ntsSymbol nts_dom_CharacterData_before_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: CharacterData, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    before(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_before_ns
+     * @ntsSymbol nts_dom_CharacterData_before_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: CharacterData, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    before(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_before_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_before_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_before_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -2255,17 +2249,35 @@ declare module "nts:dom" {
      */
     before(this: CharacterData, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_before_s
+     * @ntsSymbol nts_dom_CharacterData_before_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    before(this: CharacterData, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    before(this: CharacterData, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_before_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: CharacterData, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_before_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: CharacterData, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_before_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     before(this: CharacterData, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_before_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: CharacterData, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_before_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -2297,41 +2309,11 @@ declare module "nts:dom" {
      */
     replaceData(this: CharacterData, offset: CNumber<"double">, count: CNumber<"double">, data: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_sss
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceWith(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_replaceWith_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -2339,29 +2321,41 @@ declare module "nts:dom" {
      */
     replaceWith(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_nnn
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: CharacterData, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_ss
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: CharacterData, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: CharacterData, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_sn
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: CharacterData, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_ns
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: CharacterData, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: CharacterData, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: CharacterData, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_replaceWith_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -2369,17 +2363,35 @@ declare module "nts:dom" {
      */
     replaceWith(this: CharacterData, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_CharacterData_replaceWith_s
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceWith(this: CharacterData, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    replaceWith(this: CharacterData, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: CharacterData, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: CharacterData, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_replaceWith_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     replaceWith(this: CharacterData, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CharacterData_replaceWith_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: CharacterData, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_replaceWith_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -2441,6 +2453,14 @@ declare module "nts:dom" {
   export function newText(): Text;
   export interface DocumentOwnMethods {
     /**
+     * @ntsSymbol nts_dom_Document_get_implementation
+     */
+    _get_implementation(this: Document): DOMImplementation;
+    /**
+     * @ntsGet _get_implementation
+     */
+    readonly implementation: DOMImplementation;
+    /**
      * @ntsSymbol nts_dom_Document_get_URL
      */
     _get_URL(this: Document): StringView;
@@ -2496,6 +2516,14 @@ declare module "nts:dom" {
      * @ntsGet _get_contentType
      */
     readonly contentType: StringView;
+    /**
+     * @ntsSymbol nts_dom_Document_get_doctype
+     */
+    _get_doctype(this: Document): DocumentType | null;
+    /**
+     * @ntsGet _get_doctype
+     */
+    readonly doctype: DocumentType | null;
     /**
      * @ntsSymbol nts_dom_Document_get_documentElement
      */
@@ -4336,41 +4364,11 @@ declare module "nts:dom" {
      */
     adoptNode(this: Document, node: Node, error?: Ptr<DOMException | null>): Node;
     /**
-     * @ntsSymbol nts_dom_Document_append_sss
+     * @ntsSymbol nts_dom_Document_append_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Document, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_append_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Document, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_append_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Document, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_append_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Document, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_append_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Document, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_append_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: Document, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    append(this: Document, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_append_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -4378,29 +4376,41 @@ declare module "nts:dom" {
      */
     append(this: Document, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_append_nnn
+     * @ntsSymbol nts_dom_Document_append_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Document, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    append(this: Document, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_append_ss
+     * @ntsSymbol nts_dom_Document_append_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Document, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: Document, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_append_sn
+     * @ntsSymbol nts_dom_Document_append_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Document, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    append(this: Document, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_append_ns
+     * @ntsSymbol nts_dom_Document_append_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Document, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: Document, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_append_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Document, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_append_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Document, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_append_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -4408,17 +4418,35 @@ declare module "nts:dom" {
      */
     append(this: Document, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_append_s
+     * @ntsSymbol nts_dom_Document_append_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: Document, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: Document, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_append_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Document, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_append_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Document, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_append_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     append(this: Document, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_append_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Document, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_append_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -4464,6 +4492,12 @@ declare module "nts:dom" {
      */
     createAttributeNS(this: Document, namespaceURI: StringView | null, qualifiedName: StringView, error?: Ptr<DOMException | null>): Attr;
     /**
+     * @ntsSymbol nts_dom_Document_createCDATASection
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createCDATASection(this: Document, data: StringView, error?: Ptr<DOMException | null>): CDATASection;
+    /**
      * @ntsSymbol nts_dom_Document_createComment
      */
     createComment(this: Document, data: StringView): Comment;
@@ -4494,6 +4528,16 @@ declare module "nts:dom" {
      */
     createNSResolver(this: Document, nodeResolver: Node): Node;
     /**
+     * @ntsSymbol nts_dom_Document_createNodeIterator_2
+     */
+    createNodeIterator(this: Document, root: Node, whatToShow: CNumber<"double">): NodeIterator;
+    /**
+     * @ntsSymbol nts_dom_Document_createProcessingInstruction
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createProcessingInstruction(this: Document, target: StringView, data: StringView, error?: Ptr<DOMException | null>): ProcessingInstruction;
+    /**
      * @ntsSymbol nts_dom_Document_createRange
      */
     createRange(this: Document): Range;
@@ -4501,6 +4545,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_createTextNode
      */
     createTextNode(this: Document, data: StringView): Text;
+    /**
+     * @ntsSymbol nts_dom_Document_createTreeWalker_2
+     */
+    createTreeWalker(this: Document, root: Node, whatToShow: CNumber<"double">): TreeWalker;
     /**
      * @ntsSymbol nts_dom_Document_elementFromPoint
      * @ntsThrows error nts_dom_exception_take_message
@@ -4606,41 +4654,11 @@ declare module "nts:dom" {
      */
     open(this: Document, url: StringView, name: StringView, features: StringView, error?: Ptr<DOMException | null>): Window;
     /**
-     * @ntsSymbol nts_dom_Document_prepend_sss
+     * @ntsSymbol nts_dom_Document_prepend_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Document, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_prepend_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Document, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_prepend_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Document, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_prepend_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Document, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_prepend_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Document, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_prepend_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: Document, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: Document, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_prepend_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -4648,29 +4666,41 @@ declare module "nts:dom" {
      */
     prepend(this: Document, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_prepend_nnn
+     * @ntsSymbol nts_dom_Document_prepend_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Document, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: Document, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_prepend_ss
+     * @ntsSymbol nts_dom_Document_prepend_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Document, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: Document, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_prepend_sn
+     * @ntsSymbol nts_dom_Document_prepend_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Document, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: Document, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_prepend_ns
+     * @ntsSymbol nts_dom_Document_prepend_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Document, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: Document, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_prepend_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Document, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_prepend_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Document, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_prepend_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -4678,17 +4708,35 @@ declare module "nts:dom" {
      */
     prepend(this: Document, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_prepend_s
+     * @ntsSymbol nts_dom_Document_prepend_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: Document, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: Document, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_prepend_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Document, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_prepend_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Document, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_prepend_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     prepend(this: Document, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_prepend_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: Document, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_prepend_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -4742,41 +4790,11 @@ declare module "nts:dom" {
      */
     releaseEvents(this: Document): void;
     /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_sss
+     * @ntsSymbol nts_dom_Document_replaceChildren_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Document, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Document, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Document, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Document, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Document, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: Document, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Document, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_replaceChildren_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -4784,29 +4802,41 @@ declare module "nts:dom" {
      */
     replaceChildren(this: Document, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_nnn
+     * @ntsSymbol nts_dom_Document_replaceChildren_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Document, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Document, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_ss
+     * @ntsSymbol nts_dom_Document_replaceChildren_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Document, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Document, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_sn
+     * @ntsSymbol nts_dom_Document_replaceChildren_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Document, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Document, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_ns
+     * @ntsSymbol nts_dom_Document_replaceChildren_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Document, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Document, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_replaceChildren_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Document, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_replaceChildren_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Document, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_replaceChildren_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -4814,17 +4844,35 @@ declare module "nts:dom" {
      */
     replaceChildren(this: Document, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_Document_replaceChildren_s
+     * @ntsSymbol nts_dom_Document_replaceChildren_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: Document, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: Document, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_replaceChildren_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Document, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_replaceChildren_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Document, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_replaceChildren_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     replaceChildren(this: Document, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_replaceChildren_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: Document, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Document_replaceChildren_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -4930,41 +4978,11 @@ declare module "nts:dom" {
      */
     readonly childElementCount: CNumber<"double">;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_sss
+     * @ntsSymbol nts_dom_DocumentFragment_append_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    append(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    append(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_append_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -4972,29 +4990,41 @@ declare module "nts:dom" {
      */
     append(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_nnn
+     * @ntsSymbol nts_dom_DocumentFragment_append_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    append(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_ss
+     * @ntsSymbol nts_dom_DocumentFragment_append_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: DocumentFragment, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_sn
+     * @ntsSymbol nts_dom_DocumentFragment_append_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: DocumentFragment, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    append(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_ns
+     * @ntsSymbol nts_dom_DocumentFragment_append_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: DocumentFragment, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_append_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_append_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_append_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -5002,17 +5032,35 @@ declare module "nts:dom" {
      */
     append(this: DocumentFragment, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_append_s
+     * @ntsSymbol nts_dom_DocumentFragment_append_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    append(this: DocumentFragment, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    append(this: DocumentFragment, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_append_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: DocumentFragment, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_append_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: DocumentFragment, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_append_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     append(this: DocumentFragment, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_append_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: DocumentFragment, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_append_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -5030,41 +5078,11 @@ declare module "nts:dom" {
      */
     moveBefore(this: DocumentFragment, node: Node, child: Node | null, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_sss
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    prepend(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_prepend_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -5072,29 +5090,41 @@ declare module "nts:dom" {
      */
     prepend(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_nnn
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_ss
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: DocumentFragment, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_sn
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: DocumentFragment, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    prepend(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_ns
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: DocumentFragment, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_prepend_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -5102,17 +5132,35 @@ declare module "nts:dom" {
      */
     prepend(this: DocumentFragment, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_prepend_s
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    prepend(this: DocumentFragment, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    prepend(this: DocumentFragment, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: DocumentFragment, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: DocumentFragment, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_prepend_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     prepend(this: DocumentFragment, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_prepend_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    prepend(this: DocumentFragment, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_prepend_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -5132,41 +5180,11 @@ declare module "nts:dom" {
      */
     querySelectorAll(this: DocumentFragment, selectors: StringView, error?: Ptr<DOMException | null>): NodeList;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_sss
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_nnn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_ssn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_sns
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_snn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_nss
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_nsn
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_nns
      * @ntsThrows error nts_dom_exception_take_message
@@ -5174,29 +5192,41 @@ declare module "nts:dom" {
      */
     replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_nnn
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_nsn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_ss
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_nss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_sn
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_snn
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_ns
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_sns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_nn
      * @ntsThrows error nts_dom_exception_take_message
@@ -5204,17 +5234,35 @@ declare module "nts:dom" {
      */
     replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_s
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_ns
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceChildren(this: DocumentFragment, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    replaceChildren(this: DocumentFragment, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: DocumentFragment, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_n
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     replaceChildren(this: DocumentFragment, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceChildren(this: DocumentFragment, nodes1: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_replaceChildren_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -5284,6 +5332,10 @@ declare module "nts:dom" {
      */
     dir: StringView;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
+     */
+    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_string
      */
     _set_hidden_string(this: HTMLElement, value: StringView): void;
@@ -5291,10 +5343,6 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_number
      */
     _set_hidden_number(this: HTMLElement, value: CNumber<"double">): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
-     */
-    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_inert
      */
@@ -19228,6 +19276,14 @@ declare module "nts:dom" {
      */
     readonly inputType: StringView;
     /**
+     * @ntsSymbol nts_dom_InputEvent_get_dataTransfer
+     */
+    _get_dataTransfer(this: InputEvent): DataTransfer | null;
+    /**
+     * @ntsGet _get_dataTransfer
+     */
+    readonly dataTransfer: DataTransfer | null;
+    /**
      * @ntsSymbol nts_dom_InputEvent_get_isTrusted
      */
     _get_isTrusted(this: InputEvent): boolean;
@@ -22540,18 +22596,13 @@ declare module "nts:dom" {
      */
     globalCompositeOperation: StringView;
     /**
-     * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_filter
-     */
-    _get_filter(this: CanvasRenderingContext2D): StringView | null;
-    /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_filter
      */
     _set_filter(this: CanvasRenderingContext2D, value: StringView | null): void;
     /**
-     * @ntsGet _get_filter
      * @ntsSet _set_filter
      */
-    filter: StringView | null;
+    set filter(value: StringView | null);
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_imageSmoothingEnabled
      */
@@ -23279,41 +23330,11 @@ declare module "nts:dom" {
      */
     name: StringView;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_eee
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ttt
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, nodes3: Element, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_eet
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, nodes3: Text, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ete
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, nodes3: Element, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ett
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, nodes3: Text, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tee
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, nodes3: Element, error?: Ptr<DOMException | null>): void;
-    /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tet
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, nodes3: Text, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, nodes3: Text, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLSlotElement_assign_tte
      * @ntsThrows error nts_dom_exception_take_message
@@ -23321,29 +23342,41 @@ declare module "nts:dom" {
      */
     assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, nodes3: Element, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ttt
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tet
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, nodes3: Text, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, nodes3: Text, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ee
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_tee
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, nodes3: Element, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_et
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ett
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, nodes3: Text, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_te
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ete
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, nodes3: Element, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_eet
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, nodes3: Text, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_eee
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, nodes3: Element, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLSlotElement_assign_tt
      * @ntsThrows error nts_dom_exception_take_message
@@ -23351,17 +23384,35 @@ declare module "nts:dom" {
      */
     assign(this: HTMLSlotElement, nodes1: Text, nodes2: Text, error?: Ptr<DOMException | null>): void;
     /**
-     * @ntsSymbol nts_dom_HTMLSlotElement_assign_e
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_te
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    assign(this: HTMLSlotElement, nodes1: Element, error?: Ptr<DOMException | null>): void;
+    assign(this: HTMLSlotElement, nodes1: Text, nodes2: Element, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_et
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Text, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_ee
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Element, nodes2: Element, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLSlotElement_assign_t
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     assign(this: HTMLSlotElement, nodes1: Text, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLSlotElement_assign_e
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    assign(this: HTMLSlotElement, nodes1: Element, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLSlotElement_assign_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -25207,4 +25258,2466 @@ declare module "nts:dom" {
   export type HTMLLegendElement = HostClass<"NtsDomHTMLLegendElement", HTMLElement> & HTMLLegendElementMethods;
   /** @ntsSymbol nts_dom_as_HTMLLegendElement */
   export function asHTMLLegendElement(node: Node): HTMLLegendElement | null;
+  export interface DataTransferOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_get_dropEffect
+     */
+    _get_dropEffect(this: DataTransfer): StringView;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_set_dropEffect
+     */
+    _set_dropEffect(this: DataTransfer, value: StringView): void;
+    /**
+     * @ntsGet _get_dropEffect
+     * @ntsSet _set_dropEffect
+     */
+    dropEffect: StringView;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_get_effectAllowed
+     */
+    _get_effectAllowed(this: DataTransfer): StringView;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_set_effectAllowed
+     */
+    _set_effectAllowed(this: DataTransfer, value: StringView): void;
+    /**
+     * @ntsGet _get_effectAllowed
+     * @ntsSet _set_effectAllowed
+     */
+    effectAllowed: StringView;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_get_items
+     */
+    _get_items(this: DataTransfer): DataTransferItemList;
+    /**
+     * @ntsGet _get_items
+     */
+    readonly items: DataTransferItemList;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_clearData_1
+     */
+    clearData(this: DataTransfer, format: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_clearData_0
+     */
+    clearData(this: DataTransfer): void;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_getData
+     */
+    getData(this: DataTransfer, format: StringView): StringView;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_setData
+     */
+    setData(this: DataTransfer, format: StringView, data: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_setDragImage
+     */
+    setDragImage(this: DataTransfer, image: Element, x: CNumber<"double">, y: CNumber<"double">): void;
+  }
+  export type DataTransferMethods = DataTransferOwnMethods;
+  export type DataTransfer = HostClass<"NtsDomDataTransfer", null, "nts_dom_retain", "nts_dom_release"> & DataTransferMethods;
+  /**
+   * @ntsSymbol nts_dom_new_DataTransfer
+   */
+  export function newDataTransfer(): DataTransfer;
+  export interface DataTransferItemOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DataTransferItem_get_kind
+     */
+    _get_kind(this: DataTransferItem): StringView;
+    /**
+     * @ntsGet _get_kind
+     */
+    readonly kind: StringView;
+    /**
+     * @ntsSymbol nts_dom_DataTransferItem_get_type
+     */
+    _get_type(this: DataTransferItem): StringView;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: StringView;
+  }
+  export type DataTransferItemMethods = DataTransferItemOwnMethods;
+  export type DataTransferItem = HostClass<"NtsDomDataTransferItem", null, "nts_dom_retain", "nts_dom_release"> & DataTransferItemMethods;
+  export interface DataTransferItemListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DataTransferItemList_get_length
+     */
+    _get_length(this: DataTransferItemList): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_DataTransferItemList_add_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    add(this: DataTransferItemList, data: StringView, type: StringView, error?: Ptr<DOMException | null>): DataTransferItem | null;
+    /**
+     * @ntsSymbol nts_dom_DataTransferItemList_clear
+     */
+    clear(this: DataTransferItemList): void;
+    /**
+     * @ntsSymbol nts_dom_DataTransferItemList_remove
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    remove(this: DataTransferItemList, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+  }
+  export type DataTransferItemListMethods = DataTransferItemListOwnMethods;
+  export type DataTransferItemList = HostClass<"NtsDomDataTransferItemList", null, "nts_dom_retain", "nts_dom_release"> & DataTransferItemListMethods;
+  export interface DragEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DragEvent_get_dataTransfer
+     */
+    _get_dataTransfer(this: DragEvent): DataTransfer | null;
+    /**
+     * @ntsGet _get_dataTransfer
+     */
+    readonly dataTransfer: DataTransfer | null;
+    /**
+     * @ntsSymbol nts_dom_DragEvent_get_isTrusted
+     */
+    _get_isTrusted(this: DragEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type DragEventMethods = DragEventOwnMethods & MouseEventMethods;
+  export type DragEvent = HostClass<"NtsDomDragEvent", MouseEvent> & DragEventMethods;
+  /** @ntsSymbol nts_dom_as_DragEvent */
+  export function asDragEvent(event: Event): DragEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_DragEvent_2
+   */
+  export function newDragEvent(type: StringView, eventInitDict: ByValue<DragEventInit> | Fields<DragEventInit>): DragEvent;
+  /**
+   * @ntsSymbol nts_dom_new_DragEvent_1
+   */
+  export function newDragEvent(type: StringView): DragEvent;
+  export interface CompositionEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_CompositionEvent_get_data
+     */
+    _get_data(this: CompositionEvent): StringView;
+    /**
+     * @ntsGet _get_data
+     */
+    readonly data: StringView;
+    /**
+     * @ntsSymbol nts_dom_CompositionEvent_get_isTrusted
+     */
+    _get_isTrusted(this: CompositionEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+    /**
+     * @ntsSymbol nts_dom_CompositionEvent_initCompositionEvent_5
+     */
+    initCompositionEvent(this: CompositionEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, data: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_CompositionEvent_initCompositionEvent_4
+     */
+    initCompositionEvent(this: CompositionEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null): void;
+    /**
+     * @ntsSymbol nts_dom_CompositionEvent_initCompositionEvent_3
+     */
+    initCompositionEvent(this: CompositionEvent, type: StringView, bubbles: boolean, cancelable: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_CompositionEvent_initCompositionEvent_2
+     */
+    initCompositionEvent(this: CompositionEvent, type: StringView, bubbles: boolean): void;
+    /**
+     * @ntsSymbol nts_dom_CompositionEvent_initCompositionEvent_1
+     */
+    initCompositionEvent(this: CompositionEvent, type: StringView): void;
+  }
+  export type CompositionEventMethods = CompositionEventOwnMethods & UIEventMethods;
+  export type CompositionEvent = HostClass<"NtsDomCompositionEvent", UIEvent> & CompositionEventMethods;
+  /** @ntsSymbol nts_dom_as_CompositionEvent */
+  export function asCompositionEvent(event: Event): CompositionEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_CompositionEvent_2
+   */
+  export function newCompositionEvent(type: StringView, eventInitDict: ByValue<CompositionEventInit> | Fields<CompositionEventInit>): CompositionEvent;
+  /**
+   * @ntsSymbol nts_dom_new_CompositionEvent_1
+   */
+  export function newCompositionEvent(type: StringView): CompositionEvent;
+  export interface TouchEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_TouchEvent_get_touches
+     */
+    _get_touches(this: TouchEvent): TouchList;
+    /**
+     * @ntsGet _get_touches
+     */
+    readonly touches: TouchList;
+    /**
+     * @ntsSymbol nts_dom_TouchEvent_get_targetTouches
+     */
+    _get_targetTouches(this: TouchEvent): TouchList;
+    /**
+     * @ntsGet _get_targetTouches
+     */
+    readonly targetTouches: TouchList;
+    /**
+     * @ntsSymbol nts_dom_TouchEvent_get_changedTouches
+     */
+    _get_changedTouches(this: TouchEvent): TouchList;
+    /**
+     * @ntsGet _get_changedTouches
+     */
+    readonly changedTouches: TouchList;
+    /**
+     * @ntsSymbol nts_dom_TouchEvent_get_altKey
+     */
+    _get_altKey(this: TouchEvent): boolean;
+    /**
+     * @ntsGet _get_altKey
+     */
+    readonly altKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_TouchEvent_get_metaKey
+     */
+    _get_metaKey(this: TouchEvent): boolean;
+    /**
+     * @ntsGet _get_metaKey
+     */
+    readonly metaKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_TouchEvent_get_ctrlKey
+     */
+    _get_ctrlKey(this: TouchEvent): boolean;
+    /**
+     * @ntsGet _get_ctrlKey
+     */
+    readonly ctrlKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_TouchEvent_get_shiftKey
+     */
+    _get_shiftKey(this: TouchEvent): boolean;
+    /**
+     * @ntsGet _get_shiftKey
+     */
+    readonly shiftKey: boolean;
+    /**
+     * @ntsSymbol nts_dom_TouchEvent_get_isTrusted
+     */
+    _get_isTrusted(this: TouchEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type TouchEventMethods = TouchEventOwnMethods & UIEventMethods;
+  export type TouchEvent = HostClass<"NtsDomTouchEvent", UIEvent> & TouchEventMethods;
+  /** @ntsSymbol nts_dom_as_TouchEvent */
+  export function asTouchEvent(event: Event): TouchEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_TouchEvent_2
+   */
+  export function newTouchEvent(type: StringView, eventInitDict: ByValue<TouchEventInit> | Fields<TouchEventInit>): TouchEvent;
+  /**
+   * @ntsSymbol nts_dom_new_TouchEvent_1
+   */
+  export function newTouchEvent(type: StringView): TouchEvent;
+  export interface TouchOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Touch_get_identifier
+     */
+    _get_identifier(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_identifier
+     */
+    readonly identifier: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_target
+     */
+    _get_target(this: Touch): EventTarget;
+    /**
+     * @ntsGet _get_target
+     */
+    readonly target: EventTarget;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_screenX
+     */
+    _get_screenX(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_screenX
+     */
+    readonly screenX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_screenY
+     */
+    _get_screenY(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_screenY
+     */
+    readonly screenY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_clientX
+     */
+    _get_clientX(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_clientX
+     */
+    readonly clientX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_clientY
+     */
+    _get_clientY(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_clientY
+     */
+    readonly clientY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_pageX
+     */
+    _get_pageX(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_pageX
+     */
+    readonly pageX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_pageY
+     */
+    _get_pageY(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_pageY
+     */
+    readonly pageY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_radiusX
+     */
+    _get_radiusX(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_radiusX
+     */
+    readonly radiusX: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_radiusY
+     */
+    _get_radiusY(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_radiusY
+     */
+    readonly radiusY: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_rotationAngle
+     */
+    _get_rotationAngle(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_rotationAngle
+     */
+    readonly rotationAngle: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Touch_get_force
+     */
+    _get_force(this: Touch): CNumber<"double">;
+    /**
+     * @ntsGet _get_force
+     */
+    readonly force: CNumber<"double">;
+  }
+  export type TouchMethods = TouchOwnMethods;
+  export type Touch = HostClass<"NtsDomTouch", null, "nts_dom_retain", "nts_dom_release"> & TouchMethods;
+  export interface TouchListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_TouchList_get_length
+     */
+    _get_length(this: TouchList): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_TouchList_item
+     */
+    item(this: TouchList, index: CNumber<"double">): Touch | null;
+  }
+  export type TouchListMethods = TouchListOwnMethods;
+  export type TouchList = HostClass<"NtsDomTouchList", null, "nts_dom_retain", "nts_dom_release"> & TouchListMethods;
+  export interface ClipboardEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_ClipboardEvent_get_clipboardData
+     */
+    _get_clipboardData(this: ClipboardEvent): DataTransfer | null;
+    /**
+     * @ntsGet _get_clipboardData
+     */
+    readonly clipboardData: DataTransfer | null;
+    /**
+     * @ntsSymbol nts_dom_ClipboardEvent_get_isTrusted
+     */
+    _get_isTrusted(this: ClipboardEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type ClipboardEventMethods = ClipboardEventOwnMethods & EventMethods;
+  export type ClipboardEvent = HostClass<"NtsDomClipboardEvent", Event> & ClipboardEventMethods;
+  /** @ntsSymbol nts_dom_as_ClipboardEvent */
+  export function asClipboardEvent(event: Event): ClipboardEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_ClipboardEvent_2
+   */
+  export function newClipboardEvent(type: StringView, eventInitDict: ByValue<ClipboardEventInit> | Fields<ClipboardEventInit>): ClipboardEvent;
+  /**
+   * @ntsSymbol nts_dom_new_ClipboardEvent_1
+   */
+  export function newClipboardEvent(type: StringView): ClipboardEvent;
+  export interface AnimationEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_AnimationEvent_get_animationName
+     */
+    _get_animationName(this: AnimationEvent): StringView;
+    /**
+     * @ntsGet _get_animationName
+     */
+    readonly animationName: StringView;
+    /**
+     * @ntsSymbol nts_dom_AnimationEvent_get_elapsedTime
+     */
+    _get_elapsedTime(this: AnimationEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_elapsedTime
+     */
+    readonly elapsedTime: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_AnimationEvent_get_pseudoElement
+     */
+    _get_pseudoElement(this: AnimationEvent): StringView;
+    /**
+     * @ntsGet _get_pseudoElement
+     */
+    readonly pseudoElement: StringView;
+    /**
+     * @ntsSymbol nts_dom_AnimationEvent_get_isTrusted
+     */
+    _get_isTrusted(this: AnimationEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type AnimationEventMethods = AnimationEventOwnMethods & EventMethods;
+  export type AnimationEvent = HostClass<"NtsDomAnimationEvent", Event> & AnimationEventMethods;
+  /** @ntsSymbol nts_dom_as_AnimationEvent */
+  export function asAnimationEvent(event: Event): AnimationEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_AnimationEvent_2
+   */
+  export function newAnimationEvent(type: StringView, eventInitDict: ByValue<AnimationEventInit> | Fields<AnimationEventInit>): AnimationEvent;
+  /**
+   * @ntsSymbol nts_dom_new_AnimationEvent_1
+   */
+  export function newAnimationEvent(type: StringView): AnimationEvent;
+  export interface TransitionEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_TransitionEvent_get_propertyName
+     */
+    _get_propertyName(this: TransitionEvent): StringView;
+    /**
+     * @ntsGet _get_propertyName
+     */
+    readonly propertyName: StringView;
+    /**
+     * @ntsSymbol nts_dom_TransitionEvent_get_elapsedTime
+     */
+    _get_elapsedTime(this: TransitionEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_elapsedTime
+     */
+    readonly elapsedTime: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_TransitionEvent_get_pseudoElement
+     */
+    _get_pseudoElement(this: TransitionEvent): StringView;
+    /**
+     * @ntsGet _get_pseudoElement
+     */
+    readonly pseudoElement: StringView;
+    /**
+     * @ntsSymbol nts_dom_TransitionEvent_get_isTrusted
+     */
+    _get_isTrusted(this: TransitionEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type TransitionEventMethods = TransitionEventOwnMethods & EventMethods;
+  export type TransitionEvent = HostClass<"NtsDomTransitionEvent", Event> & TransitionEventMethods;
+  /** @ntsSymbol nts_dom_as_TransitionEvent */
+  export function asTransitionEvent(event: Event): TransitionEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_TransitionEvent_2
+   */
+  export function newTransitionEvent(type: StringView, eventInitDict: ByValue<TransitionEventInit> | Fields<TransitionEventInit>): TransitionEvent;
+  /**
+   * @ntsSymbol nts_dom_new_TransitionEvent_1
+   */
+  export function newTransitionEvent(type: StringView): TransitionEvent;
+  export interface SubmitEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SubmitEvent_get_submitter
+     */
+    _get_submitter(this: SubmitEvent): HTMLElement | null;
+    /**
+     * @ntsGet _get_submitter
+     */
+    readonly submitter: HTMLElement | null;
+    /**
+     * @ntsSymbol nts_dom_SubmitEvent_get_isTrusted
+     */
+    _get_isTrusted(this: SubmitEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type SubmitEventMethods = SubmitEventOwnMethods & EventMethods;
+  export type SubmitEvent = HostClass<"NtsDomSubmitEvent", Event> & SubmitEventMethods;
+  /** @ntsSymbol nts_dom_as_SubmitEvent */
+  export function asSubmitEvent(event: Event): SubmitEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_SubmitEvent_2
+   */
+  export function newSubmitEvent(type: StringView, eventInitDict: ByValue<SubmitEventInit> | Fields<SubmitEventInit>): SubmitEvent;
+  /**
+   * @ntsSymbol nts_dom_new_SubmitEvent_1
+   */
+  export function newSubmitEvent(type: StringView): SubmitEvent;
+  export interface HashChangeEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HashChangeEvent_get_oldURL
+     */
+    _get_oldURL(this: HashChangeEvent): StringView;
+    /**
+     * @ntsGet _get_oldURL
+     */
+    readonly oldURL: StringView;
+    /**
+     * @ntsSymbol nts_dom_HashChangeEvent_get_newURL
+     */
+    _get_newURL(this: HashChangeEvent): StringView;
+    /**
+     * @ntsGet _get_newURL
+     */
+    readonly newURL: StringView;
+    /**
+     * @ntsSymbol nts_dom_HashChangeEvent_get_isTrusted
+     */
+    _get_isTrusted(this: HashChangeEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type HashChangeEventMethods = HashChangeEventOwnMethods & EventMethods;
+  export type HashChangeEvent = HostClass<"NtsDomHashChangeEvent", Event> & HashChangeEventMethods;
+  /** @ntsSymbol nts_dom_as_HashChangeEvent */
+  export function asHashChangeEvent(event: Event): HashChangeEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_HashChangeEvent_2
+   */
+  export function newHashChangeEvent(type: StringView, eventInitDict: ByValue<HashChangeEventInit> | Fields<HashChangeEventInit>): HashChangeEvent;
+  /**
+   * @ntsSymbol nts_dom_new_HashChangeEvent_1
+   */
+  export function newHashChangeEvent(type: StringView): HashChangeEvent;
+  export interface PageTransitionEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_PageTransitionEvent_get_persisted
+     */
+    _get_persisted(this: PageTransitionEvent): boolean;
+    /**
+     * @ntsGet _get_persisted
+     */
+    readonly persisted: boolean;
+    /**
+     * @ntsSymbol nts_dom_PageTransitionEvent_get_isTrusted
+     */
+    _get_isTrusted(this: PageTransitionEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type PageTransitionEventMethods = PageTransitionEventOwnMethods & EventMethods;
+  export type PageTransitionEvent = HostClass<"NtsDomPageTransitionEvent", Event> & PageTransitionEventMethods;
+  /** @ntsSymbol nts_dom_as_PageTransitionEvent */
+  export function asPageTransitionEvent(event: Event): PageTransitionEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_PageTransitionEvent_2
+   */
+  export function newPageTransitionEvent(type: StringView, eventInitDict: ByValue<PageTransitionEventInit> | Fields<PageTransitionEventInit>): PageTransitionEvent;
+  /**
+   * @ntsSymbol nts_dom_new_PageTransitionEvent_1
+   */
+  export function newPageTransitionEvent(type: StringView): PageTransitionEvent;
+  export interface ProgressEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_ProgressEvent_get_lengthComputable
+     */
+    _get_lengthComputable(this: ProgressEvent): boolean;
+    /**
+     * @ntsGet _get_lengthComputable
+     */
+    readonly lengthComputable: boolean;
+    /**
+     * @ntsSymbol nts_dom_ProgressEvent_get_loaded
+     */
+    _get_loaded(this: ProgressEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_loaded
+     */
+    readonly loaded: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_ProgressEvent_get_total
+     */
+    _get_total(this: ProgressEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_total
+     */
+    readonly total: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_ProgressEvent_get_isTrusted
+     */
+    _get_isTrusted(this: ProgressEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type ProgressEventMethods = ProgressEventOwnMethods & EventMethods;
+  export type ProgressEvent = HostClass<"NtsDomProgressEvent", Event> & ProgressEventMethods;
+  /** @ntsSymbol nts_dom_as_ProgressEvent */
+  export function asProgressEvent(event: Event): ProgressEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_ProgressEvent_2
+   */
+  export function newProgressEvent(type: StringView, eventInitDict: ByValue<ProgressEventInit> | Fields<ProgressEventInit>): ProgressEvent;
+  /**
+   * @ntsSymbol nts_dom_new_ProgressEvent_1
+   */
+  export function newProgressEvent(type: StringView): ProgressEvent;
+  export interface ErrorEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_ErrorEvent_get_message
+     */
+    _get_message(this: ErrorEvent): StringView;
+    /**
+     * @ntsGet _get_message
+     */
+    readonly message: StringView;
+    /**
+     * @ntsSymbol nts_dom_ErrorEvent_get_filename
+     */
+    _get_filename(this: ErrorEvent): StringView;
+    /**
+     * @ntsGet _get_filename
+     */
+    readonly filename: StringView;
+    /**
+     * @ntsSymbol nts_dom_ErrorEvent_get_lineno
+     */
+    _get_lineno(this: ErrorEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_lineno
+     */
+    readonly lineno: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_ErrorEvent_get_colno
+     */
+    _get_colno(this: ErrorEvent): CNumber<"double">;
+    /**
+     * @ntsGet _get_colno
+     */
+    readonly colno: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_ErrorEvent_get_isTrusted
+     */
+    _get_isTrusted(this: ErrorEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type ErrorEventMethods = ErrorEventOwnMethods & EventMethods;
+  export type ErrorEvent = HostClass<"NtsDomErrorEvent", Event> & ErrorEventMethods;
+  /** @ntsSymbol nts_dom_as_ErrorEvent */
+  export function asErrorEvent(event: Event): ErrorEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_ErrorEvent_2
+   */
+  export function newErrorEvent(type: StringView, eventInitDict: ByValue<ErrorEventInit> | Fields<ErrorEventInit>): ErrorEvent;
+  /**
+   * @ntsSymbol nts_dom_new_ErrorEvent_1
+   */
+  export function newErrorEvent(type: StringView): ErrorEvent;
+  export interface FormDataOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_FormData_append_2
+     */
+    append(this: FormData, name: StringView, value: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_FormData_delete
+     */
+    delete(this: FormData, name: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_FormData_has
+     */
+    has(this: FormData, name: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_FormData_set_2
+     */
+    set(this: FormData, name: StringView, value: StringView): void;
+  }
+  export type FormDataMethods = FormDataOwnMethods;
+  export type FormData = HostClass<"NtsDomFormData", null, "nts_dom_retain", "nts_dom_release"> & FormDataMethods;
+  /**
+   * @ntsSymbol nts_dom_new_FormData_2
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newFormData(form: HTMLFormElement, submitter: HTMLElement | null, error?: Ptr<DOMException | null>): FormData;
+  /**
+   * @ntsSymbol nts_dom_new_FormData_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newFormData(form: HTMLFormElement, error?: Ptr<DOMException | null>): FormData;
+  /**
+   * @ntsSymbol nts_dom_new_FormData_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newFormData(error?: Ptr<DOMException | null>): FormData;
+  export interface HTMLMediaElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_error
+     */
+    _get_error(this: HTMLMediaElement): MediaError | null;
+    /**
+     * @ntsGet _get_error
+     */
+    readonly error: MediaError | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_src
+     */
+    _get_src(this: HTMLMediaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_src
+     */
+    _set_src(this: HTMLMediaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_src
+     * @ntsSet _set_src
+     */
+    src: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_currentSrc
+     */
+    _get_currentSrc(this: HTMLMediaElement): StringView;
+    /**
+     * @ntsGet _get_currentSrc
+     */
+    readonly currentSrc: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_crossOrigin
+     */
+    _get_crossOrigin(this: HTMLMediaElement): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_crossOrigin
+     */
+    _set_crossOrigin(this: HTMLMediaElement, value: StringView | null): void;
+    /**
+     * @ntsGet _get_crossOrigin
+     * @ntsSet _set_crossOrigin
+     */
+    crossOrigin: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_networkState
+     */
+    _get_networkState(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_networkState
+     */
+    readonly networkState: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_preload
+     */
+    _get_preload(this: HTMLMediaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_preload
+     */
+    _set_preload(this: HTMLMediaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_preload
+     * @ntsSet _set_preload
+     */
+    preload: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_buffered
+     */
+    _get_buffered(this: HTMLMediaElement): TimeRanges;
+    /**
+     * @ntsGet _get_buffered
+     */
+    readonly buffered: TimeRanges;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_readyState
+     */
+    _get_readyState(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_readyState
+     */
+    readonly readyState: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_seeking
+     */
+    _get_seeking(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsGet _get_seeking
+     */
+    readonly seeking: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_currentTime
+     */
+    _get_currentTime(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_currentTime
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_currentTime(this: HTMLMediaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_currentTime
+     * @ntsSet _set_currentTime
+     */
+    currentTime: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_duration
+     */
+    _get_duration(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_duration
+     */
+    readonly duration: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_paused
+     */
+    _get_paused(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsGet _get_paused
+     */
+    readonly paused: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_defaultPlaybackRate
+     */
+    _get_defaultPlaybackRate(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_defaultPlaybackRate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_defaultPlaybackRate(this: HTMLMediaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_defaultPlaybackRate
+     * @ntsSet _set_defaultPlaybackRate
+     */
+    defaultPlaybackRate: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_playbackRate
+     */
+    _get_playbackRate(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_playbackRate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_playbackRate(this: HTMLMediaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_playbackRate
+     * @ntsSet _set_playbackRate
+     */
+    playbackRate: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_played
+     */
+    _get_played(this: HTMLMediaElement): TimeRanges;
+    /**
+     * @ntsGet _get_played
+     */
+    readonly played: TimeRanges;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_seekable
+     */
+    _get_seekable(this: HTMLMediaElement): TimeRanges;
+    /**
+     * @ntsGet _get_seekable
+     */
+    readonly seekable: TimeRanges;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_ended
+     */
+    _get_ended(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsGet _get_ended
+     */
+    readonly ended: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_autoplay
+     */
+    _get_autoplay(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_autoplay
+     */
+    _set_autoplay(this: HTMLMediaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_autoplay
+     * @ntsSet _set_autoplay
+     */
+    autoplay: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_loop
+     */
+    _get_loop(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_loop
+     */
+    _set_loop(this: HTMLMediaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_loop
+     * @ntsSet _set_loop
+     */
+    loop: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_preservesPitch
+     */
+    _get_preservesPitch(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_preservesPitch
+     */
+    _set_preservesPitch(this: HTMLMediaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_preservesPitch
+     * @ntsSet _set_preservesPitch
+     */
+    preservesPitch: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_controls
+     */
+    _get_controls(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_controls
+     */
+    _set_controls(this: HTMLMediaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_controls
+     * @ntsSet _set_controls
+     */
+    controls: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_controlsList
+     */
+    _get_controlsList(this: HTMLMediaElement): DOMTokenList;
+    /**
+     * @ntsGet _get_controlsList
+     */
+    readonly controlsList: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_volume
+     */
+    _get_volume(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_volume
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_volume(this: HTMLMediaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_volume
+     * @ntsSet _set_volume
+     */
+    volume: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_muted
+     */
+    _get_muted(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_muted
+     */
+    _set_muted(this: HTMLMediaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_muted
+     * @ntsSet _set_muted
+     */
+    muted: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_defaultMuted
+     */
+    _get_defaultMuted(this: HTMLMediaElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_defaultMuted
+     */
+    _set_defaultMuted(this: HTMLMediaElement, value: boolean): void;
+    /**
+     * @ntsGet _get_defaultMuted
+     * @ntsSet _set_defaultMuted
+     */
+    defaultMuted: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_webkitAudioDecodedByteCount
+     */
+    _get_webkitAudioDecodedByteCount(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_webkitAudioDecodedByteCount
+     */
+    readonly webkitAudioDecodedByteCount: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_webkitVideoDecodedByteCount
+     */
+    _get_webkitVideoDecodedByteCount(this: HTMLMediaElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_webkitVideoDecodedByteCount
+     */
+    readonly webkitVideoDecodedByteCount: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_canPlayType
+     */
+    canPlayType(this: HTMLMediaElement, type: StringView): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_load
+     */
+    load(this: HTMLMediaElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_pause
+     */
+    pause(this: HTMLMediaElement): void;
+  }
+  export type HTMLMediaElementMethods = HTMLMediaElementOwnMethods & HTMLElementMethods;
+  export type HTMLMediaElement = HostClass<"NtsDomHTMLMediaElement", HTMLElement> & HTMLMediaElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLMediaElement */
+  export function asHTMLMediaElement(node: Node): HTMLMediaElement | null;
+  export interface HTMLVideoElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_get_width
+     */
+    _get_width(this: HTMLVideoElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_set_width
+     */
+    _set_width(this: HTMLVideoElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_width
+     * @ntsSet _set_width
+     */
+    width: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_get_height
+     */
+    _get_height(this: HTMLVideoElement): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_set_height
+     */
+    _set_height(this: HTMLVideoElement, value: CNumber<"double">): void;
+    /**
+     * @ntsGet _get_height
+     * @ntsSet _set_height
+     */
+    height: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_get_videoWidth
+     */
+    _get_videoWidth(this: HTMLVideoElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_videoWidth
+     */
+    readonly videoWidth: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_get_videoHeight
+     */
+    _get_videoHeight(this: HTMLVideoElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_videoHeight
+     */
+    readonly videoHeight: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_get_poster
+     */
+    _get_poster(this: HTMLVideoElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_set_poster
+     */
+    _set_poster(this: HTMLVideoElement, value: StringView): void;
+    /**
+     * @ntsGet _get_poster
+     * @ntsSet _set_poster
+     */
+    poster: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_get_webkitDecodedFrameCount
+     */
+    _get_webkitDecodedFrameCount(this: HTMLVideoElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_webkitDecodedFrameCount
+     */
+    readonly webkitDecodedFrameCount: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_get_webkitDroppedFrameCount
+     */
+    _get_webkitDroppedFrameCount(this: HTMLVideoElement): CNumber<"double">;
+    /**
+     * @ntsGet _get_webkitDroppedFrameCount
+     */
+    readonly webkitDroppedFrameCount: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_get_playsInline
+     */
+    _get_playsInline(this: HTMLVideoElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLVideoElement_set_playsInline
+     */
+    _set_playsInline(this: HTMLVideoElement, value: boolean): void;
+    /**
+     * @ntsGet _get_playsInline
+     * @ntsSet _set_playsInline
+     */
+    playsInline: boolean;
+  }
+  export type HTMLVideoElementMethods = HTMLVideoElementOwnMethods & HTMLMediaElementMethods;
+  export type HTMLVideoElement = HostClass<"NtsDomHTMLVideoElement", HTMLMediaElement> & HTMLVideoElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLVideoElement */
+  export function asHTMLVideoElement(node: Node): HTMLVideoElement | null;
+  export interface HTMLAudioElementOwnMethods {
+  }
+  export type HTMLAudioElementMethods = HTMLAudioElementOwnMethods & HTMLMediaElementMethods;
+  export type HTMLAudioElement = HostClass<"NtsDomHTMLAudioElement", HTMLMediaElement> & HTMLAudioElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLAudioElement */
+  export function asHTMLAudioElement(node: Node): HTMLAudioElement | null;
+  export interface TimeRangesOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_TimeRanges_get_length
+     */
+    _get_length(this: TimeRanges): CNumber<"double">;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_TimeRanges_end
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    end(this: TimeRanges, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_TimeRanges_start
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    start(this: TimeRanges, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+  }
+  export type TimeRangesMethods = TimeRangesOwnMethods;
+  export type TimeRanges = HostClass<"NtsDomTimeRanges", null, "nts_dom_retain", "nts_dom_release"> & TimeRangesMethods;
+  export interface MediaErrorOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_MediaError_get_code
+     */
+    _get_code(this: MediaError): CNumber<"double">;
+    /**
+     * @ntsGet _get_code
+     */
+    readonly code: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_MediaError_get_message
+     */
+    _get_message(this: MediaError): StringView;
+    /**
+     * @ntsGet _get_message
+     */
+    readonly message: StringView;
+  }
+  export type MediaErrorMethods = MediaErrorOwnMethods;
+  export type MediaError = HostClass<"NtsDomMediaError", null, "nts_dom_retain", "nts_dom_release"> & MediaErrorMethods;
+  export interface HTMLIFrameElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_src
+     */
+    _get_src(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_src
+     */
+    _set_src(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_src
+     * @ntsSet _set_src
+     */
+    src: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_srcdoc
+     */
+    _get_srcdoc(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_srcdoc
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_srcdoc(this: HTMLIFrameElement, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_srcdoc
+     * @ntsSet _set_srcdoc
+     */
+    srcdoc: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_name
+     */
+    _get_name(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_name
+     */
+    _set_name(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_name
+     * @ntsSet _set_name
+     */
+    name: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_sandbox
+     */
+    _get_sandbox(this: HTMLIFrameElement): DOMTokenList;
+    /**
+     * @ntsGet _get_sandbox
+     */
+    readonly sandbox: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_allowFullscreen
+     */
+    _get_allowFullscreen(this: HTMLIFrameElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_allowFullscreen
+     */
+    _set_allowFullscreen(this: HTMLIFrameElement, value: boolean): void;
+    /**
+     * @ntsGet _get_allowFullscreen
+     * @ntsSet _set_allowFullscreen
+     */
+    allowFullscreen: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_width
+     */
+    _get_width(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_width
+     */
+    _set_width(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_width
+     * @ntsSet _set_width
+     */
+    width: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_height
+     */
+    _get_height(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_height
+     */
+    _set_height(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_height
+     * @ntsSet _set_height
+     */
+    height: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_contentDocument
+     */
+    _get_contentDocument(this: HTMLIFrameElement): Document | null;
+    /**
+     * @ntsGet _get_contentDocument
+     */
+    readonly contentDocument: Document | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_contentWindow
+     */
+    _get_contentWindow(this: HTMLIFrameElement): Window | null;
+    /**
+     * @ntsGet _get_contentWindow
+     */
+    readonly contentWindow: Window | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_referrerPolicy
+     */
+    _get_referrerPolicy(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_referrerPolicy
+     */
+    _set_referrerPolicy(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_referrerPolicy
+     * @ntsSet _set_referrerPolicy
+     */
+    referrerPolicy: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_csp
+     */
+    _get_csp(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_csp
+     */
+    _set_csp(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_csp
+     * @ntsSet _set_csp
+     */
+    csp: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_allow
+     */
+    _get_allow(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_allow
+     */
+    _set_allow(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_allow
+     * @ntsSet _set_allow
+     */
+    allow: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_loading
+     */
+    _get_loading(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_loading
+     */
+    _set_loading(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_loading
+     * @ntsSet _set_loading
+     */
+    loading: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_adAuctionHeaders
+     */
+    _get_adAuctionHeaders(this: HTMLIFrameElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_adAuctionHeaders
+     */
+    _set_adAuctionHeaders(this: HTMLIFrameElement, value: boolean): void;
+    /**
+     * @ntsGet _get_adAuctionHeaders
+     * @ntsSet _set_adAuctionHeaders
+     */
+    adAuctionHeaders: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_align
+     */
+    _get_align(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_align
+     */
+    _set_align(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_scrolling
+     */
+    _get_scrolling(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_scrolling
+     */
+    _set_scrolling(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_scrolling
+     * @ntsSet _set_scrolling
+     */
+    scrolling: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_frameBorder
+     */
+    _get_frameBorder(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_frameBorder
+     */
+    _set_frameBorder(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_frameBorder
+     * @ntsSet _set_frameBorder
+     */
+    frameBorder: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_longDesc
+     */
+    _get_longDesc(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_longDesc
+     */
+    _set_longDesc(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_longDesc
+     * @ntsSet _set_longDesc
+     */
+    longDesc: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_marginHeight
+     */
+    _get_marginHeight(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_marginHeight
+     */
+    _set_marginHeight(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_marginHeight
+     * @ntsSet _set_marginHeight
+     */
+    marginHeight: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_marginWidth
+     */
+    _get_marginWidth(this: HTMLIFrameElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_marginWidth
+     */
+    _set_marginWidth(this: HTMLIFrameElement, value: StringView): void;
+    /**
+     * @ntsGet _get_marginWidth
+     * @ntsSet _set_marginWidth
+     */
+    marginWidth: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_getSVGDocument
+     */
+    getSVGDocument(this: HTMLIFrameElement): Document | null;
+  }
+  export type HTMLIFrameElementMethods = HTMLIFrameElementOwnMethods & HTMLElementMethods;
+  export type HTMLIFrameElement = HostClass<"NtsDomHTMLIFrameElement", HTMLElement> & HTMLIFrameElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLIFrameElement */
+  export function asHTMLIFrameElement(node: Node): HTMLIFrameElement | null;
+  export interface HTMLLinkElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_disabled
+     */
+    _get_disabled(this: HTMLLinkElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_disabled
+     */
+    _set_disabled(this: HTMLLinkElement, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_href
+     */
+    _get_href(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_href
+     */
+    _set_href(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_href
+     * @ntsSet _set_href
+     */
+    href: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_crossOrigin
+     */
+    _get_crossOrigin(this: HTMLLinkElement): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_crossOrigin
+     */
+    _set_crossOrigin(this: HTMLLinkElement, value: StringView | null): void;
+    /**
+     * @ntsGet _get_crossOrigin
+     * @ntsSet _set_crossOrigin
+     */
+    crossOrigin: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_rel
+     */
+    _get_rel(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_rel
+     */
+    _set_rel(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_rel
+     * @ntsSet _set_rel
+     */
+    rel: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_relList
+     */
+    _get_relList(this: HTMLLinkElement): DOMTokenList;
+    /**
+     * @ntsGet _get_relList
+     */
+    readonly relList: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_media
+     */
+    _get_media(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_media
+     */
+    _set_media(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_media
+     * @ntsSet _set_media
+     */
+    media: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_hreflang
+     */
+    _get_hreflang(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_hreflang
+     */
+    _set_hreflang(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_hreflang
+     * @ntsSet _set_hreflang
+     */
+    hreflang: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_type
+     */
+    _get_type(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_type
+     */
+    _set_type(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_as
+     */
+    _get_as(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_as
+     */
+    _set_as(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_as
+     * @ntsSet _set_as
+     */
+    as: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_referrerPolicy
+     */
+    _get_referrerPolicy(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_referrerPolicy
+     */
+    _set_referrerPolicy(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_referrerPolicy
+     * @ntsSet _set_referrerPolicy
+     */
+    referrerPolicy: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_sizes
+     */
+    _get_sizes(this: HTMLLinkElement): DOMTokenList;
+    /**
+     * @ntsGet _get_sizes
+     */
+    readonly sizes: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_fetchPriority
+     */
+    _get_fetchPriority(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_fetchPriority
+     */
+    _set_fetchPriority(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_fetchPriority
+     * @ntsSet _set_fetchPriority
+     */
+    fetchPriority: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_imageSrcset
+     */
+    _get_imageSrcset(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_imageSrcset
+     */
+    _set_imageSrcset(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_imageSrcset
+     * @ntsSet _set_imageSrcset
+     */
+    imageSrcset: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_imageSizes
+     */
+    _get_imageSizes(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_imageSizes
+     */
+    _set_imageSizes(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_imageSizes
+     * @ntsSet _set_imageSizes
+     */
+    imageSizes: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_charset
+     */
+    _get_charset(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_charset
+     */
+    _set_charset(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_charset
+     * @ntsSet _set_charset
+     */
+    charset: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_rev
+     */
+    _get_rev(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_rev
+     */
+    _set_rev(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_rev
+     * @ntsSet _set_rev
+     */
+    rev: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_target
+     */
+    _get_target(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_target
+     */
+    _set_target(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_target
+     * @ntsSet _set_target
+     */
+    target: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_sheet
+     */
+    _get_sheet(this: HTMLLinkElement): StyleSheet | null;
+    /**
+     * @ntsGet _get_sheet
+     */
+    readonly sheet: StyleSheet | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_integrity
+     */
+    _get_integrity(this: HTMLLinkElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_set_integrity
+     */
+    _set_integrity(this: HTMLLinkElement, value: StringView): void;
+    /**
+     * @ntsGet _get_integrity
+     * @ntsSet _set_integrity
+     */
+    integrity: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLLinkElement_get_blocking
+     */
+    _get_blocking(this: HTMLLinkElement): DOMTokenList;
+    /**
+     * @ntsGet _get_blocking
+     */
+    readonly blocking: DOMTokenList;
+  }
+  export type HTMLLinkElementMethods = HTMLLinkElementOwnMethods & HTMLElementMethods;
+  export type HTMLLinkElement = HostClass<"NtsDomHTMLLinkElement", HTMLElement> & HTMLLinkElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLLinkElement */
+  export function asHTMLLinkElement(node: Node): HTMLLinkElement | null;
+  export interface HTMLStyleElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLStyleElement_get_disabled
+     */
+    _get_disabled(this: HTMLStyleElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLStyleElement_set_disabled
+     */
+    _set_disabled(this: HTMLStyleElement, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLStyleElement_get_media
+     */
+    _get_media(this: HTMLStyleElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLStyleElement_set_media
+     */
+    _set_media(this: HTMLStyleElement, value: StringView): void;
+    /**
+     * @ntsGet _get_media
+     * @ntsSet _set_media
+     */
+    media: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLStyleElement_get_type
+     */
+    _get_type(this: HTMLStyleElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLStyleElement_set_type
+     */
+    _set_type(this: HTMLStyleElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLStyleElement_get_sheet
+     */
+    _get_sheet(this: HTMLStyleElement): StyleSheet | null;
+    /**
+     * @ntsGet _get_sheet
+     */
+    readonly sheet: StyleSheet | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLStyleElement_get_blocking
+     */
+    _get_blocking(this: HTMLStyleElement): DOMTokenList;
+    /**
+     * @ntsGet _get_blocking
+     */
+    readonly blocking: DOMTokenList;
+  }
+  export type HTMLStyleElementMethods = HTMLStyleElementOwnMethods & HTMLElementMethods;
+  export type HTMLStyleElement = HostClass<"NtsDomHTMLStyleElement", HTMLElement> & HTMLStyleElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLStyleElement */
+  export function asHTMLStyleElement(node: Node): HTMLStyleElement | null;
+  export interface HTMLScriptElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_src
+     */
+    _get_src(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_src
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_src(this: HTMLScriptElement, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_src
+     * @ntsSet _set_src
+     */
+    src: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_type
+     */
+    _get_type(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_type
+     */
+    _set_type(this: HTMLScriptElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_noModule
+     */
+    _get_noModule(this: HTMLScriptElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_noModule
+     */
+    _set_noModule(this: HTMLScriptElement, value: boolean): void;
+    /**
+     * @ntsGet _get_noModule
+     * @ntsSet _set_noModule
+     */
+    noModule: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_charset
+     */
+    _get_charset(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_charset
+     */
+    _set_charset(this: HTMLScriptElement, value: StringView): void;
+    /**
+     * @ntsGet _get_charset
+     * @ntsSet _set_charset
+     */
+    charset: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_async
+     */
+    _get_async(this: HTMLScriptElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_async
+     */
+    _set_async(this: HTMLScriptElement, value: boolean): void;
+    /**
+     * @ntsGet _get_async
+     * @ntsSet _set_async
+     */
+    async: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_defer
+     */
+    _get_defer(this: HTMLScriptElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_defer
+     */
+    _set_defer(this: HTMLScriptElement, value: boolean): void;
+    /**
+     * @ntsGet _get_defer
+     * @ntsSet _set_defer
+     */
+    defer: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_crossOrigin
+     */
+    _get_crossOrigin(this: HTMLScriptElement): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_crossOrigin
+     */
+    _set_crossOrigin(this: HTMLScriptElement, value: StringView | null): void;
+    /**
+     * @ntsGet _get_crossOrigin
+     * @ntsSet _set_crossOrigin
+     */
+    crossOrigin: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_text
+     */
+    _get_text(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_text
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_text(this: HTMLScriptElement, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_text
+     * @ntsSet _set_text
+     */
+    text: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_referrerPolicy
+     */
+    _get_referrerPolicy(this: HTMLScriptElement): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_referrerPolicy
+     */
+    _set_referrerPolicy(this: HTMLScriptElement, value: StringView | null): void;
+    /**
+     * @ntsGet _get_referrerPolicy
+     * @ntsSet _set_referrerPolicy
+     */
+    referrerPolicy: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_fetchPriority
+     */
+    _get_fetchPriority(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_fetchPriority
+     */
+    _set_fetchPriority(this: HTMLScriptElement, value: StringView): void;
+    /**
+     * @ntsGet _get_fetchPriority
+     * @ntsSet _set_fetchPriority
+     */
+    fetchPriority: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_event
+     */
+    _get_event(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_event
+     */
+    _set_event(this: HTMLScriptElement, value: StringView): void;
+    /**
+     * @ntsGet _get_event
+     * @ntsSet _set_event
+     */
+    event: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_htmlFor
+     */
+    _get_htmlFor(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_htmlFor
+     */
+    _set_htmlFor(this: HTMLScriptElement, value: StringView): void;
+    /**
+     * @ntsGet _get_htmlFor
+     * @ntsSet _set_htmlFor
+     */
+    htmlFor: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_integrity
+     */
+    _get_integrity(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_integrity
+     */
+    _set_integrity(this: HTMLScriptElement, value: StringView): void;
+    /**
+     * @ntsGet _get_integrity
+     * @ntsSet _set_integrity
+     */
+    integrity: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_blocking
+     */
+    _get_blocking(this: HTMLScriptElement): DOMTokenList;
+    /**
+     * @ntsGet _get_blocking
+     */
+    readonly blocking: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_attributionSrc
+     */
+    _get_attributionSrc(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_attributionSrc
+     */
+    _set_attributionSrc(this: HTMLScriptElement, value: StringView): void;
+    /**
+     * @ntsGet _get_attributionSrc
+     * @ntsSet _set_attributionSrc
+     */
+    attributionSrc: StringView;
+  }
+  export type HTMLScriptElementMethods = HTMLScriptElementOwnMethods & HTMLElementMethods;
+  export type HTMLScriptElement = HostClass<"NtsDomHTMLScriptElement", HTMLElement> & HTMLScriptElementMethods;
+  /** @ntsSymbol nts_dom_as_HTMLScriptElement */
+  export function asHTMLScriptElement(node: Node): HTMLScriptElement | null;
+  export interface DOMParserOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMParser_parseFromString
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    parseFromString(this: DOMParser, str: StringView, type: SupportedType, error?: Ptr<DOMException | null>): Document;
+  }
+  export type DOMParserMethods = DOMParserOwnMethods;
+  export type DOMParser = HostClass<"NtsDomDOMParser", null, "nts_dom_retain", "nts_dom_release"> & DOMParserMethods;
+  /**
+   * @ntsSymbol nts_dom_new_DOMParser
+   */
+  export function newDOMParser(): DOMParser;
+  export interface XMLSerializerOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_XMLSerializer_serializeToString
+     */
+    serializeToString(this: XMLSerializer, root: Node): StringView;
+  }
+  export type XMLSerializerMethods = XMLSerializerOwnMethods;
+  export type XMLSerializer = HostClass<"NtsDomXMLSerializer", null, "nts_dom_retain", "nts_dom_release"> & XMLSerializerMethods;
+  /**
+   * @ntsSymbol nts_dom_new_XMLSerializer
+   */
+  export function newXMLSerializer(): XMLSerializer;
+  export interface TreeWalkerOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_get_root
+     */
+    _get_root(this: TreeWalker): Node;
+    /**
+     * @ntsGet _get_root
+     */
+    readonly root: Node;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_get_whatToShow
+     */
+    _get_whatToShow(this: TreeWalker): CNumber<"double">;
+    /**
+     * @ntsGet _get_whatToShow
+     */
+    readonly whatToShow: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_get_currentNode
+     */
+    _get_currentNode(this: TreeWalker): Node;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_set_currentNode
+     */
+    _set_currentNode(this: TreeWalker, value: Node): void;
+    /**
+     * @ntsGet _get_currentNode
+     * @ntsSet _set_currentNode
+     */
+    currentNode: Node;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_firstChild
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    firstChild(this: TreeWalker, error?: Ptr<DOMException | null>): Node | null;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_lastChild
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    lastChild(this: TreeWalker, error?: Ptr<DOMException | null>): Node | null;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_nextNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    nextNode(this: TreeWalker, error?: Ptr<DOMException | null>): Node | null;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_nextSibling
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    nextSibling(this: TreeWalker, error?: Ptr<DOMException | null>): Node | null;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_parentNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    parentNode(this: TreeWalker, error?: Ptr<DOMException | null>): Node | null;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_previousNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    previousNode(this: TreeWalker, error?: Ptr<DOMException | null>): Node | null;
+    /**
+     * @ntsSymbol nts_dom_TreeWalker_previousSibling
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    previousSibling(this: TreeWalker, error?: Ptr<DOMException | null>): Node | null;
+  }
+  export type TreeWalkerMethods = TreeWalkerOwnMethods;
+  export type TreeWalker = HostClass<"NtsDomTreeWalker", null, "nts_dom_retain", "nts_dom_release"> & TreeWalkerMethods;
+  export interface NodeIteratorOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_NodeIterator_get_root
+     */
+    _get_root(this: NodeIterator): Node;
+    /**
+     * @ntsGet _get_root
+     */
+    readonly root: Node;
+    /**
+     * @ntsSymbol nts_dom_NodeIterator_get_referenceNode
+     */
+    _get_referenceNode(this: NodeIterator): Node;
+    /**
+     * @ntsGet _get_referenceNode
+     */
+    readonly referenceNode: Node;
+    /**
+     * @ntsSymbol nts_dom_NodeIterator_get_pointerBeforeReferenceNode
+     */
+    _get_pointerBeforeReferenceNode(this: NodeIterator): boolean;
+    /**
+     * @ntsGet _get_pointerBeforeReferenceNode
+     */
+    readonly pointerBeforeReferenceNode: boolean;
+    /**
+     * @ntsSymbol nts_dom_NodeIterator_get_whatToShow
+     */
+    _get_whatToShow(this: NodeIterator): CNumber<"double">;
+    /**
+     * @ntsGet _get_whatToShow
+     */
+    readonly whatToShow: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_NodeIterator_detach
+     */
+    detach(this: NodeIterator): void;
+    /**
+     * @ntsSymbol nts_dom_NodeIterator_nextNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    nextNode(this: NodeIterator, error?: Ptr<DOMException | null>): Node | null;
+    /**
+     * @ntsSymbol nts_dom_NodeIterator_previousNode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    previousNode(this: NodeIterator, error?: Ptr<DOMException | null>): Node | null;
+  }
+  export type NodeIteratorMethods = NodeIteratorOwnMethods;
+  export type NodeIterator = HostClass<"NtsDomNodeIterator", null, "nts_dom_retain", "nts_dom_release"> & NodeIteratorMethods;
+  export interface DOMImplementationOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMImplementation_createDocumentType
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createDocumentType(this: DOMImplementation, qualifiedName: StringView, publicId: StringView, systemId: StringView, error?: Ptr<DOMException | null>): DocumentType;
+    /**
+     * @ntsSymbol nts_dom_DOMImplementation_createHTMLDocument_1
+     */
+    createHTMLDocument(this: DOMImplementation, title: StringView): Document;
+    /**
+     * @ntsSymbol nts_dom_DOMImplementation_createHTMLDocument_0
+     */
+    createHTMLDocument(this: DOMImplementation): Document;
+    /**
+     * @ntsSymbol nts_dom_DOMImplementation_hasFeature
+     */
+    hasFeature(this: DOMImplementation): boolean;
+  }
+  export type DOMImplementationMethods = DOMImplementationOwnMethods;
+  export type DOMImplementation = HostClass<"NtsDomDOMImplementation", null, "nts_dom_retain", "nts_dom_release"> & DOMImplementationMethods;
+  export interface CDATASectionOwnMethods {
+  }
+  export type CDATASectionMethods = CDATASectionOwnMethods & TextMethods;
+  export type CDATASection = HostClass<"NtsDomCDATASection", Text> & CDATASectionMethods;
+  /** @ntsSymbol nts_dom_as_CDATASection */
+  export function asCDATASection(node: Node): CDATASection | null;
+  export interface ProcessingInstructionOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_get_target
+     */
+    _get_target(this: ProcessingInstruction): StringView;
+    /**
+     * @ntsGet _get_target
+     */
+    readonly target: StringView;
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_get_sheet
+     */
+    _get_sheet(this: ProcessingInstruction): StyleSheet | null;
+    /**
+     * @ntsGet _get_sheet
+     */
+    readonly sheet: StyleSheet | null;
+  }
+  export type ProcessingInstructionMethods = ProcessingInstructionOwnMethods & CharacterDataMethods;
+  export type ProcessingInstruction = HostClass<"NtsDomProcessingInstruction", CharacterData> & ProcessingInstructionMethods;
+  /** @ntsSymbol nts_dom_as_ProcessingInstruction */
+  export function asProcessingInstruction(node: Node): ProcessingInstruction | null;
+  export interface DocumentTypeOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DocumentType_get_name
+     */
+    _get_name(this: DocumentType): StringView;
+    /**
+     * @ntsGet _get_name
+     */
+    readonly name: StringView;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_get_publicId
+     */
+    _get_publicId(this: DocumentType): StringView;
+    /**
+     * @ntsGet _get_publicId
+     */
+    readonly publicId: StringView;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_get_systemId
+     */
+    _get_systemId(this: DocumentType): StringView;
+    /**
+     * @ntsGet _get_systemId
+     */
+    readonly systemId: StringView;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_nnn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_nns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_nsn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_nss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_snn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_sns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_nn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_ns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_n
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_after_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    after(this: DocumentType, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_nnn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_nns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_nsn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_nss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_snn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_sns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_nn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_ns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_n
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_before_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    before(this: DocumentType, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_remove
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    remove(this: DocumentType, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_nnn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: Node, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_nns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: Node, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_nsn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: Node, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_nss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: Node, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_snn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: StringView, nodes2: Node, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_sns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: StringView, nodes2: Node, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_ssn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: StringView, nodes2: StringView, nodes3: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_sss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: StringView, nodes2: StringView, nodes3: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_nn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: Node, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_ns
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: Node, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_sn
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: StringView, nodes2: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_ss
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: StringView, nodes2: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_n
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: Node, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_s
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, nodes1: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_DocumentType_replaceWith_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceWith(this: DocumentType, error?: Ptr<DOMException | null>): void;
+  }
+  export type DocumentTypeMethods = DocumentTypeOwnMethods & NodeMethods;
+  export type DocumentType = HostClass<"NtsDomDocumentType", Node> & DocumentTypeMethods;
+  /** @ntsSymbol nts_dom_as_DocumentType */
+  export function asDocumentType(node: Node): DocumentType | null;
 }

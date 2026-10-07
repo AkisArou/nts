@@ -12,8 +12,8 @@
 // Page script has no `asText`/`asHTMLElement`/`asHTMLInputElement`; the
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
-import { newDOMPoint, newMutationObserver, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
-import { asCSSStyleSheet, asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
+import { newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
+import { asCSSStyleSheet, asElement, asHTMLFormElement, asHTMLVideoElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { CanvasFillRule, Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
 export interface VectorHost {
@@ -507,6 +507,47 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   const scratch = [form, prose, style, dialog, details, progress];
   log("cleanup", scratch.map((node: Element): string => node.parentNode === root ? "root" : node.parentNode === null ? "detached" : describe(node.parentNode)).join(","));
   for (const node of scratch) node.remove();
+
+  // Parsing and serializing, tree walking, data transfer and drag events,
+  // a form as data, events made with their dictionaries, the doctype, a
+  // created document, media state. Nothing here joins the page.
+  const parsed = newDOMParser().parseFromString("<p id='x'>parsed <b>bold</b></p>", "text/html");
+  log("domParser", shown(parsed.querySelector("#x")!.textContent) + "|" + parsed.body!.children.length);
+  const xml = newDOMParser().parseFromString("<root><item a='1'/></root>", "application/xml");
+  log("xmlParsed", xml.documentElement!.tagName + "|" + shown(xml.documentElement!.firstElementChild!.getAttribute("a")));
+  log("serialized", newXMLSerializer().serializeToString(xml));
+  const walkRoot = d.createElement("div");
+  const walkSpan = d.createElement("span");
+  walkSpan.appendChild(d.createElement("b"));
+  walkRoot.appendChild(walkSpan);
+  walkRoot.appendChild(d.createTextNode("text"));
+  walkRoot.appendChild(d.createElement("i"));
+  const walker = d.createTreeWalker(walkRoot, 1);
+  let walked = "";
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) walked += node.nodeName + ",";
+  log("treeWalker", walked + (walker.currentNode === walkRoot.lastChild ? "end" : "elsewhere"));
+  const transfer = newDataTransfer();
+  transfer.setData("text/plain", "dragged");
+  log("dataTransfer", transfer.getData("text/plain") + "|" + shown(transfer.getData("text/html")) + "|" + transfer.dropEffect);
+  const drag = newDragEvent("dragstart", { bubbles: true });
+  log("dragEvent", drag.type + "|" + drag.bubbles + "|" + (drag.dataTransfer === null ? "none" : "some"));
+  const progressEvent = newProgressEvent("progress", { lengthComputable: true, loaded: 5, total: 10 });
+  log("progressEvent", progressEvent.lengthComputable + "|" + progressEvent.loaded + "|" + progressEvent.total);
+  const dataForm = asHTMLFormElement(d.createElement("form"))!;
+  const field = asHTMLInputElement(d.createElement("input"))!;
+  field.name = "a";
+  field.value = "1";
+  dataForm.appendChild(field);
+  const data = newFormData(dataForm, null);
+  data.append("b", "2");
+  const hadA = data.has("a");
+  data.delete("a");
+  log("formData", hadA + "|" + data.has("a") + "|" + data.has("b"));
+  log("doctype", d.doctype === null ? "none" : d.doctype.name);
+  const made = d.implementation.createHTMLDocument("made");
+  log("createdDocument", made.title + "|" + (made.body === null ? "no body" : made.body.nodeName));
+  const video = asHTMLVideoElement(d.createElement("video"))!;
+  log("media", video.paused + "|" + video.currentTime + "|" + video.readyState + "|" + video.networkState);
 
   // Canvas 2D: a drawing, then its pixels as PNG (toDataURL), hashed. The
   // same Skia draws for both, so the hashes agree only if every call drew

@@ -412,8 +412,25 @@ inline const blink::String &AsString(const blink::String &text) { return text; }
 template <class Union> blink::String AsString(const Union *value) {
   if (!value)
     return blink::String();
-  CHECK(value->IsString());
-  return value->GetAsString();
+  // The string member is named for its IDL type (`(File or USVString)`).
+  if constexpr (requires { value->IsUSVString(); }) {
+    CHECK(value->IsUSVString());
+    return value->GetAsUSVString();
+  } else {
+    CHECK(value->IsString());
+    return value->GetAsString();
+  }
+}
+// The same union, answered already converted to V8 (an OptimizedReturnProxy,
+// `script.text`): its string, read back out.
+template <class Union>
+blink::String AsString(blink::bindings::OptimizedReturnProxy<Union> value) {
+  if (value.IsNull())
+    return blink::String();
+  const v8::Local<v8::Value> converted = value.ToV8();
+  CHECK(converted->IsString());
+  return blink::ToCoreString(v8::Isolate::GetCurrent(),
+                             converted.As<v8::String>());
 }
 
 // IDL enums. A value crosses as the program's string -- a literal union in

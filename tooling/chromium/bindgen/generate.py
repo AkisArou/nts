@@ -406,9 +406,16 @@ class Generator:
         # CHECKs that a union it does answer holds its string.
         # Only where the string is the one primitive arm, as for a parameter:
         # a union of several primitives answers a V8 value (`hidden`'s Ret).
+        # And only where the other members are Trusted Types, which a page
+        # without a Trusted Types policy never answers: FormData.get's File
+        # is a value the program would have to receive, not a string.
         if unwrapped.is_union and sum(1 for t in unwrapped.flattened_member_types
                                       if t.unwrap().keyword_typename in STRINGS) == 1 \
-                and sum(1 for t in unwrapped.flattened_member_types if not t.unwrap().is_interface) == 1:
+                and sum(1 for t in unwrapped.flattened_member_types if not t.unwrap().is_interface) == 1 \
+                and all(t.unwrap().keyword_typename in STRINGS
+                        or t.unwrap().type_definition_object.identifier.startswith("Trusted")
+                        for t in unwrapped.flattened_member_types):
+            self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
         if keyword in NUMERIC and not nullable:
             return Result("double", 'CNumber<"double">', "scalar")
