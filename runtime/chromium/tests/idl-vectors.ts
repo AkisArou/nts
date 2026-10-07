@@ -13,7 +13,7 @@
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
 import { newMutationObserver, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
-import { asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
+import { asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { CanvasFillRule, Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
 export interface VectorHost {
@@ -393,6 +393,50 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   thrown("enumInvalid", () => { ranged.setRangeText("W", 0, 1, ("inward" + "") as SelectionMode); });
   thrown("enumAfterRange", () => { ranged.setRangeText("W", 9, 1, ("inward" + "") as SelectionMode); });
   log("enumUnchanged", ranged.value);
+
+  // Shadow DOM: an open root and a closed one, slotting (assignedNodes, a
+  // sequence), and a composed event crossing the boundary, retargeted to the
+  // host outside it.
+  const shadowHost = d.createElement("div");
+  root.appendChild(shadowHost);
+  const shadow = shadowHost.attachShadow("open");
+  const slot = asHTMLSlotElement(d.createElement("slot"))!;
+  slot.name = "title";
+  shadow.appendChild(slot);
+  const shadowButton = d.createElement("button");
+  shadow.appendChild(shadowButton);
+  const slotted = d.createElement("span");
+  slotted.setAttribute("slot", "title");
+  slotted.textContent = "slotted";
+  shadowHost.appendChild(slotted);
+  shadowHost.appendChild(d.createElement("i"));
+  log("shadow", shadow.mode + "|" + (shadowHost.shadowRoot === shadow ? "found" : "lost") + "|" + (shadow.host === shadowHost ? "host" : "other")
+    + "|" + shadow.childNodes.length + "|" + (shadowButton.parentNode === shadow ? "inside" : "outside"));
+  const assigned = slot.assignedNodes();
+  log("slotted", assigned.length + "|" + (assigned.item(0) === slotted ? "span" : "other") + "|" + slot.assignedElements().length
+    + "|" + (slotted.assignedSlot === slot ? "assigned" : "unassigned"));
+  const closedHost = d.createElement("section");
+  root.appendChild(closedHost);
+  const closed = closedHost.attachShadow("closed");
+  log("closedShadow", closed.mode + "|" + (closedHost.shadowRoot === null ? "hidden" : "exposed"));
+  thrown("shadowTwice", () => { shadowHost.attachShadow("open"); });
+  thrown("shadowMode", () => { d.createElement("article").attachShadow(("sideways" + "") as "open"); });
+  thrown("shadowOnInput", () => { d.createElement("input").attachShadow("open"); });
+  const crossing = { target: "", path: 0, phase: 0, seen: "no" };
+  const onPing = (event: Event): void => {
+    crossing.target = event.target === shadowHost ? "host" : event.target === shadowButton ? "inner" : "other";
+    crossing.path = event.composedPath().length;
+    crossing.phase = event.eventPhase;
+  };
+  const onPong = (): void => { crossing.seen = "yes"; };
+  shadowHost.addEventListener("ping", onPing);
+  shadowHost.addEventListener("pong", onPong);
+  shadowButton.dispatchEvent(newEvent("ping", { bubbles: true, composed: true }));
+  shadowButton.dispatchEvent(newEvent("pong", { bubbles: true }));
+  shadowHost.removeEventListener("ping", onPing);
+  shadowHost.removeEventListener("pong", onPong);
+  log("composed", crossing.target + "|" + crossing.path + "|" + crossing.phase);
+  log("notComposed", crossing.seen);
 
   // Canvas 2D: a drawing, then its pixels as PNG (toDataURL), hashed. The
   // same Skia draws for both, so the hashes agree only if every call drew

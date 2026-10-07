@@ -827,7 +827,7 @@ interface HTMLScriptElement {}
  */
 interface HTMLSelectElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLElement
+ * @ntsBoundBy "nts:dom" HTMLSlotElement
  * @ntsIs nts_dom_is 244
  */
 interface HTMLSlotElement {}
@@ -1733,7 +1733,7 @@ interface SecurityPolicyViolationEvent {}
  */
 interface Selection {}
 /**
- * @ntsBoundBy "nts:dom" DocumentFragment
+ * @ntsBoundBy "nts:dom" ShadowRoot
  * @ntsIs nts_dom_is 511
  */
 interface ShadowRoot {}

@@ -67,12 +67,16 @@
     "CanvasRenderingContext2D",
     "CanvasGradient",
     "Path2D",
-    "TextMetrics"
+    "TextMetrics",
+    "ShadowRoot",
+    "HTMLSlotElement"
   ],
   "sequences": [
     "MutationRecord",
     "ResizeObserverEntry",
-    "IntersectionObserverEntry"
+    "IntersectionObserverEntry",
+    "Node",
+    "Element"
   ],
   "modules": [
     "CanvasRenderingContext2D",

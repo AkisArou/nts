@@ -176,6 +176,13 @@ int32_t nts_dom_set_interval_default(void (*callback)(void* closure),
 void nts_dom_clear_timeout(int32_t id);
 void nts_dom_clear_interval(int32_t id);
 
+/* `element.attachShadow({mode})`, mode "open" or "closed": the element's new
+ * shadow root. Throws as Blink's attachShadow does (NotSupportedError for an
+ * element that cannot host one or already does), and the binding's TypeError
+ * for another mode. */
+NtsDomShadowRoot* nts_dom_Element_attachShadow_mode(NtsDomElement* self,
+                                                    const char* mode,
+                                                    NtsDomException** error);
 /* `canvas.getContext("2d")`: the canvas's 2D context, made on first use;
  * null for another id, or if the canvas has a context of another kind. Throws
  * InvalidStateError when the canvas transferred its control to offscreen. */

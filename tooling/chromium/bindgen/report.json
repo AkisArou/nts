@@ -1,5 +1,5 @@
 {
-  "bound": 3760,
+  "bound": 3806,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -30,16 +30,6 @@
       "interface": "Element",
       "member": "get attributes",
       "why": "interface NamedNodeMap is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "get shadowRoot",
-      "why": "interface ShadowRoot is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "get assignedSlot",
-      "why": "interface HTMLSlotElement is not bound"
     },
     {
       "interface": "Element",
@@ -317,9 +307,14 @@
       "why": "[RuntimeEnabled]"
     },
     {
+      "interface": "ShadowRootInit",
+      "member": "customElementRegistry",
+      "why": "dictionary member of type optional CustomElementRegistry?"
+    },
+    {
       "interface": "Element",
       "member": "attachShadow/1",
-      "why": "interface ShadowRoot is not bound"
+      "why": "dictionary ShadowRootInit's required member mode (dictionary member of type ShadowRootMode)"
     },
     {
       "interface": "Element",
@@ -655,11 +650,6 @@
       "interface": "CharacterData",
       "member": "streamReplaceWithHTMLUnsafe/1",
       "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Text",
-      "member": "get assignedSlot",
-      "why": "interface HTMLSlotElement is not bound"
     },
     {
       "interface": "Text",
@@ -6860,6 +6850,126 @@
       "interface": "TextMetrics",
       "member": "getTextClusters/1",
       "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "get onslotchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "get onslotchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "get referenceTarget",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "set referenceTarget",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "get styleSheets",
+      "why": "interface StyleSheetList is not bound"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "get adoptedStyleSheets",
+      "why": "result type ObservableArray<CSSStyleSheet>"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "set adoptedStyleSheets",
+      "why": "parameter type ObservableArray<CSSStyleSheet>"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "get customElementRegistry",
+      "why": "interface CustomElementRegistry is not bound"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "appendHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "appendHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "getAnimations/0",
+      "why": "interface Animation is not bound"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "getSelection/0",
+      "why": "interface Selection is not bound"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "prependHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "prependHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "setHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "setHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "setHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "streamAppendHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "streamAppendHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "streamHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "streamHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "streamPrependHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ShadowRoot",
+      "member": "streamPrependHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "HTMLSlotElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
     }
   ]
 }

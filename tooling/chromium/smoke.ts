@@ -173,6 +173,12 @@ try {
       for (const style of ["fillStyle", "strokeStyle"])
         for (const arm of ["string", "gradient"])
           CanvasRenderingContext2D.prototype["_set_" + style + "_" + arm] = function (value) { this[style] = value; };
+      // \`attachShadow(mode)\`: nts:dom takes the mode itself, page script
+      // the ShadowRootInit dictionary holding it.
+      const attachShadow = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function (init) {
+        return attachShadow.call(this, typeof init === "string" ? { mode: init } : init);
+      };
       // nts:dom spells addEventListener's options as trailing arguments
       // (capture, once, signal); page script, as a dictionary.
       const addEventListener = EventTarget.prototype.addEventListener;
@@ -184,12 +190,14 @@ try {
       // V8's message carries the binding's context ("Failed to execute 'x'
       // on 'Y': "), which the generated binding's does not.
       const failure = (error) => error.name + ": " + error.message
-        .replace(/^Failed to (?:execute '[^']*'|set the '[^']*' property|read the '[^']*' property|(?:set|delete) a named property '[^']*') on '[^']*': |^Failed to construct '[^']*': /, "");
+        .replace(/^Failed to (?:execute '[^']*'|set the '[^']*' property|read the '[^']*' property|(?:set|delete) a named property '[^']*') on '[^']*': |^Failed to construct '[^']*': /, "")
+        .replace(/^Failed to read the '[^']*' property from '[^']*': /, "");
       const container = document.querySelector('#native-dom');
       const section = document.createElement('section');
       container.appendChild(section);
       const transcript = idlTranscript(document, section, { failure });
       EventTarget.prototype.addEventListener = addEventListener;
+      Element.prototype.attachShadow = attachShadow;
       const pre = document.createElement('pre');
       pre.id = 'native-idl';
       pre.textContent = transcript;

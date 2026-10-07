@@ -169,7 +169,7 @@ class Generator:
         self.headers = {"third_party/blink/renderer/bindings/core/v8/generated_code_helper.h",
                         "third_party/blink/renderer/core/frame/local_dom_window.h"}
         self.statics = []  # adapter-level definitions the functions use
-        self.dictionaries = {}  # identifier -> (fields, conversion function name)
+        self.dictionaries = {}  # identifier -> (fields, conversion function name), or why it does not bind
         self.enums = {}  # IDL enum identifier -> its values, as TypeScript literal unions
         # Element interfaces answered as `sequence<T>`, and those the
         # hand-written ABI hands the program (an observer's entries).
@@ -232,10 +232,20 @@ class Generator:
         Skip when nothing binds."""
         identifier = dictionary.identifier
         if identifier in self.dictionaries:
-            if self.dictionaries[identifier] is None:
-                raise Skip(f"dictionary {identifier} has no member a C struct can carry")
+            if isinstance(self.dictionaries[identifier], str):
+                raise Skip(self.dictionaries[identifier])
             return self.dictionaries[identifier]
         fields = []
+
+        def unbindable(member, why):
+            # A required member the struct cannot carry would reach Blink
+            # unset: the dictionary does not bind at all.
+            if member.is_required:
+                reason = f"dictionary {identifier}'s required member {member.identifier} ({why})"
+                self.dictionaries[identifier] = reason
+                raise Skip(reason)
+            self.skipped.append({"interface": identifier, "member": member.identifier, "why": why})
+
         for member in dictionary.members:
             label = f"{identifier}.{member.identifier}"
             if "RuntimeEnabled" in member.extended_attributes:
@@ -245,18 +255,16 @@ class Generator:
             keyword = idl_type.keyword_typename
             literal = member.default_value.literal if member.default_value is not None else None
             if nullable or keyword not in ("boolean", *NUMERIC):
-                self.skipped.append({"interface": identifier, "member": member.identifier,
-                                     "why": f"dictionary member of type {member.idl_type.syntactic_form}"})
+                unbindable(member, f"dictionary member of type {member.idl_type.syntactic_form}")
                 continue
             zero = "false" if keyword == "boolean" else "0"
             if literal not in (None, zero) and not (keyword != "boolean" and literal in ("0.0", "0")):
-                self.skipped.append({"interface": identifier, "member": member.identifier,
-                                     "why": f"dictionary member whose default {literal} is not zero"})
+                unbindable(member, f"dictionary member whose default {literal} is not zero")
                 continue
             fields.append((member.identifier, keyword, idl_type))
         if not fields:
-            self.dictionaries[identifier] = None
-            raise Skip(f"dictionary {identifier} has no member a C struct can carry")
+            self.dictionaries[identifier] = f"dictionary {identifier} has no member a C struct can carry"
+            raise Skip(self.dictionaries[identifier])
         tag = f"NtsDom{identifier}"
         convert = f"NtsDomTo{identifier}"
         self.headers.add(PathManager(dictionary).api_path(ext="h"))
@@ -511,8 +519,10 @@ class Generator:
             if param.idl_name is not None:
                 placeholders[name_style.arg_f("arg{}_{}", index + 1, param.idl_name)] = param.expr
         if tail is not None:
+            # A local, declared before the call (below): Blink takes some
+            # variadic tails by non-const reference (HTMLSlotElement.assign).
             identifier, index, vector, _ = tail
-            placeholders[name_style.arg_f("arg{}_{}", index + 1, identifier)] = vector
+            placeholders[name_style.arg_f("arg{}_{}", index + 1, identifier)] = f"{identifier}_values"
         for index, (idl_name, value) in enumerate(filled, start=len(params)):
             placeholders[name_style.arg_f("arg{}_{}", index + 1, idl_name)] = value
         expression = self.call(context, placeholders, num_of_args)
@@ -524,6 +534,8 @@ class Generator:
             if param.include:
                 self.headers.add(param.include)
         function = Function(interface, symbol, params, result, expression, throws, reactions)
+        if tail is not None:
+            function.statements.append(f"auto {tail[0]}_values = {tail[2]}")
         # Window is implemented by DOMWindow, and every member but a
         # [CrossOrigin] one by LocalDOMWindow: bind_gen casts the receiver so,
         # and the program's window is always its own document's, a local one.
@@ -1131,7 +1143,7 @@ class Generator:
         an object literal: `newEvent("go", {bubbles: true})`."""
         lines = []
         for identifier, entry in sorted(self.dictionaries.items()):
-            if entry is None:
+            if isinstance(entry, str):
                 continue
             members = "; ".join(f"{name}: {'CBool<c_uint8>' if keyword == 'boolean' else 'c_double'}"
                                 for name, keyword, _ in entry[0])
@@ -1183,7 +1195,7 @@ class Generator:
         # A dictionary as the program writes it: zero is what leaving a member
         # out means (generate.py, dictionary).
         for identifier, entry in sorted(self.dictionaries.items()):
-            if entry is None:
+            if isinstance(entry, str):
                 continue
             members = "".join(f"  {'uint8_t' if keyword == 'boolean' else 'double'} {self.safe(name)};\n"
                               for name, keyword, _ in entry[0])

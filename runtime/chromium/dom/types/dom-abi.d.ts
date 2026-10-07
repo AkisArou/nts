@@ -67,6 +67,17 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_window
    */
   export function window(): Window;
+  export interface ElementOwnMethods {
+    /**
+     * `element.attachShadow({ mode })`: the element's new shadow root. The
+     * mode is the argument: ShadowRootInit's is a required enum, which a
+     * dictionary struct cannot carry (contracts/workarounds.md, 18).
+     * @ntsSymbol nts_dom_Element_attachShadow_mode
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    attachShadow(this: Element, mode: "open" | "closed", error?: Ptr<DOMException | null>): ShadowRoot;
+  }
   export interface HTMLCanvasElementOwnMethods {
     /**
      * `canvas.getContext("2d")`: the canvas's 2D context, made on first use;

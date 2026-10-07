@@ -13,6 +13,8 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_mode.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
@@ -23,6 +25,7 @@
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observer.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observer_entry.h"
+#include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
@@ -1249,6 +1252,26 @@ char *nts_dom_exception_take_message(NtsDomException *exception) {
   return message;
 }
 
+// `element.attachShadow({mode})`: ShadowRootInit's mode is a required enum,
+// which a dictionary struct cannot carry, so the mode is the argument; the
+// other members keep their defaults. Blink's own attachShadow decides the
+// rest (which elements may host one, a second attach).
+NtsDomShadowRoot *nts_dom_Element_attachShadow_mode(NtsDomElement *self,
+                                                    const char *mode,
+                                                    NtsDomException **error) {
+  NtsDomContext &context = nts_dom::Current();
+  Throws exception_state(error);
+  const auto value = nts_dom::EnumFrom<blink::V8ShadowRootMode>(mode);
+  if (!value) {
+    nts_dom::ThrowInvalidEnum<blink::V8ShadowRootMode>(context, mode,
+                                                       exception_state);
+    return nullptr;
+  }
+  auto *init = blink::ShadowRootInit::Create(context.v8_isolate.get());
+  init->setMode(*value);
+  return HandleOf<NtsDomShadowRoot>(
+      ObjectOf<blink::Element>(self)->attachShadow(init, exception_state));
+}
 NtsDomListener *nts_dom_listen(NtsDomEventTarget *target,
                                const NtsBorrowedString *type,
                                NtsDomCallback callback, void *closure,
