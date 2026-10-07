@@ -206,6 +206,29 @@ class Function:
                 or "context." in self.expression or any("context." in s for s in self.statements))
 
 
+def runtime_feature_status():
+    """Each Blink runtime feature's status as page script meets it: "stable"
+    only where Blink's default is what a renderer runs with. A feature the
+    embedder may set is "overridable" whatever its status: one marked
+    `public` (WebRuntimeFeatures), one with an origin trial or `depends_on`,
+    and one content/child/runtime_features.cc sets at startup
+    (TouchEventFeatureDetection, TopicsAPI, LegacyAbstractRange...)."""
+    path = os.path.join(SRC, "third_party", "blink", "renderer", "platform",
+                        "runtime_enabled_features.json5")
+    text = re.sub(r"//[^\n]*", "", open(path).read())
+    content = open(os.path.join(SRC, "content", "child", "runtime_features.cc")).read()
+    status = {}
+    for match in re.finditer(r'\{\s*name:\s*"(\w+)"(.*?)\n\s*\}', text, re.S):
+        name, body = match.group(1), match.group(2)
+        found = re.search(r'status:\s*(?:"(\w+)"|\{)', body)
+        value = (found.group(1) or "per-platform") if found else "none"
+        if (re.search(r"\bpublic:\s*true", body) or "origin_trial_feature_name" in body
+                or "depends_on" in body or re.search(rf"\bEnable{name}\b|\"{name}\"", content)):
+            value = "overridable"
+        status[name] = value
+    return status
+
+
 class Generator:
     def __init__(self, database, allowlist):
         self.database = database
@@ -220,6 +243,7 @@ class Generator:
         import libdom
         self.lib_dom_void = libdom.void_methods(open(libdom.LIB_DOM).read())
         self.skipped = []
+        self.feature_status = runtime_feature_status()
         self.functions = []
         self.members = {}  # interface identifier -> TypeScript member lines
         # What bind_gen's expressions name beyond each interface's own header:
@@ -312,7 +336,7 @@ class Generator:
         implemented = {}
         for member in dictionary.members:
             label = f"{identifier}.{member.identifier}"
-            if "RuntimeEnabled" in member.extended_attributes:
+            if self.unshipped(member.extended_attributes):
                 continue
             # `[ImplementedAs=inlinePosition]`: Blink's accessors take that name.
             implemented[member.identifier] = member.extended_attributes.value_of("ImplementedAs") or member.identifier
@@ -695,12 +719,26 @@ class Generator:
             return False
         return owner.identifier in self.modules or f"{owner.identifier}.{member.identifier}" in self.modules
 
+    def unshipped(self, ext):
+        """Why a member behind runtime features is not bound, or None. One
+        whose every feature is "stable" -- on in a shipping renderer -- binds:
+        page script sees it, and Blink's implementation is there whether or
+        not a flag hides it from script. Any other status stays out."""
+        if "RuntimeEnabled" not in ext:
+            return None
+        features = ext.values_of("RuntimeEnabled")
+        statuses = [self.feature_status.get(feature, "none") for feature in features]
+        if all(status == "stable" for status in statuses):
+            return None
+        return "[RuntimeEnabled=" + "|".join(features) + "] " + " ".join(statuses)
+
     def check_member(self, member):
         ext = member.extended_attributes
         if getattr(member, "is_static", False):
             raise Skip("static")
-        if "RuntimeEnabled" in ext:
-            raise Skip("[RuntimeEnabled]")
+        unshipped = self.unshipped(ext)
+        if unshipped:
+            raise Skip(unshipped)
         if web_idl.Component("modules") in member.components and not self.from_modules(member):
             raise Skip("defined in Blink's modules component, on an interface the allowlist does not take from there")
         if "ThisValue" in ext.values_of("CallWith"):

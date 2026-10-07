@@ -1,5 +1,5 @@
 {
-  "bound": 4806,
+  "bound": 4869,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -29,17 +29,17 @@
     {
       "interface": "Element",
       "member": "get currentCSSZoom",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=StandardizedBrowserZoom] overridable"
     },
     {
       "interface": "Element",
       "member": "get computedRole",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ComputedAccessibilityInfo] experimental"
     },
     {
       "interface": "Element",
       "member": "get computedName",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ComputedAccessibilityInfo] experimental"
     },
     {
       "interface": "Element",
@@ -84,42 +84,42 @@
     {
       "interface": "Element",
       "member": "get containerTiming",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ContainerTiming] overridable"
     },
     {
       "interface": "Element",
       "member": "set containerTiming",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ContainerTiming] overridable"
     },
     {
       "interface": "Element",
       "member": "get containerTimingIgnore",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ContainerTiming] overridable"
     },
     {
       "interface": "Element",
       "member": "set containerTimingIgnore",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ContainerTiming] overridable"
     },
     {
       "interface": "Element",
       "member": "get headingOffset",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HeadingOffset] experimental"
     },
     {
       "interface": "Element",
       "member": "set headingOffset",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HeadingOffset] experimental"
     },
     {
       "interface": "Element",
       "member": "get headingReset",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HeadingOffset] experimental"
     },
     {
       "interface": "Element",
       "member": "set headingReset",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HeadingOffset] experimental"
     },
     {
       "interface": "Element",
@@ -173,33 +173,13 @@
     },
     {
       "interface": "Element",
-      "member": "get ariaColIndexText",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Element",
-      "member": "set ariaColIndexText",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Element",
-      "member": "get ariaRowIndexText",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Element",
-      "member": "set ariaRowIndexText",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Element",
       "member": "get ariaActionsElements",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AriaActions] per-platform"
     },
     {
       "interface": "Element",
       "member": "set ariaActionsElements",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AriaActions] per-platform"
     },
     {
       "interface": "Element",
@@ -264,22 +244,22 @@
     {
       "interface": "Element",
       "member": "get ariaOwnsElements",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AOMAriaRelationshipPropertiesAriaOwns] overridable"
     },
     {
       "interface": "Element",
       "member": "set ariaOwnsElements",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AOMAriaRelationshipPropertiesAriaOwns] overridable"
     },
     {
       "interface": "Element",
       "member": "afterHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "afterHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
@@ -294,17 +274,17 @@
     {
       "interface": "Element",
       "member": "appendHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "appendHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "ariaNotify/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AriaNotify] per-platform"
     },
     {
       "interface": "ShadowRootInit",
@@ -314,12 +294,12 @@
     {
       "interface": "Element",
       "member": "beforeHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "beforeHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
@@ -379,32 +359,32 @@
     {
       "interface": "Element",
       "member": "matchContainer/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ElementMatchContainer] test"
     },
     {
       "interface": "Element",
       "member": "prependHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "prependHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "pseudo/1",
-      "why": "[RuntimeEnabled]"
+      "why": "interface CSSPseudoElement is not bound"
     },
     {
       "interface": "Element",
       "member": "replaceWithHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "replaceWithHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "FullscreenOptions",
@@ -422,19 +402,24 @@
       "why": "parameter type TrustedType: no member is bound"
     },
     {
+      "interface": "SetHTMLOptions",
+      "member": "sanitizer",
+      "why": "dictionary member of type optional (Sanitizer or SanitizerConfig or SanitizerPresets)"
+    },
+    {
       "interface": "Element",
       "member": "setHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "dictionary SetHTMLOptions has no member a C struct can carry"
+    },
+    {
+      "interface": "SetHTMLUnsafeOptions",
+      "member": "sanitizer",
+      "why": "dictionary member of type optional (Sanitizer or SanitizerConfig or SanitizerPresets)"
     },
     {
       "interface": "Element",
       "member": "setHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Element",
-      "member": "setHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TrustedTypesCreateParserOptions] overridable"
     },
     {
       "interface": "Element",
@@ -454,122 +439,122 @@
     {
       "interface": "Element",
       "member": "streamAfterHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamAfterHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamAppendHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamAppendHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamBeforeHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamBeforeHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamPrependHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamPrependHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamReplaceWithHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Element",
       "member": "streamReplaceWithHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "afterHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "afterHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "beforeHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "beforeHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "replaceWithHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "replaceWithHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "streamAfterHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "streamAfterHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "streamBeforeHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "streamBeforeHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "streamReplaceWithHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "CharacterData",
       "member": "streamReplaceWithHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Text",
@@ -624,7 +609,7 @@
     {
       "interface": "Document",
       "member": "get fragmentDirective",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TextFragmentIdentifiers] overridable"
     },
     {
       "interface": "Document",
@@ -634,12 +619,12 @@
     {
       "interface": "Document",
       "member": "get permissionsPolicy",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=PermissionsPolicyAPI] experimental"
     },
     {
       "interface": "Document",
       "member": "get onautofill",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AutofillEvent] overridable"
     },
     {
       "interface": "Document",
@@ -649,7 +634,7 @@
     {
       "interface": "Document",
       "member": "set onautofill",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AutofillEvent] overridable"
     },
     {
       "interface": "Document",
@@ -809,7 +794,7 @@
     {
       "interface": "Document",
       "member": "get onbeforefilter",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "Document",
@@ -819,7 +804,7 @@
     {
       "interface": "Document",
       "member": "set onbeforefilter",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "Document",
@@ -934,7 +919,7 @@
     {
       "interface": "Document",
       "member": "get oncomplete",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "Document",
@@ -944,7 +929,7 @@
     {
       "interface": "Document",
       "member": "set oncomplete",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "Document",
@@ -1309,7 +1294,7 @@
     {
       "interface": "Document",
       "member": "get onoverscrollcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1319,12 +1304,12 @@
     {
       "interface": "Document",
       "member": "set onoverscrollcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
       "member": "get onoverscrollchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1334,12 +1319,12 @@
     {
       "interface": "Document",
       "member": "set onoverscrollchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
       "member": "get onoverscrollend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1349,12 +1334,12 @@
     {
       "interface": "Document",
       "member": "set onoverscrollend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
       "member": "get onoverscrollstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1364,7 +1349,7 @@
     {
       "interface": "Document",
       "member": "set onoverscrollstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1509,7 +1494,7 @@
     {
       "interface": "Document",
       "member": "get onscrollsnapchange",
-      "why": "[RuntimeEnabled]"
+      "why": "result type EventHandler"
     },
     {
       "interface": "Document",
@@ -1518,23 +1503,13 @@
     },
     {
       "interface": "Document",
-      "member": "set onscrollsnapchange",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Document",
       "member": "get onscrollsnapchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "result type EventHandler"
     },
     {
       "interface": "Document",
       "member": "get onscrollsnapchanging",
       "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
-      "member": "set onscrollsnapchanging",
-      "why": "[RuntimeEnabled]"
     },
     {
       "interface": "Document",
@@ -1779,7 +1754,7 @@
     {
       "interface": "Document",
       "member": "get ontouchcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -1789,12 +1764,12 @@
     {
       "interface": "Document",
       "member": "set ontouchcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
       "member": "get ontouchend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -1804,12 +1779,12 @@
     {
       "interface": "Document",
       "member": "set ontouchend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
       "member": "get ontouchmove",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -1819,12 +1794,12 @@
     {
       "interface": "Document",
       "member": "set ontouchmove",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
       "member": "get ontouchstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -1834,7 +1809,7 @@
     {
       "interface": "Document",
       "member": "set ontouchstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -2004,7 +1979,7 @@
     {
       "interface": "Document",
       "member": "ariaNotify/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AriaNotify] per-platform"
     },
     {
       "interface": "Document",
@@ -2079,12 +2054,12 @@
     {
       "interface": "Document",
       "member": "hasPrivateToken/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=PrivateStateTokens] overridable"
     },
     {
       "interface": "Document",
       "member": "hasRedemptionRecord/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=PrivateStateTokens] overridable"
     },
     {
       "interface": "Document",
@@ -2114,12 +2089,12 @@
     {
       "interface": "Document",
       "member": "requestStorageAccessFor/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=RequestStorageAccessFor] overridable"
     },
     {
       "interface": "Document",
       "member": "setSequentialFocusStartingPoint/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=SetSequentialFocusStartingPoint] experimental"
     },
     {
       "interface": "Document",
@@ -2144,7 +2119,7 @@
     {
       "interface": "Document",
       "member": "write/2",
-      "why": "[RuntimeEnabled]"
+      "why": "interface TrustedHTML is not bound"
     },
     {
       "interface": "Document",
@@ -2154,7 +2129,7 @@
     {
       "interface": "Document",
       "member": "writeln/2",
-      "why": "[RuntimeEnabled]"
+      "why": "interface TrustedHTML is not bound"
     },
     {
       "interface": "Document",
@@ -2189,17 +2164,7 @@
     {
       "interface": "HTMLElement",
       "member": "get accessKeyLabel",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get autocorrect",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "set autocorrect",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AccessKeyLabel] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2214,22 +2179,22 @@
     {
       "interface": "HTMLElement",
       "member": "get overscrollcontainer",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
       "member": "set overscrollcontainer",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
       "member": "get overscrollarea",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
       "member": "set overscrollarea",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2244,7 +2209,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onbeforefilter",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "HTMLElement",
@@ -2254,7 +2219,7 @@
     {
       "interface": "HTMLElement",
       "member": "set onbeforefilter",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "HTMLElement",
@@ -2369,7 +2334,7 @@
     {
       "interface": "HTMLElement",
       "member": "get oncomplete",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -2379,7 +2344,7 @@
     {
       "interface": "HTMLElement",
       "member": "set oncomplete",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -2744,7 +2709,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onoverscrollcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2754,12 +2719,12 @@
     {
       "interface": "HTMLElement",
       "member": "set onoverscrollcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
       "member": "get onoverscrollchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2769,12 +2734,12 @@
     {
       "interface": "HTMLElement",
       "member": "set onoverscrollchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
       "member": "get onoverscrollend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2784,12 +2749,12 @@
     {
       "interface": "HTMLElement",
       "member": "set onoverscrollend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
       "member": "get onoverscrollstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2799,7 +2764,7 @@
     {
       "interface": "HTMLElement",
       "member": "set onoverscrollstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2944,7 +2909,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onscrollsnapchange",
-      "why": "[RuntimeEnabled]"
+      "why": "result type EventHandler"
     },
     {
       "interface": "HTMLElement",
@@ -2953,23 +2918,13 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "set onscrollsnapchange",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onscrollsnapchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "result type EventHandler"
     },
     {
       "interface": "HTMLElement",
       "member": "get onscrollsnapchanging",
       "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "set onscrollsnapchanging",
-      "why": "[RuntimeEnabled]"
     },
     {
       "interface": "HTMLElement",
@@ -3214,7 +3169,7 @@
     {
       "interface": "HTMLElement",
       "member": "get ontouchcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3224,12 +3179,12 @@
     {
       "interface": "HTMLElement",
       "member": "set ontouchcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
       "member": "get ontouchend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3239,12 +3194,12 @@
     {
       "interface": "HTMLElement",
       "member": "set ontouchend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
       "member": "get ontouchmove",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3254,12 +3209,12 @@
     {
       "interface": "HTMLElement",
       "member": "set ontouchmove",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
       "member": "get ontouchstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3269,7 +3224,7 @@
     {
       "interface": "HTMLElement",
       "member": "set ontouchstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3418,21 +3373,6 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get focusGroup",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get focusGroupStart",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "set focusGroupStart",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get attributeStyleMap",
       "why": "interface StylePropertyMap is not bound"
     },
@@ -3444,7 +3384,7 @@
     {
       "interface": "HTMLElement",
       "member": "scrollParent/0",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HTMLElementScrollParent] experimental"
     },
     {
       "interface": "ShowPopoverOptions",
@@ -3469,32 +3409,32 @@
     {
       "interface": "HTMLInputElement",
       "member": "get alpha",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=InputTypeColorEnhancements] experimental"
     },
     {
       "interface": "HTMLInputElement",
       "member": "set alpha",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=InputTypeColorEnhancements] experimental"
     },
     {
       "interface": "HTMLInputElement",
       "member": "get colorSpace",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=InputTypeColorEnhancements] experimental"
     },
     {
       "interface": "HTMLInputElement",
       "member": "set colorSpace",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=InputTypeColorEnhancements] experimental"
     },
     {
       "interface": "HTMLInputElement",
       "member": "get switch",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HTMLSwitchAttribute] experimental"
     },
     {
       "interface": "HTMLInputElement",
       "member": "set switch",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HTMLSwitchAttribute] experimental"
     },
     {
       "interface": "HTMLInputElement",
@@ -3529,12 +3469,12 @@
     {
       "interface": "HTMLInputElement",
       "member": "get capture",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=MediaCapture] per-platform"
     },
     {
       "interface": "HTMLInputElement",
       "member": "set capture",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=MediaCapture] per-platform"
     },
     {
       "interface": "HTMLInputElement",
@@ -3559,12 +3499,12 @@
     {
       "interface": "HTMLAnchorElement",
       "member": "get hrefTranslate",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HrefTranslate] overridable"
     },
     {
       "interface": "HTMLAnchorElement",
       "member": "set hrefTranslate",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=HrefTranslate] overridable"
     },
     {
       "interface": "UIEventInit",
@@ -3584,7 +3524,7 @@
     {
       "interface": "UIEvent",
       "member": "get pseudoTarget",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=EventPseudoTargetProperty] overridable"
     },
     {
       "interface": "MouseEventInit",
@@ -3694,12 +3634,12 @@
     {
       "interface": "HTMLSelectElement",
       "member": "get selectedContentElement",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=SelectedcontentelementAttribute] overridable"
     },
     {
       "interface": "HTMLSelectElement",
       "member": "set selectedContentElement",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=SelectedcontentelementAttribute] overridable"
     },
     {
       "interface": "HTMLSelectElement",
@@ -3729,22 +3669,22 @@
     {
       "interface": "HTMLImageElement",
       "member": "get browsingTopics",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TopicsAPI] overridable"
     },
     {
       "interface": "HTMLImageElement",
       "member": "set browsingTopics",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TopicsAPI] overridable"
     },
     {
       "interface": "HTMLImageElement",
       "member": "get replacedByUserAgent",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
     },
     {
       "interface": "HTMLImageElement",
       "member": "get onuareplacestart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
     },
     {
       "interface": "HTMLImageElement",
@@ -3754,12 +3694,12 @@
     {
       "interface": "HTMLImageElement",
       "member": "set onuareplacestart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
     },
     {
       "interface": "HTMLImageElement",
       "member": "get onuareplaceend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
     },
     {
       "interface": "HTMLImageElement",
@@ -3769,7 +3709,7 @@
     {
       "interface": "HTMLImageElement",
       "member": "set onuareplaceend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -3779,17 +3719,17 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "get layoutSubtree",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
       "member": "set layoutSubtree",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
       "member": "get onpaint",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -3799,12 +3739,12 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "set onpaint",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
       "member": "captureElementImage/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -3814,12 +3754,12 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "clearElementGeometry/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
       "member": "configureHighDynamicRange/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasHDR] experimental"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -3829,17 +3769,17 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "getElementTransform/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
       "member": "getElementTransform/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ElementCanvasTransform] experimental"
     },
     {
       "interface": "HTMLCanvasElement",
       "member": "requestPaint/0",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -3869,7 +3809,7 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "updateElementGeometry/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLTableElement",
@@ -3899,102 +3839,82 @@
     {
       "interface": "HTMLTemplateElement",
       "member": "get shadowRootReferenceTarget",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ShadowRootReferenceTarget] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "set shadowRootReferenceTarget",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLTemplateElement",
-      "member": "get shadowRootSlotAssignment",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLTemplateElement",
-      "member": "set shadowRootSlotAssignment",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ShadowRootReferenceTarget] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "get shadowRootAdoptedStyleSheets",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ShadowRootAdoptedStyleSheet] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "set shadowRootAdoptedStyleSheets",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ShadowRootAdoptedStyleSheet] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "get buffer",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "set buffer",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "get sanitize",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "set sanitize",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLTemplateElement",
-      "member": "get htmlFor",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLTemplateElement",
-      "member": "set htmlFor",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "get src",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "set src",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "get crossOrigin",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "set crossOrigin",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "get referrerPolicy",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "set referrerPolicy",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "get integrity",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "HTMLTemplateElement",
       "member": "set integrity",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DeclarativeFragment] overridable"
     },
     {
       "interface": "FocusEventInit",
@@ -4097,11 +4017,6 @@
       "why": "dictionary member of type optional EventTarget?"
     },
     {
-      "interface": "WheelEvent",
-      "member": "get momentum",
-      "why": "[RuntimeEnabled]"
-    },
-    {
       "interface": "CustomEventInit",
       "member": "detail",
       "why": "dictionary member of type optional any"
@@ -4129,7 +4044,7 @@
     {
       "interface": "Window",
       "member": "get alwaysOnTop",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WindowOpenAlwaysOnTop] test"
     },
     {
       "interface": "Window",
@@ -4144,7 +4059,7 @@
     {
       "interface": "Window",
       "member": "get originAgentCluster",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OriginIsolationHeader] overridable"
     },
     {
       "interface": "Window",
@@ -4159,12 +4074,12 @@
     {
       "interface": "Window",
       "member": "get viewport",
-      "why": "[RuntimeEnabled]"
+      "why": "interface Viewport is not bound"
     },
     {
       "interface": "Window",
       "member": "get onorientationchange",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
     },
     {
       "interface": "Window",
@@ -4174,27 +4089,22 @@
     {
       "interface": "Window",
       "member": "set onorientationchange",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
     },
     {
       "interface": "Window",
       "member": "get orientation",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
     },
     {
       "interface": "Window",
       "member": "get onpageswap",
-      "why": "[RuntimeEnabled]"
+      "why": "result type EventHandler"
     },
     {
       "interface": "Window",
       "member": "get onpageswap",
       "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
-      "member": "set onpageswap",
-      "why": "[RuntimeEnabled]"
     },
     {
       "interface": "Window",
@@ -4214,22 +4124,22 @@
     {
       "interface": "Window",
       "member": "get defaultStatus",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WindowDefaultStatus] none"
     },
     {
       "interface": "Window",
       "member": "set defaultStatus",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WindowDefaultStatus] none"
     },
     {
       "interface": "Window",
       "member": "get defaultstatus",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WindowDefaultStatus] none"
     },
     {
       "interface": "Window",
       "member": "set defaultstatus",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WindowDefaultStatus] none"
     },
     {
       "interface": "Window",
@@ -4248,18 +4158,13 @@
     },
     {
       "interface": "Window",
-      "member": "get credentialless",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Window",
       "member": "get fence",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FencedFrames] overridable"
     },
     {
       "interface": "Window",
       "member": "get crashReport",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CrashReportingStorageAPI] overridable"
     },
     {
       "interface": "Window",
@@ -4379,7 +4284,7 @@
     {
       "interface": "Window",
       "member": "get onbeforefilter",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "Window",
@@ -4389,7 +4294,7 @@
     {
       "interface": "Window",
       "member": "set onbeforefilter",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "Window",
@@ -4504,7 +4409,7 @@
     {
       "interface": "Window",
       "member": "get oncomplete",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "Window",
@@ -4514,7 +4419,7 @@
     {
       "interface": "Window",
       "member": "set oncomplete",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "Window",
@@ -4879,7 +4784,7 @@
     {
       "interface": "Window",
       "member": "get onoverscrollcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -4889,12 +4794,12 @@
     {
       "interface": "Window",
       "member": "set onoverscrollcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
       "member": "get onoverscrollchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -4904,12 +4809,12 @@
     {
       "interface": "Window",
       "member": "set onoverscrollchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
       "member": "get onoverscrollend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -4919,12 +4824,12 @@
     {
       "interface": "Window",
       "member": "set onoverscrollend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
       "member": "get onoverscrollstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -4934,7 +4839,7 @@
     {
       "interface": "Window",
       "member": "set onoverscrollstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -5079,7 +4984,7 @@
     {
       "interface": "Window",
       "member": "get onscrollsnapchange",
-      "why": "[RuntimeEnabled]"
+      "why": "result type EventHandler"
     },
     {
       "interface": "Window",
@@ -5088,23 +4993,13 @@
     },
     {
       "interface": "Window",
-      "member": "set onscrollsnapchange",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Window",
       "member": "get onscrollsnapchanging",
-      "why": "[RuntimeEnabled]"
+      "why": "result type EventHandler"
     },
     {
       "interface": "Window",
       "member": "get onscrollsnapchanging",
       "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
-      "member": "set onscrollsnapchanging",
-      "why": "[RuntimeEnabled]"
     },
     {
       "interface": "Window",
@@ -5349,7 +5244,7 @@
     {
       "interface": "Window",
       "member": "get ontouchcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5359,12 +5254,12 @@
     {
       "interface": "Window",
       "member": "set ontouchcancel",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
       "member": "get ontouchend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5374,12 +5269,12 @@
     {
       "interface": "Window",
       "member": "set ontouchend",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
       "member": "get ontouchmove",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5389,12 +5284,12 @@
     {
       "interface": "Window",
       "member": "set ontouchmove",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
       "member": "get ontouchstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5404,7 +5299,7 @@
     {
       "interface": "Window",
       "member": "set ontouchstart",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5594,7 +5489,7 @@
     {
       "interface": "Window",
       "member": "get onmove",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
     },
     {
       "interface": "Window",
@@ -5604,7 +5499,7 @@
     {
       "interface": "Window",
       "member": "set onmove",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
     },
     {
       "interface": "Window",
@@ -5679,7 +5574,7 @@
     {
       "interface": "Window",
       "member": "get ontimezonechange",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
     },
     {
       "interface": "Window",
@@ -5689,7 +5584,7 @@
     {
       "interface": "Window",
       "member": "set ontimezonechange",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
     },
     {
       "interface": "Window",
@@ -5714,7 +5609,7 @@
     {
       "interface": "Window",
       "member": "get ongamepadconnected",
-      "why": "[RuntimeEnabled]"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -5724,12 +5619,12 @@
     {
       "interface": "Window",
       "member": "set ongamepadconnected",
-      "why": "[RuntimeEnabled]"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get ongamepaddisconnected",
-      "why": "[RuntimeEnabled]"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -5739,12 +5634,12 @@
     {
       "interface": "Window",
       "member": "set ongamepaddisconnected",
-      "why": "[RuntimeEnabled]"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
       "member": "get ongamepadrawinputchanged",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=GamepadRawInputChangeEvent] overridable"
     },
     {
       "interface": "Window",
@@ -5754,12 +5649,12 @@
     {
       "interface": "Window",
       "member": "set ongamepadrawinputchanged",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=GamepadRawInputChangeEvent] overridable"
     },
     {
       "interface": "Window",
       "member": "get crossOriginEmbedderPolicy",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CoepReflection] test"
     },
     {
       "interface": "Window",
@@ -5883,11 +5778,6 @@
     },
     {
       "interface": "Window",
-      "member": "requestResize/0",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Window",
       "member": "restore/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -5944,12 +5834,12 @@
     {
       "interface": "Window",
       "member": "webkitRequestFileSystem/4",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FileSystem] overridable"
     },
     {
       "interface": "Window",
       "member": "webkitResolveLocalFileSystemURL/3",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FileSystem] overridable"
     },
     {
       "interface": "Window",
@@ -5988,18 +5878,13 @@
     },
     {
       "interface": "Performance",
-      "member": "get interactionCount",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "Performance",
       "member": "bind/3",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=UserDefinedEntryPointTiming] experimental"
     },
     {
       "interface": "Performance",
       "member": "getSpeculations/0",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=SpeculationMeasurement] overridable"
     },
     {
       "interface": "PerformanceMarkOptions",
@@ -6009,7 +5894,7 @@
     {
       "interface": "Performance",
       "member": "markConditional/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ConditionalTracingLoAF] experimental"
     },
     {
       "interface": "Performance",
@@ -6024,12 +5909,12 @@
     {
       "interface": "Performance",
       "member": "measureConditional/3",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ConditionalTracingLoAF] experimental"
     },
     {
       "interface": "Performance",
       "member": "measureUserAgentSpecificMemory/0",
-      "why": "[RuntimeEnabled]"
+      "why": "result type Promise<MemoryMeasurement>"
     },
     {
       "interface": "Performance",
@@ -6209,12 +6094,12 @@
     {
       "interface": "CanvasRenderingContext2D",
       "member": "get globalHDRHeadroom",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasGlobalHDRHeadroom] experimental"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "set globalHDRHeadroom",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasGlobalHDRHeadroom] experimental"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -6239,67 +6124,67 @@
     {
       "interface": "CanvasRenderingContext2D",
       "member": "beginLayer/0",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Canvas2dLayers] none"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "beginLayer/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Canvas2dLayersWithOptions] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "createMesh2DIndexBuffer/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Canvas2dMesh] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "createMesh2DUVBuffer/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Canvas2dMesh] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "createMesh2DVertexBuffer/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Canvas2dMesh] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "drawElementImage/4",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "drawElementImage/6",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "drawElementImage/8",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "drawElementImage/10",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "drawMesh/4",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Canvas2dMesh] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "endLayer/0",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Canvas2dLayers] none"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "fillTextCluster/3",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "fillTextCluster/4",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -6344,42 +6229,42 @@
     {
       "interface": "CanvasRenderingContext2D",
       "member": "strokeTextCluster/3",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "CanvasRenderingContext2D",
       "member": "strokeTextCluster/4",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "CanvasGradient",
       "member": "get colorInterpolationMethod",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
     },
     {
       "interface": "CanvasGradient",
       "member": "set colorInterpolationMethod",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
     },
     {
       "interface": "CanvasGradient",
       "member": "get hueInterpolationMethod",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
     },
     {
       "interface": "CanvasGradient",
       "member": "set hueInterpolationMethod",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
     },
     {
       "interface": "CanvasGradient",
       "member": "get premultipliedAlpha",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
     },
     {
       "interface": "CanvasGradient",
       "member": "set premultipliedAlpha",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
     },
     {
       "interface": "Path2D",
@@ -6393,53 +6278,38 @@
     },
     {
       "interface": "TextMetrics",
-      "member": "get hangingBaseline",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "TextMetrics",
-      "member": "get alphabeticBaseline",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "TextMetrics",
-      "member": "get ideographicBaseline",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "TextMetrics",
       "member": "get emHeightAscent",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "TextMetrics",
       "member": "get emHeightDescent",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "TextMetrics",
       "member": "getActualBoundingBox/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "TextMetrics",
       "member": "getIndexFromOffset/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "TextMetrics",
       "member": "getSelectionRects/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "TextMetrics",
       "member": "getTextClusters/3",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "TextMetrics",
       "member": "getTextClusters/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
     {
       "interface": "ShadowRoot",
@@ -6454,12 +6324,12 @@
     {
       "interface": "ShadowRoot",
       "member": "get referenceTarget",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ShadowRootReferenceTarget] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "set referenceTarget",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ShadowRootReferenceTarget] overridable"
     },
     {
       "interface": "ShadowRoot",
@@ -6479,67 +6349,62 @@
     {
       "interface": "ShadowRoot",
       "member": "appendHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "appendHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "prependHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "prependHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "setHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "dictionary SetHTMLOptions has no member a C struct can carry"
     },
     {
       "interface": "ShadowRoot",
       "member": "setHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ShadowRoot",
-      "member": "setHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TrustedTypesCreateParserOptions] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "streamAppendHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "streamAppendHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "streamHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "streamHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "streamPrependHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ShadowRoot",
       "member": "streamPrependHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "HTMLSlotElement",
@@ -6549,12 +6414,12 @@
     {
       "interface": "AbstractRange",
       "member": "get startContainer",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=LegacyAbstractRange] overridable"
     },
     {
       "interface": "AbstractRange",
       "member": "get endContainer",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=LegacyAbstractRange] overridable"
     },
     {
       "interface": "StaticRange",
@@ -6594,7 +6459,7 @@
     {
       "interface": "Navigator",
       "member": "get deprecatedRunAdAuctionEnforcesKAnonymity",
-      "why": "[RuntimeEnabled]"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Navigator",
@@ -6614,7 +6479,7 @@
     {
       "interface": "Navigator",
       "member": "get contacts",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ContactsManager] per-platform"
     },
     {
       "interface": "Navigator",
@@ -6624,7 +6489,7 @@
     {
       "interface": "Navigator",
       "member": "get login",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FedCm] overridable"
     },
     {
       "interface": "Navigator",
@@ -6699,7 +6564,7 @@
     {
       "interface": "Navigator",
       "member": "get rtc",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=RTCDiagnosticLogging] overridable"
     },
     {
       "interface": "Navigator",
@@ -6724,7 +6589,7 @@
     {
       "interface": "Navigator",
       "member": "get usb",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WebUSB] overridable"
     },
     {
       "interface": "Navigator",
@@ -6734,7 +6599,7 @@
     {
       "interface": "Navigator",
       "member": "get xr",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WebXR] overridable"
     },
     {
       "interface": "Navigator",
@@ -6804,12 +6669,12 @@
     {
       "interface": "Navigator",
       "member": "adAuctionComponents/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Fledge] overridable"
     },
     {
       "interface": "Navigator",
       "member": "canLoadAdAuctionFencedFrame/0",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FencedFrames] overridable"
     },
     {
       "interface": "Navigator",
@@ -6829,7 +6694,7 @@
     {
       "interface": "Navigator",
       "member": "createAdRequest/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Parakeet] overridable"
     },
     {
       "interface": "Navigator",
@@ -6844,17 +6709,17 @@
     {
       "interface": "Navigator",
       "member": "deprecatedReplaceInURN/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AllowURNsInIframes] overridable"
     },
     {
       "interface": "Navigator",
       "member": "deprecatedURNToURL/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AllowURNsInIframes] overridable"
     },
     {
       "interface": "Navigator",
       "member": "finalizeAd/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Parakeet] overridable"
     },
     {
       "interface": "Navigator",
@@ -6874,7 +6739,7 @@
     {
       "interface": "Navigator",
       "member": "getInterestGroupAdAuctionData/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=FledgeBiddingAndAuctionServerAPI] overridable"
     },
     {
       "interface": "Navigator",
@@ -6919,7 +6784,7 @@
     {
       "interface": "Navigator",
       "member": "registerProtocolHandler/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NavigatorContentUtils] per-platform"
     },
     {
       "interface": "Navigator",
@@ -6934,7 +6799,7 @@
     {
       "interface": "Navigator",
       "member": "runAdAuction/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=Fledge] overridable"
     },
     {
       "interface": "Navigator",
@@ -6954,7 +6819,7 @@
     {
       "interface": "Navigator",
       "member": "unregisterProtocolHandler/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NavigatorContentUtils] per-platform"
     },
     {
       "interface": "Navigator",
@@ -7039,12 +6904,12 @@
     {
       "interface": "HTMLFieldSetElement",
       "member": "get checkable",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=MenuElements] experimental"
     },
     {
       "interface": "HTMLFieldSetElement",
       "member": "set checkable",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=MenuElements] experimental"
     },
     {
       "interface": "HTMLProgressElement",
@@ -7172,24 +7037,24 @@
       "why": "dictionary member of type optional DataTransfer?"
     },
     {
-      "interface": "AnimationEvent",
-      "member": "get pseudoTarget",
-      "why": "[RuntimeEnabled]"
+      "interface": "AnimationEventInit",
+      "member": "animation",
+      "why": "dictionary member of type optional Animation?"
     },
     {
       "interface": "AnimationEvent",
-      "member": "get animation",
-      "why": "[RuntimeEnabled]"
+      "member": "get pseudoTarget",
+      "why": "[RuntimeEnabled=EventPseudoTargetProperty] overridable"
+    },
+    {
+      "interface": "TransitionEventInit",
+      "member": "animation",
+      "why": "dictionary member of type optional Animation?"
     },
     {
       "interface": "TransitionEvent",
       "member": "get pseudoTarget",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "TransitionEvent",
-      "member": "get animation",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=EventPseudoTargetProperty] overridable"
     },
     {
       "interface": "SubmitEventInit",
@@ -7199,12 +7064,12 @@
     {
       "interface": "SubmitEvent",
       "member": "get agentInvoked",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WebMCP] overridable"
     },
     {
       "interface": "SubmitEvent",
       "member": "respondWith/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=WebMCP] overridable"
     },
     {
       "interface": "ErrorEventInit",
@@ -7228,33 +7093,23 @@
     },
     {
       "interface": "HTMLMediaElement",
-      "member": "get loading",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLMediaElement",
-      "member": "set loading",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLMediaElement",
       "member": "get latencyHint",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=MediaLatencyHint] test"
     },
     {
       "interface": "HTMLMediaElement",
       "member": "set latencyHint",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=MediaLatencyHint] test"
     },
     {
       "interface": "HTMLMediaElement",
       "member": "get audioTracks",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AudioVideoTracks] experimental"
     },
     {
       "interface": "HTMLMediaElement",
       "member": "get videoTracks",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AudioVideoTracks] experimental"
     },
     {
       "interface": "HTMLMediaElement",
@@ -7264,7 +7119,7 @@
     {
       "interface": "HTMLMediaElement",
       "member": "get sinkId",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AudioOutputDevices] overridable"
     },
     {
       "interface": "HTMLMediaElement",
@@ -7304,17 +7159,17 @@
     {
       "interface": "HTMLMediaElement",
       "member": "get remote",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=RemotePlayback] overridable"
     },
     {
       "interface": "HTMLMediaElement",
       "member": "get disableRemotePlayback",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=RemotePlayback] overridable"
     },
     {
       "interface": "HTMLMediaElement",
       "member": "set disableRemotePlayback",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=RemotePlayback] overridable"
     },
     {
       "interface": "HTMLMediaElement",
@@ -7344,7 +7199,7 @@
     {
       "interface": "HTMLMediaElement",
       "member": "setSinkId/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=AudioOutputDevices] overridable"
     },
     {
       "interface": "HTMLVideoElement",
@@ -7424,12 +7279,12 @@
     {
       "interface": "HTMLIFrameElement",
       "member": "get connectionAllowlist",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ConnectionAllowlistEmbeddedEnforcement] overridable"
     },
     {
       "interface": "HTMLIFrameElement",
       "member": "set connectionAllowlist",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ConnectionAllowlistEmbeddedEnforcement] overridable"
     },
     {
       "interface": "HTMLIFrameElement",
@@ -7439,47 +7294,37 @@
     {
       "interface": "HTMLIFrameElement",
       "member": "get permissionsPolicy",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=PermissionsPolicyAPI] experimental"
     },
     {
       "interface": "HTMLIFrameElement",
       "member": "get policy",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DocumentPolicyNegotiation] overridable"
     },
     {
       "interface": "HTMLIFrameElement",
       "member": "set policy",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=DocumentPolicyNegotiation] overridable"
     },
     {
       "interface": "HTMLIFrameElement",
       "member": "get privateToken",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=PrivateStateTokens] overridable"
     },
     {
       "interface": "HTMLIFrameElement",
       "member": "set privateToken",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=PrivateStateTokens] overridable"
     },
     {
       "interface": "HTMLIFrameElement",
       "member": "get browsingTopics",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TopicsAPI] overridable"
     },
     {
       "interface": "HTMLIFrameElement",
       "member": "set browsingTopics",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLIFrameElement",
-      "member": "get credentialless",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLIFrameElement",
-      "member": "set credentialless",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=TopicsAPI] overridable"
     },
     {
       "interface": "HTMLIFrameElement",
@@ -7509,42 +7354,22 @@
     {
       "interface": "HTMLScriptElement",
       "member": "get cacheHint",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=InlineScriptCacheHint] experimental"
     },
     {
       "interface": "HTMLScriptElement",
       "member": "set cacheHint",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=InlineScriptCacheHint] experimental"
     },
     {
       "interface": "HTMLScriptElement",
       "member": "get signature",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=SignatureBasedInlineIntegrity] experimental"
     },
     {
       "interface": "HTMLScriptElement",
       "member": "set signature",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLScriptElement",
-      "member": "get textContent",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLScriptElement",
-      "member": "set textContent",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLScriptElement",
-      "member": "get innerText",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "HTMLScriptElement",
-      "member": "set innerText",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=SignatureBasedInlineIntegrity] experimental"
     },
     {
       "interface": "HTMLScriptElement",
@@ -7568,98 +7393,68 @@
     },
     {
       "interface": "ProcessingInstruction",
-      "member": "getAttribute/1",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ProcessingInstruction",
       "member": "getAttributeNames/0",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ProcessingInstruction",
-      "member": "hasAttribute/1",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ProcessingInstruction",
-      "member": "hasAttributes/0",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ProcessingInstruction",
-      "member": "removeAttribute/1",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ProcessingInstruction",
-      "member": "setAttribute/2",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ProcessingInstruction",
-      "member": "toggleAttribute/2",
-      "why": "[RuntimeEnabled]"
+      "why": "result type sequence<DOMString>"
     },
     {
       "interface": "DocumentType",
       "member": "afterHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "afterHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "beforeHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "beforeHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "replaceWithHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "replaceWithHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "streamAfterHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "streamAfterHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "streamBeforeHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "streamBeforeHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "streamReplaceWithHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "DocumentType",
       "member": "streamReplaceWithHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "Blob",
@@ -7679,7 +7474,7 @@
     {
       "interface": "Blob",
       "member": "bytes/0",
-      "why": "[RuntimeEnabled]"
+      "why": "result type Promise<Uint8Array>"
     },
     {
       "interface": "Blob",
@@ -7699,7 +7494,7 @@
     {
       "interface": "Blob",
       "member": "textStream/0",
-      "why": "[RuntimeEnabled]"
+      "why": "interface ReadableStream is not bound"
     },
     {
       "interface": "File",
@@ -7763,11 +7558,6 @@
     },
     {
       "interface": "ImageData",
-      "member": "get pixelFormat",
-      "why": "[RuntimeEnabled]"
-    },
-    {
-      "interface": "ImageData",
       "member": "get data",
       "why": "result type ImageDataArray"
     },
@@ -7779,7 +7569,7 @@
     {
       "interface": "PerformanceEntry",
       "member": "get navigationId",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NavigationId] overridable"
     },
     {
       "interface": "PerformanceEntry",
@@ -7819,7 +7609,7 @@
     {
       "interface": "Animation",
       "member": "get overallProgress",
-      "why": "[RuntimeEnabled]"
+      "why": "result type double?"
     },
     {
       "interface": "Animation",
@@ -7919,12 +7709,12 @@
     {
       "interface": "KeyframeEffect",
       "member": "get iterationComposite",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CSSAnimationIterationComposite] experimental"
     },
     {
       "interface": "KeyframeEffect",
       "member": "set iterationComposite",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=CSSAnimationIterationComposite] experimental"
     },
     {
       "interface": "KeyframeEffect",
@@ -7949,67 +7739,67 @@
     {
       "interface": "AnimationTimeline",
       "member": "getCurrentTime/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=ScrollTimelineCurrentTime] experimental"
     },
     {
       "interface": "ChildNode",
       "member": "afterHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "afterHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "beforeHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "beforeHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "replaceWithHTML/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "replaceWithHTMLUnsafe/2",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "streamAfterHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "streamAfterHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "streamBeforeHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "streamBeforeHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "streamReplaceWithHTML/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     },
     {
       "interface": "ChildNode",
       "member": "streamReplaceWithHTMLUnsafe/1",
-      "why": "[RuntimeEnabled]"
+      "why": "[RuntimeEnabled=NewHTMLSettingMethods] overridable"
     }
   ]
 }

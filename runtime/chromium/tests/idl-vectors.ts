@@ -799,6 +799,18 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   // page back where the later input events expect it.
   window().scrollTo(0, 0);
   log("scrolling", offsets.join("|"));
+
+  // Members behind runtime features a shipping renderer has on (the
+  // generator binds a feature whose status is stable and that the embedder
+  // does not set): reflected text, an enumerated boolean, text metrics.
+  const featured = asHTMLElement(d.createElement("div"))!;
+  featured.ariaRowIndexText = "row 3";
+  featured.autocorrect = false;
+  const featuredCanvas = asHTMLCanvasElement(d.createElement("canvas"))!;
+  const featuredMetrics = featuredCanvas.getContext("2d")!.measureText("Hg");
+  log("runtimeFeatures", shown(featured.ariaRowIndexText) + "|" + shown(featured.getAttribute("aria-rowindextext")) + "|" +
+    (featured.autocorrect ? "on" : "off") + "|" + shown(featured.getAttribute("autocorrect")) + "|" +
+    (featuredMetrics.alphabeticBaseline === 0 ? "baseline 0" : "baseline " + featuredMetrics.alphabeticBaseline));
   const pointed = newMouseEvent("click", { clientX: 12.5, clientY: -3, button: 2, ctrlKey: true, detail: 7 });
   log("mouseInit", pointed.clientX + "|" + pointed.clientY + "|" + pointed.button + "|" + (pointed.ctrlKey ? "ctrl" : "-") + (pointed.shiftKey ? "shift" : "-") + "|" + pointed.detail);
 

@@ -17,6 +17,7 @@ declare module "nts:dom" {
   export type CanvasTextRendering = "auto" | "optimizeSpeed" | "optimizeLegibility" | "geometricPrecision";
   export type CompositeOperation = "replace" | "add" | "accumulate";
   export type DocumentReadyState = "loading" | "interactive" | "complete";
+  export type ImageDataPixelFormat = "rgba-unorm8" | "rgba-float16" | "rgba-float32";
   export type ImageSmoothingQuality = "low" | "medium" | "high";
   export type PredefinedColorSpace = "srgb" | "rec2020" | "display-p3" | "rec2100-hlg" | "rec2100-pq" | "srgb-linear" | "display-p3-linear" | "rec2100-linear";
   export type ReplaceState = "active" | "removed" | "persisted";
@@ -30,7 +31,7 @@ declare module "nts:dom" {
   export type AssignedNodesOptions = Struct<{ flatten: CBool<c_uint8> }, "NtsDomAssignedNodesOptions">;
   export type BoxQuadOptions = Struct<{ box: StringView }, "NtsDomBoxQuadOptions">;
   export type CSSStyleSheetInit = Struct<{ alternate: CBool<c_uint8>; disabled: CBool<c_uint8> }, "NtsDomCSSStyleSheetInit">;
-  export type CheckVisibilityOptions = Struct<{ checkOpacity: CBool<c_uint8>; checkVisibilityCSS: CBool<c_uint8> }, "NtsDomCheckVisibilityOptions">;
+  export type CheckVisibilityOptions = Struct<{ checkOpacity: CBool<c_uint8>; checkVisibilityCSS: CBool<c_uint8>; contentVisibilityAuto: CBool<c_uint8>; opacityProperty: CBool<c_uint8>; visibilityProperty: CBool<c_uint8> }, "NtsDomCheckVisibilityOptions">;
   export type ClipboardEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomClipboardEventInit">;
   export type CompositionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; data: StringView }, "NtsDomCompositionEventInit">;
   export type ConvertCoordinateOptions = Struct<{ fromBox: StringView; toBox: StringView }, "NtsDomConvertCoordinateOptions">;
@@ -49,7 +50,7 @@ declare module "nts:dom" {
   export type GetHTMLOptions = Struct<{ serializableShadowRoots: CBool<c_uint8> }, "NtsDomGetHTMLOptions">;
   export type GetRootNodeOptions = Struct<{ composed: CBool<c_uint8> }, "NtsDomGetRootNodeOptions">;
   export type HashChangeEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; newURL: StringView; oldURL: StringView }, "NtsDomHashChangeEventInit">;
-  export type ImageDataSettings = Struct<{ colorSpace: StringView }, "NtsDomImageDataSettings">;
+  export type ImageDataSettings = Struct<{ colorSpace: StringView; pixelFormat: StringView }, "NtsDomImageDataSettings">;
   export type ImportNodeOptions = Struct<{ selfOnly: CBool<c_uint8> }, "NtsDomImportNodeOptions">;
   export type InputEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; inputType: StringView; isComposing: CBool<c_uint8> }, "NtsDomInputEventInit">;
   export type KeyboardEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; charCode: c_double; code: StringView; isComposing: CBool<c_uint8>; key: StringView; keyCode: c_double; location: c_double; repeat: CBool<c_uint8> }, "NtsDomKeyboardEventInit">;
@@ -62,15 +63,16 @@ declare module "nts:dom" {
   export type PointerLockOptions = Struct<{ unadjustedMovement: CBool<c_uint8> }, "NtsDomPointerLockOptions">;
   export type ProgressEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; lengthComputable: CBool<c_uint8>; loaded: c_double; total: c_double }, "NtsDomProgressEventInit">;
   export type ResizeObserverOptions = Struct<{ box: StringView }, "NtsDomResizeObserverOptions">;
-  export type ScrollIntoViewOptions = Struct<{ behavior: StringView; block: StringView; inline: StringView }, "NtsDomScrollIntoViewOptions">;
+  export type ScrollIntoViewOptions = Struct<{ behavior: StringView; block: StringView; container: StringView; inline: StringView }, "NtsDomScrollIntoViewOptions">;
   export type ScrollToOptions = Struct<{ behavior: StringView; left: c_double; top: c_double }, "NtsDomScrollToOptions">;
+  export type SetHTMLUnsafeOptions = Struct<{ runScripts: CBool<c_uint8> }, "NtsDomSetHTMLUnsafeOptions">;
   export type ShadowRootInit = Struct<{ clonable: CBool<c_uint8>; delegatesFocus: CBool<c_uint8>; mode: StringView; serializable: CBool<c_uint8>; slotAssignment: StringView }, "NtsDomShadowRootInit">;
   export type SubmitEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomSubmitEventInit">;
   export type TogglePopoverOptions = Struct<{ force: CBool<c_uint8> }, "NtsDomTogglePopoverOptions">;
   export type TouchEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8> }, "NtsDomTouchEventInit">;
   export type TransitionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; elapsedTime: c_double; propertyName: StringView; pseudoElement: StringView }, "NtsDomTransitionEventInit">;
   export type UIEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double }, "NtsDomUIEventInit">;
-  export type WheelEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double; deltaMode: c_double; deltaX: c_double; deltaY: c_double; deltaZ: c_double; wheelDeltaX: c_double; wheelDeltaY: c_double }, "NtsDomWheelEventInit">;
+  export type WheelEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; screenX: c_double; screenY: c_double; deltaMode: c_double; deltaX: c_double; deltaY: c_double; deltaZ: c_double; momentum: CBool<c_uint8>; wheelDeltaX: c_double; wheelDeltaY: c_double }, "NtsDomWheelEventInit">;
   export type AnimationSequence = HostClass<"NtsDomAnimationSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & AnimationSequenceMethods;
   export interface AnimationSequenceMethods {
     /** @ntsSymbol nts_dom_AnimationSequence_get_length */
@@ -848,6 +850,19 @@ declare module "nts:dom" {
      */
     ariaColIndex: StringView | null;
     /**
+     * @ntsSymbol nts_dom_Element_get_ariaColIndexText
+     */
+    _get_ariaColIndexText(this: Element): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Element_set_ariaColIndexText
+     */
+    _set_ariaColIndexText(this: Element, value: StringView | null): void;
+    /**
+     * @ntsGet _get_ariaColIndexText
+     * @ntsSet _set_ariaColIndexText
+     */
+    ariaColIndexText: StringView | null;
+    /**
      * @ntsSymbol nts_dom_Element_get_ariaColSpan
      */
     _get_ariaColSpan(this: Element): StringView | null;
@@ -1172,6 +1187,19 @@ declare module "nts:dom" {
      * @ntsSet _set_ariaRowIndex
      */
     ariaRowIndex: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Element_get_ariaRowIndexText
+     */
+    _get_ariaRowIndexText(this: Element): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Element_set_ariaRowIndexText
+     */
+    _set_ariaRowIndexText(this: Element, value: StringView | null): void;
+    /**
+     * @ntsGet _get_ariaRowIndexText
+     * @ntsSet _set_ariaRowIndexText
+     */
+    ariaRowIndexText: StringView | null;
     /**
      * @ntsSymbol nts_dom_Element_get_ariaRowSpan
      */
@@ -2226,11 +2254,23 @@ declare module "nts:dom" {
      */
     setAttributeNodeNS(this: Element, attr: Attr, error?: Ptr<DOMException | null>): Attr | null;
     /**
+     * @ntsSymbol nts_dom_Element_setHTML_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setHTML(this: Element, html: StringView, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_Element_setHTMLUnsafe_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     setHTMLUnsafe(this: Element, html: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_setHTMLUnsafe_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setHTMLUnsafe(this: Element, html: StringView, options: ByValue<SetHTMLUnsafeOptions> | Fields<SetHTMLUnsafeOptions>, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_setPointerCapture
      * @ntsThrows error nts_dom_exception_take_message
@@ -4154,6 +4194,30 @@ declare module "nts:dom" {
      */
     _set_onslotchange_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_set_onscrollsnapchange_void
+     */
+    _set_onscrollsnapchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscrollsnapchange_boolean
+     */
+    _set_onscrollsnapchange_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscrollsnapchange_null
+     */
+    _set_onscrollsnapchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscrollsnapchanging_void
+     */
+    _set_onscrollsnapchanging_void(this: Document, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscrollsnapchanging_boolean
+     */
+    _set_onscrollsnapchanging_boolean(this: Document, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Document_set_onscrollsnapchanging_null
+     */
+    _set_onscrollsnapchanging_null(this: Document): void;
+    /**
      * @ntsSymbol nts_dom_Document_set_onstalled_void
      */
     _set_onstalled_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -5812,6 +5876,19 @@ declare module "nts:dom" {
      */
     spellcheck: boolean;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_autocorrect
+     */
+    _get_autocorrect(this: HTMLElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_autocorrect
+     */
+    _set_autocorrect(this: HTMLElement, value: boolean): void;
+    /**
+     * @ntsGet _get_autocorrect
+     * @ntsSet _set_autocorrect
+     */
+    autocorrect: boolean;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_get_autocapitalize
      */
     _get_autocapitalize(this: HTMLElement): StringView;
@@ -6728,6 +6805,30 @@ declare module "nts:dom" {
      */
     _set_onslotchange_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchange_void
+     */
+    _set_onscrollsnapchange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchange_boolean
+     */
+    _set_onscrollsnapchange_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchange_null
+     */
+    _set_onscrollsnapchange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchanging_void
+     */
+    _set_onscrollsnapchanging_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchanging_boolean
+     */
+    _set_onscrollsnapchanging_boolean(this: HTMLElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchanging_null
+     */
+    _set_onscrollsnapchanging_null(this: HTMLElement): void;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onstalled_void
      */
     _set_onstalled_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7218,6 +7319,27 @@ declare module "nts:dom" {
      * @ntsSet _set_tabIndex
      */
     tabIndex: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_focusGroup
+     */
+    _get_focusGroup(this: HTMLElement): DOMTokenList;
+    /**
+     * @ntsGet _get_focusGroup
+     */
+    readonly focusGroup: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_focusGroupStart
+     */
+    _get_focusGroupStart(this: HTMLElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_focusGroupStart
+     */
+    _set_focusGroupStart(this: HTMLElement, value: boolean): void;
+    /**
+     * @ntsGet _get_focusGroupStart
+     * @ntsSet _set_focusGroupStart
+     */
+    focusGroupStart: boolean;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_style
      */
@@ -19662,6 +19784,19 @@ declare module "nts:dom" {
      */
     shadowRootSerializable: boolean;
     /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_get_shadowRootSlotAssignment
+     */
+    _get_shadowRootSlotAssignment(this: HTMLTemplateElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_set_shadowRootSlotAssignment
+     */
+    _set_shadowRootSlotAssignment(this: HTMLTemplateElement, value: StringView): void;
+    /**
+     * @ntsGet _get_shadowRootSlotAssignment
+     * @ntsSet _set_shadowRootSlotAssignment
+     */
+    shadowRootSlotAssignment: StringView;
+    /**
      * @ntsSymbol nts_dom_HTMLTemplateElement_get_shadowRootCustomElementRegistry
      */
     _get_shadowRootCustomElementRegistry(this: HTMLTemplateElement): StringView;
@@ -19674,6 +19809,19 @@ declare module "nts:dom" {
      * @ntsSet _set_shadowRootCustomElementRegistry
      */
     shadowRootCustomElementRegistry: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_get_htmlFor
+     */
+    _get_htmlFor(this: HTMLTemplateElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLTemplateElement_set_htmlFor
+     */
+    _set_htmlFor(this: HTMLTemplateElement, value: StringView): void;
+    /**
+     * @ntsGet _get_htmlFor
+     * @ntsSet _set_htmlFor
+     */
+    htmlFor: StringView;
   }
   export type HTMLTemplateElementMethods = HTMLTemplateElementOwnMethods & HTMLElementMethods;
   export type HTMLTemplateElement = HostClass<"NtsDomHTMLTemplateElement", HTMLElement> & HTMLTemplateElementMethods;
@@ -19938,6 +20086,14 @@ declare module "nts:dom" {
      * @ntsGet _get_deltaMode
      */
     readonly deltaMode: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_WheelEvent_get_momentum
+     */
+    _get_momentum(this: WheelEvent): boolean;
+    /**
+     * @ntsGet _get_momentum
+     */
+    readonly momentum: boolean;
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_wheelDeltaX
      */
@@ -20311,6 +20467,18 @@ declare module "nts:dom" {
      */
     readonly devicePixelRatio: CNumber<"double">;
     /**
+     * @ntsSymbol nts_dom_Window_set_onpageswap_void
+     */
+    _set_onpageswap_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpageswap_boolean
+     */
+    _set_onpageswap_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onpageswap_null
+     */
+    _set_onpageswap_null(this: Window): void;
+    /**
      * @ntsSymbol nts_dom_Window_set_onpagereveal_void
      */
     _set_onpagereveal_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20366,6 +20534,14 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onsearch_null
      */
     _set_onsearch_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_credentialless
+     */
+    _get_credentialless(this: Window): boolean;
+    /**
+     * @ntsGet _get_credentialless
+     */
+    readonly credentialless: boolean;
     /**
      * @ntsSymbol nts_dom_Window_get_testOriginTrialGlobalAttribute
      */
@@ -21106,6 +21282,30 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onslotchange_null
      */
     _set_onslotchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollsnapchange_void
+     */
+    _set_onscrollsnapchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollsnapchange_boolean
+     */
+    _set_onscrollsnapchange_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollsnapchange_null
+     */
+    _set_onscrollsnapchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollsnapchanging_void
+     */
+    _set_onscrollsnapchanging_void(this: Window, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollsnapchanging_boolean
+     */
+    _set_onscrollsnapchanging_boolean(this: Window, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_set_onscrollsnapchanging_null
+     */
+    _set_onscrollsnapchanging_null(this: Window): void;
     /**
      * @ntsSymbol nts_dom_Window_set_onstalled_void
      */
@@ -21907,6 +22107,12 @@ declare module "nts:dom" {
      */
     releaseEvents(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_requestResize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    requestResize(this: Window, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_Window_resizeBy
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -21994,6 +22200,14 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Performance_set_onresourcetimingbufferfull_null
      */
     _set_onresourcetimingbufferfull_null(this: Performance): void;
+    /**
+     * @ntsSymbol nts_dom_Performance_get_interactionCount
+     */
+    _get_interactionCount(this: Performance): CNumber<"double">;
+    /**
+     * @ntsGet _get_interactionCount
+     */
+    readonly interactionCount: CNumber<"double">;
     /**
      * @ntsSymbol nts_dom_Performance_clearMarks_1
      */
@@ -23835,6 +24049,30 @@ declare module "nts:dom" {
      * @ntsGet _get_actualBoundingBoxDescent
      */
     readonly actualBoundingBoxDescent: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_TextMetrics_get_hangingBaseline
+     */
+    _get_hangingBaseline(this: TextMetrics): CNumber<"double">;
+    /**
+     * @ntsGet _get_hangingBaseline
+     */
+    readonly hangingBaseline: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_TextMetrics_get_alphabeticBaseline
+     */
+    _get_alphabeticBaseline(this: TextMetrics): CNumber<"double">;
+    /**
+     * @ntsGet _get_alphabeticBaseline
+     */
+    readonly alphabeticBaseline: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_TextMetrics_get_ideographicBaseline
+     */
+    _get_ideographicBaseline(this: TextMetrics): CNumber<"double">;
+    /**
+     * @ntsGet _get_ideographicBaseline
+     */
+    readonly ideographicBaseline: CNumber<"double">;
   }
   export type TextMetricsMethods = TextMetricsOwnMethods;
   export type TextMetrics = HostClass<"NtsDomTextMetrics", null, "nts_dom_retain", "nts_dom_release"> & TextMetricsMethods;
@@ -23987,11 +24225,23 @@ declare module "nts:dom" {
      */
     getSelection(this: ShadowRoot): Selection | null;
     /**
+     * @ntsSymbol nts_dom_ShadowRoot_setHTML_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setHTML(this: ShadowRoot, html: StringView, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_ShadowRoot_setHTMLUnsafe_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     setHTMLUnsafe(this: ShadowRoot, string: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_ShadowRoot_setHTMLUnsafe_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setHTMLUnsafe(this: ShadowRoot, html: StringView, options: ByValue<SetHTMLUnsafeOptions> | Fields<SetHTMLUnsafeOptions>, error?: Ptr<DOMException | null>): void;
   }
   export type ShadowRootMethods = ShadowRootOwnMethods & DocumentFragmentMethods;
   export type ShadowRoot = HostClass<"NtsDomShadowRoot", DocumentFragment> & ShadowRootMethods;
@@ -26396,6 +26646,14 @@ declare module "nts:dom" {
      */
     readonly pseudoElement: StringView;
     /**
+     * @ntsSymbol nts_dom_AnimationEvent_get_animation
+     */
+    _get_animation(this: AnimationEvent): Animation | null;
+    /**
+     * @ntsGet _get_animation
+     */
+    readonly animation: Animation | null;
+    /**
      * @ntsSymbol nts_dom_AnimationEvent_get_isTrusted
      */
     _get_isTrusted(this: AnimationEvent): boolean;
@@ -26441,6 +26699,14 @@ declare module "nts:dom" {
      * @ntsGet _get_pseudoElement
      */
     readonly pseudoElement: StringView;
+    /**
+     * @ntsSymbol nts_dom_TransitionEvent_get_animation
+     */
+    _get_animation(this: TransitionEvent): Animation | null;
+    /**
+     * @ntsGet _get_animation
+     */
+    readonly animation: Animation | null;
     /**
      * @ntsSymbol nts_dom_TransitionEvent_get_isTrusted
      */
@@ -26778,6 +27044,19 @@ declare module "nts:dom" {
      * @ntsSet _set_preload
      */
     preload: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_get_loading
+     */
+    _get_loading(this: HTMLMediaElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLMediaElement_set_loading
+     */
+    _set_loading(this: HTMLMediaElement, value: StringView): void;
+    /**
+     * @ntsGet _get_loading
+     * @ntsSet _set_loading
+     */
+    loading: StringView;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_buffered
      */
@@ -27335,6 +27614,19 @@ declare module "nts:dom" {
      * @ntsSet _set_adAuctionHeaders
      */
     adAuctionHeaders: boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_get_credentialless
+     */
+    _get_credentialless(this: HTMLIFrameElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_HTMLIFrameElement_set_credentialless
+     */
+    _set_credentialless(this: HTMLIFrameElement, value: boolean): void;
+    /**
+     * @ntsGet _get_credentialless
+     * @ntsSet _set_credentialless
+     */
+    credentialless: boolean;
     /**
      * @ntsSymbol nts_dom_HTMLIFrameElement_get_align
      */
@@ -27912,6 +28204,36 @@ declare module "nts:dom" {
      */
     readonly blocking: DOMTokenList;
     /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_textContent
+     */
+    _get_textContent(this: HTMLScriptElement): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_textContent
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_textContent(this: HTMLScriptElement, value: StringView | null, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_textContent
+     * @ntsSet _set_textContent
+     */
+    textContent: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_get_innerText
+     */
+    _get_innerText(this: HTMLScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLScriptElement_set_innerText
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_innerText(this: HTMLScriptElement, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_innerText
+     * @ntsSet _set_innerText
+     */
+    innerText: StringView;
+    /**
      * @ntsSymbol nts_dom_HTMLScriptElement_get_attributionSrc
      */
     _get_attributionSrc(this: HTMLScriptElement): StringView;
@@ -28127,6 +28449,40 @@ declare module "nts:dom" {
      * @ntsGet _get_sheet
      */
     readonly sheet: StyleSheet | null;
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_getAttribute
+     */
+    getAttribute(this: ProcessingInstruction, name: StringView): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_hasAttribute
+     */
+    hasAttribute(this: ProcessingInstruction, name: StringView): boolean;
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_hasAttributes
+     */
+    hasAttributes(this: ProcessingInstruction): boolean;
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_removeAttribute
+     */
+    removeAttribute(this: ProcessingInstruction, name: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_setAttribute
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setAttribute(this: ProcessingInstruction, name: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_toggleAttribute_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toggleAttribute(this: ProcessingInstruction, name: StringView, force: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_toggleAttribute_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toggleAttribute(this: ProcessingInstruction, name: StringView, error?: Ptr<DOMException | null>): void;
   }
   export type ProcessingInstructionMethods = ProcessingInstructionOwnMethods & CharacterDataMethods;
   export type ProcessingInstruction = HostClass<"NtsDomProcessingInstruction", CharacterData> & ProcessingInstructionMethods;
@@ -28565,6 +28921,14 @@ declare module "nts:dom" {
      * @ntsGet _get_colorSpace
      */
     readonly colorSpace: PredefinedColorSpace;
+    /**
+     * @ntsSymbol nts_dom_ImageData_get_pixelFormat
+     */
+    _get_pixelFormat(this: ImageData): ImageDataPixelFormat;
+    /**
+     * @ntsGet _get_pixelFormat
+     */
+    readonly pixelFormat: ImageDataPixelFormat;
   }
   export type ImageDataMethods = ImageDataOwnMethods;
   export type ImageData = HostClass<"NtsDomImageData", null, "nts_dom_retain", "nts_dom_release"> & ImageDataMethods;
