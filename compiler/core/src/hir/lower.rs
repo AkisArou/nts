@@ -55141,6 +55141,11 @@ impl<'a> FuncBuilder<'a> {
         if self.pending_chain(receiver_node) {
             return self.lower_chain(id);
         }
+        // A static operation of a class a binding implements, before the class
+        // is read as a value: lib.dom's `URL` has no value here to read.
+        if let Some(function) = self.delegated_static(receiver_node, member) {
+            return self.lower_delegated_call(id, function, arguments);
+        }
         let receiver = self.lower_expression(receiver_node)?;
         self.lower_method_on(id, receiver, receiver_node, member, arguments)
     }
@@ -57793,6 +57798,28 @@ impl<'a> FuncBuilder<'a> {
         })?;
         let (module, name) = nts_semantic_schema::binding::parse(binding)?;
         let function = nts_semantic_schema::binding::declared_in(self.snapshot, module, name, syntax::FUNCTION_DECLARATION)?;
+        Some((function, *self.snapshot.node_types.get(&function)?))
+    }
+
+    /// The function implementing a **static** operation of a class a binding
+    /// implements: lib.dom's `URL.canParse(x)` -- a member of `declare var URL:
+    /// { …; canParse(…) }` -- is the bound module's `URL_canParse`, declared beside
+    /// the type it binds and named `<Interface>_<member>`, as its constructor is
+    /// `new<Interface>` ([`Self::delegated_constructor`]). The binding is read from
+    /// the interface the receiver's name also declares (`/** @ntsBoundBy "nts:dom"
+    /// URL */ interface URL {}`). Overloads by arity, as everywhere.
+    fn delegated_static(&self, receiver: NodeId, member: NodeId) -> Option<(NodeId, TypeId)> {
+        if self.kind_of(receiver) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
+        let symbol = self.denoted_symbol(self.node(receiver).symbol?);
+        let (module, name) = self.snapshot.symbols.get(symbol.0 as usize)?.declarations.iter().find_map(|declaration| {
+            (self.kind_of(*declaration) == Some(syntax::INTERFACE_DECLARATION))
+                .then(|| nts_semantic_schema::binding::parse(self.node(*declaration).native.as_deref()?.bound_by.as_deref()?))
+                .flatten()
+        })?;
+        let member = self.literal_name(member)?;
+        let function = nts_semantic_schema::binding::declared_in(self.snapshot, module, &format!("{name}_{member}"), syntax::FUNCTION_DECLARATION)?;
         Some((function, *self.snapshot.node_types.get(&function)?))
     }
 
