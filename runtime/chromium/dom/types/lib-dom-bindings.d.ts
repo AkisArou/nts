@@ -2082,6 +2082,10 @@ interface Path2D {}
  * @ntsIs nts_dom_is 607
  */
 interface Storage {}
+/** @ntsBoundBy "nts:dom" HTMLCollection */
+interface HTMLCollectionOf<T extends Element> {}
+/** @ntsBoundBy "nts:dom" NodeList */
+interface NodeListOf<TNode extends Node> {}
 /** @ntsBoundBy "nts:dom" ChildNode */
 interface ChildNode {}
 /** @ntsBoundBy "nts:dom" NonDocumentTypeChildNode */

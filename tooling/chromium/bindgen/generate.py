@@ -138,6 +138,13 @@ class Result:
         self.c, self.ts, self.kind, self.nullable = c, ts, kind, nullable
 
 
+def members_of(union):
+    """A union's flattened members in a fixed order. web_idl keeps them in a
+    set, which Python iterates in a different order each run, and the
+    generated files must not change unless the IDL does."""
+    return sorted(union.flattened_member_types, key=lambda member: member.syntactic_form)
+
+
 class MixinView:
     """A Blink IDL mixin bound as a handle type of its own (`ParentNode`,
     `ChildNode`), as lib.dom.d.ts declares one: the members it contributes to
@@ -378,7 +385,7 @@ class Generator:
             return Param(name, f"{self.handle_tag(interface.identifier)}* {name}",
                          f"{name}: {interface.identifier}{or_null}", expr, False)
         if unwrapped.is_union:
-            members = unwrapped.flattened_member_types
+            members = members_of(unwrapped)
             strings = [t for t in members if t.unwrap().keyword_typename in STRINGS]
             # The string is taken only where it is the one primitive member and
             # the others are interfaces (TrustedScript, TrustedHTML): a union
@@ -738,7 +745,7 @@ class Generator:
         unwrapped = idl_type.unwrap(nullable=True, typedef=True)
         if not unwrapped.is_union:
             return None
-        primitives = [t.unwrap() for t in unwrapped.flattened_member_types if not t.unwrap().is_interface]
+        primitives = [t.unwrap() for t in members_of(unwrapped) if not t.unwrap().is_interface]
         if len(primitives) < 2 or any(t.keyword_typename not in self.ARM_NAMES for t in primitives):
             return None
         return unwrapped, primitives
@@ -959,7 +966,7 @@ class Generator:
         elif element.is_union:
             union = blink_type_info(element).typename
             arms = []
-            for member in element.flattened_member_types:
+            for member in members_of(element):
                 unwrapped = member.unwrap()
                 if unwrapped.keyword_typename in STRINGS:
                     arms.append(("s", unwrapped))
@@ -1366,6 +1373,16 @@ class Generator:
             ("declare function requestAnimationFrame(callback: FrameRequestCallback): number;", "requestAnimationFrame"),
             ("declare function cancelAnimationFrame(handle: number): void;", "cancelAnimationFrame"),
         ]
+        # lib.dom's generic collections (`NodeListOf<HTMLLIElement>`,
+        # `HTMLCollectionOf<HTMLOptionElement>`) only narrow `X`'s element
+        # type for TypeScript: each instantiation is an `X` handle. Bound
+        # without @ntsIs; no value is an instance of `XOf`.
+        lib_dom = open(libdom.LIB_DOM).read()
+        for identifier in sorted(name for name in declared if name.endswith("Of") and name[:-2] in self.bound):
+            # Its own type parameters, which a merging declaration repeats.
+            parameters = re.search(rf"^interface {identifier}(<[^>]*>)", lib_dom, re.M)
+            generic = parameters.group(1) if parameters else ""
+            lines.append(f'/** @ntsBoundBy "nts:dom" {identifier[:-2]} */\ninterface {identifier}{generic} {{}}')
         # A mixin is never an `instanceof` target: bound, with no @ntsIs.
         for identifier in sorted(self.mixins):
             if identifier in declared:

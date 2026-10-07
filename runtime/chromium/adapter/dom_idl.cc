@@ -14555,6 +14555,13 @@ void nts_dom_HTMLElement_set_dir(NtsDomHTMLElement* self, const NtsBorrowedStrin
   receiver->setDir(NtsText(context, value));
 }
 
+void nts_dom_HTMLElement_set_hidden_string(NtsDomHTMLElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(NtsText(context, value).Text()));
+}
+
 void nts_dom_HTMLElement_set_hidden_boolean(NtsDomHTMLElement* self, bool value) {
   NtsDomContext& context = nts_dom::Current();
   blink::CEReactionsScope reactions(context.v8_isolate);
@@ -14567,13 +14574,6 @@ void nts_dom_HTMLElement_set_hidden_number(NtsDomHTMLElement* self, double value
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
   receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(value));
-}
-
-void nts_dom_HTMLElement_set_hidden_string(NtsDomHTMLElement* self, const NtsBorrowedString* value) {
-  NtsDomContext& context = nts_dom::Current();
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::HTMLElement>(self);
-  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(NtsText(context, value).Text()));
 }
 
 bool nts_dom_HTMLElement_get_inert(NtsDomHTMLElement* self) {
@@ -35769,51 +35769,11 @@ void nts_dom_HTMLSlotElement_set_name(NtsDomHTMLSlotElement* self, const NtsBorr
   receiver->setAttribute(html_names::kNameAttr, NtsText(context, value));
 }
 
-void nts_dom_HTMLSlotElement_assign_ttt(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomText* nodes2, NtsDomText* nodes3, NtsDomException** error) {
+void nts_dom_HTMLSlotElement_assign_eee(NtsDomHTMLSlotElement* self, NtsDomElement* nodes1, NtsDomElement* nodes2, NtsDomElement* nodes3, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes3))});
-  receiver->assign(nodes_values, exception_state);
-}
-
-void nts_dom_HTMLSlotElement_assign_tte(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomText* nodes2, NtsDomElement* nodes3, NtsDomException** error) {
-  nts_dom::AssertEntered();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes3))});
-  receiver->assign(nodes_values, exception_state);
-}
-
-void nts_dom_HTMLSlotElement_assign_tet(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomElement* nodes2, NtsDomText* nodes3, NtsDomException** error) {
-  nts_dom::AssertEntered();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes3))});
-  receiver->assign(nodes_values, exception_state);
-}
-
-void nts_dom_HTMLSlotElement_assign_tee(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomElement* nodes2, NtsDomElement* nodes3, NtsDomException** error) {
-  nts_dom::AssertEntered();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes3))});
-  receiver->assign(nodes_values, exception_state);
-}
-
-void nts_dom_HTMLSlotElement_assign_ett(NtsDomHTMLSlotElement* self, NtsDomElement* nodes1, NtsDomText* nodes2, NtsDomText* nodes3, NtsDomException** error) {
-  nts_dom::AssertEntered();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes3))});
-  receiver->assign(nodes_values, exception_state);
-}
-
-void nts_dom_HTMLSlotElement_assign_ete(NtsDomHTMLSlotElement* self, NtsDomElement* nodes1, NtsDomText* nodes2, NtsDomElement* nodes3, NtsDomException** error) {
-  nts_dom::AssertEntered();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes3))});
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes3))});
   receiver->assign(nodes_values, exception_state);
 }
 
@@ -35825,35 +35785,51 @@ void nts_dom_HTMLSlotElement_assign_eet(NtsDomHTMLSlotElement* self, NtsDomEleme
   receiver->assign(nodes_values, exception_state);
 }
 
-void nts_dom_HTMLSlotElement_assign_eee(NtsDomHTMLSlotElement* self, NtsDomElement* nodes1, NtsDomElement* nodes2, NtsDomElement* nodes3, NtsDomException** error) {
+void nts_dom_HTMLSlotElement_assign_ete(NtsDomHTMLSlotElement* self, NtsDomElement* nodes1, NtsDomText* nodes2, NtsDomElement* nodes3, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes3))});
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes3))});
   receiver->assign(nodes_values, exception_state);
 }
 
-void nts_dom_HTMLSlotElement_assign_tt(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomText* nodes2, NtsDomException** error) {
+void nts_dom_HTMLSlotElement_assign_ett(NtsDomHTMLSlotElement* self, NtsDomElement* nodes1, NtsDomText* nodes2, NtsDomText* nodes3, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2))});
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes3))});
   receiver->assign(nodes_values, exception_state);
 }
 
-void nts_dom_HTMLSlotElement_assign_te(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomElement* nodes2, NtsDomException** error) {
+void nts_dom_HTMLSlotElement_assign_tee(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomElement* nodes2, NtsDomElement* nodes3, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes2))});
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes3))});
   receiver->assign(nodes_values, exception_state);
 }
 
-void nts_dom_HTMLSlotElement_assign_et(NtsDomHTMLSlotElement* self, NtsDomElement* nodes1, NtsDomText* nodes2, NtsDomException** error) {
+void nts_dom_HTMLSlotElement_assign_tet(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomElement* nodes2, NtsDomText* nodes3, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2))});
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes3))});
+  receiver->assign(nodes_values, exception_state);
+}
+
+void nts_dom_HTMLSlotElement_assign_tte(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomText* nodes2, NtsDomElement* nodes3, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes3))});
+  receiver->assign(nodes_values, exception_state);
+}
+
+void nts_dom_HTMLSlotElement_assign_ttt(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomText* nodes2, NtsDomText* nodes3, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes3))});
   receiver->assign(nodes_values, exception_state);
 }
 
@@ -35865,11 +35841,27 @@ void nts_dom_HTMLSlotElement_assign_ee(NtsDomHTMLSlotElement* self, NtsDomElemen
   receiver->assign(nodes_values, exception_state);
 }
 
-void nts_dom_HTMLSlotElement_assign_t(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomException** error) {
+void nts_dom_HTMLSlotElement_assign_et(NtsDomHTMLSlotElement* self, NtsDomElement* nodes1, NtsDomText* nodes2, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1))});
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2))});
+  receiver->assign(nodes_values, exception_state);
+}
+
+void nts_dom_HTMLSlotElement_assign_te(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomElement* nodes2, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes2))});
+  receiver->assign(nodes_values, exception_state);
+}
+
+void nts_dom_HTMLSlotElement_assign_tt(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomText* nodes2, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes2))});
   receiver->assign(nodes_values, exception_state);
 }
 
@@ -35878,6 +35870,14 @@ void nts_dom_HTMLSlotElement_assign_e(NtsDomHTMLSlotElement* self, NtsDomElement
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
   auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Element>(nodes1))});
+  receiver->assign(nodes_values, exception_state);
+}
+
+void nts_dom_HTMLSlotElement_assign_t(NtsDomHTMLSlotElement* self, NtsDomText* nodes1, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
+  auto nodes_values = blink::HeapVector<blink::Member<blink::V8UnionElementOrText>>({blink::MakeGarbageCollected<blink::V8UnionElementOrText>(ObjectOf<blink::Text>(nodes1))});
   receiver->assign(nodes_values, exception_state);
 }
 
