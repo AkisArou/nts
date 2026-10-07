@@ -1,5 +1,5 @@
 {
-  "bound": 3596,
+  "bound": 3623,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -6580,6 +6580,36 @@
       "interface": "MutationObserverInit",
       "member": "attributeFilter",
       "why": "dictionary member of type optional sequence<DOMString>"
+    },
+    {
+      "interface": "ResizeObserver",
+      "member": "constructor/1",
+      "why": "parameter type ResizeObserverCallback"
+    },
+    {
+      "interface": "ResizeObserverOptions",
+      "member": "box",
+      "why": "dictionary member of type optional ResizeObserverBoxOptions"
+    },
+    {
+      "interface": "ResizeObserver",
+      "member": "observe/2",
+      "why": "dictionary ResizeObserverOptions has no member a C struct can carry"
+    },
+    {
+      "interface": "IntersectionObserver",
+      "member": "constructor/2",
+      "why": "parameter type IntersectionObserverCallback"
+    },
+    {
+      "interface": "IntersectionObserver",
+      "member": "constructor/1",
+      "why": "parameter type IntersectionObserverCallback"
+    },
+    {
+      "interface": "IntersectionObserver",
+      "member": "get thresholds",
+      "why": "result type FrozenArray<double>"
     }
   ]
 }

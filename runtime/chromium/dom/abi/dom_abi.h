@@ -128,6 +128,24 @@ NtsDomMutationObserver* nts_dom_new_mutation_observer(
     void* closure,
     void (*destroy)(void* closure));
 
+/* `new ResizeObserver(callback)`: delivered in the rendering steps after
+ * layout, with the entries and the observer. Held until the document ends. */
+NtsDomResizeObserver* nts_dom_new_resize_observer(
+    void (*callback)(NtsDomResizeObserverEntrySequence* entries,
+                     NtsDomResizeObserver* observer,
+                     void* closure),
+    void* closure,
+    void (*destroy)(void* closure));
+/* `new IntersectionObserver(callback)` with the default options (the
+ * viewport, no margin, threshold 0): delivered by a posted task, with the
+ * entries and the observer. Held until the document ends. */
+NtsDomIntersectionObserver* nts_dom_new_intersection_observer(
+    void (*callback)(NtsDomIntersectionObserverEntrySequence* entries,
+                     NtsDomIntersectionObserver* observer,
+                     void* closure),
+    void* closure,
+    void (*destroy)(void* closure));
+
 /* `setTimeout(callback, timeout)` and `setInterval` for a compiled closure,
  * as HTML's timer initialization steps run them: the timeout is WebIDL's
  * `long` (ToInt32; a negative one is 0), past nesting level 5 one under 4 ms

@@ -15,6 +15,12 @@
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
 #include "third_party/blink/renderer/core/dom/mutation_record.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_intersection_observer_init.h"
+#include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
+#include "third_party/blink/renderer/core/intersection_observer/intersection_observer_delegate.h"
+#include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
+#include "third_party/blink/renderer/core/resize_observer/resize_observer.h"
+#include "third_party/blink/renderer/core/resize_observer/resize_observer_entry.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
@@ -260,29 +266,28 @@ private:
   bool cleared_ = false;
 };
 
-// `new MutationObserver(callback)` for a compiled closure: Blink's own
-// observer, with a native delegate where page script's has V8's. Each
-// delivery is an entry calling the closure with the records and the
-// observer. The context holds the delegate, and with it the closure, until the
-// document ends -- as long as page script's observer can be reached -- and a
-// give-back asked for during a delivery waits for it to return.
-class NtsMutationDelegate final : public blink::MutationObserver::Delegate {
+// A compiled closure a native delegate calls back -- an observer's -- held
+// for the program until the document ends, as long as page script's observer
+// can be reached. It is given back once, and never while a call of it is
+// under way: a give-back asked for during one happens as it returns.
+class NtsHeldClosure final : public blink::GarbageCollected<NtsHeldClosure> {
 public:
-  using Callback = void (*)(NtsDomMutationRecordSequence *,
-                            NtsDomMutationObserver *, void *);
-  NtsMutationDelegate(NtsDomContext *context, Callback callback, void *closure,
-                      NtsDomDestroy destroy)
+  using AnyCallback = void (*)();
+  NtsHeldClosure(NtsDomContext *context, AnyCallback callback, void *closure,
+                 NtsDomDestroy destroy)
       : context_(context), callback_(callback), closure_(closure),
         destroy_(destroy) {}
 
-  blink::ExecutionContext *GetExecutionContext() const override {
-    return context_ ? context_->document->GetExecutionContext() : nullptr;
+  NtsDomContext *context() const { return context_; }
+  template <class Callback> Callback callback() const {
+    return reinterpret_cast<Callback>(callback_);
   }
-  void Deliver(const blink::MutationRecordVector &records,
-               blink::MutationObserver &observer) override;
+  void *closure() const { return closure_.get(); }
+  bool live() const { return callback_ && context_; }
 
-  // What gives the closure back, once; nothing while a delivery runs (it
-  // gives it back when it returns).
+  // `call(state)` as the program's entry (NtsDomContext::RunCallback).
+  void Run(void (*call)(void *), void *state);
+
   NtsDomDestroy Take(void *&closure) {
     if (!callback_)
       return nullptr;
@@ -295,14 +300,86 @@ public:
     closure = closure_.ExtractAsDangling();
     return std::exchange(destroy_, nullptr);
   }
+  void Trace(blink::Visitor *) const {}
 
 private:
   raw_ptr<NtsDomContext> context_;
-  Callback callback_;
+  AnyCallback callback_;
   raw_ptr<void> closure_;
   NtsDomDestroy destroy_;
   int running_ = 0;
   bool taken_while_running_ = false;
+};
+
+// `new MutationObserver(callback)`: Blink's own observer, with a native
+// delegate where page script's has V8's.
+class NtsMutationDelegate final : public blink::MutationObserver::Delegate {
+public:
+  using Callback = void (*)(NtsDomMutationRecordSequence *,
+                            NtsDomMutationObserver *, void *);
+  explicit NtsMutationDelegate(NtsHeldClosure *held) : held_(held) {}
+  blink::ExecutionContext *GetExecutionContext() const override {
+    return held_->context() ? held_->context()->document->GetExecutionContext()
+                            : nullptr;
+  }
+  void Deliver(const blink::MutationRecordVector &records,
+               blink::MutationObserver &observer) override;
+  void Trace(blink::Visitor *visitor) const override {
+    visitor->Trace(held_);
+    blink::MutationObserver::Delegate::Trace(visitor);
+  }
+
+private:
+  blink::Member<NtsHeldClosure> held_;
+};
+
+// `new ResizeObserver(callback)`: delivered in the rendering steps, after
+// layout, with the entries and the observer, as page script's is.
+class NtsResizeDelegate final : public blink::ResizeObserver::Delegate {
+public:
+  using Callback = void (*)(NtsDomResizeObserverEntrySequence *,
+                            NtsDomResizeObserver *, void *);
+  explicit NtsResizeDelegate(NtsHeldClosure *held) : held_(held) {}
+  void Watch(blink::ResizeObserver *observer) { observer_ = observer; }
+  void OnResize(const blink::HeapVector<blink::Member<blink::ResizeObserverEntry>>
+                    &entries) override;
+  void Trace(blink::Visitor *visitor) const override {
+    visitor->Trace(held_);
+    visitor->Trace(observer_);
+    blink::ResizeObserver::Delegate::Trace(visitor);
+  }
+
+private:
+  blink::Member<NtsHeldClosure> held_;
+  blink::Member<blink::ResizeObserver> observer_;
+};
+
+// `new IntersectionObserver(callback)`: delivered by a posted task, as page
+// script's is, with the entries and the observer.
+class NtsIntersectionDelegate final
+    : public blink::IntersectionObserverDelegate {
+public:
+  using Callback = void (*)(NtsDomIntersectionObserverEntrySequence *,
+                            NtsDomIntersectionObserver *, void *);
+  explicit NtsIntersectionDelegate(NtsHeldClosure *held) : held_(held) {}
+  blink::IntersectionObserver::DeliveryBehavior
+  GetDeliveryBehavior() const override {
+    return blink::IntersectionObserver::kPostTaskToDeliver;
+  }
+  blink::ExecutionContext *GetExecutionContext() const override {
+    return held_->context() ? held_->context()->document->GetExecutionContext()
+                            : nullptr;
+  }
+  void Deliver(const blink::HeapVector<
+                   blink::Member<blink::IntersectionObserverEntry>> &entries,
+               blink::IntersectionObserver &observer) override;
+  void Trace(blink::Visitor *visitor) const override {
+    visitor->Trace(held_);
+    blink::IntersectionObserverDelegate::Trace(visitor);
+  }
+
+private:
+  blink::Member<NtsHeldClosure> held_;
 };
 
 // What a context's program has asked Blink to call -- listeners until each is
@@ -324,7 +401,7 @@ public:
     visitor->Trace(by_target);
     visitor->Trace(handlers);
     visitor->Trace(timers);
-    visitor->Trace(observers);
+    visitor->Trace(held);
   }
   // The listener added for (type, closure, capture) on `target`, or null.
   NtsListener *Find(blink::EventTarget *target, const blink::AtomicString &type,
@@ -362,8 +439,8 @@ public:
       handlers;
   // Timers that can still run, by id.
   blink::HeapHashMap<int32_t, blink::Member<NtsTimer>> timers;
-  // Mutation observers' delegates, until the document ends.
-  blink::HeapHashSet<blink::Member<NtsMutationDelegate>> observers;
+  // Closures native delegates hold -- observers' -- until the document ends.
+  blink::HeapHashSet<blink::Member<NtsHeldClosure>> held;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -475,36 +552,72 @@ void NtsListener::Invoke(blink::ExecutionContext *, blink::Event *event) {
                     closure_.ExtractAsDangling());
 }
 
-void NtsMutationDelegate::Deliver(const blink::MutationRecordVector &records,
-                                  blink::MutationObserver &observer) {
-  if (!callback_ || !context_)
+void NtsHeldClosure::Run(void (*call)(void *), void *state) {
+  if (!live())
     return;
   scoped_refptr<NtsDomContext> context(context_.get());
-  // On this stack for the call, where Oilpan's scan finds what it holds.
-  struct Call {
-    STACK_ALLOCATED();
-
-  public:
-    Callback callback;
-    NtsDomMutationRecordSequence *records;
-    NtsDomMutationObserver *observer;
-    void *closure;
-  } call{callback_,
-         reinterpret_cast<NtsDomMutationRecordSequence *>(Sequence(records)),
-         HandleOf<NtsDomMutationObserver>(&observer), closure_.get()};
   ++running_;
-  context->RunCallback(
-      [](void *state) {
-        auto *call = static_cast<Call *>(state);
-        call->callback(call->records, call->observer, call->closure);
-      },
-      &call);
+  context->RunCallback(call, state);
   if (--running_ || !taken_while_running_)
     return;
   taken_while_running_ = false;
   context_ = nullptr;
   context->GiveBack(std::exchange(destroy_, nullptr),
                     closure_.ExtractAsDangling());
+}
+
+// An observer's delivery, on this stack for the call, where Oilpan's scan
+// finds what it holds: the entries, the observer, and the closure.
+template <class Callback, class Entries, class Observer> struct DeliveryCall {
+  STACK_ALLOCATED();
+
+public:
+  Callback callback;
+  Entries *entries;
+  Observer *observer;
+  void *closure;
+  static void Run(void *state) {
+    auto *call = static_cast<DeliveryCall *>(state);
+    call->callback(call->entries, call->observer, call->closure);
+  }
+};
+
+void NtsMutationDelegate::Deliver(const blink::MutationRecordVector &records,
+                                  blink::MutationObserver &observer) {
+  if (!held_->live())
+    return;
+  DeliveryCall<Callback, NtsDomMutationRecordSequence, NtsDomMutationObserver> call{
+      held_->callback<Callback>(),
+      reinterpret_cast<NtsDomMutationRecordSequence *>(Sequence(records)),
+      HandleOf<NtsDomMutationObserver>(&observer), held_->closure()};
+  held_->Run(decltype(call)::Run, &call);
+}
+
+void NtsResizeDelegate::OnResize(
+    const blink::HeapVector<blink::Member<blink::ResizeObserverEntry>> &entries) {
+  if (!held_->live() || !observer_)
+    return;
+  DeliveryCall<Callback, NtsDomResizeObserverEntrySequence, NtsDomResizeObserver>
+      call{held_->callback<Callback>(),
+           reinterpret_cast<NtsDomResizeObserverEntrySequence *>(
+               Sequence(entries)),
+           HandleOf<NtsDomResizeObserver>(observer_.Get()), held_->closure()};
+  held_->Run(decltype(call)::Run, &call);
+}
+
+void NtsIntersectionDelegate::Deliver(
+    const blink::HeapVector<blink::Member<blink::IntersectionObserverEntry>>
+        &entries,
+    blink::IntersectionObserver &observer) {
+  if (!held_->live())
+    return;
+  DeliveryCall<Callback, NtsDomIntersectionObserverEntrySequence,
+           NtsDomIntersectionObserver>
+      call{held_->callback<Callback>(),
+           reinterpret_cast<NtsDomIntersectionObserverEntrySequence *>(
+               Sequence(entries)),
+           HandleOf<NtsDomIntersectionObserver>(&observer), held_->closure()};
+  held_->Run(decltype(call)::Run, &call);
 }
 
 void NtsTimer::Fired() {
@@ -891,12 +1004,12 @@ void NtsDomContext::Close() {
     if (auto destroy = timer->Take(closure))
       GiveBack(destroy, closure);
   }
-  blink::HeapVector<blink::Member<nts_dom::NtsMutationDelegate>> observers(
-      listeners->observers);
-  listeners->observers.clear();
-  for (auto &observer : observers) {
+  blink::HeapVector<blink::Member<nts_dom::NtsHeldClosure>> held(
+      listeners->held);
+  listeners->held.clear();
+  for (auto &closure_holder : held) {
     void *closure = nullptr;
-    if (auto destroy = observer->Take(closure))
+    if (auto destroy = closure_holder->Take(closure))
       GiveBack(destroy, closure);
   }
   blink::HeapVector<blink::Member<NtsFrame>> frames(listeners->frames);
@@ -1002,7 +1115,7 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
 size_t nts_blink_dom_held_closures(NtsDomContext *context) {
   return context->listeners->set.size() + context->listeners->frames.size() +
          context->listeners->timers.size() +
-         context->listeners->observers.size();
+         context->listeners->held.size();
 }
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
 // Logs each root left, as "Interface xcount": what a handle the program
@@ -1211,17 +1324,54 @@ int32_t nts_dom_request_animation_frame(NtsDomFrameCallback callback,
   return context.document->RequestAnimationFrame(
       frame, blink::FrameCallbackType::kWebExposed);
 }
-NtsDomMutationObserver *nts_dom_new_mutation_observer(
-    void (*callback)(NtsDomMutationRecordSequence *, NtsDomMutationObserver *,
-                     void *),
-    void *closure, void (*destroy)(void *)) {
-  NtsDomContext &context = nts_dom::Current();
+// The closure an observer's delegate holds, in the context's set.
+static nts_dom::NtsHeldClosure *Hold(NtsDomContext &context,
+                                     nts_dom::NtsHeldClosure::AnyCallback callback,
+                                     void *closure, NtsDomDestroy destroy) {
   CHECK(context.invoke);
-  auto *delegate = blink::MakeGarbageCollected<nts_dom::NtsMutationDelegate>(
+  auto *held = blink::MakeGarbageCollected<nts_dom::NtsHeldClosure>(
       &context, callback, closure, destroy);
-  context.listeners->observers.insert(delegate);
+  context.listeners->held.insert(held);
+  return held;
+}
+
+NtsDomMutationObserver *nts_dom_new_mutation_observer(
+    nts_dom::NtsMutationDelegate::Callback callback, void *closure,
+    NtsDomDestroy destroy) {
+  NtsDomContext &context = nts_dom::Current();
+  auto *delegate = blink::MakeGarbageCollected<nts_dom::NtsMutationDelegate>(
+      Hold(context, reinterpret_cast<nts_dom::NtsHeldClosure::AnyCallback>(callback),
+           closure, destroy));
   return HandleOf<NtsDomMutationObserver>(
       blink::MutationObserver::Create(delegate));
+}
+
+NtsDomResizeObserver *nts_dom_new_resize_observer(
+    nts_dom::NtsResizeDelegate::Callback callback, void *closure,
+    NtsDomDestroy destroy) {
+  NtsDomContext &context = nts_dom::Current();
+  auto *delegate = blink::MakeGarbageCollected<nts_dom::NtsResizeDelegate>(
+      Hold(context, reinterpret_cast<nts_dom::NtsHeldClosure::AnyCallback>(callback),
+           closure, destroy));
+  auto *observer =
+      blink::ResizeObserver::Create(context.document->domWindow(), delegate);
+  delegate->Watch(observer);
+  return HandleOf<NtsDomResizeObserver>(observer);
+}
+
+NtsDomIntersectionObserver *nts_dom_new_intersection_observer(
+    nts_dom::NtsIntersectionDelegate::Callback callback, void *closure,
+    NtsDomDestroy destroy) {
+  NtsDomContext &context = nts_dom::Current();
+  auto *delegate =
+      blink::MakeGarbageCollected<nts_dom::NtsIntersectionDelegate>(
+          Hold(context, reinterpret_cast<nts_dom::NtsHeldClosure::AnyCallback>(callback),
+               closure, destroy));
+  // The defaults page script's `new IntersectionObserver(callback)` gets:
+  // the viewport, no margin, threshold 0.
+  return HandleOf<NtsDomIntersectionObserver>(blink::IntersectionObserver::Create(
+      blink::IntersectionObserverInit::Create(context.v8_isolate),
+      *delegate, std::nullopt));
 }
 
 int32_t nts_dom_set_timeout(NtsDomTimerCallback callback, void *closure,

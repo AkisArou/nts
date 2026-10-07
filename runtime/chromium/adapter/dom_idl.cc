@@ -693,6 +693,11 @@
 #include "third_party/blink/renderer/core/html/html_table_section_element.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
+#include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
+#include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
+#include "third_party/blink/renderer/core/resize_observer/resize_observer.h"
+#include "third_party/blink/renderer/core/resize_observer/resize_observer_entry.h"
+#include "third_party/blink/renderer/core/resize_observer/resize_observer_size.h"
 #include "third_party/blink/renderer/core/scheduler/dom_scheduler.h"
 #include "third_party/blink/renderer/core/scheduler/dom_timer.h"
 #include "third_party/blink/renderer/core/scheduler/window_idle_tasks.h"
@@ -13143,13 +13148,6 @@ void nts_dom_HTMLElement_set_dir(NtsDomHTMLElement* self, const NtsBorrowedStrin
   receiver->setDir(NtsText(context, value));
 }
 
-void nts_dom_HTMLElement_set_hidden_boolean(NtsDomHTMLElement* self, bool value) {
-  NtsDomContext& context = nts_dom::Current();
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::HTMLElement>(self);
-  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(value));
-}
-
 void nts_dom_HTMLElement_set_hidden_number(NtsDomHTMLElement* self, double value) {
   NtsDomContext& context = nts_dom::Current();
   blink::CEReactionsScope reactions(context.v8_isolate);
@@ -13162,6 +13160,13 @@ void nts_dom_HTMLElement_set_hidden_string(NtsDomHTMLElement* self, const NtsBor
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
   receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(NtsText(context, value).Text()));
+}
+
+void nts_dom_HTMLElement_set_hidden_boolean(NtsDomHTMLElement* self, bool value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(value));
 }
 
 bool nts_dom_HTMLElement_get_inert(NtsDomHTMLElement* self) {
@@ -32659,6 +32664,172 @@ const NtsStringView* nts_dom_MutationRecord_get_oldValue(NtsDomMutationRecord* s
   return context.Lend(nts_dom::AsString(receiver->oldValue()), true);
 }
 
+void nts_dom_ResizeObserver_disconnect(NtsDomResizeObserver* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserver>(self);
+  receiver->disconnect();
+}
+
+void nts_dom_ResizeObserver_observe_1(NtsDomResizeObserver* self, NtsDomElement* target) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserver>(self);
+  receiver->observe(ObjectOf<blink::Element>(target));
+}
+
+void nts_dom_ResizeObserver_unobserve(NtsDomResizeObserver* self, NtsDomElement* target) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserver>(self);
+  receiver->unobserve(ObjectOf<blink::Element>(target));
+}
+
+NtsDomElement* nts_dom_ResizeObserverEntry_get_target(NtsDomResizeObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserverEntry>(self);
+  return HandleOf<NtsDomElement>(receiver->target());
+}
+
+NtsDomDOMRectReadOnly* nts_dom_ResizeObserverEntry_get_contentRect(NtsDomResizeObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserverEntry>(self);
+  return HandleOf<NtsDomDOMRectReadOnly>(receiver->contentRect());
+}
+
+NtsDomResizeObserverSizeSequence* nts_dom_ResizeObserverEntry_get_contentBoxSize(NtsDomResizeObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserverEntry>(self);
+  return reinterpret_cast<NtsDomResizeObserverSizeSequence*>(nts_dom::Sequence(receiver->contentBoxSize()));
+}
+
+NtsDomResizeObserverSizeSequence* nts_dom_ResizeObserverEntry_get_borderBoxSize(NtsDomResizeObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserverEntry>(self);
+  return reinterpret_cast<NtsDomResizeObserverSizeSequence*>(nts_dom::Sequence(receiver->borderBoxSize()));
+}
+
+NtsDomResizeObserverSizeSequence* nts_dom_ResizeObserverEntry_get_devicePixelContentBoxSize(NtsDomResizeObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserverEntry>(self);
+  return reinterpret_cast<NtsDomResizeObserverSizeSequence*>(nts_dom::Sequence(receiver->devicePixelContentBoxSize()));
+}
+
+double nts_dom_ResizeObserverSize_get_inlineSize(NtsDomResizeObserverSize* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserverSize>(self);
+  return static_cast<double>(receiver->inlineSize());
+}
+
+double nts_dom_ResizeObserverSize_get_blockSize(NtsDomResizeObserverSize* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ResizeObserverSize>(self);
+  return static_cast<double>(receiver->blockSize());
+}
+
+NtsDomNode* nts_dom_IntersectionObserver_get_root(NtsDomIntersectionObserver* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  return HandleOf<NtsDomNode>(receiver->root());
+}
+
+const NtsStringView* nts_dom_IntersectionObserver_get_rootMargin(NtsDomIntersectionObserver* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  return context.Lend(nts_dom::AsString(receiver->rootMargin()), false);
+}
+
+const NtsStringView* nts_dom_IntersectionObserver_get_scrollMargin(NtsDomIntersectionObserver* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  return context.Lend(nts_dom::AsString(receiver->scrollMargin()), false);
+}
+
+double nts_dom_IntersectionObserver_get_delay(NtsDomIntersectionObserver* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  return static_cast<double>(receiver->delay());
+}
+
+bool nts_dom_IntersectionObserver_get_trackVisibility(NtsDomIntersectionObserver* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  return static_cast<bool>(receiver->trackVisibility());
+}
+
+void nts_dom_IntersectionObserver_disconnect(NtsDomIntersectionObserver* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  receiver->disconnect(exception_state);
+}
+
+void nts_dom_IntersectionObserver_observe(NtsDomIntersectionObserver* self, NtsDomElement* target, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  receiver->observe(ObjectOf<blink::Element>(target), exception_state);
+}
+
+NtsDomIntersectionObserverEntrySequence* nts_dom_IntersectionObserver_takeRecords(NtsDomIntersectionObserver* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  return reinterpret_cast<NtsDomIntersectionObserverEntrySequence*>(nts_dom::Sequence(receiver->takeRecords(exception_state)));
+}
+
+void nts_dom_IntersectionObserver_unobserve(NtsDomIntersectionObserver* self, NtsDomElement* target, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  receiver->unobserve(ObjectOf<blink::Element>(target), exception_state);
+}
+
+double nts_dom_IntersectionObserverEntry_get_time(NtsDomIntersectionObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserverEntry>(self);
+  return static_cast<double>(receiver->time());
+}
+
+NtsDomDOMRectReadOnly* nts_dom_IntersectionObserverEntry_get_rootBounds(NtsDomIntersectionObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserverEntry>(self);
+  return HandleOf<NtsDomDOMRectReadOnly>(receiver->rootBounds());
+}
+
+NtsDomDOMRectReadOnly* nts_dom_IntersectionObserverEntry_get_boundingClientRect(NtsDomIntersectionObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserverEntry>(self);
+  return HandleOf<NtsDomDOMRectReadOnly>(receiver->boundingClientRect());
+}
+
+NtsDomDOMRectReadOnly* nts_dom_IntersectionObserverEntry_get_intersectionRect(NtsDomIntersectionObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserverEntry>(self);
+  return HandleOf<NtsDomDOMRectReadOnly>(receiver->intersectionRect());
+}
+
+bool nts_dom_IntersectionObserverEntry_get_isIntersecting(NtsDomIntersectionObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserverEntry>(self);
+  return static_cast<bool>(receiver->isIntersecting());
+}
+
+bool nts_dom_IntersectionObserverEntry_get_isVisible(NtsDomIntersectionObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserverEntry>(self);
+  return static_cast<bool>(receiver->isVisible());
+}
+
+double nts_dom_IntersectionObserverEntry_get_intersectionRatio(NtsDomIntersectionObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserverEntry>(self);
+  return static_cast<double>(receiver->intersectionRatio());
+}
+
+NtsDomElement* nts_dom_IntersectionObserverEntry_get_target(NtsDomIntersectionObserverEntry* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserverEntry>(self);
+  return HandleOf<NtsDomElement>(receiver->target());
+}
+
 double nts_dom_ElementSequence_get_length(NtsDomElementSequence* self) {
   nts_dom::AssertEntered();
   return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
@@ -32679,6 +32850,16 @@ NtsDomEventTarget* nts_dom_EventTargetSequence_item(NtsDomEventTargetSequence* s
   return HandleOf<NtsDomEventTarget>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
 }
 
+double nts_dom_IntersectionObserverEntrySequence_get_length(NtsDomIntersectionObserverEntrySequence* self) {
+  nts_dom::AssertEntered();
+  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+}
+
+NtsDomIntersectionObserverEntry* nts_dom_IntersectionObserverEntrySequence_item(NtsDomIntersectionObserverEntrySequence* self, double index) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomIntersectionObserverEntry>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+}
+
 double nts_dom_MutationRecordSequence_get_length(NtsDomMutationRecordSequence* self) {
   nts_dom::AssertEntered();
   return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
@@ -32697,6 +32878,26 @@ double nts_dom_PointerEventSequence_get_length(NtsDomPointerEventSequence* self)
 NtsDomPointerEvent* nts_dom_PointerEventSequence_item(NtsDomPointerEventSequence* self, double index) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomPointerEvent>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+}
+
+double nts_dom_ResizeObserverEntrySequence_get_length(NtsDomResizeObserverEntrySequence* self) {
+  nts_dom::AssertEntered();
+  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+}
+
+NtsDomResizeObserverEntry* nts_dom_ResizeObserverEntrySequence_item(NtsDomResizeObserverEntrySequence* self, double index) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomResizeObserverEntry>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+}
+
+double nts_dom_ResizeObserverSizeSequence_get_length(NtsDomResizeObserverSizeSequence* self) {
+  nts_dom::AssertEntered();
+  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+}
+
+NtsDomResizeObserverSize* nts_dom_ResizeObserverSizeSequence_item(NtsDomResizeObserverSizeSequence* self, double index) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomResizeObserverSize>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
 }
 }  // extern "C"
 }  // namespace blink

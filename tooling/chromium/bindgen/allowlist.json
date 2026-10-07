@@ -58,6 +58,16 @@
     "URL",
     "URLSearchParams",
     "MutationObserver",
-    "MutationRecord"
+    "MutationRecord",
+    "ResizeObserver",
+    "ResizeObserverEntry",
+    "ResizeObserverSize",
+    "IntersectionObserver",
+    "IntersectionObserverEntry"
+  ],
+  "sequences": [
+    "MutationRecord",
+    "ResizeObserverEntry",
+    "IntersectionObserverEntry"
   ]
 }

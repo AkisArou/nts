@@ -21,6 +21,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
@@ -179,6 +180,11 @@ private:
 template <class T>
 NtsSequence *Sequence(const blink::HeapVector<blink::Member<T>> &items) {
   return blink::MakeGarbageCollected<NtsSequence>(items);
+}
+// A FrozenArray<T> member (ResizeObserverEntry's box sizes): its vector.
+template <class IDLType>
+NtsSequence *Sequence(const blink::FrozenArray<IDLType> &array) {
+  return Sequence(array.AsVector());
 }
 
 } // namespace nts_dom

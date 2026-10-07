@@ -956,10 +956,12 @@ interface ImageData {}
  */
 interface InputEvent {}
 /**
+ * @ntsBoundBy "nts:dom" IntersectionObserver
  * @ntsIs nts_dom_is 287
  */
 interface IntersectionObserver {}
 /**
+ * @ntsBoundBy "nts:dom" IntersectionObserverEntry
  * @ntsIs nts_dom_is 288
  */
 interface IntersectionObserverEntry {}
@@ -1239,14 +1241,17 @@ interface ReportingObserver {}
  */
 interface Request {}
 /**
+ * @ntsBoundBy "nts:dom" ResizeObserver
  * @ntsIs nts_dom_is 399
  */
 interface ResizeObserver {}
 /**
+ * @ntsBoundBy "nts:dom" ResizeObserverEntry
  * @ntsIs nts_dom_is 400
  */
 interface ResizeObserverEntry {}
 /**
+ * @ntsBoundBy "nts:dom" ResizeObserverSize
  * @ntsIs nts_dom_is 401
  */
 interface ResizeObserverSize {}

@@ -37,6 +37,15 @@ declare module "nts:dom" {
     /** @ntsSymbol nts_dom_EventTargetSequence_item */
     item(this: EventTargetSequence, index: CNumber<"double">): EventTarget | null;
   }
+  export type IntersectionObserverEntrySequence = HostClass<"NtsDomIntersectionObserverEntrySequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & IntersectionObserverEntrySequenceMethods;
+  export interface IntersectionObserverEntrySequenceMethods {
+    /** @ntsSymbol nts_dom_IntersectionObserverEntrySequence_get_length */
+    _get_length(this: IntersectionObserverEntrySequence): CNumber<"double">;
+    /** @ntsGet _get_length */
+    readonly length: CNumber<"double">;
+    /** @ntsSymbol nts_dom_IntersectionObserverEntrySequence_item */
+    item(this: IntersectionObserverEntrySequence, index: CNumber<"double">): IntersectionObserverEntry | null;
+  }
   export type MutationRecordSequence = HostClass<"NtsDomMutationRecordSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & MutationRecordSequenceMethods;
   export interface MutationRecordSequenceMethods {
     /** @ntsSymbol nts_dom_MutationRecordSequence_get_length */
@@ -54,6 +63,24 @@ declare module "nts:dom" {
     readonly length: CNumber<"double">;
     /** @ntsSymbol nts_dom_PointerEventSequence_item */
     item(this: PointerEventSequence, index: CNumber<"double">): PointerEvent | null;
+  }
+  export type ResizeObserverEntrySequence = HostClass<"NtsDomResizeObserverEntrySequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & ResizeObserverEntrySequenceMethods;
+  export interface ResizeObserverEntrySequenceMethods {
+    /** @ntsSymbol nts_dom_ResizeObserverEntrySequence_get_length */
+    _get_length(this: ResizeObserverEntrySequence): CNumber<"double">;
+    /** @ntsGet _get_length */
+    readonly length: CNumber<"double">;
+    /** @ntsSymbol nts_dom_ResizeObserverEntrySequence_item */
+    item(this: ResizeObserverEntrySequence, index: CNumber<"double">): ResizeObserverEntry | null;
+  }
+  export type ResizeObserverSizeSequence = HostClass<"NtsDomResizeObserverSizeSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & ResizeObserverSizeSequenceMethods;
+  export interface ResizeObserverSizeSequenceMethods {
+    /** @ntsSymbol nts_dom_ResizeObserverSizeSequence_get_length */
+    _get_length(this: ResizeObserverSizeSequence): CNumber<"double">;
+    /** @ntsGet _get_length */
+    readonly length: CNumber<"double">;
+    /** @ntsSymbol nts_dom_ResizeObserverSizeSequence_item */
+    item(this: ResizeObserverSizeSequence, index: CNumber<"double">): ResizeObserverSize | null;
   }
   export interface EventTargetOwnMethods {
     /**
@@ -5078,10 +5105,6 @@ declare module "nts:dom" {
      */
     dir: StringView;
     /**
-     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
-     */
-    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
-    /**
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_number
      */
     _set_hidden_number(this: HTMLElement, value: CNumber<"double">): void;
@@ -5089,6 +5112,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_string
      */
     _set_hidden_string(this: HTMLElement, value: StringView): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_set_hidden_boolean
+     */
+    _set_hidden_boolean(this: HTMLElement, value: boolean): void;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_inert
      */
@@ -21771,4 +21798,220 @@ declare module "nts:dom" {
   }
   export type MutationRecordMethods = MutationRecordOwnMethods;
   export type MutationRecord = HostClass<"NtsDomMutationRecord", null, "nts_dom_retain", "nts_dom_release"> & MutationRecordMethods;
+  export interface ResizeObserverOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_ResizeObserver_disconnect
+     */
+    disconnect(this: ResizeObserver): void;
+    /**
+     * @ntsSymbol nts_dom_ResizeObserver_observe_1
+     */
+    observe(this: ResizeObserver, target: Element): void;
+    /**
+     * @ntsSymbol nts_dom_ResizeObserver_unobserve
+     */
+    unobserve(this: ResizeObserver, target: Element): void;
+  }
+  export type ResizeObserverMethods = ResizeObserverOwnMethods;
+  export type ResizeObserver = HostClass<"NtsDomResizeObserver", null, "nts_dom_retain", "nts_dom_release"> & ResizeObserverMethods;
+  export interface ResizeObserverEntryOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_ResizeObserverEntry_get_target
+     */
+    _get_target(this: ResizeObserverEntry): Element;
+    /**
+     * @ntsGet _get_target
+     */
+    readonly target: Element;
+    /**
+     * @ntsSymbol nts_dom_ResizeObserverEntry_get_contentRect
+     */
+    _get_contentRect(this: ResizeObserverEntry): DOMRectReadOnly;
+    /**
+     * @ntsGet _get_contentRect
+     */
+    readonly contentRect: DOMRectReadOnly;
+    /**
+     * @ntsSymbol nts_dom_ResizeObserverEntry_get_contentBoxSize
+     */
+    _get_contentBoxSize(this: ResizeObserverEntry): ResizeObserverSizeSequence;
+    /**
+     * @ntsGet _get_contentBoxSize
+     */
+    readonly contentBoxSize: ResizeObserverSizeSequence;
+    /**
+     * @ntsSymbol nts_dom_ResizeObserverEntry_get_borderBoxSize
+     */
+    _get_borderBoxSize(this: ResizeObserverEntry): ResizeObserverSizeSequence;
+    /**
+     * @ntsGet _get_borderBoxSize
+     */
+    readonly borderBoxSize: ResizeObserverSizeSequence;
+    /**
+     * @ntsSymbol nts_dom_ResizeObserverEntry_get_devicePixelContentBoxSize
+     */
+    _get_devicePixelContentBoxSize(this: ResizeObserverEntry): ResizeObserverSizeSequence;
+    /**
+     * @ntsGet _get_devicePixelContentBoxSize
+     */
+    readonly devicePixelContentBoxSize: ResizeObserverSizeSequence;
+  }
+  export type ResizeObserverEntryMethods = ResizeObserverEntryOwnMethods;
+  export type ResizeObserverEntry = HostClass<"NtsDomResizeObserverEntry", null, "nts_dom_retain", "nts_dom_release"> & ResizeObserverEntryMethods;
+  export interface ResizeObserverSizeOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_ResizeObserverSize_get_inlineSize
+     */
+    _get_inlineSize(this: ResizeObserverSize): CNumber<"double">;
+    /**
+     * @ntsGet _get_inlineSize
+     */
+    readonly inlineSize: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_ResizeObserverSize_get_blockSize
+     */
+    _get_blockSize(this: ResizeObserverSize): CNumber<"double">;
+    /**
+     * @ntsGet _get_blockSize
+     */
+    readonly blockSize: CNumber<"double">;
+  }
+  export type ResizeObserverSizeMethods = ResizeObserverSizeOwnMethods;
+  export type ResizeObserverSize = HostClass<"NtsDomResizeObserverSize", null, "nts_dom_retain", "nts_dom_release"> & ResizeObserverSizeMethods;
+  export interface IntersectionObserverOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_get_root
+     */
+    _get_root(this: IntersectionObserver): Node | null;
+    /**
+     * @ntsGet _get_root
+     */
+    readonly root: Node | null;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_get_rootMargin
+     */
+    _get_rootMargin(this: IntersectionObserver): StringView;
+    /**
+     * @ntsGet _get_rootMargin
+     */
+    readonly rootMargin: StringView;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_get_scrollMargin
+     */
+    _get_scrollMargin(this: IntersectionObserver): StringView;
+    /**
+     * @ntsGet _get_scrollMargin
+     */
+    readonly scrollMargin: StringView;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_get_delay
+     */
+    _get_delay(this: IntersectionObserver): CNumber<"double">;
+    /**
+     * @ntsGet _get_delay
+     */
+    readonly delay: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_get_trackVisibility
+     */
+    _get_trackVisibility(this: IntersectionObserver): boolean;
+    /**
+     * @ntsGet _get_trackVisibility
+     */
+    readonly trackVisibility: boolean;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_disconnect
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    disconnect(this: IntersectionObserver, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_observe
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: IntersectionObserver, target: Element, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_takeRecords
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    takeRecords(this: IntersectionObserver, error?: Ptr<DOMException | null>): IntersectionObserverEntrySequence;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserver_unobserve
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    unobserve(this: IntersectionObserver, target: Element, error?: Ptr<DOMException | null>): void;
+  }
+  export type IntersectionObserverMethods = IntersectionObserverOwnMethods;
+  export type IntersectionObserver = HostClass<"NtsDomIntersectionObserver", null, "nts_dom_retain", "nts_dom_release"> & IntersectionObserverMethods;
+  export interface IntersectionObserverEntryOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserverEntry_get_time
+     */
+    _get_time(this: IntersectionObserverEntry): CNumber<"double">;
+    /**
+     * @ntsGet _get_time
+     */
+    readonly time: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserverEntry_get_rootBounds
+     */
+    _get_rootBounds(this: IntersectionObserverEntry): DOMRectReadOnly | null;
+    /**
+     * @ntsGet _get_rootBounds
+     */
+    readonly rootBounds: DOMRectReadOnly | null;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserverEntry_get_boundingClientRect
+     */
+    _get_boundingClientRect(this: IntersectionObserverEntry): DOMRectReadOnly;
+    /**
+     * @ntsGet _get_boundingClientRect
+     */
+    readonly boundingClientRect: DOMRectReadOnly;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserverEntry_get_intersectionRect
+     */
+    _get_intersectionRect(this: IntersectionObserverEntry): DOMRectReadOnly;
+    /**
+     * @ntsGet _get_intersectionRect
+     */
+    readonly intersectionRect: DOMRectReadOnly;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserverEntry_get_isIntersecting
+     */
+    _get_isIntersecting(this: IntersectionObserverEntry): boolean;
+    /**
+     * @ntsGet _get_isIntersecting
+     */
+    readonly isIntersecting: boolean;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserverEntry_get_isVisible
+     */
+    _get_isVisible(this: IntersectionObserverEntry): boolean;
+    /**
+     * @ntsGet _get_isVisible
+     */
+    readonly isVisible: boolean;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserverEntry_get_intersectionRatio
+     */
+    _get_intersectionRatio(this: IntersectionObserverEntry): CNumber<"double">;
+    /**
+     * @ntsGet _get_intersectionRatio
+     */
+    readonly intersectionRatio: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_IntersectionObserverEntry_get_target
+     */
+    _get_target(this: IntersectionObserverEntry): Element;
+    /**
+     * @ntsGet _get_target
+     */
+    readonly target: Element;
+  }
+  export type IntersectionObserverEntryMethods = IntersectionObserverEntryOwnMethods;
+  export type IntersectionObserverEntry = HostClass<"NtsDomIntersectionObserverEntry", null, "nts_dom_retain", "nts_dom_release"> & IntersectionObserverEntryMethods;
 }

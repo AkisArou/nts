@@ -183,6 +183,20 @@ counts its runs; a detach during one is recorded, and the closure goes back
 when the outermost run returns. `tests/timer-vectors.ts` exercises both, from
 a later entry, so nothing else holds the closure.
 
+**Observers.** `newMutationObserver`, `newResizeObserver` and
+`newIntersectionObserver` are Blink's own observers over native delegates
+(`MutationObserver::Delegate`, `ResizeObserver::Delegate`,
+`IntersectionObserverDelegate`) where page script's have V8's. They deliver
+when page script's do: at the microtask checkpoint, in the rendering steps
+after layout, and by a posted task. Each delegate's closure lives in one
+`NtsHeldClosure`. It calls the closure as an entry with the entries (a
+`TSequence`) and the observer, gives the closure back once and never during
+its own run, and gives it back when the document ends, which is as long as
+page script's observer can be reached. Options come as dictionaries
+(`observe(target, {childList: true})`). The intersection observer takes the
+defaults (viewport, no margin, threshold 0) until string and union
+dictionary members bind (workarounds ledger, 18).
+
 **Designed: collecting what nobody removes.** The rest of this section is the
 design for listeners a program drops without removing.
 

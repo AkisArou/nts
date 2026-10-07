@@ -5,8 +5,8 @@
 // smoke waits for before it reads the page. Nothing here keeps a node: each
 // callback finds the transcript when it runs, and an interval keeps its id
 // and count in attributes, so no handle is rooted while the timers wait.
-import { asHTMLElement, clearInterval, clearTimeout, document, newMutationObserver, setInterval, setTimeout } from "nts:dom";
-import type { Event, MutationObserver, MutationRecordSequence } from "nts:dom";
+import { asHTMLElement, clearInterval, clearTimeout, document, newIntersectionObserver, newMutationObserver, newResizeObserver, setInterval, setTimeout } from "nts:dom";
+import type { Event, IntersectionObserver, IntersectionObserverEntrySequence, MutationObserver, MutationRecordSequence, ResizeObserver, ResizeObserverEntrySequence } from "nts:dom";
 
 function log(text: string): void {
   const pre = document().querySelector("#native-timers");
@@ -110,6 +110,75 @@ function observeMutations(): void {
   target.appendChild(document().createElement("i"));
 }
 
+// Text kept in an attribute: what arrives in the rendering steps or a posted
+// task is not ordered against the timers, so it is not in their transcript.
+function note(name: string, text: string): void {
+  const pre = document().querySelector("#native-timers");
+  if (pre === null) return;
+  const before = pre.getAttribute(name);
+  pre.setAttribute(name, (before === null ? "" : before) + text + ";");
+}
+
+// ResizeObserver: the first delivery is the element's size, the second its
+// size after the program widened it; then it disconnects itself.
+function observeResize(): void {
+  const target = asHTMLElement(document().createElement("div"));
+  if (target === null) return;
+  target.id = "resized";
+  target.style.width = "10px";
+  target.style.height = "5px";
+  const body = document().body;
+  if (body !== null) body.appendChild(target);
+  const observer = newResizeObserver((entries: ResizeObserverEntrySequence, self: ResizeObserver): void => {
+    const entry = entries.item(0)!;
+    note("data-resize", entries.length + ":" + entry.contentRect.width + "x" + entry.contentRect.height + ":" +
+      entry.borderBoxSize.item(0)!.inlineSize);
+    const grown = asHTMLElement(document().querySelector("#resized")!);
+    if (grown !== null && grown.style.width === "10px") {
+      grown.style.width = "20px";
+      return;
+    }
+    self.disconnect();
+    note("data-resize", "done");
+  });
+  observer.observe(target);
+}
+
+// IntersectionObserver: an element at the top of the page intersects the
+// viewport, wholly.
+function observeIntersection(): void {
+  const target = document().createElement("div");
+  target.id = "intersected";
+  target.textContent = "x";
+  const body = document().body;
+  if (body !== null) body.insertBefore(target, body.firstChild);
+  const observer = newIntersectionObserver((entries: IntersectionObserverEntrySequence, self: IntersectionObserver): void => {
+    const entry = entries.item(0)!;
+    note("data-intersection", entries.length + ":" + (entry.isIntersecting ? "in" : "out") + ":" + entry.intersectionRatio + ":" + entry.target.id);
+    self.disconnect();
+    note("data-intersection", "done");
+  });
+  observer.observe(target);
+}
+
+// The last step waits for both observers, up to two seconds.
+function finish(): void {
+  const pre = document().querySelector("#native-timers");
+  if (pre === null) return;
+  const waited = attribute("data-waited") + 1;
+  remember("data-waited", waited);
+  const resized = pre.getAttribute("data-resize");
+  const intersected = pre.getAttribute("data-intersection");
+  const settled = resized !== null && resized.endsWith("done;") && intersected !== null && intersected.endsWith("done;");
+  if (!settled && waited < 100) {
+    setTimeout(finish, 20);
+    return;
+  }
+  remember("data-waited", 0);
+  log("done" + attribute("data-ticks") + (settled ? "" : ":observers-unsettled"));
+  remember("data-done", 1);
+}
+
 // Three phases, each started by the one before, so no ordering in the
 // transcript rests on how two timers due at nearby times race.
 export function startTimerVectors(): void {
@@ -119,7 +188,7 @@ export function startTimerVectors(): void {
   // is 0, and a 0 runs before a 5 and a 20.
   setTimeout((): void => { log("t20"); intervals(); }, 20);
   setTimeout((): void => { log("t5"); }, 5);
-  setTimeout((): void => { log("t0"); clickSelfRemoval(); observeMutations(); }, 0);
+  setTimeout((): void => { log("t0"); clickSelfRemoval(); observeMutations(); observeResize(); observeIntersection(); }, 0);
   setTimeout((): void => { log("tNegative"); }, -5);
   setTimeout((): void => { log("tNaN"); }, 0 / 0);
   setTimeout((): void => { log("tDefault"); });
@@ -164,8 +233,5 @@ function deeper(): void {
     return;
   }
   // A last one after a quiet interval: the interval is gone by now.
-  setTimeout((): void => {
-    log("done" + attribute("data-ticks"));
-    remember("data-done", 1);
-  }, 20);
+  setTimeout(finish, 20);
 }

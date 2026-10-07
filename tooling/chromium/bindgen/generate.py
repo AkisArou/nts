@@ -166,7 +166,9 @@ class Generator:
                         "third_party/blink/renderer/core/frame/local_dom_window.h"}
         self.statics = []  # adapter-level definitions the functions use
         self.dictionaries = {}  # identifier -> (fields, conversion function name)
-        self.sequences = set()  # element interfaces answered as `sequence<T>`
+        # Element interfaces answered as `sequence<T>`, and those the
+        # hand-written ABI hands the program (an observer's entries).
+        self.sequences = set(allowlist.get("sequences", []))
         # Every interface Blink's core component defines, in a fixed order:
         # what `instanceof` can be asked of (nts_dom_is), bound or not.
         self.checkable = sorted((i for i in database.interfaces

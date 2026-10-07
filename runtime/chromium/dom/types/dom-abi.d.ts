@@ -46,6 +46,18 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_new_mutation_observer
    */
   export function newMutationObserver(callback: Closure<(records: MutationRecordSequence, observer: MutationObserver) => void>): MutationObserver;
+  /**
+   * `new ResizeObserver(callback)`: delivered in the rendering steps after
+   * layout, with the entries and the observer, as page script's is.
+   * @ntsSymbol nts_dom_new_resize_observer
+   */
+  export function newResizeObserver(callback: Closure<(entries: ResizeObserverEntrySequence, observer: ResizeObserver) => void>): ResizeObserver;
+  /**
+   * `new IntersectionObserver(callback)`, with the default options: the
+   * viewport, no margin, threshold 0. Delivered by a posted task.
+   * @ntsSymbol nts_dom_new_intersection_observer
+   */
+  export function newIntersectionObserver(callback: Closure<(entries: IntersectionObserverEntrySequence, observer: IntersectionObserver) => void>): IntersectionObserver;
   /** The document the running code is part of. */
   /** @ntsSymbol nts_dom_document */
   export function document(): Document;
