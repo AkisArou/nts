@@ -11,6 +11,8 @@
 
 #include <cmath>
 #include <limits>
+#include <optional>
+#include <string_view>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -37,6 +39,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/html/custom/ce_reactions_scope.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_counted_set.h"
@@ -276,6 +279,15 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
     return &lent_view;
   }
 
+  // An IDL enum's value: the enum's own static literal, ASCII, lent as it
+  // is -- no String made. (An attribute Blink answers as a String lends that.)
+  const NtsStringView *Lend(const blink::bindings::EnumerationBase &value,
+                            bool) {
+    lent = blink::String();
+    lent_view = {value.AsCStr(), value.AsStringView().length(), 0};
+    return &lent_view;
+  }
+
   // Text from a program's string. A literal (NTS_STRING_VIEW_IMMORTAL) has
   // units that never move or change, so it is copied once per document and
   // shared after, keyed by their address. The table is bounded by the
@@ -403,6 +415,33 @@ template <class Union> blink::String AsString(const Union *value) {
   CHECK(value->IsString());
   return value->GetAsString();
 }
+
+// IDL enums. A value crosses as the program's string -- a literal union in
+// TypeScript, a C string here -- and is matched against the enum's own table:
+// a few comparisons, no String made. A value matching nothing goes through V8,
+// where the enum's Create throws the TypeError page script's binding
+// throws, word for word.
+template <class E> std::optional<E> EnumFrom(const char *value) {
+  const std::string_view wanted(value);
+  for (size_t i = 0; i < E::kEnumSize; ++i) {
+    const E candidate(static_cast<typename E::Enum>(i));
+    if (std::string_view(candidate.AsCStr()) == wanted)
+      return candidate;
+  }
+  return std::nullopt;
+}
+template <class E>
+void ThrowInvalidEnum(NtsDomContext &context, const char *value,
+                      blink::ExceptionState &exception_state) {
+  v8::Isolate *isolate = context.v8_isolate.get();
+  E::Create(isolate, blink::V8String(isolate, blink::String::FromUtf8(std::string_view(value))),
+            exception_state);
+}
+// An attribute set to a value outside its enum keeps its value, and the
+// console says so, as page script's binding does
+// (bindings::ReportInvalidEnumSetToAttribute).
+void WarnInvalidEnum(NtsDomContext &context, const char *value,
+                     const char *enum_name);
 
 // A DOM exception a member reported, for the program to throw
 // (nts_dom_exception_take_message).

@@ -135,6 +135,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_document.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_document_fragment.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_document_policy_violation_report_body.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_document_ready_state.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_document_timeline.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_document_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
@@ -427,9 +428,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_scheduler.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scheduling.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_screen.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_restoration.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_timeline.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_security_policy_violation_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_selection.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_selection_mode.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_selector_directive.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_sequence_test.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_shadow_realm_global_scope.h"
@@ -603,6 +606,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_view_transition.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_view_transition_type_set.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_viewport.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_visibility_state.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_visibility_state_entry.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_visual_viewport.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_vtt_cue.h"
@@ -7036,52 +7040,12 @@ NtsDomElement* nts_dom_Element_get_nextElementSibling(NtsDomElement* self) {
   return HandleOf<NtsDomElement>(receiver->nextElementSibling());
 }
 
-void nts_dom_Element_after_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_Element_after_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_after_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_after_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_after_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_after_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_after_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_Element_after_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -7092,36 +7056,52 @@ void nts_dom_Element_after_ssn(NtsDomElement* self, const NtsBorrowedString* nod
   receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_after_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_Element_after_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_after_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_after_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_after_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Element_after_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_after_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_after_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_after_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_after_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_after_ss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -7132,12 +7112,28 @@ void nts_dom_Element_after_ss(NtsDomElement* self, const NtsBorrowedString* node
   receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Element_after_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Element_after_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Element_after_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Element_after_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Element_after_s(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -7148,68 +7144,20 @@ void nts_dom_Element_after_s(NtsDomElement* self, const NtsBorrowedString* nodes
   receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
 }
 
+void nts_dom_Element_after_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+}
+
 void nts_dom_Element_after_0(NtsDomElement* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
   receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({}), exception_state);
-}
-
-void nts_dom_Element_append_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_append_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_append_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_append_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_append_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_append_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_append_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_append_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
@@ -7220,28 +7168,60 @@ void nts_dom_Element_append_sss(NtsDomElement* self, const NtsBorrowedString* no
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_append_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_append_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_append_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Element_append_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_append_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_append_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_append_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_append_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_append_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_append_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_append_ss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -7252,12 +7232,28 @@ void nts_dom_Element_append_ss(NtsDomElement* self, const NtsBorrowedString* nod
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Element_append_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Element_append_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Element_append_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Element_append_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Element_append_s(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -7268,68 +7264,20 @@ void nts_dom_Element_append_s(NtsDomElement* self, const NtsBorrowedString* node
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
 }
 
+void nts_dom_Element_append_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+}
+
 void nts_dom_Element_append_0(NtsDomElement* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({}), exception_state);
-}
-
-void nts_dom_Element_before_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_before_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_before_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_before_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_before_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_before_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_before_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_before_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
@@ -7340,28 +7288,60 @@ void nts_dom_Element_before_sss(NtsDomElement* self, const NtsBorrowedString* no
   receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_before_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_before_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_before_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Element_before_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_before_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_before_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_before_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_before_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_before_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_before_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_before_ss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -7372,12 +7352,28 @@ void nts_dom_Element_before_ss(NtsDomElement* self, const NtsBorrowedString* nod
   receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Element_before_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Element_before_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Element_before_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Element_before_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Element_before_s(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -7386,6 +7382,14 @@ void nts_dom_Element_before_s(NtsDomElement* self, const NtsBorrowedString* node
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
   receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_Element_before_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_Element_before_0(NtsDomElement* self, NtsDomException** error) {
@@ -7529,52 +7533,12 @@ void nts_dom_Element_moveBefore(NtsDomElement* self, NtsDomNode* node, NtsDomNod
   receiver->moveBefore(ObjectOf<blink::Node>(node), ObjectOf<blink::Node>(child), exception_state);
 }
 
-void nts_dom_Element_prepend_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_Element_prepend_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_prepend_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_prepend_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_prepend_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_prepend_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_prepend_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_Element_prepend_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -7585,36 +7549,52 @@ void nts_dom_Element_prepend_ssn(NtsDomElement* self, const NtsBorrowedString* n
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_prepend_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_Element_prepend_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_prepend_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_prepend_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_prepend_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Element_prepend_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_prepend_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_prepend_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_prepend_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_prepend_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_prepend_ss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -7625,12 +7605,28 @@ void nts_dom_Element_prepend_ss(NtsDomElement* self, const NtsBorrowedString* no
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Element_prepend_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Element_prepend_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Element_prepend_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Element_prepend_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Element_prepend_s(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -7639,6 +7635,14 @@ void nts_dom_Element_prepend_s(NtsDomElement* self, const NtsBorrowedString* nod
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_Element_prepend_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_Element_prepend_0(NtsDomElement* self, NtsDomException** error) {
@@ -7694,52 +7698,12 @@ void nts_dom_Element_removeAttributeNS(NtsDomElement* self, const NtsBorrowedStr
   receiver->removeAttributeNS(NtsText(context, namespaceURI), NtsText(context, localName));
 }
 
-void nts_dom_Element_replaceChildren_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_Element_replaceChildren_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_replaceChildren_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_replaceChildren_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_replaceChildren_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_replaceChildren_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_replaceChildren_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_Element_replaceChildren_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -7750,36 +7714,52 @@ void nts_dom_Element_replaceChildren_ssn(NtsDomElement* self, const NtsBorrowedS
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_replaceChildren_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_Element_replaceChildren_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_replaceChildren_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_replaceChildren_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_replaceChildren_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Element_replaceChildren_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_replaceChildren_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_replaceChildren_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_replaceChildren_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_replaceChildren_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_replaceChildren_ss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -7790,12 +7770,28 @@ void nts_dom_Element_replaceChildren_ss(NtsDomElement* self, const NtsBorrowedSt
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Element_replaceChildren_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Element_replaceChildren_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Element_replaceChildren_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Element_replaceChildren_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Element_replaceChildren_s(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -7806,68 +7802,20 @@ void nts_dom_Element_replaceChildren_s(NtsDomElement* self, const NtsBorrowedStr
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
 }
 
+void nts_dom_Element_replaceChildren_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+}
+
 void nts_dom_Element_replaceChildren_0(NtsDomElement* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({}), exception_state);
-}
-
-void nts_dom_Element_replaceWith_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_replaceWith_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_replaceWith_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_replaceWith_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_replaceWith_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Element_replaceWith_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Element_replaceWith_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_replaceWith_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
@@ -7878,28 +7826,60 @@ void nts_dom_Element_replaceWith_sss(NtsDomElement* self, const NtsBorrowedStrin
   receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_replaceWith_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_replaceWith_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Element_replaceWith_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Element_replaceWith_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Element_replaceWith_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Element_replaceWith_snn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_replaceWith_nss(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_replaceWith_nsn(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Element_replaceWith_nns(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Element_replaceWith_nnn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Element_replaceWith_ss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -7910,12 +7890,28 @@ void nts_dom_Element_replaceWith_ss(NtsDomElement* self, const NtsBorrowedString
   receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Element_replaceWith_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Element_replaceWith_sn(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Element_replaceWith_ns(NtsDomElement* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Element_replaceWith_nn(NtsDomElement* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Element_replaceWith_s(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -7924,6 +7920,14 @@ void nts_dom_Element_replaceWith_s(NtsDomElement* self, const NtsBorrowedString*
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Element>(self);
   receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_Element_replaceWith_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_Element_replaceWith_0(NtsDomElement* self, NtsDomException** error) {
@@ -8049,52 +8053,12 @@ NtsDomElement* nts_dom_CharacterData_get_nextElementSibling(NtsDomCharacterData*
   return HandleOf<NtsDomElement>(receiver->nextElementSibling());
 }
 
-void nts_dom_CharacterData_after_nnn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_CharacterData_after_sss(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_after_nns(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_CharacterData_after_nsn(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_after_nss(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_CharacterData_after_snn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_after_sns(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_CharacterData_after_ssn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -8105,36 +8069,52 @@ void nts_dom_CharacterData_after_ssn(NtsDomCharacterData* self, const NtsBorrowe
   receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_CharacterData_after_sss(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_CharacterData_after_sns(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_after_nn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_after_snn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_CharacterData_after_ns(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_after_nss(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_after_sn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_after_nsn(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_CharacterData_after_nns(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_after_nnn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_CharacterData_after_ss(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -8145,12 +8125,28 @@ void nts_dom_CharacterData_after_ss(NtsDomCharacterData* self, const NtsBorrowed
   receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_after_n(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_CharacterData_after_sn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_CharacterData_after_ns(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_after_nn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_CharacterData_after_s(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -8159,6 +8155,14 @@ void nts_dom_CharacterData_after_s(NtsDomCharacterData* self, const NtsBorrowedS
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
   receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_after_n(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->after(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_CharacterData_after_0(NtsDomCharacterData* self, NtsDomException** error) {
@@ -8175,52 +8179,12 @@ void nts_dom_CharacterData_appendData(NtsDomCharacterData* self, const NtsBorrow
   receiver->appendData(NtsText(context, data));
 }
 
-void nts_dom_CharacterData_before_nnn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_CharacterData_before_sss(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_before_nns(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_CharacterData_before_nsn(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_before_nss(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_CharacterData_before_snn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_before_sns(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_CharacterData_before_ssn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -8231,36 +8195,52 @@ void nts_dom_CharacterData_before_ssn(NtsDomCharacterData* self, const NtsBorrow
   receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_CharacterData_before_sss(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_CharacterData_before_sns(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_before_nn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_before_snn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_CharacterData_before_ns(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_before_nss(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_before_sn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_before_nsn(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_CharacterData_before_nns(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_before_nnn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_CharacterData_before_ss(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -8271,12 +8251,28 @@ void nts_dom_CharacterData_before_ss(NtsDomCharacterData* self, const NtsBorrowe
   receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_before_n(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_CharacterData_before_sn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_CharacterData_before_ns(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_before_nn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_CharacterData_before_s(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -8285,6 +8281,14 @@ void nts_dom_CharacterData_before_s(NtsDomCharacterData* self, const NtsBorrowed
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
   receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_before_n(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->before(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_CharacterData_before_0(NtsDomCharacterData* self, NtsDomException** error) {
@@ -8300,6 +8304,7 @@ void nts_dom_CharacterData_deleteData(NtsDomCharacterData* self, double offset, 
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
   const auto offset_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), offset), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   const auto count_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), count), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->deleteData(offset_converted, count_converted, exception_state);
@@ -8327,65 +8332,10 @@ void nts_dom_CharacterData_replaceData(NtsDomCharacterData* self, double offset,
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
   const auto offset_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), offset), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   const auto count_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), count), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->replaceData(offset_converted, count_converted, NtsText(context, data), exception_state);
-}
-
-void nts_dom_CharacterData_replaceWith_nnn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_replaceWith_nns(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_CharacterData_replaceWith_nsn(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_replaceWith_nss(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_CharacterData_replaceWith_snn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_CharacterData_replaceWith_sns(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_CharacterData_replaceWith_ssn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_CharacterData_replaceWith_sss(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
@@ -8396,28 +8346,60 @@ void nts_dom_CharacterData_replaceWith_sss(NtsDomCharacterData* self, const NtsB
   receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_replaceWith_nn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_replaceWith_ssn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_CharacterData_replaceWith_ns(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_replaceWith_sns(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_replaceWith_sn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_CharacterData_replaceWith_snn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_CharacterData_replaceWith_nss(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_replaceWith_nsn(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_CharacterData_replaceWith_nns(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_replaceWith_nnn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_CharacterData_replaceWith_ss(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -8428,12 +8410,28 @@ void nts_dom_CharacterData_replaceWith_ss(NtsDomCharacterData* self, const NtsBo
   receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_CharacterData_replaceWith_n(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_CharacterData_replaceWith_sn(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
-  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_CharacterData_replaceWith_ns(NtsDomCharacterData* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_replaceWith_nn(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_CharacterData_replaceWith_s(NtsDomCharacterData* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -8442,6 +8440,14 @@ void nts_dom_CharacterData_replaceWith_s(NtsDomCharacterData* self, const NtsBor
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
   receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_CharacterData_replaceWith_n(NtsDomCharacterData* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::CharacterData>(self);
+  receiver->replaceWith(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_CharacterData_replaceWith_0(NtsDomCharacterData* self, NtsDomException** error) {
@@ -8457,6 +8463,7 @@ const NtsStringView* nts_dom_CharacterData_substringData(NtsDomCharacterData* se
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::CharacterData>(self);
   const auto offset_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), offset), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   const auto count_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), count), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return context.Lend(nts_dom::AsString(receiver->substringData(offset_converted, count_converted, exception_state)), false);
@@ -8625,6 +8632,12 @@ const NtsStringView* nts_dom_Document_get_lastModified(NtsDomDocument* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Document>(self);
   return context.Lend(nts_dom::AsString(receiver->lastModified()), false);
+}
+
+const NtsStringView* nts_dom_Document_get_readyState(NtsDomDocument* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return context.Lend(receiver->readyState(), false);
 }
 
 const NtsStringView* nts_dom_Document_get_title(NtsDomDocument* self) {
@@ -8890,6 +8903,12 @@ bool nts_dom_Document_get_hidden(NtsDomDocument* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Document>(self);
   return static_cast<bool>(receiver->hidden());
+}
+
+const NtsStringView* nts_dom_Document_get_visibilityState(NtsDomDocument* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return context.Lend(receiver->visibilityState(), false);
 }
 
 bool nts_dom_Document_get_wasDiscarded(NtsDomDocument* self) {
@@ -11978,52 +11997,12 @@ NtsDomNode* nts_dom_Document_adoptNode(NtsDomDocument* self, NtsDomNode* node, N
   return HandleOf<NtsDomNode>(receiver->adoptNode(ObjectOf<blink::Node>(node), exception_state));
 }
 
-void nts_dom_Document_append_nnn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_Document_append_sss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_append_nns(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Document_append_nsn(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_append_nss(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Document_append_snn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_append_sns(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_Document_append_ssn(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -12034,36 +12013,52 @@ void nts_dom_Document_append_ssn(NtsDomDocument* self, const NtsBorrowedString* 
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Document_append_sss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_Document_append_sns(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Document_append_nn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Document_append_snn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Document_append_ns(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Document_append_nss(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Document_append_sn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Document_append_nsn(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Document_append_nns(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Document_append_nnn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Document_append_ss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -12074,12 +12069,28 @@ void nts_dom_Document_append_ss(NtsDomDocument* self, const NtsBorrowedString* n
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Document_append_n(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Document_append_sn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Document_append_ns(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Document_append_nn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Document_append_s(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -12088,6 +12099,14 @@ void nts_dom_Document_append_s(NtsDomDocument* self, const NtsBorrowedString* no
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_Document_append_n(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_Document_append_0(NtsDomDocument* self, NtsDomException** error) {
@@ -12170,6 +12189,7 @@ NtsDomElement* nts_dom_Document_elementFromPoint(NtsDomDocument* self, double x,
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
   const auto x_converted = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), x), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   const auto y_converted = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return HandleOf<NtsDomElement>(receiver->elementFromPoint(x_converted, y_converted));
@@ -12180,6 +12200,7 @@ NtsDomElementSequence* nts_dom_Document_elementsFromPoint(NtsDomDocument* self, 
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
   const auto x_converted = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), x), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   const auto y_converted = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return reinterpret_cast<NtsDomElementSequence*>(nts_dom::Sequence(receiver->elementsFromPoint(x_converted, y_converted)));
@@ -12298,52 +12319,12 @@ NtsDomWindow* nts_dom_Document_open_3(NtsDomDocument* self, const NtsBorrowedStr
   return HandleOf<NtsDomWindow>(receiver->open(context.v8_isolate.get(), NtsText(context, url, /*scalar_values=*/true), NtsText(context, name), NtsText(context, features), exception_state));
 }
 
-void nts_dom_Document_prepend_nnn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_Document_prepend_sss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_prepend_nns(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Document_prepend_nsn(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_prepend_nss(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Document_prepend_snn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_prepend_sns(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_Document_prepend_ssn(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -12354,36 +12335,52 @@ void nts_dom_Document_prepend_ssn(NtsDomDocument* self, const NtsBorrowedString*
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Document_prepend_sss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_Document_prepend_sns(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Document_prepend_nn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Document_prepend_snn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Document_prepend_ns(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Document_prepend_nss(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Document_prepend_sn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Document_prepend_nsn(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Document_prepend_nns(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Document_prepend_nnn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Document_prepend_ss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -12394,12 +12391,28 @@ void nts_dom_Document_prepend_ss(NtsDomDocument* self, const NtsBorrowedString* 
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Document_prepend_n(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Document_prepend_sn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Document_prepend_ns(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Document_prepend_nn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Document_prepend_s(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -12408,6 +12421,14 @@ void nts_dom_Document_prepend_s(NtsDomDocument* self, const NtsBorrowedString* n
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_Document_prepend_n(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_Document_prepend_0(NtsDomDocument* self, NtsDomException** error) {
@@ -12473,52 +12494,12 @@ void nts_dom_Document_releaseEvents(NtsDomDocument* self) {
   receiver->releaseEvents();
 }
 
-void nts_dom_Document_replaceChildren_nnn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_Document_replaceChildren_sss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_replaceChildren_nns(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Document_replaceChildren_nsn(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_replaceChildren_nss(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_Document_replaceChildren_snn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_Document_replaceChildren_sns(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_Document_replaceChildren_ssn(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -12529,36 +12510,52 @@ void nts_dom_Document_replaceChildren_ssn(NtsDomDocument* self, const NtsBorrowe
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Document_replaceChildren_sss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_Document_replaceChildren_sns(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Document_replaceChildren_nn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Document_replaceChildren_snn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_Document_replaceChildren_ns(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_Document_replaceChildren_nss(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_Document_replaceChildren_sn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_Document_replaceChildren_nsn(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_Document_replaceChildren_nns(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_Document_replaceChildren_nnn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_Document_replaceChildren_ss(NtsDomDocument* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -12569,12 +12566,28 @@ void nts_dom_Document_replaceChildren_ss(NtsDomDocument* self, const NtsBorrowed
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_Document_replaceChildren_n(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_Document_replaceChildren_sn(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_Document_replaceChildren_ns(NtsDomDocument* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_Document_replaceChildren_nn(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_Document_replaceChildren_s(NtsDomDocument* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -12583,6 +12596,14 @@ void nts_dom_Document_replaceChildren_s(NtsDomDocument* self, const NtsBorrowedS
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::Document>(self);
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_Document_replaceChildren_n(NtsDomDocument* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_Document_replaceChildren_0(NtsDomDocument* self, NtsDomException** error) {
@@ -12703,52 +12724,12 @@ double nts_dom_DocumentFragment_get_childElementCount(NtsDomDocumentFragment* se
   return static_cast<double>(receiver->childElementCount());
 }
 
-void nts_dom_DocumentFragment_append_nnn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_DocumentFragment_append_sss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_append_nns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_DocumentFragment_append_nsn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_append_nss(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_DocumentFragment_append_snn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_append_sns(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_DocumentFragment_append_ssn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -12759,36 +12740,52 @@ void nts_dom_DocumentFragment_append_ssn(NtsDomDocumentFragment* self, const Nts
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_DocumentFragment_append_sss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_DocumentFragment_append_sns(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_append_nn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_append_snn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_DocumentFragment_append_ns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_append_nss(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_append_sn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_append_nsn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_DocumentFragment_append_nns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_append_nnn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_append_ss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -12799,12 +12796,28 @@ void nts_dom_DocumentFragment_append_ss(NtsDomDocumentFragment* self, const NtsB
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_append_n(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_DocumentFragment_append_sn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_DocumentFragment_append_ns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_append_nn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_append_s(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -12813,6 +12826,14 @@ void nts_dom_DocumentFragment_append_s(NtsDomDocumentFragment* self, const NtsBo
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
   receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_append_n(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->append(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_append_0(NtsDomDocumentFragment* self, NtsDomException** error) {
@@ -12837,52 +12858,12 @@ void nts_dom_DocumentFragment_moveBefore(NtsDomDocumentFragment* self, NtsDomNod
   receiver->moveBefore(ObjectOf<blink::Node>(node), ObjectOf<blink::Node>(child), exception_state);
 }
 
-void nts_dom_DocumentFragment_prepend_nnn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_DocumentFragment_prepend_sss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_prepend_nns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_DocumentFragment_prepend_nsn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_prepend_nss(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_DocumentFragment_prepend_snn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_prepend_sns(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_DocumentFragment_prepend_ssn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -12893,36 +12874,52 @@ void nts_dom_DocumentFragment_prepend_ssn(NtsDomDocumentFragment* self, const Nt
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_DocumentFragment_prepend_sss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_DocumentFragment_prepend_sns(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_prepend_nn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_prepend_snn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_DocumentFragment_prepend_ns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_prepend_nss(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_prepend_sn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_prepend_nsn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_DocumentFragment_prepend_nns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_prepend_nnn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_prepend_ss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -12933,12 +12930,28 @@ void nts_dom_DocumentFragment_prepend_ss(NtsDomDocumentFragment* self, const Nts
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_prepend_n(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_DocumentFragment_prepend_sn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_DocumentFragment_prepend_ns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_prepend_nn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_prepend_s(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -12947,6 +12960,14 @@ void nts_dom_DocumentFragment_prepend_s(NtsDomDocumentFragment* self, const NtsB
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
   receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_prepend_n(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->prepend(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_prepend_0(NtsDomDocumentFragment* self, NtsDomException** error) {
@@ -12971,52 +12992,12 @@ NtsDomNodeList* nts_dom_DocumentFragment_querySelectorAll(NtsDomDocumentFragment
   return HandleOf<NtsDomNodeList>(receiver->querySelectorAll(NtsText(context, selectors), exception_state));
 }
 
-void nts_dom_DocumentFragment_replaceChildren_nnn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+void nts_dom_DocumentFragment_replaceChildren_sss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_replaceChildren_nns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_DocumentFragment_replaceChildren_nsn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_replaceChildren_nss(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
-}
-
-void nts_dom_DocumentFragment_replaceChildren_snn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
-}
-
-void nts_dom_DocumentFragment_replaceChildren_sns(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
 void nts_dom_DocumentFragment_replaceChildren_ssn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
@@ -13027,36 +13008,52 @@ void nts_dom_DocumentFragment_replaceChildren_ssn(NtsDomDocumentFragment* self, 
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_DocumentFragment_replaceChildren_sss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+void nts_dom_DocumentFragment_replaceChildren_sns(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_replaceChildren_nn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_replaceChildren_snn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
-void nts_dom_DocumentFragment_replaceChildren_ns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_replaceChildren_nss(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_replaceChildren_sn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+void nts_dom_DocumentFragment_replaceChildren_nsn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
+}
+
+void nts_dom_DocumentFragment_replaceChildren_nns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes3).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_replaceChildren_nnn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomNode* nodes3, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes3))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_replaceChildren_ss(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
@@ -13067,12 +13064,28 @@ void nts_dom_DocumentFragment_replaceChildren_ss(NtsDomDocumentFragment* self, c
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
 }
 
-void nts_dom_DocumentFragment_replaceChildren_n(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomException** error) {
+void nts_dom_DocumentFragment_replaceChildren_sn(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
-  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text()), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
+}
+
+void nts_dom_DocumentFragment_replaceChildren_ns(NtsDomDocumentFragment* self, NtsDomNode* nodes1, const NtsBorrowedString* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes2).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_replaceChildren_nn(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomNode* nodes2, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1)), blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes2))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_replaceChildren_s(NtsDomDocumentFragment* self, const NtsBorrowedString* nodes1, NtsDomException** error) {
@@ -13081,6 +13094,14 @@ void nts_dom_DocumentFragment_replaceChildren_s(NtsDomDocumentFragment* self, co
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::DocumentFragment>(self);
   receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(NtsText(context, nodes1).Text())}), exception_state);
+}
+
+void nts_dom_DocumentFragment_replaceChildren_n(NtsDomDocumentFragment* self, NtsDomNode* nodes1, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::DocumentFragment>(self);
+  receiver->replaceChildren(blink::HeapVector<blink::Member<blink::V8UnionNodeOrStringOrTrustedScript>>({blink::MakeGarbageCollected<blink::V8UnionNodeOrStringOrTrustedScript>(ObjectOf<blink::Node>(nodes1))}), exception_state);
 }
 
 void nts_dom_DocumentFragment_replaceChildren_0(NtsDomDocumentFragment* self, NtsDomException** error) {
@@ -13148,13 +13169,6 @@ void nts_dom_HTMLElement_set_dir(NtsDomHTMLElement* self, const NtsBorrowedStrin
   receiver->setDir(NtsText(context, value));
 }
 
-void nts_dom_HTMLElement_set_hidden_number(NtsDomHTMLElement* self, double value) {
-  NtsDomContext& context = nts_dom::Current();
-  blink::CEReactionsScope reactions(context.v8_isolate);
-  auto* receiver = ObjectOf<blink::HTMLElement>(self);
-  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(value));
-}
-
 void nts_dom_HTMLElement_set_hidden_string(NtsDomHTMLElement* self, const NtsBorrowedString* value) {
   NtsDomContext& context = nts_dom::Current();
   blink::CEReactionsScope reactions(context.v8_isolate);
@@ -13163,6 +13177,13 @@ void nts_dom_HTMLElement_set_hidden_string(NtsDomHTMLElement* self, const NtsBor
 }
 
 void nts_dom_HTMLElement_set_hidden_boolean(NtsDomHTMLElement* self, bool value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  receiver->setHidden(blink::MakeGarbageCollected<blink::V8UnionBooleanOrStringOrUnrestrictedDouble>(value));
+}
+
+void nts_dom_HTMLElement_set_hidden_number(NtsDomHTMLElement* self, double value) {
   NtsDomContext& context = nts_dom::Current();
   blink::CEReactionsScope reactions(context.v8_isolate);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
@@ -16717,11 +16738,36 @@ void nts_dom_HTMLInputElement_setRangeText_1(NtsDomHTMLInputElement* self, const
   receiver->setRangeText(NtsText(context, replacement), exception_state);
 }
 
+void nts_dom_HTMLInputElement_setRangeText_4(NtsDomHTMLInputElement* self, const NtsBorrowedString* replacement, double start, double end, const char* selectionMode, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLInputElement>(self);
+  const auto start_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), start), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto end_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), end), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto selectionMode_value = nts_dom::EnumFrom<blink::V8SelectionMode>(selectionMode); if (!selectionMode_value) { nts_dom::ThrowInvalidEnum<blink::V8SelectionMode>(context, selectionMode, exception_state); return; }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setRangeText(NtsText(context, replacement), start_converted, end_converted, *selectionMode_value, exception_state);
+}
+
+void nts_dom_HTMLInputElement_setRangeText_3(NtsDomHTMLInputElement* self, const NtsBorrowedString* replacement, double start, double end, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLInputElement>(self);
+  const auto start_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), start), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto end_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), end), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setRangeText(NtsText(context, replacement), start_converted, end_converted, blink::V8SelectionMode(blink::V8SelectionMode::Enum::kPreserve), exception_state);
+}
+
 void nts_dom_HTMLInputElement_setSelectionRange_3(NtsDomHTMLInputElement* self, double start, double end, const NtsBorrowedString* direction, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLInputElement>(self);
   const auto start_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), start), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   const auto end_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), end), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->setSelectionRangeForBinding(start_converted, end_converted, NtsText(context, direction), exception_state);
@@ -16732,6 +16778,7 @@ void nts_dom_HTMLInputElement_setSelectionRange_2(NtsDomHTMLInputElement* self, 
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLInputElement>(self);
   const auto start_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), start), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   const auto end_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), end), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->setSelectionRangeForBinding(start_converted, end_converted, exception_state);
@@ -26963,6 +27010,30 @@ void nts_dom_HTMLTextAreaElement_setRangeText_1(NtsDomHTMLTextAreaElement* self,
   receiver->setRangeText(NtsText(context, replacement), exception_state);
 }
 
+void nts_dom_HTMLTextAreaElement_setRangeText_4(NtsDomHTMLTextAreaElement* self, const NtsBorrowedString* replacement, double start, double end, const char* selectionMode, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLTextAreaElement>(self);
+  const auto start_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), start), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto end_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), end), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto selectionMode_value = nts_dom::EnumFrom<blink::V8SelectionMode>(selectionMode); if (!selectionMode_value) { nts_dom::ThrowInvalidEnum<blink::V8SelectionMode>(context, selectionMode, exception_state); return; }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setRangeText(NtsText(context, replacement), start_converted, end_converted, *selectionMode_value, exception_state);
+}
+
+void nts_dom_HTMLTextAreaElement_setRangeText_3(NtsDomHTMLTextAreaElement* self, const NtsBorrowedString* replacement, double start, double end, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLTextAreaElement>(self);
+  const auto start_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), start), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto end_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), end), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setRangeText(NtsText(context, replacement), start_converted, end_converted, blink::V8SelectionMode(blink::V8SelectionMode::Enum::kPreserve), exception_state);
+}
+
 void nts_dom_HTMLTextAreaElement_setSelectionRange_3(NtsDomHTMLTextAreaElement* self, double start, double end, const NtsBorrowedString* direction) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::HTMLTextAreaElement>(self);
@@ -31886,6 +31957,7 @@ void nts_dom_Window_resizeBy(NtsDomWindow* self, double x, double y, NtsDomExcep
   Throws exception_state(error);
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
   const auto x_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), x), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   const auto y_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->resizeBy(x_converted, y_converted, exception_state);
@@ -31896,6 +31968,7 @@ void nts_dom_Window_resizeTo(NtsDomWindow* self, double x, double y, NtsDomExcep
   Throws exception_state(error);
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
   const auto x_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), x), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   const auto y_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->resizeTo(x_converted, y_converted, exception_state);
@@ -32182,6 +32255,22 @@ double nts_dom_History_get_length(NtsDomHistory* self, NtsDomException** error) 
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::History>(self);
   return static_cast<double>(receiver->length(exception_state));
+}
+
+const NtsStringView* nts_dom_History_get_scrollRestoration(NtsDomHistory* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::History>(self);
+  return context.Lend(receiver->scrollRestoration(exception_state), false);
+}
+
+void nts_dom_History_set_scrollRestoration(NtsDomHistory* self, const char* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::History>(self);
+  const auto value_value = nts_dom::EnumFrom<blink::V8ScrollRestoration>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "ScrollRestoration"); return; }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setScrollRestoration(*value_value, exception_state);
 }
 
 void nts_dom_History_back(NtsDomHistory* self, NtsDomException** error) {

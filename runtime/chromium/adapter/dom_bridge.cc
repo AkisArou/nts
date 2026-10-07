@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
@@ -27,6 +28,7 @@
 #include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
 #include "third_party/blink/renderer/platform/timer.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 
 namespace nts_dom {
 // The objects the program keeps off the stack -- nodes, events, token lists
@@ -525,6 +527,16 @@ struct NtsDomException {
 };
 
 namespace nts_dom {
+void WarnInvalidEnum(NtsDomContext &context, const char *value,
+                     const char *enum_name) {
+  // The text bindings' FormatInvalidEnumValueMessage writes.
+  context.document->GetExecutionContext()->AddConsoleMessage(
+      blink::mojom::blink::ConsoleMessageSource::kJavaScript,
+      blink::mojom::blink::ConsoleMessageLevel::kWarning,
+      blink::StrCat({"The provided value '", blink::String::FromUtf8(std::string_view(value)),
+                     "' is not a valid enum value of type ", enum_name,
+                     "."}));
+}
 NtsDomException *Report(blink::ExceptionCode code,
                         const blink::String &message) {
   return new NtsDomException{code, message};

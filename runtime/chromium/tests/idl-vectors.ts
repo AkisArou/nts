@@ -14,7 +14,7 @@
 // error reads as is passed in.
 import { newMutationObserver, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
-import type { Document, Element, Event, MutationObserver, MutationRecordSequence, Node, Text } from "nts:dom";
+import type { Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
 export interface VectorHost {
   // "Name: message", the binding's own context prefix left out.
@@ -371,6 +371,28 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   const later = w.performance.now();
   log("clock", (earlier >= 0 ? "+" : "-") + (later >= earlier ? "monotonic" : "backwards"));
   log("window", (w.innerWidth > 0 ? "sized" : "empty") + "|" + w.location.protocol + "|" + (w.history.length >= 1 ? "history" : "none"));
+
+  // IDL enums: a value read is Blink's literal; one written is matched
+  // against the enum. Outside it, an attribute keeps its value (the console
+  // warns) and an argument throws the binding's TypeError.
+  log("enumRead", d.readyState + "|" + d.visibilityState + "|" + w.history.scrollRestoration);
+  w.history.scrollRestoration = "manual";
+  const restoration = w.history.scrollRestoration;
+  w.history.scrollRestoration = ("sometimes" + "") as ScrollRestoration;
+  log("enumAttr", restoration + "|" + w.history.scrollRestoration);
+  w.history.scrollRestoration = "auto";
+  const ranged = asHTMLInputElement(d.createElement("input"))!;
+  root.appendChild(ranged);
+  ranged.value = "abcdef";
+  ranged.setRangeText("XY", 1, 3, "select");
+  log("enumArg", ranged.value);
+  ranged.setRangeText("Z", 0, 1, "end");
+  log("enumArgEnd", ranged.value);
+  ranged.setRangeText("Q", 0, 1);
+  log("enumDefault", ranged.value);
+  thrown("enumInvalid", () => { ranged.setRangeText("W", 0, 1, ("inward" + "") as SelectionMode); });
+  thrown("enumAfterRange", () => { ranged.setRangeText("W", 9, 1, ("inward" + "") as SelectionMode); });
+  log("enumUnchanged", ranged.value);
 
   // URL: parsing, resolution against a base, its search parameters; an
   // invalid one throws.

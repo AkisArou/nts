@@ -1,5 +1,5 @@
 {
-  "bound": 3623,
+  "bound": 3631,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -693,11 +693,6 @@
     },
     {
       "interface": "Document",
-      "member": "get readyState",
-      "why": "result type DocumentReadyState"
-    },
-    {
-      "interface": "Document",
       "member": "get head",
       "why": "interface HTMLHeadElement is not bound"
     },
@@ -740,11 +735,6 @@
       "interface": "Document",
       "member": "get onpointerlockerror",
       "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
-      "member": "get visibilityState",
-      "why": "result type VisibilityState"
     },
     {
       "interface": "Document",
@@ -3747,16 +3737,6 @@
       "why": "interface OpaqueRange is not bound"
     },
     {
-      "interface": "HTMLInputElement",
-      "member": "setRangeText/4",
-      "why": "parameter type optional SelectionMode"
-    },
-    {
-      "interface": "HTMLInputElement",
-      "member": "setRangeText/3",
-      "why": "default `\"preserve\"` of argument selectionMode"
-    },
-    {
       "interface": "HTMLButtonElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
@@ -3965,16 +3945,6 @@
       "interface": "HTMLTextAreaElement",
       "member": "createValueRange/2",
       "why": "interface OpaqueRange is not bound"
-    },
-    {
-      "interface": "HTMLTextAreaElement",
-      "member": "setRangeText/4",
-      "why": "parameter type optional SelectionMode"
-    },
-    {
-      "interface": "HTMLTextAreaElement",
-      "member": "setRangeText/3",
-      "why": "default `\"preserve\"` of argument selectionMode"
     },
     {
       "interface": "HTMLImageElement",
@@ -6450,16 +6420,6 @@
       "interface": "Location",
       "member": "get ancestorOrigins",
       "why": "interface DOMStringList is not bound"
-    },
-    {
-      "interface": "History",
-      "member": "get scrollRestoration",
-      "why": "result type ScrollRestoration"
-    },
-    {
-      "interface": "History",
-      "member": "set scrollRestoration",
-      "why": "parameter type ScrollRestoration"
     },
     {
       "interface": "History",

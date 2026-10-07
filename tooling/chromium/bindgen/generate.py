@@ -129,6 +129,7 @@ class Param:
         # A statement converting it before the call, `{exceptions}` naming the
         # ExceptionState it reports to; and whether that can fail.
         self.prelude, self.may_throw = prelude, may_throw
+        self.enum = None  # (Blink's enum class, IDL name) for an IDL enum
 
 
 class Result:
@@ -146,7 +147,7 @@ class Function:
         self.receiver = True  # false for a constructor or a downcast: no `self`
 
     def needs_context(self):
-        return (self.reactions or self.result.kind == "string" or any(p.context for p in self.params)
+        return (self.reactions or self.result.kind in ("string", "enum") or any(p.context for p in self.params)
                 or "context." in self.expression or any("context." in s for s in self.statements))
 
 
@@ -166,6 +167,7 @@ class Generator:
                         "third_party/blink/renderer/core/frame/local_dom_window.h"}
         self.statics = []  # adapter-level definitions the functions use
         self.dictionaries = {}  # identifier -> (fields, conversion function name)
+        self.enums = {}  # IDL enum identifier -> its values, as TypeScript literal unions
         # Element interfaces answered as `sequence<T>`, and those the
         # hand-written ABI hands the program (an observer's entries).
         self.sequences = set(allowlist.get("sequences", []))
@@ -308,6 +310,8 @@ class Generator:
                 expr = f"({name} ? {expr} : nullptr)"
             return Param(name, f"const NtsBorrowedString* {name}", f"{name}: StringView{or_null}", expr, True,
                          PathManager(unwrapped.union_definition_object).api_path(ext="h"))
+        if unwrapped.is_enumeration and not nullable:
+            return self.enum_parameter(unwrapped.type_definition_object, name)
         keyword = unwrapped.keyword_typename
         if keyword in STRINGS:
             return Param(name, f"const NtsBorrowedString* {name}", f"{name}: StringView{or_null}",
@@ -325,6 +329,33 @@ class Generator:
             c, ts = SCALARS[keyword]
             return Param(name, f"{c} {name}", f"{name}: {ts}", name, False)
         raise Skip(f"parameter type {idl_type.syntactic_form}")
+
+    def enum_parameter(self, enumeration, name):
+        """`ctx.fill("evenodd")`: an IDL enum is its literal union in
+        TypeScript, as lib.dom spells it, and crosses as a C string. It is
+        matched against Blink's enum class before the call (nts_dom::EnumFrom);
+        a value outside it throws page script's TypeError and Blink is not
+        called. A setter's prelude is enum_setter_prelude instead."""
+        self.enums[enumeration.identifier] = list(enumeration.values)
+        cls = f"blink::{blink_class_name(enumeration)}"
+        self.headers.add(PathManager(enumeration).api_path(ext="h"))
+        prelude = (f"const auto {name}_value = nts_dom::EnumFrom<{cls}>({name}); "
+                   f"if (!{name}_value) {{ nts_dom::ThrowInvalidEnum<{cls}>(context, {name}, {{exceptions}}); {{return}}; }}")
+        param = Param(name, f"const char* {name}", f"{name}: {enumeration.identifier}", f"*{name}_value", True,
+                      prelude=prelude, may_throw=True)
+        param.enum = (cls, enumeration.identifier)
+        return param
+
+    @staticmethod
+    def enum_setter_prelude(param):
+        """An attribute written with a value outside its enum keeps its
+        value, with a console warning, and nothing throws (WebIDL's attribute
+        setter steps, as page script's binding takes them)."""
+        cls, identifier = param.enum
+        param.may_throw = False
+        param.prelude = (f"const auto {param.name}_value = nts_dom::EnumFrom<{cls}>({param.name}); "
+                         f"if (!{param.name}_value) {{ nts_dom::WarnInvalidEnum(context, {param.name}, "
+                         f"\"{identifier}\"); {{return}}; }}")
 
     @staticmethod
     def text(idl_type, name):
@@ -350,6 +381,12 @@ class Generator:
             identifier = self.bound_interface(element).identifier
             self.sequences.add(identifier)
             return Result(f"NtsDom{identifier}Sequence*", f"{identifier}Sequence", "sequence")
+        # An IDL enum's value is lent from Blink's own literal. Typed as a
+        # string, not its literal union: a foreign function cannot answer
+        # one yet (contracts/workarounds.md, 21).
+        if unwrapped.is_enumeration and not nullable:
+            self.headers.add(PathManager(unwrapped.type_definition_object).api_path(ext="h"))
+            return Result("const NtsStringView*", "StringView", "enum")
         keyword = unwrapped.keyword_typename
         if keyword in STRINGS:
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
@@ -388,6 +425,13 @@ class Generator:
             self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
             union = blink_type_info(unwrapped).typename
             return f"blink::MakeGarbageCollected<blink::{union}>(blink::String({literal}))"
+        # `optional CanvasFillRule winding = "nonzero"`: the enum's value.
+        if (literal is not None and unwrapped.is_enumeration
+                and re.fullmatch(r'"[ -!#-~]*"', literal)):
+            enumeration = unwrapped.type_definition_object
+            self.headers.add(PathManager(enumeration).api_path(ext="h"))
+            cls = f"blink::{blink_class_name(enumeration)}"
+            return f"{cls}({cls}::Enum::{name_style.constant(default.value)})"
         if literal in ("true", "false"):
             return literal
         if literal == "null":
@@ -507,6 +551,8 @@ class Generator:
                 self.check_member(attribute)
                 param = self.parameter(attribute.idl_type, "value")
                 param.idl_name = "value"
+                if param.enum:
+                    self.enum_setter_prelude(param)
                 context = base.make_copy(attribute=attribute, attribute_set=True)
                 setter = self.bind(interface, attribute, f"nts_dom_{interface.identifier}_set_{identifier}",
                                    [param], Result("void", "void", "void"), context)
@@ -993,11 +1039,14 @@ class Generator:
             exceptions = "exception_state" if function.throws else "conversion"
             if not function.throws:
                 lines.append("  blink::DummyExceptionStateForTesting conversion;")
+            # Each in turn, as the binding converts them: the first that fails
+            # is the exception, and the arguments after it are not converted.
+            returned = "return" if function.result.kind == "void" else "return {}"
+            failed = "static_cast<blink::ExceptionState&>(exception_state).HadException()"
             for prelude in preludes:
-                lines.append("  " + prelude.replace("{exceptions}", exceptions))
-            if function.throws:
-                failed = "static_cast<blink::ExceptionState&>(exception_state).HadException()"
-                lines.append(f"  if ({failed}) return{'' if function.result.kind == 'void' else ' {}'};")
+                lines.append("  " + prelude.replace("{exceptions}", exceptions).replace("{return}", returned))
+                if function.throws:
+                    lines.append(f"  if ({failed}) {returned};")
         lines += ["  " + statement + ";" for statement in function.statements]
         expression = function.expression
         kind = function.result.kind
@@ -1010,6 +1059,8 @@ class Generator:
         elif kind == "string":
             nullable = "true" if function.result.nullable else "false"
             lines.append(f"  return context.Lend(nts_dom::AsString({expression}), {nullable});")
+        elif kind == "enum":
+            lines.append(f"  return context.Lend({expression}, false);")
         else:
             # An enum-typed answer (`eventPhase()` is a PhaseType) is its
             # IDL number.
@@ -1053,6 +1104,11 @@ class Generator:
                 "  }",
             ]
         return lines
+
+    def enum_types(self):
+        """Each bound IDL enum as lib.dom spells it: its literal union."""
+        return [f"  export type {identifier} = {' | '.join(json.dumps(v) for v in values)};"
+                for identifier, values in sorted(self.enums.items())]
 
     def dictionary_types(self):
         """Each bound dictionary as a C struct type, written at a call site as
@@ -1247,6 +1303,7 @@ declare module "nts:dom" {{
   import type {{ ByValue, CBool, Closure, CNumber, Fields, HostClass, Opaque, Ptr, StringView, Struct, c_double, c_uint8 }} from "c:types";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
+{chr(10).join(self.enum_types())}
 {chr(10).join(self.dictionary_types())}
 {chr(10).join(self.sequence_types())}
 {chr(10).join(types)}
