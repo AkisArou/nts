@@ -384,3 +384,25 @@ The lane's side, once these exist:
   script's window `error` listeners see, and DevTools prints as uncaught.
 - Neither needs a ScriptState.
 
+
+## 12. A foreign function answers a promise
+
+**Requested 2026-10-07. Blocks: Blink's promise-returning members, 20 in
+`tooling/chromium/bindgen/report.json` (`requestFullscreen()`, `play()`,
+`Animation.finished`, `scrollIntoView`'s `Promise<ScrollResult>`, ...).
+Fixture: `blockers/a-foreign-function-returning-a-promise`.**
+
+Today a declared `Promise<T>` result of a foreign function is refused:
+"foreign function `x`'s return ... a type with no native ABI". The runtime
+already has the host's half: `nts_promise_new`, `nts_promise_fulfill_*`,
+`nts_promise_reject` (`runtime/c/nts_runtime.h`).
+
+What would let the adapter bind them: a `Promise<T>` result crosses as an
+`NtsPromise *` the function returns owned (one reference, the program's).
+The host keeps its own reference and settles it later, from its event loop
+and inside the program's environment, with the fulfil call for `T`'s
+representation (`_void`, `_number`, `_reference` for a handle or string),
+or rejects it. `await` and `.then` in the program need nothing more than a
+promise the runtime made. In Blink the adapter would subscribe to the
+member's ScriptPromise and settle the program's promise from the reaction,
+under the same ProgramScope as a listener.
