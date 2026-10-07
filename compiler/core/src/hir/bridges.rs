@@ -29,31 +29,50 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, String)> {
     for (at, func) in program.funcs.iter().enumerate() {
         for block in &func.blocks {
             for &value in &block.ops {
-                let OpKind::NativeBridge { closure, signature, .. } = &func.value(value).kind else { continue };
+                let OpKind::NativeBridge { closure, signature, bridging, .. } = &func.value(value).kind else { continue };
                 let HirType::Managed(ManagedType::Object(ty)) = func.value(*closure).ty else { continue };
                 let Some(body) = program.layout(ty).and_then(super::Layout::closure_call).and_then(|call| by_name.get(call))
                 else {
                     continue;
                 };
-                // The closure's receiver first; the rest are positional with
-                // what C passes, and a trailing context is the bridge's own.
-                for (passed, taken) in signature.parameters.iter().zip(body.params.iter().skip(1)) {
-                    let (Type::Pointer(Pointee::Opaque(passed)), HirType::NativePointer(Pointee::Opaque(taken))) =
-                        (passed, &taken.ty)
-                    else {
-                        continue;
-                    };
-                    if admits(passed, taken) {
+                // Each of C's arguments where the closure takes it -- after its
+                // receiver, and past an array's length, which rides with the
+                // array -- except what the bridge itself converts: an array of
+                // handles, a boxed record.
+                for (c_at, foreign) in signature.parameters.iter().enumerate() {
+                    let Type::Pointer(Pointee::Opaque(passed)) = foreign else { continue };
+                    if bridging.array(c_at).is_some() || bridging.boxed(c_at).is_some() {
                         continue;
                     }
-                    problems.push((
-                        at,
-                        value,
-                        format!(
+                    let Some(taken) = bridging.parameter(c_at).and_then(|parameter| body.params.get(parameter + 1)) else { continue };
+                    // And a string the bridge copies in: an `NSString` a block
+                    // is given, as the program's string -- asked of the
+                    // predicate the backends' bridges ask, so the check and the
+                    // conversion are one rule.
+                    if super::native::lent_string(foreign, &taken.ty) || super::native::lent_ns_string(foreign, &taken.ty) {
+                        continue;
+                    }
+                    let why = match &taken.ty {
+                        HirType::NativePointer(Pointee::Opaque(taken)) if admits(passed, taken) => continue,
+                        HirType::NativePointer(Pointee::Opaque(taken)) => format!(
                             "a callback taking a `{}` where its binding passes a `{}`, which is not one of its kinds",
                             taken.tag, passed.tag
                         ),
-                    ));
+                        // **A handle is never a managed value.** lib.dom's
+                        // `MutationObserver` callback takes `MutationRecord[]`
+                        // where nts:dom passes a `MutationRecordSequence`, and
+                        // this let the bridge cast the sequence to an array.
+                        HirType::Managed(ManagedType::Array(_)) => format!(
+                            "a callback taking an array where its binding passes a `{}`, which the bridge does not make one of",
+                            passed.tag
+                        ),
+                        HirType::Managed(_) => format!(
+                            "a callback taking a managed value where its binding passes a `{}` handle",
+                            passed.tag
+                        ),
+                        _ => continue,
+                    };
+                    problems.push((at, value, why));
                 }
             }
         }
