@@ -44,7 +44,9 @@ node tooling/chromium/app.ts check runtime/chromium/examples/todo --expect '#app
 ```
 
 `build` compiles the app, archives it with the host by Chromium's toolchain,
-stages it, and builds `nts_app`. `run` opens the page. `check` runs the
+stages it, and builds `nts_app`. `run` opens the page from the app's own
+origin, `nts-app://app/` (a secure context, served from the app's directory:
+its stylesheets, images and `fetch()` of its own files). `check` runs the
 lifecycle headless: start, render, reload, close.
 
 ## Layout

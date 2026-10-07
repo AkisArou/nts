@@ -14,8 +14,10 @@
  *
  * `build` compiles the program, archives it with the app host
  * (runtime/chromium/host) by Chromium's toolchain, stages it beside the test
- * probe, and builds `nts_app`. `run` opens the app's page in it. `check` runs
- * the built app headless through its lifecycle: it starts, renders what
+ * probe, and builds `nts_app`. `run` opens the app's page in it, served from
+ * the app's own origin, nts-app://app/ (the directory is --nts-app-dir).
+ * `check` runs the built app headless through its lifecycle: it is served as
+ * that origin, a secure context, with its stylesheets; it starts, renders what
  * `--expect` names, ends cleanly on reload and starts again, and the shell
  * exits when its window closes, with no renderer check failing on the way.
  *
@@ -56,6 +58,10 @@ if (!/<meta\s+name="nts-app"/.test(readFileSync(page, "utf8"))) {
   throw new Error(`${relative(root, page)} does not opt in: add <meta name="nts-app">`);
 }
 const name = basename(app);
+// The app's origin: the shell serves nts-app://app/<path> from the app's
+// directory (host/app_main.cc), so the page is a secure context of its own.
+const appUrl = "nts-app://app/index.html";
+const appArgs = [`--nts-app-dir=${app}`];
 const work = resolve(root, "target/chromium/apps", name);
 const source = resolve(root, "third_party/chromium/src");
 const shell = resolve(source, profile.directory, "nts_app");
@@ -122,7 +128,7 @@ export default defineConfig({
 
 function run(): void {
   if (!existsSync(shell)) throw new Error(`No ${relative(root, shell)}; run: node tooling/chromium/app.ts build ${relative(root, app)}`);
-  const status = spawnSync(shell, [...shellFlags, `file://${page}`], { stdio: "inherit" }).status;
+  const status = spawnSync(shell, [...appArgs, ...shellFlags, appUrl], { stdio: "inherit" }).status;
   process.exit(status ?? 1);
 }
 
@@ -130,11 +136,21 @@ async function check(): Promise<void> {
   if (!existsSync(shell)) throw new Error(`No ${relative(root, shell)}; run: node tooling/chromium/app.ts build ${relative(root, app)}`);
   const expected = option("--expect", "");
   mkdirSync(work, { recursive: true });
-  const page = await openPage(shell, `file://${resolve(app, "index.html")}`, { temporary: work, args: shellFlags });
+  const page = await openPage(shell, appUrl, { temporary: work, args: [...appArgs, ...shellFlags] });
   const starts = (): number => page.log().match(/NTS_APP start/g)?.length ?? 0;
   const stops = (): number => page.log().match(/NTS_APP stop/g)?.length ?? 0;
   try {
     await page.until(() => starts() === 1, "the app to start");
+    // Served from its own origin, a secure context, with its stylesheets
+    // (subresources of the app's URL) loaded.
+    const served = await page.evaluate<string>(`location.origin + "|" + isSecureContext + "|" +
+      [...document.styleSheets].every(sheet => sheet.cssRules.length > 0)`);
+    if (served !== "nts-app://app|true|true") throw new Error(`The app is not served as nts-app://app with its styles: ${served}`);
+    // Nothing outside the app's directory is served, through any spelling
+    // of a parent; the app's own file, fetched the same way, is.
+    const escaped = await page.evaluate<string>(`Promise.all(["styles.css", "%2e%2e/%2e%2e/%2e%2e/etc/hostname", "..%2f..%2f..%2fetc%2fhostname"]
+      .map(path => fetch("nts-app://app/" + path).then(response => "read " + response.status, () => "refused"))).then(all => all.join("|"))`);
+    if (escaped !== "read 200|refused|refused") throw new Error(`A path outside the app was served: ${escaped}`);
     if (expected !== "") await page.until(() => page.evaluate<boolean>(`document.querySelector(${JSON.stringify(expected)}) !== null`), `${expected} to render`);
     await page.cdp("Page.reload");
     await page.until(() => stops() === 1 && starts() === 2, "the app to end and start again on reload");

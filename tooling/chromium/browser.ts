@@ -75,7 +75,7 @@ export async function openPage(executable: string, url: string, options: { tempo
     socket.send(JSON.stringify({ id: next, method, params }));
   });
   const evaluate = async <T>(expression: string): Promise<T> => {
-    const result = await cdp<{ exceptionDetails?: unknown; result: { value: T } }>("Runtime.evaluate", { expression, returnByValue: true });
+    const result = await cdp<{ exceptionDetails?: unknown; result: { value: T } }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
     return result.result.value;
   };
