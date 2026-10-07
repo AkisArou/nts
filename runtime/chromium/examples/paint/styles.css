@@ -1,0 +1,11 @@
+body { margin: 0; font: 14px system-ui, sans-serif; background: #f4f2ee; color: #1d1d1f; }
+#app { display: grid; gap: 12px; justify-items: center; padding: 24px; }
+.palette { display: flex; gap: 8px; align-items: center; }
+.palette button[data-color] { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.palette button[data-color].chosen { border-color: #1d1d1f; }
+.palette button[data-color="#1d1d1f"] { background: #1d1d1f; }
+.palette button[data-color="#d62f2f"] { background: #d62f2f; }
+.palette button[data-color="#2f6fd6"] { background: #2f6fd6; }
+.palette button[data-color="#2fa84f"] { background: #2fa84f; }
+#board { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgb(0 0 0 / 0.15); touch-action: none; cursor: crosshair; }
+footer { text-align: center; color: #777; font-size: 12px; }

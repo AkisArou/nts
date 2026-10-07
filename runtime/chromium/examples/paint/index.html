@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Opts this page in: nts_app runs the app's main(document) once it has loaded. -->
+<meta name="nts-app">
+<title>paint</title>
+<link rel="stylesheet" href="styles.css">
+<main id="app">
+  <nav class="palette" id="palette">
+    <button data-color="#1d1d1f" class="chosen" aria-label="ink"></button>
+    <button data-color="#d62f2f" aria-label="red"></button>
+    <button data-color="#2f6fd6" aria-label="blue"></button>
+    <button data-color="#2fa84f" aria-label="green"></button>
+    <input id="width" type="range" min="1" max="24" value="4" aria-label="width">
+    <button id="clear">Clear</button>
+  </nav>
+  <canvas id="board" width="640" height="420"></canvas>
+  <output id="status">0 strokes</output>
+</main>
+<footer>Compiled TypeScript drawing on Blink's 2D canvas. Application scripts: zero.</footer>
