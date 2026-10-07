@@ -58067,9 +58067,19 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let mut with_this = record;
         let chained = self.without_chain_absence(id, with_this.return_type);
+        // A sequence the binding answers where the program reads an array
+        // (`event.composedPath()`): the call is the sequence's, and the array
+        // is made of it below.
+        let sequence = self.sequence_for_array(id, with_this.return_type);
         // In a chain, the message's value is the method's type; the branch
         // around it makes the chain's.
-        let typed = if chained == with_this.return_type { None } else { self.represent(chained) };
+        let typed = if sequence.is_some() {
+            self.represent(with_this.return_type)
+        } else if chained == with_this.return_type {
+            None
+        } else {
+            self.represent(chained)
+        };
         with_this.return_type = chained;
         let name = self.node(member).text.clone().unwrap_or_default();
         // `list.as_IVector()`: the object as another of its interfaces.
@@ -58127,7 +58137,66 @@ impl<'a> FuncBuilder<'a> {
         let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
         let answer = self.finish_call_typed(id, callee, args, lent, Some(declaration), typed)?;
         self.release_via(id, queried);
-        Ok(answer)
+        match sequence {
+            Some(sequence) => self.array_of_sequence(id, answer, sequence),
+            None => Ok(answer),
+        }
+    }
+
+    /// The type of a sequence a native method answers -- one with `length` and
+    /// `item`, as nts:dom's `EventTargetSequence` -- where the program reads
+    /// the call as an array: lib.dom's `composedPath(): EventTarget[]`.
+    fn sequence_for_array(&self, id: NodeId, returned: TypeId) -> Option<TypeId> {
+        matches!(self.type_of(id), Some(HirType::Managed(ManagedType::Array(_)))).then_some(())?;
+        matches!(self.represent(returned), Some(HirType::NativePointer(_))).then_some(())?;
+        self.walk_method(returned, "_get_length")?;
+        self.walk_method(returned, "item")?;
+        Some(returned)
+    }
+
+    /// A sequence a binding answered, as the new array the program reads it
+    /// as: `WebIDL` converts a `sequence<T>` to a new JavaScript array each time,
+    /// so page script's `composedPath()` is a fresh array too, and one the
+    /// program owns is that. Each item is read as the array's element type, a
+    /// kind of what `item` answers on the ground a `for...of` over a bound
+    /// collection reads one ([`Self::delegated_walk`]). A sequence is a list
+    /// made once, so its length does not move while it is copied.
+    fn array_of_sequence(&mut self, id: NodeId, sequence: ValueId, ty: TypeId) -> Result<ValueId, Diagnostic> {
+        let array_ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "an array made of a sequence"))?;
+        let HirType::Managed(ManagedType::Array(element)) = &array_ty else {
+            return Err(self.unsupported(id, "a sequence read as something other than an array"));
+        };
+        let element = (**element).clone();
+        let (Some(size), Some(at)) = (self.walk_method(ty, "_get_length"), self.walk_method(ty, "item")) else {
+            return Err(self.unsupported(id, "a sequence with no `length` and `item`"));
+        };
+        let read = self.represent(at.2.return_type).ok_or_else(|| self.unsupported(id, "a sequence whose `item` answers a type with no representation"))?;
+        let narrows = Self::host_downcast(&read, &element);
+        let walk = Walk::Native(Box::new(NativeWalk {
+            by: NativeBy::Vector(Box::new(VectorMethods { size: size.clone(), at })),
+            element: if narrows { element.clone() } else { read },
+            site: id,
+            narrows,
+        }));
+        let origin = self.origin(id);
+        let length = self.call_native_walk(id, &size, sequence, Vec::new())?;
+        let length = self.coerce(length, &HirType::NUMBER, id)?;
+        let array = self.push(OpKind::ArrayNew { length, zeroed: true }, array_ty, origin.clone());
+        let (sequence, cursor, _) = self.walk_start(&walk, sequence, &origin)?;
+        let cursor = cursor.ok_or_else(|| self.unsupported(id, "a sequence walk with no cursor"))?;
+        let record = self.begin_loop(id, &[cursor], true, &origin)?;
+        let at = self.bindings[&cursor];
+        let cond = self.walk_condition(&walk, at, sequence, &origin)?;
+        self.test_loop(cond, &record);
+        self.switch_to(record.body);
+        let at = self.bindings[&cursor];
+        let [item] = self.read_element(&walk, sequence, at, &origin)?[..] else {
+            return Err(self.unsupported(id, "a sequence walk that did not read one item"));
+        };
+        let item = self.coerce(item, &element, id)?;
+        self.push(OpKind::ArraySet { array, index: at, value: item, checked: true }, HirType::Void, origin.clone());
+        self.end_loop(&record, Step::Walk { cursor, walk, sequence })?;
+        Ok(array)
     }
 
     /// `emit(name, ...args)` of a signal a `GObject` class the program writes
