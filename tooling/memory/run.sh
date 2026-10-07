@@ -198,11 +198,18 @@ NTS_MEMORY_OBJECTS=$(mktemp -d)
 export NTS_MEMORY_OBJECTS
 trap 'rm -rf "$rows" "$NTS_MEMORY_OBJECTS"' EXIT
 self="$PWD/tooling/memory/run.sh"
+# A case's row is written aside and renamed into place when the case has ended
+# (with `.failed` beside it when it failed), so a worker killed half way leaves
+# no row and is counted below as not measured -- a redirect creates the file
+# before the command runs, and an empty row read as a measured case. xargs stops
+# starting work when a worker dies by a signal and `set -e` would end this
+# script silently there; it is reported instead and the accounting decides.
 printf '%s\0' tooling/memory/cases/*/ | xargs -0 -P "$jobs" -I{} bash -c '
   dir=$1; rows=$2
   name=$(basename "$dir")
-  if "$0" --case "$dir" > "$rows/$name.row" 2> "$rows/$name.err"; then :; else : > "$rows/$name.failed"; fi
-' "$self" {} "$rows"
+  if "$0" --case "$dir" > "$rows/$name.row.part" 2> "$rows/$name.err"; then :; else : > "$rows/$name.failed"; fi
+  mv "$rows/$name.row.part" "$rows/$name.row"
+' "$self" {} "$rows" || echo "  a worker ended abnormally (xargs exited $?); the cases it held are not measured" >&2
 seen=0
 for dir in tooling/memory/cases/*/; do
   name=$(basename "$dir")

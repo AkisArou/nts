@@ -232,7 +232,11 @@ dexed=0 refused=0 declined=0 methods=0
 jobs=${NTS_DEX_JOBS:-${NTS_GATE_JOBS:-4}}
 NTS_DEX_WORK=$work
 export NTS_DEX_WORK
-printf '%s\n' $targets | xargs -P "$jobs" -I{} sh "$root/tooling/android/dexes.sh" --one {}
+# A worker that dies by a signal stops xargs, and `set -e` would end this script
+# there with nothing printed: report it, and let the accounting below name
+# every target that wrote no counts.
+printf '%s\n' $targets | xargs -P "$jobs" -I{} sh "$root/tooling/android/dexes.sh" --one {} \
+  || echo "a worker ended abnormally (xargs exited $?); the targets it held did not finish" >&2
 for target in $targets; do
   name=$(basename "$target")
   key=$(printf '%s' "$target" | tr '/' '_')
