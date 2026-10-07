@@ -17976,6 +17976,10 @@ struct FuncBuilder<'a> {
     /// overload's parameters and held here, keyed by its call as
     /// `callee_signature` is, and asked first.
     delegated_signature: Option<(NodeId, nts_semantic_schema::SignatureRecord)>,
+    /// A call whose last argument, a dictionary literal, the binding takes as
+    /// its members (`dictionary_spread`): the call, the literal, and each
+    /// argument as the binding's parameters take them.
+    dictionary_slots: Option<(NodeId, NodeId, Vec<Option<NodeId>>)>,
     /// The receiver, in a method.
     this: Option<ValueId>,
     /// The type this function's `return` statements must produce.
@@ -18368,6 +18372,7 @@ impl<'a> FuncBuilder<'a> {
             layouts: Vec::new(),
             callee_signature: None,
             delegated_signature: None,
+            dictionary_slots: None,
             this: None,
             suffix: String::new(),
             qualified: rustc_hash::FxHashMap::default(),
@@ -55025,7 +55030,9 @@ impl<'a> FuncBuilder<'a> {
             // parameters, its `@ntsDefault`s, its ABI types -- and not the ones
             // lib.dom.d.ts declares, which the checker resolved the call to.
             let outer = self.delegated_signature.replace((id, record.clone()));
+            let spread = self.spread_for(id, &record, arguments);
             let answer = self.lower_native_method_call_as(id, (receiver, receiver_node), (declaration, record), member, arguments);
+            self.dictionary_slots = spread;
             self.delegated_signature = outer;
             return answer.map(Some);
         }
@@ -57425,7 +57432,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let candidates: Vec<_> = overloads.into_iter().filter_map(method).collect();
         if candidates.len() > 1
-            && let Some(at) = candidates.iter().position(|(_, record)| self.arguments_fit(record, arguments))
+            && let Some(at) = candidates.iter().position(|(_, record)| self.call_fits(record, arguments))
         {
             return candidates.into_iter().nth(at);
         }
@@ -57512,14 +57519,100 @@ impl<'a> FuncBuilder<'a> {
         let Some(TypeKind::Function(signature)) = self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) else {
             return Err(self.unsupported(id, "a function a binding names, whose signature is unknown"));
         };
-        let record = self.snapshot.signatures[signature.0 as usize].clone();
+        // Its overload chosen by the arguments, as a bound method's is:
+        // `requestIdleCallback(f)` and `requestIdleCallback(f, { timeout })`
+        // are two of nts:dom's declarations.
+        let merged = self.snapshot.signatures[signature.0 as usize].clone();
+        let (function, record) = self.overload_by_arguments(function, &merged, arguments);
         let name = nts_semantic_schema::binding::declared_name(self.snapshot, function).unwrap_or_default().to_owned();
         let callee = self.native_callee(id, Some(function), name, &record)?;
-        let outer = self.callee_signature.replace((id, ty));
+        let spread = self.spread_for(id, &record, arguments);
+        let outer = self.delegated_signature.replace((id, record));
         let lowered = self.lower_call_arguments(id, &callee, arguments, None);
-        self.callee_signature = outer;
+        self.delegated_signature = outer;
+        self.dictionary_slots = spread;
         let (args, lent) = lowered?;
         self.finish_call(id, callee, args, lent, Some(function))
+    }
+
+    /// The overload of the function declared at `first` its arguments fit
+    /// ([`Self::call_fits`]), each overload's signature read from its own
+    /// parameters; with none, the first.
+    fn overload_by_arguments(&self, first: NodeId, merged: &nts_semantic_schema::SignatureRecord, arguments: &[NodeId]) -> (NodeId, nts_semantic_schema::SignatureRecord) {
+        let overloads: Vec<NodeId> = self
+            .name_node(first)
+            .and_then(|name| self.node(name).symbol)
+            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+            .map_or_else(|| vec![first], |record| record.declarations.clone());
+        let candidates: Vec<_> = overloads.into_iter().map(|declaration| (declaration, self.overload_signature(declaration, merged))).collect();
+        let at = candidates.iter().position(|(_, record)| self.call_fits(record, arguments)).unwrap_or(0);
+        candidates.into_iter().nth(at).unwrap_or_else(|| (first, merged.clone()))
+    }
+
+    /// Whether a call's arguments fit `record`, a dictionary literal last
+    /// taken as its members where the binding takes them so
+    /// ([`Self::dictionary_spread`]).
+    fn call_fits(&self, record: &nts_semantic_schema::SignatureRecord, arguments: &[NodeId]) -> bool {
+        let Some((_, slots)) = self.dictionary_spread(record, arguments) else {
+            return self.arguments_fit(record, arguments);
+        };
+        slots.iter().zip(&record.parameters).all(|(slot, parameter)| {
+            slot.is_none_or(|argument| {
+                let one = nts_semantic_schema::SignatureRecord { parameters: vec![parameter.clone()], ..record.clone() };
+                self.arguments_fit(&one, &[argument])
+            })
+        })
+    }
+
+    /// A dictionary argument a binding takes as its members: lib.dom's
+    /// `addEventListener(type, f, { once: true })` is nts:dom's
+    /// `addEventListener(type, f, capture?, once?, signal?)`, and
+    /// `requestIdleCallback(f, { timeout: 500 })` its `(f, timeout)`. The
+    /// literal, and the call's arguments as the binding takes them: those
+    /// before the literal as written, then for each parameter up to the last
+    /// one the literal names, its member's expression, or `None` -- the
+    /// parameter's `@ntsDefault`, which a member left out means.
+    ///
+    /// **Only where every member names a parameter**, so a binding that takes
+    /// the dictionary whole (`Fields<EventInit>`) is never taken apart. And
+    /// only where order cannot be seen: the members are evaluated in the
+    /// binding's order, which is the literal's unless at most one of them can
+    /// have an effect.
+    fn dictionary_spread(&self, record: &nts_semantic_schema::SignatureRecord, arguments: &[NodeId]) -> Option<(NodeId, Vec<Option<NodeId>>)> {
+        let (&literal, before) = arguments.split_last()?;
+        if self.kind_of(literal) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            return None;
+        }
+        let tail = record.parameters.get(before.len()..)?;
+        let mut members: Vec<(String, NodeId)> = Vec::new();
+        for property in self.children(literal) {
+            if self.kind_of(property) != Some(syntax::PROPERTY_ASSIGNMENT) {
+                return None;
+            }
+            let [name, value] = self.children(property)[..] else { return None };
+            members.push((self.literal_name(name)?, value));
+        }
+        let at = |name: &str| tail.iter().position(|parameter| parameter.name == name);
+        let positions = members.iter().map(|(name, _)| at(name)).collect::<Option<Vec<_>>>()?;
+        let last = *positions.iter().max()?;
+        let reordered = positions.windows(2).any(|pair| pair[0] > pair[1]);
+        if reordered && members.iter().filter(|(_, value)| !self.cannot_have_effects(*value)).count() > 1 {
+            return None;
+        }
+        let slots = before
+            .iter()
+            .map(|argument| Some(*argument))
+            .chain(tail[..=last].iter().map(|parameter| members.iter().find(|(name, _)| *name == parameter.name).map(|(_, value)| *value)))
+            .collect();
+        Some((literal, slots))
+    }
+
+    /// The dictionary plan for a call at `record` ([`Self::dictionary_spread`]),
+    /// installed for [`Self::lower_call_arguments`]; what was installed
+    /// before, for the caller to put back.
+    fn spread_for(&mut self, id: NodeId, record: &nts_semantic_schema::SignatureRecord, arguments: &[NodeId]) -> Option<(NodeId, NodeId, Vec<Option<NodeId>>)> {
+        let plan = self.dictionary_spread(record, arguments).map(|(literal, slots)| (id, literal, slots));
+        std::mem::replace(&mut self.dictionary_slots, plan)
     }
 
     /// The function constructing the class a `new` builds, where a binding
@@ -57549,7 +57642,7 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
             .map_or_else(|| vec![first], |record| record.declarations.clone());
         let candidates: Vec<_> = overloads.into_iter().map(|declaration| (declaration, self.overload_signature(declaration, merged))).collect();
-        let at = candidates.iter().position(|(_, record)| self.arguments_fit(record, arguments)).unwrap_or(0);
+        let at = candidates.iter().position(|(_, record)| self.call_fits(record, arguments)).unwrap_or(0);
         candidates.into_iter().nth(at)
     }
 
@@ -57559,9 +57652,11 @@ impl<'a> FuncBuilder<'a> {
     fn lower_delegated_construction(&mut self, id: NodeId, (function, record): (NodeId, nts_semantic_schema::SignatureRecord), arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
         let name = nts_semantic_schema::binding::declared_name(self.snapshot, function).unwrap_or_default().to_owned();
         let callee = self.native_callee(id, Some(function), name, &record)?;
+        let spread = self.spread_for(id, &record, arguments);
         let outer = self.delegated_signature.replace((id, record));
         let lowered = self.lower_call_arguments(id, &callee, arguments, None);
         self.delegated_signature = outer;
+        self.dictionary_slots = spread;
         let (args, lent) = lowered?;
         self.finish_call(id, callee, args, lent, Some(function))
     }
@@ -59091,6 +59186,11 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
         receiver: Option<ValueId>,
     ) -> Result<(Vec<ValueId>, Vec<Lent>), Diagnostic> {
+        if let (Some((call, literal, slots)), Callee::Native(target)) = (self.dictionary_slots.clone(), callee)
+            && call == id
+        {
+            return self.lower_dictionary_slots(id, target, (literal, &slots), receiver);
+        }
         let tail = match callee {
             Callee::Native(target) => {
                 target.variadic.as_ref().map(super::native::Type::representation)
@@ -59108,6 +59208,39 @@ impl<'a> FuncBuilder<'a> {
         let args = self.lower_written_arguments(id, callee, arguments, spelled, tail.as_ref())?;
         let Callee::Native(target) = callee else { return Ok((args, Vec::new())) };
         self.native_arguments(id, &target.clone(), args, arguments.len(), receiver)
+    }
+
+    /// [`Self::lower_call_arguments`] for a call whose dictionary the binding
+    /// takes as its members ([`Self::dictionary_spread`]): each member where
+    /// its parameter is, and the parameter's `@ntsDefault` where the literal
+    /// leaves it out.
+    fn lower_dictionary_slots(
+        &mut self,
+        id: NodeId,
+        target: &std::sync::Arc<super::native::Function>,
+        (literal, slots): (NodeId, &[Option<NodeId>]),
+        receiver: Option<ValueId>,
+    ) -> Result<(Vec<ValueId>, Vec<Lent>), Diagnostic> {
+        let spelled = receiver.is_some() && target.roles.first() != Some(&super::native::Role::Receiver);
+        let positional: Vec<NodeId> = slots.iter().map(|slot| slot.unwrap_or(literal)).collect();
+        self.mark_literals(target, &positional, spelled);
+        let outer = self.omitting_for.replace((target.clone(), usize::from(spelled)));
+        let mut arguments = Vec::with_capacity(slots.len());
+        for (at, slot) in slots.iter().enumerate() {
+            arguments.push(match slot {
+                Some(node) => Argument::expression(*node),
+                None => match self.absent_argument(id, at) {
+                    Ok(value) => Argument { node: literal, value: Some(value) },
+                    Err(why) => {
+                        self.omitting_for = outer;
+                        return Err(why);
+                    }
+                },
+            });
+        }
+        let args = self.lower_argument_values(id, &arguments, None, None);
+        self.omitting_for = outer;
+        self.native_arguments(id, &target.clone(), args?, arguments.len(), receiver)
     }
 
     /// A C method's receiver, at the type its first parameter declares: the
