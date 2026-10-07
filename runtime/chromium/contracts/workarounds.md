@@ -27,6 +27,8 @@ shared tooling.
 
 | 19 | The fuzz's `pick` closure answers an index into the pool, not the node. | `tests/idl-vectors.ts` (`fuzz`) | blocker `a-closure-returning-a-host-handle-is-refused-since-a2`: a local closure answering a host handle is refused since 7a5964d71 | the blocker reads FIXED | C |
 
+| 20 | An uncaught throw in a listener, a timer or an app's `main` ends the renderer (Chromium's crash page), and `console.*` writes to the process's stdout/stderr, not DevTools. The app examples and vectors throw nothing uncaught. | runtime, every callback | request 11: no host hook for console output or uncaught throws (`nts_uncaught` calls `exit(1)` inside a callback) | request 11 delivered, and the lane wires both into Blink | C |
+
 ## Waiting on shared tooling
 
 | # | Workaround | Where | Cause | Remove when | Owner |

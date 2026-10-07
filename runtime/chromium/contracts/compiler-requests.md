@@ -330,3 +330,57 @@ declares `module__init`, naming this request. What would lift it, either of:
   releasing what module state holds, and a re-run of `module__init` for the
   next.
 
+## 11. Console and uncaught errors reach the host
+
+**Requested 2026-10-07. Blocks: errors and console output in DevTools, and
+a page that survives a throwing listener.**
+
+Today, measured on the a2 compiler:
+
+- A throw nothing catches inside a listener, or inside an export such as an
+  app's `main`, compiles to a direct `nts_uncaught(value, detail)` call
+  (emit-c of `body.addEventListener("click", () => { document().querySelector("["); })`
+  and of `export function main(d) { d.querySelector("["); }`). Inside a
+  callback, `nts_uncaught` prints to stderr and calls `exit(1)`, so the
+  renderer dies with Chromium's crash page. The raise path, which returns to
+  the host, is not taken by either.
+- `console.*` lowers to `nts_console_write(line, to_stderr)`, which writes to
+  the process's stdout or stderr. It carries one bit, not the level, and
+  nothing reaches DevTools.
+- `NtsHost` has no hook for either.
+
+What would let the renderer host report through Blink: DevTools'
+console, the window's `error` event, and "Uncaught ..." in the inspector.
+Each hook is optional, and NULL keeps today's behaviour.
+
+```c
+typedef enum NtsConsoleLevel {
+  NTS_CONSOLE_LOG, NTS_CONSOLE_INFO, NTS_CONSOLE_DEBUG,
+  NTS_CONSOLE_WARN, NTS_CONSOLE_ERROR,
+} NtsConsoleLevel;
+
+/* In NtsHost: */
+/* Each console line, instead of stdout/stderr. */
+void (*console_write)(void *state, const NtsString *line, NtsConsoleLevel level);
+/* A throw that reached a callback boundary with nothing to catch it:
+   `thrown` and the message it carried (or null). The host reports it, and
+   the callback is abandoned rather than the process: the runtime unwinds to
+   the innermost host entry, as a landing the host pushed after
+   nts_callback_enter would. */
+void (*report_uncaught)(void *state, NtsValue thrown, const NtsString *detail);
+```
+
+and in the compiler, `console.warn`/`error`/`info`/`debug`/`log` passing
+their level. If unwinding to the host entry is too large a change, a
+report-then-exit `report_uncaught` is still worth having: the error reaches
+DevTools before the renderer goes.
+
+The lane's side, once these exist:
+
+- `console_write` becomes `ExecutionContext::AddConsoleMessage(kConsoleApi,
+  level, text)`;
+- `report_uncaught` dispatches an `ErrorEvent` through
+  `ExecutionContext::DispatchErrorEvent(..., kDoNotSanitize)`, which page
+  script's window `error` listeners see, and DevTools prints as uncaught.
+- Neither needs a ScriptState.
+
