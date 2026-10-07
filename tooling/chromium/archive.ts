@@ -7,7 +7,7 @@
  * (app.ts).
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 
 export interface Toolchain {
@@ -59,12 +59,31 @@ export function archiveProgram(request: ArchiveRequest): void {
     execFileSync(toolchain.clang, [...cFlags, "-c", input, "-o", output], { cwd: root, stdio: "inherit" });
     return output;
   };
+  // The program and every runtime unit `nts build` archived beside it
+  // (nts_runtime.c, and nts_unicode.c when the program maps case), rebuilt
+  // with Chromium's toolchain.
+  const units = runtimeUnits(generated);
   const objects = [
     backend === "llvm"
       ? compile(resolve(generated, "program.ll"), "program", ["-O2", "-fPIC", "-ffunction-sections", "-fdata-sections"])
       : compile(resolve(generated, "program.c"), "program", flags),
-    compile(resolve(generated, "nts_runtime.c"), "runtime", flags),
+    ...units.map(unit => compile(resolve(generated, unit), basename(unit, ".c"), flags)),
     ...request.sources.map(source => compile(source, basename(source, ".c"), flags)),
   ];
   execFileSync(toolchain.archiver, ["rcs", archive, ...objects], { cwd: root, stdio: "inherit" });
+}
+
+/**
+ * The runtime's C units in `nts build`'s own archive of the program: the
+ * members it generated beside the program (not the program, the ABI check,
+ * or a target's native sources, which the caller passes as `sources`).
+ */
+function runtimeUnits(generated: string): string[] {
+  const archives = readdirSync(generated).filter(name => /^lib.*\.a$/.test(name));
+  if (archives.length !== 1) throw new Error(`Expected one archive from nts build in ${generated}, found ${archives.length}`);
+  const members = execFileSync("ar", ["t", resolve(generated, archives[0])], { encoding: "utf8" }).split("\n")
+    .filter(member => member.endsWith(".c.o")).map(member => member.slice(0, -2));
+  const units = members.filter(unit => unit !== "program.c" && unit !== "abi_check.c" && existsSync(resolve(generated, unit)));
+  if (!units.includes("nts_runtime.c")) throw new Error(`nts build's archive in ${generated} has no runtime: ${members.join(", ")}`);
+  return units;
 }

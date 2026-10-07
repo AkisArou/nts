@@ -160,13 +160,15 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_add_event_listener
      * @ntsDefault capture=0 once=0 signal=null
      */
-    addEventListener(this: EventTarget, type: StringView, listener: Closure<(event: Event) => void>, capture?: boolean, once?: boolean, signal?: AbortSignal | null): void;
+    addEventListener(this: EventTarget, type: StringView, listener: EventCallback, capture?: boolean, once?: boolean, signal?: AbortSignal | null): void;
     /**
      * The same with `passive` given: a passive listener's preventDefault()
-     * does nothing.
+     * does nothing. An options literal reaches this overload only when it
+     * names `passive`, so passive's default is never used.
      * @ntsSymbol nts_dom_add_event_listener_passive
+     * @ntsDefault capture=0 once=0 signal=null passive=0
      */
-    addEventListener(this: EventTarget, type: StringView, listener: Closure<(event: Event) => void>, capture: boolean, once: boolean, signal: AbortSignal | null, passive: boolean): void;
+    addEventListener(this: EventTarget, type: StringView, listener: EventCallback, capture?: boolean, once?: boolean, signal?: AbortSignal | null, passive?: boolean): void;
     /**
      * @ntsSymbol nts_dom_remove_event_listener
      * @ntsDefault capture=0
@@ -180,6 +182,8 @@ declare module "nts:dom" {
      */
     remove(this: Listener): void;
   }
+  /** A listener's closure: one type, shared by the overloads that take it. */
+  export type EventCallback = Closure<(event: Event) => void>;
   export type Listener = HostClass<"NtsDomListener", null, "nts_dom_listener_retain", "nts_dom_listener_release"> &
     ListenerMethods;
 }
