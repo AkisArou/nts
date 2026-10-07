@@ -7,8 +7,13 @@
 // defined 0 time(s)" (the integrity.known entry beside this fixture). The same
 // shape through lib.dom (`await document.exitFullscreen()`) reports the same.
 // Found 2026-10-08 by the Chromium lane, asked for as its own fixture by
-// MainClaude. The expectation above is the emitted C, which is right; the
-// defect is what the HIR says, which the integrity entry records.
+// MainClaude. The expectation above is the emitted C, which is right.
+//
+// **Fixed 2026-10-08** (MainClaude): never-free `prepare` refuses a function
+// holding a host handle (`refuse_host_handles`) *after* `suspend::transform`,
+// when only the resumption holds it, and refused `go__resume` without its
+// caller. It now drops the callers too, so `go` is refused naming the cause and
+// the HIR is valid; the integrity.known entry is gone with it.
 //
 // Control, one difference -- the promise from a `c:` foreign function
 // instead (`import { ready } from "c:later"`, `await ready()`, the

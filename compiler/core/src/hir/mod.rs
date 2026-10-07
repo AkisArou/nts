@@ -5280,6 +5280,15 @@ fn refuse_host_handles(lowered: &mut lower::Lowered) {
         refused.insert(func.name.clone());
     }
     lowered.program.funcs.retain(|f| !refused.contains(&f.name));
+    // **And what calls them**, as `settle` does after its own refusals. This runs
+    // after `suspend::transform`, so an `async` function awaiting a host's promise
+    // is two functions by now, and only the resumption holds the handle: refusing
+    // it left `go` calling a `go__resume` nothing defined -- invalid HIR, and
+    // `emit-c` writing nothing (`blockers/an-await-of-a-dom-promise-has-no-resume-
+    // in-the-hir`, the Chromium lane's).
+    if !refused.is_empty() {
+        drop_callers_of_refused(lowered);
+    }
 }
 
 fn settle(lowered: &mut lower::Lowered) {
