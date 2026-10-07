@@ -1,5 +1,5 @@
 {
-  "bound": 4609,
+  "bound": 4709,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -8294,6 +8294,66 @@
     {
       "interface": "AnimationTimeline",
       "member": "getCurrentTime/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "afterHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "afterHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "beforeHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "beforeHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "replaceWithHTML/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "replaceWithHTMLUnsafe/2",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "streamAfterHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "streamAfterHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "streamBeforeHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "streamBeforeHTMLUnsafe/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "streamReplaceWithHTML/1",
+      "why": "[RuntimeEnabled]"
+    },
+    {
+      "interface": "ChildNode",
+      "member": "streamReplaceWithHTMLUnsafe/1",
       "why": "[RuntimeEnabled]"
     }
   ]

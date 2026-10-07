@@ -2077,6 +2077,12 @@ interface Path2D {}
  * @ntsIs nts_dom_is 606
  */
 interface Storage {}
+/** @ntsBoundBy "nts:dom" ChildNode */
+interface ChildNode {}
+/** @ntsBoundBy "nts:dom" NonDocumentTypeChildNode */
+interface NonDocumentTypeChildNode {}
+/** @ntsBoundBy "nts:dom" ParentNode */
+interface ParentNode {}
 /** @ntsBoundBy "nts:dom" document */
 declare var document: Document;
 /** @ntsBoundBy "nts:dom" requestAnimationFrame */

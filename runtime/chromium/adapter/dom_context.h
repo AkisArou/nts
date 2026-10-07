@@ -289,15 +289,6 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
     return &lent_view;
   }
 
-  // An IDL enum's value: the enum's own static literal, ASCII, lent as it
-  // is -- no String made. (An attribute Blink answers as a String lends that.)
-  const NtsStringView *Lend(const blink::bindings::EnumerationBase &value,
-                            bool) {
-    lent = blink::String();
-    lent_view = {value.AsCStr(), value.AsStringView().length(), 0};
-    return &lent_view;
-  }
-
   // Text from a program's string. A literal (NTS_STRING_VIEW_IMMORTAL) has
   // units that never move or change, so it is copied once per document and
   // shared after, keyed by their address. The table is bounded by the
@@ -441,6 +432,12 @@ blink::String AsString(blink::bindings::OptimizedReturnProxy<Union> value) {
   CHECK(converted->IsString());
   return blink::ToCoreString(v8::Isolate::GetCurrent(),
                              converted.As<v8::String>());
+}
+
+// An IDL enum's value as the program receives it: the enum's own static
+// literal, ASCII, NUL-terminated.
+inline const char *EnumText(const blink::bindings::EnumerationBase &value) {
+  return value.AsCStr();
 }
 
 // IDL enums. A value crosses as the program's string -- a literal union in

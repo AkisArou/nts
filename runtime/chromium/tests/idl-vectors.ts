@@ -14,7 +14,7 @@
 // error reads as is passed in.
 import { newBlob, newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asCSSStyleSheet, asElement, asHTMLFormElement, asHTMLVideoElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
-import type { CanvasFillRule, Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ScrollRestoration, SelectionMode, Text } from "nts:dom";
+import type { CanvasFillRule, ChildNode, Document, Element, Event, MutationObserver, MutationRecordSequence, Node, ParentNode, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
 export interface VectorHost {
   // "Name: message", the binding's own context prefix left out.
@@ -588,6 +588,23 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   session.clear();
   local.clear();
 
+  // lib.dom's mixins as their own types: an element, the document and a
+  // fragment as a ParentNode; a text and an element as a ChildNode.
+  const describeParent = (parent: ParentNode): string =>
+    parent.childElementCount + ":" + (parent.firstElementChild === null ? "none" : parent.firstElementChild.nodeName)
+      + ":" + (parent.querySelector("nts-none") === null ? "absent" : "found");
+  const mixed = d.createElement("div");
+  mixed.appendChild(d.createElement("em"));
+  const mixedText = d.createTextNode("loose");
+  mixed.appendChild(mixedText);
+  const fragment = d.createDocumentFragment();
+  fragment.appendChild(d.createElement("b"));
+  log("parentNode", describeParent(mixed) + "|" + describeParent(d) + "|" + describeParent(fragment));
+  const removeChild = (child: ChildNode): void => { child.remove(); };
+  removeChild(mixedText);
+  removeChild(mixed.firstElementChild!);
+  log("childNode", mixed.childNodes.length + "|" + (mixedText.parentNode === null ? "detached" : "attached"));
+
   // Canvas 2D: a drawing, then its pixels as PNG (toDataURL), hashed. The
   // same Skia draws for both, so the hashes agree only if every call drew
   // the same thing.
@@ -631,10 +648,8 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   thrown("canvasArc", () => { ctx.arc(0, 0, -1, 0, 1, false); });
   thrown("canvasFillRule", () => { ctx.fill(("inside" + "") as CanvasFillRule); });
   const png = surface.toDataURL();
-  // A polynomial hash, exact in doubles (below 2^53 at every step), not
-  // FNV: Math.imul is refused (contracts/workarounds.md, 22).
-  let hash = 0;
-  for (let i = 0; i < png.length; i += 1) hash = (hash * 31 + png.charCodeAt(i)) % 2147483647;
+  let hash = 2166136261;
+  for (let i = 0; i < png.length; i += 1) hash = Math.imul(hash ^ png.charCodeAt(i), 16777619) >>> 0;
   log("canvasPixels", png.substring(0, 22) + "|" + png.length + "|" + hash);
 
   // URL: parsing, resolution against a base, its search parameters; an

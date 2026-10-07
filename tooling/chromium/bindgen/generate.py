@@ -137,6 +137,34 @@ class Result:
         self.c, self.ts, self.kind, self.nullable = c, ts, kind, nullable
 
 
+class MixinView:
+    """A Blink IDL mixin bound as a handle type of its own (`ParentNode`,
+    `ChildNode`), as lib.dom.d.ts declares one: the members it contributes to
+    `host`, an interface including it, under the mixin's name, called on
+    `receiver` -- the C++ class every including interface derives from, where
+    Blink implements them (ContainerNode for ParentNode, Node for ChildNode).
+    Blink's binding generator computes each call for the host, so the call
+    is the one page script's binding makes."""
+
+    def __init__(self, host, identifier, receiver, prerequisite):
+        self.host, self.identifier, self.receiver = host, identifier, receiver
+        self.prerequisite = prerequisite  # the nts:dom class every includer extends
+
+        def contributed(member):
+            owner = getattr(member, "owner_mixin", None)
+            return owner is not None and owner.identifier == identifier
+        self.attributes = [attribute for attribute in host.attributes if contributed(attribute)]
+        self.operation_groups = [group for group in host.operation_groups
+                                 if group.identifier and all(contributed(operation) for operation in group)]
+        self.inherited = None
+        self.indexed_and_named_properties = None
+        self.stringifier = None
+        self.constructor_groups = []
+
+    def __getattr__(self, name):
+        return getattr(self.host, name)
+
+
 class Function:
     """One C function: a getter, a setter, or one arity of an operation."""
 
@@ -147,7 +175,7 @@ class Function:
         self.receiver = True  # false for a constructor or a downcast: no `self`
 
     def needs_context(self):
-        return (self.reactions or self.result.kind in ("string", "enum") or any(p.context for p in self.params)
+        return (self.reactions or self.result.kind == "string" or any(p.context for p in self.params)
                 or "context." in self.expression or any("context." in s for s in self.statements))
 
 
@@ -157,6 +185,7 @@ class Generator:
         self.allowlist = allowlist
         self.interfaces = [database.find(name) for name in allowlist["interfaces"]]
         self.bound = {interface.identifier for interface in self.interfaces}
+        self.mixins = set()  # lib.dom mixins bound as their own types (MixinView)
         # Interfaces of Blink's modules component the adapter binds (it
         # links modules for them): only their members are taken from there.
         self.modules = set(allowlist.get("modules", []))
@@ -198,7 +227,8 @@ class Generator:
         """The Blink object behind a handle, which the handle's type names:
         a handle is the object as a ScriptWrappable (dom_context.h), so the
         conversion is a static_cast from there, NULL to NULL."""
-        return f"ObjectOf<blink::{blink_class_name(interface)}>({name})"
+        receiver = interface.receiver if isinstance(interface, MixinView) else blink_class_name(interface)
+        return f"ObjectOf<blink::{receiver}>({name})"
 
     def ancestors(self, interface):
         chain = []
@@ -393,12 +423,13 @@ class Generator:
             identifier = self.bound_interface(element).identifier
             self.sequences.add(identifier)
             return Result(f"NtsDom{identifier}Sequence*", f"{identifier}Sequence", "sequence")
-        # An IDL enum's value is lent from Blink's own literal. Typed as a
-        # string, not its literal union: a foreign function cannot answer
-        # one yet (contracts/workarounds.md, 21).
+        # An IDL enum's value is its literal union, answered as Blink's own
+        # static literal (a C string; nothing lent or copied here).
         if unwrapped.is_enumeration and not nullable:
-            self.headers.add(PathManager(unwrapped.type_definition_object).api_path(ext="h"))
-            return Result("const NtsStringView*", "StringView", "enum")
+            enumeration = unwrapped.type_definition_object
+            self.enums[enumeration.identifier] = list(enumeration.values)
+            self.headers.add(PathManager(enumeration).api_path(ext="h"))
+            return Result("const char*", enumeration.identifier, "enum")
         keyword = unwrapped.keyword_typename
         if keyword in STRINGS:
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
@@ -504,6 +535,13 @@ class Generator:
                                     if self.from_modules(member)
                                     or not path.startswith("third_party/blink/renderer/modules/"))
 
+    @staticmethod
+    def includes(interface, mixin):
+        """Whether an interface includes a mixin itself (`Element includes
+        ParentNode`): one of its members comes from the mixin."""
+        members = list(interface.attributes) + [operation for group in interface.operation_groups for operation in group]
+        return any(getattr(getattr(member, "owner_mixin", None), "identifier", None) == mixin for member in members)
+
     def from_modules(self, member):
         """Whether a member is one the allowlist takes from Blink's modules
         component (`"modules"`): every member of a modules interface named
@@ -569,7 +607,8 @@ class Generator:
         return f"{doc}    {name}({', '.join(params)}): {function.result.ts};"
 
     def attribute(self, interface, attribute):
-        base = CodeGenContext(interface=interface, class_name="V8" + interface.identifier)
+        host = getattr(interface, "host", interface)
+        base = CodeGenContext(interface=host, class_name="V8" + host.identifier)
         identifier = attribute.identifier
         getter = setter = None
         try:
@@ -774,7 +813,8 @@ class Generator:
         if not name:
             return
         variants = self.variants(interface, name, group, lambda operation: self.result(operation.return_type))
-        base = CodeGenContext(interface=interface, class_name="V8" + interface.identifier)
+        host = getattr(interface, "host", interface)
+        base = CodeGenContext(interface=host, class_name="V8" + host.identifier)
         lines = self.members.setdefault(interface.identifier, [])
         used = set()
         for operation, params, result, truncate, filled, tail in variants:
@@ -922,6 +962,17 @@ class Generator:
             else:
                 self.named_properties(interface)
             self.stringifier(interface)
+        # lib.dom's mixins, each its own handle type (MixinView); bound
+        # after the interfaces, whose members they reuse.
+        for identifier, spec in sorted(self.allowlist.get("mixins", {}).items()):
+            view = MixinView(self.database.find(spec["host"]), identifier, spec["receiver"], spec["prerequisite"])
+            self.interfaces.append(view)
+            self.bound.add(identifier)
+            self.mixins.add(identifier)
+            for attribute in view.attributes:
+                self.attribute(view, attribute)
+            for group in view.operation_groups:
+                self.operation(view, group)
 
     def stringifier(self, interface):
         """`range.toString()`: an anonymous `stringifier;` (Range, Selection)
@@ -1142,7 +1193,7 @@ class Generator:
             nullable = "true" if function.result.nullable else "false"
             lines.append(f"  return context.Lend(nts_dom::AsString({expression}), {nullable});")
         elif kind == "enum":
-            lines.append(f"  return context.Lend({expression}, false);")
+            lines.append(f"  return nts_dom::EnumText({expression});")
         else:
             # An enum-typed answer (`eventPhase()` is a PhaseType) is its
             # IDL number.
@@ -1234,6 +1285,10 @@ class Generator:
             ("declare function requestAnimationFrame(callback: FrameRequestCallback): number;", "requestAnimationFrame"),
             ("declare function cancelAnimationFrame(handle: number): void;", "cancelAnimationFrame"),
         ]
+        # A mixin is never an `instanceof` target: bound, with no @ntsIs.
+        for identifier in sorted(self.mixins):
+            if identifier in declared:
+                lines.append(f'/** @ntsBoundBy "nts:dom" {identifier} */\ninterface {identifier} {{}}')
         for declaration, bound in globals_:
             lines.append(f'/** @ntsBoundBy "nts:dom" {bound} */\n{declaration}')
         return "\n".join(lines)
@@ -1338,14 +1393,26 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
             types.append(f"  export interface {identifier}OwnMethods {{")
             types.extend(self.members.get(identifier, []))
             types.append("  }")
+            # A mixin is an interface handle (GObjectInterface's shape): a
+            # handle of its prerequisite class that C spells by its own tag,
+            # which whatever includes it converts to.
+            if isinstance(interface, MixinView):
+                types.append(f"  export type {identifier}Methods = {identifier}OwnMethods;")
+                types.append(f'  export type {identifier} = GObjectInterface<"{self.handle_tag(identifier)}", '
+                             f"{interface.prerequisite}> & {identifier}Methods;")
+                continue
+            # What it includes, which its subclasses' Methods carry too.
+            included = sorted(mixin for mixin in self.mixins if self.includes(interface, mixin))
+            implements = ("" if not included else " & { readonly __c_implements: { "
+                          + "; ".join(f"readonly {self.handle_tag(mixin)}: true" for mixin in included) + " } }")
             if parent is None:
                 # A hierarchy's root: every root shares the one counted pair,
                 # which roots any ScriptWrappable.
-                types.append(f"  export type {identifier}Methods = {identifier}OwnMethods;")
+                types.append(f"  export type {identifier}Methods = {identifier}OwnMethods{implements};")
                 types.append(f'  export type {identifier} = HostClass<"{self.handle_tag(identifier)}", null, '
                              f'"nts_dom_retain", "nts_dom_release"> & {identifier}Methods;')
             else:
-                types.append(f"  export type {identifier}Methods = {identifier}OwnMethods & {parent.identifier}Methods;")
+                types.append(f"  export type {identifier}Methods = {identifier}OwnMethods & {parent.identifier}Methods{implements};")
                 types.append(f'  export type {identifier} = HostClass<"{self.handle_tag(identifier)}", '
                              f"{parent.identifier}> & {identifier}Methods;")
             downcast = next((f for f in self.functions if getattr(f, "downcast", False) and f.interface is interface), None)
@@ -1360,7 +1427,7 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
-  import type {{ ByValue, CBool, Closure, CNumber, Fields, HostClass, Opaque, Ptr, StringView, Struct, c_double, c_uint8 }} from "c:types";
+  import type {{ ByValue, CBool, Closure, CNumber, Fields, GObjectInterface, HostClass, Opaque, Ptr, StringView, Struct, c_double, c_uint8 }} from "c:types";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
 {chr(10).join(self.enum_types())}

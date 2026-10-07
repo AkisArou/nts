@@ -163,5 +163,22 @@
     "Storage",
     "Window.localStorage",
     "Window.sessionStorage"
-  ]
+  ],
+  "mixins": {
+    "ParentNode": {
+      "host": "Element",
+      "receiver": "ContainerNode",
+      "prerequisite": "Node"
+    },
+    "ChildNode": {
+      "host": "Element",
+      "receiver": "Node",
+      "prerequisite": "Node"
+    },
+    "NonDocumentTypeChildNode": {
+      "host": "Element",
+      "receiver": "Node",
+      "prerequisite": "Node"
+    }
+  }
 }
