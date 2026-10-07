@@ -1,4 +1,10 @@
-// expect: NTS1001 foreign function `canvas_fill_rule`'s return (which wants a c_int or c_double brand, a boolean, or a string, or void), a type with no native ABI is not supported by this lowering yet
+// expect: emit-c --rc -> emits-c canvas_fill_rule();
+//
+// **FIXED 2026-10-07, and kept as a guard**: a union of string literals is
+// answered as a non-nullable `const char *`, as the parameter side already
+// took it. The guard is the call in `go`, which exists only when it lowers.
+// The record follows unchanged.
+//
 //
 // A union of string literals -- how lib.dom.d.ts spells every IDL enum
 // (CanvasFillRule, DocumentReadyState, ScrollRestoration) -- crosses into a

@@ -4646,6 +4646,14 @@ fn returned_string(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<ReturnedSt
     if string_encoding(snapshot, ty) == Some(Encoding::View) {
         return Some(ReturnedString { nullable: matches!(kind, Some(TypeKind::Union(_))), free: None, array: false, view: true });
     }
+    // A union of string literals -- lib.dom's spelling of a WebIDL enum,
+    // `CanvasFillRule` -- is a string that is never `null` by its type: the same
+    // `const char *` a parameter of that type already takes (`is_string_literal`
+    // in `parameter_slots`), answered as a non-nullable string. It was refused
+    // as "a type with no native ABI" on the return side only.
+    if is_string_literal(snapshot, ty) {
+        return Some(ReturnedString { nullable: false, free: None, array: false, view: false });
+    }
     is_string(snapshot, ty).then_some(ReturnedString {
         nullable: !matches!(kind, Some(TypeKind::String)),
         free: None,
