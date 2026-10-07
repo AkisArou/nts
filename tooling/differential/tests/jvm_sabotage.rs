@@ -167,6 +167,20 @@ fn run(binary: &Path, tsconfig: &Path, runtime: Option<&Path>) -> bool {
     output.status.success() && text.contains("agreed on every case")
 }
 
+/// `from`'s files and directories, recreated under `to`.
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).unwrap();
+        }
+    }
+}
+
 #[test]
 fn every_sabotage_of_the_jvm_runtime_is_noticed() {
     let root = repository();
@@ -180,9 +194,19 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
 
     let scratch = std::env::temp_dir().join(format!("nts-jvm-sabotage-{}", std::process::id()));
     std::fs::create_dir_all(&scratch).unwrap();
+    // **Sabotaged in a copy, never in the tree.** Each sabotage used to be
+    // written into `runtime/jvm/src` for the length of its build and then put
+    // back -- and the gate runs test binaries side by side, so the drift test
+    // (`runtime_jar.rs`) could build the runtime from a sabotaged source in that
+    // window and report a jar that does not match its sources: a red `tests`
+    // step on two gates of 2026-10-07, on a tree whose jar was right. The copy
+    // carries `build.sh`, which builds the sources beside it.
+    let runtime = scratch.join("jvm");
+    copy_tree(&root.join("runtime/jvm/src"), &runtime.join("src"));
+    std::fs::copy(root.join("runtime/jvm/build.sh"), runtime.join("build.sh")).unwrap();
 
     for sabotage in SABOTAGES {
-        let source_path = root.join("runtime/jvm/src").join(sabotage.file);
+        let source_path = runtime.join("src").join(sabotage.file);
         let original = std::fs::read_to_string(&source_path)
             .unwrap_or_else(|_| panic!("{} exists", sabotage.file));
 
@@ -207,11 +231,11 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
         let jar = scratch.join(format!("{}-broken.jar", sabotage.method));
         std::fs::write(&source_path, &patched).unwrap();
         let built = std::process::Command::new("sh")
-            .arg(root.join("runtime/jvm/build.sh"))
+            .arg(runtime.join("build.sh"))
             .arg(&jar)
             .output();
-        // Put the real source back before asserting anything, so a failure here
-        // does not leave the tree broken for whoever runs next.
+        // The copy back to the real source, so the next sabotage is the only
+        // difference in its build.
         std::fs::write(&source_path, &original).unwrap();
         let built = built.unwrap();
         assert!(
