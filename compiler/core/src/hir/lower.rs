@@ -11188,6 +11188,15 @@ fn evaluated_reads(probe: &FuncBuilder, id: NodeId, visit: &mut impl FnMut(NodeI
     }
 }
 
+/// Whether `module` is a declaration file -- `.d.ts`, `.d.mts`, `.d.cts` --
+/// which declares and never runs.
+fn is_declaration_file(snapshot: &SemanticSnapshot, module: &nts_semantic_schema::ModuleRecord) -> bool {
+    snapshot.sources.get(module.file.0 as usize).is_some_and(|source| {
+        let path = source.uri.as_str();
+        [".d.ts", ".d.mts", ".d.cts"].iter().any(|suffix| path.ends_with(suffix))
+    })
+}
+
 /// The eager modules' statements in evaluation order, for `module#init`; and
 /// each lazy module's own, for its `#evaluate`.
 type ModuleStatements = (Option<(NodeId, Vec<NodeId>)>, Vec<(usize, Vec<NodeId>)>, Vec<Diagnostic>);
@@ -11212,6 +11221,15 @@ fn module_statements(snapshot: &SemanticSnapshot, lazy: &[bool], initialization:
 
     let mut per_module: Vec<Vec<NodeId>> = vec![Vec::new(); snapshot.modules.len()];
     for (at, module) in snapshot.modules.iter().enumerate() {
+        // **A declaration file is never evaluated**, as TypeScript emits
+        // nothing for one: `declare var document: Document` in lib.dom's
+        // overlay is a statement in its syntax and none in its program, and
+        // taking it for one gave every Chromium app an empty `module__init`,
+        // which says the program has module state (`target.chromium()` puts
+        // the overlay in every program).
+        if is_declaration_file(snapshot, module) {
+            continue;
+        }
         for child in probe.children(module.root) {
             let Some(kind) = probe.kind_of(child) else {
                 continue;

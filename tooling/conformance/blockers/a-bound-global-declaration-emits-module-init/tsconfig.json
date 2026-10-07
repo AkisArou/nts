@@ -1,0 +1,11 @@
+{
+  "//": "A program typed by lib.dom with the Chromium overlay, whose bound global declarations (declare var document / window) are the difference from the control.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": [
+    "src/main.ts",
+    "../../../../runtime/chromium/dom/types/dom-idl.d.ts",
+    "../../../../runtime/chromium/dom/types/dom-abi.d.ts",
+    "../../../../runtime/chromium/dom/types/lib-dom-bindings.d.ts",
+    "../../../../runtime/native/libc.d.ts"
+  ]
+}
