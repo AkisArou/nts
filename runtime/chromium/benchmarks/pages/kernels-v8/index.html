@@ -9,6 +9,7 @@ body { font: 14px system-ui; padding: 16px; }
 <p>native-typescript's benchmarks/chromium/pages/v8.js kernels, unchanged, with normal V8 JIT.</p>
 <label><input type="checkbox" id="v8-kernels-run"> Run kernels</label>
 <output id="benchmark-result" data-state="initializing"></output>
+<canvas id="kernel-canvas" width="256" height="256"></canvas>
 <script>
 // Ordinary application source, loaded by the HTML parser. CDP only supplies
 // input and reads results; it does not evaluate the measured application.
@@ -47,12 +48,18 @@ function runSynchronousEventRoundTrips(count) {
   return checksum;
 }
 
+function fillCanvasRects(count) {
+  const ctx = document.getElementById('kernel-canvas').getContext('2d');
+  for (let index = 0; index < count; index += 1) ctx.fillRect(index & 255, (index >> 8) & 255, 2, 2);
+  return count;
+}
+
 // The same table as kernels_benchmark.cc: 20,000 iterations per sample,
 // three discarded, twenty kept, one posted task per sample. `per-call` calls
 // the kernel with 1 from a loop, as native-typescript's v8.js does.
 const iterations = 20000, warm = 3, measured = 20;
 const kernels = [['create-element', createElements], ['detached-counter-tree', createDetachedCounterTrees],
-  ['event-round-trip', runSynchronousEventRoundTrips]];
+  ['event-round-trip', runSynchronousEventRoundTrips], ['canvas-rects', fillCanvasRects]];
 function nextTask() {
   return new Promise(resolve => {
     const channel = new MessageChannel();

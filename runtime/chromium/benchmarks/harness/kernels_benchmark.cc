@@ -18,7 +18,11 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
+#include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
+#include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 
@@ -32,7 +36,12 @@ constexpr uint32_t kIterations = 20000;
 constexpr uint32_t kWarm = 3;
 constexpr uint32_t kMeasured = 20;
 
-enum Kernel : uint32_t { kCreateElements = 0, kCounterTrees = 1, kEventRoundTrips = 2 };
+enum Kernel : uint32_t {
+  kCreateElements = 0,
+  kCounterTrees = 1,
+  kEventRoundTrips = 2,
+  kCanvasRects = 3,
+};
 enum class Shape { kLoop, kPerCall };
 enum class Lane { kIntrinsic, kCompiled };
 struct Case {
@@ -41,7 +50,7 @@ struct Case {
   Shape shape;
   Lane lane;
 };
-constexpr std::array<Case, 12> kCases{{
+constexpr std::array<Case, 16> kCases{{
     {"create-element", kCreateElements, Shape::kLoop, Lane::kIntrinsic},
     {"create-element", kCreateElements, Shape::kLoop, Lane::kCompiled},
     {"create-element", kCreateElements, Shape::kPerCall, Lane::kIntrinsic},
@@ -57,6 +66,10 @@ constexpr std::array<Case, 12> kCases{{
     {"event-round-trip", kEventRoundTrips, Shape::kPerCall,
      Lane::kIntrinsic},
     {"event-round-trip", kEventRoundTrips, Shape::kPerCall, Lane::kCompiled},
+    {"canvas-rects", kCanvasRects, Shape::kLoop, Lane::kIntrinsic},
+    {"canvas-rects", kCanvasRects, Shape::kLoop, Lane::kCompiled},
+    {"canvas-rects", kCanvasRects, Shape::kPerCall, Lane::kIntrinsic},
+    {"canvas-rects", kCanvasRects, Shape::kPerCall, Lane::kCompiled},
 }};
 
 // The C++ floor, as native-typescript's nts_blink_benchmark_host.cc writes
@@ -104,6 +117,23 @@ NOINLINE uint32_t EventRoundTrips(blink::Document& document, uint32_t clicks) {
   body->removeEventListener(type, listener, false);
   return listener->count;
 }
+// The page's canvas and its 2D context, found as the compiled kernel finds
+// them, then `count` 2x2 rectangles.
+NOINLINE uint32_t CanvasRects(blink::Document& document, uint32_t count) {
+  auto* canvas = blink::DynamicTo<blink::HTMLCanvasElement>(
+      document.getElementById(blink::AtomicString("kernel-canvas")));
+  if (!canvas)
+    return 0;
+  blink::CanvasRenderingContext* rendering = canvas->GetCanvasRenderingContext(
+      document.GetExecutionContext(), blink::String("2d"),
+      blink::CanvasContextCreationAttributesCore());
+  if (!rendering || !rendering->IsRenderingContext2D())
+    return 0;
+  auto* context = static_cast<blink::CanvasRenderingContext2D*>(rendering);
+  for (uint32_t i = 0; i < count; ++i)
+    context->fillRect(i & 255, (i >> 8) & 255, 2, 2);
+  return count;
+}
 uint32_t IntrinsicOnce(Kernel kernel, blink::Document& document) {
   switch (kernel) {
     case kCreateElements:
@@ -112,6 +142,8 @@ uint32_t IntrinsicOnce(Kernel kernel, blink::Document& document) {
       return CreateCounterTreeOnce(document);
     case kEventRoundTrips:
       return EventRoundTrips(document, 1);
+    case kCanvasRects:
+      return CanvasRects(document, 1);
   }
 }
 
@@ -156,6 +188,9 @@ class KernelsRun {
       if (c.shape == Shape::kLoop && c.kernel == kEventRoundTrips) {
         // One listener for the whole loop, as the compiled loop has.
         checksum = EventRoundTrips(document, kIterations);
+      } else if (c.shape == Shape::kLoop && c.kernel == kCanvasRects) {
+        // One context lookup for the whole loop, as the compiled loop has.
+        checksum = CanvasRects(document, kIterations);
       } else if (c.shape == Shape::kLoop) {
         for (uint32_t i = 0; i < kIterations; ++i)
           checksum += IntrinsicOnce(c.kernel, document);

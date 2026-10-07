@@ -103,6 +103,8 @@ assert.equal(buildRecord.v8ControlExecutableSha256, hash(await readFile(v8Execut
 await mkdir(output, {recursive:true});
 const measurements: Array<{ run: number; order: Mode[]; native: Measurements; v8: Measurements; launches: Record<Mode, LaunchResult> }> = [];
 
+// The kernels workload's kernels, in kernels_benchmark.cc's case order.
+const KERNELS = ["create-element", "detached-counter-tree", "event-round-trip", "canvas-rects"];
 interface Profile { child: ReturnType<typeof spawn>; data: string; stderr: string[] }
 // Attaches to one process: user-space cycles with frame-pointer call graphs
 // (Chromium keeps frame pointers). An attach the sandbox refuses fails here,
@@ -380,8 +382,8 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     assert.equal(result.status, 0);
     if (workload === "kernels") {
       const kernels = result as unknown as KernelsMeasurements;
-      // Three kernels x two shapes x twenty samples, per lane: two lanes native.
-      assert.equal(kernels.samples.length, mode === "native" ? 240 : 120);
+      // Each kernel x two shapes x twenty samples, per lane: two lanes native.
+      assert.equal(kernels.samples.length, KERNELS.length * 2 * 20 * (mode === "native" ? 2 : 1));
       if (mode === "native") {
         assert.equal(kernels.liveRoots, 0, "a kernel must root nothing");
         // The DOM kernels allocate nothing of the program's; an event round
@@ -507,7 +509,7 @@ if (workload === "todo") {
     return {samples:values.length,medianNs:percentile(values,.5),q1Ns:percentile(values,.25),q3Ns:percentile(values,.75)};
   };
   const summaries = [];
-  for (const kernel of ["create-element", "detached-counter-tree", "event-round-trip"]) {
+  for (const kernel of KERNELS) {
     for (const shape of ["loop", "per-call"]) {
       const intrinsic = median(kernel, shape, "blink-intrinsic"), compiled = median(kernel, shape, "compiled"), v8 = median(kernel, shape, "v8");
       summaries.push({kernel,shape,intrinsic,compiled,v8,compiledOverIntrinsic:compiled.medianNs/intrinsic.medianNs,compiledOverV8:compiled.medianNs/v8.medianNs});

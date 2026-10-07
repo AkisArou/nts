@@ -6,7 +6,7 @@
 // text; click the body, dispatching to a compiled closure. No node here
 // leaves the frame, so none is rooted: each is Blink's own pointer, found by
 // Oilpan on the native stack.
-import { document } from "nts:dom";
+import { asHTMLCanvasElement, document } from "nts:dom";
 
 export function ntsKernelCreateElements(iterations: number): number {
   const d = document();
@@ -31,6 +31,23 @@ export function ntsKernelEventRoundTrips(iterations: number): number {
   for (let i = 0; i < iterations; i += 1) body.click();
   listener.remove();
   return state.checksum;
+}
+
+// A canvas kernel: fill a 2x2 rectangle on the page's 256x256 canvas, the
+// call a drawing loop makes most. Blink records it (no pixels until a frame);
+// what is measured is the call into the 2D context, which page script makes
+// through V8's fast API path ([NoAllocDirectCall]).
+export function ntsKernelCanvasRects(iterations: number): number {
+  const canvas = asHTMLCanvasElement(document().getElementById("kernel-canvas")!);
+  if (canvas === null) return 0;
+  const ctx = canvas.getContext("2d");
+  if (ctx === null) return 0;
+  let checksum = 0;
+  for (let i = 0; i < iterations; i += 1) {
+    ctx.fillRect(i & 255, (i >> 8) & 255, 2, 2);
+    checksum += 1;
+  }
+  return checksum;
 }
 
 export function ntsKernelCounterTrees(iterations: number): number {

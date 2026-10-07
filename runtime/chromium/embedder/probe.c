@@ -562,7 +562,8 @@ static void run_kernel(void* state) {
   run->result =
       run->kernel == 0   ? ntsKernelCreateElements(run->iterations)
       : run->kernel == 1 ? ntsKernelCounterTrees(run->iterations)
-                         : ntsKernelEventRoundTrips(run->iterations);
+      : run->kernel == 2 ? ntsKernelEventRoundTrips(run->iterations)
+                         : ntsKernelCanvasRects(run->iterations);
 }
 double nts_chromium_kernel_run(NtsChromiumProbe* probe,
                                NtsDomContext* context,
