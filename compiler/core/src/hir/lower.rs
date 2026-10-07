@@ -24367,6 +24367,13 @@ impl<'a> FuncBuilder<'a> {
         // the `undefined` at the slot's own representation rather than at a
         // guess.
         let place = self.place_of(*target)?;
+        // A name a binding implements through its named-property methods:
+        // `delete el.dataset.id` is `DOMStringMap`'s `_named_delete("id")`,
+        // and `true`, as page script's always is.
+        if let Place::NamedProperty { receiver, ty, key } = place {
+            self.call_bound_method(id, receiver, ty, "_named_delete", vec![key])?;
+            return Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin));
+        }
         let &Place::Field { object, field } = &place else {
             return Err(self.unsupported(
                 *target,
