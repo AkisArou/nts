@@ -42,8 +42,8 @@ export function main(document: Document): void {
 
 `main` runs once the page has loaded (DOMContentLoaded). From then on, Blink
 calls the closures it registered: listeners, handlers, frame, idle and
-timer callbacks, and observers (mutation, resize, intersection). `unload()` runs when the document ends in a renderer that goes on
-(reload, navigation); closing the window may end the process without it, as
+timer callbacks, and observers (mutation, resize, intersection). `unload()`
+runs when the document ends in a renderer that goes on (reload, navigation); closing the window may end the process without it, as
 with page script's `unload`. Keep the app's state in what `main` creates.
 Module-level state is not per document yet, and the build refuses it
 (contracts/compiler-requests.md, 10). [`examples/todo`](examples/todo) is
@@ -60,6 +60,45 @@ stages it, and builds `nts_app`. `run` opens the page from the app's own
 origin, `nts-app://app/` (a secure context, served from the app's directory:
 its stylesheets, images and `fetch()` of its own files). `check` runs the
 lifecycle headless: start, render, reload, close.
+
+### Common tasks
+
+Page script's code mostly carries over as it is written; where `nts:dom`
+spells something differently, [docs/lib-dom.md](docs/lib-dom.md) has the
+table. In one place:
+
+```ts
+import { asHTMLCanvasElement, newResizeObserver, requestIdleCallback, setTimeout, window } from "nts:dom";
+import type { Document, Event, IdleDeadline, ResizeObserver, ResizeObserverEntrySequence } from "nts:dom";
+
+export function main(document: Document): void {
+  const button = document.querySelector("#save")!;
+  const canvas = asHTMLCanvasElement(document.querySelector("canvas")!)!;
+  const ctx = canvas.getContext("2d")!;                 // the 2D context, as in page script
+  ctx.fillStyle = "#336699";                            // a color; a gradient is _set_fillStyle_gradient(g)
+  ctx.fillRect(0, 0, 40, 40);
+  const storage = window().localStorage;                // `window` is window()
+  button.addEventListener("click", (event: Event): void => {
+    storage.setItem("saved", canvas.toDataURL());
+  }, false, true);                                      // options as trailing arguments: capture, once, signal
+  setTimeout(() => { button.textContent = "Save"; }, 500);
+  requestIdleCallback((deadline: IdleDeadline): void => { /* deadline.timeRemaining() */ }, 1000);
+  newResizeObserver((entries: ResizeObserverEntrySequence, observer: ResizeObserver): void => {
+    for (let i = 0; i < entries.length; i += 1) { /* entries.item(i)!.contentRect */ }
+  }).observe(canvas);
+  const shadow = document.createElement("div").attachShadow("open");   // the mode, not { mode }
+}
+```
+
+What differs from page script, in short:
+- `new X(...)` is `newX(...)`, and narrowing (`instanceof`) is `asX(node)`.
+- Options dictionaries are object literals of their boolean and number
+  members only.
+- A sequence (`addedNodes`, `getAnimations()`) is read with `length` and
+  `item(i)`.
+- An IDL enum is a literal union: `"open" | "closed"`.
+- What does not exist yet (`fetch`, `history.pushState`'s state, promises
+  from DOM calls) is in [contracts/workarounds.md](contracts/workarounds.md).
 
 ## Layout
 
