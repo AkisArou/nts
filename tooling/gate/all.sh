@@ -2247,7 +2247,13 @@ interop() {
     rm -rf "$out"
     began=$(date +%s)
     # One token per project build (token.sh; see "Tokens" in run.mjs).
-    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" "$root/tooling/gate/token.sh" sh "$script" "$out" 2>&1 8>&-); then
+    # **Stdin is /dev/null.** The Apple and Windows lanes read their list on
+    # stdin (`done < "$list"`), and a project's build reaches its VM with
+    # `ssh`, which reads stdin: the first project to reach the Mac took the
+    # rest of the list, and every later macOS and iOS project ended "without
+    # a verdict" (2026-10-07). With the VM down, ssh failed before reading,
+    # which is why no gate had shown it.
+    if output=$(NTS_BIN="${NTS_BIN:-$PWD/target/release/nts}" "$root/tooling/gate/token.sh" sh "$script" "$out" 2>&1 8>&- </dev/null); then
       printf 'ok\n' > "$lanes/$project.status"
     else
       printf 'failed\n' > "$lanes/$project.status"
