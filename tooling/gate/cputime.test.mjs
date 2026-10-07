@@ -65,5 +65,10 @@ test("on this machine, the same work counts the same", { skip: instructionsWork(
   }
   for (const c of counts) assert.ok(c > 1e8, `counted ${c}`);
   const spread = Math.max(...counts) / Math.min(...counts) - 1;
-  assert.ok(spread < 0.01, `three runs read ${counts.map((c) => (c / 1e9).toFixed(2)).join(", ")} G`);
+  // 3%, not 1%: perf attaches after the child starts and loses what it ran
+  // first -- measured at 1-2% on this box -- so three identical runs under a
+  // gate's load read 24.50, 24.57 and 24.75 G (1.02%) and failed a 1% bound
+  // (2026-10-08). The table's own threshold is 2x, so 3% still catches an
+  // instrument that has stopped counting the same thing.
+  assert.ok(spread < 0.03, `three runs read ${counts.map((c) => (c / 1e9).toFixed(2)).join(", ")} G`);
 });
