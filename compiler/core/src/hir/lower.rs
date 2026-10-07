@@ -44723,43 +44723,43 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// The expression an options literal gives for `key`.
+    /// Every initializer of an options literal, in the order written, with its
+    /// key where it is a plain property: what a call evaluates before the
+    /// constructor reads any of them.
     ///
     /// Written for `ErrorOptions`, whose only member is `cause`, and deliberately
-    /// narrow: an argument that is not an object *literal* answers `None` so the
-    /// caller refuses by name rather than reading a field off a layout nothing
-    /// else needs.
+    /// narrow: an argument that is not an object *literal* of plain and
+    /// shorthand properties -- a spread, an accessor, a method -- answers `None`,
+    /// so the caller refuses by name rather than reading a field off a layout
+    /// nothing else needs.
     ///
     /// Both spellings, because `{ cause }` is the one React writes and is a
     /// `SHORTHAND_PROPERTY_ASSIGNMENT` whose single child is both the key and the
     /// value -- an identifier, which lowers as the expression it is. The
     /// single-child guard is [`Self::literal_name`]'s reason one construct over:
     /// `{ a = 1 }` is three children and a destructuring *pattern*, not a literal.
-    fn option_in_a_literal(&self, argument: NodeId, key: &str) -> Option<NodeId> {
+    fn option_initializers(&self, argument: NodeId) -> Option<Vec<(Option<String>, NodeId)>> {
         if self.kind_of(argument) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
             return None;
         }
+        let mut found = Vec::new();
         for property in self.children(argument) {
             let parts = self.children(property);
             match self.kind_of(property) {
                 Some(syntax::PROPERTY_ASSIGNMENT) if parts.len() >= 2 => {
                     let name = parts.first().copied()?;
-                    if self.literal_name(name).as_deref() == Some(key) {
-                        return parts.last().copied();
-                    }
-                },
+                    found.push((self.literal_name(name), parts.last().copied()?));
+                }
                 Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) if parts.len() == 1 => {
                     let at = parts.first().copied()?;
-                    if self.node(at).text.as_deref() == Some(key) {
-                        return Some(at);
-                    }
-                },
-                // A spread, an accessor or a method: not a shape this reads.
+                    found.push((self.node(at).text.clone(), at));
+                }
                 _ => return None,
             }
         }
-        None
+        Some(found)
     }
+
 
     /// The `message` an `Error` stores for the argument it was given:
     /// the specification's `ToString(message)`, except that an `undefined`
@@ -44873,6 +44873,24 @@ impl<'a> FuncBuilder<'a> {
         let layout = self.layout_of(id, type_id)?;
         let origin = self.origin(id);
         let text = HirType::Managed(ManagedType::String);
+        // **Every argument in source order**, as a call evaluates them:
+        // `AggregateError`'s errors, then the message, then each initializer of
+        // the options literal. The errors were lowered last and the options'
+        // other initializers not at all, so `new AggregateError(errors(),
+        // message(), { cause: mark(3) })` ran 2, 3, 1 and `{ before: mark(3),
+        // cause: mark(4) }` never ran `before`
+        // (examples/provided-error-arguments-run-in-source-order).
+        let errors = if aggregate {
+            let Some(first) = arguments.first() else {
+                return Err(self.unsupported(
+                    id,
+                    "an `AggregateError` with no errors, which its signature requires",
+                ));
+            };
+            Some(self.lower_expression(*first)?)
+        } else {
+            None
+        };
         let message = match arguments.get(usize::from(aggregate)) {
             Some(argument) => {
                 let value = self.lower_expression(*argument)?;
@@ -44917,15 +44935,26 @@ impl<'a> FuncBuilder<'a> {
         // options object is absent, which is why `"cause" in new Error("x")` is
         // false.
         if let Some(options) = options {
-            let Some(value) = self.option_in_a_literal(options, super::builtin::CAUSE_FIELD) else {
+            let Some(initializers) = self.option_initializers(options) else {
                 return Err(self.unsupported(
                     id,
-                    "an `Error` whose options are not written as a literal with a `cause`",
+                    "an `Error` whose options are not written as an object literal of plain properties",
                 ));
             };
-            let cause = self.lower_expecting(value, &HirType::Erased)?;
-            let cause = self.erased(cause, &origin);
-            if let Some(field) = layout.index_of(super::builtin::CAUSE_FIELD) {
+            // Each initializer runs, in order; the last `cause` is the one
+            // installed, as a literal with a repeated key keeps the last.
+            let mut cause = None;
+            for (key, value) in initializers {
+                if key.as_deref() == Some(super::builtin::CAUSE_FIELD) {
+                    let lowered = self.lower_expecting(value, &HirType::Erased)?;
+                    cause = Some(self.erased(lowered, &origin));
+                } else {
+                    self.lower_expression(value)?;
+                }
+            }
+            if let Some(cause) = cause
+                && let Some(field) = layout.index_of(super::builtin::CAUSE_FIELD)
+            {
                 self.field_set(receiver, field, cause, &origin);
             }
         }
@@ -44938,17 +44967,10 @@ impl<'a> FuncBuilder<'a> {
         // argument accepted and thrown away. That is the shape `builtin::OMITTED`
         // cannot express: it names a member so that reading one says why it is
         // absent, and says nothing about writing.
-        if aggregate {
-            let Some(first) = arguments.first() else {
-                return Err(self.unsupported(
-                    id,
-                    "an `AggregateError` with no errors, which its signature requires",
-                ));
-            };
-            let errors = self.lower_expression(*first)?;
-            if let Some(field) = layout.index_of("errors") {
-                self.field_set(receiver, field, errors, &origin);
-            }
+        if let Some(errors) = errors
+            && let Some(field) = layout.index_of("errors")
+        {
+            self.field_set(receiver, field, errors, &origin);
         }
         Ok(())
     }
