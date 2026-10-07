@@ -97,11 +97,14 @@ void nts_chromium_rows_destroy(NtsChromiumRows* rows);
 /* The TodoMVC-shaped app (src/todo.ts), created on `root` in one native
    callback. After that every interaction is a Blink event dispatched to the
    app's compiled listeners: nothing of the app's runs here. Destroying it
-   removes them. */
+   removes them. `lib_dom` selects the same app typed by the stock
+   lib.dom.d.ts (todo-dom.ts, bound by delegation), whose listeners stay
+   until the document's end gives them back. */
 typedef struct NtsChromiumTodo NtsChromiumTodo;
 NtsChromiumTodo* nts_chromium_todo_create(NtsChromiumProbe* probe,
                                           NtsDomContext* context,
-                                          NtsDomNode* root);
+                                          NtsDomNode* root,
+                                          bool lib_dom);
 void nts_chromium_todo_destroy(NtsChromiumTodo* todo);
 
 /* The binding kernels (src/kernels.ts): kernel 0 creates detached divs,

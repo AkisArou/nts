@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { sha256File } from "./hash.ts";
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { stripTypeScriptTypes } from "node:module";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { activeChromiumBuild } from "./profiles.ts";
@@ -35,11 +36,16 @@ const root = resolve(import.meta.dirname, "../..");
 const executable = resolve(process.argv[2] ?? "third_party/chromium/src/out/NtsBaseline/nts_shell");
 const output = resolve(process.argv[3] ?? "target/chromium/binding-benchmark");
 const backend = process.argv[4];
-assert(backend === "c" || backend === "llvm", "Usage: benchmark.ts <nts_shell> <output> <c|llvm> [--allow-debug] [--cpu N] [--runs N] [--workload binding|rows|kernels] [--collection idle|checkpoint] [--trace-gc] [--trace] [--profile-renderer]");
+assert(backend === "c" || backend === "llvm", "Usage: benchmark.ts <nts_shell> <output> <c|llvm> [--allow-debug] [--cpu N] [--runs N] [--workload binding|rows|kernels|todo] [--todo-source nts-dom|lib-dom] [--collection idle|checkpoint] [--trace-gc] [--trace] [--profile-renderer]");
 let runs = 6;
 let cpu: number | undefined;
 let workload: "binding" | "rows" | "kernels" | "todo" = "binding";
 let collection: "checkpoint" | "idle" = "idle";
+// --todo-source lib-dom: TodoMVC as todo-dom.ts, typed by the stock
+// lib.dom.d.ts and bound by delegation, against the same file, types
+// stripped, as page script. nts-dom (the default): examples/todo on nts:dom
+// against its hand-written page script.
+let todoSource: "nts-dom" | "lib-dom" = "nts-dom";
 // --trace-gc: V8's GC trace in both launches. Oilpan collects inside V8's
 // unified heap, so its mark-compacts are in the same lines.
 let traceGc = false;
@@ -69,6 +75,11 @@ for (let i = 5; i < process.argv.length; ++i) {
     const value = process.argv[++i];
     assert(value === "checkpoint" || value === "idle", "--collection must be checkpoint or idle");
     collection = value;
+  }
+  else if (option === "--todo-source") {
+    const value = process.argv[++i];
+    assert(value === "nts-dom" || value === "lib-dom", "--todo-source must be nts-dom or lib-dom");
+    todoSource = value;
   }
   else if (option === "--workload") {
     const value = process.argv[++i];
@@ -100,7 +111,26 @@ assert.equal(buildRecord.executableSha256, sha256File(executable), "Executable c
 assert.equal(buildRecord.nativeManifestSha256, hash(await readFile(resolve(source, "nts/manifest.json"))), "Staging changed after building; rebuild first");
 const fixturePath = resolve(root, `runtime/chromium/benchmarks/pages/${workload}/index.html`);
 const v8Executable = resolve(dirname(executable), "content_shell");
-const v8FixturePath = resolve(root, `runtime/chromium/benchmarks/pages/${workload}-v8/index.html`);
+assert(todoSource === "nts-dom" || workload === "todo", "--todo-source is the todo workload's");
+const v8FixturePath = todoSource === "lib-dom" ? await libDomTodoPage()
+  : resolve(root, `runtime/chromium/benchmarks/pages/${workload}-v8/index.html`);
+// The V8 page for --todo-source lib-dom: the todo page script's page with its
+// script replaced by todo-dom.ts, types stripped -- the file the native arm
+// compiles -- started as the hand-written script starts its copy.
+async function libDomTodoPage(): Promise<string> {
+  const page = await readFile(resolve(root, "runtime/chromium/benchmarks/pages/todo-v8/index.html"), "utf8");
+  const source = stripTypeScriptTypes(await readFile(resolve(root, "runtime/chromium/benchmarks/workloads/todo-dom.ts"), "utf8"))
+    .replace(/^export /gm, "");
+  const start = page.indexOf("<script>"), end = page.indexOf("</script>");
+  assert(start >= 0 && end > start, "the todo page script's page has one inline script");
+  const script = `<script>\n${source}\ncreate(document.querySelector('#v8-todo'));\n`
+    + "document.querySelector('#benchmark-result').setAttribute('data-state', 'ready');\n";
+  const directory = resolve(output, "todo-lib-dom-v8");
+  await mkdir(directory, {recursive:true});
+  const path = resolve(directory, "index.html");
+  await writeFile(path, page.slice(0, start) + script + page.slice(end));
+  return path;
+}
 assert.equal(buildRecord.v8ControlExecutableSha256, sha256File(v8Executable), "Build the unmodified V8 control with the same profile");
 await mkdir(output, {recursive:true});
 const measurements: Array<{ run: number; order: Mode[]; native: Measurements; v8: Measurements; launches: Record<Mode, LaunchResult> }> = [];
@@ -250,6 +280,7 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
   // the measured tab's PID unambiguous. V8/JIT/Web-platform flags stay normal.
   const args = ["--disable-features=SpareRendererForSitePerProcess", "--enable-logging=stderr"];
   if (mode === "native") args.push(`--nts-probe-url=${fixture}`, `--nts-benchmark-order=${run % 3}`);
+  if (mode === "native" && todoSource === "lib-dom") args.push("--nts-todo-source=lib-dom");
   if (mode === "native" && workload === "rows") args.push(`--nts-collection=${collection}`);
   const jsFlags = [...(traceGc ? ["--trace-gc"] : []), ...(diagnosticJsFlags ? [diagnosticJsFlags] : [])];
   if (jsFlags.length) args.push(`--js-flags=${jsFlags.join(" ")}`);
@@ -400,7 +431,7 @@ const gc = traceGc ? await Promise.all(measurements.flatMap(run => (["native", "
     pauseMs: +pauses.reduce((sum, match) => sum + Number(match[2]), 0).toFixed(1)};
 }))) : undefined;
 const percentile = (values:number[], fraction:number):number => values[Math.floor((values.length-1)*fraction)];
-const provenance = {observedAt:new Date().toISOString(),workload,gc,diagnosticJsFlags,profiledRenderer:profileRenderer || undefined,traced:trace || undefined,collection:workload === "rows" ? collection : undefined,backend,debugEngine,
+const provenance = {observedAt:new Date().toISOString(),workload,todoSource:workload === "todo" ? todoSource : undefined,gc,diagnosticJsFlags,profiledRenderer:profileRenderer || undefined,traced:trace || undefined,collection:workload === "rows" ? collection : undefined,backend,debugEngine,
   scope:debugEngine?"Diagnostic architecture comparison in debug Chromium; not a production performance claim":"Optimized static Chromium (no DCHECKs) architecture comparison; not an official/PGO distribution or whole-application speedup",
   argsText,cpu,runs,buildRecord,executable,executableSha256:sha256File(executable),fixtureSha256:hash(await readFile(fixturePath)),
   v8Executable,v8ExecutableSha256:sha256File(v8Executable),v8FixtureSha256:hash(await readFile(v8FixturePath)),

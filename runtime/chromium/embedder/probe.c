@@ -511,22 +511,29 @@ void nts_chromium_rows_destroy(NtsChromiumRows* rows) {
 struct NtsChromiumTodo {
   NtsChromiumProbe* probe;
   NtsDomContext* context;
-  ntsTodoCreate_return_t* app;
+  /* ntsTodoCreate's app, or ntsTodoDomCreate's (lib_dom). */
+  NtsHeader* app;
   NtsDomNode* root;
+  bool lib_dom;
 };
 static void create_todo(void* state) {
   NtsChromiumTodo* todo = state;
-  todo->app = ntsTodoCreate((struct NtsDomElement*)todo->root);
+  todo->app =
+      todo->lib_dom
+          ? (NtsHeader*)ntsTodoDomCreate((struct NtsDomHTMLElement*)todo->root)
+          : (NtsHeader*)ntsTodoCreate((struct NtsDomElement*)todo->root);
 }
 NtsChromiumTodo* nts_chromium_todo_create(NtsChromiumProbe* probe,
                                           NtsDomContext* context,
-                                          NtsDomNode* root) {
+                                          NtsDomNode* root,
+                                          bool lib_dom) {
   NtsChromiumTodo* todo = calloc(1, sizeof(*todo));
   if (!todo)
     PROBE_FAIL();
   todo->probe = probe;
   todo->context = context;
   todo->root = root;
+  todo->lib_dom = lib_dom;
   ProbeScope scope = enter(probe);
   if (nts_blink_dom_entry(context, create_todo, todo) || nts_raising() ||
       !todo->app)
@@ -535,7 +542,9 @@ NtsChromiumTodo* nts_chromium_todo_create(NtsChromiumProbe* probe,
   return todo;
 }
 static void destroy_todo(void* state) {
-  ntsTodoDestroy(((NtsChromiumTodo*)state)->app);
+  NtsChromiumTodo* todo = state;
+  if (!todo->lib_dom)
+    ntsTodoDestroy((ntsTodoCreate_return_t*)todo->app);
 }
 void nts_chromium_todo_destroy(NtsChromiumTodo* todo) {
   ProbeScope scope = enter(todo->probe);

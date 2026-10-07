@@ -80,7 +80,8 @@ class ProbeObserver final : public content::RenderFrameObserver {
         nts_chromium_probe_install_host(probe_.get(), dom_.get());
       todo_ = nts_chromium_todo_create(
           probe_.get(), dom_.get(),
-          nts_blink_dom_element_by_id(dom_.get(), "native-todo"));
+          nts_blink_dom_element_by_id(dom_.get(), "native-todo"),
+          command.GetSwitchValueASCII("nts-todo-source") == "lib-dom");
       counter_output_ = document.GetElementById(
           blink::WebString::FromAscii("benchmark-result"));
       CHECK(!counter_output_.IsNull());
