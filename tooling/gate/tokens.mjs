@@ -7,28 +7,45 @@
 // steps they belong to. Outside the gate (no NTS_GATE_TOKENS), or when the
 // runner cannot be reached, `fn` simply runs: scheduling is never a verdict.
 //
-// A process spawned inside `fn` does not inherit the connection (node opens
-// sockets close-on-exec), so it must not ask for a token of its own: a holder
-// waiting for a second token can deadlock the run. Spawn compilers and
-// programs here, never another token-aware tool.
+// **What this process spawns does not ask for tokens**: importing this module
+// sets NTS_GATE_TOKEN_HELD=1 in this process's environment, which every child
+// built from it inherits. The tool asks for one around each process it runs;
+// a child asking again while every token is held by such tools would deadlock
+// the run.
+//
+// A runner that is gone -- unreachable, or closing the connection without
+// `go` -- rejects: inside a gate that is the runner having died, and running
+// untokened would start every waiting worker at once (see token.sh).
 import { connect } from "node:net";
 
 const WHERE = process.env.NTS_GATE_TOKENS ?? "";
 const STEP = process.env.NTS_GATE_STEP ?? "?";
 const ENABLED = WHERE !== "" && !process.env.NTS_GATE_TOKEN_HELD;
+process.env.NTS_GATE_TOKEN_HELD = "1";
 
 function acquire() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const i = WHERE.lastIndexOf(":");
     const sock = connect({ host: WHERE.slice(0, i), port: Number(WHERE.slice(i + 1)) });
     let settled = false;
-    const done = (s) => { if (!settled) { settled = true; resolve(s); } };
+    let buf = "";
+    const fail = (why) => {
+      if (settled) return;
+      settled = true;
+      sock.destroy();
+      reject(new Error(`tokens.mjs: the gate runner at ${WHERE} ${why}`));
+    };
     sock.setEncoding("utf8");
     sock.on("connect", () => sock.write(`want ${STEP} ${process.pid}\n`));
-    sock.on("data", (d) => { if (d.includes("\n")) done(sock); });
-    // Unreachable or gone: run untokened rather than fail or hang.
-    sock.on("error", () => done(null));
-    sock.on("close", () => done(null));
+    sock.on("data", (d) => {
+      buf += d;
+      if (settled || !buf.includes("\n")) return;
+      if (buf.split("\n")[0] !== "go") return fail(`answered ${JSON.stringify(buf.split("\n")[0])}`);
+      settled = true;
+      resolve(sock);
+    });
+    sock.on("error", (e) => fail(`cannot be reached (${e.code ?? e.message})`));
+    sock.on("close", () => fail("went away before granting a token"));
   });
 }
 
@@ -38,7 +55,7 @@ export async function withToken(fn) {
   try {
     return await fn();
   } finally {
-    sock?.destroy();
+    sock.destroy();
   }
 }
 

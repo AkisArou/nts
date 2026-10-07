@@ -94,9 +94,27 @@ test("a holder that runs token.sh again does not wait for a second token", async
   p.close();
 });
 
-test("no runner, or none reachable: the command runs", async () => {
+test("outside a gate the command runs; inside one, a runner that is gone is an error", async () => {
   assert.equal((await run(TOKEN, ["sh", "-c", "echo plain"], { NTS_GATE_TOKENS: "" })).out.trim(), "plain");
-  assert.equal((await run(TOKEN, ["sh", "-c", "echo unreachable"], { NTS_GATE_TOKENS: "127.0.0.1:1" })).out.trim(), "unreachable");
+  const unreachable = await run(TOKEN, ["sh", "-c", "echo ran"], { NTS_GATE_TOKENS: "127.0.0.1:1", NTS_GATE_TOKEN_HELD: "" });
+  assert.equal(unreachable.status, 75);
+  assert.ok(!unreachable.out.split("\n").includes("ran"), unreachable.out);
+});
+
+test("a runner that accepted and then died: every waiting worker exits non-zero, none runs", async () => {
+  const p = await pool(1);
+  const holder = spawn(TOKEN, ["sleep", "30"], { env: { ...process.env, ...tokenEnv(p) }, stdio: "ignore" });
+  while (p.total === 0) await settle();
+  const waiting = Array.from({ length: 3 }, () => run(TOKEN, ["sh", "-c", "echo ran"], tokenEnv(p)));
+  while (p.waiting.length < 3) await settle();
+  // The runner goes: its server and every connection it held.
+  p.close();
+  for (const w of p.waiting) w.sock.destroy();
+  for (const r of await Promise.all(waiting)) {
+    assert.equal(r.status, 75, r.out);
+    assert.ok(!r.out.split("\n").includes("ran"), r.out);
+  }
+  holder.kill("SIGKILL");
 });
 
 test("the highest claim among waiting steps gets the freed token", async () => {
@@ -131,5 +149,10 @@ test("tokens.mjs holds a token around fn and returns it", async () => {
   await settle();
   assert.equal(p.total, 0);
   assert.equal(await withToken(async () => 42), 42);
+  // What the tool spawns inherits the guard, so it does not ask again.
+  const child = await run("sh", ["-c", "echo $NTS_GATE_TOKEN_HELD"], {});
+  assert.equal(child.out.trim(), "1");
   p.close();
+  // And a runner that is gone rejects rather than running untokened.
+  await assert.rejects(withToken(async () => "ran"), /went away|cannot be reached/);
 });
