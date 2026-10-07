@@ -85,7 +85,7 @@ let probed;
 /** Whether `perf stat -p` can count a process of ours here; the reason when not. */
 export function instructionsWork() {
   if (probed !== undefined) return probed;
-  const r = spawnSync("sh", ["-c", 'sleep 0.5 & p=$!; perf stat -x, -e instructions:u -p "$p" 2>&1 >/dev/null; wait'], { encoding: "utf8" });
+  const r = spawnSync("sh", ["-c", 'sleep 0.5 & p=$!; perf stat --no-inherit -x, -e instructions:u -p "$p" 2>&1 >/dev/null; wait'], { encoding: "utf8" });
   probed = r.error ? `no perf (${r.error.message})` : parsePerf(r.stdout + r.stderr) === null ? `perf stat -p counted nothing: ${(r.stdout + r.stderr).trim().split("\n").pop()}` : null;
   return probed;
 }
@@ -93,7 +93,11 @@ export function instructionsWork() {
 /** Follow `child` until it exits; resolves to its user-space instructions, or null. */
 export function followInstructions(child) {
   const out = join(tmpdir(), `nts-instructions-${process.pid}-${child.pid}.txt`);
-  const perf = spawn("perf", ["stat", "-x,", "-e", "instructions:u", "-p", String(child.pid), "-o", out], { stdio: "ignore" });
+  // --no-inherit: the process's own instructions. `-p` otherwise counts every
+  // child forked after perf attaches -- an `sh` the compiler starts counted
+  // 1.69 G, and one module read 34.4 G inherited against 31.9 G without. The
+  // frontend was left out only because it happened to start first.
+  const perf = spawn("perf", ["stat", "--no-inherit", "-x,", "-e", "instructions:u", "-p", String(child.pid), "-o", out], { stdio: "ignore" });
   let stopper;
   child.on("exit", () => { stopper = setTimeout(() => perf.kill("SIGINT"), 5000); });
   return new Promise((resolve) => {

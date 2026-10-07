@@ -935,14 +935,19 @@ const slot = limiter(WORKERS);
 // Each process holds one of the gate's tokens while it runs (tokens.mjs).
 const run = (args) => slot(() => withToken(() =>
   new Promise((resolve) => {
-    const child = spawn(NTS, args, { cwd: ROOT, env });
+    // The timed listing runs with the snapshot cache off: whether it hits,
+    // misses or stores changes the compiler's own work by up to 1.8x
+    // (runtime/node/assert: 291 G instructions off or on a hit, 524 G on a
+    // miss that stores), and what it prints is the same either way -- the
+    // snapshot-cache step checks exactly that.
+    const timedRun = KEEP && args[0] === "hir" && args[1] === "--prepared";
+    const child = spawn(NTS, args, { cwd: ROOT, env: timedRun ? { ...env, NTS_NO_SNAPSHOT_CACHE: "1" } : env });
     // The lowering's own work -- instructions retired, and CPU seconds -- kept
     // for the compile-time step (tooling/gate/compile-time.mjs): measured on
     // the listing it would otherwise make itself, so the corpus is lowered
     // once for three steps. perf attaches to the process; nothing stands
     // between this and it.
-    const timed = KEEP && args[0] === "hir" && args[1] === "--prepared";
-    const cpu = timed ? Promise.all([followCpu(child), followInstructions(child)]) : Promise.resolve([null, null]);
+    const cpu = timedRun ? Promise.all([followCpu(child), followInstructions(child)]) : Promise.resolve([null, null]);
     let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => child.kill("SIGTERM"), 900_000);

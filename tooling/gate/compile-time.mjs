@@ -19,10 +19,12 @@
 // more**. Instructions, not seconds: wall time moves with the slots and the
 // load, and CPU time with which kind of core the process landed on -- one
 // module read 2.2x its recorded CPU time under a gate's load with nothing
-// changed, while its instruction count repeats within half a percent. The
-// frontend (tsgo, a child process) is not counted: how much of its work a
-// snapshot saves differs between runs. The floor keeps the smallest modules
-// out of it. CPU seconds are printed beside, for the reader.
+// changed, while its instruction count repeats within half a percent. Only
+// the compiler process is counted (`--no-inherit`), not the frontend (tsgo) or
+// anything else it starts, and with the snapshot cache off: a miss that
+// stores the snapshot took runtime/node/assert from 291 G to 524 G. The floor
+// keeps the smallest modules out of it. CPU seconds are printed beside, for
+// the reader.
 //
 // # Where the times come from
 //
@@ -55,6 +57,7 @@ const JOBS = Number(process.env.NTS_GATE_JOBS ?? 4);
 const RATIO = 2;
 const ABS = Number(process.env.NTS_COMPILE_TIME_ABS_G ?? 20); // billion instructions, about 2 s
 const RECORD = process.argv.includes("--record");
+const QUICK_S = 1; // CPU seconds below which a process may end before perf attaches
 let FROM = process.env.NTS_COMPILE_TIMES_FROM;
 
 const modules = [
@@ -90,7 +93,8 @@ if (FROM) {
 
 function lower(module) {
   return withToken(() => new Promise((resolve) => {
-    const child = spawn(NTS, ["hir", "--prepared", module], { cwd: ROOT, stdio: "ignore" });
+    // Snapshot cache off, as integrity's timed listing runs (see there).
+    const child = spawn(NTS, ["hir", "--prepared", module], { cwd: ROOT, stdio: "ignore", env: { ...process.env, NTS_NO_SNAPSHOT_CACHE: "1" } });
     const cpu = Promise.all([followCpu(child), followInstructions(child)]);
     const timer = setTimeout(() => child.kill("SIGTERM"), 900_000);
     child.on("error", (e) => { clearTimeout(timer); resolve({ error: e.message }); });
@@ -151,19 +155,23 @@ if (RECORD) {
 
 const base = readTable();
 let failures = 0;
-let sumNow = 0, sumWas = 0, early = 0, earlyBig = 0;
+let sumNow = 0, sumWas = 0, early = 0;
 const lines = [];
 for (const module of modules) {
   const t = times.get(module);
   const was = base.get(module);
   if (t === undefined) continue;
+  // No count: the process ended before perf attached. Under about a second
+  // of CPU that is the smallest modules; above it, perf missed work it should
+  // have counted, and a module that grew from 5 G to 30 G would pass unseen.
   if (t.g === null) {
     early += 1;
-    if ((was ?? 0) >= ABS) earlyBig += 1;
+    if ((was ?? 0) >= ABS || (t.cpu ?? 0) > QUICK_S) unmeasured.push(`${module}: no instruction count, with ${t.cpu?.toFixed(1) ?? "?"} s of CPU`);
     continue;
   }
+  // A module with no row is not checked against anything: red until recorded.
   if (was === undefined) {
-    lines.push(`  new           ${module}: ${t.g.toFixed(1)} G instructions, no row -- add it with --record`);
+    unmeasured.push(`${module}: ${t.g.toFixed(1)} G instructions and no row in compile-times.tsv -- record it with --record`);
     continue;
   }
   sumNow += t.g;
@@ -177,13 +185,10 @@ for (const module of modules) {
 for (const module of base.keys()) {
   if (!modules.includes(module)) lines.push(`  gone          ${module}: in the table, not in the tree -- remove its row`);
 }
-// A module that used to take billions of instructions and now ended before
-// perf could attach did not get faster; something stopped it being measured.
-if (earlyBig) unmeasured.push(`${earlyBig} module(s) recorded at ${ABS} G or more ended before perf attached`);
 const moved = [...times].filter(([m, t]) => t.g !== null && (base.get(m) ?? 0) >= ABS)
   .map(([m, t]) => [m, t.g / base.get(m)]).sort((a, b) => b[1] - a[1]).slice(0, 3);
 console.log(`  compiler ${NTS} (${mine.slice(0, 12)})`);
-console.log(`  ${times.size} of ${modules.length} module(s) counted${early ? ` (${early} too quick to count)` : ""}; ${sumNow.toFixed(0)} G instructions against ${sumWas.toFixed(0)} recorded (${sumWas ? (sumNow / sumWas).toFixed(2) : "?"}x); fails at ${RATIO}x and ${ABS} G more`);
+console.log(`  ${times.size} of ${modules.length} module(s) counted${early ? ` (${early} with no count)` : ""}; ${sumNow.toFixed(0)} G instructions against ${sumWas.toFixed(0)} recorded (${sumWas ? (sumNow / sumWas).toFixed(2) : "?"}x); fails at ${RATIO}x and ${ABS} G more`);
 if (moved.length) console.log(`  most moved: ${moved.map(([m, r]) => `${m.replace("runtime/", "")} ${r.toFixed(2)}x`).join(", ")}`);
 for (const l of lines) console.log(l);
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
