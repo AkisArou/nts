@@ -52275,9 +52275,16 @@ impl<'a> FuncBuilder<'a> {
             // handler edge the refusal below exists for the absence of. The
             // same walk decides both so that the set of calls this `try`
             // handles and the set it refuses cannot drift apart.
+            //
+            // **And then the children that run before it**, whichever arm handles
+            // it: the receiver and the arguments are evaluated before the call, so
+            // a `throw` in `outer(argument(n))`'s `argument` reaches this handler
+            // too -- and returning here left `argument` unexamined and unnamed, so
+            // its `throw` ended the program where node catches.
             if self.has_a_raising_copy(node) {
                 handled.push(node);
-                return None;
+                return children_that_run(self, node).into_iter()
+                    .find_map(|child| self.call_within(child, handled));
             }
             // **Or the raising uniform entry**, which is the same handler edge
             // through a slot instead of through a name. A raising copy is made of
@@ -52298,7 +52305,8 @@ impl<'a> FuncBuilder<'a> {
             if self.calls_a_closure(node) {
                 if self.hierarchy.raising_call_slot.is_some() && self.hierarchy.closures_carry {
                     handled.push(node);
-                    return None;
+                    return children_that_run(self, node).into_iter()
+                        .find_map(|child| self.call_within(child, handled));
                 }
                 // **A fifth answer, and it names a fifth piece of work.** The entry
                 // exists and this program may not dispatch at it, because some body
@@ -52339,7 +52347,8 @@ impl<'a> FuncBuilder<'a> {
             // it `return box.plain` was refused beside the throwing getter, because a
             // quiet accessor is in no `copyable` set and so has no copy to find.
             if !self.an_accessor_that_can_raise(node) {
-                return None;
+                return children_that_run(self, node).into_iter()
+                    .find_map(|child| self.call_within(child, handled));
             }
             // **Handled where the accessor has a copy**, which it can now:
             // `lower_class` builds one for a `get` or a `set` as it does for a method,
@@ -52349,7 +52358,8 @@ impl<'a> FuncBuilder<'a> {
             // inside a `try` this walk refused.
             if self.has_a_raising_copy(node) {
                 handled.push(node);
-                return None;
+                return children_that_run(self, node).into_iter()
+                    .find_map(|child| self.call_within(child, handled));
             }
             return Some((node, "an accessor, which is a call".to_owned()));
         }
@@ -52366,7 +52376,8 @@ impl<'a> FuncBuilder<'a> {
             // and the site reads `raising_calls`.
             if self.hierarchy.raising_call_slot.is_some() && self.hierarchy.closures_carry {
                 handled.push(node);
-                return None;
+                return children_that_run(self, node).into_iter()
+                    .find_map(|child| self.call_within(child, handled));
             }
             return Some((node, "a `sort` comparator, which is called".to_owned()));
         }
