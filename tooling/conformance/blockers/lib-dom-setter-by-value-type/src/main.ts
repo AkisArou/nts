@@ -13,21 +13,20 @@
 // `(const struct NtsBorrowedString *)gradient`, which compiled. The string role
 // refuses a value that is not a string since (`lend_string_argument`).
 //
-// Control, one difference: the same program against the generated nts:dom
-// module, calling the setters by name (emit-c --rc, clean):
+// Control, one difference: the same function against the generated nts:dom
+// module, calling the setters by name (emit-c --rc, clean). The context is a
+// parameter in both, so the control reaches it with nothing between: narrowed
+// by `instanceof HTMLCanvasElement` in a program with the DOM lib, a canvas is
+// lib.dom's, whose `getContext` answers lib.dom's context, not nts:dom's.
 //
-//     import { document } from "nts:dom";
-//     export function go(): number {
-//       const ctx = document().createElement("canvas").getContext("2d");
-//       if (ctx === null) return -1;
+//     import type { CanvasRenderingContext2D } from "nts:dom";
+//     export function paint(ctx: CanvasRenderingContext2D): number {
 //       ctx._set_fillStyle_gradient(ctx.createLinearGradient(0, 0, 1, 1));
 //       ctx._set_fillStyle_string("red");
 //       return 0;
 //     }
 
-export function go(): number {
-  const ctx = document.createElement("canvas").getContext("2d");
-  if (ctx === null) return -1;
+export function paint(ctx: CanvasRenderingContext2D): number {
   ctx.fillStyle = ctx.createLinearGradient(0, 0, 1, 1);
   ctx.fillStyle = "red";
   return 0;

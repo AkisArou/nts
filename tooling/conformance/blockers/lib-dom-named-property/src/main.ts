@@ -15,9 +15,10 @@
 //
 //     import { document } from "nts:dom";
 //     export function go(): number {
-//       const li = document().createElement("li");
-//       li.dataset._named_set("id", "7");
-//       const id = li.dataset._named_get("id");
+//       const body = document().body;
+//       if (body === null) return -1;
+//       body.dataset._named_set("id", "7");
+//       const id = body.dataset._named_get("id");
 //       return id === null ? -1 : Number(id);
 //     }
 

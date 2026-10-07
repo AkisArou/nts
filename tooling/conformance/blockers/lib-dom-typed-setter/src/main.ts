@@ -17,7 +17,8 @@
 //
 //     import { document } from "nts:dom";
 //     export function go(): number {
-//       const div = document().createElement("div");
+//       const div = document().body;
+//       if (div === null) return -1;
 //       div._set_hidden_boolean(true);
 //       div._set_hidden_string("until-found");
 //       div._set_onclick_void(() => {});
