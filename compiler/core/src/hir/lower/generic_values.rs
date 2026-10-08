@@ -254,6 +254,7 @@ fn lower_open(
     let mut params = vec![Param {
         name: "this".to_owned(), shape: ParamShape::Ordinary, ty: receiver_ty,
         origin: origin.clone(), known: Facts::TOP,
+        written: None,
     }];
     let mut args = Vec::new();
     for (at, param) in plain.params.iter().enumerate() {

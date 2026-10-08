@@ -1340,6 +1340,7 @@ fn assembled_resume(
             ty: frame_ty,
             origin: func.origin.clone(),
             known: super::facts::Facts::TOP,
+            written: None,
         }],
         // A generator's resumption answers *done*, which is the whole of what
         // the walk needs to decide whether to go round again; the element it

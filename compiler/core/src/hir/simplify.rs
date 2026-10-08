@@ -589,6 +589,7 @@ mod tests {
                 ty: i32_ty(),
                 origin: origin(),
                 known: crate::hir::facts::Facts::TOP,
+                written: None,
                 shape: crate::hir::ParamShape::Ordinary,
             }],
             return_type: i32_ty(),

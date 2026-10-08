@@ -4316,6 +4316,21 @@ impl Scalar {
         })
     }
 
+    /// The least and greatest value of an integer kind, from its
+    /// representation's width (so the two can't disagree); `None` for a
+    /// floating-point kind and a boolean.
+    #[must_use]
+    pub fn integer_range(self) -> Option<(i128, i128)> {
+        match self.representation() {
+            HirType::Int { bits, signed: true } => {
+                let half = 1i128 << (bits - 1);
+                Some((-half, half - 1))
+            }
+            HirType::Int { bits, signed: false } => Some((0, (1i128 << bits) - 1)),
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub const fn representation(self) -> HirType {
         match self {

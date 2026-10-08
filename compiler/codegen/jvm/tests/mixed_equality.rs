@@ -34,6 +34,7 @@ fn param(i: usize, ty: &HirType) -> hir::Param {
         origin: origin(),
         shape: hir::ParamShape::Ordinary,
         known: hir::facts::Facts::TOP,
+        written: None,
     }
 }
 

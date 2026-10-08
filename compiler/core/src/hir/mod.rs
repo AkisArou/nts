@@ -795,6 +795,16 @@ pub struct Param {
     /// is a fact about every possible caller, available without seeing one, and
     /// it is the only way a parameter becomes provable at all.
     pub known: facts::Facts,
+    /// The scalar kind the parameter's type was **written** as -- `n: c_int`
+    /// -- or `None`.
+    ///
+    /// An obligation and a fact at once (docs/scalar-numbers.md, step 1):
+    /// every call must prove its argument fits, and so inside the function the
+    /// parameter is the kind's range, whole. Kept apart from `known` because
+    /// it's the written type, which the strict check may rely on, and `known`
+    /// is also where the optimizer narrows a parameter by what its callers
+    /// pass (`signatures`), which it may not (decision Q2).
+    pub written: Option<native::Scalar>,
 }
 
 /// What a parameter's declaration said, beyond its type.

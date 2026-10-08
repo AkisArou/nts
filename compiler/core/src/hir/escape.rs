@@ -1087,6 +1087,7 @@ mod tests {
                     ty: object(),
                     origin: origin(),
                     known: crate::hir::facts::Facts::TOP,
+                    written: None,
                     shape: crate::hir::ParamShape::Ordinary,
                 })
                 .collect(),

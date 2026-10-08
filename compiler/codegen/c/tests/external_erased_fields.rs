@@ -50,6 +50,7 @@ fn program() -> hir::Program {
                 origin: origin(),
                 shape: hir::ParamShape::Ordinary,
                 known: hir::facts::Facts::TOP,
+                written: None,
             }],
             return_type: HirType::NUMBER,
             values,

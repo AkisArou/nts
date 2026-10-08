@@ -1221,6 +1221,7 @@ mod tests {
                     ty: HirType::Float { bits: 64 },
                     origin: origin(),
                     known: Facts::TOP,
+                    written: None,
                     shape: crate::hir::ParamShape::Ordinary,
                 })
                 .collect(),
@@ -1347,6 +1348,7 @@ mod tests {
             ty: HirType::Float { bits: 64 },
             origin: origin(),
             known: Facts::TOP,
+            written: None,
             shape: crate::hir::ParamShape::Ordinary,
         });
 

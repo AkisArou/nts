@@ -56,6 +56,7 @@ fn predicate(name: &str, negate: bool) -> hir::Func {
             origin: origin(),
             shape: hir::ParamShape::Ordinary,
             known: hir::facts::Facts::TOP,
+            written: None,
         }],
         return_type: HirType::Bool,
         values,

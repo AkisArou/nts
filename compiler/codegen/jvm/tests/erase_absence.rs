@@ -31,6 +31,7 @@ fn eraser(name: &str, ty: &HirType, absent: Absent) -> hir::Func {
             origin: origin(),
             shape: hir::ParamShape::Ordinary,
             known: hir::facts::Facts::TOP,
+            written: None,
         }],
         return_type: HirType::Erased,
         values: vec![op(OpKind::Param(0), ty.clone()), op(OpKind::Erase { value: ValueId(0), absent }, HirType::Erased)],

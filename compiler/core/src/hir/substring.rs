@@ -343,6 +343,7 @@ mod tests {
                     ty: HirType::Managed(ManagedType::String),
                     origin: origin(),
                     known: crate::hir::facts::Facts::TOP,
+                    written: None,
                     shape: crate::hir::ParamShape::Ordinary,
                 },
                 Param {
@@ -350,6 +351,7 @@ mod tests {
                     ty: I32,
                     origin: origin(),
                     known: crate::hir::facts::Facts::TOP,
+                    written: None,
                     shape: crate::hir::ParamShape::Ordinary,
                 },
                 Param {
@@ -357,6 +359,7 @@ mod tests {
                     ty: I32,
                     origin: origin(),
                     known: crate::hir::facts::Facts::TOP,
+                    written: None,
                     shape: crate::hir::ParamShape::Ordinary,
                 },
             ],

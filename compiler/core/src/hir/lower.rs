@@ -15177,6 +15177,7 @@ fn declare_erased_entries(
             origin: origin.clone(),
             shape: ParamShape::Ordinary,
             known: Facts::TOP,
+            written: None,
         };
         // The same builder the implementations use, so a declaration and every
         // body that overrides it cannot drift apart.
@@ -20988,7 +20989,7 @@ impl<'a> FuncBuilder<'a> {
         let mut arguments = Vec::new();
         for (at, param) in func.params.iter().enumerate() {
             let value = self.push(OpKind::Param(u32::try_from(at).unwrap_or(0)), param.ty.clone(), origin.clone());
-            params.push(Param { name: param.name.clone(), shape: ParamShape::Ordinary, ty: param.ty.clone(), origin: origin.clone(), known: Facts::TOP });
+            params.push(Param { name: param.name.clone(), shape: ParamShape::Ordinary, ty: param.ty.clone(), origin: origin.clone(), known: Facts::TOP, written: None });
             arguments.push(value);
         }
         self.this = arguments.first().copied();
@@ -20996,7 +20997,7 @@ impl<'a> FuncBuilder<'a> {
         for (at, ty) in slot.entry.parameters.iter().enumerate().skip(func.params.len()) {
             let ty = ty.representation();
             let value = self.push(OpKind::Param(u32::try_from(at).unwrap_or(0)), ty.clone(), origin.clone());
-            params.push(Param { name: format!("out{at}"), shape: ParamShape::Ordinary, ty: ty.clone(), origin: origin.clone(), known: Facts::TOP });
+            params.push(Param { name: format!("out{at}"), shape: ParamShape::Ordinary, ty: ty.clone(), origin: origin.clone(), known: Facts::TOP, written: None });
             pointers.push((value, ty));
         }
         let answer_ty = func.return_type.clone();
@@ -22079,9 +22080,9 @@ impl<'a> FuncBuilder<'a> {
         // The parameters first: each is the value its position names.
         let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
         self.this = Some(receiver);
-        let mut params = vec![Param { name: "this".to_owned(), shape: ParamShape::Ordinary, ty: instance, origin: origin.clone(), known: Facts::TOP }];
+        let mut params = vec![Param { name: "this".to_owned(), shape: ParamShape::Ordinary, ty: instance, origin: origin.clone(), known: Facts::TOP, written: None }];
         let value = setter.then(|| {
-            params.push(Param { name: "value".to_owned(), shape: ParamShape::Ordinary, ty: field_ty.clone(), origin: origin.clone(), known: Facts::TOP });
+            params.push(Param { name: "value".to_owned(), shape: ParamShape::Ordinary, ty: field_ty.clone(), origin: origin.clone(), known: Facts::TOP, written: None });
             self.push(OpKind::Param(1), field_ty.clone(), origin.clone())
         });
         let state_ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
@@ -22137,9 +22138,9 @@ impl<'a> FuncBuilder<'a> {
         let instance = HirType::NativePointer(pointee);
         let receiver = self.push(OpKind::Param(0), instance.clone(), origin.clone());
         self.this = Some(receiver);
-        let mut params = vec![Param { name: "this".to_owned(), shape: ParamShape::Ordinary, ty: instance, origin: origin.clone(), known: Facts::TOP }];
+        let mut params = vec![Param { name: "this".to_owned(), shape: ParamShape::Ordinary, ty: instance, origin: origin.clone(), known: Facts::TOP, written: None }];
         let written = setter.then(|| {
-            params.push(Param { name: "value".to_owned(), shape: ParamShape::Ordinary, ty: field_ty.clone(), origin: origin.clone(), known: Facts::TOP });
+            params.push(Param { name: "value".to_owned(), shape: ParamShape::Ordinary, ty: field_ty.clone(), origin: origin.clone(), known: Facts::TOP, written: None });
             self.push(OpKind::Param(1), field_ty.clone(), origin.clone())
         });
         let state_ty = HirType::Managed(ManagedType::Object(super::objc_state_type(index)));
@@ -22472,6 +22473,7 @@ impl<'a> FuncBuilder<'a> {
                 ty: instance,
                 origin: origin.clone(),
                 known: Facts::TOP,
+                written: None,
             });
         }
 
@@ -25677,6 +25679,7 @@ impl<'a> FuncBuilder<'a> {
             ty: receiver_ty,
             origin: origin.clone(),
             known: Facts::TOP,
+            written: None,
         }];
         let Some(namespace) = self.module.roles.namespace.get(module).copied().flatten() else {
             return Err(self.unsupported(root, "a module job for a module nothing imports dynamically"));
@@ -26128,6 +26131,7 @@ impl<'a> FuncBuilder<'a> {
             ty: receiver_ty,
             origin: origin.clone(),
             known: Facts::TOP,
+            written: None,
         }];
         let mut forwarded = Vec::new();
         for child in self.children(id) {
@@ -26493,6 +26497,7 @@ impl<'a> FuncBuilder<'a> {
             ty: receiver_ty,
             origin: origin.clone(),
             known: Facts::TOP,
+            written: None,
         }];
         let thenable_ty = self.thenable_type(index)?;
         self.layouts.push(self.closure_layout(index, thenable_job_fields(thenable_ty.clone())));
@@ -26600,6 +26605,7 @@ impl<'a> FuncBuilder<'a> {
             ty: receiver_ty,
             origin: origin.clone(),
             known: Facts::TOP,
+            written: None,
         }];
         self.layouts.push(self.closure_layout(index, resolving_function_fields()));
         let function = self.snapshot.node_types.get(&parameter).copied();
@@ -26623,6 +26629,7 @@ impl<'a> FuncBuilder<'a> {
                 ty,
                 origin: origin.clone(),
                 known: Facts::TOP,
+                written: None,
             });
         }
         let returns = self
@@ -26868,6 +26875,7 @@ impl<'a> FuncBuilder<'a> {
             ty: receiver_ty,
             origin: origin.clone(),
             known: Facts::TOP,
+            written: None,
         }];
         let fields = shape.fields();
         for field in &fields {
@@ -29238,7 +29246,7 @@ impl<'a> FuncBuilder<'a> {
         let return_type = if self.objc_entry.is_some_and(|entry| entry.returns_record) || self.com_entry.is_some_and(|entry| entry.returns_record) {
             let index = u32::try_from(params.len()).unwrap_or(0);
             let out = self.push(OpKind::Param(index), return_type.clone(), origin.clone());
-            params.push(Param { name: "returned".to_owned(), shape: ParamShape::Ordinary, ty: return_type, origin: origin.clone(), known: Facts::TOP });
+            params.push(Param { name: "returned".to_owned(), shape: ParamShape::Ordinary, ty: return_type, origin: origin.clone(), known: Facts::TOP, written: None });
             self.record_out = Some(out);
             HirType::Void
         } else {
@@ -29273,7 +29281,7 @@ impl<'a> FuncBuilder<'a> {
         for (at, (key, ty)) in labels.into_iter().enumerate() {
             let ty = self.represent(ty).ok_or_else(|| self.unrepresentable(name_node, "a label"))?;
             let value = self.push(OpKind::Param(index + u32::try_from(at).unwrap_or(0)), ty.clone(), origin.clone());
-            params.push(Param { name: key.clone(), shape: ParamShape::Ordinary, ty, origin: origin.clone(), known: Facts::TOP });
+            params.push(Param { name: key.clone(), shape: ParamShape::Ordinary, ty, origin: origin.clone(), known: Facts::TOP, written: None });
             values.push((key, value));
         }
         self.pending_labels.push((name_node, values));
@@ -29534,6 +29542,7 @@ impl<'a> FuncBuilder<'a> {
                 // the arity back in dispute at the one place that now agrees.
                 shape: ParamShape::Ordinary,
                 known: Facts::TOP,
+                written: None,
             });
         }
 
@@ -29901,7 +29910,19 @@ impl<'a> FuncBuilder<'a> {
             ParamShape::Ordinary
         };
 
-        Ok(vec![Param { name, ty, origin, shape, known }])
+        // A parameter's type is always a declared one -- annotated, or
+        // contextual from a declared function type, a binding's callback
+        // included; TypeScript never infers it from the body -- so its kind is
+        // a written one.
+        Ok(vec![Param { name, ty, origin, shape, known, written: self.written_kind(name_node) }])
+    }
+
+    /// The scalar kind `node`'s type is (`n: c_int` is `Int`), through the
+    /// one recognizer ([`super::native::scalar`]); `None` for any other type.
+    /// The caller decides whether the type at `node` was written.
+    fn written_kind(&self, node: NodeId) -> Option<super::native::Scalar> {
+        let declared = *self.snapshot.node_types.get(&node)?;
+        super::native::scalar(self.snapshot, declared)
     }
 
     /// An override's string argument, lent by the Windows Runtime as its
@@ -29919,7 +29940,7 @@ impl<'a> FuncBuilder<'a> {
         // Copied once every parameter is in place (`finish_params`): the
         // parameters are the function's first values, in order.
         self.pending_hstrings.push((symbol.0, handle, name_node, ty.clone()));
-        Some(Param { name: name.to_owned(), shape: ParamShape::Ordinary, ty: handle_ty, origin, known: Facts::TOP })
+        Some(Param { name: name.to_owned(), shape: ParamShape::Ordinary, ty: handle_ty, origin, known: Facts::TOP, written: None })
     }
 
     /// A `return`, which has three destinations and a value for each.
@@ -59589,7 +59610,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(site);
         let text = HirType::NativePointer(super::native::Pointee::Const(Box::new(super::native::Pointee::Scalar(super::native::Scalar::Char))));
         let promise_ty = HirType::Managed(ManagedType::Promise(Box::new(HirType::Erased)));
-        let param = |name: &str, ty: &HirType| Param { name: name.to_owned(), shape: ParamShape::Ordinary, ty: ty.clone(), origin: origin.clone(), known: Facts::TOP };
+        let param = |name: &str, ty: &HirType| Param { name: name.to_owned(), shape: ParamShape::Ordinary, ty: ty.clone(), origin: origin.clone(), known: Facts::TOP, written: None };
         let params = vec![param("promise", &promise_ty), param("name", &text), param("message", &text)];
         let promise = self.push(OpKind::Param(0), promise_ty, origin.clone());
         let name = self.push(OpKind::Param(1), text.clone(), origin.clone());
@@ -59615,6 +59636,7 @@ impl<'a> FuncBuilder<'a> {
             ty: taken.clone(),
             origin: origin.clone(),
             known: Facts::TOP,
+            written: None,
         }];
         let sequence = self.push(OpKind::Param(0), taken, origin.clone());
         let array = self.array_of_sequence(request.site, sequence, request.sequence, request.array.clone())?;
@@ -70842,6 +70864,7 @@ mod tests {
                 shape: ParamShape::Ordinary,
                 origin: here(),
                 known: Facts::TOP,
+                written: None,
             }],
             return_type: super::HirType::Void,
             values: Vec::new(),

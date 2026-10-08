@@ -510,6 +510,7 @@ mod tests {
                 ty: HirType::NUMBER,
                 origin: origin(),
                 known: crate::hir::facts::Facts::TOP,
+                written: None,
                 shape: crate::hir::ParamShape::Ordinary,
             }],
             return_type: HirType::Void,

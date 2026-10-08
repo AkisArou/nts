@@ -31,6 +31,7 @@ fn length(name: &str, returns: HirType) -> hir::Func {
             origin: origin(),
             shape: hir::ParamShape::Ordinary,
             known: hir::facts::Facts::TOP,
+            written: None,
         }],
         return_type: returns.clone(),
         values: vec![op(OpKind::Param(0), HirType::Erased), op(OpKind::Length(ValueId(0)), returns)],

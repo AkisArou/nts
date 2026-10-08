@@ -38,6 +38,7 @@ fn function(
                 origin: origin(),
                 shape: hir::ParamShape::Ordinary,
                 known: hir::facts::Facts::TOP,
+                written: None,
             })
             .collect(),
         return_type: result.map_or(HirType::Void, |value| values[value.0 as usize].ty.clone()),

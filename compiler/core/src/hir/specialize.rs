@@ -1664,6 +1664,7 @@ mod tests {
                 ty: U64,
                 origin: origin.clone(),
                 known: crate::hir::facts::Facts::TOP,
+                written: None,
                 shape: crate::hir::ParamShape::Ordinary,
             }],
             return_type: HirType::Void,
