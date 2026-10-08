@@ -239,8 +239,9 @@ try {
   if (nativeDom) await until(async () => await evaluate<string | null>("document.querySelector('#native-timers')?.getAttribute('data-done') ?? null") === "1", "timer vectors");
   // So do the lib.dom promise vectors (tests/lib-dom-vectors.ts): six
   // outcomes, each an attribute of the transcript's element once settled.
-  if (nativeDom) await until(async () => await evaluate<number>(`["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text"]
-    .filter(name => (document.querySelector('#native-lib-dom')?.getAttribute('data-' + name) ?? 'pending') !== 'pending').length`) === 6, "lib.dom promise vectors");
+  const promisesSettled = async () => await evaluate<number>(`["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text"]
+    .filter(name => (document.querySelector('#native-lib-dom')?.getAttribute('data-' + name) ?? 'pending') !== 'pending').length`) === 6;
+  if (nativeDom) await until(promisesSettled, "lib.dom promise vectors");
   // Where the input steps' log begins: the checkpoints counted below are
   // theirs, not the vectors' (whose promise continuations end checkpoints of
   // their own before the first input).
@@ -345,6 +346,9 @@ try {
       const priorDisposals = disposals();
       await cdp("Page.reload");
       await until(() => attachments() === priorAttachments + 1 && disposals() === priorDisposals + 1, "native reload/disposal");
+      // The next disposal checks what a quiescent document leaves: let this
+      // one's promise vectors settle first.
+      if (nativeDom) await until(promisesSettled, "the reloaded document's promise vectors");
       if (nativeCounter) assert.equal(await evaluate<string>(readCount), expectedCount(0), "a fresh document must get a fresh native counter");
     }
     const priorDisposals = disposals();

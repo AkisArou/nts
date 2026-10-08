@@ -204,6 +204,15 @@ export function libDomTranscript(): string {
     ul.lastChild!.remove();
   }
 
+  // Static operations, as page script calls them: lib.dom's `URL.canParse`
+  // is the binding's URL_canParse.
+  {
+    const rect = DOMRect.fromRect({ x: 1, y: 2, width: 3, height: 4 });
+    const parsed = Document.parseHTMLUnsafe("<p id=q>static</p>");
+    log("statics", (URL.canParse("https://x.test/") ? "can" : "cannot") + "|" + (URL.canParse("no scheme") ? "can" : "cannot") + "|" +
+      rect.right + "," + rect.bottom + "|" + (AbortSignal.abort().aborted ? "aborted" : "live") + "|" + parsed.querySelector("#q")!.textContent);
+  }
+
   root.remove();
   return lines.join("\n");
 }
