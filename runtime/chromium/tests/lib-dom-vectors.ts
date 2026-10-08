@@ -338,10 +338,9 @@ export function startLibDomPromises(): void {
     settle("clipboard", (): Promise<void> => navigator.clipboard.writeText("copied"));
     settleFetch("fetched");
     // RequestInit's method, a ByteString read from the dictionary before
-    // the fetch starts: refused, the promise rejected. window.fetch: the
-    // bare global with a dictionary is not compiled yet (ledger row 26).
+    // the fetch starts: refused, the promise rejected.
     settle("fetchWide", async (): Promise<void> => {
-      await window.fetch("data:text/plain,x", { method: "✓" });
+      await fetch("data:text/plain,x", { method: "✓" });
     });
   }, 0);
 }
