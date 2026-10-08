@@ -4499,6 +4499,15 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
                 if !property.readonly || property.kind != MemberKind::Field {
                     return None;
                 }
+                // `number & { readonly __c_of?: T }`: a number that is one of
+                // `T`'s -- a native memory slot's (`Slot<T>`), a copied
+                // record's field (`Copied<T>`). A plain number is assignable;
+                // the kind is `T`'s.
+                if property.name == "___c_of" && property.optional {
+                    brand = Some(present_scalar(snapshot, property.ty)?);
+                    optional = true;
+                    continue;
+                }
                 // `number & { readonly __c_double?: true }`: the brand as an
                 // optional `true`, which is how `objc:types` spells Swift's
                 // `Double`, `Int` and `CGFloat`. A plain `number` is assignable

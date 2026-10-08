@@ -192,7 +192,9 @@ declare module "c:types" {
   export type Fields<T> = ([T] extends [Struct<infer F, string>] ? { [K in keyof F]?: FieldOf<F[K]> } : never) & {
     readonly __c_fields?: T;
   };
-  type FieldOf<V> = [V] extends [number] ? number : [V] extends [Struct<any, string>] ? Fields<V> : V;
+  // A number field keeps its C type as `Slot` does (`__c_of`): a plain number
+  // is assignable, and the field is written as the C type.
+  type FieldOf<V> = [V] extends [number] ? number & { readonly __c_of?: V } : [V] extends [Struct<any, string>] ? Fields<V> : V;
   // A `GObject`: `Class<Tag, Parent>` for an object GLib counts. Under the
   // reference-counting provider the compiler takes a reference where a
   // second one is kept -- `g_object_ref_sink`, which also takes the floating

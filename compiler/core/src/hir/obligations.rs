@@ -267,8 +267,13 @@ pub fn census(program: &Program, targets: &[NativeAbi]) -> Vec<Judged> {
 pub fn check(program: &Program, arrivals: &[super::lower::Arrival], targets: &[NativeAbi]) -> Vec<Diagnostic> {
     let slots = Slots::of(program, targets);
     let mut unproven: Vec<Judged> = census(program, targets).into_iter().filter(|judged| !judged.proven()).collect();
-    // The `as` first, so it is the one kept.
-    unproven.sort_by_key(|judged| judged.obligation.into != Into::Assertion);
+    // The `as` first, so it is the one kept, then what the program named --
+    // a local, not the closure cell holding it.
+    unproven.sort_by_key(|judged| match judged.obligation.into {
+        Into::Assertion => 0,
+        Into::Local { .. } => 1,
+        _ => 2,
+    });
     let mut kept: Vec<&Judged> = Vec::new();
     for judged in &unproven {
         let same = |other: &&Judged| {
@@ -729,7 +734,7 @@ fn judge(
     let value = obligation.value;
     let (source, unproven) = match func.value(value).ty {
         HirType::Float { .. } => {
-            let facts = analysis.get_at(obligation.block, value);
+            let facts = in_bounds_unit(func, analysis, obligation.block, value).unwrap_or_else(|| analysis.get_at(obligation.block, value));
             let exact = obligation.kind == Scalar::Float
                 && self.exact_in_float(func, analysis, (obligation.block, value), &mut Vec::new());
             (Source::Number(facts), number_fits(facts, obligation, exact))
@@ -788,9 +793,27 @@ fn exact_in_float(&self, func: &Func, analysis: &Analysis, (block, value): (Bloc
             seen.push(value);
             incoming(func, value).into_iter().all(|edge| self.exact_in_float(func, analysis, edge, seen))
         }
+        // `Math.min` and `Math.max` answer one of their operands, and a
+        // negation or an absolute value only flips a sign.
+        OpKind::Binary { op: BinOp::Min | BinOp::Max, lhs, rhs } => {
+            self.exact_in_float(func, analysis, (block, *lhs), seen) && self.exact_in_float(func, analysis, (block, *rhs), seen)
+        }
+        OpKind::Unary { op: UnOp::Neg | UnOp::Abs, operand } => self.exact_in_float(func, analysis, (block, *operand), seen),
         _ => false,
     }
 }
+}
+
+/// A string's code unit read at an index guarded by that string's length
+/// (`i < text.length`) and not below zero: one of the units, never the NaN
+/// an out-of-range read answers. The relation the bounds pass removes the
+/// check with, asked before it runs.
+fn in_bounds_unit(func: &Func, analysis: &Analysis, block: BlockId, value: ValueId) -> Option<Facts> {
+    let OpKind::StringUnitAt { string, index, checked: true } = func.value(value).kind else { return None };
+    let length_of_string = |candidate: ValueId| matches!(func.value(candidate).kind, OpKind::Length(of) if of == string);
+    let at = analysis.get_at(block, index);
+    (at.lo >= 0.0 && analysis.guarded_by(block, index, length_of_string))
+        .then(|| analysis.get_at(block, value).narrow(Facts::new(0.0, 65_535.0, true, false, false)))
 }
 
 /// What each edge into the block that defines the block parameter `param`

@@ -118,9 +118,11 @@ declare module "winrt:types" {
     readonly __c_records?: T;
     readonly __c_filled?: true;
   };
-  // A number field is a `number` whatever C's width is, as `Fields<T>` writes
-  // one -- except an enum, which keeps its members. The enum's own marker
-  // decides, since a C scalar's brand matches the `CEnum` pattern too.
+  // A number field is a `number` that keeps its C type (`__c_of`), as
+  // `Fields<T>` writes one: a plain number is assignable, and the field is
+  // written as the C type -- except an enum, which keeps its members. The
+  // enum's own marker decides, since a C scalar's brand matches the `CEnum`
+  // pattern too.
   type CopiedField<V> = [V] extends [Struct<object, string>]
     ? Copied<V>
     : [V] extends [HString]
@@ -130,7 +132,7 @@ declare module "winrt:types" {
           ? V extends CEnum<infer E, number>
             ? E
             : number
-          : number
+          : number & { readonly __c_of?: V }
         : V;
 
   // A TypeScript function where the Windows Runtime takes a delegate: a COM

@@ -27746,7 +27746,9 @@ impl<'a> FuncBuilder<'a> {
             // Written by definition -- being written is why it exists.
             readonly: false,
             declared_by: None,
-            written: None,
+            // The local's written kind: a closure reads it through here, and
+            // every assignment to the local was obliged to fit it.
+            written: self.boxed.get(index).and_then(|symbol| self.written_kind_of_symbol(*symbol)),
         }];
         // Zero until the declaration runs, which is what the guard reads. Only
         // on a cell that has the window; every other one carries nothing.
@@ -30061,18 +30063,22 @@ impl<'a> FuncBuilder<'a> {
     /// declaration was written as a kind (`let n: Uint8`), at its declaration
     /// and at every later assignment.
     fn oblige_local(&mut self, symbol: u32, value: ValueId, at: NodeId) {
-        let Some(record) = self.snapshot.symbols.get(symbol as usize) else { return };
-        let kind = record.declarations.iter().find_map(|declaration| {
+        if let Some(kind) = self.written_kind_of_symbol(symbol) {
+            let local = self.snapshot.symbols.get(symbol as usize).map(|record| record.name.clone()).unwrap_or_default();
+            self.oblige(value, kind, super::obligations::Into::Local { local }, at);
+        }
+    }
+
+    /// The kind a local's declaration was written as.
+    fn written_kind_of_symbol(&self, symbol: u32) -> Option<super::native::Scalar> {
+        let record = self.snapshot.symbols.get(symbol as usize)?;
+        record.declarations.iter().find_map(|declaration| {
             let name = self
                 .children(*declaration)
                 .into_iter()
                 .find(|child| self.node(*child).symbol.is_some_and(|named| named.0 == symbol))?;
             self.written_kind(name)
-        });
-        if let Some(kind) = kind {
-            let local = record.name.clone();
-            self.oblige(value, kind, super::obligations::Into::Local { local }, at);
-        }
+        })
     }
 
     /// Record that `value` must fit `kind` (see [`super::obligations`]): a
@@ -46742,7 +46748,9 @@ impl<'a> FuncBuilder<'a> {
                 // accepts.
                 readonly: false,
                 declared_by: None,
-                written: None,
+                // A tuple's element types are written by whoever wrote the
+                // tuple type, an annotation or a binding's (S3).
+                written: self.written_scalar(*element),
             });
         }
         let layout = Layout {
@@ -60253,6 +60261,53 @@ impl<'a> FuncBuilder<'a> {
         Ok(block)
     }
 
+    /// The element count of each array a call passes beside a count, by the
+    /// count's slot, read before anything is lent for the call. One C takes
+    /// narrower than an array can be long -- a `uint32_t`, as the Windows
+    /// Runtime takes every one -- is bounded there too: an array too long for
+    /// it throws a `RangeError`. The binding declared the array crosses with
+    /// that count, so the check is one it wrote (`docs/scalar-numbers.md`,
+    /// Q4), and the count is then proven to fit.
+    fn bounded_counts(
+        &mut self,
+        id: NodeId,
+        target: &super::native::Function,
+        args: &[ValueId],
+    ) -> Result<rustc_hash::FxHashMap<usize, ValueId>, Diagnostic> {
+        let mut counts = rustc_hash::FxHashMap::default();
+        for (at, role, _) in target.slots() {
+            let super::native::Role::Length { array, nullable } = role else { continue };
+            let fed = target.slots().find(|(slot, _, _)| *slot == array).and_then(|(_, _, fed)| fed);
+            let Some(array) = fed.and_then(|ts| args.get(ts).copied()) else { continue };
+            let origin = self.origin(id);
+            let count = self.array_count(array, nullable, &origin);
+            counts.insert(at, count);
+            // Nothing holds 2^53 elements, so a count that wide takes any.
+            let narrower = match &target.parameters[at] {
+                super::native::Type::Scalar(kind) => kind.integer_range().filter(|(_, greatest)| *greatest < 1 << 53).map(|(_, greatest)| (*kind, greatest)),
+                _ => None,
+            };
+            let Some((kind, greatest)) = narrower else { continue };
+            #[allow(clippy::cast_precision_loss)]
+            let most = self.push(OpKind::ConstFloat(greatest as f64), HirType::NUMBER, origin.clone());
+            let fits = self.push(OpKind::Binary { op: BinOp::Le, lhs: count, rhs: most }, HirType::Bool, origin.clone());
+            let (throws, carries_on) = (self.new_block(), self.new_block());
+            self.terminate(Terminator::Branch { cond: fits, then_target: carries_on, then_args: Vec::new(), else_target: throws, else_args: Vec::new() });
+            self.switch_to(throws);
+            let message = format!(
+                "an array too long for the `{}` count `{}` takes",
+                super::native::Type::Scalar(kind).c_type(),
+                target.name
+            );
+            self.throw_provided_error(id, "RangeError", &message)?;
+            if !self.is_terminated() {
+                self.terminate(Terminator::Unreachable);
+            }
+            self.switch_to(carries_on);
+        }
+        Ok(counts)
+    }
+
     /// What C means by a length beside an array: its elements -- a
     /// `string[]`'s, a view's -- and 0 for a `null` one.
     ///
@@ -60532,6 +60587,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         let fed_receiver = target.roles.first() == Some(&super::native::Role::Receiver);
         let receiver_value = self.place_receiver(id, &target, &mut args, receiver)?;
+        let counts = self.bounded_counts(id, &target, &args)?;
         let mut lent = Vec::new();
         let mut c_args = Vec::with_capacity(target.parameters.len());
         // The closure the context slots that follow a closure slot belong to.
@@ -60595,12 +60651,9 @@ impl<'a> FuncBuilder<'a> {
                 // The array's element count, into the slot C reads it from --
                 // before the array's own slot as often as after, so it is read
                 // from the arguments rather than from what was pushed.
-                Role::Length { array, nullable } => {
-                    let fed = target.slots().find(|(slot, _, _)| *slot == array).and_then(|(_, _, fed)| fed);
-                    let Some(array) = fed.and_then(|ts| args.get(ts).copied()) else { continue };
-                    let count = self.array_count(array, nullable, &origin);
-                    let count = self.coerce(count, &target.parameters[at].representation(), id)?;
-                    c_args.push(count);
+                Role::Length { .. } => {
+                    let Some(&count) = counts.get(&at) else { continue };
+                    c_args.push(self.coerce(count, &target.parameters[at].representation(), id)?);
                 }
                 Role::NSString => c_args.extend(argument.map(|string| self.ns_string_of(string, &origin))),
                 Role::NSArray(_) | Role::NSDictionary(_) | Role::NSSet(_) => {
