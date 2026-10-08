@@ -2008,6 +2008,9 @@ impl Layout {
     /// Field names and representations, in order. Not `readonly`: a value is
     /// laid out the same whether or not anyone may write to it, and refusing to
     /// share a layout over that would split `Point` from `Readonly<Point>`.
+    /// But the scalar kind each field was written as, yes: a read through a
+    /// field written `Uint8` is a fact only its own stores proved
+    /// (docs/scalar-numbers.md, Q1), so `{ x: number }` is another shape.
     ///
     /// The dispatch table counts too. Two classes that extend the same base and
     /// add no fields have identical field lists and different `area` methods —
@@ -2031,7 +2034,7 @@ impl Layout {
                 .fields
                 .iter()
                 .zip(fields)
-                .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty)
+                .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty && mine.written == theirs.written)
             && self.methods == methods
     }
 

@@ -182,6 +182,10 @@ pub struct Arrival {
     pub parameters: Vec<Option<HirType>>,
     /// As `parameters`, for the result.
     pub returns: Option<HirType>,
+    /// The scalar kind each of the slot's parameters is written as, which a
+    /// call through the slot is obliged to fit -- and so all a closure in it
+    /// may rely on (docs/scalar-numbers.md, Q1).
+    pub kinds: Vec<Option<super::native::Scalar>>,
 }
 
 /// What a lowering produced, and what it could not.
@@ -23974,6 +23978,7 @@ impl<'a> FuncBuilder<'a> {
             return;
         }
         let parameters = params.iter().map(|t| self.represent(*t)).collect();
+        let kinds = params.iter().map(|t| super::native::scalar(self.snapshot, *t)).collect();
         let returns = self.represent(ret);
         let origin = self.origin(id);
         self.arrivals.at_signature.push(Arrival {
@@ -23981,6 +23986,7 @@ impl<'a> FuncBuilder<'a> {
             origin,
             parameters,
             returns,
+            kinds,
         });
     }
 
@@ -24404,11 +24410,24 @@ impl<'a> FuncBuilder<'a> {
                 name: absent.name.clone(),
             });
         }
-        to.fields.iter().zip(from.fields.iter()).enumerate().find_map(|(at, (want, have))| {
+        if let Some(disagrees) = to.fields.iter().zip(from.fields.iter()).enumerate().find_map(|(at, (want, have))| {
             (!self.one_slot(want, have)).then(|| NotAPrefix::Disagrees {
                 at,
                 wanted: want.name.clone(),
                 held: have.name.clone(),
+            })
+        }) {
+            return Some(disagrees);
+        }
+        // **And the kinds the fields were written as**, in both directions
+        // (docs/scalar-numbers.md, Q1): a read through a field written
+        // `Uint8` is the kind's range, which every store into that field was
+        // proven to fit -- and a store through the other type was not.
+        to.fields.iter().zip(from.fields.iter()).find_map(|(want, have)| {
+            (want.written != have.written).then(|| NotAPrefix::Kind {
+                name: want.name.clone(),
+                wanted: want.written,
+                held: have.written,
             })
         })
     }
@@ -70779,6 +70798,14 @@ enum NotAPrefix {
     /// will be read; a shape that cannot be established cannot be shown to hold
     /// them where the target expects.
     Unknown,
+    /// One field is written as a scalar kind in one type and not, or as
+    /// another, in the other: the same storage, and a fact one side's stores
+    /// never proved.
+    Kind {
+        name: String,
+        wanted: Option<super::native::Scalar>,
+        held: Option<super::native::Scalar>,
+    },
 }
 
 impl NotAPrefix {
@@ -70812,6 +70839,21 @@ impl NotAPrefix {
                 "{from} where {to} is wanted, and {from} has no layout here, so \
                  nothing can show it holds {to}'s fields where {to} expects them"
             ),
+            Self::Kind { name, wanted, held } => {
+                let kind = |kind: &Option<super::native::Scalar>| {
+                    kind.map_or_else(|| "a plain `number`".to_owned(), |kind| {
+                        format!("`{}`", super::native::Type::Scalar(kind).c_type())
+                    })
+                };
+                format!(
+                    "{from} where {to} is wanted -- `{name}` is {} in {to} and {} in {from}, \
+                     and one object is both: a store through one type would be read through \
+                     the other as a kind it was never proven to fit, so an object's scalar \
+                     fields must be written alike",
+                    kind(wanted),
+                    kind(held),
+                )
+            }
         }
     }
 }

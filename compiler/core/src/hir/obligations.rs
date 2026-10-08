@@ -171,8 +171,8 @@ pub enum Why {
     NoBigIntRanges,
     /// A `bigint` literal outside the kind.
     LiteralOutside(i128),
-    /// A `float` slot: whether the value is exactly a `float` isn't modelled
-    /// yet (decision Q3 makes it an obligation).
+    /// A `float` slot, and the value may not be exactly a `float` (Q3):
+    /// `Math.fround(x)` is the explicit narrowing.
     FloatExactness,
     /// It may not be a number at all: an `any`, or a union the program holds
     /// erased (Q1: `any` into a written kind is a store like any other).
@@ -238,7 +238,7 @@ pub fn census(program: &Program) -> Vec<Judged> {
                 return Vec::new();
             }
             let analysis = local_analysis(func, &written);
-            obligations.iter().map(|obligation| judge(func, &analysis, obligation)).collect()
+            obligations.iter().map(|obligation| slots.judge(func, &analysis, obligation)).collect()
         })
         .collect()
 }
@@ -447,12 +447,15 @@ pub fn local_analysis(func: &Func, written: &Written) -> Analysis {
     analysis
 }
 
-fn judge(func: &Func, analysis: &Analysis, obligation: &Obligation) -> Judged {
+impl Slots<'_> {
+fn judge(&self, func: &Func, analysis: &Analysis, obligation: &Obligation) -> Judged {
     let value = obligation.value;
     let (source, unproven) = match func.value(value).ty {
         HirType::Float { .. } => {
             let facts = analysis.get_at(obligation.block, value);
-            (Source::Number(facts), number_fits(facts, obligation))
+            let exact = obligation.kind == Scalar::Float
+                && self.exact_in_float(func, analysis, (obligation.block, value), &mut Vec::new());
+            (Source::Number(facts), number_fits(facts, obligation, exact))
         }
         HirType::Int { bits, signed } => {
             let (lo, hi) = if signed {
@@ -497,14 +500,73 @@ fn judge(func: &Func, analysis: &Analysis, obligation: &Obligation) -> Judged {
     Judged { func: func.name.clone(), obligation: obligation.clone(), source, made: made_by(func, value), unproven }
 }
 
-/// Why `facts` may not fit the obligation's slot, or nothing when it does.
-fn number_fits(facts: Facts, obligation: &Obligation) -> Vec<Why> {
-    let Some((least, greatest)) = obligation.range() else {
-        return match obligation.kind {
-            // A `double` slot holds every `number`.
-            Scalar::Double => Vec::new(),
-            _ => vec![Why::FloatExactness],
+/// Whether `value`, at `block`, is exactly a `float`, which a `float` slot
+/// then stores unchanged (Q3).
+///
+/// Judged from how the value was made rather than tracked by the analysis:
+/// `Math.fround(x)`, the explicit narrowing; a value that was a `float`
+/// already -- C's, or read from a slot written `float`; a number a `float`
+/// holds exactly; or a join of those.
+fn exact_in_float(&self, func: &Func, analysis: &Analysis, (block, value): (BlockId, ValueId), seen: &mut Vec<ValueId>) -> bool {
+    /// Every integer up to 2^24 is a `float`.
+    const FLOAT_INTEGERS: f64 = 16_777_216.0;
+    let facts = analysis.get_at(block, value);
+    #[allow(clippy::cast_possible_truncation)]
+    let single = facts.is_singleton() && !facts.maybe_nan && f64::from(facts.lo as f32).to_bits() == facts.lo.to_bits();
+    if single || facts.integral() && facts.lo >= -FLOAT_INTEGERS && facts.hi <= FLOAT_INTEGERS {
+        return true;
+    }
+    let float = Some(Scalar::Float);
+    match &func.value(value).kind {
+        OpKind::Call { callee: Callee::External(name), .. } => name == "nts_math_fround",
+        OpKind::Call { callee: Callee::Native(target), .. } => target.result == super::native::Type::Scalar(Scalar::Float),
+        OpKind::Call { callee: Callee::Direct(name), .. } => self.by_name.get(name.as_str()).is_some_and(|callee| callee.written_return == float),
+        OpKind::Convert(from) => func.value(*from).ty == HirType::Float { bits: 32 },
+        OpKind::Param(slot) => func.params.get(*slot as usize).is_some_and(|param| param.written == float),
+        OpKind::FieldGet { object, field } => self.field(&func.value(*object).ty, *field).is_some_and(|(kind, _)| kind == Scalar::Float),
+        OpKind::GlobalGet(global) => self.globals.get(*global as usize).is_some_and(|slot| slot.written == float),
+        OpKind::BlockParam(_) => {
+            if seen.contains(&value) {
+                return true;
+            }
+            seen.push(value);
+            incoming(func, value).into_iter().all(|edge| self.exact_in_float(func, analysis, edge, seen))
+        }
+        _ => false,
+    }
+}
+}
+
+/// What each edge into the block that defines the block parameter `param`
+/// passes for it, with the block the edge leaves.
+fn incoming(func: &Func, param: ValueId) -> Vec<(BlockId, ValueId)> {
+    let Some((target, at)) = func.blocks.iter().enumerate().find_map(|(index, block)| {
+        Some((BlockId(u32::try_from(index).ok()?), block.params.iter().position(|p| *p == param)?))
+    }) else {
+        return Vec::new();
+    };
+    let mut passed = Vec::new();
+    for (index, block) in func.blocks.iter().enumerate() {
+        let from = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
+        let edges: Vec<(BlockId, &Vec<ValueId>)> = match &block.terminator {
+            Terminator::Jump { target, args } => vec![(*target, args)],
+            Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
+                vec![(*then_target, then_args), (*else_target, else_args)]
+            }
+            Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
         };
+        passed.extend(edges.into_iter().filter(|(to, _)| *to == target).filter_map(|(_, args)| Some((from, *args.get(at)?))));
+    }
+    passed
+}
+
+/// Why `facts` may not fit the obligation's slot, or nothing when it does;
+/// `exact` is whether the value is exactly a `float`, which a `float` slot
+/// asks.
+fn number_fits(facts: Facts, obligation: &Obligation, exact: bool) -> Vec<Why> {
+    let Some((least, greatest)) = obligation.range() else {
+        // A `double` slot holds every `number`.
+        return if obligation.kind == Scalar::Double || exact { Vec::new() } else { vec![Why::FloatExactness] };
     };
     let mut why = Vec::new();
     if !facts.whole {
@@ -569,19 +631,19 @@ mod tests {
 
     #[test]
     fn a_whole_number_in_range_fits() {
-        assert!(number_fits(Facts::new(0.0, 255.0, true, false, false), &into(Scalar::UInt8, None)).is_empty());
+        assert!(number_fits(Facts::new(0.0, 255.0, true, false, false), &into(Scalar::UInt8, None), false).is_empty());
     }
 
     #[test]
     fn negative_zero_matters_only_where_the_program_reads_it_back() {
         let maybe_negative_zero = Facts::new(0.0, 255.0, true, false, true);
         assert!(
-            number_fits(maybe_negative_zero, &into(Scalar::UInt8, None)).is_empty(),
+            number_fits(maybe_negative_zero, &into(Scalar::UInt8, None), false).is_empty(),
             "C stores -0 and 0 as the same integer"
         );
         let field = Obligation { into: Into::Field { field: "size".to_owned() }, ..into(Scalar::UInt8, None) };
         assert_eq!(
-            number_fits(maybe_negative_zero, &field),
+            number_fits(maybe_negative_zero, &field, false),
             vec![Why::NegativeZero],
             "a field held at an integer width would read back 0 where node keeps -0"
         );
@@ -590,17 +652,18 @@ mod tests {
     #[test]
     fn each_way_of_not_fitting_is_named() {
         let byte = into(Scalar::UInt8, None);
-        assert_eq!(number_fits(Facts::new(0.0, 256.0, true, false, false), &byte), vec![Why::Above(256.0)]);
-        assert_eq!(number_fits(Facts::new(-1.0, 10.0, true, false, false), &byte), vec![Why::Below(-1.0)]);
-        assert_eq!(number_fits(Facts::new(0.0, 10.0, false, true, false), &byte), vec![Why::Fraction, Why::NaN]);
-        assert!(number_fits(Facts::TOP, &into(Scalar::Double, None)).is_empty());
-        assert_eq!(number_fits(Facts::new(0.0, 1.0, true, false, false), &into(Scalar::Float, None)), vec![Why::FloatExactness]);
+        assert_eq!(number_fits(Facts::new(0.0, 256.0, true, false, false), &byte, false), vec![Why::Above(256.0)]);
+        assert_eq!(number_fits(Facts::new(-1.0, 10.0, true, false, false), &byte, false), vec![Why::Below(-1.0)]);
+        assert_eq!(number_fits(Facts::new(0.0, 10.0, false, true, false), &byte, false), vec![Why::Fraction, Why::NaN]);
+        assert!(number_fits(Facts::TOP, &into(Scalar::Double, None), false).is_empty());
+        assert_eq!(number_fits(Facts::new(0.0, 1.0, true, false, false), &into(Scalar::Float, None), false), vec![Why::FloatExactness]);
+        assert!(number_fits(Facts::new(0.0, 1.0, true, false, false), &into(Scalar::Float, None), true).is_empty());
     }
 
     #[test]
     fn a_bit_field_narrows_its_unit() {
         assert_eq!(into(Scalar::UInt32, Some(3)).range(), Some((0, 7)));
         assert_eq!(into(Scalar::Int32, Some(3)).range(), Some((-4, 3)));
-        assert_eq!(number_fits(Facts::new(0.0, 8.0, true, false, false), &into(Scalar::UInt32, Some(3))), vec![Why::Above(8.0)]);
+        assert_eq!(number_fits(Facts::new(0.0, 8.0, true, false, false), &into(Scalar::UInt32, Some(3)), false), vec![Why::Above(8.0)]);
     }
 }
