@@ -93,7 +93,7 @@ for (const [directory, names] of Object.entries(sources)) {
 // StringView, the same for both backends.
 stage(resolve(root, "runtime/c/nts_string_view.h"), "nts_string_view.h");
 if (appArchive !== undefined) {
-  for (const name of ["app.h", "app_observer.cc", "app_observer.h", "app_main.cc", "app_scheme.cc", "app_scheme.h", "shell_main.cc"]) stage(resolve(lane, "host", name), name);
+  for (const name of ["app.h", "app_observer.cc", "app_observer.h", "app_main.cc", "app_scheme.cc", "app_scheme.h", "app_permissions.cc", "app_permissions.h", "shell_main.cc"]) stage(resolve(lane, "host", name), name);
   stage(resolve(appArchive), `generated/app/${backend}/program.a`);
 }
 for (const variant of ["c", "llvm"] as const) {

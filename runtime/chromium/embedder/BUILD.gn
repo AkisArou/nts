@@ -150,7 +150,11 @@ if (nts_app_backend != "") {
 
   # The release shell: its own content embedder, no test-only code.
   executable("nts_app_shell") {
-    sources = [ "shell_main.cc" ]
+    sources = [
+      "app_permissions.cc",
+      "app_permissions.h",
+      "shell_main.cc",
+    ]
     deps = [
       ":app_scheme",
       ":nts_app_pak",

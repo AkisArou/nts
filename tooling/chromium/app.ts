@@ -148,6 +148,16 @@ async function check(): Promise<void> {
     const escaped = await page.evaluate<string>(`Promise.all(["styles.css", "%2e%2e/%2e%2e/%2e%2e/etc/hostname", "..%2f..%2f..%2fetc%2fhostname"]
       .map(path => fetch("nts-app://app/" + path).then(response => "read " + response.status, () => "refused"))).then(all => all.join("|"))`);
     if (escaped !== "read 200|refused|refused") throw new Error(`A path outside the app was served: ${escaped}`);
+    // The shell's permission policy (host/app_permissions.h): the clipboard
+    // granted to the app, with no prompt, and the rest denied; a write read
+    // back. The Clipboard API also wants a focused document, which a window
+    // nobody is typing into is not: focus is emulated.
+    await page.cdp("Emulation.setFocusEmulationEnabled", { enabled: true });
+    const permitted = await page.evaluate<string>(`Promise.all(["clipboard-read", "clipboard-write", "geolocation", "notifications"]
+      .map(name => navigator.permissions.query({ name }).then(status => status.state, error => error.name))).then(all => all.join("|"))`);
+    if (permitted !== "granted|granted|denied|denied") throw new Error(`The app's permissions are not the shell's policy: ${permitted}`);
+    const copied = await page.evaluate<string>(`navigator.clipboard.writeText("nts-app clipboard").then(() => navigator.clipboard.readText(), error => error.name + ": " + error.message)`);
+    if (copied !== "nts-app clipboard") throw new Error(`The clipboard did not round-trip: ${copied}`);
     if (expected !== "") await page.until(() => page.evaluate<boolean>(`document.querySelector(${JSON.stringify(expected)}) !== null`), `${expected} to render`);
     await page.cdp("Page.reload");
     await page.until(() => stops() === 1 && starts() === 2, "the app to end and start again on reload");
@@ -156,7 +166,7 @@ async function check(): Promise<void> {
     await page.close();
   }
   writeFileSync(resolve(work, "check.log"), page.log());
-  console.log(`PASS: ${name} started, rendered${expected === "" ? "" : ` ${expected}`}, ended cleanly and restarted on reload, and closed`);
+  console.log(`PASS: ${name} started, rendered${expected === "" ? "" : ` ${expected}`}, held the clipboard and no other permission, ended cleanly and restarted on reload, and closed`);
 }
 
 /** Every TypeScript file of the app, but not its dependencies or output. */

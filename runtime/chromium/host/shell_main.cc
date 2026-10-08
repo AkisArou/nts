@@ -40,6 +40,7 @@
 #include "net/log/net_log_source.h"
 #include "net/socket/tcp_server_socket.h"
 #include "nts/app_observer.h"
+#include "nts/app_permissions.h"
 #include "nts/app_scheme.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -105,8 +106,8 @@ class ShellRendererClient final : public content::ContentRendererClient {
 // -- browser ---------------------------------------------------------------
 
 // The profile: storage keyed by the app's origin lives under it. No
-// downloads, notifications, push or permission prompts: a permission with no
-// delegate is denied, which is a shell's default until an app declares one.
+// downloads, notifications or push; permissions are the app's fixed policy
+// (app_permissions.h), with no prompt.
 class ShellBrowserContext final : public content::BrowserContext {
  public:
   explicit ShellBrowserContext(base::FilePath path) : path_(std::move(path)) {}
@@ -146,7 +147,7 @@ class ShellBrowserContext final : public content::BrowserContext {
   }
   content::PermissionControllerDelegate* GetPermissionControllerDelegate()
       override {
-    return nullptr;
+    return &permissions_;
   }
   content::ReduceAcceptLanguageControllerDelegate*
   GetReduceAcceptLanguageControllerDelegate() override {
@@ -169,6 +170,7 @@ class ShellBrowserContext final : public content::BrowserContext {
 
  private:
   const base::FilePath path_;
+  AppPermissions permissions_;
 };
 
 // The app's window: the page, titled by it, closed by it (window.close())
