@@ -413,3 +413,29 @@ or rejects it. `await` and `.then` in the program need nothing more than a
 promise the runtime made. In Blink the adapter would subscribe to the
 member's ScriptPromise and settle the program's promise from the reaction,
 under the same ProgramScope as a listener.
+
+## 13. A class extending a host class (custom elements)
+
+**Requested 2026-10-08. Blocks: custom elements -- `customElements.define`
+and the 39 [HTMLConstructor] members -- the way an app is built from web
+components. Fixture: `blockers/a-class-extending-a-host-class`.**
+
+Today `class Counter extends HTMLElement { count = 0; }` is refused: "a base
+`HTMLElement` of unrepresentable type (an opaque C pointer to
+NtsDomHTMLElement)". A class extends only classes the program defines.
+
+What would let the adapter define custom elements natively: an instance of a
+class whose base is a host class is a program object holding its host
+handle (the element), made when the host calls the class's constructor with
+that handle -- Blink creates the element and upgrades it, as it does for a
+JS-defined element -- and every member the base declares is reached through
+the handle (`this.textContent` is `nts_dom_Node_get_textContent(this.element)`).
+`this` handed to a host function is the handle. The lifecycle callbacks a
+class declares (`connectedCallback`, `disconnectedCallback`,
+`attributeChangedCallback`, `adoptedCallback`) are methods the host calls.
+
+The adapter's half (the lane's, once this exists): a native
+`blink::CustomElementDefinition` per `customElements.define(name, Class)`,
+whose construction and reactions call the program's constructor and
+callbacks through the invoker, under a ProgramScope, as listeners are
+called today; `customElements` bound on Window.
