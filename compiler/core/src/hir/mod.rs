@@ -3044,6 +3044,10 @@ pub struct Global {
     /// The scalar kind the variable's type was **written** as, or `None`;
     /// see [`Param::written`].
     pub written: Option<native::Scalar>,
+    /// Declared `const`: never assigned after its initializer, which the
+    /// language guarantees. Where that needs no code (`deferred` false), the
+    /// variable is `initial` forever -- a fact any reader may rely on.
+    pub constant: bool,
     /// What it holds before anything runs. A `bool` stores its truth value here;
     /// `ty` says which of the two a zero means.
     pub initial: f64,

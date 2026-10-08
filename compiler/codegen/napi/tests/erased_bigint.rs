@@ -166,6 +166,7 @@ fn program() -> hir::Program {
             deferred: false,
             origin: origin(),
             written: None,
+            constant: false,
         }],
         ..hir::Program::default()
     };

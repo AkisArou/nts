@@ -6875,6 +6875,7 @@ fn declare_a_closure_global(
         deferred: initializer.is_some(),
         origin: probe.origin(name_node),
         written: None,
+        constant: false,
     });
     scope.variables.insert(symbol.0, global);
     scope.types.push(ty);
@@ -7377,6 +7378,7 @@ fn add_initialized_flags(probe: &FuncBuilder, scope: &mut ModuleScope) {
             deferred: false,
             origin: probe.origin(name),
             written: None,
+            constant: false,
         });
         scope.types.push(HirType::Bool);
         scope.initialized.insert(symbol, flag);
@@ -8091,6 +8093,12 @@ fn declare_a_module_global(
         deferred: needs_code,
         origin: probe.origin(name_node),
         written: probe.written_kind(name_node),
+        constant: probe
+            .syntactic_parent(name_node)
+            .and_then(|declaration| probe.ancestor(declaration, syntax::VARIABLE_DECLARATION_LIST))
+            .is_some_and(|list| {
+                nts_semantic_schema::VariableKind::from_flags(probe.node(list).flags) == nts_semantic_schema::VariableKind::Const
+            }),
     });
     scope.variables.insert(symbol.0, global);
     scope.types.push(ty.clone());
@@ -8264,6 +8272,7 @@ fn collect_static_fields(
             deferred: constant.is_none() && initializer.is_some(),
             origin: probe.origin(name_node),
             written: probe.written_kind(name_node),
+            constant: false,
         });
         scope.variables.insert(symbol.0, global);
         scope.types.push(ty);
@@ -11647,7 +11656,7 @@ fn add_lazy_modules(snapshot: &SemanticSnapshot, module: &mut ModuleScope) {
         let origin = probe.origin(snapshot.modules[at].root);
         let mut global = |name: String, ty: HirType| {
             let index = u32::try_from(module.globals.len()).unwrap_or(u32::MAX);
-            module.globals.push(super::Global { name, ty: ty.clone(), initial: 0.0, exported: false, deferred: false, origin: origin.clone(), written: None });
+            module.globals.push(super::Global { name, ty: ty.clone(), initial: 0.0, exported: false, deferred: false, origin: origin.clone(), written: None, constant: false });
             module.types.push(ty);
             index
         };
@@ -17106,6 +17115,21 @@ fn brand_representation(brand: super::native::Scalar) -> HirType {
     }
 }
 
+/// Whether the constant `value` is one of `kind`'s: a whole number in an
+/// integer kind's range and not `-0`, exactly a `float` for a `float`, any
+/// number for a `double`.
+fn constant_fits(value: f64, kind: super::native::Scalar) -> bool {
+    match kind.integer_range() {
+        #[allow(clippy::cast_precision_loss)]
+        Some((lo, hi)) => {
+            value.fract() == 0.0 && value >= lo as f64 && value <= hi as f64 && !(value == 0.0 && value.is_sign_negative())
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        None if kind == super::native::Scalar::Float => f64::from(value as f32).to_bits() == value.to_bits(),
+        None => true,
+    }
+}
+
 /// What [`decided_representation`] answers.
 enum Decided {
     /// Provided as this, whatever the type's own kind says.
@@ -20478,13 +20502,31 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let lhs = self.constant_value(*lhs, known)?;
                 let rhs = self.constant_value(*rhs, known)?;
+                // A bitwise operator only where both sides are int32s already,
+                // so `ToInt32` is the identity -- `(64 | 1 | 512)`, a flag set.
+                #[allow(clippy::cast_possible_truncation)]
+                let int32 = |value: f64| (value.fract() == 0.0 && (-2_147_483_648.0..=2_147_483_647.0).contains(&value)).then_some(value as i32);
                 match self.kind_of(*operator)? {
                     syntax::PLUS_TOKEN => Some(lhs + rhs),
                     syntax::MINUS_TOKEN => Some(lhs - rhs),
                     syntax::ASTERISK_TOKEN => Some(lhs * rhs),
                     syntax::SLASH_TOKEN => Some(lhs / rhs),
+                    syntax::BAR_TOKEN => Some(f64::from(int32(lhs)? | int32(rhs)?)),
+                    syntax::AMPERSAND_TOKEN => Some(f64::from(int32(lhs)? & int32(rhs)?)),
+                    syntax::CARET_TOKEN => Some(f64::from(int32(lhs)? ^ int32(rhs)?)),
                     _ => None,
                 }
+            }
+            Some(syntax::PARENTHESIZED_EXPRESSION | syntax::SATISFIES_EXPRESSION) => {
+                self.constant_value(*self.children(id).first()?, known)
+            }
+            // `10 as c_int` is 10: an `as` has no run-time effect. Folded only
+            // where the claim holds for the constant -- otherwise the
+            // initializer stays code, whose `as` the strict check reports.
+            Some(syntax::AS_EXPRESSION) => {
+                let value = self.constant_value(*self.children(id).first()?, known)?;
+                let claimed = self.snapshot.node_types.get(&id).and_then(|ty| self.written_scalar(*ty));
+                claimed.is_none_or(|kind| constant_fits(value, kind)).then_some(value)
             }
             // A name that is itself a module-scope constant. `SOLAR_MASS` is
             // `4 * PI * PI`, and a compiler that folds arithmetic but not names

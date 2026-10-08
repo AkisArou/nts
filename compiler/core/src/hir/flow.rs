@@ -328,11 +328,20 @@ impl Written {
                 fields.extend(layout.types.iter().map(|ty| ((*ty, index), kind.facts())));
             }
         }
+        // A `const` set before anything runs is its initial value, whatever
+        // was written; anything else, its written kind.
         let globals = program
             .globals
             .iter()
             .enumerate()
-            .filter_map(|(index, global)| Some((u32::try_from(index).ok()?, global.written?.facts())))
+            .filter_map(|(index, global)| {
+                let facts = if global.constant && !global.deferred && global.ty.is_scalar() {
+                    Facts::constant(global.initial)
+                } else {
+                    global.written?.facts()
+                };
+                Some((u32::try_from(index).ok()?, facts))
+            })
             .collect();
         Self { returns, return_elements, fields, globals }
     }
