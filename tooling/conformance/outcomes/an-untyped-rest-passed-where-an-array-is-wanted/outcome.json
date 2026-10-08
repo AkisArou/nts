@@ -2,8 +2,8 @@
   "run": "build",
   "category": "refused",
   "nts": "NTS1001 an array of Erased where an array of Float { bits: 64 } is wanted -- the two hold different widths, so a pointer to one is not a pointer to the other",
-  "ran": "SIGSEGV",
+  "ran": "exit 1; nts: uncaught Observed: ",
   "node": "exit 1; nts: uncaught Observed: length=2;",
-  "measured_with": "e2ff33794952c566",
+  "measured_with": "3fb37e1e45c686f5",
   "source": "measured"
 }
