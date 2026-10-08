@@ -44,9 +44,7 @@ async function settleText(label: string, run: () => Promise<string>): Promise<vo
 async function settleFetch(label: string): Promise<void> {
   let outcome = "";
   try {
-    // window.fetch: the global is refused (blockers/lib-dom-global-fetch-is-
-    // taken-as-a-builtin; ledger row 26).
-    const response = await window.fetch("data:text/plain;charset=utf-8,hello%20nts");
+    const response = await fetch("data:text/plain;charset=utf-8,hello%20nts");
     const body = await response.text();
     outcome = "fulfilled " + response.status + " " + (response.ok ? "ok" : "not ok") + " " +
       (response.headers.get("content-type") ?? "none") + " " + body;
@@ -246,9 +244,7 @@ export function libDomTranscript(): string {
       rect.right + "," + rect.bottom + "|" + (AbortSignal.abort().aborted ? "aborted" : "live") + "|" + parsed.querySelector("#q")!.textContent);
   }
 
-  // fetch's own types. A ByteString (a header here; RequestInit's method in
-  // idl-vectors.ts, until blockers/lib-dom-dictionary-with-a-string-member)
-  // is a string whose
+  // fetch's own types. A ByteString (a header, a method) is a string whose
   // every unit is at most 0xFF -- "café" is one -- and one above throws
   // TypeError before Blink is called. V8's message carries its context
   // first ("Failed to execute 'set' on 'Headers': "); the program's does not.
@@ -276,6 +272,22 @@ export function libDomTranscript(): string {
     log("headersDeleted", headers.has("x-list") ? "has" : "lacks");
     log("headersWide", failure((): void => headers.set("x-name", "✓")));
     log("headersBadName", failure((): void => headers.set("bad name", "v")));
+    const request = new Request("https://x.test/a", { method: "post" });
+    log("request", request.method + "|" + request.url);
+    log("requestWide", failure((): void => {
+      new Request("https://x.test/", { method: "✓" });
+    }));
+  }
+  // An event handler attribute read back, under lib.dom's types: the
+  // function written, null before and after.
+  {
+    const target = document.createElement("div");
+    const before = target.onclick === null;
+    const clicked = (event: MouseEvent): void => {};
+    target.onclick = clicked;
+    const same = target.onclick === clicked;
+    target.onclick = null;
+    log("onclickRead", (before ? "null" : "set") + "|" + (same ? "same" : "other") + "|" + (target.onclick === null ? "null" : "set"));
   }
 
   // crypto (Blink's modules component): a version-4 UUID's shape, and two
@@ -305,7 +317,7 @@ export function startLibDomPromises(): void {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -325,5 +337,11 @@ export function startLibDomPromises(): void {
     // app.ts check's.)
     settle("clipboard", (): Promise<void> => navigator.clipboard.writeText("copied"));
     settleFetch("fetched");
+    // RequestInit's method, a ByteString read from the dictionary before
+    // the fetch starts: refused, the promise rejected. window.fetch: the
+    // bare global with a dictionary is not compiled yet (ledger row 26).
+    settle("fetchWide", async (): Promise<void> => {
+      await window.fetch("data:text/plain,x", { method: "✓" });
+    });
   }, 0);
 }
