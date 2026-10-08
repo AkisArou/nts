@@ -13,16 +13,16 @@ export function alphaLength(): number {
   return text_length(sample(0x3b1));
 }
 
-export function alphaByte(at: number): number {
+export function alphaByte(at: c_int): number {
   return text_byte(sample(0x3b1), at as c_int);
 }
 
-export function betaByte(at: number): number {
+export function betaByte(at: c_int): number {
   return text_byte(sample(0x3b2), at as c_int);
 }
 
 // A lone high surrogate, which UTF-8 cannot spell. TextEncoder writes U+FFFD.
-export function loneByte(at: number): number {
+export function loneByte(at: c_int): number {
   return text_byte(String.fromCharCode(0xd800), at as c_int);
 }
 
@@ -70,7 +70,7 @@ export function dupLength(): number {
 }
 
 // `string | null`: NULL is null, and a string is a string.
-export function maybe(which: number): number {
+export function maybe(which: c_int): number {
   const s = text_maybe(which as c_int);
   return s === null ? -1 : s.length;
 }

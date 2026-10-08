@@ -3,7 +3,7 @@ import type { c_int } from "c:types";
 
 // Scoped: the arrow captures `total`, C calls it `upto` times during the
 // call, and the sum is read back after. 1 + 2 + ... + upto.
-export function sumTo(upto: number): number {
+export function sumTo(upto: c_int): number {
   let total = 0;
   each_upto((n) => {
     total += n;
@@ -29,7 +29,7 @@ export function twoContexts(): number {
 
 // An arrow taking fewer parameters than C passes, which TypeScript allows and
 // every event API relies on: the bridge accepts C's argument and drops it.
-export function countCalls(upto: number): number {
+export function countCalls(upto: c_int): number {
   let calls = 0;
   each_upto(() => {
     calls++;
@@ -51,7 +51,7 @@ export function visitItems(): number {
 // its own, and under counting gives back the one the arrow made. The second
 // answer is not ASCII, so it is converted, not copied as stored. All three
 // read back as written.
-export function ownedAnswers(count: number): number {
+export function ownedAnswers(count: c_int): number {
   const accent = "\u00e9";
   return owned_answers((n) => (n === 2 ? "item " + accent : "item " + String(n)), count as c_int);
 }
@@ -64,7 +64,7 @@ class Box {
 }
 
 let current = new Box();
-let handle = -1;
+let handle: c_int = -1 as c_int;
 
 export function start(): number {
   const box = new Box();
@@ -80,12 +80,12 @@ export function total(): number {
 }
 
 export function stop(): void {
-  unsubscribe(handle as c_int);
-  handle = -1;
+  unsubscribe(handle);
+  handle = -1 as c_int;
 }
 
 // Delivered from TypeScript as well as from C, so a test can drive a cycle
 // without a C caller.
-export function send(n: number): void {
-  deliver(n as c_int);
+export function send(n: c_int): void {
+  deliver(n);
 }

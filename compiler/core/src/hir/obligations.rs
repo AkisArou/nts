@@ -1060,6 +1060,17 @@ impl Slots<'_> {
                 super::native::Type::Scalar(kind) => Bounds::of(Some(kind)),
                 _ => Bounds::FULL,
             },
+            // `BigInt(x)` is exactly `x`, an integer -- it throws for
+            // anything else -- so it has the number's bounds.
+            OpKind::Call { callee: Callee::External(name), args, .. } if name == "nts_bigint_from_number" => {
+                let facts = args.first().map_or(Facts::TOP, |number| numbers.get_at(block, *number));
+                #[allow(clippy::cast_possible_truncation)]
+                if facts.integral() {
+                    Bounds { lo: facts.lo as i128, hi: facts.hi as i128 }
+                } else {
+                    Bounds::FULL
+                }
+            }
             // `BigInt.asIntN(w, x)` and `asUintN`: the explicit narrowing.
             OpKind::Call { callee: Callee::External(name), args, .. }
                 if matches!(name.as_str(), "nts_bigint_as_intn" | "nts_bigint_as_uintn") =>

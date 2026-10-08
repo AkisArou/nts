@@ -31,14 +31,14 @@ import type { c_int, c_uint64 } from "c:types";
 // of a 12-byte struct; if the struct were the natural 16 bytes, or the union
 // were laid out after padding, the kernel would read the subscription from the
 // wrong place and this would return something else or fail outright.
-export function waitForOne(fd: number): number {
+export function waitForOne(fd: c_int): number {
   const epfd = epoll_create1(0 as c_int);
   if (epfd < 0) return -1;
 
   const subscription = local<EpollEvent>();
   subscription.events = READABLE;
-  subscription.data.fd = fd as c_int;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd as c_int, subscription) !== 0) {
+  subscription.data.fd = fd;
+  if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, subscription) !== 0) {
     close(epfd);
     return -2;
   }
@@ -54,12 +54,12 @@ export function waitForOne(fd: number): number {
 // the bytes are whatever the write left, and on this target `fd` is the low
 // half of `u64` -- so a nonzero `fd` shows through. Nothing here tracks which
 // member is live, and the value below is what the platform gives.
-export function aliasedLowHalf(value: number): number {
+export function aliasedLowHalf(value: c_int): number {
   const event = local<EpollEvent>();
   // A 64-bit slot takes a `bigint`, and the cast is not ceremony: `Slot<T>`
   // projects to a plain `number` only for numeric members, so an exact
   // integer keeps its brand and a literal has to say which one it is.
   event.data.u64 = 0n as c_uint64;
-  event.data.fd = value as c_int;
+  event.data.fd = value;
   return Number(event.data.u64);
 }

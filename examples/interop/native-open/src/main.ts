@@ -12,11 +12,11 @@ const READ_ONLY = 0 as Flags;
 // prototype is for. With `O_CREAT` the mode argument is required; without it,
 // passing one is undefined -- so this is not a convenience, it is the only
 // way to reach `open` at all.
-export function createAndWrite(path: Ptr<c_char>, byte: number): number {
+export function createAndWrite(path: Ptr<c_char>, byte: c_char): number {
   const fd = open(path, CREATE_WRITE, OWNER_READ_WRITE);
   if (fd < 0) return -1;
   const buf = local<c_char>(1);
-  buf[0] = byte as c_char;
+  buf[0] = byte;
   // `size_t` is 64 bits here and so bigint-branded.
   const written = Number(write(fd, buf, 1n as c_size_t));
   close(fd);
