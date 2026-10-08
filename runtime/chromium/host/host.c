@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "dom_abi.h"
 #include "dom_bridge.h"
 
 struct NtsChromiumHost {
@@ -139,6 +140,15 @@ static void promise_fulfil_string(void *state, NtsPromise *promise,
   nts_release((NtsHeader *)value);
   nts_release((NtsHeader *)promise);
 }
+static void promise_fulfil_handle(void *state, NtsPromise *promise,
+                                  void *handle) {
+  request_checkpoint_end(state);
+  /* The promise holds the handle through the DOM family's pair, registered
+     below, and gives it back when it dies. */
+  nts_promise_fulfill_value(promise,
+                            nts_value_of_handle(handle, NTS_TAG_HANDLE_HOST));
+  nts_release((NtsHeader *)promise);
+}
 static void promise_reject(void *state, NtsPromise *promise, const char *name,
                            const char *message) {
   request_checkpoint_end(state);
@@ -150,8 +160,19 @@ static void promise_drop(void *state, NtsPromise *promise) {
   nts_release((NtsHeader *)promise);
 }
 static const NtsDomPromiseOps promise_ops = {
-    promise_make, promise_fulfil, promise_fulfil_string, promise_reject,
-    promise_drop};
+    promise_make,   promise_fulfil, promise_fulfil_string,
+    promise_fulfil_handle, promise_reject, promise_drop};
+
+/* DOM handles as the runtime counts a host class's erased values (a promise
+   settled with one, an `unknown` holding one): nts_dom_retain roots the
+   Blink object, nts_dom_release unroots it. Every nts:dom class a value can
+   hold names this pair. Registered once, before any program code runs. */
+static void dom_handle_retain(void *handle) { nts_dom_retain(handle); }
+static void dom_handle_release(void *handle) { nts_dom_release(handle); }
+__attribute__((constructor)) static void register_dom_handles(void) {
+  nts_handle_family_register(NTS_TAG_HANDLE_HOST, dom_handle_retain,
+                             dom_handle_release, "dom");
+}
 
 void nts_chromium_host_attach(NtsChromiumHost *host, NtsDomContext *context) {
   host->dom = context;

@@ -37,6 +37,20 @@ async function settleText(label: string, run: () => Promise<string>): Promise<vo
   document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
 }
 
+// The same for a promise fulfilled with a DOM object: the stylesheet
+// replace() settles with is the one it was called on, holding the new rule.
+async function settleSheet(label: string): Promise<void> {
+  let outcome = "";
+  try {
+    const sheet = new CSSStyleSheet();
+    const replaced = await sheet.replace("p { color: red } .x { margin: 0 }");
+    outcome = "fulfilled " + (replaced === sheet ? "same" : "other") + " " + replaced.cssRules.length;
+  } catch (error) {
+    outcome = "rejected " + (error as Error).name;
+  }
+  document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
+}
+
 export function libDomTranscript(): string {
   const lines: string[] = [];
   const log = (label: string, value: string): void => {
@@ -227,7 +241,7 @@ export function startLibDomPromises(): void {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -240,5 +254,6 @@ export function startLibDomPromises(): void {
     // An empty Blob: `new Blob(parts)` drops its parts today
     // (blockers/lib-dom-new-that-fits-no-constructor).
     settleText("text", (): Promise<string> => new Blob().text());
+    settleSheet("sheet");
   }, 0);
 }

@@ -16,6 +16,17 @@ void nts_blink_dom_post_idle(NtsDomContext* context,
   abort();
 }
 
+/* The DOM handle family's pair, which host.c registers at load: the
+   standalone check makes no DOM handle, so neither runs here. */
+void* nts_dom_retain(void* node) {
+  (void)node;
+  abort();
+}
+void nts_dom_release(void* node) {
+  (void)node;
+  abort();
+}
+
 int main(void) {
   for (int document = 0; document < 20; ++document) {
     NtsChromiumProbe* probe = nts_chromium_probe_create();

@@ -1,5 +1,5 @@
 {
-  "bound": 4890,
+  "bound": 4893,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -3512,11 +3512,6 @@
       "why": "dictionary member of type optional InputDeviceCapabilities?"
     },
     {
-      "interface": "UIEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
-    },
-    {
       "interface": "UIEvent",
       "member": "get sourceCapabilities",
       "why": "interface InputDeviceCapabilities is not bound"
@@ -3532,24 +3527,9 @@
       "why": "dictionary member of type optional InputDeviceCapabilities?"
     },
     {
-      "interface": "MouseEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "MouseEventInit",
-      "member": "relatedTarget",
-      "why": "dictionary member of type optional EventTarget?"
-    },
-    {
       "interface": "KeyboardEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
-    },
-    {
-      "interface": "KeyboardEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
     },
     {
       "interface": "DOMRectReadOnly",
@@ -3907,29 +3887,9 @@
       "why": "dictionary member of type optional InputDeviceCapabilities?"
     },
     {
-      "interface": "FocusEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "FocusEventInit",
-      "member": "relatedTarget",
-      "why": "dictionary member of type optional EventTarget?"
-    },
-    {
       "interface": "InputEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
-    },
-    {
-      "interface": "InputEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "InputEventInit",
-      "member": "dataTransfer",
-      "why": "dictionary member of type optional DataTransfer?"
     },
     {
       "interface": "InputEventInit",
@@ -3940,16 +3900,6 @@
       "interface": "PointerEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "relatedTarget",
-      "why": "dictionary member of type optional EventTarget?"
     },
     {
       "interface": "PointerEventInit",
@@ -3975,16 +3925,6 @@
       "interface": "WheelEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
-    },
-    {
-      "interface": "WheelEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "WheelEventInit",
-      "member": "relatedTarget",
-      "why": "dictionary member of type optional EventTarget?"
     },
     {
       "interface": "CustomEventInit",
@@ -6807,11 +6747,6 @@
       "why": "dictionary member of type optional (MediaList or DOMString)"
     },
     {
-      "interface": "CSSStyleSheet",
-      "member": "replace/1",
-      "why": "result type Promise<CSSStyleSheet>"
-    },
-    {
       "interface": "CSSStyleRule",
       "member": "get styleMap",
       "why": "interface StylePropertyMap is not bound"
@@ -6907,39 +6842,14 @@
       "why": "dictionary member of type optional InputDeviceCapabilities?"
     },
     {
-      "interface": "DragEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "DragEventInit",
-      "member": "relatedTarget",
-      "why": "dictionary member of type optional EventTarget?"
-    },
-    {
-      "interface": "DragEventInit",
-      "member": "dataTransfer",
-      "why": "dictionary member of type optional DataTransfer?"
-    },
-    {
       "interface": "CompositionEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
     },
     {
-      "interface": "CompositionEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
-    },
-    {
       "interface": "TouchEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
-    },
-    {
-      "interface": "TouchEventInit",
-      "member": "view",
-      "why": "dictionary member of type optional Window?"
     },
     {
       "interface": "TouchEventInit",
@@ -6962,34 +6872,14 @@
       "why": "dictionary TouchInit's required member target (dictionary member of type EventTarget)"
     },
     {
-      "interface": "ClipboardEventInit",
-      "member": "clipboardData",
-      "why": "dictionary member of type optional DataTransfer?"
-    },
-    {
-      "interface": "AnimationEventInit",
-      "member": "animation",
-      "why": "dictionary member of type optional Animation?"
-    },
-    {
       "interface": "AnimationEvent",
       "member": "get pseudoTarget",
       "why": "[RuntimeEnabled=EventPseudoTargetProperty] overridable"
     },
     {
-      "interface": "TransitionEventInit",
-      "member": "animation",
-      "why": "dictionary member of type optional Animation?"
-    },
-    {
       "interface": "TransitionEvent",
       "member": "get pseudoTarget",
       "why": "[RuntimeEnabled=EventPseudoTargetProperty] overridable"
-    },
-    {
-      "interface": "SubmitEventInit",
-      "member": "submitter",
-      "why": "dictionary member of type optional HTMLElement?"
     },
     {
       "interface": "SubmitEvent",
@@ -7585,16 +7475,6 @@
       "interface": "Animation",
       "member": "get onremove",
       "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Animation",
-      "member": "get finished",
-      "why": "result type Promise<Animation>"
-    },
-    {
-      "interface": "Animation",
-      "member": "get ready",
-      "why": "result type Promise<Animation>"
     },
     {
       "interface": "AnimationEffect",

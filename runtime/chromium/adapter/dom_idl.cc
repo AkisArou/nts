@@ -1117,6 +1117,7 @@ blink::UIEventInit* NtsDomToUIEventInit(NtsDomContext& context, const NtsDomUIEv
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   return to;
 }
 blink::MouseEventInit* NtsDomToMouseEventInit(NtsDomContext& context, const NtsDomMouseEventInit& from, blink::ExceptionState& exception_state) {
@@ -1127,6 +1128,7 @@ blink::MouseEventInit* NtsDomToMouseEventInit(NtsDomContext& context, const NtsD
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   if (from.altKey) to->setAltKey(true);
   if (from.ctrlKey) to->setCtrlKey(true);
   if (from.metaKey) to->setMetaKey(true);
@@ -1144,6 +1146,7 @@ blink::MouseEventInit* NtsDomToMouseEventInit(NtsDomContext& context, const NtsD
   if (from.movementX != 0) to->setMovementX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementX), conversion));
   if (from.movementY != 0) to->setMovementY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementY), conversion));
   if (from.region) to->setRegion(NtsText(context, from.region));
+  if (from.relatedTarget) to->setRelatedTarget(ObjectOf<blink::EventTarget>(from.relatedTarget));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
   return to;
@@ -1156,6 +1159,7 @@ blink::KeyboardEventInit* NtsDomToKeyboardEventInit(NtsDomContext& context, cons
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   if (from.altKey) to->setAltKey(true);
   if (from.ctrlKey) to->setCtrlKey(true);
   if (from.metaKey) to->setMetaKey(true);
@@ -5448,6 +5452,8 @@ blink::FocusEventInit* NtsDomToFocusEventInit(NtsDomContext& context, const NtsD
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
+  if (from.relatedTarget) to->setRelatedTarget(ObjectOf<blink::EventTarget>(from.relatedTarget));
   return to;
 }
 blink::InputEventInit* NtsDomToInputEventInit(NtsDomContext& context, const NtsDomInputEventInit& from, blink::ExceptionState& exception_state) {
@@ -5458,7 +5464,9 @@ blink::InputEventInit* NtsDomToInputEventInit(NtsDomContext& context, const NtsD
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   if (from.data) to->setData(NtsText(context, from.data));
+  if (from.dataTransfer) to->setDataTransfer(ObjectOf<blink::DataTransfer>(from.dataTransfer));
   if (from.inputType) to->setInputType(NtsText(context, from.inputType));
   if (from.isComposing) to->setIsComposing(true);
   return to;
@@ -5471,6 +5479,7 @@ blink::PointerEventInit* NtsDomToPointerEventInit(NtsDomContext& context, const 
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   if (from.altKey) to->setAltKey(true);
   if (from.ctrlKey) to->setCtrlKey(true);
   if (from.metaKey) to->setMetaKey(true);
@@ -5488,6 +5497,7 @@ blink::PointerEventInit* NtsDomToPointerEventInit(NtsDomContext& context, const 
   if (from.movementX != 0) to->setMovementX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementX), conversion));
   if (from.movementY != 0) to->setMovementY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementY), conversion));
   if (from.region) to->setRegion(NtsText(context, from.region));
+  if (from.relatedTarget) to->setRelatedTarget(ObjectOf<blink::EventTarget>(from.relatedTarget));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
   if (from.altitudeAngle != 0) to->setAltitudeAngle(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.altitudeAngle), conversion));
@@ -5511,6 +5521,7 @@ blink::WheelEventInit* NtsDomToWheelEventInit(NtsDomContext& context, const NtsD
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   if (from.altKey) to->setAltKey(true);
   if (from.ctrlKey) to->setCtrlKey(true);
   if (from.metaKey) to->setMetaKey(true);
@@ -5528,6 +5539,7 @@ blink::WheelEventInit* NtsDomToWheelEventInit(NtsDomContext& context, const NtsD
   if (from.movementX != 0) to->setMovementX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementX), conversion));
   if (from.movementY != 0) to->setMovementY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementY), conversion));
   if (from.region) to->setRegion(NtsText(context, from.region));
+  if (from.relatedTarget) to->setRelatedTarget(ObjectOf<blink::EventTarget>(from.relatedTarget));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
   if (from.deltaMode != 0) to->setDeltaMode(blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(isolate, v8::Number::New(isolate, from.deltaMode), conversion));
@@ -5666,6 +5678,7 @@ blink::DragEventInit* NtsDomToDragEventInit(NtsDomContext& context, const NtsDom
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   if (from.altKey) to->setAltKey(true);
   if (from.ctrlKey) to->setCtrlKey(true);
   if (from.metaKey) to->setMetaKey(true);
@@ -5683,8 +5696,10 @@ blink::DragEventInit* NtsDomToDragEventInit(NtsDomContext& context, const NtsDom
   if (from.movementX != 0) to->setMovementX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementX), conversion));
   if (from.movementY != 0) to->setMovementY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementY), conversion));
   if (from.region) to->setRegion(NtsText(context, from.region));
+  if (from.relatedTarget) to->setRelatedTarget(ObjectOf<blink::EventTarget>(from.relatedTarget));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
+  if (from.dataTransfer) to->setDataTransfer(ObjectOf<blink::DataTransfer>(from.dataTransfer));
   return to;
 }
 blink::CompositionEventInit* NtsDomToCompositionEventInit(NtsDomContext& context, const NtsDomCompositionEventInit& from, blink::ExceptionState& exception_state) {
@@ -5695,6 +5710,7 @@ blink::CompositionEventInit* NtsDomToCompositionEventInit(NtsDomContext& context
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   if (from.data) to->setData(NtsText(context, from.data));
   return to;
 }
@@ -5706,6 +5722,7 @@ blink::TouchEventInit* NtsDomToTouchEventInit(NtsDomContext& context, const NtsD
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.view) to->setView(ObjectOf<blink::DOMWindow>(from.view));
   if (from.altKey) to->setAltKey(true);
   if (from.ctrlKey) to->setCtrlKey(true);
   if (from.metaKey) to->setMetaKey(true);
@@ -5724,6 +5741,7 @@ blink::ClipboardEventInit* NtsDomToClipboardEventInit(NtsDomContext& context, co
   if (from.bubbles) to->setBubbles(true);
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
+  if (from.clipboardData) to->setClipboardData(ObjectOf<blink::DataTransfer>(from.clipboardData));
   return to;
 }
 blink::AnimationEventInit* NtsDomToAnimationEventInit(NtsDomContext& context, const NtsDomAnimationEventInit& from, blink::ExceptionState& exception_state) {
@@ -5733,6 +5751,7 @@ blink::AnimationEventInit* NtsDomToAnimationEventInit(NtsDomContext& context, co
   if (from.bubbles) to->setBubbles(true);
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
+  if (from.animation) to->setAnimation(ObjectOf<blink::Animation>(from.animation));
   if (from.animationName) to->setAnimationName(NtsText(context, from.animationName));
   if (from.elapsedTime != 0) to->setElapsedTime(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.elapsedTime), conversion));
   if (from.pseudoElement) to->setPseudoElement(NtsText(context, from.pseudoElement));
@@ -5745,6 +5764,7 @@ blink::TransitionEventInit* NtsDomToTransitionEventInit(NtsDomContext& context, 
   if (from.bubbles) to->setBubbles(true);
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
+  if (from.animation) to->setAnimation(ObjectOf<blink::Animation>(from.animation));
   if (from.elapsedTime != 0) to->setElapsedTime(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.elapsedTime), conversion));
   if (from.propertyName) to->setPropertyName(NtsText(context, from.propertyName));
   if (from.pseudoElement) to->setPseudoElement(NtsText(context, from.pseudoElement));
@@ -5756,6 +5776,7 @@ blink::SubmitEventInit* NtsDomToSubmitEventInit(NtsDomContext& context, const Nt
   if (from.bubbles) to->setBubbles(true);
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
+  if (from.submitter) to->setSubmitter(ObjectOf<blink::HTMLElement>(from.submitter));
   return to;
 }
 blink::HashChangeEventInit* NtsDomToHashChangeEventInit(NtsDomContext& context, const NtsDomHashChangeEventInit& from, blink::ExceptionState& exception_state) {
@@ -37639,6 +37660,15 @@ void nts_dom_CSSStyleSheet_removeRule_0(NtsDomCSSStyleSheet* self, NtsDomExcepti
   receiver->removeRule(0, exception_state);
 }
 
+struct NtsPromise* nts_dom_CSSStyleSheet_replace(NtsDomCSSStyleSheet* self, const NtsBorrowedString* text) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::CSSStyleSheet>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->replace(script_state, NtsText(context, text), exception_state));
+}
+
 void nts_dom_CSSStyleSheet_replaceSync(NtsDomCSSStyleSheet* self, const NtsBorrowedString* text, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -41578,6 +41608,24 @@ void nts_dom_Animation_set_onremove_null(NtsDomAnimation* self) {
   blink::EventListener* previous = receiver->onremove();
   receiver->setOnremove(nullptr);
   context.Replaced(previous);
+}
+
+struct NtsPromise* nts_dom_Animation_get_finished(NtsDomAnimation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Animation>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->finished(script_state));
+}
+
+struct NtsPromise* nts_dom_Animation_get_ready(NtsDomAnimation* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Animation>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->ready(script_state));
 }
 
 void nts_dom_Animation_cancel(NtsDomAnimation* self) {

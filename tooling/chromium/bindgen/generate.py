@@ -202,7 +202,7 @@ class Function:
         self.receiver = True  # false for a constructor or a downcast: no `self`
 
     def needs_context(self):
-        return (self.reactions or self.result.kind in ("string", "promise", "promise_string") or any(p.context for p in self.params)
+        return (self.reactions or self.result.kind in ("string", "promise", "promise_string", "promise_handle") or any(p.context for p in self.params)
                 or "context." in self.expression or any("context." in s for s in self.statements))
 
 
@@ -369,9 +369,12 @@ class Generator:
                 if member.idl_type.unwrap().keyword_typename in STRINGS:
                     fields.append((member.identifier, "string", member.idl_type.unwrap(), False))
                     continue
-                # A bound interface (`relatedTarget`, `view`) would be a
-                # handle field: refused while a by-value struct cannot lend
-                # one (blockers/a-struct-argument-lending-a-handle).
+                # A bound interface (`relatedTarget`, `view`): a handle field
+                # the struct lends for the call (ad784a2d5).
+                referenced = member.idl_type.unwrap()
+                if referenced.is_interface and referenced.identifier in self.bound:
+                    fields.append((member.identifier, "handle:" + referenced.identifier, referenced, False))
+                    continue
 
             if nullable or keyword not in ("boolean", *NUMERIC):
                 unbindable(member, f"dictionary member of type {member.idl_type.syntactic_form}")
@@ -606,9 +609,11 @@ class Generator:
             # `Promise<USVString>` (`blob.text()`): settled with the program's string.
             if settled.keyword_typename in STRINGS:
                 return Result("struct NtsPromise*", "Promise<string>", "promise_string")
-            # `Promise<Animation>` (`animation.finished`): a handle the promise
-            # holds has no ownership rule yet (what keeps Blink's object alive
-            # between the fulfil and the program's read).
+            # `Promise<Animation>` (`animation.finished`): settled with the
+            # object, a DOM handle the program's promise holds
+            # (NTS_TAG_HANDLE_HOST; nts_dom::AnswerWrappable).
+            if settled.is_interface and settled.identifier in self.bound:
+                return Result("struct NtsPromise*", f"Promise<{settled.identifier}>", "promise_handle")
             raise Skip(f"result type {idl_type.syntactic_form}")
         keyword = unwrapped.keyword_typename
         if keyword in STRINGS:

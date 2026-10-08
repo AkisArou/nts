@@ -181,6 +181,7 @@ typedef struct NtsDomAnimationEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
   uint8_t composed;
+  NtsDomAnimation* animation;
   const NtsBorrowedString* animationName;
   double elapsedTime;
   const NtsBorrowedString* pseudoElement;
@@ -206,12 +207,14 @@ typedef struct NtsDomClipboardEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
   uint8_t composed;
+  NtsDomDataTransfer* clipboardData;
 } NtsDomClipboardEventInit;
 typedef struct NtsDomCompositionEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
   const NtsBorrowedString* data;
 } NtsDomCompositionEventInit;
 typedef struct NtsDomConvertCoordinateOptions {
@@ -279,6 +282,7 @@ typedef struct NtsDomDragEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
   uint8_t altKey;
   uint8_t ctrlKey;
   uint8_t metaKey;
@@ -296,8 +300,10 @@ typedef struct NtsDomDragEventInit {
   double movementX;
   double movementY;
   const NtsBorrowedString* region;
+  NtsDomEventTarget* relatedTarget;
   double screenX;
   double screenY;
+  NtsDomDataTransfer* dataTransfer;
 } NtsDomDragEventInit;
 typedef struct NtsDomErrorEventInit {
   uint8_t bubbles;
@@ -318,6 +324,8 @@ typedef struct NtsDomFocusEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
+  NtsDomEventTarget* relatedTarget;
 } NtsDomFocusEventInit;
 typedef struct NtsDomFocusOptions {
   uint8_t focusVisible;
@@ -354,7 +362,9 @@ typedef struct NtsDomInputEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
   const NtsBorrowedString* data;
+  NtsDomDataTransfer* dataTransfer;
   const NtsBorrowedString* inputType;
   uint8_t isComposing;
 } NtsDomInputEventInit;
@@ -363,6 +373,7 @@ typedef struct NtsDomKeyboardEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
   uint8_t altKey;
   uint8_t ctrlKey;
   uint8_t metaKey;
@@ -386,6 +397,7 @@ typedef struct NtsDomMouseEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
   uint8_t altKey;
   uint8_t ctrlKey;
   uint8_t metaKey;
@@ -403,6 +415,7 @@ typedef struct NtsDomMouseEventInit {
   double movementX;
   double movementY;
   const NtsBorrowedString* region;
+  NtsDomEventTarget* relatedTarget;
   double screenX;
   double screenY;
 } NtsDomMouseEventInit;
@@ -435,6 +448,7 @@ typedef struct NtsDomPointerEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
   uint8_t altKey;
   uint8_t ctrlKey;
   uint8_t metaKey;
@@ -452,6 +466,7 @@ typedef struct NtsDomPointerEventInit {
   double movementX;
   double movementY;
   const NtsBorrowedString* region;
+  NtsDomEventTarget* relatedTarget;
   double screenX;
   double screenY;
   double altitudeAngle;
@@ -505,6 +520,7 @@ typedef struct NtsDomSubmitEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
   uint8_t composed;
+  NtsDomHTMLElement* submitter;
 } NtsDomSubmitEventInit;
 typedef struct NtsDomTogglePopoverOptions {
   uint8_t force;
@@ -514,6 +530,7 @@ typedef struct NtsDomTouchEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
   uint8_t altKey;
   uint8_t ctrlKey;
   uint8_t metaKey;
@@ -529,6 +546,7 @@ typedef struct NtsDomTransitionEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
   uint8_t composed;
+  NtsDomAnimation* animation;
   double elapsedTime;
   const NtsBorrowedString* propertyName;
   const NtsBorrowedString* pseudoElement;
@@ -538,12 +556,14 @@ typedef struct NtsDomUIEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
 } NtsDomUIEventInit;
 typedef struct NtsDomWheelEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  NtsDomWindow* view;
   uint8_t altKey;
   uint8_t ctrlKey;
   uint8_t metaKey;
@@ -561,6 +581,7 @@ typedef struct NtsDomWheelEventInit {
   double movementX;
   double movementY;
   const NtsBorrowedString* region;
+  NtsDomEventTarget* relatedTarget;
   double screenX;
   double screenY;
   double deltaMode;
@@ -5328,6 +5349,7 @@ double nts_dom_CSSStyleSheet_insertRule_2(NtsDomCSSStyleSheet* self, const NtsBo
 double nts_dom_CSSStyleSheet_insertRule_1(NtsDomCSSStyleSheet* self, const NtsBorrowedString* rule, NtsDomException** error);
 void nts_dom_CSSStyleSheet_removeRule_1(NtsDomCSSStyleSheet* self, double index, NtsDomException** error);
 void nts_dom_CSSStyleSheet_removeRule_0(NtsDomCSSStyleSheet* self, NtsDomException** error);
+struct NtsPromise* nts_dom_CSSStyleSheet_replace(NtsDomCSSStyleSheet* self, const NtsBorrowedString* text);
 void nts_dom_CSSStyleSheet_replaceSync(NtsDomCSSStyleSheet* self, const NtsBorrowedString* text, NtsDomException** error);
 double nts_dom_CSSRuleList_get_length(NtsDomCSSRuleList* self);
 NtsDomCSSRule* nts_dom_CSSRuleList_item(NtsDomCSSRuleList* self, double index);
@@ -5925,6 +5947,8 @@ void nts_dom_Animation_set_oncancel_null(NtsDomAnimation* self);
 void nts_dom_Animation_set_onremove_void(NtsDomAnimation* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*));
 void nts_dom_Animation_set_onremove_boolean(NtsDomAnimation* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*));
 void nts_dom_Animation_set_onremove_null(NtsDomAnimation* self);
+struct NtsPromise* nts_dom_Animation_get_finished(NtsDomAnimation* self);
+struct NtsPromise* nts_dom_Animation_get_ready(NtsDomAnimation* self);
 void nts_dom_Animation_cancel(NtsDomAnimation* self);
 void nts_dom_Animation_commitStyles(NtsDomAnimation* self, NtsDomException** error);
 void nts_dom_Animation_finish(NtsDomAnimation* self, NtsDomException** error);

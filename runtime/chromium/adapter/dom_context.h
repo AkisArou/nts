@@ -533,6 +533,21 @@ NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,
                    blink::ScriptPromise<blink::IDLString> promise);
+// The same, fulfilled with a Blink object: the program's promise holds it as
+// a DOM handle (`animation.finished` answers the Animation).
+NtsPromise *AnswerWrappable(NtsDomContext &context,
+                            blink::ScriptState *script_state,
+                            const Rejections &rejections,
+                            v8::Local<v8::Promise> promise);
+template <typename T>
+  requires std::is_base_of_v<blink::ScriptWrappable, T>
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<T> promise) {
+  return AnswerWrappable(context, script_state, rejections,
+                         promise.IsEmpty() ? v8::Local<v8::Promise>()
+                                           : promise.V8Promise());
+}
 // A promise already rejected with what `rejections` holds: a member whose
 // arguments failed to convert, before Blink is called.
 NtsPromise *Rejected(NtsDomContext &context, const Rejections &rejections);

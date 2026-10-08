@@ -254,9 +254,9 @@ public:
       : context_(context), promise_(promise) {}
   void Trace(blink::Visitor *) const {}
 
-  // `name` null: fulfilled (with `text`, when it is not null).
+  // `name` null: fulfilled -- with `text` or `handle` when one is not null.
   void Settle(const char *name, const char *message,
-              const NtsStringView *text = nullptr);
+              const NtsStringView *text = nullptr, void *handle = nullptr);
   // The promise, unsettled, for the document's end; null after either.
   NtsPromise *Take() {
     context_ = nullptr;
@@ -301,6 +301,30 @@ public:
     visitor->Trace(pending_);
     blink::ThenCallable<IDLText, NtsPromiseFulfilledText<IDLText>>::Trace(
         visitor);
+  }
+
+private:
+  blink::Member<NtsPendingPromise> pending_;
+};
+// Fulfilled with a Blink object: its handle, which the program's promise
+// holds. A value that is not a wrapper fulfils with nothing.
+class NtsPromiseFulfilledWrappable final
+    : public blink::ThenCallable<blink::IDLAny, NtsPromiseFulfilledWrappable> {
+public:
+  explicit NtsPromiseFulfilledWrappable(NtsPendingPromise *pending)
+      : pending_(pending) {}
+  void React(blink::ScriptState *script_state, blink::ScriptValue value) {
+    v8::Local<v8::Value> settled = value.V8Value();
+    blink::ScriptWrappable *wrappable =
+        settled->IsObject()
+            ? blink::ToAnyScriptWrappable(script_state->GetIsolate(),
+                                          settled.As<v8::Object>())
+            : nullptr;
+    pending_->Settle(nullptr, nullptr, nullptr, wrappable);
+  }
+  void Trace(blink::Visitor *visitor) const override {
+    visitor->Trace(pending_);
+    ThenCallable::Trace(visitor);
   }
 
 private:
@@ -690,7 +714,7 @@ private:
 // enters it, and gives the adapter's reference back; nothing once the
 // document has ended (Close dropped it).
 void NtsPendingPromise::Settle(const char *name, const char *message,
-                               const NtsStringView *text) {
+                               const NtsStringView *text, void *handle) {
   NtsDomContext *context = context_;
   NtsPromise *promise = Take();
   if (!context || !promise || context->closed)
@@ -704,8 +728,9 @@ void NtsPendingPromise::Settle(const char *name, const char *message,
     RAW_PTR_EXCLUSION const char *name;            // see PlainPointers
     RAW_PTR_EXCLUSION const char *message;         // see PlainPointers
     RAW_PTR_EXCLUSION const NtsStringView *text;   // see PlainPointers
+    RAW_PTR_EXCLUSION void *handle;                // see PlainPointers
   } call{context->promise_ops.get(), context->promise_state.get(), promise,
-         name, message, text};
+         name, message, text, handle};
   context->invoke(
       context->invoke_host.get(),
       [](void *state) {
@@ -715,6 +740,8 @@ void NtsPendingPromise::Settle(const char *name, const char *message,
                             call->message);
         else if (call->text)
           call->ops->fulfil_string(call->state, call->promise, call->text);
+        else if (call->handle)
+          call->ops->fulfil_handle(call->state, call->promise, call->handle);
         else
           call->ops->fulfil(call->state, call->promise);
       },
@@ -1410,6 +1437,17 @@ NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
   return Subscribe<blink::IDLUSVString,
                    NtsPromiseFulfilledText<blink::IDLUSVString>>(
       context, script_state, rejections, promise);
+}
+NtsPromise *AnswerWrappable(NtsDomContext &context,
+                            blink::ScriptState *script_state,
+                            const Rejections &rejections,
+                            v8::Local<v8::Promise> promise) {
+  if (promise.IsEmpty())
+    return Rejected(context, rejections);
+  return Subscribe<blink::IDLAny, NtsPromiseFulfilledWrappable>(
+      context, script_state, rejections,
+      blink::ScriptPromise<blink::IDLAny>::FromV8Promise(
+          script_state->GetIsolate(), promise));
 }
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,

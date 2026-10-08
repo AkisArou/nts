@@ -824,6 +824,12 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
     fromRect.right + "," + fromRect.bottom + "|" + shown(parsedDocument.querySelector("#q")!.textContent));
   const pointed = newMouseEvent("click", { clientX: 12.5, clientY: -3, button: 2, ctrlKey: true, detail: 7 });
   log("mouseInit", pointed.clientX + "|" + pointed.clientY + "|" + pointed.button + "|" + (pointed.ctrlKey ? "ctrl" : "-") + (pointed.shiftKey ? "shift" : "-") + "|" + pointed.detail);
+  // A dictionary member that is a node or the window: the struct's pointer,
+  // lent for the call; NULL for the member's null default.
+  const related = newMouseEvent("mouseover", { relatedTarget: outer, view: window() });
+  const unrelated = newMouseEvent("mouseover", { bubbles: true });
+  log("eventInitHandles", (related.relatedTarget === outer ? "outer" : "other") + "|" + (related.view === window() ? "window" : "other") + "|" +
+    (unrelated.relatedTarget === null ? "null" : "set") + "|" + (unrelated.view === null ? "null" : "set"));
   // A nullable string member (InputEventInit.data, null by default): given,
   // and left out.
   const typed = newInputEvent("beforeinput", { data: "é✓", inputType: "insertText" });

@@ -37,6 +37,9 @@ typedef struct NtsDomPromiseOps {
   // Fulfilled with text, which the host copies (`blob.text()`).
   void (*fulfil_string)(void* state, NtsPromise* promise,
                         const NtsStringView* text);
+  // Fulfilled with a Blink object, as a DOM handle the promise holds
+  // (`animation.finished`).
+  void (*fulfil_handle)(void* state, NtsPromise* promise, void* handle);
   void (*reject)(void* state, NtsPromise* promise, const char* name,
                  const char* message);
   void (*drop)(void* state, NtsPromise* promise);
