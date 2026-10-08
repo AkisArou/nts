@@ -256,6 +256,41 @@ through the gate on its own.
   `gtk-journal`'s `get_n_items() - 1` and `list-model`'s
   `remove(row.get_index())`), or a **fact the engine lacks**.
 
+**Step 0 results (2026-10-08).** `nts facts --crossings`, over 648 projects
+(every example, `runtime/node`, the Chromium lane), judged by local facts only
+(Q2). Counted once per source location:
+
+- **275 proven, 589 unproven.** The whole-program analysis would prove just
+  6 more (281 / 583), so Q2 costs almost nothing.
+- 22 projects couldn't be measured alone: the `examples/workspace` apps need a
+  workspace build, `examples/invalid` fails to typecheck on purpose, and two
+  GJS examples don't typecheck in isolation.
+
+What the 589 unproven are, and what clears each group:
+
+| Group | Count | Example | Cleared by |
+|---|---|---|---|
+| **Generated GTK wrappers' parameters** (`bind-gir`'s `*.values.ts`) | 452 | `default_port: CNumber<"uint16">` passed straight to C | **Written types as facts** (Q1). No program changes. |
+| **A native function's result passed on** | 22 | `close(open(…))`; `remove(list, sel.get_selected())` | **A binding's return type as a fact** (a `guint` result is 0..2^32-1) |
+| **Loop counters over native counts** | 8 | `for (i = 0; i < n; i++) get_object(model, i)`, `n` from `get_n_items()` | the same, plus the existing `i < n` relation |
+| **Constructor properties** | 31 | `new Gtk.Box({ spacing: 6, … })` | **The bound property's type as a written type** |
+| **Globals holding native values** | 16 | `weak_alive(tallyWatch)` (macOS) | written types and binding results |
+| **Parameters of the program's own functions** | 34 | test entry points `export function f(n: number)` passing `n` to C; callback parameters (`DefWindowProcW`, GObject overrides) | callbacks: the binding's parameter types. Exports: **the example declares `n: c_int`**, and the test harness generates inputs that fit. |
+| **Arithmetic that can really overflow** | 11 | `get_n_items() - 1` and `badge_number -= 1` send -1 (as 4294967295) when empty; `size + 300`, `width_chars += 3` can pass `int`'s range | **Real bugs or real edges: the program must guard.** Strict is right here. |
+| **Values from outside** | 9 | `Number(args[0])` in the GJS workbench | **An explicit `c_int(…)` or a guard.** Strict is right here. |
+| Other (a field, an element, a program call's result) | 6 | | individually |
+
+**What the engine must learn** (from the census's own probes):
+- guards through `&&`, an early return through `||`, and `Number.isInteger`:
+  today only nested `if`s narrow;
+- `Math.round`/`floor`/`trunc` give whole numbers;
+- relations: `a - b` is non-negative inside `if (a >= b)`.
+
+**So about 20 of the 589 are refusals strict exists for:** two real
+underflows, several possible overflows, and values from outside. Everything
+else clears by making written and binding types facts, which step 1 does
+first.
+
 **1. Strict native calls** (A, C, D):
 - the facts step 0 found missing, including validators' assertions and written
   parameter types;

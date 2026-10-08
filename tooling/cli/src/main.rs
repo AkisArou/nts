@@ -1528,14 +1528,15 @@ fn dump_crossings(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
         }
         if tsv {
             println!(
-                "{verdict}\t{place}\t{}\t{kind}\t{target}\t{c_type}\t{lo}..{hi}\t{}\t{}",
+                "{verdict}\t{place}\t{}\t{kind}\t{target}\t{c_type}\t{lo}..{hi}\t{}\t{}\t{:?}",
                 crossing.func,
                 known(&crossing.source),
-                reasons(&crossing.unproven)
+                reasons(&crossing.unproven),
+                crossing.made
             );
         } else {
             let into = if target.is_empty() { format!("a store into {c_type}") } else { format!("{target} ({c_type})") };
-            println!("{verdict:<9} {place}  {into}, {lo}..{hi}: knows {}", known(&crossing.source));
+            println!("{verdict:<9} {place}  {into}, {lo}..{hi}: knows {}, made by {:?}", known(&crossing.source), crossing.made);
             if !crossing.proven() {
                 println!("          {}", reasons(&crossing.unproven));
             }

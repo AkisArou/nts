@@ -97,6 +97,33 @@ pub enum Why {
     LiteralOutside(i128),
 }
 
+/// What made the crossing value: which kind of fact would prove it.
+///
+/// For the census's classification. A parameter is proven by its written
+/// type (step 1), a native result by its binding's return type, a guard's
+/// effect shows in a join, and so on -- each kind points at the fact that is
+/// missing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Made {
+    Parameter,
+    /// A value from native code: a binding's result.
+    NativeResult,
+    /// A call to a function of the program.
+    ProgramCall,
+    /// A call to a runtime helper.
+    RuntimeCall,
+    Field,
+    Element,
+    Global,
+    Length,
+    Arithmetic,
+    Literal,
+    /// A value joined from several paths: a loop variable, or one assigned
+    /// in branches.
+    Join,
+    Other,
+}
+
 /// One crossing, and the verdict on it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Crossing {
@@ -109,6 +136,8 @@ pub struct Crossing {
     pub bits: u32,
     pub signed: bool,
     pub source: Source,
+    /// What made the value that crosses.
+    pub made: Made,
     /// Empty when proven.
     pub unproven: Vec<Why>,
 }
@@ -252,8 +281,29 @@ fn crossing(func: &Func, analysis: &Analysis, block: BlockId, value: ValueId, in
         bits,
         signed,
         source,
+        made: made_by(func, operand),
         unproven,
     })
+}
+
+fn made_by(func: &Func, value: ValueId) -> Made {
+    match &func.value(value).kind {
+        OpKind::Param(_) => Made::Parameter,
+        OpKind::BlockParam(_) => Made::Join,
+        OpKind::Call { callee: Callee::Native(_), .. } => Made::NativeResult,
+        OpKind::Call { callee: Callee::Direct(_), .. } => Made::ProgramCall,
+        OpKind::Call { callee: Callee::External(_), .. } => Made::RuntimeCall,
+        OpKind::FieldGet { .. } => Made::Field,
+        OpKind::ArrayGet { .. } => Made::Element,
+        OpKind::GlobalGet(_) => Made::Global,
+        OpKind::Length(_) => Made::Length,
+        OpKind::Binary { .. } | OpKind::Unary { .. } => Made::Arithmetic,
+        OpKind::ConstFloat(_) | OpKind::ConstInt(_) => Made::Literal,
+        // A conversion between number representations says nothing new about
+        // where the value came from: look through it.
+        OpKind::Convert(from) => made_by(func, *from),
+        _ => Made::Other,
+    }
 }
 
 #[cfg(test)]
