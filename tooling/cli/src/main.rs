@@ -741,6 +741,9 @@ fn main() -> Result<()> {
             if rest.iter().any(|arg| arg == "--obligations") {
                 return dump_obligations(&tsconfig, rest.iter().any(|arg| arg == "--tsv"));
             }
+            if rest.iter().any(|arg| arg == "--strict") {
+                return dump_strict(&tsconfig);
+            }
             dump_facts(&tsconfig, rest.iter().any(|arg| arg == "--prepared"))
         }
         Some("refusals") => {
@@ -1457,6 +1460,25 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     for (name, why) in &prepared.program.uncompiled {
         println!("{name}\t{why}");
     }
+    Ok(())
+}
+
+/// `nts facts --strict`: what the strict check ([`hir::obligations::check`])
+/// says of the program, one error per line.
+fn dump_strict(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = frontend_binary();
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    report_snapshot_diagnostics(&snapshot)?;
+    let lowered = hir::lower::lower(&snapshot);
+    let errors = hir::obligations::check(&lowered.program, &lowered.arrivals.at_signature);
+    for error in &errors {
+        println!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, error));
+        for label in &error.labels {
+            println!("  {}: {}", nts_diagnostics::where_it_is(&snapshot.sources, &label.location), label.message);
+        }
+    }
+    println!("{} error(s)", errors.len());
     Ok(())
 }
 

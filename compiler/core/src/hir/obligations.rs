@@ -45,7 +45,7 @@
 //! breaks a call in another, and a speculative copy's facts would pass for
 //! proof. [`local_analysis`] is that rule, in one place.
 
-use nts_diagnostics::Location;
+use nts_diagnostics::{Diagnostic, Location};
 use rustc_hash::FxHashMap;
 
 use super::facts::Facts;
@@ -72,13 +72,19 @@ impl Obligation {
     /// The integers the slot holds, or `None` for a float kind.
     #[must_use]
     pub fn range(&self) -> Option<(i128, i128)> {
-        let (lo, hi) = self.kind.integer_range()?;
-        Some(match self.bits {
-            Some(bits) if lo < 0 => (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1),
-            Some(bits) => (0, (1i128 << bits) - 1),
-            None => (lo, hi),
-        })
+        range_of(self.kind, self.bits)
     }
+}
+
+/// The integers `kind` holds -- `bits` of them, for a bit-field -- or `None`
+/// for a float kind.
+fn range_of(kind: Scalar, bits: Option<u32>) -> Option<(i128, i128)> {
+    let (lo, hi) = kind.integer_range()?;
+    Some(match bits {
+        Some(bits) if lo < 0 => (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1),
+        Some(bits) => (0, (1i128 << bits) - 1),
+        None => (lo, hi),
+    })
 }
 
 /// Where the value goes.
@@ -243,6 +249,54 @@ pub fn census(program: &Program) -> Vec<Judged> {
         .collect()
 }
 
+/// The strict check (`docs/scalar-numbers.md`, D1, D2, Q1): every store into
+/// a written kind proven by local facts, and no function let in where a call
+/// could hand it a kind it relies on and was never obliged to fit. Each
+/// failure is a compile error -- nts inserts no check the program didn't
+/// write.
+///
+/// An `as` and the slot it feeds are one claim about one value, reported once
+/// and at the `as`, where the program made it.
+#[must_use]
+pub fn check(program: &Program, arrivals: &[super::lower::Arrival]) -> Vec<Diagnostic> {
+    let slots = Slots::of(program);
+    let mut unproven: Vec<Judged> = census(program).into_iter().filter(|judged| !judged.proven()).collect();
+    // The `as` first, so it is the one kept.
+    unproven.sort_by_key(|judged| judged.obligation.into != Into::Assertion);
+    let mut kept: Vec<&Judged> = Vec::new();
+    for judged in &unproven {
+        let same = |other: &&Judged| {
+            other.func == judged.func
+                && other.obligation.value == judged.obligation.value
+                && other.obligation.range() == judged.obligation.range()
+        };
+        if !kept.iter().any(same) {
+            kept.push(judged);
+        }
+    }
+    let mut errors: Vec<Diagnostic> = kept.into_iter().map(|judged| slots.unproven(judged)).collect();
+    errors.extend(slots.closures_relying_on_kinds(arrivals));
+    errors.extend(slots.overrides_writing_kinds_otherwise(program));
+    errors.sort_by_key(|error| (error.primary.file.0, error.primary.span.start));
+    errors
+}
+
+/// A kind as a message names it: its C spelling, a bit-field's width, and
+/// the range.
+fn spelled(kind: Scalar, bits: Option<u32>) -> String {
+    let name = super::native::Type::Scalar(kind).c_type().into_owned();
+    let width = bits.map_or_else(String::new, |bits| format!(" : {bits}"));
+    match range_of(kind, bits) {
+        Some((lo, hi)) => format!("`{name}{width}` ({lo}..{hi})"),
+        None => format!("`{name}`"),
+    }
+}
+
+/// A slot's kind or its absence, as a message names it.
+fn kind_or_number(kind: Option<Scalar>) -> String {
+    kind.map_or_else(|| "a plain `number`".to_owned(), |kind| spelled(kind, None))
+}
+
 /// The program's slots, as a store's operation names them.
 struct Slots<'a> {
     by_name: FxHashMap<&'a str, &'a Func>,
@@ -372,6 +426,137 @@ impl<'a> Slots<'a> {
         found
     }
 
+    /// An unproven obligation as the error that teaches it (section H): what
+    /// the value goes into, why it may not fit, and how to prove it.
+    fn unproven(&self, judged: &Judged) -> Diagnostic {
+        let obligation = &judged.obligation;
+        let kind = spelled(obligation.kind, obligation.bits);
+        let argument = |position: usize| format!("argument {}", position + 1);
+        let (into, label) = match &obligation.into {
+            Into::Parameter { function, position } => {
+                let param = self.by_name.get(function.as_str()).and_then(|callee| callee.params.get(*position));
+                let named = param.map_or_else(String::new, |param| format!(" `{}`", param.name));
+                let label = param.map(|param| (param.origin.location, format!("the parameter{named} is written as {kind} here")));
+                (format!("{}, for the parameter{named} written as {kind},", argument(*position)), label)
+            }
+            Into::NativeArgument { function, position } => (format!("{} of `{function}`, a C {kind},", argument(*position)), None),
+            Into::NativeStore => (format!("this store into a C {kind}"), None),
+            Into::Field { field } => (format!("this store into `{field}`, written as {kind},"), None),
+            Into::Global { global } => (format!("this store into `{global}`, written as {kind},"), None),
+            Into::Return => (format!("this result, which `{}` is written to return as {kind},", judged.func), None),
+            Into::CallbackReturn { callback } => (format!("this result, which C reads back from `{callback}` as {kind},"), None),
+            Into::Local { local } => (format!("this store into `{local}`, written as {kind},"), None),
+            Into::ClosureArgument { position } => {
+                (format!("{}, for a parameter the function type writes as {kind},", argument(*position)), None)
+            }
+            Into::Assertion => (format!("this `as` claims {kind}, and the value"), None),
+        };
+        // Nothing known is one reason, not five.
+        let anything = matches!(judged.source, Source::Number(facts) if facts.maybe_nan && !facts.whole && facts.lo == f64::NEG_INFINITY && facts.hi == f64::INFINITY);
+        let why = if anything {
+            "could be any number".to_owned()
+        } else {
+            judged.unproven.iter().map(|why| reason(*why)).collect::<Vec<_>>().join(", ")
+        };
+        let message = format!("{into} may not fit: it {why}. {}", remedy(&judged.unproven, obligation));
+        let error = Diagnostic::error("NTS5001", message, obligation.location);
+        match label {
+            Some((location, text)) => error.with_label(location, text),
+            None => error,
+        }
+    }
+
+    /// Closures admitted into a function type whose parameter is not written
+    /// as the kind the closure's own is: a call through the type is obliged to
+    /// fit the type's kind, and the closure reads its own (Q1).
+    fn closures_relying_on_kinds(&self, arrivals: &[super::lower::Arrival]) -> Vec<Diagnostic> {
+        let mut errors = Vec::new();
+        for arrival in arrivals {
+            let Some(func) = self
+                .layouts
+                .get(&arrival.closure)
+                .and_then(|layout| layout.closure_call())
+                .and_then(|call| self.by_name.get(call))
+            else {
+                continue;
+            };
+            // The environment is the closure's own first parameter.
+            for (at, param) in func.params.iter().skip(1).enumerate() {
+                let Some(relied) = param.written else { continue };
+                let obliged = arrival.kinds.get(at).copied().flatten();
+                if obliged == Some(relied) {
+                    continue;
+                }
+                let message = format!(
+                    "a function whose parameter `{}` is written as {}, where the function type it is \
+                     passed as takes {} -- a call through the type is obliged to fit only that, and \
+                     the function reads {}; write them alike",
+                    param.name,
+                    spelled(relied, None),
+                    kind_or_number(obliged),
+                    spelled(relied, None),
+                );
+                errors.push(
+                    Diagnostic::error("NTS5002", message, arrival.origin.location)
+                        .with_label(param.origin.location, "written here"),
+                );
+            }
+        }
+        errors
+    }
+
+    /// Overrides that write a parameter or the result as another kind than
+    /// the method they override: a call dispatched through the base is
+    /// obliged to the base's kinds (Q1), and a result read through it is
+    /// taken as the base's.
+    fn overrides_writing_kinds_otherwise(&self, program: &Program) -> Vec<Diagnostic> {
+        let mut errors = Vec::new();
+        let mut reported: Vec<(&str, &str)> = Vec::new();
+        for layout in &program.layouts {
+            // Everything `layout` is also: its bases, and the interfaces any of
+            // them implements.
+            let mut above: Vec<&Layout> = Vec::new();
+            let mut pending: Vec<TypeId> = layout.base.into_iter().chain(layout.interfaces.iter().copied()).collect();
+            while let Some(ty) = pending.pop() {
+                let Some(ancestor) = self.layouts.get(&ty).copied() else { continue };
+                if std::ptr::eq(ancestor, layout) || above.iter().any(|seen| std::ptr::eq(*seen, ancestor)) {
+                    continue;
+                }
+                above.push(ancestor);
+                pending.extend(ancestor.base.into_iter().chain(ancestor.interfaces.iter().copied()));
+            }
+            for (slot, method) in layout.methods.iter().enumerate() {
+                let Some(method) = method.as_deref() else { continue };
+                for ancestor in &above {
+                    let Some(overridden) = ancestor.methods.get(slot).and_then(|m| m.as_deref()) else { continue };
+                    if overridden == method || reported.contains(&(method, overridden)) {
+                        continue;
+                    }
+                    let (Some(mine), Some(theirs)) = (self.by_name.get(method), self.by_name.get(overridden)) else {
+                        continue;
+                    };
+                    let parameter = mine.params.iter().zip(&theirs.params).skip(1).find(|(m, t)| m.written != t.written);
+                    let what = match parameter {
+                        Some((m, t)) => Some((format!("parameter `{}`", m.name), m.written, t.written)),
+                        None => (mine.written_return != theirs.written_return)
+                            .then(|| ("result".to_owned(), mine.written_return, theirs.written_return)),
+                    };
+                    let Some((what, written, base)) = what else { continue };
+                    reported.push((method, overridden));
+                    let message = format!(
+                        "`{method}` writes its {what} as {}, and the method it overrides, \
+                         `{overridden}`, as {} -- a call through the base is obliged to the base's \
+                         kinds, so an override writes them alike",
+                        kind_or_number(written),
+                        kind_or_number(base),
+                    );
+                    errors.push(Diagnostic::error("NTS5003", message, mine.origin.location));
+                }
+            }
+        }
+        errors
+    }
+
     /// The kind a field of an object of type `object` was written as, and its
     /// name.
     fn field(&self, object: &HirType, field: u32) -> Option<(Scalar, &'a str)> {
@@ -390,6 +575,58 @@ fn stored_kind(pointee: &Pointee) -> Option<(Scalar, Option<u32>)> {
         Pointee::Unaligned(inner) | Pointee::Const(inner) => stored_kind(inner),
         _ => None,
     }
+}
+
+/// One reason a value may not fit, as a message says it after "it".
+fn reason(why: Why) -> String {
+    match why {
+        Why::Fraction => "may be a fraction".to_owned(),
+        Why::NaN => "may be NaN".to_owned(),
+        Why::NegativeZero => "may be -0".to_owned(),
+        Why::Below(lo) => format!("may be as low as {}", bound(lo)),
+        Why::Above(hi) => format!("may be as high as {}", bound(hi)),
+        Why::NoBigIntRanges => "is a bigint whose range isn't tracked".to_owned(),
+        Why::LiteralOutside(literal) => format!("is {literal}"),
+        Why::FloatExactness => "may not be exactly a `float`".to_owned(),
+        Why::NotANumber => "may not be a number".to_owned(),
+    }
+}
+
+/// A bound as a message prints it.
+fn bound(value: f64) -> String {
+    if value.is_infinite() {
+        if value > 0.0 { "Infinity" } else { "-Infinity" }.to_owned()
+    } else {
+        format!("{value}")
+    }
+}
+
+/// How to prove it: what JavaScript already has for each reason, so the fix
+/// runs the same under node.
+fn remedy(why: &[Why], obligation: &Obligation) -> String {
+    let mut fixes = Vec::new();
+    if why.iter().any(|why| matches!(why, Why::NotANumber)) {
+        fixes.push("test `typeof x === \"number\"` first".to_owned());
+    }
+    if why.iter().any(|why| matches!(why, Why::Fraction | Why::NaN)) {
+        fixes.push("`Number.isInteger(x)` rules out a fraction and NaN".to_owned());
+    }
+    if why.iter().any(|why| matches!(why, Why::Below(_) | Why::Above(_))) {
+        fixes.push(match obligation.range() {
+            Some((lo, hi)) => format!("a guard such as `x >= {lo} && x <= {hi}` bounds it"),
+            None => "a guard on its range bounds it".to_owned(),
+        });
+    }
+    if why.iter().any(|why| matches!(why, Why::NegativeZero)) {
+        fixes.push("`x + 0` is `x` with -0 made 0".to_owned());
+    }
+    if why.iter().any(|why| matches!(why, Why::FloatExactness)) {
+        fixes.push("`Math.fround(x)` is the value as a `float`".to_owned());
+    }
+    if fixes.is_empty() {
+        return String::new();
+    }
+    format!("To prove it: {}.", fixes.join("; "))
 }
 
 /// The record a pointer to `pointee` points at.
