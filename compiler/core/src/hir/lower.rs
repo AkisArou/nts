@@ -11992,18 +11992,20 @@ fn drop_the_unlowerable(
                     .filter_map(|at| probe.declared_name(at))
                     .map(|name| format!("`{name}`"))
                     .collect();
-                lost.push((probe.origin(*statement).location, diagnostic, names));
                 // And every global the statement assigns, in any form
                 // (`assigned_symbols`), which keeps its old value now.
                 let mut assigned = Vec::new();
                 probe.assigned_symbols(*statement, &mut assigned);
-                stale.extend(assigned.iter().filter_map(|symbol| probe.module.variables.get(symbol).copied()));
+                let assigned: Vec<u32> =
+                    assigned.iter().filter_map(|symbol| probe.module.variables.get(symbol).copied()).collect();
+                stale.extend(assigned.iter().copied());
+                lost.push((probe.origin(*statement).location, diagnostic, names, assigned));
                 false
             }
         }
     });
     lowered.stale_globals.extend(stale);
-    for (statement, diagnostic, names) in lost {
+    for (statement, diagnostic, names, assigned) in lost {
         lowered.diagnostics.push(diagnostic);
         // A *consequence*, and coded as one. The cause is the diagnostic
         // pushed just above; this says what losing the statement costs.
@@ -12011,10 +12013,23 @@ fn drop_the_unlowerable(
         // corpus histogram -- 37 of 184 files -- which read as a feature
         // thirty-seven programs were waiting on and was a tally of how
         // often anything at all went wrong at module scope.
-        let leaving = if names.is_empty() {
-            String::new()
-        } else {
-            format!(", leaving {} unwritten", names.join(", "))
+        //
+        // **And what it would have reassigned**, which keeps its old value: a
+        // reader of one is refused or cut as reading a stale binding, and
+        // without its name here nothing on the page said which line made it
+        // stale -- `if (b instanceof Leaf) { viaNarrowedConst = ... }` names
+        // no declaration.
+        let reassigned: Vec<String> = assigned
+            .iter()
+            .filter_map(|global| lowered.program.globals.get(*global as usize))
+            .map(|global| format!("`{}`", global.name))
+            .filter(|name| !names.contains(name))
+            .collect();
+        let leaving = match (names.is_empty(), reassigned.is_empty()) {
+            (true, true) => String::new(),
+            (false, true) => format!(", leaving {} unwritten", names.join(", ")),
+            (true, false) => format!(", leaving {} as it was", reassigned.join(", ")),
+            (false, false) => format!(", leaving {} unwritten and {} as it was", names.join(", "), reassigned.join(", ")),
         };
         lowered.diagnostics.push(Diagnostic::error(
             "NTS1005",

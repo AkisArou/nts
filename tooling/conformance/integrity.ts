@@ -308,6 +308,10 @@ export function rootOf(name, reasons) {
  *     calls `X`                                            X is refused
  *   this module-scope statement was dropped because it
  *     calls `X`                                            X is refused
+ *   the initializer of `G` was not compiled because it
+ *     reads `H`                                            H's initializer line exists
+ *   this module-scope statement was dropped because it
+ *     reads `H`                                            H's initializer line exists
  *
  * The last two are also the *reports* of a cut from `module#init`, which
  * `top-level-kept` holds the program to.
@@ -317,12 +321,18 @@ export function readCascades(text) {
   const reads = [...text.matchAll(/NTS1003 `([^`]+)` cannot be compiled because it reads `([^`]+)`/g)].map(([, who, global]) => ({ who, global }));
   const initializers = [...text.matchAll(/NTS1003 the initializer of `([^`]+)` was not compiled because it calls `([^`]+)`/g)].map(([, global, cause]) => ({ global, cause }));
   const statements = [...text.matchAll(/NTS1003 this module-scope statement was dropped because it calls `([^`]+)`/g)].map(([, cause]) => ({ cause }));
+  // Module evaluation reading a binding it no longer assigns is cut with its
+  // statement (641b21042), and the line names the binding rather than a call.
+  const initializerReads = [...text.matchAll(/NTS1003 the initializer of `([^`]+)` was not compiled because it reads `([^`]+)`/g)].map(([, global, read]) => ({ global, read }));
+  const statementReads = [...text.matchAll(/NTS1003 this module-scope statement was dropped because it reads `([^`]+)`/g)].map(([, read]) => ({ read }));
   // A skipped module-scope statement that leaves a global unwritten says so
   // (1c12d40c9): `NTS1005 this statement, which module evaluation therefore
   // skips, leaving `stdout` unwritten`. That is the global's record as much as
   // an initializer line is.
-  const unwritten = [...text.matchAll(/NTS1005 this statement, which module evaluation therefore skips, leaving `([^`]+)` unwritten/g)].map(([, global]) => global);
-  return { calls, reads, initializers, statements, unwritten };
+  // Every name in the clause: `leaving `a`, `b` unwritten and `c` as it was`
+  // -- the last for a binding the statement would have reassigned.
+  const unwritten = [...text.matchAll(/NTS1005 this statement, which module evaluation therefore skips, leaving ([^;]+);/g)].flatMap(([, clause]) => [...clause.matchAll(/`([^`]+)`/g)].map(([, global]) => global));
+  return { calls, reads, initializers, statements, initializerReads, statementReads, unwritten };
 }
 
 /**
@@ -572,9 +582,19 @@ export function judge({ prepared, plain, layouts, refusals, whole = true }, sour
   for (const { who, cause } of cascades.calls) {
     if (!isRefused(cause)) rootless(`\`${who}\` blames \`${cause}\``, cause);
   }
-  const uncompiled = new Set([...cascades.initializers.map((i) => i.global), ...cascades.unwritten]);
+  const uncompiled = new Set([
+    ...cascades.initializers.map((i) => i.global),
+    ...cascades.initializerReads.map((i) => i.global),
+    ...cascades.unwritten,
+  ]);
   for (const { who, global } of cascades.reads) {
     if (!uncompiled.has(global)) say("cascade-has-root", `\`${who}\` blames the initializer of \`${global}\`, and no line says it was not compiled`, `the initializer of ${global}`);
+  }
+  for (const { global, read } of cascades.initializerReads) {
+    if (!uncompiled.has(read)) say("cascade-has-root", `the initializer of \`${global}\` blames the initializer of \`${read}\`, and no line says it was not compiled`, `the initializer of ${read}`);
+  }
+  for (const { read } of cascades.statementReads) {
+    if (!uncompiled.has(read)) say("cascade-has-root", `a dropped module-scope statement blames the initializer of \`${read}\`, and no line says it was not compiled`, `the initializer of ${read}`);
   }
   for (const { global, cause } of cascades.initializers) {
     if (!isRefused(cause)) rootless(`the initializer of \`${global}\` blames \`${cause}\``, cause);
@@ -596,6 +616,14 @@ export function judge({ prepared, plain, layouts, refusals, whole = true }, sour
   }
   for (const { cause } of cascades.statements) {
     cut(`a module-scope statement calling \`${cause}\` was dropped`, `a statement calling ${cause}`, cause);
+  }
+  // A cut that follows another is a cut all the same: named, and its root is
+  // the binding's.
+  for (const { global, read } of cascades.initializerReads) {
+    cut(`the initializer of \`${global}\` was not compiled (it reads \`${read}\`)`, `the initializer of ${global}`, read);
+  }
+  for (const { read } of cascades.statementReads) {
+    cut(`a module-scope statement reading \`${read}\` was dropped`, `a statement reading ${read}`, read);
   }
   if (refused.has("module#init")) say("top-level-cut", "module#init is refused, so none of the module's evaluation runs", "module#init");
 
@@ -713,6 +741,13 @@ function selfTest() {
   if (!reads(read).violations?.some((v) => v.rule === "cascade-has-root")) return "a read of a global with no initializer line was not caught";
   const skipped = "  -- main.ts:134:2 NTS1005 this statement, which module evaluation therefore skips, leaving `pattern` unwritten; the rest of the module's evaluation still runs\n";
   if (reads(skipped + read).violations?.some((v) => v.rule === "cascade-has-root")) return "a read of a global a skipped statement left unwritten read as rootless";
+  const reassigned = "  -- main.ts:134:2 NTS1005 this statement, which module evaluation therefore skips, leaving `other` unwritten and `pattern` as it was; the rest of the module's evaluation still runs\n";
+  if (reads(reassigned + read).violations?.some((v) => v.rule === "cascade-has-root")) return "a read of a global a skipped statement would have reassigned read as rootless";
+  // An initializer cut for reading a cut binding: rooted by that binding's line.
+  const following = "  -- main.ts:24:6 NTS1003 the initializer of `size` was not compiled because it reads `pattern`, which a module statement evaluation skips would have assigned; the rest of the module's evaluation still runs\n";
+  if (reads(init + following).violations?.some((v) => v.rule === "cascade-has-root")) return "an initializer cut for reading a cut binding, with that binding's line, read as rootless";
+  if (!reads(init + following).violations?.some((v) => v.rule === "top-level-cut" && /it reads `pattern`/.test(v.detail))) return "an initializer cut for reading a cut binding went unnamed";
+  if (!reads(following).violations?.some((v) => v.rule === "cascade-has-root")) return "an initializer cut for reading a binding with no line of its own was not caught";
   // A diagnostic located in trivia: the node's full start, not its token.
   const lines = { "/p/o.ts": ["export type MapFn = (", ") => unknown;", "", "export function map() {", "  const x = Object.getPrototypeOf(y);", "  const é = f(y);"] };
   const located = (at) => judge({ ...clean, prepared: `${clean.prepared}\n  -- /p/o.ts:${at} NTS1001 a construct is not supported by this lowering yet\n` }, (f, n) => lines[f]?.[n - 1]).violations ?? [];

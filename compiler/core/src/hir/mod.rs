@@ -4696,6 +4696,39 @@ fn drop_classes_without_layouts(program: &mut Program) {
 ///
 /// Only *deferred* globals. `let x: number;` sits at zero because that is what
 /// the source asked for, and reading it is correct.
+/// The module-scope bindings evaluation does not assign: a deferred global no
+/// evaluation function stores, and every global a skipped or cut statement
+/// would have assigned ([`lower::Lowered::stale_globals`]).
+fn unwritten_globals(lowered: &lower::Lowered) -> rustc_hash::FxHashSet<u32> {
+    let written: rustc_hash::FxHashSet<u32> = lowered
+        .program
+        .funcs
+        .iter()
+        .filter(|func| lower::evaluates_module_scope(&func.name))
+        .flat_map(|func| {
+            func.blocks
+                .iter()
+                .flat_map(|block| block.ops.iter())
+                .filter_map(|value| match func.values[value.0 as usize].kind {
+                    OpKind::GlobalSet { global, .. } => Some(global),
+                    _ => None,
+                })
+        })
+        .collect();
+    lowered
+        .program
+        .globals
+        .iter()
+        .enumerate()
+        .filter(|(_, global)| global.deferred)
+        .map(|(at, _)| u32::try_from(at).unwrap_or(u32::MAX))
+        .filter(|at| !written.contains(at))
+        // And every global a skipped statement would have assigned, written
+        // elsewhere or not: see `Lowered::stale_globals`.
+        .chain(lowered.stale_globals.iter().copied())
+        .collect()
+}
+
 fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
     let settle = |lowered: &mut lower::Lowered| drop_callers_of_refused(lowered);
     // What the surviving initializer actually assigns, rather than whether
@@ -4717,33 +4750,29 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
     // writes its globals as `module#init` writes the eager ones. Asked of
     // `module#init` only, every read of a lazy module's `const` was refused as a
     // read of a global nothing writes.
-    let written: rustc_hash::FxHashSet<u32> = lowered
-        .program
-        .funcs
-        .iter()
-        .filter(|func| lower::evaluates_module_scope(&func.name))
-        .flat_map(|func| {
-            func.blocks
-                .iter()
-                .flat_map(|block| block.ops.iter())
-                .filter_map(|value| match func.values[value.0 as usize].kind {
-                    OpKind::GlobalSet { global, .. } => Some(global),
-                    _ => None,
-                })
-        })
-        .collect();
-    let unwritten: Vec<u32> = lowered
-        .program
-        .globals
-        .iter()
-        .enumerate()
-        .filter(|(_, global)| global.deferred)
-        .map(|(at, _)| u32::try_from(at).unwrap_or(u32::MAX))
-        .filter(|at| !written.contains(at))
-        // And every global a skipped statement would have assigned, written
-        // elsewhere or not: see `Lowered::stale_globals`.
-        .chain(lowered.stale_globals.iter().copied())
-        .collect();
+    // **Module evaluation's own reads first**, cut with their statements: a
+    // statement reading a binding evaluation does not assign runs on its zero,
+    // and `const label = made.label` after a cut `const made = make()` was a
+    // SIGSEGV while the module loaded. Each round cuts what reads the last
+    // round's losses; it ends when the initializer holds no such read, or when
+    // one decides control flow and `excise_from_initializer` declines -- and
+    // then the reader loop below refuses module evaluation whole, loudly.
+    let unwritten = loop {
+        let unwritten = unwritten_globals(lowered);
+        let reads = lowered.program.funcs.iter().find(|func| func.name == lower::MODULE_INIT).is_some_and(|init| {
+            init.blocks.iter().flat_map(|block| block.ops.iter()).any(|value| {
+                matches!(init.values[value.0 as usize].kind, OpKind::GlobalGet(global) if unwritten.contains(&global))
+            })
+        });
+        if !reads {
+            break unwritten;
+        }
+        let present = present_names(lowered);
+        let uncallable = uncallable_closures(lowered, &present);
+        if !excise_from_initializer(lowered, &present, &uncallable, &unwritten) {
+            break unwritten;
+        }
+    };
     if unwritten.is_empty() {
         settle(lowered);
         return;
@@ -4755,20 +4784,21 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
     // *calls*, which `drop_callers_of_refused` settles below.
     let mut refused = Vec::new();
     for func in &lowered.program.funcs {
-        // **Not module evaluation itself, for a stale global.** Evaluation goes on
-        // past a skipped statement by design (NTS1005), and refusing it whole for
-        // reading what that statement would have assigned dropped every
-        // statement after it -- the module's whole evaluation -- to protect the
-        // few that read the value; integrity reports exactly that as a
-        // `top-level-cut`. The functions answering from it are what is refused.
-        let evaluation = lower::evaluates_module_scope(&func.name);
-        let read = func.values.iter().find_map(|op| match &op.kind {
-            OpKind::GlobalGet(at)
-                if unwritten.contains(at) && !(evaluation && lowered.stale_globals.contains(at)) =>
-            {
-                Some((*at, op.origin.clone()))
+        // Module evaluation included: its own reads were cut with their
+        // statements above, so one still here is a read excision declined to
+        // cut, or one in a lazily evaluated module's `#evaluate`, and either
+        // would run on a zero. That was an exemption once, and the SIGSEGV
+        // above is what it bought.
+        //
+        // Over the ops the blocks still hold, as `drop_callers_of_refused`
+        // scans: an excised read stays in `func.values` and is in no block, so
+        // it cannot run.
+        let read = func.blocks.iter().flat_map(|block| block.ops.iter()).find_map(|value| {
+            let op = &func.values[value.0 as usize];
+            match op.kind {
+                OpKind::GlobalGet(at) if unwritten.contains(&at) => Some((at, op.origin.clone())),
+                _ => None,
             }
-            _ => None,
         });
         if let Some((at, origin)) = read {
             refused.push((func.name.clone(), at, origin));
@@ -5523,6 +5553,30 @@ fn present_names(lowered: &lower::Lowered) -> rustc_hash::FxHashSet<String> {
         .collect()
 }
 
+/// Why excision cuts a value out of module evaluation: what its statement
+/// needed that is gone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Doom {
+    /// A call to a function that is no longer here, or a closure over one.
+    Calls(String),
+    /// A read of a module-scope binding evaluation does not assign: one whose
+    /// own statement was skipped or cut, so the slot holds its zero -- or, for
+    /// a skipped reassignment, a value the program never computes there.
+    Reads(String),
+}
+
+impl Doom {
+    /// The clause after "because it".
+    fn because(&self) -> String {
+        match self {
+            Self::Calls(callee) => format!("calls `{callee}`, which was refused above"),
+            Self::Reads(global) => {
+                format!("reads `{global}`, which a module statement evaluation skips would have assigned")
+            }
+        }
+    }
+}
+
 /// Every value in this function that depends on something no longer defined,
 /// each with the name whose absence dooms it.
 ///
@@ -5531,12 +5585,22 @@ fn present_names(lowered: &lower::Lowered) -> rustc_hash::FxHashSet<String> {
 /// is doomed, to a fixpoint. A seed's own *arguments* are not -- they were
 /// computed before it and reading them is still fine, so what is left behind is
 /// dead rather than wrong.
+///
+/// **And every read of a global evaluation does not assign**: one in
+/// `unwritten`, or one whose store here is doomed. `const made = make()` with
+/// `make` refused cut the store and kept `const label = made.label`, which read
+/// a null `made` while the module loaded -- SIGSEGV, in every function of the
+/// program, refused or not. A read is a seed like a missing call, so its
+/// statement is cut and what *it* assigns goes unwritten in turn.
 fn doomed_values(
     func: &Func,
     present: &rustc_hash::FxHashSet<String>,
     uncallable: &rustc_hash::FxHashMap<TypeId, String>,
-) -> rustc_hash::FxHashMap<ValueId, String> {
-    let mut doomed: rustc_hash::FxHashMap<ValueId, String> = rustc_hash::FxHashMap::default();
+    unwritten: &rustc_hash::FxHashSet<u32>,
+    global_names: &[String],
+) -> rustc_hash::FxHashMap<ValueId, Doom> {
+    let read = |global: u32| Doom::Reads(global_names.get(global as usize).cloned().unwrap_or_else(|| global.to_string()));
+    let mut doomed: rustc_hash::FxHashMap<ValueId, Doom> = rustc_hash::FxHashMap::default();
     for (index, op) in func.values.iter().enumerate() {
         // Two ways to name a function that is gone: calling it, and *being* it.
         // The second is a closure over a refused function, which has no method
@@ -5562,8 +5626,12 @@ fn doomed_values(
             },
             _ => None,
         };
-        if let Some(name) = absent {
-            doomed.insert(ValueId(u32::try_from(index).unwrap_or(u32::MAX)), name);
+        let cause = match op.kind {
+            OpKind::GlobalGet(global) if unwritten.contains(&global) => Some(read(global)),
+            _ => absent.map(Doom::Calls),
+        };
+        if let Some(cause) = cause {
+            doomed.insert(ValueId(u32::try_from(index).unwrap_or(u32::MAX)), cause);
         }
     }
     if doomed.is_empty() {
@@ -5581,6 +5649,23 @@ fn doomed_values(
                 .find_map(|operand| doomed.get(operand).cloned());
             if let Some(name) = inherited {
                 doomed.insert(value, name);
+                grew = true;
+            }
+        }
+        let lost: rustc_hash::FxHashSet<u32> = doomed
+            .keys()
+            .filter_map(|value| match func.values[value.0 as usize].kind {
+                OpKind::GlobalSet { global, .. } => Some(global),
+                _ => None,
+            })
+            .collect();
+        for (index, op) in func.values.iter().enumerate() {
+            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+            if let OpKind::GlobalGet(global) = op.kind
+                && lost.contains(&global)
+                && !doomed.contains_key(&value)
+            {
+                doomed.insert(value, read(global));
                 grew = true;
             }
         }
@@ -5611,16 +5696,16 @@ fn doomed_values(
 /// second list is what was missing -- the report used to be per global, so a
 /// statement whose value nothing stores was cut in silence.
 struct Cuts {
-    /// A global that loses its assignment: which one, the callee that was
-    /// refused, and where the assignment was written.
-    globals: Vec<(u32, String, nts_semantic_schema::Origin)>,
-    /// A statement whose value nothing stores: the callee, and where.
-    statements: Vec<(String, nts_semantic_schema::Origin)>,
+    /// A global that loses its assignment: which one, why, and where the
+    /// assignment was written.
+    globals: Vec<(u32, Doom, nts_semantic_schema::Origin)>,
+    /// A statement whose value nothing stores: why, and where.
+    statements: Vec<(Doom, nts_semantic_schema::Origin)>,
 }
 
-fn cuts_to_report(func: &Func, doomed: &rustc_hash::FxHashMap<ValueId, String>) -> Cuts {
+fn cuts_to_report(func: &Func, doomed: &rustc_hash::FxHashMap<ValueId, Doom>) -> Cuts {
 // The globals that lose their assignment, named before the ops go.
-let mut lost: Vec<(u32, String, nts_semantic_schema::Origin)> = Vec::new();
+let mut lost: Vec<(u32, Doom, nts_semantic_schema::Origin)> = Vec::new();
 let mut lost_values: Vec<ValueId> = Vec::new();
 for block in &func.blocks {
     for value in &block.ops {
@@ -5710,7 +5795,7 @@ for block in &func.blocks {
         }
     }
 }
-let mut dropped: Vec<(String, nts_semantic_schema::Origin)> = Vec::new();
+let mut dropped: Vec<(Doom, nts_semantic_schema::Origin)> = Vec::new();
 for block in &func.blocks {
     for value in &block.ops {
         let Some(cause) = doomed.get(value) else {
@@ -5731,7 +5816,9 @@ fn excise_from_initializer(
     lowered: &mut lower::Lowered,
     present: &rustc_hash::FxHashSet<String>,
     uncallable: &rustc_hash::FxHashMap<TypeId, String>,
+    unwritten: &rustc_hash::FxHashSet<u32>,
 ) -> bool {
+    let global_names: Vec<String> = lowered.program.globals.iter().map(|global| global.name.clone()).collect();
     let Some(func) = lowered
         .program
         .funcs
@@ -5745,7 +5832,7 @@ fn excise_from_initializer(
     // that reads a doomed value is doomed, to a fixpoint. The call's own
     // *arguments* are not -- they were computed before it and reading them is
     // still fine, so what is left behind is dead rather than wrong.
-    let doomed = doomed_values(func, present, uncallable);
+    let doomed = doomed_values(func, present, uncallable, unwritten, &global_names);
     if doomed.is_empty() {
         return false;
     }
@@ -5771,15 +5858,18 @@ fn excise_from_initializer(
     // has to find first.
     let mut blame = |func: &Func, value: ValueId, what: &str| {
         let origin = func.values[value.0 as usize].origin.clone();
-        let cause = doomed.get(&value).cloned().unwrap_or_default();
+        let depends = match doomed.get(&value) {
+            Some(Doom::Calls(callee)) => format!("depends on `{callee}`, which was refused above"),
+            Some(cause @ Doom::Reads(_)) => cause.because(),
+            None => "depends on a refused call".to_owned(),
+        };
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!(
                 "module evaluation was dropped whole rather than cut here: this \
-                 statement's {what} depends on `{cause}`, which was refused above, so \
-                 cutting it would change the shape of the evaluation rather than its \
-                 value -- every module-scope binding is left unwritten and every \
-                 function reading one is refused with it"
+                 statement's {what} {depends}, so cutting it would change the shape of \
+                 the evaluation rather than its value -- every module-scope binding is \
+                 left unwritten and every function reading one is refused with it"
             ),
             origin.location,
         ));
@@ -5820,7 +5910,7 @@ fn excise_from_initializer(
         block.ops.retain(|value| !doomed.contains_key(value));
     }
 
-    for (global, callee, origin) in cuts.globals {
+    for (global, cause, origin) in cuts.globals {
         // A store cut out of evaluation leaves the global stale, whatever else
         // still writes it: `try { actual = early(3) } catch { actual = 7 }` keeps
         // the catch's store and loses the one that runs. See
@@ -5834,20 +5924,22 @@ fn excise_from_initializer(
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!(
-                "the initializer of `{name}` was not compiled because it calls `{callee}`, \
-                 which was refused above; the rest of the module's evaluation still runs"
+                "the initializer of `{name}` was not compiled because it {}; the rest of \
+                 the module's evaluation still runs",
+                cause.because()
             ),
             origin.location,
         ));
     }
 
-    for (callee, origin) in cuts.statements {
+    for (cause, origin) in cuts.statements {
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!(
-                "this module-scope statement was dropped because it calls `{callee}`, which \
-                 was refused above; the rest of the module's evaluation still runs, so the \
-                 program this builds does less than its source says"
+                "this module-scope statement was dropped because it {}; the rest of the \
+                 module's evaluation still runs, so the program this builds does less than \
+                 its source says",
+                cause.because()
             ),
             origin.location,
         ));
@@ -6000,7 +6092,12 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             // says whether it could, and where it could not this falls back to
             // dropping the whole thing, which is what it always did.
             if caller == lower::MODULE_INIT
-                && excise_from_initializer(lowered, &present_names(lowered), &uncallable)
+                && excise_from_initializer(
+                    lowered,
+                    &present_names(lowered),
+                    &uncallable,
+                    &lowered.stale_globals.clone(),
+                )
             {
                 continue;
             }
