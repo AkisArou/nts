@@ -29962,7 +29962,17 @@ impl<'a> FuncBuilder<'a> {
         if !(contextual || self.annotated(declaration)) {
             return None;
         }
-        super::native::scalar(self.snapshot, *self.snapshot.node_types.get(&name)?)
+        self.written_scalar(*self.snapshot.node_types.get(&name)?)
+    }
+
+    /// The scalar kind `ty` is, an optional one's included: `T | undefined`
+    /// of a scalar is written as `T` (S3), and the absence is the slot's own.
+    /// Through the one recognizer, [`super::native::scalar`].
+    ///
+    /// The type itself first: a `CEnum<E, B>` is a union of `E`'s members,
+    /// which the recognizer reads as one kind and no absence-stripping could.
+    fn written_scalar(&self, ty: TypeId) -> Option<super::native::Scalar> {
+        super::native::scalar(self.snapshot, ty).or_else(|| super::native::scalar(self.snapshot, self.present_part(ty)?))
     }
 
     /// `x!`, `x as T` and `x satisfies T`.
@@ -30016,7 +30026,7 @@ impl<'a> FuncBuilder<'a> {
         if !self.annotated(declaration) {
             return None;
         }
-        super::native::scalar(self.snapshot, self.declared_result_type(declaration)?)
+        self.written_scalar(self.declared_result_type(declaration)?)
     }
 
     /// An override's string argument, lent by the Windows Runtime as its
@@ -46415,7 +46425,7 @@ impl<'a> FuncBuilder<'a> {
                 written: property
                     .declaration
                     .filter(|declaration| self.annotated(*declaration))
-                    .and_then(|_| super::native::scalar(self.snapshot, property.ty)),
+                    .and_then(|_| self.written_scalar(property.ty)),
             });
         }
         Ok(fields)

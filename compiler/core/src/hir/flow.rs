@@ -738,12 +738,25 @@ fn runtime_result(name: &str) -> Option<Facts> {
         "nts_array_index_of",
         "nts_array_last_index_of",
     ];
+    // The length after one element was added: one at least.
     const LENGTH: &[&str] = &["nts_array_push"];
+    // A view's, a buffer's or a `DataView`'s length counts what was
+    // allocated, which no machine holds 2^53 of.
+    const STORAGE: &[&str] = &[
+        "nts_view_length",
+        "nts_view_byte_length",
+        "nts_buffer_byte_length",
+        "nts_buffer_max_byte_length",
+        "nts_dataview_byte_length",
+    ];
     if INDEX.contains(&name) {
         return Some(Facts::new(-1.0, facts::U32_MAX, true, false, false));
     }
     if LENGTH.contains(&name) {
-        return Some(Facts::new(0.0, facts::U32_MAX, true, false, false));
+        return Some(Facts::new(1.0, facts::U32_MAX, true, false, false));
+    }
+    if STORAGE.contains(&name) {
+        return Some(Facts::new(0.0, facts::SAFE_MAX, true, false, false));
     }
     None
 }

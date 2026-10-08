@@ -279,7 +279,10 @@ pub fn check(program: &Program, arrivals: &[super::lower::Arrival], targets: &[N
     let mut errors: Vec<Diagnostic> = kept.into_iter().map(|judged| slots.unproven(judged)).collect();
     errors.extend(slots.closures_relying_on_kinds(arrivals));
     errors.extend(slots.overrides_writing_kinds_otherwise(program));
-    errors.sort_by_key(|error| (error.primary.file.0, error.primary.span.start));
+    errors.sort_by(|a, b| (a.primary.file.0, a.primary.span.start, &a.message).cmp(&(b.primary.file.0, b.primary.span.start, &b.message)));
+    // One function's copies -- its raising variant, a generic instance --
+    // share its source, and so its errors: each is reported once.
+    errors.dedup_by(|a, b| a.primary == b.primary && a.message == b.message);
     errors
 }
 
@@ -292,6 +295,15 @@ fn spelled(kind: Scalar, bits: Option<u32>) -> String {
         Some((lo, hi)) => format!("`{name}{width}` ({lo}..{hi})"),
         None => format!("`{name}`"),
     }
+}
+
+/// Whether every value of `inner` is one of `outer`: what a slot of `inner`
+/// guarantees satisfies a reader relying on `outer`. A kind without a range
+/// (`double`, `float`, or none) asks nothing, and a slot without one
+/// guarantees nothing.
+fn within(inner: Option<Scalar>, outer: Option<Scalar>) -> bool {
+    let Some((lo, hi)) = outer.and_then(Scalar::integer_range) else { return true };
+    inner.and_then(Scalar::integer_range).is_some_and(|(ilo, ihi)| ilo >= lo && ihi <= hi)
 }
 
 /// A slot's kind or its absence, as a message names it.
@@ -493,7 +505,7 @@ impl<'a> Slots<'a> {
             for (at, param) in func.params.iter().skip(1).enumerate() {
                 let Some(relied) = param.written else { continue };
                 let obliged = arrival.kinds.get(at).copied().flatten();
-                if obliged == Some(relied) {
+                if within(obliged, Some(relied)) {
                     continue;
                 }
                 let message = format!(
@@ -558,10 +570,13 @@ impl<'a> Slots<'a> {
                     let (Some(mine), Some(theirs)) = (self.by_name.get(method), self.by_name.get(overridden)) else {
                         continue;
                     };
-                    let parameter = mine.params.iter().zip(&theirs.params).skip(1).find(|(m, t)| m.written != t.written);
+                    // A parameter the override relies on must be obliged by the
+                    // base; a result the base's callers rely on must be
+                    // obliged by the override.
+                    let parameter = mine.params.iter().zip(&theirs.params).skip(1).find(|(m, t)| !within(t.written, m.written));
                     let what = match parameter {
                         Some((m, t)) => Some((format!("parameter `{}`", m.name), m.written, t.written)),
-                        None => (mine.written_return != theirs.written_return)
+                        None => (!within(mine.written_return, theirs.written_return))
                             .then(|| ("result".to_owned(), mine.written_return, theirs.written_return)),
                     };
                     let Some((what, written, base)) = what else { continue };

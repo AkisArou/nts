@@ -136,7 +136,9 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       return true;
     case "sort": {
       if (!(object instanceof GtkColumnView)) return false;
-      const column = object.columns.get_item(Number(args[0]));
+      const at = Number(args[0]);
+      if (!(Number.isInteger(at) && at >= 0 && at <= 0xffffffff)) return false;
+      const column = object.columns.get_item(at);
       if (!(column instanceof GtkColumnViewColumn)) return false;
       object.sort_by_column(column, SortType.ASCENDING);
       return true;
@@ -167,7 +169,15 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       object.emit("emoji-picked", args[0]);
       return true;
     case "day": {
-      const date = g_date_time_new_local(Number(args[0]), Number(args[1]), Number(args[2]), 0, 0, 0);
+      // A driver's argument is text, and a date's parts are C `int`s: each is
+      // shown to be one before it crosses.
+      const year = Number(args[0]);
+      const month = Number(args[1]);
+      const day = Number(args[2]);
+      if (!(Number.isInteger(year) && year >= 1 && year <= 9999
+        && Number.isInteger(month) && month >= 1 && month <= 12
+        && Number.isInteger(day) && day >= 1 && day <= 31)) return false;
+      const date = g_date_time_new_local(year, month, day, 0, 0, 0);
       if (!(object instanceof GtkCalendar) || date === null) return false;
       object.select_day(date);
       return true;
@@ -206,11 +216,14 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       else if (object instanceof AdwBanner) object.emit("button-clicked");
       else return false;
       return true;
-    case "select":
-      if (object instanceof AdwComboRow) object.selected = Number(args[0]);
-      else if (object instanceof GtkDropDown) object.selected = Number(args[0]);
+    case "select": {
+      const at = Number(args[0]);
+      if (!(Number.isInteger(at) && at >= 0 && at <= 0xffffffff)) return false;
+      if (object instanceof AdwComboRow) object.selected = at;
+      else if (object instanceof GtkDropDown) object.selected = at;
       else return false;
       return true;
+    }
     case "revealed":
       if (object instanceof GtkActionBar) console.log(`${id}.revealed ${object.revealed}`);
       else if (object instanceof AdwBanner) console.log(`${id}.revealed ${object.revealed}`);
@@ -243,7 +256,9 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       console.log(`${id}.badge_number ${object.badge_number}`);
       return true;
     case "click-in": {
-      const row = object instanceof GtkListBox ? object.get_row_at_index(Number(args[0])) : null;
+      const at = Number(args[0]);
+      if (!(Number.isInteger(at) && at >= 0 && at <= 0x7fffffff)) return false;
+      const row = object instanceof GtkListBox ? object.get_row_at_index(at) : null;
       const button = row === null ? null : firstButton(row);
       if (button === null) return false;
       button.emit("clicked");
@@ -278,13 +293,17 @@ function act(kind: string, id: string, args: string[], object: GObject | null, w
       return true;
     }
     case "click-child": {
-      const child = object instanceof GtkFlowBox ? object.get_child_at_index(Number(args[0]))?.child : null;
+      const at = Number(args[0]);
+      if (!(Number.isInteger(at) && at >= 0 && at <= 0x7fffffff)) return false;
+      const child = object instanceof GtkFlowBox ? object.get_child_at_index(at)?.child : null;
       if (!(child instanceof GtkButton)) return false;
       child.emit("clicked");
       return true;
     }
     case "activate-child": {
-      const child = object instanceof GtkFlowBox ? object.get_child_at_index(Number(args[0])) : null;
+      const at = Number(args[0]);
+      if (!(Number.isInteger(at) && at >= 0 && at <= 0x7fffffff)) return false;
+      const child = object instanceof GtkFlowBox ? object.get_child_at_index(at) : null;
       if (child === null) return false;
       child.activate();
       return true;
