@@ -1037,30 +1037,40 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
     );
 }
 
-/// A `number` passed to a C integer parameter goes through JavaScript's own
-/// conversion, as `WebIDL`'s `long` and `GJS`'s `gint` take one: `ToInt32`,
-/// `ToUint32` for an unsigned 32-bit parameter, and a narrowing of that for a
-/// smaller one.
-/// It was `(int32_t)v0`, which C leaves undefined for NaN, an infinity and
-/// anything out of range -- clang folds `(int32_t)NAN` to whatever it likes.
-/// A store through a native pointer (`p[0] = x`) takes the same conversion.
-/// Reported by the Chromium lane; GTK's `gint` parameters take the same path.
+/// A `number` passed to a C integer, or stored into one through a pointer,
+/// must be proven to fit (`docs/scalar-numbers.md`, D1): unproven, it is a
+/// compile error naming the argument; proven, it arrives exactly. There is no
+/// conversion in between -- it was JavaScript's `ToInt32`, which wrapped
+/// `2^32 + 5` to 5 and sent C a value the program never computed, and before
+/// that `(int32_t)v0`, which C leaves undefined out of range.
 #[test]
-fn a_number_reaches_a_c_integer_through_to_int32() {
-    let source = r#"
+fn a_number_reaches_a_c_integer_only_where_it_is_proven_to_fit() {
+    let declarations = r#"
 import type { CNumber, Ptr, c_int } from "c:types";
 declare function seen_i32(v: CNumber<"int32">): CNumber<"double">;
-declare function seen_u32(v: CNumber<"uint32">): CNumber<"double">;
-declare function seen_i8(v: CNumber<"int8">): CNumber<"double">;
 declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
-export function i32(x: number): number { return seen_i32(x); }
-export function u32(x: number): number { return seen_u32(x); }
-export function i8(x: number): number { return seen_i8(x); }
-export function u16(x: number): number { return seen_u16(x); }
-export function store(p: Ptr<c_int>, x: number): void { p[0] = x as c_int; }
-export function storeNaN(p: Ptr<c_int>): void { p[1] = NaN as c_int; }
 "#;
-    let Some((dir, prepared)) = prepare_with_types("to-int32", source, false) else {
+    let unproven = format!(
+        "{declarations}export function i32(x: number): number {{ return seen_i32(x); }}\n\
+         export function store(p: Ptr<c_int>, x: number): void {{ p[0] = x; }}\n"
+    );
+    let Some((_, snapshot)) = snapshot_with_types("unproven-integer", &unproven, false) else {
+        return;
+    };
+    let Err(hir::Unprepared::Rejected(errors)) = hir::prepare(&snapshot) else {
+        panic!("an unproven number into a C integer must be refused");
+    };
+    let said: Vec<&str> = errors.iter().map(|error| error.message.as_str()).collect();
+    assert!(said.iter().any(|message| message.contains("seen_i32")), "{said:?}");
+    assert!(said.iter().any(|message| message.contains("store into a C `int`")), "{said:?}");
+    assert!(errors.iter().all(|error| error.code == "NTS5001"), "{errors:?}");
+
+    let proven = format!(
+        "{declarations}export function i32(x: c_int): number {{ return seen_i32(x); }}\n\
+         export function u16(x: number): number {{ return seen_u16(x & 0xffff); }}\n\
+         export function store(p: Ptr<c_int>, x: c_int): void {{ p[0] = x; }}\n"
+    );
+    let Some((dir, prepared)) = prepare_with_types("proven-integer", &proven, false) else {
         return;
     };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
@@ -1074,13 +1084,11 @@ export function storeNaN(p: Ptr<c_int>): void { p[1] = NaN as c_int; }
         dir.join("native.c"),
         "#include <stdint.h>\n\
          double seen_i32(int32_t v) { return v; }\n\
-         double seen_u32(uint32_t v) { return v; }\n\
-         double seen_i8(int8_t v) { return v; }\n\
          double seen_u16(uint16_t v) { return v; }\n",
     )
     .unwrap();
-    // Each expected value is node's: `x | 0`, `x >>> 0`, `(x << 24) >> 24` and
-    // `x & 0xffff` are ToInt32, ToUint32, ToInt8 and ToUint16.
+    // A written parameter's caller is C, which passes an `int`; a mask's
+    // result is in range whatever went in.
     std::fs::write(
         dir.join("caller.c"),
         "#include <math.h>\n#include <stdio.h>\n#include \"program.h\"\n\
@@ -1089,22 +1097,12 @@ export function storeNaN(p: Ptr<c_int>): void { p[1] = NaN as c_int; }
            if (got != want) { printf(\"FAIL %s: got %.17g want %.17g\\n\", what, got, want); failed = 1; }\n\
          }\n\
          int main(void) {\n\
-           check(\"i32 2^32+5\", i32(4294967301.0), 5);\n\
-           check(\"i32 2^31\", i32(2147483648.0), -2147483648.0);\n\
-           check(\"i32 -1.9\", i32(-1.9), -1);\n\
-           check(\"i32 NaN\", i32(NAN), 0);\n\
-           check(\"i32 Infinity\", i32(INFINITY), 0);\n\
-           check(\"u32 -1\", u32(-1), 4294967295.0);\n\
-           check(\"u32 2^32+7\", u32(4294967303.0), 7);\n\
-           check(\"i8 200\", i8(200), -56);\n\
-           check(\"i8 -129.5\", i8(-129.5), 127);\n\
-           check(\"u16 -1\", u16(-1), 65535);\n\
-           check(\"u16 NaN\", u16(NAN), 0);\n\
-           int slots[2] = { 7, 7 };\n\
-           store(slots, 4294967301.0); check(\"store 2^32+5\", slots[0], 5);\n\
-           store(slots, NAN); check(\"store NaN\", slots[0], 0);\n\
-           store(slots, -1.9); check(\"store -1.9\", slots[0], -1);\n\
-           storeNaN(slots); check(\"store constant NaN\", slots[1], 0);\n\
+           check(\"i32 -5\", i32(-5), -5);\n\
+           check(\"i32 2^31-1\", i32(2147483647), 2147483647.0);\n\
+           check(\"u16 -1 masked\", u16(-1), 65535);\n\
+           check(\"u16 2^16+3 masked\", u16(65539.0), 3);\n\
+           int slots[1] = { 7 };\n\
+           store(slots, 42); check(\"store 42\", slots[0], 42);\n\
            return failed;\n\
          }\n",
     )

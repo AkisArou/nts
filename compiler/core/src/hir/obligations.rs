@@ -518,7 +518,21 @@ impl<'a> Slots<'a> {
     /// the method they override: a call dispatched through the base is
     /// obliged to the base's kinds (Q1), and a result read through it is
     /// taken as the base's.
+    ///
+    /// Only of a method a dispatch names (`Callee::Virtual`'s `declared`):
+    /// a closure's entries share slots with its function type's, and a call
+    /// through a function type is the closures' own rule
+    /// ([`Self::closures_relying_on_kinds`]).
     fn overrides_writing_kinds_otherwise(&self, program: &Program) -> Vec<Diagnostic> {
+        let dispatched: rustc_hash::FxHashSet<&str> = program
+            .funcs
+            .iter()
+            .flat_map(|func| &func.values)
+            .filter_map(|op| match &op.kind {
+                OpKind::Call { callee: Callee::Virtual { declared, .. }, .. } => Some(declared.as_str()),
+                _ => None,
+            })
+            .collect();
         let mut errors = Vec::new();
         let mut reported: Vec<(&str, &str)> = Vec::new();
         for layout in &program.layouts {
@@ -538,7 +552,7 @@ impl<'a> Slots<'a> {
                 let Some(method) = method.as_deref() else { continue };
                 for ancestor in &above {
                     let Some(overridden) = ancestor.methods.get(slot).and_then(|m| m.as_deref()) else { continue };
-                    if overridden == method || reported.contains(&(method, overridden)) {
+                    if overridden == method || !dispatched.contains(overridden) || reported.contains(&(method, overridden)) {
                         continue;
                     }
                     let (Some(mine), Some(theirs)) = (self.by_name.get(method), self.by_name.get(overridden)) else {

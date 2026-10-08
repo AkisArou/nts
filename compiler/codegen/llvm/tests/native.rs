@@ -4998,28 +4998,28 @@ void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) {
     }
 }
 
-/// A `number` reaching C integer storage takes JavaScript's conversion to the
-/// width on both backends: an argument (`ToInt32`, and the 16-bit modular
-/// narrowing) and a store through a native pointer, which was a C cast --
-/// undefined for NaN and anything out of range. The C backend's
-/// `a_number_reaches_a_c_integer_through_to_int32` covers more widths; this is
-/// the same answer from the IR the LLVM backend writes.
+/// A `number` proven to fit reaches C integer storage exactly on both
+/// backends: an argument and a store through a native pointer, from a written
+/// parameter and from a mask (`docs/scalar-numbers.md`, D1). An unproven one
+/// is refused before either backend sees it -- the C backend's
+/// `a_number_reaches_a_c_integer_only_where_it_is_proven_to_fit` -- so no
+/// conversion stands between the program's value and C's.
 #[test]
-fn a_number_reaches_c_integer_storage_through_javascripts_conversion_on_both_backends() {
+fn a_proven_number_reaches_c_integer_storage_exactly_on_both_backends() {
     let source = r#"
 import type { CNumber, Ptr, c_int } from "c:types";
 declare function seen_i32(v: CNumber<"int32">): CNumber<"double">;
 declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
 declare function slots(): Ptr<c_int>;
-export function run(big: number, nan: number): number {
+export function run(x: c_int): number {
     const p = slots();
-    p[0] = big as c_int;
-    p[1] = nan as c_int;
-    return (seen_i32(big) === 5 ? 1 : 0)
-        + (seen_i32(nan) === 0 ? 2 : 0)
-        + (seen_u16(-1) === 65535 ? 4 : 0)
-        + ((p[0] as number) === 5 ? 8 : 0)
-        + ((p[1] as number) === 0 ? 16 : 0);
+    p[0] = x;
+    p[1] = (x & 0xff) as c_int;
+    return (seen_i32(x) === x ? 1 : 0)
+        + (seen_u16(x & 0xffff) === (x & 0xffff) ? 2 : 0)
+        + (seen_u16(65535) === 65535 ? 4 : 0)
+        + ((p[0] as number) === x ? 8 : 0)
+        + ((p[1] as number) === (x & 0xff) ? 16 : 0);
 }
 "#;
     let library = r"
@@ -5030,11 +5030,7 @@ double seen_i32(int32_t v) { return v; }
 double seen_u16(uint16_t v) { return v; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(
-            r#"printf("%.0f", run(4294967301.0, NAN));"#,
-            "run(4294967301.0, NAN);",
-        );
-        let caller = format!("#include <math.h>\n{caller}");
+        let caller = counted_caller(r#"printf("%.0f", run(-5));"#, "run(-5);");
         let Some((_, outputs)) = run_on_both_backends("c-integer-storage", source, provider, library, &caller) else { return; };
         for output in outputs {
             assert_eq!(output, expect("31", provider), "{provider:?}");
