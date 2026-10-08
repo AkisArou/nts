@@ -14,6 +14,16 @@
 where it finds a better answer it takes it and says why (D4 is the first such
 case).
 
+**No compatibility layer** (the user, 2026-10-08). The old forms are removed,
+not kept beside the new:
+- `libc.d.ts`'s brands (`c_int8` …, `CNumber`);
+- the `ToInt32` conversion at native calls;
+- the two hard-coded ABI models.
+
+Every binding, binding generator, example, test and runtime file is
+refactored in the same change that replaces what it uses. Nothing is
+deprecated, aliased or kept "for now".
+
 **The principle (the user, 2026-10-08):** target the best final architecture,
 not what nts or the playground implements today. Section 4 is that
 architecture, complete. Section 5 is only the order we build it in. Real usage
@@ -133,7 +143,8 @@ Then:
 - **Proven:** it passes as it is, at no cost.
 - **Not proven:** a compile error. The program can:
   - guard it: `if (n >= 0 && n <= 0xffff)`;
-  - limit it: `Math.min`, `Math.max`;
+  - saturate it: `Uint16.clamp(n)` (`Math.min(…, Math.max(…))` is *not*
+    enough: it lets NaN through, and `Math.round(NaN)` is NaN);
   - mask it: `n & 0xffff`;
   - **convert it explicitly**: `Uint16(n)` throws a `RangeError` if it
     doesn't fit (as `BigInt(1.5)` does), and `Uint16.clamp(n)` saturates.
@@ -152,6 +163,12 @@ Two deliberate exceptions, decided in the playground:
 
 ### E. Operators compute JavaScript's values
 
+**One stated rule:** plain arithmetic is never refused for being inexact. It
+computes node's value, exact or not. Only a value that reaches a conversion
+or a fixed-width store is checked, and there a value that may have passed
+2^53 (and so been rounded) is refused. That's the scope of the playground's
+"lossy operand" rule (U52).
+
 Writing `Uint8` changes what nts knows and checks, **never what an operator
 computes**. `+ - * / %` give exactly node's answer and never wrap. The width
 matters only where a result is *stored* into a fixed width (part D):
@@ -168,8 +185,8 @@ if (a + b <= 255) { const g: Uint8 = a + b; }   // proven by the guard
 - **`*`:** two large `Int32`s can multiply past 2^53, where a double rounds, so
   `Int32.clamp(x * y)` would saturate a wrong value. nts refuses it and names
   `Int32.saturatingMul`, `wrappingMul` (= `Math.imul`) or `checkedMul`.
-- **`/`:** `7 / 2` is 3.5. An integer slot needs `Int32.div(a, b)` (3, toward
-  zero) or `Math.trunc(a / b)`.
+- **`/`:** `7 / 2` is 3.5. An integer slot needs `Int32.strictDiv(a, b)` (or
+  another mode's `div`: 3, toward zero) or `Math.trunc(a / b)`.
 - **Bit operators** already have JavaScript widths: `v & 0xff` is 0..255,
   `v | 0` an `Int32`, `v >>> 0` a `Uint32`. Each fits its kind without a
   conversion.
@@ -188,7 +205,7 @@ of it:
 | Group | Functions | Example |
 |---|---|---|
 | **Convert** | `Uint16(x)` (throws, like `BigInt(x)`), `try` (or `undefined`), `is` (a guard), `wrap` (keep the low bits), `clamp` (round and saturate) | `crc16(buf, Uint16(len))`, `bytes[i] = Uint8.wrap(v)` |
-| **Integer operations** | five overflow modes (`wrapping`, `saturating`, `checked`, `strict`, `overflowing`) for `add`, `sub`, `mul`, `div`, `rem`, `neg`, `abs`, `pow`, `shl`, `shr`; plus Euclidean division, `absDiff`, `midpoint`, `isqrt`, `ilog2`, powers of two (D6) | `h = Uint32.wrappingMul(h ^ b, 16777619)` (FNV) |
+| **Integer operations** | five overflow modes (`wrapping`, `saturating`, `checked`, `strict`, `overflowing`) for `add`, `sub`, `mul`, `div`, `rem`, `neg`, `abs`, `pow`, `shl`, `shr`; plus Euclidean division, `absDiff`, `midpoint`, `isqrt`, `ilog2`, powers of two (D6) | `h = Uint32.wrappingMul((h ^ b) >>> 0, 16777619)` (FNV; `^` gives a signed result, so `>>> 0` makes it a `Uint32`) |
 | **Bits and bytes** | `leadingZeros`, `trailingZeros`, `countOnes`, `rotateLeft/Right`, `swapBytes`, `reverseBits`, `toBytes`/`fromBytes` | hashing, compression, codecs |
 | **Floats** | `round`, `toBits`/`fromBits`, `mulAdd`, `copySign`, `nextUp`/`nextDown`, `totalCompare` (D6) | serialization, numerics |
 | **Constants** | `MIN`, `MAX`, `BITS`; for floats, `MIN_POSITIVE`, `EPSILON` | `if (n > Uint16.MAX) …` |
@@ -243,11 +260,15 @@ through the gate on its own.
 - the facts step 0 found missing, including validators' assertions and written
   parameter types;
 - the platform tables;
-- the refusal turned on, landed together with fixes to the real bugs;
+- the refusal turned on, and the `ToInt32` conversion at native calls
+  (`integer_argument`) deleted, in the same change as the fixes to the real
+  bugs and every example that relied on it;
 - bigint ranges.
 
 **2. Written scalar types** (B, D, E, G):
-- the library replaces `libc.d.ts`, and the binding generators move to it;
+- the library replaces `libc.d.ts`, which is deleted; the binding generators
+  emit the new names, every checked-in binding is regenerated, and every
+  example and runtime file is rewritten to it, in the same change;
 - written types become facts, obligations and storage widths;
 - strict stores.
 
@@ -336,10 +357,17 @@ becomes Infinity. So floats have no modes. Their completeness is:
    kind, as `Math` and `Atomics` do (`Uint8.wrappingAdd(a, b)`), never on
    `Number.prototype`. Numbers are primitives, and extending built-in
    prototypes is off the table.
-2. **Total.** Every function is specified for every input, including NaN, -0,
-   Infinity, a fraction and a value outside the kind. An argument that isn't a
-   value of the kind is a `RangeError`, as `Uint8(x)` says, never silently
-   converted.
+2. **Total, and no coercion.** Every function is specified for every input,
+   including NaN, -0, Infinity, a fraction and a value outside the kind.
+   - **The wrong type** (a string, an object, a `bigint` where a `number` is
+     taken) is a `TypeError`, never coerced. This is TC39's current practice,
+     and `BigInt.asIntN`'s.
+   - **The right type, out of range** is a `RangeError`.
+   - **The conversions are the exception by design:** `wrap`, `clamp`, `try`
+     and `is` take any number, since deciding what to do with it is their job.
+   - **`Uint16(x)`** takes a `number` or a `bigint` only, unlike `BigInt(x)`,
+     which also parses strings. `new Uint16(x)` is a `TypeError`, as
+     `new BigInt(x)` is.
 3. **Polyfillable.** Each one has a plain-JavaScript implementation
    (`runtime.js`, shipped as `@nts/scalars`), so a program runs unchanged
    under node. nts compiles the same function to an instruction.
@@ -449,6 +477,104 @@ The other costs of (b):
 
 **Decided: (a), imported only.** It's what a TC39-minded library does before
 standardization, and it costs case-2 programs one import line.
+
+## 6b. Design questions from the 2026-10-08 audit
+
+A separate review checked this plan against everything the playground
+raised. It found four questions that change the design, and fifteen smaller
+ones. Every answer below is a recommendation until decided.
+
+### The four big ones (for the user)
+
+**Q1. Can a written type be trusted as a fact?**
+- **The problem:** TypeScript lets a plain number into a `Uint8` place in many
+  ways, without any check:
+  - `number[]` passed as `Uint8[]`;
+  - `{ x: number }` passed as `{ x: Uint8 }`;
+  - a function taking `Uint8` used as one taking `number`;
+  - `any`;
+  - generic code;
+  - `arr as Uint8[]`.
+- **Why it matters:** if nts then trusts "a `Uint8` reads as 0..255" and
+  nothing checks at run time, C can receive a wrong value.
+- **Recommendation: make it trustworthy.** nts's own check refuses every
+  conversion that changes a width, in both directions:
+  - arrays, objects and functions are invariant in their scalar positions;
+  - `any`, or a type parameter, into a written scalar is a store (D2);
+  - `as` on a container is refused unless nts proves it.
+
+  Then a written type is a sound fact, the same guarantee TypeScript itself
+  doesn't give. The alternative, facts only from how a value was stored and
+  never from its type, is weaker: a parameter `n: Uint16` would prove nothing.
+
+**Q2. Which facts may prove a strict obligation?**
+- **The problem:** nts's optimizer infers a function's parameter ranges from
+  all its callers. If that also discharged strict checks:
+  - adding a caller elsewhere could break the build at a native call nobody
+    touched;
+  - a compiler upgrade could break a working program;
+  - a fact that holds only in a speculative copy (`guards.rs`) could count as
+    proof.
+- **Recommendation: local facts only,** like TypeScript and Rust. A strict
+  obligation is discharged by:
+  - what can be proven inside the function;
+  - plus written types: parameters, fields, returns, and a binding's return
+    and callback-parameter types.
+
+  The whole-program analysis keeps making code fast, but never decides whether
+  code compiles. A function that passes its `number` parameter to C writes the
+  parameter as `n: Uint16`, and the obligation moves to each caller, where
+  it's checked too. Errors stay where the cause is.
+
+**Q3. Floats and -0: node parity.**
+- **The problem:** two of the playground's exceptions make nts and node
+  disagree:
+  - a `Float32` slot rounds in nts and not in node, so `f === 0.1`,
+    `includes`, `String(f)` and `JSON.stringify` differ;
+  - `-0` stored as an integer becomes `0` in nts and stays `-0` in node
+    (`1 / x` tells them apart).
+- **Recommendation: make both strict, as D2 is.**
+  - Storing into a float slot must be provably exact, or written
+    `Float32.round(x)`, which node's polyfill also does.
+  - A value that may be `-0` into an integer slot is refused unless proven
+    not to be (the analysis already tracks `-0`), or written (`Int32.wrap`).
+
+  Then "nts and node compute the same values" holds without exceptions.
+  This replaces the playground's U28 and its `-0` rule.
+
+**Q4. Values coming *from* native code.**
+- **The problem:**
+  - a `size_t` above 2^53 can't be a `number` exactly;
+  - a closed C enum can receive a value it doesn't name.
+
+  Both need a run-time check, against "nts never inserts a check".
+- **Recommendation: the rule is about values the program sends, and a binding
+  is the author of what it receives.** Inbound values are checked where the
+  binding's types say so:
+  - `AsNumber` throws past 2^53;
+  - a closed `CEnum` throws on an unknown value.
+
+  That's a check the binding wrote, not one nts invented. Outbound values stay
+  strict. The rule becomes: **nts adds no check that neither the program nor
+  its bindings wrote.**
+
+### The smaller ones (recommendations)
+
+| # | Topic | Recommendation |
+|---|---|---|
+| S1 | **Overloads that differ only by kind** (Java's `append(int)` vs `append(char)`): stock TypeScript picks the first | The binding generators rename kind-only overloads (`appendChar`). D8 wrongly filed this (C33) as checker-only. |
+| S2 | **`Uint8.is(x)` under stock TypeScript:** its `else` branch narrows to `never` | `is` is declared returning `boolean`, not a TypeScript guard. nts's engine treats `if (Uint8.is(n))` as the guard. |
+| S3 | **What counts as "written"** | Annotations on variables, fields, parameters and returns; explicit type arguments (`new Set<Float32>()`); everything a binding declares, callback parameters included. `T \| undefined` of a scalar is written. Storage width never comes from an inferred type (`let crc = crc16()` is a plain number). |
+| S4 | **Arrays and fields of written types** | Never unset: no `!` or `declare` on a scalar field, no holes, `length` growth only by `push`. `x?: Uint8` is "absent or a `Uint8`", with a presence bit. `new Array<Uint8>(n)` is refused (holes); `Uint8Array` or `Array.from` instead. |
+| S5 | **Exports and callbacks** | As the playground decided (U59): parameters and returns written, a `number` is a `double`, a plain `bigint` refused. A throw crossing native frames (a `Uint16(x)` failing inside a GTK callback, say) is reported and aborts, and the docs say so. |
+| S6 | **Where the targets come from** | The build's config lists targets; the default is the host. A proof holds on every listed target. A type's carrier is the same on every target (a `c_long` is a `bigint` if any target's `long` is 64 bits). C types apply only where C is called. |
+| S7 | **Recognising scalar types** | By the library's own marker, not by property names as nts does today. A program's own brand on a scalar (`type UserId = Int32 & {…}`) is still an `Int32`. No compatibility: `__c_*` brands go, and `size_t` and `long` become `AsNumber` numbers. |
+| S8 | **Guards on fields** | A guard narrows a local, not a field (`this.n` may change between the test and the use). The error says: copy it to a `const` first. |
+| S9 | **Backend rules** | `-ffp-contract=off` (no fused multiply-add JavaScript wouldn't do). Wrapping operations use unsigned arithmetic in C, never signed overflow (undefined behaviour). `Float16` rounds from the double directly. The JVM's `ByteBuffer` set to little-endian where C's layout is meant. To check: whether today's C output already risks fused multiply-add. |
+| S10 | **What bindings must carry** | Per-argument types for C variadics (`printf`, `g_object_set`) or they stay refused; string-length units (bytes vs UTF-16 units); range annotations (`@IntRange`, `NonZero`); bit-field widths; sentinels (C37). |
+| S11 | **The `@nts/scalars` package** | nts recognises the package by its resolved identity and compiles its functions as operations. The package version ships with the compiler, so they can't skew. |
+| S12 | **Testing** | Port the playground's named cases and audit findings as nts fixtures; its ABI tables check (`abi-tables.py`) in the gate; an nts-versus-node run of every scalar program; NaN payloads (node may canonicalize them). |
+| S13 | **The census counts stores too** | It already does: step 0 counts native call arguments *and* stores through native pointers (struct fields, buffers). Only values returned by callbacks are not counted yet. |
 
 ## 7. How we'll know it works
 
