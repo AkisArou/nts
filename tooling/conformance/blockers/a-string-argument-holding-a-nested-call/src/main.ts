@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> NTS1001 a number where a string is wanted
+// expect: emit-c --rc -> emits-c nts_dom_Document_createElement
 //
 // A binding's string argument whose expression holds a call --
 // `createElement(tags[pick(1)])` -- refuses that inner call's number
@@ -8,6 +8,8 @@
 //
 // Control (emit-c --rc), one difference -- the index computed first
 // (`const k = pick(1); createElement(tags[k])`): nothing refused.
+//
+// **A guard since 2026-10-08** (MainClaude): a nested call to a program function no longer borrows the binding's string slot: `native_string_slot` answers only for the call `omitting_for` is set around.
 import { document } from "nts:dom";
 
 export function make(): void {

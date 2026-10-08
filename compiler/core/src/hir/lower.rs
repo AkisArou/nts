@@ -18327,8 +18327,11 @@ struct FuncBuilder<'a> {
     /// leading C arguments the program did not write (a method's receiver):
     /// what an omitted argument reads its `@ntsDefault` from. Set around the
     /// arguments only, and restored after, so a foreign call inside one of
-    /// them does not leave its own behind.
-    omitting_for: Option<(std::sync::Arc<super::native::Function>, usize)>,
+    /// them does not leave its own behind. And the call node it is for: a call
+    /// to a program function inside an argument -- `createElement(tags[pick(1)])`
+    /// -- lowers its own arguments without replacing this, so a question about
+    /// *its* parameters must not be answered from the foreign function's.
+    omitting_for: Option<(std::sync::Arc<super::native::Function>, usize, NodeId)>,
     /// Object literals a native call passes as its labels, marked before its
     /// arguments are lowered: each is lowered a property at a time and never
     /// built (`Role::Label`).
@@ -24472,10 +24475,13 @@ impl<'a> FuncBuilder<'a> {
         self.coerce(value, &want, argument)
     }
 
-    /// A string, where the native call being lowered (`omitting_for`) feeds
-    /// its written argument `at` into a string slot (`Role::String`).
-    fn native_string_slot(&self, at: usize) -> Option<HirType> {
-        let (target, spelled) = self.omitting_for.as_ref()?;
+    /// A string, where `call` is the native call being lowered (`omitting_for`)
+    /// and feeds its written argument `at` into a string slot (`Role::String`).
+    fn native_string_slot(&self, call: NodeId, at: usize) -> Option<HirType> {
+        let (target, spelled, lowering) = self.omitting_for.as_ref()?;
+        if *lowering != call {
+            return None;
+        }
         target
             .slots()
             .any(|(_, role, fed)| fed == Some(at + spelled) && matches!(role, super::native::Role::String(_)))
@@ -24504,7 +24510,7 @@ impl<'a> FuncBuilder<'a> {
         // that is not a string". The slot the argument feeds is the truth, and
         // the one answer both lowering and coercion read; a value that really
         // is not a string still meets `coerce`'s refusal.
-        if let Some(string) = self.native_string_slot(at) {
+        if let Some(string) = self.native_string_slot(call, at) {
             return Some(string);
         }
         if let Some(bound) = self
@@ -28678,7 +28684,7 @@ impl<'a> FuncBuilder<'a> {
     /// own representation. `None` for every other call.
     fn omitted_by_default(&mut self, at: usize, origin: &Origin) -> Option<ValueId> {
         use super::native::ParameterDefault;
-        let (target, unwritten) = self.omitting_for.as_ref()?;
+        let (target, unwritten, _) = self.omitting_for.as_ref()?;
         let slot = target.c_index(at + unwritten)?;
         let (_, value) = target.defaults.iter().find(|(given, _)| *given == slot)?;
         let ty = target.parameters[slot].representation();
@@ -39803,7 +39809,7 @@ impl<'a> FuncBuilder<'a> {
         // leaving them out gets them.
         let written = given.len();
         let mut arguments = given;
-        let outer = self.omitting_for.replace((target.clone(), 0));
+        let outer = self.omitting_for.replace((target.clone(), 0, id));
         let defaults = (written..record.parameters.len()).map(|at| self.omitted_by_default(at, &origin)).collect::<Option<Vec<_>>>();
         self.omitting_for = outer;
         arguments.extend(defaults.ok_or_else(|| {
@@ -59938,7 +59944,7 @@ impl<'a> FuncBuilder<'a> {
         tail: Option<&HirType>,
     ) -> Result<Vec<ValueId>, Diagnostic> {
         let outer = match callee {
-            Callee::Native(target) => self.omitting_for.replace((target.clone(), usize::from(method))),
+            Callee::Native(target) => self.omitting_for.replace((target.clone(), usize::from(method), id)),
             _ => self.omitting_for.take(),
         };
         let args = match tail {
@@ -59994,7 +60000,7 @@ impl<'a> FuncBuilder<'a> {
         let spelled = receiver.is_some() && target.roles.first() != Some(&super::native::Role::Receiver);
         let positional: Vec<NodeId> = slots.iter().map(|slot| slot.unwrap_or(literal)).collect();
         self.mark_literals(target, &positional, spelled);
-        let outer = self.omitting_for.replace((target.clone(), usize::from(spelled)));
+        let outer = self.omitting_for.replace((target.clone(), usize::from(spelled), id));
         let mut arguments = Vec::with_capacity(slots.len());
         for (at, slot) in slots.iter().enumerate() {
             arguments.push(match slot {
