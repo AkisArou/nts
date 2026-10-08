@@ -1200,3 +1200,101 @@ export function reads(): number { return read(() => leaf_at(1 as c_int)); }
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     assert!(!emitted.writer.text().contains("nts_refused("), "a base reading reached a refusing entry");
 }
+
+/// A foreign function answering a `Closure<F>` the program lent it (the
+/// Chromium lane's request 14: `button.onclick` reads back the handler the
+/// program set). The host keeps the context it was lent -- which *is* the
+/// program's closure object -- and returns it retained. Run, not only
+/// emitted: the closure handed back must be callable through its own
+/// dispatch, `===` the one lent, and NULL must read as `null`; under both
+/// providers, since reference counting is where a result's reference is
+/// either the program's or a double release.
+#[test]
+fn a_closure_lent_to_c_comes_back_as_the_same_callable_closure() {
+    let source = r#"
+import type { Closure, c_double } from "c:types";
+type Handler = Closure<(n: c_double) => c_double>;
+declare function handler_set(handler: Handler): void;
+declare function handler_get(): Handler | null;
+declare function handler_clear(): void;
+let calls = 0;
+export function roundTrip(n: number): number {
+  const step = n > 100 ? 3 : 2;
+  const handler: Handler = (x: c_double): c_double => {
+    calls += 1;
+    return (x * step) as c_double;
+  };
+  handler_set(handler);
+  const back = handler_get();
+  if (back === null) return -1;
+  const same = back === handler ? 1000 : 0;
+  return same + (back(n as c_double) as number) + calls * 100;
+}
+export function cleared(): number {
+  handler_clear();
+  return handler_get() === null ? 1 : 0;
+}
+"#;
+    let host = r#"#include "nts_runtime.h"
+static void *held;
+static void (*held_notify)(void *);
+void handler_set(double (*bridge)(double, void *), void *context, void (*notify)(void *)) {
+  (void)bridge;
+  if (held != NULL) held_notify(held);
+  held = context;
+  held_notify = notify;
+}
+NtsHeader *handler_get(void) {
+  if (held == NULL) return NULL;
+  nts_retain((NtsHeader *)held);
+  return (NtsHeader *)held;
+}
+void handler_clear(void) {
+  if (held != NULL) held_notify(held);
+  held = NULL;
+}
+"#;
+    let caller = "#include \"program.h\"\n\
+                  int main(void) {\n\
+                  \x20 if (roundTrip(5) != 1000 + 10 + 100) return 1;\n\
+                  \x20 if (roundTrip(200) != 1000 + 600 + 200) return 2;\n\
+                  \x20 if (cleared() != 1) return 3;\n\
+                  \x20 return 0;\n}\n";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let name = format!("closure-result-{provider:?}");
+        let Some((dir, snapshot)) = snapshot_with_types(&name, source, false) else {
+            return;
+        };
+        let options = hir::Options { provider, ..hir::Options::default() };
+        let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
+        assert!(prepared.diagnostics.is_empty(), "{provider:?}: {:?}", prepared.diagnostics);
+        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+        std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
+        for file in emitted.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(dir.join("host.c"), host).unwrap();
+        std::fs::write(dir.join("caller.c"), caller).unwrap();
+        let mut objects = Vec::new();
+        for source in ["program.c", "nts_runtime.c", "host.c", "caller.c"] {
+            let object = format!("{source}.o");
+            let mut args = vec!["-std=gnu11", "-D_GNU_SOURCE", "-O2", "-w", "-I", ".", "-c", source, "-o", &object];
+            if provider == hir::Provider::ReferenceCounting {
+                args.push("-DNTS_PROVIDER_RC");
+            }
+            let result = Command::new("clang").current_dir(&dir).args(&args).output().unwrap();
+            assert!(result.status.success(), "{provider:?} {source}: {}", String::from_utf8_lossy(&result.stderr));
+            objects.push(object);
+        }
+        let result = Command::new("clang")
+            .current_dir(&dir)
+            .args(&objects)
+            .args(["-lm", "-lpthread", "-o", "caller"])
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{provider:?}: {}", String::from_utf8_lossy(&result.stderr));
+        let status = Command::new(dir.join("caller")).status().unwrap();
+        assert!(status.success(), "{provider:?}: the caller answered {status}");
+    }
+}

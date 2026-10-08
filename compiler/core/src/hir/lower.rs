@@ -17491,6 +17491,14 @@ fn representation_of(
             let array = super::native::lent_handles_value(snapshot, ty)?;
             representation_within(snapshot, array, path, subst)?
         }
+        // A closure marker (`Closure<F>`, `c:types`): `F` beside a brand that is
+        // optional and never exists, so exactly the function. Parameters never
+        // asked, because `closure_slots` takes them apart at the boundary; a
+        // closure a foreign function *returns* is a value the program holds.
+        TypeKind::Intersection(_) if super::native::closure_function(snapshot, ty).is_some() => {
+            let function = super::native::closure_function(snapshot, ty)?;
+            representation_within(snapshot, function, path, subst)?
+        }
         // And one half of a `CBool` (`true & brand`): exactly a boolean, for
         // the same reason -- its brand is optional and never exists. A whole
         // `CBool` is the union of both, which the union arm above builds from

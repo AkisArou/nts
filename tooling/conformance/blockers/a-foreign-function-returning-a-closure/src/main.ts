@@ -1,4 +1,4 @@
-// expect: NTS1001 foreign function `handler_get`'s return (which wants a c_int or c_double brand, a boolean, or a string, or void), a type with no native ABI
+// expect: nothing refused
 //
 // A foreign function returning a Closure is refused: a closure goes to C
 // (as a parameter, which the host retains) but never comes back. The DOM's
@@ -13,6 +13,12 @@
 //
 // Control, one difference -- `handler_get` declared returning
 // CNumber<"int32"> (types/host.d.ts): nothing refused.
+//
+// **A guard since 2026-10-08** (MainClaude): a retained
+// `Closure<F>` comes back as the program's own closure, owned -- the host
+// returns the context it was lent, retained, and NULL is `null`. Run under
+// both providers by compiler/codegen/c/tests/native.rs
+// `a_closure_lent_to_c_comes_back_as_the_same_callable_closure`.
 import type { CNumber } from "c:types";
 import { handler_get, handler_set } from "host";
 

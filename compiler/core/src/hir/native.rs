@@ -2797,6 +2797,12 @@ pub(crate) fn event_slots(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(St
     (words.next().is_none() && is_interface_id(&iid)).then_some((iid, add, remove))
 }
 
+/// The `F` of a `Closure<F>`, `ScopedClosure<F>` or any other closure marker:
+/// the value it is, since the marker is optional and never exists.
+pub(crate) fn closure_function(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<TypeId> {
+    closure(snapshot, ty).map(|(function, _)| function)
+}
+
 /// The function type inside a `Closure<F>` or `ScopedClosure<F>`, and whether
 /// it is the scoped one.
 ///
@@ -3185,6 +3191,42 @@ fn promised(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
     }
 }
 
+/// A `Closure<F>` (or `Closure<F> | null`) a foreign function answers: a
+/// closure the program made and lent, handed back. A retained closure crosses
+/// to C as its bridge and its context, and the context *is* the program's
+/// closure object (`nts_closure_lend` retains it and returns it), so the host
+/// returns that pointer -- retained, one reference, the program's, as a
+/// promise result is answered -- and it is the program's closure again:
+/// callable through its own dispatch, and `===` the value the program lent.
+/// NULL is `null`. The Chromium lane's request 14: an event handler
+/// attribute's getter, `button.onclick`, reads back the handler the program
+/// set.
+///
+/// Only a *retained* closure: a scoped one is lent for one call and the host
+/// holds nothing to return. And only one the program lent -- a pointer the
+/// host made itself is not a closure object, which is the host's contract to
+/// keep, as handing back an `NtsPromise *` it did not make would be.
+fn returned_closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+    let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
+    let closure_part = match kind(ty)? {
+        TypeKind::Union(members) => match members.as_slice() {
+            [a, b] if matches!(kind(*a), Some(TypeKind::Null)) => *b,
+            [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
+            _ => return None,
+        },
+        _ => ty,
+    };
+    let (_, ClosureKind::Retained) = closure(snapshot, closure_part)? else {
+        return None;
+    };
+    // The whole type's representation, `| null` included: a nullable object
+    // is the same pointer, and NULL is `null`.
+    match super::lower::representation(snapshot, ty)? {
+        HirType::Managed(object @ ManagedType::Object(_)) => Some(Type::Managed(object)),
+        _ => None,
+    }
+}
+
 /// A type under `@ntsAbi managed`, which passes the managed value itself.
 fn managed_abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
     match super::lower::representation(snapshot, ty)? {
@@ -3513,7 +3555,11 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
     let result = match (returned_text(array.is_some(), string.as_ref()), &declared) {
         (Some(text), _) => text,
         (None, Some((c, _))) => c.clone(),
-        (None, None) => if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty).or_else(|| promised(snapshot, ty)) }
+        (None, None) => if abi == Some("managed") {
+            managed_abi_type(snapshot, ty)
+        } else {
+            abi_type(snapshot, ty).or_else(|| promised(snapshot, ty)).or_else(|| returned_closure(snapshot, ty))
+        }
             .ok_or_else(|| no_abi_type(snapshot, ty, name, None))?,
     };
     Ok(Returned {
