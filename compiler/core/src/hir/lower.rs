@@ -6355,6 +6355,22 @@ fn functions_used_as_values(
         if excluded.contains(&id) {
             continue;
         }
+        // **Not a name an import or an export declaration writes.** `import { f }`
+        // and `export { f } from "…"` bind or publish a name and use no value --
+        // and once the
+        // symbol below goes through the import to the function, the specifier's
+        // own identifier read as a use of it: every imported throwing function
+        // was "used as a value", had no raising copy for it, and withheld every
+        // call through a closure inside a `try` in the program (the Chromium
+        // lane's probe, 2026-10-08: `idlTranscript`, called directly once, and
+        // `ntsChromiumDomProgram`, re-exported).
+        // `collect_function_values` skips the import specifier for the same reason.
+        if matches!(
+            node.parent.and_then(|parent| probe.kind_of(parent)),
+            Some(syntax::IMPORT_SPECIFIER | syntax::EXPORT_SPECIFIER)
+        ) {
+            continue;
+        }
         // **Through an import to what it names**, as every other reader of a callee
         // does: `import { literalFirst }` binds an alias whose only declaration is the
         // specifier, so an imported function used as a value seeded nothing, got no

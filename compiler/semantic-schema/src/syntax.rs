@@ -301,6 +301,12 @@ pub const IMPORT_SPECIFIER: u16 = 277;
 /// another module; the rest resolve to nothing, which is what distinguishes
 /// them without needing a second kind.
 pub const EXPORT_DECLARATION: u16 = 279;
+/// `{ x }` in `export { x }` and `export { x } from "..."`: the identifier
+/// under it publishes a name and is not a read of it. Read off real output:
+/// the parent of `ntsChromiumDomProgram` in `export { ntsChromiumDomProgram }
+/// from "../../tests/dom-witness.ts"`, under an unkinded list, `NamedExports`
+/// (280) and the declaration.
+pub const EXPORT_SPECIFIER: u16 = 282;
 /// The token every source file ends with. Read off real output: it is the last
 /// child of a `SourceFile`, and it is neither a statement nor a declaration.
 pub const END_OF_FILE_TOKEN: u16 = 1;
