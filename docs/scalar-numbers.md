@@ -157,9 +157,11 @@ no run-time effect, as everywhere in TypeScript, and node erases it. nts
 (pointing to `Uint16(n)`, a guard or `clamp`). So `as` is never a hidden lie
 and never a hidden check, and nts and node run the same line the same way.
 
-Two deliberate exceptions, decided in the playground:
-- a float slot rounds, as a `Float32Array` does;
-- `-0` stored as an integer becomes `0`.
+The playground had two exceptions here: a float slot rounded, and `-0`
+stored as an integer became `0`. **Q3 replaced both** (section 6b): a float
+slot must be stored an exact value, and `-0` is ruled out wherever the
+program could read it back -- so nts and node compute the same values with
+no exception.
 
 ### E. Operators compute JavaScript's values
 
@@ -336,6 +338,49 @@ The sub-steps, landed together through the gate when strict is on:
 | 1f | Closing TypeScript's holes (Q1): width-changing conversions refused |
 | 1g | Strict on: the refusal as an error that teaches; `integer_argument`'s `ToInt32` deleted; every example and binding generator fixed; the test harness generating inputs that fit |
 | 1h | Platform tables (replacing the two ABI models); bigint ranges |
+
+**Step 1 as built (in progress, branch `claude/scalar-step1`).** What the
+design above became in the code, and the choices made on the way:
+
+- **Obligations come from two places, never one derived twice.** Where the
+  HIR has a slot, the obligation is read off the store's operation: a call
+  names its callee (`Param::written`), a native call its C parameter types, a
+  field store its field (`Field::written`), a global store its global
+  (`Global::written`), a `return` its function (`Func::written_return`) -- and,
+  in a function C calls back, the callback type's C result -- and a store
+  through a native pointer its pointee, a bit-field its width. Where the HIR
+  has none, the lowering records it (`Func::obligations`): a local written as
+  a kind (at its declaration and every assignment), an `as`, and an argument
+  to a call through a function type (whose callee is any function of the
+  type, so the type's kinds are the obligation). `hir::obligations` walks both.
+- **"Written" means an annotation** (S3), or a parameter with neither
+  annotation nor default, whose type its context declares -- a binding's
+  callback, a declared function type. A field or local inferred from its
+  initializer has no kind, whatever the initializer was.
+- **The analysis reads the same kinds** (`flow::Written`): a written
+  parameter, a native result, and every read of a written field, global or
+  return is the kind's range. It is declared rather than inferred, so the
+  whole-program fixpoint and the strict check share it; only the latter is
+  limited to it (Q2).
+- **A value that may not be a number is unproven** (an `any`, an erased
+  union): Q1 makes it a store like any other.
+- **`-0` only where the program reads it back.** Q3's reason is parity: nts
+  must not compute a different value than node. A program slot (a written
+  parameter, field, global, return, local, or argument through a function
+  type) may be held at an integer width, which would read `-0` back as `0`,
+  so there it is an obligation. A native argument, a native store and a
+  callback's result leave the program -- C, Java and wasm can't tell `-0`
+  from `0` and receive the same integer -- and an `as` stores nothing. There
+  it is not.
+- **1e, the engine:** an `if` condition built from `&&`, `||` and `!` that
+  assigns nothing is lowered as jumps, so each test narrows like a nested
+  `if`; `Number.isInteger(x)` taken makes `x` whole and not NaN; and a fact's
+  `whole` now means "every finite member is an integer", so `Math.round(x)`
+  keeps it through a possible `Infinity` and a later guard completes it
+  (`Facts::integral` is the old meaning). Facts flow through an `Unerase`,
+  emitted only where a test proved the value is a number, which a uniform
+  closure entry needs to pass its written parameters on.
+
 
 **2. Written scalar types** (B, D, E, G):
 - the library replaces `libc.d.ts`, which is deleted; the binding generators
