@@ -516,7 +516,9 @@ pub struct Func {
     pub return_type: HirType,
     /// The scalar kind the return type was **written** as, or `None`; see
     /// [`Param::written`]. Every `return` must prove its value fits, and so a
-    /// call's result is the kind's range.
+    /// call's result is the kind's range. An `async` function's is its
+    /// promise's payload (`Promise<c_long>`), which an `await` of a call
+    /// reads; [`Self::call_kind`] is what the call itself answers.
     pub written_return: Option<native::Scalar>,
     /// Where the return type is a tuple written with scalar kinds
     /// (`[CNumber<"int">, CNumber<"int">]`), each position's kind; empty
@@ -648,6 +650,13 @@ pub struct GeneratorResumption {
 }
 
 impl Func {
+    /// The scalar kind a call to this function answers: its written return,
+    /// except an `async` function's, whose call answers its promise.
+    #[must_use]
+    pub fn call_kind(&self) -> Option<native::Scalar> {
+        self.written_return.filter(|_| self.async_result.is_none())
+    }
+
     /// Actual parameter definitions in ABI order, including dead definitions.
     /// Binding patterns can insert operations between arguments, so a formal
     /// position is not a value-arena index. Missing or repeated definitions

@@ -1117,6 +1117,73 @@ declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
     assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stdout));
 }
 
+/// A count C takes narrower than an array can be long is bounded before the
+/// call, a check the binding wrote by declaring the count: an array too long
+/// for a `uint16_t` throws a `RangeError` and C is never called; one that fits
+/// passes its exact length.
+#[test]
+fn a_count_narrower_than_an_array_is_bounded_before_the_call() {
+    let source = r#"
+import type { CBytes, CNumber, Counted } from "c:types";
+/** @ntsNoEscape bytes */
+declare function count_of(bytes: Counted<CBytes, CNumber<"uint16">>): CNumber<"double">;
+export function counted(n: CNumber<"int32">): number {
+  try {
+    return count_of(new Uint8Array(n));
+  } catch (error) {
+    return error instanceof RangeError ? -1 : -2;
+  }
+}
+"#;
+    let native = "#include <stdint.h>\n\
+         static int calls;\n\
+         int count_calls(void) { return calls; }\n\
+         double count_of(const uint8_t *bytes, uint16_t n) { (void)bytes; calls++; return n; }\n";
+    let caller = "#include <stdio.h>\n#include \"program.h\"\n\
+         int count_calls(void);\n\
+         static int failed;\n\
+         static void check(const char *what, double got, double want) {\n\
+           if (got != want) { printf(\"FAIL %s: got %.17g want %.17g\\n\", what, got, want); failed = 1; }\n\
+         }\n\
+         int main(void) {\n\
+           check(\"3\", counted(3), 3);\n\
+           check(\"65535\", counted(65535), 65535);\n\
+           check(\"65536 throws\", counted(65536), -1);\n\
+           check(\"C called twice\", count_calls(), 2);\n\
+           return failed;\n\
+         }\n";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some((dir, snapshot)) = snapshot_with_types(&format!("bounded-count-{provider:?}"), source, false) else {
+            return;
+        };
+        let prepared = hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).expect("valid HIR");
+        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+        std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
+        for file in emitted.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(dir.join("native.c"), native).unwrap();
+        std::fs::write(dir.join("caller.c"), caller).unwrap();
+        let mut objects = Vec::new();
+        for source in ["program.c", "nts_runtime.c", "native.c", "caller.c"] {
+            let object = format!("{source}.o");
+            let mut args = vec!["-std=gnu11", "-D_GNU_SOURCE", "-O2", "-w", "-I", ".", "-c", source, "-o", &object];
+            if provider == hir::Provider::ReferenceCounting {
+                args.push("-DNTS_PROVIDER_RC");
+            }
+            let result = Command::new("clang").current_dir(&dir).args(&args).output().unwrap();
+            assert!(result.status.success(), "{provider:?} {source}: {}", String::from_utf8_lossy(&result.stderr));
+            objects.push(object);
+        }
+        let result = Command::new("clang").current_dir(&dir).args(&objects).args(["-lm", "-lpthread", "-o", "caller"]).output().unwrap();
+        assert!(result.status.success(), "{provider:?}: {}", String::from_utf8_lossy(&result.stderr));
+        let ran = Command::new(dir.join("caller")).output().unwrap();
+        assert!(ran.status.success(), "{provider:?}: {}", String::from_utf8_lossy(&ran.stdout));
+    }
+}
+
 /// A closure answering a host handle: where a signature returning `void`
 /// admits it, a call through the signature drops the answer and runs; where a
 /// signature reads the answer *as the closure answers it*, the call takes the

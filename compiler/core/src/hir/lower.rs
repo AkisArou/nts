@@ -8825,8 +8825,19 @@ impl StructuralPlanner<'_, '_> {
         let mut legacy_spelled = Vec::new();
         let mut recovered = false;
         for (at, (declared, argument)) in parameters.iter().zip(&arguments).enumerate() {
-            if probe.kind_of(*argument) == Some(syntax::OBJECT_LITERAL_EXPRESSION) {
-                continue;
+            // A literal is built as the parameter's own type, so it needs no
+            // copy: an object literal always, and an array literal where the
+            // parameter is a tuple (its slot wins over the literal's type).
+            // Copied for the literal's type instead, `g([x, "a"])` with `g(t:
+            // [c_int, string])` gave `g` a copy over an unwritten `[number,
+            // string]` that the strict check refused inside `g`.
+            let tuple_slot = || {
+                matches!(probe.represent(*declared), Some(HirType::Managed(ManagedType::Object(tuple))) if probe.is_tuple(tuple))
+            };
+            match probe.kind_of(*argument) {
+                Some(syntax::OBJECT_LITERAL_EXPRESSION) => continue,
+                Some(syntax::ARRAY_LITERAL_EXPRESSION) if tuple_slot() => continue,
+                _ => {}
             }
             let Ok(position) = u32::try_from(at) else {
                 continue;
@@ -17886,6 +17897,8 @@ struct AsyncResult {
     /// The payload's representation, which is what says whether settling emits
     /// `nts_promise_fulfill_number`, `_reference` or `_void`.
     payload: HirType,
+    /// The scalar kind the payload was written as (`Promise<c_long>`).
+    written: Option<super::native::Scalar>,
 }
 
 /// What `resolve` or `reject` names inside a `new Promise` executor.
@@ -25804,7 +25817,7 @@ impl<'a> FuncBuilder<'a> {
         }
         // The module's one namespace object.
         let value = self.push(OpKind::ClosureStatic, payload.clone(), origin.clone());
-        self.fulfil(root, &AsyncResult { promise, payload }, Some(value))?;
+        self.fulfil(root, &AsyncResult { promise, payload, written: None }, Some(value))?;
         self.terminate(Terminator::Return(None));
         Ok(self.finish(name, params, HirType::Void, origin, false))
     }
@@ -26191,6 +26204,7 @@ impl<'a> FuncBuilder<'a> {
         let result = AsyncResult {
             promise,
             payload: (**payload).clone(),
+            written: self.written_return(id),
         };
         self.async_result = Some(result.clone());
         Ok(Some(result))
@@ -26787,7 +26801,7 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Managed(ManagedType::Promise(Box::new(payload.clone()))),
                 origin.clone(),
             );
-            self.settle(parameter, &AsyncResult { promise, payload }, value)?;
+            self.settle(parameter, &AsyncResult { promise, payload, written: None }, value)?;
         }
         self.terminate(Terminator::Jump { target: join, args: Vec::new() });
         self.switch_to(join);
@@ -26985,7 +26999,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let source = self.push(OpKind::FieldGet { object: receiver, field: 0 }, fields[0].ty.clone(), origin.clone());
         let promise = self.push(OpKind::FieldGet { object: receiver, field: 1 }, fields[1].ty.clone(), origin.clone());
-        let result = AsyncResult { promise, payload: shape.answer.clone() };
+        let result = AsyncResult { promise, payload: shape.answer.clone(), written: None };
         self.layouts.push(self.closure_layout(index, fields));
 
         let (fulfilled, rejected) = match &shape.callbacks {
@@ -27543,6 +27557,7 @@ impl<'a> FuncBuilder<'a> {
                         result: AsyncResult {
                             promise: value,
                             payload: *payload,
+                            written: None,
                         },
                         rejects,
                     },
@@ -30133,11 +30148,19 @@ impl<'a> FuncBuilder<'a> {
 
     /// The scalar kind a function's return type was **written** as: its
     /// annotation's, as [`Self::written_kind`] reads a variable's.
+    ///
+    /// An `async` function's is its promise's payload (`Promise<c_long>`): the
+    /// value each `return` settles it with, and an `await` of the call reads.
     fn written_return(&self, declaration: NodeId) -> Option<super::native::Scalar> {
         if !self.annotated(declaration) {
             return None;
         }
-        self.written_scalar(self.declared_result_type(declaration)?)
+        let returns = self.declared_result_type(declaration)?;
+        if self.node(declaration).modifiers.contains(nts_semantic_schema::DeclarationModifiers::ASYNC) {
+            let payload = *self.snapshot.type_arguments.get(&returns)?.first()?;
+            return self.written_scalar(payload);
+        }
+        self.written_scalar(returns)
     }
 
     /// An override's string argument, lent by the Windows Runtime as its
@@ -30273,6 +30296,14 @@ impl<'a> FuncBuilder<'a> {
             };
             self.returned_literal = outer;
             let value = value?;
+            // An `async` function settles its promise rather than returning to
+            // its caller, so its written payload is obliged here.
+            if let (Some(value), Some(expression), Some(kind)) =
+                (value, expression, self.async_result.as_ref().and_then(|result| result.written))
+                && self.callback_returns.is_empty()
+            {
+                self.oblige(value, kind, super::obligations::Into::Return, expression);
+            }
             if let (Some(value), Some(expression), None) = (value, obliged, literal) {
                 self.oblige_tuple_return(value, expression)?;
             }
@@ -34129,7 +34160,7 @@ impl<'a> FuncBuilder<'a> {
         if rejecting {
             return self.reject_with(id, promise, value);
         }
-        let result = AsyncResult { promise, payload };
+        let result = AsyncResult { promise, payload, written: None };
         self.settle(id, &result, value)
     }
 
@@ -34149,7 +34180,7 @@ impl<'a> FuncBuilder<'a> {
         let ty = HirType::Managed(ManagedType::Promise(Box::new(payload.clone())));
         let origin = self.origin(id);
         let promise = self.runtime_call("nts_promise_new", Vec::new(), ty, origin);
-        let result = AsyncResult { promise, payload };
+        let result = AsyncResult { promise, payload, written: None };
         self.settle(id, &result, Some(value))?;
         Ok(promise)
     }
@@ -34185,6 +34216,7 @@ impl<'a> FuncBuilder<'a> {
         let result = AsyncResult {
             promise,
             payload: *payload,
+            written: None,
         };
         self.settle(id, &result, value)?;
         Ok(promise)
@@ -49449,6 +49481,7 @@ impl<'a> FuncBuilder<'a> {
         let result = AsyncResult {
             promise,
             payload: payload.clone(),
+            written: None,
         };
 
         // Saved and restored rather than inserted and removed: an executor
@@ -55156,6 +55189,7 @@ impl<'a> FuncBuilder<'a> {
                 result: AsyncResult {
                     promise: value,
                     payload: *payload,
+                    written: None,
                 },
                 rejects,
             },

@@ -1062,3 +1062,101 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
         prepared.diagnostics
     );
 }
+
+/// What the strict check refuses in `source`: each error's code and message,
+/// none where every slot is proven. A construct the lowering refused counts
+/// too, so a function that was never compiled is not taken for one proven.
+fn refusals(name: &str, source: &str) -> Option<Vec<(String, String)>> {
+    let snapshot = snapshot(name, source)?;
+    Some(match hir::prepare(&snapshot) {
+        Ok(prepared) => prepared.diagnostics.into_iter().map(|refused| (refused.code, refused.message)).collect(),
+        Err(hir::Unprepared::Rejected(errors)) => errors.into_iter().map(|error| (error.code, error.message)).collect(),
+        Err(invalid) => panic!("{name}: {}", invalid.render(&snapshot.sources)),
+    })
+}
+
+/// Each way a value is proven to fit its C slot, beside a control that
+/// differs from it in one thing and is refused: the proof is what the
+/// difference took away.
+#[test]
+fn each_proof_is_refused_without_the_fact_it_rests_on() {
+    // The kinds a plain `number` reaches without an `as`, as a binding
+    // spells them.
+    let declarations = "import type { CNumber } from \"c:types\";\n\
+         type I32 = CNumber<\"int32\">;\n\
+         declare function seen_i32(v: I32): CNumber<\"double\">;\n\
+         declare function seen_u16(v: CNumber<\"uint16\">): CNumber<\"double\">;\n\
+         declare function seen_float(v: CNumber<\"float\">): CNumber<\"double\">;\n";
+    let cases = [
+        // A code unit read below its string's length is never NaN.
+        (
+            "unit",
+            "export function f(s: string): number { let t = 0; for (let i = 0; i < s.length; i++) t += seen_u16(s.charCodeAt(i)); return t; }",
+            "export function f(s: string): number { let t = 0; for (let i = 0; i <= s.length; i++) t += seen_u16(s.charCodeAt(i)); return t; }",
+        ),
+        // An `await` reads the payload an `async` function was written to
+        // settle with.
+        (
+            "awaited",
+            "async function count(): Promise<I32> { return 3; }\n\
+             export async function f(): Promise<number> { return seen_i32(await count()); }",
+            "async function count(): Promise<number> { return 3; }\n\
+             export async function f(): Promise<number> { return seen_i32(await count()); }",
+        ),
+        // ... and each `return` of one settles it with a value that fits.
+        (
+            "settled",
+            "export async function f(x: number): Promise<I32> { return x | 0; }",
+            "export async function f(x: number): Promise<I32> { return x; }",
+        ),
+        // `Math.sign` is -1, 0 or 1 whatever it is given.
+        (
+            "sign",
+            "export function f(a: c_int, b: c_int): number { return seen_i32(Math.sign(a - b)); }",
+            "export function f(a: c_int, b: c_int): number { return seen_i32(Math.trunc(a - b)); }",
+        ),
+        // `Math.max` of two `float`s is one of them.
+        (
+            "max",
+            "export function f(x: number, y: number): number { return seen_float(Math.max(Math.fround(x), Math.fround(y))); }",
+            "export function f(x: number, y: number): number { return seen_float(Math.max(Math.fround(x), y)); }",
+        ),
+        // A tuple's element types are written (one of mixed elements: a
+        // homogeneous tuple is an array, and arrays are step 2's) ...
+        (
+            "tuple",
+            "function g(t: [I32, string]): number { return seen_i32(t[0]); }\n\
+             export function f(x: number): number { return g([x | 0, \"a\"]); }",
+            "function g(t: [number, string]): number { return seen_i32(t[0]); }\n\
+             export function f(x: number): number { return g([x | 0, \"a\"]); }",
+        ),
+        // ... so a literal's elements are stores into them, built as the
+        // parameter's tuple rather than copied for the literal's own type.
+        (
+            "tuple-literal",
+            "function g(t: [I32, string]): number { return seen_i32(t[0]); }\n\
+             export function f(x: number): number { return g([x | 0, \"a\"]); }",
+            "function g(t: [I32, string]): number { return seen_i32(t[0]); }\n\
+             export function f(x: number): number { return g([x, \"a\"]); }",
+        ),
+        // A written local a closure assigns keeps its kind in its cell.
+        (
+            "cell",
+            "export function f(k: number): number { let n: I32 = 0; const bump = (): void => { n = (n + k) | 0; }; bump(); return seen_i32(n); }",
+            "export function f(k: number): number { let n: number = 0; const bump = (): void => { n = (n + k) | 0; }; bump(); return seen_i32(n); }",
+        ),
+        // `__c_of` is how a mapped record keeps a field's C type.
+        (
+            "kept",
+            "export function f(v: number & { readonly __c_of?: c_int }): number { return seen_i32(v); }",
+            "export function f(v: number): number { return seen_i32(v); }",
+        ),
+    ];
+    for (name, proven, control) in cases {
+        let Some(refused) = refusals(&format!("proof-{name}"), &format!("{declarations}{proven}\n")) else { return };
+        assert!(refused.is_empty(), "{name}: proven, and refused: {refused:?}");
+        let refused = refusals(&format!("control-{name}"), &format!("{declarations}{control}\n")).unwrap();
+        assert!(!refused.is_empty(), "{name}: the control has to be refused, or the case shows nothing");
+        assert!(refused.iter().all(|(code, _)| code == "NTS5001"), "{name}: {refused:?}");
+    }
+}

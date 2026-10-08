@@ -439,8 +439,10 @@ impl<'a> Slots<'a> {
                     _ => {}
                 }
             }
+            // An `async` function hands back its promise: its payload is
+            // obliged where each `return` settles it, by the lowering.
             if let Terminator::Return(Some(value)) = block.terminator {
-                if let Some(kind) = func.written_return {
+                if let Some(kind) = func.call_kind() {
                     oblige(value, value, (kind, None), Into::Return);
                 }
                 if let Some(&(kind, callback)) = self.bridged.get(func.name.as_str()) {
@@ -778,7 +780,7 @@ fn exact_in_float(&self, func: &Func, analysis: &Analysis, (block, value): (Bloc
     match &func.value(value).kind {
         OpKind::Call { callee: Callee::External(name), .. } => name == "nts_math_fround",
         OpKind::Call { callee: Callee::Native(target), .. } => target.result == super::native::Type::Scalar(Scalar::Float),
-        OpKind::Call { callee: Callee::Direct(name), .. } => self.by_name.get(name.as_str()).is_some_and(|callee| callee.written_return == float),
+        OpKind::Call { callee: Callee::Direct(name), .. } => self.by_name.get(name.as_str()).is_some_and(|callee| callee.call_kind() == float),
         OpKind::Convert(from) => func.value(*from).ty == HirType::Float { bits: 32 },
         // C's own `float` storage holds `float`s.
         OpKind::NativeLoad { pointer, .. } => matches!(&func.value(*pointer).ty,
@@ -1077,7 +1079,7 @@ impl Slots<'_> {
             OpKind::FieldGet { object, field } => Bounds::of(self.field(&func.value(*object).ty, *field).map(|(kind, _)| kind)),
             OpKind::GlobalGet(global) => Bounds::of(self.globals.get(*global as usize).and_then(|slot| slot.written)),
             OpKind::Call { callee: Callee::Direct(name), .. } => {
-                Bounds::of(self.by_name.get(name.as_str()).and_then(|callee| callee.written_return))
+                Bounds::of(self.by_name.get(name.as_str()).and_then(|callee| callee.call_kind()))
             }
             OpKind::Call { callee: Callee::Native(target), .. } => match target.result {
                 super::native::Type::Scalar(kind) => Bounds::of(Some(kind)),

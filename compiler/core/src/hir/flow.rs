@@ -295,6 +295,9 @@ pub struct Whole {
 pub struct Written {
     /// What a call to each function returns, by name.
     pub returns: FxHashMap<String, Facts>,
+    /// What an `await` of a call to each `async` function reads, by name:
+    /// its payload's written kind.
+    pub awaited: FxHashMap<String, Facts>,
     /// Each position of the tuple a function returns, by name, where the
     /// return type is a tuple written with scalar kinds.
     pub return_elements: FxHashMap<String, Vec<Facts>>,
@@ -307,9 +310,11 @@ pub struct Written {
 impl Written {
     #[must_use]
     pub fn of(program: &super::Program) -> Self {
-        let returns = program
+        let returns = program.funcs.iter().filter_map(|func| Some((func.name.clone(), func.call_kind()?.facts()))).collect();
+        let awaited = program
             .funcs
             .iter()
+            .filter(|func| func.async_result.is_some())
             .filter_map(|func| Some((func.name.clone(), func.written_return?.facts())))
             .collect();
         let return_elements = program
@@ -343,7 +348,7 @@ impl Written {
                 Some((u32::try_from(index).ok()?, facts))
             })
             .collect();
-        Self { returns, return_elements, fields, globals }
+        Self { returns, awaited, return_elements, fields, globals }
     }
 }
 
@@ -603,6 +608,24 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
             super::native::Type::Scalar(kind) => kind.facts(),
             _ => Facts::TOP,
         },
+    }
+}
+
+/// What an `await` of `promise` reads: the payload an `async` function was
+/// written to settle with, where `promise` is a call to one.
+fn awaited(func: &Func, context: &Context, promise: ValueId) -> Facts {
+    match &func.values[promise.0 as usize].kind {
+        OpKind::Call { callee: Callee::Direct(name), .. } => context.written.awaited.get(name).copied().unwrap_or(Facts::TOP),
+        _ => Facts::TOP,
+    }
+}
+
+/// What one of the runtime's own functions returns given its operand:
+/// `Math.sign`'s answer follows its argument's.
+fn operand_result(callee: &Callee, args: &[ValueId], refinements: &Refinements, values: &[Facts]) -> Option<Facts> {
+    match (callee, args) {
+        (Callee::External(name), [argument]) if name == "nts_math_sign" => Some(facts::sign(lookup(refinements, values, *argument))),
+        _ => None,
     }
 }
 
@@ -1029,7 +1052,7 @@ fn transfer_op(
         // What the callee was proven to return. Without this every call is
         // a wall: an unanalyzed result poisons everything downstream of it,
         // which for a program made of small functions is everything.
-        OpKind::Call { callee, .. } => call_result(context, callee),
+        OpKind::Call { callee, args, .. } => operand_result(callee, args, refinements, values).unwrap_or_else(|| call_result(context, callee)),
         // What was stored into this field, anywhere in the program.
         OpKind::FieldGet { object, field } => {
             field_facts(context, &func.values[object.0 as usize].ty, *field)
@@ -1097,6 +1120,7 @@ fn transfer_op(
             _ => Facts::TOP,
         },
         OpKind::NativeLoad { .. } | OpKind::NativeBitLoad { .. } => native_load_facts(func, &op.kind),
+        OpKind::Await { promise, .. } => awaited(func, context, *promise),
         // What an erased value holds, as the type the checker narrowed it to.
         // Its facts are about the number it is when it is one -- a written
         // parameter's kind, through a uniform closure entry -- and this is

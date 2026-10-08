@@ -834,6 +834,18 @@ pub fn javascript_round(x: f64) -> f64 {
     }
 }
 
+/// `Math.sign`: -1, 0 or 1 -- `-0` and NaN where they came in.
+#[must_use]
+pub fn sign(a: Facts) -> Facts {
+    if !a.has_numeric() {
+        return empty_but_nan(a.maybe_nan);
+    }
+    // Monotone, so the bounds' signs bound it. Not Rust's `signum`, which
+    // answers 1 for 0.
+    let sign = |x: f64| if x > 0.0 { 1.0 } else if x < 0.0 { -1.0 } else { 0.0 };
+    Facts::new(sign(a.lo), sign(a.hi), true, a.maybe_nan, a.maybe_negative_zero)
+}
+
 /// `Math.abs`.
 #[must_use]
 pub fn abs(a: Facts) -> Facts {
@@ -1148,6 +1160,14 @@ mod tests {
         assert!(seven.whole && two.whole);
         let result = div(seven, two);
         assert!(result.contains(3.5));
+    }
+
+    #[test]
+    fn sign_is_minus_one_zero_or_one() {
+        let difference = Facts::new(-5.0, 7.0, true, false, false);
+        assert_eq!(sign(difference), Facts::new(-1.0, 1.0, true, false, false));
+        assert_eq!(sign(Facts::new(0.0, 0.0, true, false, false)), Facts::constant(0.0));
+        assert!(sign(Facts::TOP).maybe_nan && sign(Facts::TOP).maybe_negative_zero);
     }
 
     #[test]
