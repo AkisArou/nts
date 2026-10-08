@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: typeof, F | null | undefined=;null check, F | null | undefined (control)=+;typeof, F | null (control)=+;a throwing task=caught task;",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: typeof, F | null | undefined=+;null check, F | null | undefined (control)=+;typeof, F | null (control)=+;a throwing task=caught task;",
   "node": "exit 1; nts: uncaught Observed: typeof, F | null | undefined=+;null check, F | null | undefined (control)=+;typeof, F | null (control)=+;a throwing task=caught task;",
-  "measured_with": "d6a57779d1376cd9",
+  "measured_with": "a8d81c4d475e7f9e",
   "source": "measured"
 }
