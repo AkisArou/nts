@@ -1,0 +1,5 @@
+{
+  "//": "A foreign module's declarations (src/events.d.ts) beside the program; libc.d.ts for c:types.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": ["src/main.ts", "src/events.d.ts", "../../../../runtime/native/libc.d.ts"]
+}

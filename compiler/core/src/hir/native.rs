@@ -1653,6 +1653,24 @@ pub struct Field {
 }
 
 impl Pointee {
+    /// [`Self::holds_counted`], but only handles whose family does not keep its
+    /// objects alive by scanning the stack (`Family::stack_rooted`): a host's
+    /// object in a by-value argument is on the stack for the call, as the
+    /// argument is, and the host's conservative scan finds it there.
+    #[must_use]
+    pub fn holds_counted_off_the_stack(&self) -> bool {
+        match self {
+            Self::Pointer(pointee) => {
+                pointee.counting().is_some() && !pointee.family().is_some_and(Family::stack_rooted)
+            }
+            Self::Record(record) => record.fields.iter().any(|field| field.ty.holds_counted_off_the_stack()),
+            Self::Array { element, .. } | Self::Flexible(element) | Self::Const(element) => {
+                element.holds_counted_off_the_stack()
+            }
+            _ => false,
+        }
+    }
+
     /// Whether storage of this type holds a handle the program counts,
     /// directly or in a nested record or array.
     #[must_use]
@@ -2395,10 +2413,13 @@ fn by_value_retention(mut retention: Vec<Retention>, parameters: &[Type], result
 /// share: a variadic tail, which would put it after arguments whose count only
 /// the call knows.
 fn records_checked(name: &str, parameters: &[Type], variadic: bool, result: Type) -> Result<Type, String> {
-    for ty in parameters.iter().chain([&result]) {
+    for ty in parameters {
         if let Type::Record(record) = ty {
-            by_value_record_is_passable(name, record)?;
+            by_value_record_is_passable(name, record, Direction::Lent)?;
         }
+    }
+    if let Type::Record(record) = &result {
+        by_value_record_is_passable(name, record, Direction::Returned)?;
     }
     if variadic && matches!(result, Type::Record(_)) {
         return Err(format!("foreign function `{name}` is variadic and returns a record by value"));
@@ -2406,17 +2427,36 @@ fn records_checked(name: &str, parameters: &[Type], variadic: bool, result: Type
     Ok(result)
 }
 
+/// Which way a by-value record crosses, which decides whether a counted handle
+/// inside it may.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    /// An argument: C has a copy for the call's duration, on the stack, so a
+    /// host's handle member is lent as a host's handle argument is -- not
+    /// retained into the copy, not released from it -- and the host's
+    /// conservative stack scan keeps it alive. Any other counted family still
+    /// refuses: reference counting would release an owned one at its last use,
+    /// which is the store into the copy, before the call reads it.
+    Lent,
+    /// A result: C hands a handle back inside it, and whose reference that is
+    /// is a question no record answers.
+    Returned,
+}
+
 /// What a record must be to cross by value.
 ///
-/// - **No counted handle inside.** Copying one would duplicate an ownership
-///   edge, which is `classify`'s question and a different feature. ARC agrees:
-///   a struct with a `__strong` member is a non-trivial C struct.
+/// - **No counted handle inside a result.** One handed back inside a copy is an
+///   ownership edge no record says the direction of, which is `classify`'s
+///   question and a different feature. ARC agrees: a struct with a `__strong`
+///   member is a non-trivial C struct. An *argument* lends a host's handle
+///   members for the call, as a host's handle argument does:
+///   `MouseEventInit.relatedTarget`. See [`Direction::Lent`].
 /// - **A C spelling.** An untagged record has none, so neither the prototype
 ///   nor the cast can name it.
 /// - **Not packed and no flexible member.** A packed record's registers are
 ///   not what its members suggest, and a flexible member has no extent to
 ///   copy.
-fn by_value_record_is_passable(name: &str, record: &Record) -> Result<(), String> {
+fn by_value_record_is_passable(name: &str, record: &Record, direction: Direction) -> Result<(), String> {
     let refuse = |why: &str| Err(format!("foreign function `{name}` passes `{}` by value, which {why}", record.name));
     if record.untagged() {
         return refuse("C has no name for");
@@ -2424,7 +2464,11 @@ fn by_value_record_is_passable(name: &str, record: &Record) -> Result<(), String
     if record.packed {
         return refuse("is packed; take it by pointer");
     }
-    if let Some(field) = record.fields.iter().find(|field| field.ty.holds_counted()) {
+    let counted = |field: &&Field| match direction {
+        Direction::Returned => field.ty.holds_counted(),
+        Direction::Lent => field.ty.holds_counted_off_the_stack(),
+    };
+    if let Some(field) = record.fields.iter().find(counted) {
         return Err(format!(
             "foreign function `{name}` passes `{}` by value, and its member `{}` is a counted handle: a copy would be a second owner",
             record.name, field.name
@@ -3328,7 +3372,7 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
     } else if let Some(record) = schema::copied(snapshot, ty) {
-        by_value_record_is_passable(name, &record)?;
+        by_value_record_is_passable(name, &record, Direction::Returned)?;
         (Type::Record(record), Written::Copied)
     } else if boxable(snapshot, ty).is_some() {
         (Type::Pointer(Pointee::Void), Written::Boxed)
@@ -3348,7 +3392,7 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
             // A Windows Runtime `boolean` is one byte, 0 or 1.
             Type::Bool => (Type::Scalar(Scalar::UInt8), Written::Bool),
             Type::Record(record) => {
-                by_value_record_is_passable(name, &record)?;
+                by_value_record_is_passable(name, &record, Direction::Returned)?;
                 (Type::Record(record), Written::Record)
             }
             result => (result, Written::Value),

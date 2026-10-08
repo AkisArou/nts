@@ -1,4 +1,4 @@
-// expect: NTS1001 foreign function `event_new` passes `EventInit` by value, and its member `relatedTarget` is a counted handle
+// expect: emit-c --rc -> emits-c event_new(*
 //
 // A dictionary argument whose member is a handle -- MouseEventInit's
 // `relatedTarget: EventTarget?`, UIEventInit's `view: Window?`, 21 such
@@ -10,6 +10,13 @@
 // generator binding the member would break every call of the constructor,
 // with or without it; the Chromium lane leaves those members unbound
 // (tooling/chromium/bindgen/generate.py, dictionary). Found 2026-10-08.
+//
+// **A guard since 2026-10-08** (MainClaude): a by-value argument lends a
+// host's handle members for the call (`Direction::Lent`), as a host's handle
+// argument is lent -- not retained into the copy, not released from it -- and
+// the host's conservative stack scan finds it in the copy. A GObject, ObjC or
+// COM member is still refused (blockers/a-struct-argument-with-a-gobject-member):
+// reference counting would release an owned one at the store, before the call.
 //
 // Control, one difference -- `relatedTarget` left out of the struct type
 // (`Struct<{ bubbles: CBool<c_uint8> }, "EventInit">`): nothing refused.
