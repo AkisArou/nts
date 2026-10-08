@@ -4286,6 +4286,12 @@ pub struct Prepared {
     /// What could not be lowered. Reported, not fatal: a program may have one
     /// unsupported function and many supported ones.
     pub diagnostics: Vec<nts_diagnostics::Diagnostic>,
+    /// Where the program breaks a rule nts adds to TypeScript's own: a value
+    /// that may not fit the scalar kind it is stored into, or a function let
+    /// in where a kind it relies on was never obliged ([`obligations::check`],
+    /// `docs/scalar-numbers.md`). **Fatal**: the program's to fix, and
+    /// [`prepare_with`] refuses it.
+    pub rejected: Vec<nts_diagnostics::Diagnostic>,
     pub specialized: usize,
     pub conversions: usize,
     /// Bounds checks the range analysis proved unnecessary.
@@ -4543,8 +4549,40 @@ fn reconcile(program: &mut Program) -> usize {
         .sum()
 }
 
-pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Vec<verify::Invalid>> {
+pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Unprepared> {
     prepare_with(snapshot, &Options::default())
+}
+
+/// Why [`prepare_with`] produced no program.
+#[derive(Debug)]
+pub enum Unprepared {
+    /// The program breaks a rule nts adds to TypeScript's own
+    /// ([`Prepared::rejected`]): compile errors, the program's to fix.
+    Rejected(Vec<nts_diagnostics::Diagnostic>),
+    /// The compiler produced HIR that doesn't verify: the compiler's to fix.
+    Invalid(Vec<verify::Invalid>),
+}
+
+impl Unprepared {
+    /// The reason, as a command prints it: each error a source line, or each
+    /// verifier complaint.
+    #[must_use]
+    pub fn render(&self, sources: &[nts_diagnostics::SourceFile]) -> String {
+        match self {
+            Self::Rejected(errors) => errors
+                .iter()
+                .flat_map(|error| {
+                    std::iter::once(nts_diagnostics::diagnostic_line(sources, error)).chain(error.labels.iter().map(|label| {
+                        format!("  {}: {}", nts_diagnostics::where_it_is(sources, &label.location), label.message)
+                    }))
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Self::Invalid(problems) => {
+                problems.iter().map(|problem| format!("invalid HIR: {problem:?}")).collect::<Vec<_>>().join("\n")
+            }
+        }
+    }
 }
 
 /// Which memory discipline the emitted code follows.
@@ -4603,6 +4641,10 @@ pub struct Options<'a> {
     /// Bound foreign members, keyed by `(source, span end)`. Loaded by the
     /// driver from the `.bind` file `nts bind` writes beside each `.d.ts`.
     pub foreign: &'a runtime::ForeignTable,
+    /// The C ABIs the native code is built for. A value stored into a written
+    /// scalar kind must fit it on every one ([`native::Scalar::on`]): C's
+    /// `long` is 32 bits on Windows and 64 elsewhere.
+    pub targets: &'a [native::NativeAbi],
 }
 
 impl Default for Options<'_> {
@@ -4627,9 +4669,16 @@ impl Default for Options<'_> {
                 > = std::sync::OnceLock::new();
                 EMPTY.get_or_init(rustc_hash::FxHashMap::default)
             },
+            // The host, until a build names its targets.
+            targets: HOST,
         }
     }
 }
+
+/// The C ABI of the machine the compiler runs on: what a build targets unless
+/// it names its targets.
+pub const HOST: &[native::NativeAbi] =
+    if cfg!(windows) { &[native::NativeAbi::Win64] } else { &[native::NativeAbi::SysV] };
 
 /// As [`prepare`], with specialization optional.
 ///
@@ -4643,9 +4692,12 @@ impl Default for Options<'_> {
 pub fn prepare_with(
     snapshot: &SemanticSnapshot,
     options: &Options<'_>,
-) -> Result<Prepared, Vec<verify::Invalid>> {
-    let prepared = prepare_unverified(snapshot, options);
-    verify::verify(&prepared.program)?;
+) -> Result<Prepared, Unprepared> {
+    let mut prepared = prepare_unverified(snapshot, options);
+    if !prepared.rejected.is_empty() {
+        return Err(Unprepared::Rejected(std::mem::take(&mut prepared.rejected)));
+    }
+    verify::verify(&prepared.program).map_err(Unprepared::Invalid)?;
     Ok(prepared)
 }
 
@@ -6288,6 +6340,9 @@ fn provide(program: &mut Program, provider: Provider) -> rc::Report {
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
     let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
+    // On the program the lowering produced, before any pass renumbers a value
+    // the lowering recorded an obligation about.
+    let rejected = obligations::check(&lowered.program, &lowered.arrivals.at_signature, options.targets);
     // Before `settle`, whose callback check reads it.
     lowered.program.callbacks_checkpoint = options.callbacks_checkpoint;
     // Re-keyed by the foreign key as lowering finishes: same rows, indexed for
@@ -6506,6 +6561,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         devirtualized,
         program,
         diagnostics: lowered.diagnostics,
+        rejected,
         specialized,
         conversions,
         checks_removed,

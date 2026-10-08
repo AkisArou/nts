@@ -1463,6 +1463,16 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
+/// Why `prepare` produced nothing, printed, as the error a command fails
+/// with: a strict error is the program's to fix, invalid HIR the compiler's.
+fn refused(snapshot: &nts_semantic_schema::SemanticSnapshot, unprepared: &hir::Unprepared) -> anyhow::Error {
+    eprintln!("{}", unprepared.render(&snapshot.sources));
+    match unprepared {
+        hir::Unprepared::Rejected(errors) => anyhow::anyhow!("the program does not compile: {} error(s)", errors.len()),
+        hir::Unprepared::Invalid(_) => anyhow::anyhow!("refusing to emit code from invalid HIR"),
+    }
+}
+
 /// `nts facts --strict`: what the strict check ([`hir::obligations::check`])
 /// says of the program, one error per line.
 fn dump_strict(tsconfig: &Utf8Path) -> Result<()> {
@@ -1471,7 +1481,7 @@ fn dump_strict(tsconfig: &Utf8Path) -> Result<()> {
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
     let lowered = hir::lower::lower(&snapshot);
-    let errors = hir::obligations::check(&lowered.program, &lowered.arrivals.at_signature);
+    let errors = hir::obligations::check(&lowered.program, &lowered.arrivals.at_signature, nts_core::hir::HOST);
     for error in &errors {
         println!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, error));
         for label in &error.labels {
@@ -1494,7 +1504,7 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
         bail!("the program does not typecheck");
     }
     let program = hir::lower::lower(&snapshot).program;
-    let judged = hir::obligations::census(&program);
+    let judged = hir::obligations::census(&program, nts_core::hir::HOST);
 
     let reasons = |why: &[Why]| -> String {
         why.iter().map(|why| hir::obligations::reason(*why)).collect::<Vec<_>>().join("; ")
@@ -1569,11 +1579,7 @@ fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
     }
 
     let program = if prepared {
-        hir::prepare(&snapshot)
-            .map_err(|problems| {
-                anyhow::anyhow!("the prepared program does not verify: {problems:?}")
-            })?
-            .program
+        hir::prepare(&snapshot).map_err(|unprepared| refused(&snapshot, &unprepared))?.program
     } else {
         hir::lower::lower(&snapshot).program
     };
@@ -2419,10 +2425,8 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         };
         // An invalid program is exactly the one worth reading, so the
         // complaints are printed and the program is dumped anyway.
-        if let Err(problems) = hir::prepare_with(&snapshot, &options) {
-            for problem in &problems {
-                eprintln!("invalid HIR: {problem:?}");
-            }
+        if let Err(unprepared) = hir::prepare_with(&snapshot, &options) {
+            eprintln!("{}", unprepared.render(&snapshot.sources));
         }
         let prepared = hir::prepare_unverified(&snapshot, &options);
         (prepared.program, prepared.diagnostics)
@@ -2469,10 +2473,10 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
                 "  all of it verifies ({} after pruning unreachable functions)",
                 prepared.program.funcs.len()
             ),
-            Err(problems) => {
-                println!("  the prepared program does NOT verify:");
-                for problem in problems.iter().take(10) {
-                    println!("    {problem:?}");
+            Err(unprepared) => {
+                println!("  the prepared program is refused:");
+                for line in unprepared.render(&snapshot.sources).lines().take(10) {
+                    println!("    {line}");
                 }
             }
         }
@@ -7499,12 +7503,7 @@ fn emit_llvm(tsconfig: &Utf8Path, emission: Emission, platform: nts_codegen_llvm
         &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, emission.host.checkpoints_after_callbacks()),
     ) {
         Ok(prepared) => prepared,
-        Err(problems) => {
-            for problem in &problems {
-                eprintln!("invalid HIR: {problem:?}");
-            }
-            bail!("refusing to emit code from invalid HIR");
-        }
+        Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
     // The lowering's refusals, not just the backend's. Printing only the
     // second is how this command answered an empty module for a program with
@@ -7554,12 +7553,7 @@ fn emit_jvm(
         &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, false),
     ) {
         Ok(prepared) => prepared,
-        Err(problems) => {
-            for problem in &problems {
-                eprintln!("invalid HIR: {problem:?}");
-            }
-            bail!("refusing to emit code from invalid HIR");
-        }
+        Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
     for diagnostic in &prepared.diagnostics {
         eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
@@ -7741,12 +7735,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, emission.host.checkpoints_after_callbacks()),
     ) {
         Ok(prepared) => prepared,
-        Err(problems) => {
-            for problem in &problems {
-                eprintln!("invalid HIR: {problem:?}");
-            }
-            bail!("refusing to emit code from invalid HIR");
-        }
+        Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
     for diagnostic in &prepared.diagnostics {
         eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));

@@ -4423,10 +4423,26 @@ impl Scalar {
     /// representation only for `long` and `unsigned long` under Win64.
     #[must_use]
     pub const fn abi(self, abi: NativeAbi) -> HirType {
-        match (self, abi) {
-            (Self::Long, NativeAbi::Win64) => HirType::Int { bits: 32, signed: true },
-            (Self::ULong, NativeAbi::Win64) => HirType::Int { bits: 32, signed: false },
-            _ => self.representation(),
+        self.on(&[abi]).representation()
+    }
+
+    /// The kind as every one of `targets` holds it: the narrowest of what
+    /// each target's C makes of it. C's `long` is 64 bits on System V and 32
+    /// on Windows (LLP64), so for a build that includes Windows it is
+    /// [`Self::Long32`]. What a value stored into the kind must fit on all of
+    /// them (`docs/scalar-numbers.md`, S6).
+    #[must_use]
+    pub const fn on(self, targets: &[NativeAbi]) -> Self {
+        let mut windows = false;
+        let mut at = 0;
+        while at < targets.len() {
+            windows |= matches!(targets[at], NativeAbi::Win64);
+            at += 1;
+        }
+        match self {
+            Self::Long if windows => Self::Long32,
+            Self::ULong if windows => Self::ULong32,
+            other => other,
         }
     }
 

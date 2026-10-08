@@ -27613,32 +27613,17 @@ impl<'a> FuncBuilder<'a> {
 
     /// A plain argument as C takes it: a boxed record's box where C takes the
     /// struct's pointer -- lent for the call, since a box whose pointer is
-    /// passed must live until C is done with it -- a `number` where C takes an
-    /// integer through JavaScript's own conversion, and anything else as it is.
+    /// passed must live until C is done with it -- and anything else as it is.
+    ///
+    /// A `number` where C takes an integer is converted with the call's other
+    /// arguments (`specialize`), and C's own conversion is exact there: the
+    /// strict check proved the value fits (`docs/scalar-numbers.md`, D1), so
+    /// no wrapping conversion stands in for a proof.
     fn unboxed_argument(&mut self, value: ValueId, parameter: &super::native::Type, origin: &Origin) -> ValueId {
-        let want = parameter.representation();
-        if let (HirType::Float { .. }, HirType::Int { bits: 1..=32, .. }) = (&self.values[value.0 as usize].ty, &want) {
-            return self.integer_argument(value, &want, origin);
-        }
         if self.values[value.0 as usize].ty != HirType::Managed(ManagedType::Object(TypeId(super::BOXED_RECORD))) {
             return value;
         }
-        self.unbox_record(value, &want, origin)
-    }
-
-    /// A `number` handed to a C integer of 32 bits or fewer, through
-    /// JavaScript's conversion to that width -- `ToInt32`, `ToUint32`, and their
-    /// 8- and 16-bit modular narrowings -- as `WebIDL`'s `long` and `GJS`'s
-    /// `gint` take a number, and never C's own conversion: a `double` cast to
-    /// `int32_t` is undefined for NaN, an infinity or anything out of range,
-    /// and `(int32_t)v0` is what this emitted. The conversion is
-    /// [`super::builtin::element_coercion`]'s, which a typed array's store and
-    /// a store through a native pointer (`specialize::stored_operand`) use too.
-    fn integer_argument(&mut self, value: ValueId, want: &HirType, origin: &Origin) -> ValueId {
-        let Some(helper) = super::builtin::element_coercion(want) else {
-            return value;
-        };
-        self.runtime_call(helper, vec![value], want.clone(), origin.clone())
+        self.unbox_record(value, &parameter.representation(), origin)
     }
 
     /// The struct a boxed record's box holds, as the C pointer `want` a

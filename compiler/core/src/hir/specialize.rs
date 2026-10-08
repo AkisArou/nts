@@ -764,7 +764,7 @@ fn memory_operands(
             else {
                 return None;
             };
-            let stored = stored_operand(func, rewritten, count, stored, &unit.representation());
+            let stored = convert(func, rewritten, count, stored, &unit.representation());
             Some(OpKind::NativeBitStore { pointer, field, value: stored })
         }
         OpKind::NativeStore { pointer, index, value: stored } => {
@@ -772,7 +772,7 @@ fn memory_operands(
                 HirType::NativePointer(pointee) => {
                     let element = pointee.element_type()?;
                     let index = convert(func, rewritten, count, index, &native_index);
-                    let stored = stored_operand(func, rewritten, count, stored, &element);
+                    let stored = convert(func, rewritten, count, stored, &element);
                     Some(OpKind::NativeStore { pointer, index, value: stored })
                 }
                 _ => None,
@@ -1497,36 +1497,6 @@ fn unsigned_classes(
     unsigned
 }
 
-/// A value stored into C memory of type `element`: a `number` into an integer
-/// of 32 bits or fewer goes through JavaScript's conversion to that width
-/// ([`super::builtin::element_coercion`]), the one a typed array's store and
-/// a C integer argument take, and never through `convert`'s C cast, which is
-/// undefined for NaN, an infinity or anything out of range -- `p[0] = NaN`
-/// was `(int32_t)v`. A constant too: `convert` folds one with Rust's
-/// saturating cast, which is not `ToInt32` either.
-fn stored_operand(
-    func: &mut Func,
-    ops: &mut Vec<ValueId>,
-    count: &mut usize,
-    stored: ValueId,
-    element: &HirType,
-) -> ValueId {
-    let helper = super::builtin::element_coercion(element)
-        .filter(|_| matches!(func.values[stored.0 as usize].ty, HirType::Float { bits: 64 }));
-    let Some(helper) = helper else {
-        return convert(func, ops, count, stored, element);
-    };
-    let origin = func.values[stored.0 as usize].origin.clone();
-    let id = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
-    func.values.push(Op {
-        kind: OpKind::Call { callee: super::Callee::External(helper.to_owned()), args: vec![stored], frame: None },
-        ty: element.clone(),
-        origin,
-    });
-    ops.push(id);
-    *count += 1;
-    id
-}
 
 /// A value of the wanted type, converting if it is not already.
 fn convert(

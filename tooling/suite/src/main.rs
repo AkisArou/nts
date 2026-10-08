@@ -367,7 +367,10 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
         Err(error) => Outcome::Failed(error.to_string()),
         Ok(snapshot) if snapshot.has_errors() => Outcome::Rejected,
         Ok(snapshot) => match hir::prepare(&snapshot) {
-            Err(_) => Outcome::Invalid,
+            // A program breaking a scalar rule doesn't compile, as one that
+            // doesn't typecheck doesn't.
+            Err(hir::Unprepared::Rejected(_)) => Outcome::Rejected,
+            Err(hir::Unprepared::Invalid(_)) => Outcome::Invalid,
             Ok(prepared) => {
                 // Ask clang whether what the backend produced is C. The IR being
                 // well formed does not make the output well formed, and nothing

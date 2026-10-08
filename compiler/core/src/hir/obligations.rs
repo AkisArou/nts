@@ -32,9 +32,8 @@
 //! whose callee is any function of the type. Those the lowering records
 //! ([`super::Func::obligations`]) from the checker's types.
 //!
-//! A typed array's store takes the same `ToInt32` helper as a native call
-//! does today and is deliberately *not* an obligation: it keeps JavaScript's
-//! wrapping semantics (decision C27).
+//! A typed array's store is deliberately *not* an obligation: it keeps
+//! JavaScript's wrapping semantics (decision C27).
 //!
 //! # Which facts may prove one (decision Q2)
 //!
@@ -50,7 +49,7 @@ use rustc_hash::FxHashMap;
 
 use super::facts::Facts;
 use super::flow::{Analysis, Context, Whole, Written};
-use super::native::{Pointee, Scalar};
+use super::native::{NativeAbi, Pointee, Scalar};
 use super::{BinOp, BlockId, Callee, Func, Global, HirType, Layout, ManagedType, OpKind, Program, Terminator, TypeId, UnOp, ValueId};
 
 /// One store into a slot of a written scalar kind.
@@ -226,14 +225,15 @@ impl Judged {
     }
 }
 
-/// Every obligation in `program`, each judged by [`local_analysis`].
+/// Every obligation in `program`, each judged by [`local_analysis`], against
+/// its kind as every one of `targets` holds it ([`Scalar::on`]).
 ///
 /// Meaningful on the program the lowering produced: the obligations it
 /// recorded name its values, and a pass that renumbers them, or makes a
 /// speculative copy, would leave them stale.
 #[must_use]
-pub fn census(program: &Program) -> Vec<Judged> {
-    let slots = Slots::of(program);
+pub fn census(program: &Program, targets: &[NativeAbi]) -> Vec<Judged> {
+    let slots = Slots::of(program, targets);
     let written = Written::of(program);
     program
         .funcs
@@ -260,9 +260,9 @@ pub fn census(program: &Program) -> Vec<Judged> {
 /// An `as` and the slot it feeds are one claim about one value, reported once
 /// and at the `as`, where the program made it.
 #[must_use]
-pub fn check(program: &Program, arrivals: &[super::lower::Arrival]) -> Vec<Diagnostic> {
-    let slots = Slots::of(program);
-    let mut unproven: Vec<Judged> = census(program).into_iter().filter(|judged| !judged.proven()).collect();
+pub fn check(program: &Program, arrivals: &[super::lower::Arrival], targets: &[NativeAbi]) -> Vec<Diagnostic> {
+    let slots = Slots::of(program, targets);
+    let mut unproven: Vec<Judged> = census(program, targets).into_iter().filter(|judged| !judged.proven()).collect();
     // The `as` first, so it is the one kept.
     unproven.sort_by_key(|judged| judged.obligation.into != Into::Assertion);
     let mut kept: Vec<&Judged> = Vec::new();
@@ -307,10 +307,13 @@ struct Slots<'a> {
     /// The C result type of each function a native callback bridges to, by
     /// the function's name, and the callback type's.
     bridged: FxHashMap<&'a str, (Scalar, &'a str)>,
+    /// The C ABIs the build targets: an obligation's kind is the one every
+    /// target holds.
+    targets: &'a [NativeAbi],
 }
 
 impl<'a> Slots<'a> {
-    fn of(program: &'a Program) -> Self {
+    fn of(program: &'a Program, targets: &'a [NativeAbi]) -> Self {
         let by_name: FxHashMap<&str, &Func> = program.funcs.iter().map(|func| (func.name.as_str(), func)).collect();
         let layouts: FxHashMap<TypeId, &Layout> =
             program.layouts.iter().flat_map(|layout| layout.types.iter().map(move |ty| (*ty, layout))).collect();
@@ -326,7 +329,7 @@ impl<'a> Slots<'a> {
                 }
             }
         }
-        Self { by_name, layouts, globals: &program.globals, bridged }
+        Self { by_name, layouts, globals: &program.globals, bridged, targets }
     }
 
     /// `func`'s obligations: each store into a slot of a written kind, read
@@ -337,6 +340,7 @@ impl<'a> Slots<'a> {
             let block_id = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
             let mut oblige = |at: ValueId, value: ValueId, (kind, bits): (Scalar, Option<u32>), into: Into| {
                 let location = func.value(at).origin.location;
+                let kind = kind.on(self.targets);
                 found.push(Obligation { value: before_conversion(func, value), block: block_id, kind, bits, into, location });
             };
             for &op in &block.ops {
@@ -353,9 +357,11 @@ impl<'a> Slots<'a> {
                                 }
                             }
                         }
+                        // Each argument as the call converts it (`argument`),
+                        // a variadic tail's included.
                         Callee::Native(target) => {
-                            for (position, (parameter, &argument)) in target.parameters.iter().zip(args).enumerate() {
-                                if let super::native::Type::Scalar(kind) = parameter {
+                            for (position, &argument) in args.iter().enumerate() {
+                                if let Some(super::native::Type::Scalar(kind)) = target.argument(position) {
                                     let into = Into::NativeArgument { function: target.name.clone(), position };
                                     oblige(op, argument, (*kind, None), into);
                                 }
@@ -423,6 +429,7 @@ impl<'a> Slots<'a> {
         }
         found.extend(func.obligations.iter().map(|obligation| Obligation {
             value: before_conversion(func, obligation.value),
+            kind: obligation.kind.on(self.targets),
             ..obligation.clone()
         }));
         found
@@ -571,10 +578,9 @@ impl<'a> Slots<'a> {
 /// The kind a store through a pointer to `pointee` writes, and a bit-field's
 /// width.
 fn stored_kind(pointee: &Pointee) -> Option<(Scalar, Option<u32>)> {
-    match pointee {
+    match pointee.viewed() {
         Pointee::Scalar(kind) => Some((*kind, None)),
         Pointee::Bits { unit, width } => Some((*unit, Some(*width))),
-        Pointee::Unaligned(inner) | Pointee::Const(inner) => stored_kind(inner),
         _ => None,
     }
 }
@@ -634,28 +640,18 @@ fn remedy(why: &[Why], obligation: &Obligation) -> String {
 
 /// The record a pointer to `pointee` points at.
 fn record_of(pointee: &Pointee) -> Option<&super::native::Record> {
-    match pointee {
+    match pointee.viewed() {
         Pointee::Record(record) => Some(record),
-        Pointee::Unaligned(inner) | Pointee::Const(inner) => record_of(inner),
         _ => None,
     }
 }
 
 /// The value as the program computed it, before the conversion that made it
-/// the slot's representation: a `Convert`, or JavaScript's `ToInt32` family
-/// ([`super::builtin::element_coercion`]), which a native call applies today
-/// and step 1g deletes.
+/// the slot's representation -- or, for an optional slot, erased it beside
+/// the tag that says it is there.
 fn before_conversion(func: &Func, value: ValueId) -> ValueId {
-    let op = func.value(value);
-    match &op.kind {
-        // An optional slot holds its value erased beside the tag that says
-        // it is there.
+    match &func.value(value).kind {
         OpKind::Convert(from) | OpKind::Erase { value: from, .. } => *from,
-        OpKind::Call { callee: Callee::External(name), args, .. }
-            if super::builtin::element_coercion(&op.ty) == Some(name.as_str()) =>
-        {
-            args.first().copied().unwrap_or(value)
-        }
         _ => value,
     }
 }

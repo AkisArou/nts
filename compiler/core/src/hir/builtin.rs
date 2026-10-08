@@ -389,6 +389,10 @@ pub(super) fn element_width(element: &HirType) -> Option<u32> {
 ///
 /// `None` for the floating-point arrays: `double` to `float` is a defined
 /// narrowing conversion and `double` to `double` is nothing at all.
+///
+/// Only a typed array's: a store into C -- an argument, a field -- is proven
+/// to fit instead (`docs/scalar-numbers.md`, D1), and a typed array keeps
+/// JavaScript's wrapping (C27).
 pub(super) fn element_coercion(element: &HirType) -> Option<&'static str> {
     match element {
         HirType::Int {

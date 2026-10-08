@@ -2264,10 +2264,11 @@ fn prepared_program(
             // A benchmark is a standalone program on libuv's loop, which no
             // callback returns to.
             callbacks_checkpoint: false,
+            targets: hir::HOST,
         },
     ) {
         Ok(prepared) => prepared,
-        Err(problems) => bail!("invalid HIR: {problems:?}"),
+        Err(unprepared) => bail!("{}", unprepared.render(&snapshot.sources)),
     };
     for diagnostic in &prepared.diagnostics {
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);

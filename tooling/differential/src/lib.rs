@@ -403,7 +403,7 @@ pub fn check(
     };
     let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,
-        Err(problems) => bail!("invalid HIR: {problems:?}"),
+        Err(unprepared) => bail!("{}", unprepared.render(&snapshot.sources)),
     };
     for diagnostic in &prepared.diagnostics {
         eprintln!("  refused: {}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
