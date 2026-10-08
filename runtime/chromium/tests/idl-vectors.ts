@@ -13,6 +13,7 @@
 // oracle defines them (`instanceof`) where the import stood. What a caught
 // error reads as is passed in.
 import { AbortSignal_abort, AbortSignal_timeout, DOMRect_fromRect, Document_parseHTMLUnsafe, URL_canParse, URL_parse } from "nts:dom";
+import { newInputEvent } from "nts:dom";
 import { newBlob, newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asCSSStyleSheet, asElement, asHTMLFormElement, asHTMLVideoElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { CanvasFillRule, ChildNode, Document, Element, Event, EventTarget, MutationObserver, MutationRecordSequence, Node, ParentNode, ScrollRestoration, SelectionMode, Text } from "nts:dom";
@@ -823,6 +824,10 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
     fromRect.right + "," + fromRect.bottom + "|" + shown(parsedDocument.querySelector("#q")!.textContent));
   const pointed = newMouseEvent("click", { clientX: 12.5, clientY: -3, button: 2, ctrlKey: true, detail: 7 });
   log("mouseInit", pointed.clientX + "|" + pointed.clientY + "|" + pointed.button + "|" + (pointed.ctrlKey ? "ctrl" : "-") + (pointed.shiftKey ? "shift" : "-") + "|" + pointed.detail);
+  // A nullable string member (InputEventInit.data, null by default): given,
+  // and left out.
+  const typed = newInputEvent("beforeinput", { data: "é✓", inputType: "insertText" });
+  log("inputInit", shown(typed.data) + "|" + typed.inputType + "|" + shown(newInputEvent("input", { bubbles: true }).data));
 
   // MutationObserver: the records of a child list and an attribute change,
   // taken before delivery; a sequence of interfaces, read by index.

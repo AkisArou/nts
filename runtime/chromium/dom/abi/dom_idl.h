@@ -295,6 +295,7 @@ typedef struct NtsDomDragEventInit {
   double clientY;
   double movementX;
   double movementY;
+  const NtsBorrowedString* region;
   double screenX;
   double screenY;
 } NtsDomDragEventInit;
@@ -353,6 +354,7 @@ typedef struct NtsDomInputEventInit {
   uint8_t cancelable;
   uint8_t composed;
   double detail;
+  const NtsBorrowedString* data;
   const NtsBorrowedString* inputType;
   uint8_t isComposing;
 } NtsDomInputEventInit;
@@ -400,6 +402,7 @@ typedef struct NtsDomMouseEventInit {
   double clientY;
   double movementX;
   double movementY;
+  const NtsBorrowedString* region;
   double screenX;
   double screenY;
 } NtsDomMouseEventInit;
@@ -448,6 +451,7 @@ typedef struct NtsDomPointerEventInit {
   double clientY;
   double movementX;
   double movementY;
+  const NtsBorrowedString* region;
   double screenX;
   double screenY;
   double altitudeAngle;
@@ -556,6 +560,7 @@ typedef struct NtsDomWheelEventInit {
   double clientY;
   double movementX;
   double movementY;
+  const NtsBorrowedString* region;
   double screenX;
   double screenY;
   double deltaMode;

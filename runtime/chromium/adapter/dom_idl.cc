@@ -1143,6 +1143,7 @@ blink::MouseEventInit* NtsDomToMouseEventInit(NtsDomContext& context, const NtsD
   if (from.clientY != 0) to->setClientY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.clientY), conversion));
   if (from.movementX != 0) to->setMovementX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementX), conversion));
   if (from.movementY != 0) to->setMovementY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementY), conversion));
+  if (from.region) to->setRegion(NtsText(context, from.region));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
   return to;
@@ -5457,6 +5458,7 @@ blink::InputEventInit* NtsDomToInputEventInit(NtsDomContext& context, const NtsD
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
   if (from.detail != 0) to->setDetail(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.detail), conversion));
+  if (from.data) to->setData(NtsText(context, from.data));
   if (from.inputType) to->setInputType(NtsText(context, from.inputType));
   if (from.isComposing) to->setIsComposing(true);
   return to;
@@ -5485,6 +5487,7 @@ blink::PointerEventInit* NtsDomToPointerEventInit(NtsDomContext& context, const 
   if (from.clientY != 0) to->setClientY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.clientY), conversion));
   if (from.movementX != 0) to->setMovementX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementX), conversion));
   if (from.movementY != 0) to->setMovementY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementY), conversion));
+  if (from.region) to->setRegion(NtsText(context, from.region));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
   if (from.altitudeAngle != 0) to->setAltitudeAngle(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.altitudeAngle), conversion));
@@ -5524,6 +5527,7 @@ blink::WheelEventInit* NtsDomToWheelEventInit(NtsDomContext& context, const NtsD
   if (from.clientY != 0) to->setClientY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.clientY), conversion));
   if (from.movementX != 0) to->setMovementX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementX), conversion));
   if (from.movementY != 0) to->setMovementY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementY), conversion));
+  if (from.region) to->setRegion(NtsText(context, from.region));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
   if (from.deltaMode != 0) to->setDeltaMode(blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(isolate, v8::Number::New(isolate, from.deltaMode), conversion));
@@ -5678,6 +5682,7 @@ blink::DragEventInit* NtsDomToDragEventInit(NtsDomContext& context, const NtsDom
   if (from.clientY != 0) to->setClientY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.clientY), conversion));
   if (from.movementX != 0) to->setMovementX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementX), conversion));
   if (from.movementY != 0) to->setMovementY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.movementY), conversion));
+  if (from.region) to->setRegion(NtsText(context, from.region));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
   return to;

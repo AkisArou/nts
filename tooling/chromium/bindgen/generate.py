@@ -363,6 +363,16 @@ class Generator:
                     self.headers.add(PathManager(idl_type.type_definition_object).api_path(ext="h"))
                 fields.append((member.identifier, kind, idl_type, member.is_required))
                 continue
+            # A nullable string or bound interface whose default is null:
+            # NULL in the struct is that null (`relatedTarget`, `view`).
+            if nullable and literal in (None, "null"):
+                if member.idl_type.unwrap().keyword_typename in STRINGS:
+                    fields.append((member.identifier, "string", member.idl_type.unwrap(), False))
+                    continue
+                # A bound interface (`relatedTarget`, `view`) would be a
+                # handle field: refused while a by-value struct cannot lend
+                # one (blockers/a-struct-argument-lending-a-handle).
+
             if nullable or keyword not in ("boolean", *NUMERIC):
                 unbindable(member, f"dictionary member of type {member.idl_type.syntactic_form}")
                 continue
@@ -409,6 +419,9 @@ class Generator:
                              "    }",
                              f"    to->{setter}(*value);",
                              "  }"]
+            elif keyword.startswith("handle:"):
+                interface = self.database.find(keyword[len("handle:"):])
+                body.append(f"  if (from.{field}) to->{setter}({self.node(interface, 'from.' + field)});")
             elif keyword == "boolean":
                 body.append(f"  if (from.{field}) to->{setter}(true);")
             elif keyword == "unrestricted double":
@@ -1476,7 +1489,8 @@ class Generator:
             if isinstance(entry, str):
                 continue
             ts = {"boolean": "CBool<c_uint8>", "string": "StringView", "enum": "StringView"}
-            members = "; ".join(f"{name}: {ts.get(keyword, 'c_double')}" for name, keyword, _, _ in entry[0])
+            members = "; ".join(f"{name}: " + (f"{keyword[len('handle:'):]} | null" if keyword.startswith("handle:")
+                                               else ts.get(keyword, "c_double")) for name, keyword, _, _ in entry[0])
             lines.append(f'  export type {identifier} = Struct<{{ {members} }}, "NtsDom{identifier}">;')
         return lines
 
@@ -1550,7 +1564,8 @@ class Generator:
             if isinstance(entry, str):
                 continue
             c = {"boolean": "uint8_t", "string": "const NtsBorrowedString*", "enum": "const NtsBorrowedString*"}
-            members = "".join(f"  {c.get(keyword, 'double')} {native_member(name)};\n" for name, keyword, _, _ in entry[0])
+            members = "".join(f"  {self.handle_tag(keyword[len('handle:'):]) + '*' if keyword.startswith('handle:') else c.get(keyword, 'double')} "
+                              f"{native_member(name)};\n" for name, keyword, _, _ in entry[0])
             typedefs += f"\ntypedef struct NtsDom{identifier} {{\n{members}}} NtsDom{identifier};"
         prototypes = []
         accessors = self.sequence_functions()

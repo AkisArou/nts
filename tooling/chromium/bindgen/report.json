@@ -3538,11 +3538,6 @@
     },
     {
       "interface": "MouseEventInit",
-      "member": "region",
-      "why": "dictionary member of type optional DOMString?"
-    },
-    {
-      "interface": "MouseEventInit",
       "member": "relatedTarget",
       "why": "dictionary member of type optional EventTarget?"
     },
@@ -3933,11 +3928,6 @@
     },
     {
       "interface": "InputEventInit",
-      "member": "data",
-      "why": "dictionary member of type optional DOMString?"
-    },
-    {
-      "interface": "InputEventInit",
       "member": "dataTransfer",
       "why": "dictionary member of type optional DataTransfer?"
     },
@@ -3955,11 +3945,6 @@
       "interface": "PointerEventInit",
       "member": "view",
       "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "region",
-      "why": "dictionary member of type optional DOMString?"
     },
     {
       "interface": "PointerEventInit",
@@ -3995,11 +3980,6 @@
       "interface": "WheelEventInit",
       "member": "view",
       "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "WheelEventInit",
-      "member": "region",
-      "why": "dictionary member of type optional DOMString?"
     },
     {
       "interface": "WheelEventInit",
@@ -6930,11 +6910,6 @@
       "interface": "DragEventInit",
       "member": "view",
       "why": "dictionary member of type optional Window?"
-    },
-    {
-      "interface": "DragEventInit",
-      "member": "region",
-      "why": "dictionary member of type optional DOMString?"
     },
     {
       "interface": "DragEventInit",
