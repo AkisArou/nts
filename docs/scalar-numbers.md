@@ -300,6 +300,43 @@ first.
   bugs and every example that relied on it;
 - bigint ranges.
 
+**Step 1 design (2026-10-08).** Facts and obligations arrive together: a
+written type may be trusted (Q1) only once every store into it is checked
+(D2). Otherwise integer specialization would trust a `c_int` parameter that a
+caller filled with `3.7`.
+
+- **Written kinds live on the slots.** Each slot records its written scalar
+  kind, if it has one: a parameter (`Param::written`, separate from
+  `Param::known`, which the optimizer fills with whole-program facts), a
+  field, a global, a function's return, a native function's parameters and
+  result. One function recognises a kind from a type. Today that's the
+  `c_*` brands; step 2 switches it to the new vocabulary.
+- **Two readers of the same record:**
+  - **the obligation check:** every store into a slot with a written kind must
+    be proven, by local facts only (Q2). Stores are a call's argument against
+    the callee's parameter, a field store, a global store, a return, and a
+    native argument or native store;
+  - **the range analysis:** a read from such a slot is the kind's range and
+    whole.
+- **What has no slot:** a local variable's assignment (`let x: Uint8`, an SSA
+  value) and an `x as Uint16` claim (D4). These are kept as a per-function
+  obligation list made by the lowering.
+- **No new HIR operation.** The written types are already the slots' types,
+  and nothing changes at run time.
+
+The sub-steps, landed together through the gate when strict is on:
+
+| | Sub-step |
+|---|---|
+| 1a | One recognizer for a type's scalar kind; a kind's range (64-bit `long` everywhere until 1h) |
+| 1b | Written kinds on the slots, filled by the lowering |
+| 1c | The obligation check, generalizing the census to every store above |
+| 1d | Facts at reads of written slots and native results |
+| 1e | The engine's missing facts: `&&`, `\|\|` and early-return guards, `Number.isInteger`, `Math.round/floor/trunc/ceil` |
+| 1f | Closing TypeScript's holes (Q1): width-changing conversions refused |
+| 1g | Strict on: the refusal as an error that teaches; `integer_argument`'s `ToInt32` deleted; every example and binding generator fixed; the test harness generating inputs that fit |
+| 1h | Platform tables (replacing the two ABI models); bigint ranges |
+
 **2. Written scalar types** (B, D, E, G):
 - the library replaces `libc.d.ts`, which is deleted; the binding generators
   emit the new names, every checked-in binding is regenerated, and every
