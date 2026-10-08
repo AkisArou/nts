@@ -1497,20 +1497,7 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
     let judged = hir::obligations::census(&program);
 
     let reasons = |why: &[Why]| -> String {
-        why.iter()
-            .map(|why| match why {
-                Why::Fraction => "may be a fraction".to_owned(),
-                Why::NaN => "may be NaN".to_owned(),
-                Why::NegativeZero => "may be -0".to_owned(),
-                Why::Below(lo) => format!("may be as low as {}", render_bound(*lo)),
-                Why::Above(hi) => format!("may be as high as {}", render_bound(*hi)),
-                Why::NoBigIntRanges => "a bigint (no bigint ranges yet)".to_owned(),
-                Why::LiteralOutside(literal) => format!("the literal {literal} doesn't fit"),
-                Why::FloatExactness => "a float (exactness not modelled yet)".to_owned(),
-                Why::NotANumber => "may not be a number".to_owned(),
-            })
-            .collect::<Vec<_>>()
-            .join("; ")
+        why.iter().map(|why| hir::obligations::reason(*why)).collect::<Vec<_>>().join("; ")
     };
     let known = |source: &Source| -> String {
         match source {
@@ -1522,8 +1509,7 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
                 if facts.maybe_nan { " nan?" } else { "" },
             ),
             Source::Integer { lo, hi } => format!("an integer {lo}..{hi}"),
-            Source::BigInt(Some(literal)) => format!("{literal}n"),
-            Source::BigInt(None) => "bigint".to_owned(),
+            Source::BigInt { lo, hi } => format!("a bigint {lo}n..{hi}n"),
             Source::Bool => "a boolean".to_owned(),
             Source::Absent => "an absence".to_owned(),
             Source::Other => "a value of another type".to_owned(),

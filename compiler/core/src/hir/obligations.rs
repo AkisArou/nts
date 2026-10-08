@@ -51,7 +51,7 @@ use rustc_hash::FxHashMap;
 use super::facts::Facts;
 use super::flow::{Analysis, Context, Whole, Written};
 use super::native::{Pointee, Scalar};
-use super::{BlockId, Callee, Func, Global, HirType, Layout, ManagedType, OpKind, Program, Terminator, TypeId, ValueId};
+use super::{BinOp, BlockId, Callee, Func, Global, HirType, Layout, ManagedType, OpKind, Program, Terminator, TypeId, UnOp, ValueId};
 
 /// One store into a slot of a written scalar kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,8 +148,8 @@ pub enum Source {
     Number(Facts),
     /// An integer representation already, with its range.
     Integer { lo: i128, hi: i128 },
-    /// A `bigint`: its literal value when it is one, and otherwise unknown.
-    BigInt(Option<i128>),
+    /// A `bigint`, with the exact range [`Slots::bigint_ranges`] proved.
+    BigInt { lo: i128, hi: i128 },
     /// A boolean, which C's integer kinds take as 0 or 1.
     Bool,
     /// `undefined` or `null` into an optional slot: an absence, which fits.
@@ -173,10 +173,10 @@ pub enum Why {
     Below(f64),
     /// It may be above the kind's greatest value: the analysis's upper bound.
     Above(f64),
-    /// A `bigint` that isn't a literal: the analysis has no bigint ranges yet.
-    NoBigIntRanges,
-    /// A `bigint` literal outside the kind.
-    LiteralOutside(i128),
+    /// [`Self::Below`], for an integer or a `bigint`, whose bound is exact.
+    ExactlyBelow(i128),
+    /// [`Self::Above`], for an integer or a `bigint`.
+    ExactlyAbove(i128),
     /// A `float` slot, and the value may not be exactly a `float` (Q3):
     /// `Math.fround(x)` is the explicit narrowing.
     FloatExactness,
@@ -244,7 +244,9 @@ pub fn census(program: &Program) -> Vec<Judged> {
                 return Vec::new();
             }
             let analysis = local_analysis(func, &written);
-            obligations.iter().map(|obligation| slots.judge(func, &analysis, obligation)).collect()
+            // Only a function that obliges a `bigint` pays for their ranges.
+            let bigints = std::cell::OnceCell::new();
+            obligations.iter().map(|obligation| slots.judge(func, (&analysis, &bigints), obligation)).collect()
         })
         .collect()
 }
@@ -578,15 +580,16 @@ fn stored_kind(pointee: &Pointee) -> Option<(Scalar, Option<u32>)> {
 }
 
 /// One reason a value may not fit, as a message says it after "it".
-fn reason(why: Why) -> String {
+#[must_use]
+pub fn reason(why: Why) -> String {
     match why {
         Why::Fraction => "may be a fraction".to_owned(),
         Why::NaN => "may be NaN".to_owned(),
         Why::NegativeZero => "may be -0".to_owned(),
         Why::Below(lo) => format!("may be as low as {}", bound(lo)),
         Why::Above(hi) => format!("may be as high as {}", bound(hi)),
-        Why::NoBigIntRanges => "is a bigint whose range isn't tracked".to_owned(),
-        Why::LiteralOutside(literal) => format!("is {literal}"),
+        Why::ExactlyBelow(lo) => format!("may be as low as {lo}"),
+        Why::ExactlyAbove(hi) => format!("may be as high as {hi}"),
         Why::FloatExactness => "may not be exactly a `float`".to_owned(),
         Why::NotANumber => "may not be a number".to_owned(),
     }
@@ -611,7 +614,7 @@ fn remedy(why: &[Why], obligation: &Obligation) -> String {
     if why.iter().any(|why| matches!(why, Why::Fraction | Why::NaN)) {
         fixes.push("`Number.isInteger(x)` rules out a fraction and NaN".to_owned());
     }
-    if why.iter().any(|why| matches!(why, Why::Below(_) | Why::Above(_))) {
+    if why.iter().any(|why| matches!(why, Why::Below(_) | Why::Above(_) | Why::ExactlyBelow(_) | Why::ExactlyAbove(_))) {
         fixes.push(match obligation.range() {
             Some((lo, hi)) => format!("a guard such as `x >= {lo} && x <= {hi}` bounds it"),
             None => "a guard on its range bounds it".to_owned(),
@@ -685,7 +688,12 @@ pub fn local_analysis(func: &Func, written: &Written) -> Analysis {
 }
 
 impl Slots<'_> {
-fn judge(&self, func: &Func, analysis: &Analysis, obligation: &Obligation) -> Judged {
+fn judge(
+    &self,
+    func: &Func,
+    (analysis, bigints): (&Analysis, &std::cell::OnceCell<BigRanges>),
+    obligation: &Obligation,
+) -> Judged {
     let value = obligation.value;
     let (source, unproven) = match func.value(value).ty {
         HirType::Float { .. } => {
@@ -695,40 +703,16 @@ fn judge(&self, func: &Func, analysis: &Analysis, obligation: &Obligation) -> Ju
             (Source::Number(facts), number_fits(facts, obligation, exact))
         }
         HirType::Int { bits, signed } => {
-            let (lo, hi) = if signed {
-                let half = 1i128 << (bits - 1);
-                (-half, half - 1)
-            } else {
-                (0, (1i128 << bits) - 1)
-            };
-            let mut why = Vec::new();
-            if let Some((least, greatest)) = obligation.range() {
-                #[allow(clippy::cast_precision_loss)]
-                if lo < least {
-                    why.push(Why::Below(lo as f64));
-                }
-                #[allow(clippy::cast_precision_loss)]
-                if hi > greatest {
-                    why.push(Why::Above(hi as f64));
-                }
-            }
-            (Source::Integer { lo, hi }, why)
+            let (lo, hi) = int_range(bits, signed);
+            (Source::Integer { lo, hi }, exactly_fits(Bounds { lo, hi }, obligation))
         }
         HirType::BigInt => {
-            let literal = match func.value(value).kind {
-                OpKind::ConstInt(literal) => Some(literal),
-                _ => None,
-            };
-            let why = match (literal, obligation.range()) {
-                (Some(literal), Some((lo, hi))) if literal < lo || literal > hi => vec![Why::LiteralOutside(literal)],
-                (Some(_), _) => Vec::new(),
-                (None, _) => vec![Why::NoBigIntRanges],
-            };
-            (Source::BigInt(literal), why)
+            let bounds = bigints.get_or_init(|| self.bigint_ranges(func, analysis)).get_at(obligation.block, value);
+            (Source::BigInt { lo: bounds.lo, hi: bounds.hi }, exactly_fits(bounds, obligation))
         }
         HirType::Bool => {
             let fits = obligation.range().is_none_or(|(lo, hi)| lo <= 0 && hi >= 1);
-            (Source::Bool, if fits { Vec::new() } else { vec![Why::Above(1.0)] })
+            (Source::Bool, if fits { Vec::new() } else { vec![Why::ExactlyAbove(1)] })
         }
         // An optional slot's absence (`x?: Uint8`, S4).
         _ if matches!(func.value(value).kind, OpKind::ConstUndefined | OpKind::ConstNull) => (Source::Absent, Vec::new()),
@@ -797,6 +781,307 @@ fn incoming(func: &Func, param: ValueId) -> Vec<(BlockId, ValueId)> {
     passed
 }
 
+/// The integers a machine integer of `bits` holds.
+const fn int_range(bits: u8, signed: bool) -> (i128, i128) {
+    if signed {
+        let half = 1i128 << (bits - 1);
+        (-half, half - 1)
+    } else {
+        (0, (1i128 << bits) - 1)
+    }
+}
+
+/// Why an integer in `bounds` may not fit the obligation's slot. A float
+/// slot takes every integer a machine type or a `bigint` here can hold
+/// only approximately, which isn't this question.
+fn exactly_fits(bounds: Bounds, obligation: &Obligation) -> Vec<Why> {
+    let Some((least, greatest)) = obligation.range() else { return Vec::new() };
+    let mut why = Vec::new();
+    if bounds.lo < least {
+        why.push(Why::ExactlyBelow(bounds.lo));
+    }
+    if bounds.hi > greatest {
+        why.push(Why::ExactlyAbove(bounds.hi));
+    }
+    why
+}
+
+/// An exact range of integers, inclusive: what a `bigint` may be. nts's
+/// bigints are 128-bit, so [`Self::FULL`] is every one of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bounds {
+    pub lo: i128,
+    pub hi: i128,
+}
+
+impl Bounds {
+    const FULL: Self = Self { lo: i128::MIN, hi: i128::MAX };
+    /// No value: a block not reached yet.
+    const EMPTY: Self = Self { lo: i128::MAX, hi: i128::MIN };
+
+    const fn exact(value: i128) -> Self {
+        Self { lo: value, hi: value }
+    }
+
+    const fn is_empty(self) -> bool {
+        self.lo > self.hi
+    }
+
+    fn of(kind: Option<Scalar>) -> Self {
+        kind.and_then(Scalar::integer_range).map_or(Self::FULL, |(lo, hi)| Self { lo, hi })
+    }
+
+    fn join(self, other: Self) -> Self {
+        if self.is_empty() {
+            other
+        } else if other.is_empty() {
+            self
+        } else {
+            Self { lo: self.lo.min(other.lo), hi: self.hi.max(other.hi) }
+        }
+    }
+
+    fn meet(self, other: Self) -> Self {
+        Self { lo: self.lo.max(other.lo), hi: self.hi.min(other.hi) }
+    }
+
+    /// Every result of `apply` on the corners, or everything where one
+    /// overflows: nts's 128-bit arithmetic wraps there.
+    fn corners(self, other: Self, apply: fn(i128, i128) -> Option<i128>) -> Self {
+        if self.is_empty() || other.is_empty() {
+            return Self::EMPTY;
+        }
+        let corners = [(self.lo, other.lo), (self.lo, other.hi), (self.hi, other.lo), (self.hi, other.hi)];
+        corners.iter().try_fold(Self::EMPTY, |range, (a, b)| Some(range.join(Self::exact(apply(*a, *b)?)))).unwrap_or(Self::FULL)
+    }
+}
+
+/// What [`Slots::bigint_ranges`] proved: each `bigint`'s range, and what each
+/// block's guards narrowed.
+struct BigRanges {
+    values: Vec<Bounds>,
+    refined: Vec<FxHashMap<ValueId, Bounds>>,
+}
+
+impl BigRanges {
+    fn get_at(&self, block: BlockId, value: ValueId) -> Bounds {
+        self.refined
+            .get(block.0 as usize)
+            .and_then(|refined| refined.get(&value))
+            .copied()
+            .unwrap_or(self.values[value.0 as usize])
+    }
+}
+
+impl Slots<'_> {
+    /// The exact range of every `bigint` in `func`, by local facts only (Q2):
+    /// what a written kind, a native result, a literal, `BigInt.asIntN` and
+    /// `asUintN` say, through `+`, `-`, `*`, `&`, `>>` and negation, joined
+    /// where paths meet and narrowed by a comparison's guard.
+    ///
+    /// Its own small analysis because [`super::flow`]'s facts are about a
+    /// double -- which can't tell `2^63 - 1` from `2^63`, the very edge
+    /// `BigInt.asIntN(64, x)` sits on. A guard narrows along an edge into a
+    /// block with that one predecessor, and on through blocks with one
+    /// predecessor, which is every `if` and every `&&` chain.
+    fn bigint_ranges(&self, func: &Func, numbers: &Analysis) -> BigRanges {
+        /// Past this many rounds a block parameter that still grows is a loop
+        /// accumulator, and is everything.
+        const WIDEN_AFTER: u32 = 8;
+        let blocks = func.blocks.len();
+        let mut predecessors: Vec<Vec<BlockId>> = vec![Vec::new(); blocks];
+        for (index, block) in func.blocks.iter().enumerate() {
+            for successor in block.terminator.successors() {
+                if let Some(into) = predecessors.get_mut(successor.0 as usize) {
+                    into.push(BlockId(u32::try_from(index).unwrap_or(u32::MAX)));
+                }
+            }
+        }
+        let mut ranges = BigRanges { values: vec![Bounds::EMPTY; func.values.len()], refined: vec![FxHashMap::default(); blocks] };
+        let mut rounds = vec![0u32; blocks];
+        for _ in 0..(4 * blocks + 16) {
+            let mut changed = false;
+            for index in 0..blocks {
+                let block = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
+                // What the one predecessor knew, and what its branch proves.
+                let refined = match predecessors[index][..] {
+                    [from] => Self::edge_refinements(func, &ranges, from, block),
+                    _ => FxHashMap::default(),
+                };
+                ranges.refined[index] = refined;
+                rounds[index] += 1;
+                for (at, param) in func.blocks[index].params.iter().enumerate() {
+                    if func.value(*param).ty != HirType::BigInt {
+                        continue;
+                    }
+                    let mut passed = Bounds::EMPTY;
+                    for from in &predecessors[index] {
+                        for args in edge_args(&func.blocks[from.0 as usize].terminator, block) {
+                            if let Some(arg) = args.get(at) {
+                                passed = passed.join(ranges.get_at(*from, *arg));
+                            }
+                        }
+                    }
+                    let slot = &mut ranges.values[param.0 as usize];
+                    let mut joined = slot.join(passed);
+                    if joined != *slot && rounds[index] > WIDEN_AFTER {
+                        joined = Bounds::FULL;
+                    }
+                    if joined != *slot {
+                        *slot = joined;
+                        changed = true;
+                    }
+                }
+                for &value in &func.blocks[index].ops {
+                    if func.value(value).ty != HirType::BigInt {
+                        continue;
+                    }
+                    let computed = self.bigint_transfer(func, numbers, &ranges, block, value);
+                    let slot = &mut ranges.values[value.0 as usize];
+                    let joined = slot.join(computed);
+                    if joined != *slot {
+                        *slot = joined;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        ranges
+    }
+
+    /// The refinements in force at `block`, entered from its one predecessor
+    /// `from`: `from`'s own, and what `from`'s branch proves on this edge.
+    fn edge_refinements(func: &Func, ranges: &BigRanges, from: BlockId, block: BlockId) -> FxHashMap<ValueId, Bounds> {
+        let mut refined = ranges.refined[from.0 as usize].clone();
+        let Terminator::Branch { cond, then_target, else_target, .. } = &func.blocks[from.0 as usize].terminator else {
+            return refined;
+        };
+        if then_target == else_target {
+            return refined;
+        }
+        let OpKind::Binary { op, lhs, rhs } = &func.value(*cond).kind else { return refined };
+        if func.value(*lhs).ty != HirType::BigInt || func.value(*rhs).ty != HirType::BigInt {
+            return refined;
+        }
+        // A `bigint` has no NaN, so the false edge proves the negation.
+        let holds = if *then_target == block {
+            *op
+        } else {
+            match op {
+                BinOp::Lt => BinOp::Ge,
+                BinOp::Le => BinOp::Gt,
+                BinOp::Gt => BinOp::Le,
+                BinOp::Ge => BinOp::Lt,
+                BinOp::Eq => BinOp::Ne,
+                BinOp::Ne => BinOp::Eq,
+                _ => return refined,
+            }
+        };
+        let (a, b) = (ranges.get_at(from, *lhs), ranges.get_at(from, *rhs));
+        let below = |hi: i128| Bounds { lo: i128::MIN, hi };
+        let above = |lo: i128| Bounds { lo, hi: i128::MAX };
+        let (left, right) = match holds {
+            BinOp::Lt => (below(b.hi.saturating_sub(1)), above(a.lo.saturating_add(1))),
+            BinOp::Le => (below(b.hi), above(a.lo)),
+            BinOp::Gt => (above(b.lo.saturating_add(1)), below(a.hi.saturating_sub(1))),
+            BinOp::Ge => (above(b.lo), below(a.hi)),
+            BinOp::Eq => (b, a),
+            _ => return refined,
+        };
+        refined.insert(*lhs, a.meet(left));
+        refined.insert(*rhs, b.meet(right));
+        refined
+    }
+
+    /// What one operation producing a `bigint` may produce.
+    fn bigint_transfer(&self, func: &Func, numbers: &Analysis, ranges: &BigRanges, block: BlockId, value: ValueId) -> Bounds {
+        let get = |operand: ValueId| ranges.get_at(block, operand);
+        match &func.value(value).kind {
+            OpKind::ConstInt(literal) => Bounds::exact(*literal),
+            OpKind::Convert(from) | OpKind::Unerase { value: from } => match func.value(*from).ty {
+                HirType::Int { bits, signed } => {
+                    let (lo, hi) = int_range(bits, signed);
+                    Bounds { lo, hi }
+                }
+                HirType::BigInt => get(*from),
+                // The `bigint` an erased value is, where a test proved it is
+                // one: what made it says, as a uniform closure entry passes
+                // a written parameter on.
+                HirType::Erased if matches!(func.value(value).kind, OpKind::Unerase { .. }) => {
+                    self.bigint_transfer(func, numbers, ranges, block, *from)
+                }
+                _ => Bounds::FULL,
+            },
+            OpKind::Param(slot) => Bounds::of(func.params.get(*slot as usize).and_then(|param| param.written)),
+            OpKind::FieldGet { object, field } => Bounds::of(self.field(&func.value(*object).ty, *field).map(|(kind, _)| kind)),
+            OpKind::GlobalGet(global) => Bounds::of(self.globals.get(*global as usize).and_then(|slot| slot.written)),
+            OpKind::Call { callee: Callee::Direct(name), .. } => {
+                Bounds::of(self.by_name.get(name.as_str()).and_then(|callee| callee.written_return))
+            }
+            OpKind::Call { callee: Callee::Native(target), .. } => match target.result {
+                super::native::Type::Scalar(kind) => Bounds::of(Some(kind)),
+                _ => Bounds::FULL,
+            },
+            // `BigInt.asIntN(w, x)` and `asUintN`: the explicit narrowing.
+            OpKind::Call { callee: Callee::External(name), args, .. }
+                if matches!(name.as_str(), "nts_bigint_as_intn" | "nts_bigint_as_uintn") =>
+            {
+                let width = args.first().map(|width| numbers.get_at(block, *width));
+                match width.filter(|width| width.is_singleton() && width.integral() && (1.0..=127.0).contains(&width.lo)) {
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    Some(width) => {
+                        let bits = width.lo as u8;
+                        let (lo, hi) = int_range(bits, name == "nts_bigint_as_intn");
+                        Bounds { lo, hi }
+                    }
+                    None => Bounds::FULL,
+                }
+            }
+            OpKind::Binary { op, lhs, rhs } => {
+                let (a, b) = (get(*lhs), get(*rhs));
+                match op {
+                    BinOp::Add => a.corners(b, i128::checked_add),
+                    BinOp::Sub => a.corners(b, i128::checked_sub),
+                    BinOp::Mul => a.corners(b, i128::checked_mul),
+                    // A mask with a non-negative side is within that side.
+                    BinOp::BitAnd if a.lo >= 0 || b.lo >= 0 => {
+                        let hi = if a.lo >= 0 && b.lo >= 0 { a.hi.min(b.hi) } else if a.lo >= 0 { a.hi } else { b.hi };
+                        Bounds { lo: 0, hi }
+                    }
+                    BinOp::Shr if b.lo >= 0 && b.hi < 128 => a.corners(b, |x, n| u32::try_from(n).ok().map(|n| x >> n)),
+                    _ => Bounds::FULL,
+                }
+            }
+            OpKind::Unary { op: UnOp::Neg, operand } => {
+                let a = get(*operand);
+                Bounds::exact(0).corners(a, i128::checked_sub)
+            }
+            _ => Bounds::FULL,
+        }
+    }
+}
+
+/// The arguments the terminator passes to `target`, on each edge to it.
+fn edge_args(terminator: &Terminator, target: BlockId) -> Vec<&[ValueId]> {
+    match terminator {
+        Terminator::Jump { target: to, args } if *to == target => vec![args.as_slice()],
+        Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
+            let mut edges = Vec::new();
+            if *then_target == target {
+                edges.push(then_args.as_slice());
+            }
+            if *else_target == target {
+                edges.push(else_args.as_slice());
+            }
+            edges
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// Why `facts` may not fit the obligation's slot, or nothing when it does;
 /// `exact` is whether the value is exactly a `float`, which a `float` slot
 /// asks.
@@ -850,7 +1135,7 @@ fn made_by(func: &Func, value: ValueId) -> Made {
 
 #[cfg(test)]
 mod tests {
-    use super::{number_fits, Into, Obligation, Why};
+    use super::{exactly_fits, number_fits, Bounds, Into, Obligation, Why};
     use crate::hir::facts::Facts;
     use crate::hir::native::Scalar;
     use crate::hir::{BlockId, ValueId};
@@ -895,6 +1180,19 @@ mod tests {
         assert!(number_fits(Facts::TOP, &into(Scalar::Double, None), false).is_empty());
         assert_eq!(number_fits(Facts::new(0.0, 1.0, true, false, false), &into(Scalar::Float, None), false), vec![Why::FloatExactness]);
         assert!(number_fits(Facts::new(0.0, 1.0, true, false, false), &into(Scalar::Float, None), true).is_empty());
+    }
+
+    #[test]
+    fn bigint_bounds_are_exact_and_an_overflow_is_everything() {
+        let int64 = Bounds { lo: -(1i128 << 63), hi: (1i128 << 63) - 1 };
+        assert_eq!(int64.corners(Bounds::exact(1), i128::checked_add).hi, 1i128 << 63, "INT64_MAX + 1 is one past the kind");
+        assert_eq!(Bounds::FULL.corners(Bounds::exact(1), i128::checked_add), Bounds::FULL, "past 128 bits it wraps");
+        assert_eq!(exactly_fits(int64, &into(Scalar::Int64, None)), Vec::<Why>::new());
+        assert_eq!(
+            exactly_fits(Bounds { lo: 0, hi: 1i128 << 63 }, &into(Scalar::Int64, None)),
+            vec![Why::ExactlyAbove(1i128 << 63)],
+            "a double could not tell 2^63 from 2^63 - 1; the bound must be exact"
+        );
     }
 
     #[test]
