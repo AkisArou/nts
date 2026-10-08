@@ -5320,8 +5320,7 @@ fn settle_host_handles(lowered: &mut lower::Lowered, provider: Provider) {
 /// would be counted through the wrong functions -- nts:dom's sequence adapters
 /// name `nts_dom_sequence_retain` where its wrappables name `nts_dom_retain`.
 /// The first pair the program erases (in function order) is the family's; a
-/// function erasing or unerasing a host handle of any other is refused, naming
-/// both.
+/// function erasing a host handle of any other is refused, naming both.
 fn check_host_pairs(lowered: &mut lower::Lowered) {
     let pair_of = |ty: &HirType| match ty {
         HirType::NativePointer(pointee) => match pointee.family()? {
@@ -5330,9 +5329,15 @@ fn check_host_pairs(lowered: &mut lower::Lowered) {
         },
         _ => None,
     };
+    // **Erasures only.** An erase puts a handle into a value the runtime then
+    // counts through the family's registered pair; an unerase reads one back
+    // and the typed handle it makes is counted through its own class's pair.
+    // Counting unerases refused every program with an observer callback beside
+    // a promise of a DOM object: the callback's erased-call shim unerases its
+    // `MutationRecordSequence` parameter, a sequence adapter's pair, though
+    // nothing in the program erases one (the Chromium lane, 2026-10-08).
     let crossing = |func: &Func, op: &Op| match op.kind {
         OpKind::Erase { value, .. } => pair_of(&func.values[value.0 as usize].ty),
-        OpKind::Unerase { .. } => pair_of(&op.ty),
         _ => None,
     };
     let mut family: Option<(&'static str, &'static str)> = None;
