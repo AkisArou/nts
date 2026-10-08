@@ -255,6 +255,14 @@ struct ModuleScope {
     /// var document`, `@ntsBoundBy "nts:dom" document`, is a call of
     /// `nts:dom`'s `document()`. Not storage, so not in `variables`.
     bound: rustc_hash::FxHashMap<u32, (NodeId, String)>,
+    /// The global object, where a binding implements it (`/** @ntsBoundBy
+    /// "nts:dom" window */ declare var window`): the foreign function a bare
+    /// lib.dom global's call reaches it through ([`FuncBuilder::window_global`]).
+    /// Found by the declaration's name, **not** through `bound`: `bound` is
+    /// keyed by symbol, and a name the program never writes has none, so bare
+    /// `fetch(url)` was "a builtin this compiler does not provide" until the
+    /// program mentioned `window` somewhere else.
+    global_object: Option<(NodeId, String)>,
     /// Symbol to index in [`Program::globals`].
     variables: rustc_hash::FxHashMap<u32, u32>,
     /// The type of each global, by the same index.
@@ -6924,6 +6932,32 @@ fn declared_literal(probe: &FuncBuilder, name: NodeId) -> Option<f64> {
 ///
 /// This doc comment sat on an unrelated `impl` block 765 lines above the
 /// function it describes until 2026-09-17.
+/// The foreign function a `@ntsBoundBy` declaration's reads call, and its
+/// name: `nts:dom`'s `window()` for `/** @ntsBoundBy "nts:dom" window */
+/// declare var window`. `None` with no tag, or one naming nothing.
+fn binding_of(probe: &FuncBuilder, id: NodeId) -> Option<(NodeId, String)> {
+    let binding = probe.node(probe.tagged_statement(id)).native.as_deref()?.bound_by.as_deref()?;
+    let (module, name) = nts_semantic_schema::binding::parse(binding)?;
+    let function = nts_semantic_schema::binding::declared_in(probe.snapshot, module, name, syntax::FUNCTION_DECLARATION)?;
+    Some((function, name.to_owned()))
+}
+
+/// [`ModuleScope::global_object`]: the binding of a module-scope `window`
+/// declaration, looked for by its name rather than its symbol, since one the
+/// program never writes has no symbol.
+fn global_object(probe: &FuncBuilder) -> Option<(NodeId, String)> {
+    probe.snapshot.nodes.iter().enumerate().find_map(|(index, node)| {
+        if node.kind != NodeKind::Syntax(syntax::VARIABLE_DECLARATION) {
+            return None;
+        }
+        let id = NodeId(u32::try_from(index).ok()?);
+        let name = *probe.children(id).first()?;
+        (probe.node(name).text.as_deref() == Some("window") && !probe.is_within_a_function(id))
+            .then(|| binding_of(probe, id))
+            .flatten()
+    })
+}
+
 /// A module-scope declaration whose value is not the program's to compute,
 /// settled into `scope`; `true` when it was, and it needs no global.
 ///
@@ -6942,11 +6976,7 @@ fn settle_by_binding(
 ) -> bool {
     let native = probe.node(probe.tagged_statement(id)).native.as_deref();
     if let Some(binding) = native.and_then(|native| native.bound_by.as_deref()) {
-        let resolved = nts_semantic_schema::binding::parse(binding).and_then(|(module, name)| {
-            let function = nts_semantic_schema::binding::declared_in(probe.snapshot, module, name, syntax::FUNCTION_DECLARATION)?;
-            Some((function, name.to_owned()))
-        });
-        match resolved {
+        match binding_of(probe, id) {
             Some(bound) => drop(scope.bound.insert(symbol.0, bound)),
             None => drop(scope.unsupported.insert(
                 symbol.0,
@@ -7035,6 +7065,7 @@ fn collect_module_scope(
     // copies two of the four has that same problem for the other two, and says
     // nothing about it.*
 
+    scope.global_object = global_object(&probe);
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::VARIABLE_DECLARATION) {
             continue;
@@ -24420,6 +24451,16 @@ impl<'a> FuncBuilder<'a> {
         self.coerce(value, &want, argument)
     }
 
+    /// A string, where the native call being lowered (`omitting_for`) feeds
+    /// its written argument `at` into a string slot (`Role::String`).
+    fn native_string_slot(&self, at: usize) -> Option<HirType> {
+        let (target, spelled) = self.omitting_for.as_ref()?;
+        target
+            .slots()
+            .any(|(_, role, fed)| fed == Some(at + spelled) && matches!(role, super::native::Role::String(_)))
+            .then_some(HirType::Managed(ManagedType::String))
+    }
+
     /// Whether the call's `at`th parameter is `CHandles`.
     fn lends_handles(&self, call: NodeId, at: usize) -> bool {
         self.parameter_type_id(call, at).is_some_and(|ty| super::native::lends_handles(self.snapshot, ty))
@@ -24433,6 +24474,18 @@ impl<'a> FuncBuilder<'a> {
     /// and the copy takes a `Thing`; coercing to the declaration would meet the
     /// prefix check that the copy exists to avoid.
     fn parameter_representation(&self, call: NodeId, at: usize) -> Option<HirType> {
+        // **A native string slot takes a string, whatever declared the call.**
+        // A lib.dom global or member a binding implements is resolved by the
+        // checker to lib.dom's declaration, which can be wider than the
+        // binding's: `alert(message?: any)`, `fetch(input: RequestInfo | URL)`.
+        // Lowered expecting that, a string argument was erased on its way to
+        // `nts_dom_Window_fetch_1`'s `StringView` and refused there as "a value
+        // that is not a string". The slot the argument feeds is the truth, and
+        // the one answer both lowering and coercion read; a value that really
+        // is not a string still meets `coerce`'s refusal.
+        if let Some(string) = self.native_string_slot(at) {
+            return Some(string);
+        }
         if let Some(bound) = self
             .structural_calls
             .get(&call)
@@ -57789,7 +57842,7 @@ impl<'a> FuncBuilder<'a> {
         if !self.snapshot.symbols.get(symbol.0 as usize)?.declarations.is_empty() {
             return None;
         }
-        let (function, bound) = self.module.bound.values().find(|(_, bound)| bound == "window")?.clone();
+        let (function, bound) = self.module.global_object.clone()?;
         let TypeKind::Function(signature) = self.snapshot.types.get(self.snapshot.node_types.get(&function)?.0 as usize)?.kind else { return None };
         let returned = self.snapshot.signatures.get(signature.0 as usize)?.return_type;
         Some((function, bound, returned))
