@@ -1461,7 +1461,7 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
 }
 
 /// `nts facts --crossings`: [`hir::crossings::census`] over the lowered
-/// program, with the whole-program analysis, as `dump_facts` reads it.
+/// program, each crossing judged by local facts only (decision Q2).
 fn dump_crossings(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
     use hir::crossings::{Into, Source, Why};
     let tsgo_binary = frontend_binary();
@@ -1471,8 +1471,7 @@ fn dump_crossings(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
         bail!("the program does not typecheck");
     }
     let program = hir::lower::lower(&snapshot).program;
-    let analyses = hir::interprocedural::analyze_program(&program, hir::reachable::Roots::EveryExport);
-    let crossings = hir::crossings::census(&program, &analyses);
+    let crossings = hir::crossings::census(&program);
 
     let reasons = |why: &[Why]| -> String {
         why.iter()

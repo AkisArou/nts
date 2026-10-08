@@ -39,11 +39,23 @@
 //! Not yet counted, and said so rather than missed: a value a callback or an
 //! export *returns* to native code. Its conversion happens in the backend's
 //! bridge, not in the HIR this reads.
+//!
+//! # Which facts may prove a crossing (decision Q2)
+//!
+//! **Only local ones:** what the function proves alone, its loop bounds, and
+//! its written types (a parameter's declared type). Never what callers pass,
+//! nor what the whole program stores into a field. The whole-program analysis
+//! makes code fast; it must not decide whether code compiles. Otherwise
+//! adding a caller in one file breaks a native call in another, and a
+//! speculative copy's facts would pass for proof. [`local_analysis`] is that
+//! rule, in one place.
 
 use nts_diagnostics::Location;
 
+use rustc_hash::FxHashMap;
+
 use super::facts::Facts;
-use super::flow::Analysis;
+use super::flow::{Analysis, Context, Whole};
 use super::{BlockId, Callee, Func, HirType, OpKind, Program, ValueId};
 
 /// The `ToInt32`-family helpers: a `number` to an integer of 32 bits or fewer.
@@ -123,17 +135,36 @@ fn range_of(bits: u32, signed: bool) -> (i128, i128) {
     }
 }
 
-/// Every crossing in `program`, with `analyses[i]` the analysis of
-/// `program.funcs[i]` (as [`super::interprocedural::analyze_program`] returns
-/// them).
+/// Every crossing in `program`, each judged by [`local_analysis`].
 #[must_use]
-pub fn census(program: &Program, analyses: &[Analysis]) -> Vec<Crossing> {
-    program
-        .funcs
-        .iter()
-        .zip(analyses)
-        .flat_map(|(func, analysis)| in_func(func, analysis))
-        .collect()
+pub fn census(program: &Program) -> Vec<Crossing> {
+    program.funcs.iter().flat_map(|func| in_func(func, &local_analysis(func))).collect()
+}
+
+/// What a strict obligation may rely on in `func` (decision Q2): the function
+/// alone, with its declared parameter types, and its loops' bounds -- which
+/// [`super::loops::accumulator_caps`] counts from the function itself. The caps
+/// feed the analysis and the analysis feeds the caps, so the two are run to a
+/// fixpoint, as the whole-program driver runs them.
+#[must_use]
+pub fn local_analysis(func: &Func) -> Analysis {
+    let whole = Whole::default();
+    let mut caps: FxHashMap<ValueId, Facts> = FxHashMap::default();
+    let analyze = |caps: &FxHashMap<ValueId, Facts>| {
+        super::flow::analyze_with(func, &Context { params: &[], caps, param_lengths: &[], whole: &whole })
+    };
+    let mut analysis = analyze(&caps);
+    // Each round only adds caps it has proven; a loop nest is not deeper than
+    // the function has blocks, which bounds the rounds.
+    for _ in 0..func.blocks.len().max(1) {
+        let next = super::loops::accumulator_caps(func, &analysis);
+        if next == caps {
+            break;
+        }
+        caps = next;
+        analysis = analyze(&caps);
+    }
+    analysis
 }
 
 fn in_func(func: &Func, analysis: &Analysis) -> Vec<Crossing> {

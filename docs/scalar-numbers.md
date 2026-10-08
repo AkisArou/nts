@@ -482,9 +482,12 @@ standardization, and it costs case-2 programs one import line.
 
 A separate review checked this plan against everything the playground
 raised. It found four questions that change the design, and fifteen smaller
-ones. Every answer below is a recommendation until decided.
+ones.
 
-### The four big ones (for the user)
+**Q1-Q4 decided 2026-10-08, as recommended below.** The smaller ones (S1-S13)
+are recommendations.
+
+### The four big ones (decided)
 
 **Q1. Can a written type be trusted as a fact?**
 - **The problem:** TypeScript lets a plain number into a `Uint8` place in many
