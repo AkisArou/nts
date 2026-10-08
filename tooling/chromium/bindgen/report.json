@@ -1,5 +1,5 @@
 {
-  "bound": 4949,
+  "bound": 5296,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -48,18 +48,8 @@
     },
     {
       "interface": "Element",
-      "member": "get onbeforecopy",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Element",
       "member": "get onbeforecut",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onbeforecut",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Element",
@@ -68,18 +58,8 @@
     },
     {
       "interface": "Element",
-      "member": "get onbeforepaste",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Element",
       "member": "get onsearch",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onsearch",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Element",
@@ -133,18 +113,8 @@
     },
     {
       "interface": "Element",
-      "member": "get onfullscreenchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Element",
       "member": "get onfullscreenerror",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onfullscreenerror",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Element",
@@ -153,18 +123,8 @@
     },
     {
       "interface": "Element",
-      "member": "get onwebkitfullscreenchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Element",
       "member": "get onwebkitfullscreenerror",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onwebkitfullscreenerror",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Element",
@@ -578,11 +538,6 @@
     },
     {
       "interface": "Document",
-      "member": "get onreadystatechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get all",
       "why": "interface HTMLAllCollection is not bound"
     },
@@ -593,18 +548,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onpointerlockchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onpointerlockerror",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerlockerror",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -629,7 +574,7 @@
     {
       "interface": "Document",
       "member": "get onautofill",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=AutofillEvent] overridable"
     },
     {
       "interface": "Document",
@@ -643,18 +588,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onbeforecopy",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onbeforecut",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforecut",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -663,18 +598,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onbeforepaste",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onfreeze",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onfreeze",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -683,18 +608,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onprerenderingchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onresume",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onresume",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -703,18 +618,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onsearch",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onvisibilitychange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onvisibilitychange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -723,18 +628,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onfullscreenchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onfullscreenerror",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onfullscreenerror",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -743,18 +638,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onwebkitfullscreenchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onwebkitfullscreenerror",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkitfullscreenerror",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -788,18 +673,13 @@
     },
     {
       "interface": "Document",
-      "member": "get onabort",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "Document",
       "member": "get onbeforefilter",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "Document",
@@ -813,18 +693,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onbeforeinput",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onbeforematch",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforematch",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -833,18 +703,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onbeforetoggle",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onblur",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onblur",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -853,18 +713,8 @@
     },
     {
       "interface": "Document",
-      "member": "get oncancel",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get oncanplay",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncanplay",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -873,18 +723,8 @@
     },
     {
       "interface": "Document",
-      "member": "get oncanplaythrough",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -893,28 +733,13 @@
     },
     {
       "interface": "Document",
-      "member": "get onclick",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onclose",
       "why": "result type EventHandler"
     },
     {
       "interface": "Document",
-      "member": "get onclose",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get oncommand",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncommand",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -924,7 +749,7 @@
     {
       "interface": "Document",
       "member": "get oncomplete",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "Document",
@@ -938,18 +763,8 @@
     },
     {
       "interface": "Document",
-      "member": "get oncontentvisibilityautostatechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get oncontextlost",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncontextlost",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -958,18 +773,8 @@
     },
     {
       "interface": "Document",
-      "member": "get oncontextmenu",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get oncontextrestored",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncontextrestored",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -978,18 +783,8 @@
     },
     {
       "interface": "Document",
-      "member": "get oncuechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ondblclick",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondblclick",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -998,18 +793,8 @@
     },
     {
       "interface": "Document",
-      "member": "get ondrag",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ondragend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondragend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1018,18 +803,8 @@
     },
     {
       "interface": "Document",
-      "member": "get ondragenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ondragleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondragleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1038,18 +813,8 @@
     },
     {
       "interface": "Document",
-      "member": "get ondragover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ondragstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondragstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1058,18 +823,8 @@
     },
     {
       "interface": "Document",
-      "member": "get ondrop",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ondurationchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondurationchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1078,18 +833,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onemptied",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onended",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onended",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1108,18 +853,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onfocus",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onformdata",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onformdata",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1128,18 +863,8 @@
     },
     {
       "interface": "Document",
-      "member": "get oninput",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get oninvalid",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oninvalid",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1148,18 +873,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onkeydown",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onkeypress",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onkeypress",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1168,18 +883,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onkeyup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onload",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onload",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1188,18 +893,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onloadeddata",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onloadedmetadata",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onloadedmetadata",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1208,18 +903,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onloadstart",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onmousedown",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmousedown",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1228,18 +913,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onmouseenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onmouseleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmouseleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1248,18 +923,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onmousemove",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onmouseout",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmouseout",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1268,28 +933,13 @@
     },
     {
       "interface": "Document",
-      "member": "get onmouseover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onmouseup",
       "why": "result type EventHandler"
     },
     {
       "interface": "Document",
-      "member": "get onmouseup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onmousewheel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmousewheel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1299,7 +949,7 @@
     {
       "interface": "Document",
       "member": "get onoverscrollcancel",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1314,7 +964,7 @@
     {
       "interface": "Document",
       "member": "get onoverscrollchanging",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1329,7 +979,7 @@
     {
       "interface": "Document",
       "member": "get onoverscrollend",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1344,7 +994,7 @@
     {
       "interface": "Document",
       "member": "get onoverscrollstart",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
@@ -1358,18 +1008,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onpause",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onplay",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onplay",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1378,18 +1018,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onplaying",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onprogress",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onprogress",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1398,18 +1028,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onratechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onreset",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onreset",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1418,18 +1038,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onresize",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onscroll",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onscroll",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1438,18 +1048,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onscrollend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onsecuritypolicyviolation",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onsecuritypolicyviolation",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1458,18 +1058,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onseeked",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onseeking",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onseeking",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1478,18 +1068,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onselect",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onslotchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onslotchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1498,18 +1078,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onscrollsnapchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onscrollsnapchanging",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onscrollsnapchanging",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1518,18 +1088,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onstalled",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onsubmit",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onsubmit",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1538,18 +1098,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onsuspend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ontimeupdate",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontimeupdate",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1558,18 +1108,8 @@
     },
     {
       "interface": "Document",
-      "member": "get ontoggle",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onvolumechange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onvolumechange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1578,18 +1118,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onwaiting",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onwebkitanimationend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkitanimationend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1598,18 +1128,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onwebkitanimationiteration",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onwebkitanimationstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkitanimationstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1618,18 +1138,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onwebkittransitionend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onwheel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwheel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1638,18 +1148,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onauxclick",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ongotpointercapture",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ongotpointercapture",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1658,18 +1158,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onlostpointercapture",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onpointerdown",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerdown",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1678,18 +1168,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onpointermove",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onpointerrawupdate",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerrawupdate",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1698,18 +1178,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onpointerup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onpointercancel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointercancel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1718,18 +1188,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onpointerover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onpointerout",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerout",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1738,18 +1198,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onpointerenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onpointerleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1759,7 +1209,7 @@
     {
       "interface": "Document",
       "member": "get ontouchcancel",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -1774,7 +1224,7 @@
     {
       "interface": "Document",
       "member": "get ontouchend",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -1789,7 +1239,7 @@
     {
       "interface": "Document",
       "member": "get ontouchmove",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -1804,7 +1254,7 @@
     {
       "interface": "Document",
       "member": "get ontouchstart",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
@@ -1818,18 +1268,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onselectstart",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onselectionchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onselectionchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1838,18 +1278,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onanimationcancel",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onanimationend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onanimationend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1858,18 +1288,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onanimationiteration",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onanimationstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onanimationstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1878,18 +1298,8 @@
     },
     {
       "interface": "Document",
-      "member": "get ontransitionrun",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ontransitionstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontransitionstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1898,18 +1308,8 @@
     },
     {
       "interface": "Document",
-      "member": "get ontransitionend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get ontransitioncancel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontransitioncancel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -1919,7 +1319,7 @@
     {
       "interface": "Document",
       "member": "get onbeforexrselect",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Document",
@@ -1933,28 +1333,13 @@
     },
     {
       "interface": "Document",
-      "member": "get oncopy",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get oncut",
       "why": "result type EventHandler"
     },
     {
       "interface": "Document",
-      "member": "get oncut",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Document",
       "member": "get onpaste",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpaste",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Document",
@@ -2203,18 +1588,13 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onabort",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "HTMLElement",
       "member": "get onbeforefilter",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "HTMLElement",
@@ -2228,18 +1608,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onbeforeinput",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onbeforematch",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onbeforematch",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2248,18 +1618,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onbeforetoggle",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onblur",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onblur",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2268,18 +1628,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get oncancel",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get oncanplay",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncanplay",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2288,18 +1638,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get oncanplaythrough",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2308,28 +1648,13 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onclick",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onclose",
       "why": "result type EventHandler"
     },
     {
       "interface": "HTMLElement",
-      "member": "get onclose",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get oncommand",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncommand",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2339,7 +1664,7 @@
     {
       "interface": "HTMLElement",
       "member": "get oncomplete",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -2353,18 +1678,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get oncontentvisibilityautostatechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get oncontextlost",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncontextlost",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2373,18 +1688,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get oncontextmenu",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get oncontextrestored",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncontextrestored",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2393,18 +1698,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get oncuechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ondblclick",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondblclick",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2413,18 +1708,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get ondrag",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ondragend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondragend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2433,18 +1718,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get ondragenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ondragleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondragleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2453,18 +1728,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get ondragover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ondragstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondragstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2473,18 +1738,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get ondrop",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ondurationchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondurationchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2493,18 +1748,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onemptied",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onended",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onended",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2523,18 +1768,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onfocus",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onformdata",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onformdata",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2543,18 +1778,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get oninput",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get oninvalid",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oninvalid",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2563,18 +1788,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onkeydown",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onkeypress",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onkeypress",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2583,18 +1798,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onkeyup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onload",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onload",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2603,18 +1808,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onloadeddata",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onloadedmetadata",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onloadedmetadata",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2623,18 +1818,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onloadstart",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onmousedown",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmousedown",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2643,18 +1828,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onmouseenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onmouseleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmouseleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2663,18 +1838,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onmousemove",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onmouseout",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmouseout",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2683,28 +1848,13 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onmouseover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onmouseup",
       "why": "result type EventHandler"
     },
     {
       "interface": "HTMLElement",
-      "member": "get onmouseup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onmousewheel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmousewheel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2714,7 +1864,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onoverscrollcancel",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2729,7 +1879,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onoverscrollchanging",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2744,7 +1894,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onoverscrollend",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2759,7 +1909,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onoverscrollstart",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
@@ -2773,18 +1923,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onpause",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onplay",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onplay",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2793,18 +1933,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onplaying",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onprogress",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onprogress",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2813,18 +1943,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onratechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onreset",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onreset",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2833,18 +1953,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onresize",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onscroll",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onscroll",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2853,18 +1963,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onscrollend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onsecuritypolicyviolation",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onsecuritypolicyviolation",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2873,18 +1973,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onseeked",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onseeking",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onseeking",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2893,18 +1983,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onselect",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onslotchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onslotchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2913,18 +1993,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onscrollsnapchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onscrollsnapchanging",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onscrollsnapchanging",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2933,18 +2003,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onstalled",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onsubmit",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onsubmit",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2953,18 +2013,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onsuspend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ontimeupdate",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontimeupdate",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2973,18 +2023,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get ontoggle",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onvolumechange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onvolumechange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -2993,18 +2033,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onwaiting",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onwebkitanimationend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwebkitanimationend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3013,18 +2043,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onwebkitanimationiteration",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onwebkitanimationstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwebkitanimationstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3033,18 +2053,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onwebkittransitionend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onwheel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwheel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3053,18 +2063,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onauxclick",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ongotpointercapture",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ongotpointercapture",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3073,18 +2073,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onlostpointercapture",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onpointerdown",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerdown",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3093,18 +2083,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onpointermove",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onpointerrawupdate",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerrawupdate",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3113,18 +2093,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onpointerup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onpointercancel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointercancel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3133,18 +2103,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onpointerover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onpointerout",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerout",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3153,18 +2113,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onpointerenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onpointerleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3174,7 +2124,7 @@
     {
       "interface": "HTMLElement",
       "member": "get ontouchcancel",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3189,7 +2139,7 @@
     {
       "interface": "HTMLElement",
       "member": "get ontouchend",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3204,7 +2154,7 @@
     {
       "interface": "HTMLElement",
       "member": "get ontouchmove",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3219,7 +2169,7 @@
     {
       "interface": "HTMLElement",
       "member": "get ontouchstart",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -3233,18 +2183,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onselectstart",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onselectionchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onselectionchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3253,18 +2193,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onanimationcancel",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onanimationend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onanimationend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3273,18 +2203,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onanimationiteration",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onanimationstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onanimationstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3293,18 +2213,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get ontransitionrun",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ontransitionstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontransitionstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3313,18 +2223,8 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get ontransitionend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ontransitioncancel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontransitioncancel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3334,7 +2234,7 @@
     {
       "interface": "HTMLElement",
       "member": "get onbeforexrselect",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLElement",
@@ -3348,28 +2248,13 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get oncopy",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get oncut",
       "why": "result type EventHandler"
     },
     {
       "interface": "HTMLElement",
-      "member": "get oncut",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onpaste",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpaste",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "HTMLElement",
@@ -3654,7 +2539,7 @@
     {
       "interface": "HTMLImageElement",
       "member": "get onuareplacestart",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
     },
     {
       "interface": "HTMLImageElement",
@@ -3669,7 +2554,7 @@
     {
       "interface": "HTMLImageElement",
       "member": "get onuareplaceend",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
     },
     {
       "interface": "HTMLImageElement",
@@ -3699,7 +2584,7 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "get onpaint",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
       "interface": "HTMLCanvasElement",
@@ -3994,7 +2879,7 @@
     {
       "interface": "Window",
       "member": "get onorientationchange",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
     },
     {
       "interface": "Window",
@@ -4013,18 +2898,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onpageswap",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onpagereveal",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpagereveal",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4063,11 +2938,6 @@
     },
     {
       "interface": "Window",
-      "member": "get onsearch",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get fence",
       "why": "[RuntimeEnabled=FencedFrames] overridable"
     },
@@ -4089,7 +2959,7 @@
     {
       "interface": "Window",
       "member": "get onappinstalled",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4104,7 +2974,7 @@
     {
       "interface": "Window",
       "member": "get onbeforeinstallprompt",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4124,7 +2994,7 @@
     {
       "interface": "Window",
       "member": "get ondevicemotion",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4139,7 +3009,7 @@
     {
       "interface": "Window",
       "member": "get ondeviceorientation",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4154,7 +3024,7 @@
     {
       "interface": "Window",
       "member": "get ondeviceorientationabsolute",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -4193,18 +3063,13 @@
     },
     {
       "interface": "Window",
-      "member": "get onabort",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "Window",
       "member": "get onbeforefilter",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
     {
       "interface": "Window",
@@ -4218,18 +3083,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onbeforeinput",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onbeforematch",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforematch",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4238,18 +3093,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onbeforetoggle",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onblur",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onblur",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4258,18 +3103,8 @@
     },
     {
       "interface": "Window",
-      "member": "get oncancel",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get oncanplay",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncanplay",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4278,18 +3113,8 @@
     },
     {
       "interface": "Window",
-      "member": "get oncanplaythrough",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4298,28 +3123,13 @@
     },
     {
       "interface": "Window",
-      "member": "get onclick",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onclose",
       "why": "result type EventHandler"
     },
     {
       "interface": "Window",
-      "member": "get onclose",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get oncommand",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncommand",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4329,7 +3139,7 @@
     {
       "interface": "Window",
       "member": "get oncomplete",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "Window",
@@ -4343,18 +3153,8 @@
     },
     {
       "interface": "Window",
-      "member": "get oncontentvisibilityautostatechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get oncontextlost",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncontextlost",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4363,18 +3163,8 @@
     },
     {
       "interface": "Window",
-      "member": "get oncontextmenu",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get oncontextrestored",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncontextrestored",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4383,18 +3173,8 @@
     },
     {
       "interface": "Window",
-      "member": "get oncuechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ondblclick",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondblclick",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4403,18 +3183,8 @@
     },
     {
       "interface": "Window",
-      "member": "get ondrag",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ondragend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondragend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4423,18 +3193,8 @@
     },
     {
       "interface": "Window",
-      "member": "get ondragenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ondragleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondragleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4443,18 +3203,8 @@
     },
     {
       "interface": "Window",
-      "member": "get ondragover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ondragstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondragstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4463,18 +3213,8 @@
     },
     {
       "interface": "Window",
-      "member": "get ondrop",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ondurationchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondurationchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4483,18 +3223,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onemptied",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onended",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onended",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4513,18 +3243,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onfocus",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onformdata",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onformdata",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4533,18 +3253,8 @@
     },
     {
       "interface": "Window",
-      "member": "get oninput",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get oninvalid",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oninvalid",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4553,18 +3263,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onkeydown",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onkeypress",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onkeypress",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4573,18 +3273,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onkeyup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onload",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onload",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4593,18 +3283,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onloadeddata",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onloadedmetadata",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onloadedmetadata",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4613,18 +3293,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onloadstart",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onmousedown",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmousedown",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4633,18 +3303,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onmouseenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onmouseleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmouseleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4653,18 +3313,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onmousemove",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onmouseout",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmouseout",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4673,28 +3323,13 @@
     },
     {
       "interface": "Window",
-      "member": "get onmouseover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onmouseup",
       "why": "result type EventHandler"
     },
     {
       "interface": "Window",
-      "member": "get onmouseup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onmousewheel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmousewheel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4704,7 +3339,7 @@
     {
       "interface": "Window",
       "member": "get onoverscrollcancel",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -4719,7 +3354,7 @@
     {
       "interface": "Window",
       "member": "get onoverscrollchanging",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -4734,7 +3369,7 @@
     {
       "interface": "Window",
       "member": "get onoverscrollend",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -4749,7 +3384,7 @@
     {
       "interface": "Window",
       "member": "get onoverscrollstart",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
@@ -4763,18 +3398,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onpause",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onplay",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onplay",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4783,18 +3408,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onplaying",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onprogress",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onprogress",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4803,18 +3418,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onratechange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onreset",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onreset",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4823,18 +3428,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onresize",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onscroll",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onscroll",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4843,18 +3438,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onscrollend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onsecuritypolicyviolation",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onsecuritypolicyviolation",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4863,18 +3448,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onseeked",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onseeking",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onseeking",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4883,18 +3458,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onselect",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onslotchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onslotchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4903,18 +3468,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onscrollsnapchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onscrollsnapchanging",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onscrollsnapchanging",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4923,18 +3478,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onstalled",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onsubmit",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onsubmit",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4943,18 +3488,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onsuspend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ontimeupdate",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontimeupdate",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4963,18 +3498,8 @@
     },
     {
       "interface": "Window",
-      "member": "get ontoggle",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onvolumechange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onvolumechange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -4983,18 +3508,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onwaiting",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onwebkitanimationend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwebkitanimationend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5003,18 +3518,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onwebkitanimationiteration",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onwebkitanimationstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwebkitanimationstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5023,18 +3528,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onwebkittransitionend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onwheel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwheel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5043,18 +3538,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onauxclick",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ongotpointercapture",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ongotpointercapture",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5063,18 +3548,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onlostpointercapture",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onpointerdown",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerdown",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5083,18 +3558,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onpointermove",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onpointerrawupdate",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerrawupdate",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5103,18 +3568,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onpointerup",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onpointercancel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointercancel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5123,18 +3578,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onpointerover",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onpointerout",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerout",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5143,18 +3588,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onpointerenter",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onpointerleave",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerleave",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5164,7 +3599,7 @@
     {
       "interface": "Window",
       "member": "get ontouchcancel",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5179,7 +3614,7 @@
     {
       "interface": "Window",
       "member": "get ontouchend",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5194,7 +3629,7 @@
     {
       "interface": "Window",
       "member": "get ontouchmove",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5209,7 +3644,7 @@
     {
       "interface": "Window",
       "member": "get ontouchstart",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
@@ -5223,18 +3658,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onselectstart",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onselectionchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onselectionchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5243,18 +3668,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onanimationcancel",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onanimationend",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onanimationend",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5263,18 +3678,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onanimationiteration",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onanimationstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onanimationstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5283,18 +3688,8 @@
     },
     {
       "interface": "Window",
-      "member": "get ontransitionrun",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ontransitionstart",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontransitionstart",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5303,18 +3698,8 @@
     },
     {
       "interface": "Window",
-      "member": "get ontransitionend",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ontransitioncancel",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontransitioncancel",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5324,7 +3709,7 @@
     {
       "interface": "Window",
       "member": "get onbeforexrselect",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -5338,18 +3723,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onafterprint",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onbeforeprint",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforeprint",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5368,18 +3743,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onhashchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onlanguagechange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onlanguagechange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5388,18 +3753,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onmessage",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onmessageerror",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmessageerror",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5409,7 +3764,7 @@
     {
       "interface": "Window",
       "member": "get onmove",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
     },
     {
       "interface": "Window",
@@ -5423,18 +3778,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onoffline",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get ononline",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ononline",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5443,18 +3788,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onpagehide",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onpageshow",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpageshow",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5463,28 +3798,13 @@
     },
     {
       "interface": "Window",
-      "member": "get onpopstate",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onrejectionhandled",
       "why": "result type EventHandler"
     },
     {
       "interface": "Window",
-      "member": "get onrejectionhandled",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onstorage",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onstorage",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5494,7 +3814,7 @@
     {
       "interface": "Window",
       "member": "get ontimezonechange",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
     },
     {
       "interface": "Window",
@@ -5508,18 +3828,8 @@
     },
     {
       "interface": "Window",
-      "member": "get onunhandledrejection",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Window",
       "member": "get onunload",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onunload",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Window",
@@ -5529,7 +3839,7 @@
     {
       "interface": "Window",
       "member": "get ongamepadconnected",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -5544,7 +3854,7 @@
     {
       "interface": "Window",
       "member": "get ongamepaddisconnected",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -5559,7 +3869,7 @@
     {
       "interface": "Window",
       "member": "get ongamepadrawinputchanged",
-      "why": "an event handler's value is the program's closure"
+      "why": "[RuntimeEnabled=GamepadRawInputChangeEvent] overridable"
     },
     {
       "interface": "Window",
@@ -5768,11 +4078,6 @@
     },
     {
       "interface": "Performance",
-      "member": "get onresourcetimingbufferfull",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Performance",
       "member": "get timing",
       "why": "interface PerformanceTiming is not bound"
     },
@@ -5843,11 +4148,6 @@
     },
     {
       "interface": "MediaQueryList",
-      "member": "get onchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "MediaQueryList",
       "member": "addListener/1",
       "why": "parameter type EventListener?"
     },
@@ -5893,11 +4193,6 @@
     },
     {
       "interface": "Screen",
-      "member": "get onchange",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Screen",
       "member": "get orientation",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -5915,11 +4210,6 @@
       "interface": "AbortSignal",
       "member": "get onabort",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "AbortSignal",
-      "member": "get onabort",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "AbortSignal",
@@ -6205,11 +4495,6 @@
       "interface": "ShadowRoot",
       "member": "get onslotchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "ShadowRoot",
-      "member": "get onslotchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "ShadowRoot",
@@ -6949,7 +5234,7 @@
     {
       "interface": "HTMLMediaElement",
       "member": "get onencrypted",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLMediaElement",
@@ -6964,7 +5249,7 @@
     {
       "interface": "HTMLMediaElement",
       "member": "get onwaitingforkey",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLMediaElement",
@@ -7029,7 +5314,7 @@
     {
       "interface": "HTMLVideoElement",
       "member": "get onenterpictureinpicture",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLVideoElement",
@@ -7044,7 +5329,7 @@
     {
       "interface": "HTMLVideoElement",
       "member": "get onleavepictureinpicture",
-      "why": "an event handler's value is the program's closure"
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "HTMLVideoElement",
@@ -7448,28 +5733,13 @@
     },
     {
       "interface": "Animation",
-      "member": "get onfinish",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Animation",
       "member": "get oncancel",
       "why": "result type EventHandler"
     },
     {
       "interface": "Animation",
-      "member": "get oncancel",
-      "why": "an event handler's value is the program's closure"
-    },
-    {
-      "interface": "Animation",
       "member": "get onremove",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Animation",
-      "member": "get onremove",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "AnimationEffect",
@@ -7645,11 +5915,6 @@
       "interface": "Clipboard",
       "member": "get onclipboardchange",
       "why": "result type EventHandler"
-    },
-    {
-      "interface": "Clipboard",
-      "member": "get onclipboardchange",
-      "why": "an event handler's value is the program's closure"
     },
     {
       "interface": "Clipboard",

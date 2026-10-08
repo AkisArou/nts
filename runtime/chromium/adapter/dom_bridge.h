@@ -47,6 +47,11 @@ typedef struct NtsDomPromiseOps {
 void nts_blink_dom_set_promise_ops(NtsDomContext* context,
                                    const NtsDomPromiseOps* ops,
                                    void* state);
+// Retains an object of the program's that the adapter hands back to it: an
+// event handler attribute's value, the closure the program set (`onclick`
+// read back). Installed once per context, beside the invoker.
+typedef void (*NtsDomRetain)(void* object);
+void nts_blink_dom_set_retain(NtsDomContext* context, NtsDomRetain retain);
 // Runs program code: `run(state)` as an entry. One entry per native callback
 // supplies what V8ScriptRunner::CallFunction supplies a JS callback -- the
 // agent's microtask scope, so nested script cannot checkpoint mid-callback

@@ -79,19 +79,20 @@ using NtsDomFrameCallback = void (*)(double, void *);
 using NtsDomIdleCallback = void (*)(NtsDomIdleDeadline *, void *);
 using NtsDomTimerCallback = void (*)(void *);
 
-// Whether an event handler attribute write by the program is in progress
-// (HandlerWrite). The program's handlers are their own world, as an isolated
-// world's are: Blink finds the attribute's current handler by asking each
-// listener whether it belongs to the current world, and a compiled one does
-// only during the program's write -- so the program replaces its own handler
-// in place, and page script's `onclick` never sees it.
-inline constinit thread_local bool writing_handler = false;
-class HandlerWrite {
+// Whether the program is reading or writing an event handler attribute
+// (HandlerAccess). The program's handlers are their own world, as an
+// isolated world's are: Blink finds the attribute's current handler by
+// asking each listener whether it belongs to the current world, and a
+// compiled one does only during the program's access -- so the program
+// reads back and replaces its own handler in place, and page script's
+// `onclick` never sees it (nor the program page script's).
+inline constinit thread_local bool accessing_handler = false;
+class HandlerAccess {
   STACK_ALLOCATED();
 
 public:
-  HandlerWrite() : previous_(std::exchange(writing_handler, true)) {}
-  ~HandlerWrite() { writing_handler = previous_; }
+  HandlerAccess() : previous_(std::exchange(accessing_handler, true)) {}
+  ~HandlerAccess() { accessing_handler = previous_; }
 
 private:
   bool previous_;
@@ -231,6 +232,10 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // The value an event handler attribute held before the program's write:
   // a compiled handler stops and gives its closure back.
   void Replaced(blink::EventListener *previous);
+  // An event handler attribute's value read back (`el.onclick`): the
+  // closure this context's compiled handler holds, retained for the caller;
+  // NULL for none, page script's or another context's.
+  void *HandlerClosure(blink::EventListener *listener);
   // A compiled frame callback's call, its own entry like a dispatch; the
   // closure goes back once it has run.
   void RunFrame(NtsDomFrameCallback callback, double time, void *closure,
@@ -335,6 +340,9 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // promise_ops); a member answering a promise CHECKs it is installed.
   raw_ptr<const NtsDomPromiseOps> promise_ops;
   raw_ptr<void> promise_state;
+  // How an object of the program's handed back is retained
+  // (nts_blink_dom_set_retain).
+  NtsDomRetain retain = nullptr;
   // The document's execution context may already be detached when the
   // observer closes. Capture its actual agent loop while the document lives;
   // queued callbacks still need explicit revocation because that loop is

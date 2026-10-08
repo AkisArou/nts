@@ -170,6 +170,7 @@ try {
       for (const arm of ["void", "boolean"])
         HTMLElement.prototype["_set_onclick_" + arm] = function (handler) { this.onclick = handler; };
       HTMLElement.prototype._set_onclick_null = function () { this.onclick = null; };
+      HTMLElement.prototype._get_onclick = function () { return this.onclick; };
       // \`_set_fillStyle_gradient\` and its siblings: the canvas's \`any\`
       // style attributes, per arm.
       for (const style of ["fillStyle", "strokeStyle"])

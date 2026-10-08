@@ -278,6 +278,19 @@ export function libDomTranscript(): string {
     log("headersBadName", failure((): void => headers.set("bad name", "v")));
   }
 
+  // crypto (Blink's modules component): a version-4 UUID's shape, and two
+  // that differ; the values themselves are random.
+  {
+    const first = crypto.randomUUID();
+    const second = crypto.randomUUID();
+    let v4 = first.length === 36 && first.charAt(14) === "4" && "89ab".includes(first.charAt(19));
+    for (let i = 0; i < first.length; i++) {
+      const dash = i === 8 || i === 13 || i === 18 || i === 23;
+      if (dash !== (first.charAt(i) === "-") || (!dash && !"0123456789abcdef".includes(first.charAt(i)))) v4 = false;
+    }
+    log("uuid", (v4 ? "v4" : "not v4: " + first) + "|" + (first === second ? "repeated" : "distinct"));
+  }
+
   root.remove();
   return lines.join("\n");
 }

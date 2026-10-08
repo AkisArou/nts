@@ -634,6 +634,12 @@ declare module "nts:dom" {
      */
     readonly clientHeight: CNumber<"double">;
     /**
+     * @ntsSymbol nts_dom_Element_get_onbeforecopy
+     */
+    _get_onbeforecopy(this: Element): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforecopy */
+    readonly onbeforecopy: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Element_set_onbeforecopy_void
      */
     _set_onbeforecopy_void(this: Element, handler: Closure<(event: Event) => void>): void;
@@ -645,6 +651,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Element_set_onbeforecopy_null
      */
     _set_onbeforecopy_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_get_onbeforecut
+     */
+    _get_onbeforecut(this: Element): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforecut */
+    readonly onbeforecut: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Element_set_onbeforecut_void
      */
@@ -658,6 +670,12 @@ declare module "nts:dom" {
      */
     _set_onbeforecut_null(this: Element): void;
     /**
+     * @ntsSymbol nts_dom_Element_get_onbeforepaste
+     */
+    _get_onbeforepaste(this: Element): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforepaste */
+    readonly onbeforepaste: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Element_set_onbeforepaste_void
      */
     _set_onbeforepaste_void(this: Element, handler: Closure<(event: Event) => void>): void;
@@ -669,6 +687,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Element_set_onbeforepaste_null
      */
     _set_onbeforepaste_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_get_onsearch
+     */
+    _get_onsearch(this: Element): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsearch */
+    readonly onsearch: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Element_set_onsearch_void
      */
@@ -695,6 +719,12 @@ declare module "nts:dom" {
      */
     elementTiming: StringView;
     /**
+     * @ntsSymbol nts_dom_Element_get_onfullscreenchange
+     */
+    _get_onfullscreenchange(this: Element): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfullscreenchange */
+    readonly onfullscreenchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Element_set_onfullscreenchange_void
      */
     _set_onfullscreenchange_void(this: Element, handler: Closure<(event: Event) => void>): void;
@@ -706,6 +736,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Element_set_onfullscreenchange_null
      */
     _set_onfullscreenchange_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_get_onfullscreenerror
+     */
+    _get_onfullscreenerror(this: Element): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfullscreenerror */
+    readonly onfullscreenerror: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Element_set_onfullscreenerror_void
      */
@@ -719,6 +755,12 @@ declare module "nts:dom" {
      */
     _set_onfullscreenerror_null(this: Element): void;
     /**
+     * @ntsSymbol nts_dom_Element_get_onwebkitfullscreenchange
+     */
+    _get_onwebkitfullscreenchange(this: Element): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitfullscreenchange */
+    readonly onwebkitfullscreenchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenchange_void
      */
     _set_onwebkitfullscreenchange_void(this: Element, handler: Closure<(event: Event) => void>): void;
@@ -730,6 +772,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenchange_null
      */
     _set_onwebkitfullscreenchange_null(this: Element): void;
+    /**
+     * @ntsSymbol nts_dom_Element_get_onwebkitfullscreenerror
+     */
+    _get_onwebkitfullscreenerror(this: Element): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitfullscreenerror */
+    readonly onwebkitfullscreenerror: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Element_set_onwebkitfullscreenerror_void
      */
@@ -3099,6 +3147,12 @@ declare module "nts:dom" {
      */
     designMode: StringView;
     /**
+     * @ntsSymbol nts_dom_Document_get_onreadystatechange
+     */
+    _get_onreadystatechange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onreadystatechange */
+    readonly onreadystatechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onreadystatechange_void
      */
     _set_onreadystatechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3200,6 +3254,12 @@ declare module "nts:dom" {
      */
     readonly scrollingElement: Element | null;
     /**
+     * @ntsSymbol nts_dom_Document_get_onpointerlockchange
+     */
+    _get_onpointerlockchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerlockchange */
+    readonly onpointerlockchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onpointerlockchange_void
      */
     _set_onpointerlockchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3211,6 +3271,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onpointerlockchange_null
      */
     _set_onpointerlockchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onpointerlockerror
+     */
+    _get_onpointerlockerror(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerlockerror */
+    readonly onpointerlockerror: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onpointerlockerror_void
      */
@@ -3272,6 +3338,12 @@ declare module "nts:dom" {
      */
     readonly webkitHidden: boolean;
     /**
+     * @ntsSymbol nts_dom_Document_get_onbeforecopy
+     */
+    _get_onbeforecopy(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforecopy */
+    readonly onbeforecopy: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onbeforecopy_void
      */
     _set_onbeforecopy_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3283,6 +3355,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onbeforecopy_null
      */
     _set_onbeforecopy_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onbeforecut
+     */
+    _get_onbeforecut(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforecut */
+    readonly onbeforecut: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onbeforecut_void
      */
@@ -3296,6 +3374,12 @@ declare module "nts:dom" {
      */
     _set_onbeforecut_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onbeforepaste
+     */
+    _get_onbeforepaste(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforepaste */
+    readonly onbeforepaste: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onbeforepaste_void
      */
     _set_onbeforepaste_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3307,6 +3391,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onbeforepaste_null
      */
     _set_onbeforepaste_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onfreeze
+     */
+    _get_onfreeze(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfreeze */
+    readonly onfreeze: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onfreeze_void
      */
@@ -3320,6 +3410,12 @@ declare module "nts:dom" {
      */
     _set_onfreeze_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onprerenderingchange
+     */
+    _get_onprerenderingchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onprerenderingchange */
+    readonly onprerenderingchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onprerenderingchange_void
      */
     _set_onprerenderingchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3331,6 +3427,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onprerenderingchange_null
      */
     _set_onprerenderingchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onresume
+     */
+    _get_onresume(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onresume */
+    readonly onresume: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onresume_void
      */
@@ -3344,6 +3446,12 @@ declare module "nts:dom" {
      */
     _set_onresume_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onsearch
+     */
+    _get_onsearch(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsearch */
+    readonly onsearch: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onsearch_void
      */
     _set_onsearch_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3355,6 +3463,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onsearch_null
      */
     _set_onsearch_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onvisibilitychange
+     */
+    _get_onvisibilitychange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onvisibilitychange */
+    readonly onvisibilitychange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onvisibilitychange_void
      */
@@ -3392,6 +3506,12 @@ declare module "nts:dom" {
      */
     readonly fullscreen: boolean;
     /**
+     * @ntsSymbol nts_dom_Document_get_onfullscreenchange
+     */
+    _get_onfullscreenchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfullscreenchange */
+    readonly onfullscreenchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onfullscreenchange_void
      */
     _set_onfullscreenchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3403,6 +3523,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onfullscreenchange_null
      */
     _set_onfullscreenchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onfullscreenerror
+     */
+    _get_onfullscreenerror(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfullscreenerror */
+    readonly onfullscreenerror: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onfullscreenerror_void
      */
@@ -3448,6 +3574,12 @@ declare module "nts:dom" {
      */
     readonly webkitFullscreenElement: Element;
     /**
+     * @ntsSymbol nts_dom_Document_get_onwebkitfullscreenchange
+     */
+    _get_onwebkitfullscreenchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitfullscreenchange */
+    readonly onwebkitfullscreenchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenchange_void
      */
     _set_onwebkitfullscreenchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3459,6 +3591,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenchange_null
      */
     _set_onwebkitfullscreenchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onwebkitfullscreenerror
+     */
+    _get_onwebkitfullscreenerror(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitfullscreenerror */
+    readonly onwebkitfullscreenerror: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onwebkitfullscreenerror_void
      */
@@ -3472,6 +3610,12 @@ declare module "nts:dom" {
      */
     _set_onwebkitfullscreenerror_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onabort
+     */
+    _get_onabort(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onabort */
+    readonly onabort: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onabort_void
      */
     _set_onabort_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3483,6 +3627,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onabort_null
      */
     _set_onabort_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onbeforeinput
+     */
+    _get_onbeforeinput(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforeinput */
+    readonly onbeforeinput: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onbeforeinput_void
      */
@@ -3496,6 +3646,12 @@ declare module "nts:dom" {
      */
     _set_onbeforeinput_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onbeforematch
+     */
+    _get_onbeforematch(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforematch */
+    readonly onbeforematch: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onbeforematch_void
      */
     _set_onbeforematch_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3507,6 +3663,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onbeforematch_null
      */
     _set_onbeforematch_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onbeforetoggle
+     */
+    _get_onbeforetoggle(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforetoggle */
+    readonly onbeforetoggle: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onbeforetoggle_void
      */
@@ -3520,6 +3682,12 @@ declare module "nts:dom" {
      */
     _set_onbeforetoggle_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onblur
+     */
+    _get_onblur(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onblur */
+    readonly onblur: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onblur_void
      */
     _set_onblur_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3531,6 +3699,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onblur_null
      */
     _set_onblur_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_oncancel
+     */
+    _get_oncancel(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncancel */
+    readonly oncancel: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_oncancel_void
      */
@@ -3544,6 +3718,12 @@ declare module "nts:dom" {
      */
     _set_oncancel_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_oncanplay
+     */
+    _get_oncanplay(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncanplay */
+    readonly oncanplay: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_oncanplay_void
      */
     _set_oncanplay_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3555,6 +3735,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_oncanplay_null
      */
     _set_oncanplay_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_oncanplaythrough
+     */
+    _get_oncanplaythrough(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncanplaythrough */
+    readonly oncanplaythrough: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_oncanplaythrough_void
      */
@@ -3568,6 +3754,12 @@ declare module "nts:dom" {
      */
     _set_oncanplaythrough_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onchange
+     */
+    _get_onchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onchange */
+    readonly onchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onchange_void
      */
     _set_onchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3579,6 +3771,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onchange_null
      */
     _set_onchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onclick
+     */
+    _get_onclick(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclick */
+    readonly onclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onclick_void
      */
@@ -3592,6 +3790,12 @@ declare module "nts:dom" {
      */
     _set_onclick_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onclose
+     */
+    _get_onclose(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclose */
+    readonly onclose: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onclose_void
      */
     _set_onclose_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3603,6 +3807,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onclose_null
      */
     _set_onclose_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_oncommand
+     */
+    _get_oncommand(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncommand */
+    readonly oncommand: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_oncommand_void
      */
@@ -3616,6 +3826,12 @@ declare module "nts:dom" {
      */
     _set_oncommand_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_oncontentvisibilityautostatechange
+     */
+    _get_oncontentvisibilityautostatechange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontentvisibilityautostatechange */
+    readonly oncontentvisibilityautostatechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_oncontentvisibilityautostatechange_void
      */
     _set_oncontentvisibilityautostatechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3627,6 +3843,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_oncontentvisibilityautostatechange_null
      */
     _set_oncontentvisibilityautostatechange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_oncontextlost
+     */
+    _get_oncontextlost(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextlost */
+    readonly oncontextlost: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_oncontextlost_void
      */
@@ -3640,6 +3862,12 @@ declare module "nts:dom" {
      */
     _set_oncontextlost_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_oncontextmenu
+     */
+    _get_oncontextmenu(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextmenu */
+    readonly oncontextmenu: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_oncontextmenu_void
      */
     _set_oncontextmenu_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3651,6 +3879,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_oncontextmenu_null
      */
     _set_oncontextmenu_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_oncontextrestored
+     */
+    _get_oncontextrestored(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextrestored */
+    readonly oncontextrestored: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_oncontextrestored_void
      */
@@ -3664,6 +3898,12 @@ declare module "nts:dom" {
      */
     _set_oncontextrestored_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_oncuechange
+     */
+    _get_oncuechange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncuechange */
+    readonly oncuechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_oncuechange_void
      */
     _set_oncuechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3675,6 +3915,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_oncuechange_null
      */
     _set_oncuechange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_ondblclick
+     */
+    _get_ondblclick(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondblclick */
+    readonly ondblclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_ondblclick_void
      */
@@ -3688,6 +3934,12 @@ declare module "nts:dom" {
      */
     _set_ondblclick_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_ondrag
+     */
+    _get_ondrag(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondrag */
+    readonly ondrag: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_ondrag_void
      */
     _set_ondrag_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3699,6 +3951,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_ondrag_null
      */
     _set_ondrag_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_ondragend
+     */
+    _get_ondragend(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragend */
+    readonly ondragend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_ondragend_void
      */
@@ -3712,6 +3970,12 @@ declare module "nts:dom" {
      */
     _set_ondragend_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_ondragenter
+     */
+    _get_ondragenter(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragenter */
+    readonly ondragenter: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_ondragenter_void
      */
     _set_ondragenter_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3723,6 +3987,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_ondragenter_null
      */
     _set_ondragenter_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_ondragleave
+     */
+    _get_ondragleave(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragleave */
+    readonly ondragleave: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_ondragleave_void
      */
@@ -3736,6 +4006,12 @@ declare module "nts:dom" {
      */
     _set_ondragleave_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_ondragover
+     */
+    _get_ondragover(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragover */
+    readonly ondragover: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_ondragover_void
      */
     _set_ondragover_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3747,6 +4023,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_ondragover_null
      */
     _set_ondragover_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_ondragstart
+     */
+    _get_ondragstart(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragstart */
+    readonly ondragstart: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_ondragstart_void
      */
@@ -3760,6 +4042,12 @@ declare module "nts:dom" {
      */
     _set_ondragstart_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_ondrop
+     */
+    _get_ondrop(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondrop */
+    readonly ondrop: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_ondrop_void
      */
     _set_ondrop_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3771,6 +4059,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_ondrop_null
      */
     _set_ondrop_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_ondurationchange
+     */
+    _get_ondurationchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondurationchange */
+    readonly ondurationchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_ondurationchange_void
      */
@@ -3784,6 +4078,12 @@ declare module "nts:dom" {
      */
     _set_ondurationchange_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onemptied
+     */
+    _get_onemptied(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onemptied */
+    readonly onemptied: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onemptied_void
      */
     _set_onemptied_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3795,6 +4095,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onemptied_null
      */
     _set_onemptied_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onended
+     */
+    _get_onended(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onended */
+    readonly onended: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onended_void
      */
@@ -3808,6 +4114,12 @@ declare module "nts:dom" {
      */
     _set_onended_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onfocus
+     */
+    _get_onfocus(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfocus */
+    readonly onfocus: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onfocus_void
      */
     _set_onfocus_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3819,6 +4131,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onfocus_null
      */
     _set_onfocus_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onformdata
+     */
+    _get_onformdata(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onformdata */
+    readonly onformdata: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onformdata_void
      */
@@ -3832,6 +4150,12 @@ declare module "nts:dom" {
      */
     _set_onformdata_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_oninput
+     */
+    _get_oninput(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oninput */
+    readonly oninput: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_oninput_void
      */
     _set_oninput_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3843,6 +4167,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_oninput_null
      */
     _set_oninput_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_oninvalid
+     */
+    _get_oninvalid(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oninvalid */
+    readonly oninvalid: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_oninvalid_void
      */
@@ -3856,6 +4186,12 @@ declare module "nts:dom" {
      */
     _set_oninvalid_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onkeydown
+     */
+    _get_onkeydown(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeydown */
+    readonly onkeydown: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onkeydown_void
      */
     _set_onkeydown_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3867,6 +4203,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onkeydown_null
      */
     _set_onkeydown_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onkeypress
+     */
+    _get_onkeypress(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeypress */
+    readonly onkeypress: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onkeypress_void
      */
@@ -3880,6 +4222,12 @@ declare module "nts:dom" {
      */
     _set_onkeypress_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onkeyup
+     */
+    _get_onkeyup(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeyup */
+    readonly onkeyup: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onkeyup_void
      */
     _set_onkeyup_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3891,6 +4239,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onkeyup_null
      */
     _set_onkeyup_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onload
+     */
+    _get_onload(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onload */
+    readonly onload: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onload_void
      */
@@ -3904,6 +4258,12 @@ declare module "nts:dom" {
      */
     _set_onload_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onloadeddata
+     */
+    _get_onloadeddata(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadeddata */
+    readonly onloadeddata: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onloadeddata_void
      */
     _set_onloadeddata_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3915,6 +4275,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onloadeddata_null
      */
     _set_onloadeddata_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onloadedmetadata
+     */
+    _get_onloadedmetadata(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadedmetadata */
+    readonly onloadedmetadata: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onloadedmetadata_void
      */
@@ -3928,6 +4294,12 @@ declare module "nts:dom" {
      */
     _set_onloadedmetadata_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onloadstart
+     */
+    _get_onloadstart(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadstart */
+    readonly onloadstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onloadstart_void
      */
     _set_onloadstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3939,6 +4311,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onloadstart_null
      */
     _set_onloadstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onmousedown
+     */
+    _get_onmousedown(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousedown */
+    readonly onmousedown: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onmousedown_void
      */
@@ -3952,6 +4330,12 @@ declare module "nts:dom" {
      */
     _set_onmousedown_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onmouseenter
+     */
+    _get_onmouseenter(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseenter */
+    readonly onmouseenter: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onmouseenter_void
      */
     _set_onmouseenter_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3963,6 +4347,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onmouseenter_null
      */
     _set_onmouseenter_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onmouseleave
+     */
+    _get_onmouseleave(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseleave */
+    readonly onmouseleave: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onmouseleave_void
      */
@@ -3976,6 +4366,12 @@ declare module "nts:dom" {
      */
     _set_onmouseleave_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onmousemove
+     */
+    _get_onmousemove(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousemove */
+    readonly onmousemove: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onmousemove_void
      */
     _set_onmousemove_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -3987,6 +4383,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onmousemove_null
      */
     _set_onmousemove_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onmouseout
+     */
+    _get_onmouseout(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseout */
+    readonly onmouseout: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onmouseout_void
      */
@@ -4000,6 +4402,12 @@ declare module "nts:dom" {
      */
     _set_onmouseout_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onmouseover
+     */
+    _get_onmouseover(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseover */
+    readonly onmouseover: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onmouseover_void
      */
     _set_onmouseover_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4011,6 +4419,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onmouseover_null
      */
     _set_onmouseover_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onmouseup
+     */
+    _get_onmouseup(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseup */
+    readonly onmouseup: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onmouseup_void
      */
@@ -4024,6 +4438,12 @@ declare module "nts:dom" {
      */
     _set_onmouseup_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onmousewheel
+     */
+    _get_onmousewheel(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousewheel */
+    readonly onmousewheel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onmousewheel_void
      */
     _set_onmousewheel_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4035,6 +4455,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onmousewheel_null
      */
     _set_onmousewheel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onpause
+     */
+    _get_onpause(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpause */
+    readonly onpause: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onpause_void
      */
@@ -4048,6 +4474,12 @@ declare module "nts:dom" {
      */
     _set_onpause_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onplay
+     */
+    _get_onplay(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onplay */
+    readonly onplay: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onplay_void
      */
     _set_onplay_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4059,6 +4491,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onplay_null
      */
     _set_onplay_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onplaying
+     */
+    _get_onplaying(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onplaying */
+    readonly onplaying: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onplaying_void
      */
@@ -4072,6 +4510,12 @@ declare module "nts:dom" {
      */
     _set_onplaying_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onprogress
+     */
+    _get_onprogress(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onprogress */
+    readonly onprogress: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onprogress_void
      */
     _set_onprogress_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4083,6 +4527,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onprogress_null
      */
     _set_onprogress_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onratechange
+     */
+    _get_onratechange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onratechange */
+    readonly onratechange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onratechange_void
      */
@@ -4096,6 +4546,12 @@ declare module "nts:dom" {
      */
     _set_onratechange_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onreset
+     */
+    _get_onreset(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onreset */
+    readonly onreset: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onreset_void
      */
     _set_onreset_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4107,6 +4563,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onreset_null
      */
     _set_onreset_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onresize
+     */
+    _get_onresize(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onresize */
+    readonly onresize: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onresize_void
      */
@@ -4120,6 +4582,12 @@ declare module "nts:dom" {
      */
     _set_onresize_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onscroll
+     */
+    _get_onscroll(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscroll */
+    readonly onscroll: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onscroll_void
      */
     _set_onscroll_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4131,6 +4599,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onscroll_null
      */
     _set_onscroll_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onscrollend
+     */
+    _get_onscrollend(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollend */
+    readonly onscrollend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onscrollend_void
      */
@@ -4144,6 +4618,12 @@ declare module "nts:dom" {
      */
     _set_onscrollend_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onsecuritypolicyviolation
+     */
+    _get_onsecuritypolicyviolation(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsecuritypolicyviolation */
+    readonly onsecuritypolicyviolation: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onsecuritypolicyviolation_void
      */
     _set_onsecuritypolicyviolation_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4155,6 +4635,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onsecuritypolicyviolation_null
      */
     _set_onsecuritypolicyviolation_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onseeked
+     */
+    _get_onseeked(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onseeked */
+    readonly onseeked: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onseeked_void
      */
@@ -4168,6 +4654,12 @@ declare module "nts:dom" {
      */
     _set_onseeked_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onseeking
+     */
+    _get_onseeking(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onseeking */
+    readonly onseeking: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onseeking_void
      */
     _set_onseeking_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4179,6 +4671,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onseeking_null
      */
     _set_onseeking_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onselect
+     */
+    _get_onselect(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselect */
+    readonly onselect: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onselect_void
      */
@@ -4192,6 +4690,12 @@ declare module "nts:dom" {
      */
     _set_onselect_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onslotchange
+     */
+    _get_onslotchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onslotchange */
+    readonly onslotchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onslotchange_void
      */
     _set_onslotchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4203,6 +4707,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onslotchange_null
      */
     _set_onslotchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onscrollsnapchange
+     */
+    _get_onscrollsnapchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollsnapchange */
+    readonly onscrollsnapchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onscrollsnapchange_void
      */
@@ -4216,6 +4726,12 @@ declare module "nts:dom" {
      */
     _set_onscrollsnapchange_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onscrollsnapchanging
+     */
+    _get_onscrollsnapchanging(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollsnapchanging */
+    readonly onscrollsnapchanging: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onscrollsnapchanging_void
      */
     _set_onscrollsnapchanging_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4227,6 +4743,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onscrollsnapchanging_null
      */
     _set_onscrollsnapchanging_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onstalled
+     */
+    _get_onstalled(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onstalled */
+    readonly onstalled: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onstalled_void
      */
@@ -4240,6 +4762,12 @@ declare module "nts:dom" {
      */
     _set_onstalled_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onsubmit
+     */
+    _get_onsubmit(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsubmit */
+    readonly onsubmit: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onsubmit_void
      */
     _set_onsubmit_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4251,6 +4779,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onsubmit_null
      */
     _set_onsubmit_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onsuspend
+     */
+    _get_onsuspend(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsuspend */
+    readonly onsuspend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onsuspend_void
      */
@@ -4264,6 +4798,12 @@ declare module "nts:dom" {
      */
     _set_onsuspend_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_ontimeupdate
+     */
+    _get_ontimeupdate(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontimeupdate */
+    readonly ontimeupdate: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_ontimeupdate_void
      */
     _set_ontimeupdate_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4275,6 +4815,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_ontimeupdate_null
      */
     _set_ontimeupdate_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_ontoggle
+     */
+    _get_ontoggle(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontoggle */
+    readonly ontoggle: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_ontoggle_void
      */
@@ -4288,6 +4834,12 @@ declare module "nts:dom" {
      */
     _set_ontoggle_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onvolumechange
+     */
+    _get_onvolumechange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onvolumechange */
+    readonly onvolumechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onvolumechange_void
      */
     _set_onvolumechange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4299,6 +4851,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onvolumechange_null
      */
     _set_onvolumechange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onwaiting
+     */
+    _get_onwaiting(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwaiting */
+    readonly onwaiting: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onwaiting_void
      */
@@ -4312,6 +4870,12 @@ declare module "nts:dom" {
      */
     _set_onwaiting_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onwebkitanimationend
+     */
+    _get_onwebkitanimationend(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationend */
+    readonly onwebkitanimationend: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onwebkitanimationend_void
      */
     _set_onwebkitanimationend_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4323,6 +4887,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onwebkitanimationend_null
      */
     _set_onwebkitanimationend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onwebkitanimationiteration
+     */
+    _get_onwebkitanimationiteration(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationiteration */
+    readonly onwebkitanimationiteration: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onwebkitanimationiteration_void
      */
@@ -4336,6 +4906,12 @@ declare module "nts:dom" {
      */
     _set_onwebkitanimationiteration_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onwebkitanimationstart
+     */
+    _get_onwebkitanimationstart(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationstart */
+    readonly onwebkitanimationstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onwebkitanimationstart_void
      */
     _set_onwebkitanimationstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4347,6 +4923,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onwebkitanimationstart_null
      */
     _set_onwebkitanimationstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onwebkittransitionend
+     */
+    _get_onwebkittransitionend(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkittransitionend */
+    readonly onwebkittransitionend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onwebkittransitionend_void
      */
@@ -4360,6 +4942,12 @@ declare module "nts:dom" {
      */
     _set_onwebkittransitionend_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onwheel
+     */
+    _get_onwheel(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwheel */
+    readonly onwheel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onwheel_void
      */
     _set_onwheel_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4371,6 +4959,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onwheel_null
      */
     _set_onwheel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onauxclick
+     */
+    _get_onauxclick(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onauxclick */
+    readonly onauxclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onauxclick_void
      */
@@ -4384,6 +4978,12 @@ declare module "nts:dom" {
      */
     _set_onauxclick_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_ongotpointercapture
+     */
+    _get_ongotpointercapture(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ongotpointercapture */
+    readonly ongotpointercapture: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_ongotpointercapture_void
      */
     _set_ongotpointercapture_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4395,6 +4995,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_ongotpointercapture_null
      */
     _set_ongotpointercapture_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onlostpointercapture
+     */
+    _get_onlostpointercapture(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onlostpointercapture */
+    readonly onlostpointercapture: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onlostpointercapture_void
      */
@@ -4408,6 +5014,12 @@ declare module "nts:dom" {
      */
     _set_onlostpointercapture_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onpointerdown
+     */
+    _get_onpointerdown(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerdown */
+    readonly onpointerdown: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onpointerdown_void
      */
     _set_onpointerdown_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4419,6 +5031,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onpointerdown_null
      */
     _set_onpointerdown_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onpointermove
+     */
+    _get_onpointermove(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointermove */
+    readonly onpointermove: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onpointermove_void
      */
@@ -4432,6 +5050,12 @@ declare module "nts:dom" {
      */
     _set_onpointermove_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onpointerrawupdate
+     */
+    _get_onpointerrawupdate(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerrawupdate */
+    readonly onpointerrawupdate: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onpointerrawupdate_void
      */
     _set_onpointerrawupdate_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4443,6 +5067,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onpointerrawupdate_null
      */
     _set_onpointerrawupdate_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onpointerup
+     */
+    _get_onpointerup(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerup */
+    readonly onpointerup: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onpointerup_void
      */
@@ -4456,6 +5086,12 @@ declare module "nts:dom" {
      */
     _set_onpointerup_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onpointercancel
+     */
+    _get_onpointercancel(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointercancel */
+    readonly onpointercancel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onpointercancel_void
      */
     _set_onpointercancel_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4467,6 +5103,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onpointercancel_null
      */
     _set_onpointercancel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onpointerover
+     */
+    _get_onpointerover(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerover */
+    readonly onpointerover: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onpointerover_void
      */
@@ -4480,6 +5122,12 @@ declare module "nts:dom" {
      */
     _set_onpointerover_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onpointerout
+     */
+    _get_onpointerout(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerout */
+    readonly onpointerout: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onpointerout_void
      */
     _set_onpointerout_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4491,6 +5139,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onpointerout_null
      */
     _set_onpointerout_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onpointerenter
+     */
+    _get_onpointerenter(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerenter */
+    readonly onpointerenter: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onpointerenter_void
      */
@@ -4504,6 +5158,12 @@ declare module "nts:dom" {
      */
     _set_onpointerenter_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onpointerleave
+     */
+    _get_onpointerleave(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerleave */
+    readonly onpointerleave: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onpointerleave_void
      */
     _set_onpointerleave_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4515,6 +5175,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onpointerleave_null
      */
     _set_onpointerleave_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onselectstart
+     */
+    _get_onselectstart(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselectstart */
+    readonly onselectstart: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onselectstart_void
      */
@@ -4528,6 +5194,12 @@ declare module "nts:dom" {
      */
     _set_onselectstart_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onselectionchange
+     */
+    _get_onselectionchange(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselectionchange */
+    readonly onselectionchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onselectionchange_void
      */
     _set_onselectionchange_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4539,6 +5211,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onselectionchange_null
      */
     _set_onselectionchange_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onanimationcancel
+     */
+    _get_onanimationcancel(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationcancel */
+    readonly onanimationcancel: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onanimationcancel_void
      */
@@ -4552,6 +5230,12 @@ declare module "nts:dom" {
      */
     _set_onanimationcancel_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onanimationend
+     */
+    _get_onanimationend(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationend */
+    readonly onanimationend: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onanimationend_void
      */
     _set_onanimationend_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4563,6 +5247,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onanimationend_null
      */
     _set_onanimationend_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onanimationiteration
+     */
+    _get_onanimationiteration(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationiteration */
+    readonly onanimationiteration: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onanimationiteration_void
      */
@@ -4576,6 +5266,12 @@ declare module "nts:dom" {
      */
     _set_onanimationiteration_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_onanimationstart
+     */
+    _get_onanimationstart(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationstart */
+    readonly onanimationstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_onanimationstart_void
      */
     _set_onanimationstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4587,6 +5283,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_onanimationstart_null
      */
     _set_onanimationstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_ontransitionrun
+     */
+    _get_ontransitionrun(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionrun */
+    readonly ontransitionrun: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_ontransitionrun_void
      */
@@ -4600,6 +5302,12 @@ declare module "nts:dom" {
      */
     _set_ontransitionrun_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_ontransitionstart
+     */
+    _get_ontransitionstart(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionstart */
+    readonly ontransitionstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_ontransitionstart_void
      */
     _set_ontransitionstart_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4611,6 +5319,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_ontransitionstart_null
      */
     _set_ontransitionstart_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_ontransitionend
+     */
+    _get_ontransitionend(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionend */
+    readonly ontransitionend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_ontransitionend_void
      */
@@ -4624,6 +5338,12 @@ declare module "nts:dom" {
      */
     _set_ontransitionend_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_ontransitioncancel
+     */
+    _get_ontransitioncancel(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitioncancel */
+    readonly ontransitioncancel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_ontransitioncancel_void
      */
     _set_ontransitioncancel_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4635,6 +5355,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_ontransitioncancel_null
      */
     _set_ontransitioncancel_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_oncopy
+     */
+    _get_oncopy(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncopy */
+    readonly oncopy: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_oncopy_void
      */
@@ -4648,6 +5374,12 @@ declare module "nts:dom" {
      */
     _set_oncopy_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_oncut
+     */
+    _get_oncut(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncut */
+    readonly oncut: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Document_set_oncut_void
      */
     _set_oncut_void(this: Document, handler: Closure<(event: Event) => void>): void;
@@ -4659,6 +5391,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_set_oncut_null
      */
     _set_oncut_null(this: Document): void;
+    /**
+     * @ntsSymbol nts_dom_Document_get_onpaste
+     */
+    _get_onpaste(this: Document): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpaste */
+    readonly onpaste: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Document_set_onpaste_void
      */
@@ -6095,6 +6833,12 @@ declare module "nts:dom" {
      */
     writingSuggestions: StringView;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onabort
+     */
+    _get_onabort(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onabort */
+    readonly onabort: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onabort_void
      */
     _set_onabort_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6106,6 +6850,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onabort_null
      */
     _set_onabort_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onbeforeinput
+     */
+    _get_onbeforeinput(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforeinput */
+    readonly onbeforeinput: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onbeforeinput_void
      */
@@ -6119,6 +6869,12 @@ declare module "nts:dom" {
      */
     _set_onbeforeinput_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onbeforematch
+     */
+    _get_onbeforematch(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforematch */
+    readonly onbeforematch: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onbeforematch_void
      */
     _set_onbeforematch_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6130,6 +6886,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onbeforematch_null
      */
     _set_onbeforematch_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onbeforetoggle
+     */
+    _get_onbeforetoggle(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforetoggle */
+    readonly onbeforetoggle: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onbeforetoggle_void
      */
@@ -6143,6 +6905,12 @@ declare module "nts:dom" {
      */
     _set_onbeforetoggle_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onblur
+     */
+    _get_onblur(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onblur */
+    readonly onblur: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onblur_void
      */
     _set_onblur_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6154,6 +6922,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onblur_null
      */
     _set_onblur_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncancel
+     */
+    _get_oncancel(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncancel */
+    readonly oncancel: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncancel_void
      */
@@ -6167,6 +6941,12 @@ declare module "nts:dom" {
      */
     _set_oncancel_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncanplay
+     */
+    _get_oncanplay(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncanplay */
+    readonly oncanplay: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncanplay_void
      */
     _set_oncanplay_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6178,6 +6958,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_oncanplay_null
      */
     _set_oncanplay_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncanplaythrough
+     */
+    _get_oncanplaythrough(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncanplaythrough */
+    readonly oncanplaythrough: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncanplaythrough_void
      */
@@ -6191,6 +6977,12 @@ declare module "nts:dom" {
      */
     _set_oncanplaythrough_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onchange
+     */
+    _get_onchange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onchange */
+    readonly onchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onchange_void
      */
     _set_onchange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6202,6 +6994,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onchange_null
      */
     _set_onchange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onclick
+     */
+    _get_onclick(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclick */
+    readonly onclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onclick_void
      */
@@ -6215,6 +7013,12 @@ declare module "nts:dom" {
      */
     _set_onclick_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onclose
+     */
+    _get_onclose(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclose */
+    readonly onclose: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onclose_void
      */
     _set_onclose_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6226,6 +7030,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onclose_null
      */
     _set_onclose_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncommand
+     */
+    _get_oncommand(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncommand */
+    readonly oncommand: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncommand_void
      */
@@ -6239,6 +7049,12 @@ declare module "nts:dom" {
      */
     _set_oncommand_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncontentvisibilityautostatechange
+     */
+    _get_oncontentvisibilityautostatechange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontentvisibilityautostatechange */
+    readonly oncontentvisibilityautostatechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncontentvisibilityautostatechange_void
      */
     _set_oncontentvisibilityautostatechange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6250,6 +7066,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_oncontentvisibilityautostatechange_null
      */
     _set_oncontentvisibilityautostatechange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncontextlost
+     */
+    _get_oncontextlost(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextlost */
+    readonly oncontextlost: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncontextlost_void
      */
@@ -6263,6 +7085,12 @@ declare module "nts:dom" {
      */
     _set_oncontextlost_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncontextmenu
+     */
+    _get_oncontextmenu(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextmenu */
+    readonly oncontextmenu: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncontextmenu_void
      */
     _set_oncontextmenu_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6274,6 +7102,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_oncontextmenu_null
      */
     _set_oncontextmenu_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncontextrestored
+     */
+    _get_oncontextrestored(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextrestored */
+    readonly oncontextrestored: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncontextrestored_void
      */
@@ -6287,6 +7121,12 @@ declare module "nts:dom" {
      */
     _set_oncontextrestored_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncuechange
+     */
+    _get_oncuechange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncuechange */
+    readonly oncuechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncuechange_void
      */
     _set_oncuechange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6298,6 +7138,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_oncuechange_null
      */
     _set_oncuechange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondblclick
+     */
+    _get_ondblclick(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondblclick */
+    readonly ondblclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondblclick_void
      */
@@ -6311,6 +7157,12 @@ declare module "nts:dom" {
      */
     _set_ondblclick_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondrag
+     */
+    _get_ondrag(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondrag */
+    readonly ondrag: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondrag_void
      */
     _set_ondrag_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6322,6 +7174,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_ondrag_null
      */
     _set_ondrag_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondragend
+     */
+    _get_ondragend(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragend */
+    readonly ondragend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondragend_void
      */
@@ -6335,6 +7193,12 @@ declare module "nts:dom" {
      */
     _set_ondragend_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondragenter
+     */
+    _get_ondragenter(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragenter */
+    readonly ondragenter: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondragenter_void
      */
     _set_ondragenter_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6346,6 +7210,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_ondragenter_null
      */
     _set_ondragenter_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondragleave
+     */
+    _get_ondragleave(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragleave */
+    readonly ondragleave: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondragleave_void
      */
@@ -6359,6 +7229,12 @@ declare module "nts:dom" {
      */
     _set_ondragleave_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondragover
+     */
+    _get_ondragover(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragover */
+    readonly ondragover: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondragover_void
      */
     _set_ondragover_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6370,6 +7246,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_ondragover_null
      */
     _set_ondragover_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondragstart
+     */
+    _get_ondragstart(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragstart */
+    readonly ondragstart: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondragstart_void
      */
@@ -6383,6 +7265,12 @@ declare module "nts:dom" {
      */
     _set_ondragstart_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondrop
+     */
+    _get_ondrop(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondrop */
+    readonly ondrop: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondrop_void
      */
     _set_ondrop_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6394,6 +7282,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_ondrop_null
      */
     _set_ondrop_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ondurationchange
+     */
+    _get_ondurationchange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondurationchange */
+    readonly ondurationchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_ondurationchange_void
      */
@@ -6407,6 +7301,12 @@ declare module "nts:dom" {
      */
     _set_ondurationchange_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onemptied
+     */
+    _get_onemptied(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onemptied */
+    readonly onemptied: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onemptied_void
      */
     _set_onemptied_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6418,6 +7318,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onemptied_null
      */
     _set_onemptied_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onended
+     */
+    _get_onended(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onended */
+    readonly onended: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onended_void
      */
@@ -6431,6 +7337,12 @@ declare module "nts:dom" {
      */
     _set_onended_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onfocus
+     */
+    _get_onfocus(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfocus */
+    readonly onfocus: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onfocus_void
      */
     _set_onfocus_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6442,6 +7354,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onfocus_null
      */
     _set_onfocus_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onformdata
+     */
+    _get_onformdata(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onformdata */
+    readonly onformdata: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onformdata_void
      */
@@ -6455,6 +7373,12 @@ declare module "nts:dom" {
      */
     _set_onformdata_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oninput
+     */
+    _get_oninput(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oninput */
+    readonly oninput: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_oninput_void
      */
     _set_oninput_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6466,6 +7390,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_oninput_null
      */
     _set_oninput_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oninvalid
+     */
+    _get_oninvalid(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oninvalid */
+    readonly oninvalid: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_oninvalid_void
      */
@@ -6479,6 +7409,12 @@ declare module "nts:dom" {
      */
     _set_oninvalid_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onkeydown
+     */
+    _get_onkeydown(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeydown */
+    readonly onkeydown: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onkeydown_void
      */
     _set_onkeydown_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6490,6 +7426,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onkeydown_null
      */
     _set_onkeydown_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onkeypress
+     */
+    _get_onkeypress(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeypress */
+    readonly onkeypress: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onkeypress_void
      */
@@ -6503,6 +7445,12 @@ declare module "nts:dom" {
      */
     _set_onkeypress_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onkeyup
+     */
+    _get_onkeyup(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeyup */
+    readonly onkeyup: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onkeyup_void
      */
     _set_onkeyup_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6514,6 +7462,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onkeyup_null
      */
     _set_onkeyup_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onload
+     */
+    _get_onload(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onload */
+    readonly onload: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onload_void
      */
@@ -6527,6 +7481,12 @@ declare module "nts:dom" {
      */
     _set_onload_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onloadeddata
+     */
+    _get_onloadeddata(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadeddata */
+    readonly onloadeddata: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onloadeddata_void
      */
     _set_onloadeddata_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6538,6 +7498,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onloadeddata_null
      */
     _set_onloadeddata_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onloadedmetadata
+     */
+    _get_onloadedmetadata(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadedmetadata */
+    readonly onloadedmetadata: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onloadedmetadata_void
      */
@@ -6551,6 +7517,12 @@ declare module "nts:dom" {
      */
     _set_onloadedmetadata_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onloadstart
+     */
+    _get_onloadstart(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadstart */
+    readonly onloadstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onloadstart_void
      */
     _set_onloadstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6562,6 +7534,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onloadstart_null
      */
     _set_onloadstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onmousedown
+     */
+    _get_onmousedown(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousedown */
+    readonly onmousedown: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onmousedown_void
      */
@@ -6575,6 +7553,12 @@ declare module "nts:dom" {
      */
     _set_onmousedown_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onmouseenter
+     */
+    _get_onmouseenter(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseenter */
+    readonly onmouseenter: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onmouseenter_void
      */
     _set_onmouseenter_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6586,6 +7570,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onmouseenter_null
      */
     _set_onmouseenter_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onmouseleave
+     */
+    _get_onmouseleave(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseleave */
+    readonly onmouseleave: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onmouseleave_void
      */
@@ -6599,6 +7589,12 @@ declare module "nts:dom" {
      */
     _set_onmouseleave_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onmousemove
+     */
+    _get_onmousemove(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousemove */
+    readonly onmousemove: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onmousemove_void
      */
     _set_onmousemove_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6610,6 +7606,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onmousemove_null
      */
     _set_onmousemove_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onmouseout
+     */
+    _get_onmouseout(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseout */
+    readonly onmouseout: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onmouseout_void
      */
@@ -6623,6 +7625,12 @@ declare module "nts:dom" {
      */
     _set_onmouseout_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onmouseover
+     */
+    _get_onmouseover(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseover */
+    readonly onmouseover: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onmouseover_void
      */
     _set_onmouseover_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6634,6 +7642,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onmouseover_null
      */
     _set_onmouseover_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onmouseup
+     */
+    _get_onmouseup(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseup */
+    readonly onmouseup: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onmouseup_void
      */
@@ -6647,6 +7661,12 @@ declare module "nts:dom" {
      */
     _set_onmouseup_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onmousewheel
+     */
+    _get_onmousewheel(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousewheel */
+    readonly onmousewheel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onmousewheel_void
      */
     _set_onmousewheel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6658,6 +7678,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onmousewheel_null
      */
     _set_onmousewheel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpause
+     */
+    _get_onpause(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpause */
+    readonly onpause: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpause_void
      */
@@ -6671,6 +7697,12 @@ declare module "nts:dom" {
      */
     _set_onpause_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onplay
+     */
+    _get_onplay(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onplay */
+    readonly onplay: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onplay_void
      */
     _set_onplay_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6682,6 +7714,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onplay_null
      */
     _set_onplay_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onplaying
+     */
+    _get_onplaying(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onplaying */
+    readonly onplaying: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onplaying_void
      */
@@ -6695,6 +7733,12 @@ declare module "nts:dom" {
      */
     _set_onplaying_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onprogress
+     */
+    _get_onprogress(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onprogress */
+    readonly onprogress: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onprogress_void
      */
     _set_onprogress_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6706,6 +7750,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onprogress_null
      */
     _set_onprogress_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onratechange
+     */
+    _get_onratechange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onratechange */
+    readonly onratechange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onratechange_void
      */
@@ -6719,6 +7769,12 @@ declare module "nts:dom" {
      */
     _set_onratechange_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onreset
+     */
+    _get_onreset(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onreset */
+    readonly onreset: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onreset_void
      */
     _set_onreset_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6730,6 +7786,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onreset_null
      */
     _set_onreset_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onresize
+     */
+    _get_onresize(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onresize */
+    readonly onresize: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onresize_void
      */
@@ -6743,6 +7805,12 @@ declare module "nts:dom" {
      */
     _set_onresize_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onscroll
+     */
+    _get_onscroll(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscroll */
+    readonly onscroll: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onscroll_void
      */
     _set_onscroll_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6754,6 +7822,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onscroll_null
      */
     _set_onscroll_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onscrollend
+     */
+    _get_onscrollend(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollend */
+    readonly onscrollend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onscrollend_void
      */
@@ -6767,6 +7841,12 @@ declare module "nts:dom" {
      */
     _set_onscrollend_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onsecuritypolicyviolation
+     */
+    _get_onsecuritypolicyviolation(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsecuritypolicyviolation */
+    readonly onsecuritypolicyviolation: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onsecuritypolicyviolation_void
      */
     _set_onsecuritypolicyviolation_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6778,6 +7858,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onsecuritypolicyviolation_null
      */
     _set_onsecuritypolicyviolation_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onseeked
+     */
+    _get_onseeked(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onseeked */
+    readonly onseeked: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onseeked_void
      */
@@ -6791,6 +7877,12 @@ declare module "nts:dom" {
      */
     _set_onseeked_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onseeking
+     */
+    _get_onseeking(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onseeking */
+    readonly onseeking: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onseeking_void
      */
     _set_onseeking_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6802,6 +7894,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onseeking_null
      */
     _set_onseeking_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onselect
+     */
+    _get_onselect(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselect */
+    readonly onselect: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onselect_void
      */
@@ -6815,6 +7913,12 @@ declare module "nts:dom" {
      */
     _set_onselect_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onslotchange
+     */
+    _get_onslotchange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onslotchange */
+    readonly onslotchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onslotchange_void
      */
     _set_onslotchange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6826,6 +7930,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onslotchange_null
      */
     _set_onslotchange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onscrollsnapchange
+     */
+    _get_onscrollsnapchange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollsnapchange */
+    readonly onscrollsnapchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchange_void
      */
@@ -6839,6 +7949,12 @@ declare module "nts:dom" {
      */
     _set_onscrollsnapchange_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onscrollsnapchanging
+     */
+    _get_onscrollsnapchanging(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollsnapchanging */
+    readonly onscrollsnapchanging: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchanging_void
      */
     _set_onscrollsnapchanging_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6850,6 +7966,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onscrollsnapchanging_null
      */
     _set_onscrollsnapchanging_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onstalled
+     */
+    _get_onstalled(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onstalled */
+    readonly onstalled: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onstalled_void
      */
@@ -6863,6 +7985,12 @@ declare module "nts:dom" {
      */
     _set_onstalled_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onsubmit
+     */
+    _get_onsubmit(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsubmit */
+    readonly onsubmit: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onsubmit_void
      */
     _set_onsubmit_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6874,6 +8002,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onsubmit_null
      */
     _set_onsubmit_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onsuspend
+     */
+    _get_onsuspend(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsuspend */
+    readonly onsuspend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onsuspend_void
      */
@@ -6887,6 +8021,12 @@ declare module "nts:dom" {
      */
     _set_onsuspend_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ontimeupdate
+     */
+    _get_ontimeupdate(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontimeupdate */
+    readonly ontimeupdate: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_ontimeupdate_void
      */
     _set_ontimeupdate_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6898,6 +8038,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_ontimeupdate_null
      */
     _set_ontimeupdate_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ontoggle
+     */
+    _get_ontoggle(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontoggle */
+    readonly ontoggle: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_ontoggle_void
      */
@@ -6911,6 +8057,12 @@ declare module "nts:dom" {
      */
     _set_ontoggle_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onvolumechange
+     */
+    _get_onvolumechange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onvolumechange */
+    readonly onvolumechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onvolumechange_void
      */
     _set_onvolumechange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6922,6 +8074,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onvolumechange_null
      */
     _set_onvolumechange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onwaiting
+     */
+    _get_onwaiting(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwaiting */
+    readonly onwaiting: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onwaiting_void
      */
@@ -6935,6 +8093,12 @@ declare module "nts:dom" {
      */
     _set_onwaiting_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onwebkitanimationend
+     */
+    _get_onwebkitanimationend(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationend */
+    readonly onwebkitanimationend: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationend_void
      */
     _set_onwebkitanimationend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6946,6 +8110,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationend_null
      */
     _set_onwebkitanimationend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onwebkitanimationiteration
+     */
+    _get_onwebkitanimationiteration(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationiteration */
+    readonly onwebkitanimationiteration: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationiteration_void
      */
@@ -6959,6 +8129,12 @@ declare module "nts:dom" {
      */
     _set_onwebkitanimationiteration_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onwebkitanimationstart
+     */
+    _get_onwebkitanimationstart(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationstart */
+    readonly onwebkitanimationstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationstart_void
      */
     _set_onwebkitanimationstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6970,6 +8146,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onwebkitanimationstart_null
      */
     _set_onwebkitanimationstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onwebkittransitionend
+     */
+    _get_onwebkittransitionend(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkittransitionend */
+    readonly onwebkittransitionend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onwebkittransitionend_void
      */
@@ -6983,6 +8165,12 @@ declare module "nts:dom" {
      */
     _set_onwebkittransitionend_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onwheel
+     */
+    _get_onwheel(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwheel */
+    readonly onwheel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onwheel_void
      */
     _set_onwheel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -6994,6 +8182,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onwheel_null
      */
     _set_onwheel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onauxclick
+     */
+    _get_onauxclick(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onauxclick */
+    readonly onauxclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onauxclick_void
      */
@@ -7007,6 +8201,12 @@ declare module "nts:dom" {
      */
     _set_onauxclick_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ongotpointercapture
+     */
+    _get_ongotpointercapture(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ongotpointercapture */
+    readonly ongotpointercapture: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_ongotpointercapture_void
      */
     _set_ongotpointercapture_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7018,6 +8218,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_ongotpointercapture_null
      */
     _set_ongotpointercapture_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onlostpointercapture
+     */
+    _get_onlostpointercapture(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onlostpointercapture */
+    readonly onlostpointercapture: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onlostpointercapture_void
      */
@@ -7031,6 +8237,12 @@ declare module "nts:dom" {
      */
     _set_onlostpointercapture_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointerdown
+     */
+    _get_onpointerdown(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerdown */
+    readonly onpointerdown: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerdown_void
      */
     _set_onpointerdown_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7042,6 +8254,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerdown_null
      */
     _set_onpointerdown_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointermove
+     */
+    _get_onpointermove(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointermove */
+    readonly onpointermove: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointermove_void
      */
@@ -7055,6 +8273,12 @@ declare module "nts:dom" {
      */
     _set_onpointermove_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointerrawupdate
+     */
+    _get_onpointerrawupdate(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerrawupdate */
+    readonly onpointerrawupdate: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerrawupdate_void
      */
     _set_onpointerrawupdate_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7066,6 +8290,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerrawupdate_null
      */
     _set_onpointerrawupdate_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointerup
+     */
+    _get_onpointerup(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerup */
+    readonly onpointerup: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerup_void
      */
@@ -7079,6 +8309,12 @@ declare module "nts:dom" {
      */
     _set_onpointerup_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointercancel
+     */
+    _get_onpointercancel(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointercancel */
+    readonly onpointercancel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointercancel_void
      */
     _set_onpointercancel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7090,6 +8326,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onpointercancel_null
      */
     _set_onpointercancel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointerover
+     */
+    _get_onpointerover(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerover */
+    readonly onpointerover: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerover_void
      */
@@ -7103,6 +8345,12 @@ declare module "nts:dom" {
      */
     _set_onpointerover_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointerout
+     */
+    _get_onpointerout(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerout */
+    readonly onpointerout: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerout_void
      */
     _set_onpointerout_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7114,6 +8362,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerout_null
      */
     _set_onpointerout_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointerenter
+     */
+    _get_onpointerenter(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerenter */
+    readonly onpointerenter: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerenter_void
      */
@@ -7127,6 +8381,12 @@ declare module "nts:dom" {
      */
     _set_onpointerenter_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpointerleave
+     */
+    _get_onpointerleave(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerleave */
+    readonly onpointerleave: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerleave_void
      */
     _set_onpointerleave_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7138,6 +8398,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onpointerleave_null
      */
     _set_onpointerleave_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onselectstart
+     */
+    _get_onselectstart(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselectstart */
+    readonly onselectstart: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onselectstart_void
      */
@@ -7151,6 +8417,12 @@ declare module "nts:dom" {
      */
     _set_onselectstart_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onselectionchange
+     */
+    _get_onselectionchange(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselectionchange */
+    readonly onselectionchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onselectionchange_void
      */
     _set_onselectionchange_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7162,6 +8434,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onselectionchange_null
      */
     _set_onselectionchange_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onanimationcancel
+     */
+    _get_onanimationcancel(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationcancel */
+    readonly onanimationcancel: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onanimationcancel_void
      */
@@ -7175,6 +8453,12 @@ declare module "nts:dom" {
      */
     _set_onanimationcancel_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onanimationend
+     */
+    _get_onanimationend(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationend */
+    readonly onanimationend: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onanimationend_void
      */
     _set_onanimationend_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7186,6 +8470,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onanimationend_null
      */
     _set_onanimationend_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onanimationiteration
+     */
+    _get_onanimationiteration(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationiteration */
+    readonly onanimationiteration: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onanimationiteration_void
      */
@@ -7199,6 +8489,12 @@ declare module "nts:dom" {
      */
     _set_onanimationiteration_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onanimationstart
+     */
+    _get_onanimationstart(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationstart */
+    readonly onanimationstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_onanimationstart_void
      */
     _set_onanimationstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7210,6 +8506,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_onanimationstart_null
      */
     _set_onanimationstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ontransitionrun
+     */
+    _get_ontransitionrun(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionrun */
+    readonly ontransitionrun: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_ontransitionrun_void
      */
@@ -7223,6 +8525,12 @@ declare module "nts:dom" {
      */
     _set_ontransitionrun_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ontransitionstart
+     */
+    _get_ontransitionstart(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionstart */
+    readonly ontransitionstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_ontransitionstart_void
      */
     _set_ontransitionstart_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7234,6 +8542,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_ontransitionstart_null
      */
     _set_ontransitionstart_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ontransitionend
+     */
+    _get_ontransitionend(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionend */
+    readonly ontransitionend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_ontransitionend_void
      */
@@ -7247,6 +8561,12 @@ declare module "nts:dom" {
      */
     _set_ontransitionend_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_ontransitioncancel
+     */
+    _get_ontransitioncancel(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitioncancel */
+    readonly ontransitioncancel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_ontransitioncancel_void
      */
     _set_ontransitioncancel_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7258,6 +8578,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_ontransitioncancel_null
      */
     _set_ontransitioncancel_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncopy
+     */
+    _get_oncopy(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncopy */
+    readonly oncopy: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncopy_void
      */
@@ -7271,6 +8597,12 @@ declare module "nts:dom" {
      */
     _set_oncopy_null(this: HTMLElement): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_get_oncut
+     */
+    _get_oncut(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncut */
+    readonly oncut: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_set_oncut_void
      */
     _set_oncut_void(this: HTMLElement, handler: Closure<(event: Event) => void>): void;
@@ -7282,6 +8614,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_HTMLElement_set_oncut_null
      */
     _set_oncut_null(this: HTMLElement): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLElement_get_onpaste
+     */
+    _get_onpaste(this: HTMLElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpaste */
+    readonly onpaste: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_onpaste_void
      */
@@ -20505,6 +21843,12 @@ declare module "nts:dom" {
      */
     readonly devicePixelRatio: CNumber<"double">;
     /**
+     * @ntsSymbol nts_dom_Window_get_onpageswap
+     */
+    _get_onpageswap(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpageswap */
+    readonly onpageswap: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onpageswap_void
      */
     _set_onpageswap_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20516,6 +21860,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onpageswap_null
      */
     _set_onpageswap_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onpagereveal
+     */
+    _get_onpagereveal(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpagereveal */
+    readonly onpagereveal: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onpagereveal_void
      */
@@ -20561,6 +21911,12 @@ declare module "nts:dom" {
      */
     readonly screenTop: CNumber<"double">;
     /**
+     * @ntsSymbol nts_dom_Window_get_onsearch
+     */
+    _get_onsearch(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsearch */
+    readonly onsearch: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onsearch_void
      */
     _set_onsearch_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20581,6 +21937,12 @@ declare module "nts:dom" {
      */
     readonly credentialless: boolean;
     /**
+     * @ntsSymbol nts_dom_Window_get_onabort
+     */
+    _get_onabort(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onabort */
+    readonly onabort: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onabort_void
      */
     _set_onabort_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20592,6 +21954,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onabort_null
      */
     _set_onabort_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onbeforeinput
+     */
+    _get_onbeforeinput(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforeinput */
+    readonly onbeforeinput: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onbeforeinput_void
      */
@@ -20605,6 +21973,12 @@ declare module "nts:dom" {
      */
     _set_onbeforeinput_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onbeforematch
+     */
+    _get_onbeforematch(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforematch */
+    readonly onbeforematch: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onbeforematch_void
      */
     _set_onbeforematch_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20616,6 +21990,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onbeforematch_null
      */
     _set_onbeforematch_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onbeforetoggle
+     */
+    _get_onbeforetoggle(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforetoggle */
+    readonly onbeforetoggle: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onbeforetoggle_void
      */
@@ -20629,6 +22009,12 @@ declare module "nts:dom" {
      */
     _set_onbeforetoggle_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onblur
+     */
+    _get_onblur(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onblur */
+    readonly onblur: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onblur_void
      */
     _set_onblur_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20640,6 +22026,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onblur_null
      */
     _set_onblur_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_oncancel
+     */
+    _get_oncancel(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncancel */
+    readonly oncancel: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_oncancel_void
      */
@@ -20653,6 +22045,12 @@ declare module "nts:dom" {
      */
     _set_oncancel_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_oncanplay
+     */
+    _get_oncanplay(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncanplay */
+    readonly oncanplay: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_oncanplay_void
      */
     _set_oncanplay_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20664,6 +22062,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_oncanplay_null
      */
     _set_oncanplay_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_oncanplaythrough
+     */
+    _get_oncanplaythrough(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncanplaythrough */
+    readonly oncanplaythrough: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_oncanplaythrough_void
      */
@@ -20677,6 +22081,12 @@ declare module "nts:dom" {
      */
     _set_oncanplaythrough_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onchange
+     */
+    _get_onchange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onchange */
+    readonly onchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onchange_void
      */
     _set_onchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20688,6 +22098,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onchange_null
      */
     _set_onchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onclick
+     */
+    _get_onclick(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclick */
+    readonly onclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onclick_void
      */
@@ -20701,6 +22117,12 @@ declare module "nts:dom" {
      */
     _set_onclick_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onclose
+     */
+    _get_onclose(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclose */
+    readonly onclose: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onclose_void
      */
     _set_onclose_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20712,6 +22134,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onclose_null
      */
     _set_onclose_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_oncommand
+     */
+    _get_oncommand(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncommand */
+    readonly oncommand: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_oncommand_void
      */
@@ -20725,6 +22153,12 @@ declare module "nts:dom" {
      */
     _set_oncommand_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_oncontentvisibilityautostatechange
+     */
+    _get_oncontentvisibilityautostatechange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontentvisibilityautostatechange */
+    readonly oncontentvisibilityautostatechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_oncontentvisibilityautostatechange_void
      */
     _set_oncontentvisibilityautostatechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20736,6 +22170,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_oncontentvisibilityautostatechange_null
      */
     _set_oncontentvisibilityautostatechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_oncontextlost
+     */
+    _get_oncontextlost(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextlost */
+    readonly oncontextlost: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_oncontextlost_void
      */
@@ -20749,6 +22189,12 @@ declare module "nts:dom" {
      */
     _set_oncontextlost_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_oncontextmenu
+     */
+    _get_oncontextmenu(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextmenu */
+    readonly oncontextmenu: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_oncontextmenu_void
      */
     _set_oncontextmenu_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20760,6 +22206,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_oncontextmenu_null
      */
     _set_oncontextmenu_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_oncontextrestored
+     */
+    _get_oncontextrestored(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextrestored */
+    readonly oncontextrestored: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_oncontextrestored_void
      */
@@ -20773,6 +22225,12 @@ declare module "nts:dom" {
      */
     _set_oncontextrestored_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_oncuechange
+     */
+    _get_oncuechange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncuechange */
+    readonly oncuechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_oncuechange_void
      */
     _set_oncuechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20784,6 +22242,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_oncuechange_null
      */
     _set_oncuechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_ondblclick
+     */
+    _get_ondblclick(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondblclick */
+    readonly ondblclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_ondblclick_void
      */
@@ -20797,6 +22261,12 @@ declare module "nts:dom" {
      */
     _set_ondblclick_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ondrag
+     */
+    _get_ondrag(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondrag */
+    readonly ondrag: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ondrag_void
      */
     _set_ondrag_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20808,6 +22278,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ondrag_null
      */
     _set_ondrag_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_ondragend
+     */
+    _get_ondragend(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragend */
+    readonly ondragend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_ondragend_void
      */
@@ -20821,6 +22297,12 @@ declare module "nts:dom" {
      */
     _set_ondragend_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ondragenter
+     */
+    _get_ondragenter(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragenter */
+    readonly ondragenter: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ondragenter_void
      */
     _set_ondragenter_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20832,6 +22314,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ondragenter_null
      */
     _set_ondragenter_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_ondragleave
+     */
+    _get_ondragleave(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragleave */
+    readonly ondragleave: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_ondragleave_void
      */
@@ -20845,6 +22333,12 @@ declare module "nts:dom" {
      */
     _set_ondragleave_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ondragover
+     */
+    _get_ondragover(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragover */
+    readonly ondragover: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ondragover_void
      */
     _set_ondragover_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20856,6 +22350,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ondragover_null
      */
     _set_ondragover_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_ondragstart
+     */
+    _get_ondragstart(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragstart */
+    readonly ondragstart: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_ondragstart_void
      */
@@ -20869,6 +22369,12 @@ declare module "nts:dom" {
      */
     _set_ondragstart_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ondrop
+     */
+    _get_ondrop(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondrop */
+    readonly ondrop: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ondrop_void
      */
     _set_ondrop_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20880,6 +22386,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ondrop_null
      */
     _set_ondrop_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_ondurationchange
+     */
+    _get_ondurationchange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondurationchange */
+    readonly ondurationchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_ondurationchange_void
      */
@@ -20893,6 +22405,12 @@ declare module "nts:dom" {
      */
     _set_ondurationchange_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onemptied
+     */
+    _get_onemptied(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onemptied */
+    readonly onemptied: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onemptied_void
      */
     _set_onemptied_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20904,6 +22422,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onemptied_null
      */
     _set_onemptied_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onended
+     */
+    _get_onended(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onended */
+    readonly onended: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onended_void
      */
@@ -20917,6 +22441,12 @@ declare module "nts:dom" {
      */
     _set_onended_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onfocus
+     */
+    _get_onfocus(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfocus */
+    readonly onfocus: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onfocus_void
      */
     _set_onfocus_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20928,6 +22458,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onfocus_null
      */
     _set_onfocus_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onformdata
+     */
+    _get_onformdata(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onformdata */
+    readonly onformdata: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onformdata_void
      */
@@ -20941,6 +22477,12 @@ declare module "nts:dom" {
      */
     _set_onformdata_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_oninput
+     */
+    _get_oninput(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oninput */
+    readonly oninput: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_oninput_void
      */
     _set_oninput_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20952,6 +22494,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_oninput_null
      */
     _set_oninput_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_oninvalid
+     */
+    _get_oninvalid(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oninvalid */
+    readonly oninvalid: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_oninvalid_void
      */
@@ -20965,6 +22513,12 @@ declare module "nts:dom" {
      */
     _set_oninvalid_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onkeydown
+     */
+    _get_onkeydown(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeydown */
+    readonly onkeydown: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onkeydown_void
      */
     _set_onkeydown_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -20976,6 +22530,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onkeydown_null
      */
     _set_onkeydown_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onkeypress
+     */
+    _get_onkeypress(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeypress */
+    readonly onkeypress: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onkeypress_void
      */
@@ -20989,6 +22549,12 @@ declare module "nts:dom" {
      */
     _set_onkeypress_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onkeyup
+     */
+    _get_onkeyup(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeyup */
+    readonly onkeyup: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onkeyup_void
      */
     _set_onkeyup_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21000,6 +22566,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onkeyup_null
      */
     _set_onkeyup_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onload
+     */
+    _get_onload(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onload */
+    readonly onload: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onload_void
      */
@@ -21013,6 +22585,12 @@ declare module "nts:dom" {
      */
     _set_onload_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onloadeddata
+     */
+    _get_onloadeddata(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadeddata */
+    readonly onloadeddata: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onloadeddata_void
      */
     _set_onloadeddata_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21024,6 +22602,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onloadeddata_null
      */
     _set_onloadeddata_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onloadedmetadata
+     */
+    _get_onloadedmetadata(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadedmetadata */
+    readonly onloadedmetadata: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onloadedmetadata_void
      */
@@ -21037,6 +22621,12 @@ declare module "nts:dom" {
      */
     _set_onloadedmetadata_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onloadstart
+     */
+    _get_onloadstart(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadstart */
+    readonly onloadstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onloadstart_void
      */
     _set_onloadstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21048,6 +22638,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onloadstart_null
      */
     _set_onloadstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onmousedown
+     */
+    _get_onmousedown(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousedown */
+    readonly onmousedown: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onmousedown_void
      */
@@ -21061,6 +22657,12 @@ declare module "nts:dom" {
      */
     _set_onmousedown_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onmouseenter
+     */
+    _get_onmouseenter(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseenter */
+    readonly onmouseenter: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onmouseenter_void
      */
     _set_onmouseenter_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21072,6 +22674,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onmouseenter_null
      */
     _set_onmouseenter_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onmouseleave
+     */
+    _get_onmouseleave(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseleave */
+    readonly onmouseleave: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onmouseleave_void
      */
@@ -21085,6 +22693,12 @@ declare module "nts:dom" {
      */
     _set_onmouseleave_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onmousemove
+     */
+    _get_onmousemove(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousemove */
+    readonly onmousemove: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onmousemove_void
      */
     _set_onmousemove_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21096,6 +22710,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onmousemove_null
      */
     _set_onmousemove_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onmouseout
+     */
+    _get_onmouseout(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseout */
+    readonly onmouseout: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onmouseout_void
      */
@@ -21109,6 +22729,12 @@ declare module "nts:dom" {
      */
     _set_onmouseout_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onmouseover
+     */
+    _get_onmouseover(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseover */
+    readonly onmouseover: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onmouseover_void
      */
     _set_onmouseover_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21120,6 +22746,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onmouseover_null
      */
     _set_onmouseover_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onmouseup
+     */
+    _get_onmouseup(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseup */
+    readonly onmouseup: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onmouseup_void
      */
@@ -21133,6 +22765,12 @@ declare module "nts:dom" {
      */
     _set_onmouseup_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onmousewheel
+     */
+    _get_onmousewheel(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousewheel */
+    readonly onmousewheel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onmousewheel_void
      */
     _set_onmousewheel_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21144,6 +22782,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onmousewheel_null
      */
     _set_onmousewheel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onpause
+     */
+    _get_onpause(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpause */
+    readonly onpause: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onpause_void
      */
@@ -21157,6 +22801,12 @@ declare module "nts:dom" {
      */
     _set_onpause_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onplay
+     */
+    _get_onplay(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onplay */
+    readonly onplay: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onplay_void
      */
     _set_onplay_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21168,6 +22818,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onplay_null
      */
     _set_onplay_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onplaying
+     */
+    _get_onplaying(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onplaying */
+    readonly onplaying: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onplaying_void
      */
@@ -21181,6 +22837,12 @@ declare module "nts:dom" {
      */
     _set_onplaying_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onprogress
+     */
+    _get_onprogress(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onprogress */
+    readonly onprogress: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onprogress_void
      */
     _set_onprogress_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21192,6 +22854,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onprogress_null
      */
     _set_onprogress_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onratechange
+     */
+    _get_onratechange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onratechange */
+    readonly onratechange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onratechange_void
      */
@@ -21205,6 +22873,12 @@ declare module "nts:dom" {
      */
     _set_onratechange_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onreset
+     */
+    _get_onreset(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onreset */
+    readonly onreset: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onreset_void
      */
     _set_onreset_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21216,6 +22890,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onreset_null
      */
     _set_onreset_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onresize
+     */
+    _get_onresize(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onresize */
+    readonly onresize: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onresize_void
      */
@@ -21229,6 +22909,12 @@ declare module "nts:dom" {
      */
     _set_onresize_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onscroll
+     */
+    _get_onscroll(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscroll */
+    readonly onscroll: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onscroll_void
      */
     _set_onscroll_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21240,6 +22926,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onscroll_null
      */
     _set_onscroll_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onscrollend
+     */
+    _get_onscrollend(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollend */
+    readonly onscrollend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onscrollend_void
      */
@@ -21253,6 +22945,12 @@ declare module "nts:dom" {
      */
     _set_onscrollend_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onsecuritypolicyviolation
+     */
+    _get_onsecuritypolicyviolation(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsecuritypolicyviolation */
+    readonly onsecuritypolicyviolation: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onsecuritypolicyviolation_void
      */
     _set_onsecuritypolicyviolation_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21264,6 +22962,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onsecuritypolicyviolation_null
      */
     _set_onsecuritypolicyviolation_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onseeked
+     */
+    _get_onseeked(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onseeked */
+    readonly onseeked: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onseeked_void
      */
@@ -21277,6 +22981,12 @@ declare module "nts:dom" {
      */
     _set_onseeked_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onseeking
+     */
+    _get_onseeking(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onseeking */
+    readonly onseeking: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onseeking_void
      */
     _set_onseeking_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21288,6 +22998,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onseeking_null
      */
     _set_onseeking_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onselect
+     */
+    _get_onselect(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselect */
+    readonly onselect: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onselect_void
      */
@@ -21301,6 +23017,12 @@ declare module "nts:dom" {
      */
     _set_onselect_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onslotchange
+     */
+    _get_onslotchange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onslotchange */
+    readonly onslotchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onslotchange_void
      */
     _set_onslotchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21312,6 +23034,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onslotchange_null
      */
     _set_onslotchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onscrollsnapchange
+     */
+    _get_onscrollsnapchange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollsnapchange */
+    readonly onscrollsnapchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onscrollsnapchange_void
      */
@@ -21325,6 +23053,12 @@ declare module "nts:dom" {
      */
     _set_onscrollsnapchange_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onscrollsnapchanging
+     */
+    _get_onscrollsnapchanging(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollsnapchanging */
+    readonly onscrollsnapchanging: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onscrollsnapchanging_void
      */
     _set_onscrollsnapchanging_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21336,6 +23070,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onscrollsnapchanging_null
      */
     _set_onscrollsnapchanging_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onstalled
+     */
+    _get_onstalled(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onstalled */
+    readonly onstalled: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onstalled_void
      */
@@ -21349,6 +23089,12 @@ declare module "nts:dom" {
      */
     _set_onstalled_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onsubmit
+     */
+    _get_onsubmit(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsubmit */
+    readonly onsubmit: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onsubmit_void
      */
     _set_onsubmit_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21360,6 +23106,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onsubmit_null
      */
     _set_onsubmit_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onsuspend
+     */
+    _get_onsuspend(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsuspend */
+    readonly onsuspend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onsuspend_void
      */
@@ -21373,6 +23125,12 @@ declare module "nts:dom" {
      */
     _set_onsuspend_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ontimeupdate
+     */
+    _get_ontimeupdate(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontimeupdate */
+    readonly ontimeupdate: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ontimeupdate_void
      */
     _set_ontimeupdate_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21384,6 +23142,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ontimeupdate_null
      */
     _set_ontimeupdate_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_ontoggle
+     */
+    _get_ontoggle(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontoggle */
+    readonly ontoggle: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_ontoggle_void
      */
@@ -21397,6 +23161,12 @@ declare module "nts:dom" {
      */
     _set_ontoggle_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onvolumechange
+     */
+    _get_onvolumechange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onvolumechange */
+    readonly onvolumechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onvolumechange_void
      */
     _set_onvolumechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21408,6 +23178,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onvolumechange_null
      */
     _set_onvolumechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onwaiting
+     */
+    _get_onwaiting(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwaiting */
+    readonly onwaiting: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onwaiting_void
      */
@@ -21421,6 +23197,12 @@ declare module "nts:dom" {
      */
     _set_onwaiting_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onwebkitanimationend
+     */
+    _get_onwebkitanimationend(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationend */
+    readonly onwebkitanimationend: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onwebkitanimationend_void
      */
     _set_onwebkitanimationend_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21432,6 +23214,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onwebkitanimationend_null
      */
     _set_onwebkitanimationend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onwebkitanimationiteration
+     */
+    _get_onwebkitanimationiteration(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationiteration */
+    readonly onwebkitanimationiteration: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onwebkitanimationiteration_void
      */
@@ -21445,6 +23233,12 @@ declare module "nts:dom" {
      */
     _set_onwebkitanimationiteration_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onwebkitanimationstart
+     */
+    _get_onwebkitanimationstart(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationstart */
+    readonly onwebkitanimationstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onwebkitanimationstart_void
      */
     _set_onwebkitanimationstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21456,6 +23250,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onwebkitanimationstart_null
      */
     _set_onwebkitanimationstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onwebkittransitionend
+     */
+    _get_onwebkittransitionend(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkittransitionend */
+    readonly onwebkittransitionend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onwebkittransitionend_void
      */
@@ -21469,6 +23269,12 @@ declare module "nts:dom" {
      */
     _set_onwebkittransitionend_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onwheel
+     */
+    _get_onwheel(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwheel */
+    readonly onwheel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onwheel_void
      */
     _set_onwheel_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21480,6 +23286,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onwheel_null
      */
     _set_onwheel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onauxclick
+     */
+    _get_onauxclick(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onauxclick */
+    readonly onauxclick: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onauxclick_void
      */
@@ -21493,6 +23305,12 @@ declare module "nts:dom" {
      */
     _set_onauxclick_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ongotpointercapture
+     */
+    _get_ongotpointercapture(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ongotpointercapture */
+    readonly ongotpointercapture: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ongotpointercapture_void
      */
     _set_ongotpointercapture_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21504,6 +23322,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ongotpointercapture_null
      */
     _set_ongotpointercapture_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onlostpointercapture
+     */
+    _get_onlostpointercapture(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onlostpointercapture */
+    readonly onlostpointercapture: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onlostpointercapture_void
      */
@@ -21517,6 +23341,12 @@ declare module "nts:dom" {
      */
     _set_onlostpointercapture_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onpointerdown
+     */
+    _get_onpointerdown(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerdown */
+    readonly onpointerdown: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onpointerdown_void
      */
     _set_onpointerdown_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21528,6 +23358,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onpointerdown_null
      */
     _set_onpointerdown_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onpointermove
+     */
+    _get_onpointermove(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointermove */
+    readonly onpointermove: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onpointermove_void
      */
@@ -21541,6 +23377,12 @@ declare module "nts:dom" {
      */
     _set_onpointermove_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onpointerrawupdate
+     */
+    _get_onpointerrawupdate(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerrawupdate */
+    readonly onpointerrawupdate: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onpointerrawupdate_void
      */
     _set_onpointerrawupdate_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21552,6 +23394,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onpointerrawupdate_null
      */
     _set_onpointerrawupdate_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onpointerup
+     */
+    _get_onpointerup(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerup */
+    readonly onpointerup: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onpointerup_void
      */
@@ -21565,6 +23413,12 @@ declare module "nts:dom" {
      */
     _set_onpointerup_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onpointercancel
+     */
+    _get_onpointercancel(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointercancel */
+    readonly onpointercancel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onpointercancel_void
      */
     _set_onpointercancel_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21576,6 +23430,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onpointercancel_null
      */
     _set_onpointercancel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onpointerover
+     */
+    _get_onpointerover(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerover */
+    readonly onpointerover: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onpointerover_void
      */
@@ -21589,6 +23449,12 @@ declare module "nts:dom" {
      */
     _set_onpointerover_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onpointerout
+     */
+    _get_onpointerout(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerout */
+    readonly onpointerout: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onpointerout_void
      */
     _set_onpointerout_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21600,6 +23466,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onpointerout_null
      */
     _set_onpointerout_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onpointerenter
+     */
+    _get_onpointerenter(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerenter */
+    readonly onpointerenter: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onpointerenter_void
      */
@@ -21613,6 +23485,12 @@ declare module "nts:dom" {
      */
     _set_onpointerenter_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onpointerleave
+     */
+    _get_onpointerleave(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerleave */
+    readonly onpointerleave: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onpointerleave_void
      */
     _set_onpointerleave_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21624,6 +23502,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onpointerleave_null
      */
     _set_onpointerleave_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onselectstart
+     */
+    _get_onselectstart(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselectstart */
+    readonly onselectstart: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onselectstart_void
      */
@@ -21637,6 +23521,12 @@ declare module "nts:dom" {
      */
     _set_onselectstart_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onselectionchange
+     */
+    _get_onselectionchange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselectionchange */
+    readonly onselectionchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onselectionchange_void
      */
     _set_onselectionchange_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21648,6 +23538,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onselectionchange_null
      */
     _set_onselectionchange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onanimationcancel
+     */
+    _get_onanimationcancel(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationcancel */
+    readonly onanimationcancel: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onanimationcancel_void
      */
@@ -21661,6 +23557,12 @@ declare module "nts:dom" {
      */
     _set_onanimationcancel_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onanimationend
+     */
+    _get_onanimationend(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationend */
+    readonly onanimationend: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onanimationend_void
      */
     _set_onanimationend_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21672,6 +23574,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onanimationend_null
      */
     _set_onanimationend_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onanimationiteration
+     */
+    _get_onanimationiteration(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationiteration */
+    readonly onanimationiteration: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onanimationiteration_void
      */
@@ -21685,6 +23593,12 @@ declare module "nts:dom" {
      */
     _set_onanimationiteration_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onanimationstart
+     */
+    _get_onanimationstart(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationstart */
+    readonly onanimationstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onanimationstart_void
      */
     _set_onanimationstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21696,6 +23610,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onanimationstart_null
      */
     _set_onanimationstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_ontransitionrun
+     */
+    _get_ontransitionrun(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionrun */
+    readonly ontransitionrun: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_ontransitionrun_void
      */
@@ -21709,6 +23629,12 @@ declare module "nts:dom" {
      */
     _set_ontransitionrun_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ontransitionstart
+     */
+    _get_ontransitionstart(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionstart */
+    readonly ontransitionstart: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ontransitionstart_void
      */
     _set_ontransitionstart_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21720,6 +23646,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ontransitionstart_null
      */
     _set_ontransitionstart_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_ontransitionend
+     */
+    _get_ontransitionend(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionend */
+    readonly ontransitionend: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_ontransitionend_void
      */
@@ -21733,6 +23665,12 @@ declare module "nts:dom" {
      */
     _set_ontransitionend_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ontransitioncancel
+     */
+    _get_ontransitioncancel(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitioncancel */
+    readonly ontransitioncancel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ontransitioncancel_void
      */
     _set_ontransitioncancel_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21744,6 +23682,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ontransitioncancel_null
      */
     _set_ontransitioncancel_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onafterprint
+     */
+    _get_onafterprint(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onafterprint */
+    readonly onafterprint: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onafterprint_void
      */
@@ -21757,6 +23701,12 @@ declare module "nts:dom" {
      */
     _set_onafterprint_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onbeforeprint
+     */
+    _get_onbeforeprint(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforeprint */
+    readonly onbeforeprint: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onbeforeprint_void
      */
     _set_onbeforeprint_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21768,6 +23718,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onbeforeprint_null
      */
     _set_onbeforeprint_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onhashchange
+     */
+    _get_onhashchange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onhashchange */
+    readonly onhashchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onhashchange_void
      */
@@ -21781,6 +23737,12 @@ declare module "nts:dom" {
      */
     _set_onhashchange_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onlanguagechange
+     */
+    _get_onlanguagechange(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onlanguagechange */
+    readonly onlanguagechange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onlanguagechange_void
      */
     _set_onlanguagechange_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21792,6 +23754,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onlanguagechange_null
      */
     _set_onlanguagechange_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onmessage
+     */
+    _get_onmessage(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmessage */
+    readonly onmessage: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onmessage_void
      */
@@ -21805,6 +23773,12 @@ declare module "nts:dom" {
      */
     _set_onmessage_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onmessageerror
+     */
+    _get_onmessageerror(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmessageerror */
+    readonly onmessageerror: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onmessageerror_void
      */
     _set_onmessageerror_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21816,6 +23790,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onmessageerror_null
      */
     _set_onmessageerror_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onoffline
+     */
+    _get_onoffline(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onoffline */
+    readonly onoffline: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onoffline_void
      */
@@ -21829,6 +23809,12 @@ declare module "nts:dom" {
      */
     _set_onoffline_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_ononline
+     */
+    _get_ononline(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ononline */
+    readonly ononline: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_ononline_void
      */
     _set_ononline_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21840,6 +23826,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_ononline_null
      */
     _set_ononline_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onpagehide
+     */
+    _get_onpagehide(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpagehide */
+    readonly onpagehide: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onpagehide_void
      */
@@ -21853,6 +23845,12 @@ declare module "nts:dom" {
      */
     _set_onpagehide_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onpageshow
+     */
+    _get_onpageshow(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpageshow */
+    readonly onpageshow: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onpageshow_void
      */
     _set_onpageshow_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21864,6 +23862,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onpageshow_null
      */
     _set_onpageshow_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onpopstate
+     */
+    _get_onpopstate(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpopstate */
+    readonly onpopstate: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onpopstate_void
      */
@@ -21877,6 +23881,12 @@ declare module "nts:dom" {
      */
     _set_onpopstate_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onrejectionhandled
+     */
+    _get_onrejectionhandled(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onrejectionhandled */
+    readonly onrejectionhandled: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onrejectionhandled_void
      */
     _set_onrejectionhandled_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21888,6 +23898,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onrejectionhandled_null
      */
     _set_onrejectionhandled_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onstorage
+     */
+    _get_onstorage(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onstorage */
+    readonly onstorage: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onstorage_void
      */
@@ -21901,6 +23917,12 @@ declare module "nts:dom" {
      */
     _set_onstorage_null(this: Window): void;
     /**
+     * @ntsSymbol nts_dom_Window_get_onunhandledrejection
+     */
+    _get_onunhandledrejection(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onunhandledrejection */
+    readonly onunhandledrejection: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Window_set_onunhandledrejection_void
      */
     _set_onunhandledrejection_void(this: Window, handler: Closure<(event: Event) => void>): void;
@@ -21912,6 +23934,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Window_set_onunhandledrejection_null
      */
     _set_onunhandledrejection_null(this: Window): void;
+    /**
+     * @ntsSymbol nts_dom_Window_get_onunload
+     */
+    _get_onunload(this: Window): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onunload */
+    readonly onunload: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Window_set_onunload_void
      */
@@ -22235,6 +24263,12 @@ declare module "nts:dom" {
      */
     readonly timeOrigin: CNumber<"double">;
     /**
+     * @ntsSymbol nts_dom_Performance_get_onresourcetimingbufferfull
+     */
+    _get_onresourcetimingbufferfull(this: Performance): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onresourcetimingbufferfull */
+    readonly onresourcetimingbufferfull: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Performance_set_onresourcetimingbufferfull_void
      */
     _set_onresourcetimingbufferfull_void(this: Performance, handler: Closure<(event: Event) => void>): void;
@@ -22338,6 +24372,12 @@ declare module "nts:dom" {
      * @ntsGet _get_matches
      */
     readonly matches: boolean;
+    /**
+     * @ntsSymbol nts_dom_MediaQueryList_get_onchange
+     */
+    _get_onchange(this: MediaQueryList): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onchange */
+    readonly onchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_MediaQueryList_set_onchange_void
      */
@@ -22628,6 +24668,12 @@ declare module "nts:dom" {
      */
     readonly availTop: CNumber<"double">;
     /**
+     * @ntsSymbol nts_dom_Screen_get_onchange
+     */
+    _get_onchange(this: Screen): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onchange */
+    readonly onchange: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Screen_set_onchange_void
      */
     _set_onchange_void(this: Screen, handler: Closure<(event: Event) => void>): void;
@@ -22681,6 +24727,12 @@ declare module "nts:dom" {
      * @ntsGet _get_aborted
      */
     readonly aborted: boolean;
+    /**
+     * @ntsSymbol nts_dom_AbortSignal_get_onabort
+     */
+    _get_onabort(this: AbortSignal): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onabort */
+    readonly onabort: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_AbortSignal_set_onabort_void
      */
@@ -24175,6 +26227,12 @@ declare module "nts:dom" {
      * @ntsGet _get_host
      */
     readonly host: Element;
+    /**
+     * @ntsSymbol nts_dom_ShadowRoot_get_onslotchange
+     */
+    _get_onslotchange(this: ShadowRoot): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onslotchange */
+    readonly onslotchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_ShadowRoot_set_onslotchange_void
      */
@@ -29228,6 +31286,12 @@ declare module "nts:dom" {
      */
     id: StringView;
     /**
+     * @ntsSymbol nts_dom_Animation_get_onfinish
+     */
+    _get_onfinish(this: Animation): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfinish */
+    readonly onfinish: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Animation_set_onfinish_void
      */
     _set_onfinish_void(this: Animation, handler: Closure<(event: Event) => void>): void;
@@ -29240,6 +31304,12 @@ declare module "nts:dom" {
      */
     _set_onfinish_null(this: Animation): void;
     /**
+     * @ntsSymbol nts_dom_Animation_get_oncancel
+     */
+    _get_oncancel(this: Animation): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncancel */
+    readonly oncancel: Closure<(event: Event) => void> | null;
+    /**
      * @ntsSymbol nts_dom_Animation_set_oncancel_void
      */
     _set_oncancel_void(this: Animation, handler: Closure<(event: Event) => void>): void;
@@ -29251,6 +31321,12 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Animation_set_oncancel_null
      */
     _set_oncancel_null(this: Animation): void;
+    /**
+     * @ntsSymbol nts_dom_Animation_get_onremove
+     */
+    _get_onremove(this: Animation): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onremove */
+    readonly onremove: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Animation_set_onremove_void
      */
@@ -29846,6 +31922,12 @@ declare module "nts:dom" {
   export type CryptoMethods = CryptoOwnMethods;
   export type Crypto = HostClass<"NtsDomCrypto", null, "nts_dom_retain", "nts_dom_release"> & CryptoMethods;
   export interface ClipboardOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Clipboard_get_onclipboardchange
+     */
+    _get_onclipboardchange(this: Clipboard): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclipboardchange */
+    readonly onclipboardchange: Closure<(event: Event) => void> | null;
     /**
      * @ntsSymbol nts_dom_Clipboard_set_onclipboardchange_void
      */

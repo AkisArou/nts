@@ -110,6 +110,8 @@ public:
            closure_ == closure;
   }
   blink::EventTarget *target() const { return target_.Get(); }
+  // The closure it calls: null once detached.
+  void *closure() const { return closure_; }
 
   // `{once: true}`: removed before its first call, as the DOM says. Blink
   // would remove it without telling this listener, which would keep its
@@ -122,9 +124,9 @@ public:
 
   void Invoke(blink::ExecutionContext *, blink::Event *event) override;
   bool IsEventHandler() const override { return handler_; }
-  // The program's handlers are their own world (nts_dom::writing_handler).
+  // The program's handlers are their own world (nts_dom::accessing_handler).
   bool BelongsToTheCurrentWorld(blink::ExecutionContext *) const override {
-    return handler_ && nts_dom::writing_handler;
+    return handler_ && nts_dom::accessing_handler;
   }
 
   // Takes the listener off its target and hands back what gives the
@@ -991,6 +993,20 @@ blink::EventListener *NtsDomContext::Handler(NtsDomCallback callback,
   return handler;
 }
 
+void *NtsDomContext::HandlerClosure(blink::EventListener *listener) {
+  if (!listener)
+    return nullptr;
+  const auto found = listeners->handlers.find(listener);
+  if (found == listeners->handlers.end())
+    return nullptr;
+  void *closure = found->value->closure();
+  if (closure) {
+    CHECK(retain);
+    retain(closure);
+  }
+  return closure;
+}
+
 void NtsDomContext::Replaced(blink::EventListener *previous) {
   if (!previous)
     return;
@@ -1467,6 +1483,10 @@ void nts_blink_dom_set_invoker(NtsDomContext *context, NtsDomInvoke invoke,
   context->invoke = invoke;
   context->invoke_host = host;
 }
+void nts_blink_dom_set_retain(NtsDomContext *context, NtsDomRetain retain) {
+  context->retain = retain;
+}
+
 void nts_blink_dom_set_promise_ops(NtsDomContext *context,
                                    const NtsDomPromiseOps *ops, void *state) {
   context->promise_ops = ops;

@@ -442,6 +442,15 @@ called today; `customElements` bound on Window.
 
 ## 14. A foreign function returning a Closure
 
+**Delivered 2026-10-08** (main 8ae1b0305): a foreign result `Closure<F>` or
+`Closure<F> | null` is the program's closure object the host was lent,
+returned retained (`NtsHeader *`, NULL for null); it is callable and `===`
+the closure set. Bound in the adapter as NtsDomContext::HandlerClosure,
+retained through the host's nts_blink_dom_set_retain: 347 `on*` getters,
+typed by the void arm (a boolean arm's closure read back and called has its
+result ignored, which the closure ABI allows). lib.dom's own read of them
+waits on `blockers/lib-dom-event-handler-read-back`. The request as written:
+
 **Requested 2026-10-08. Blocks: every event handler attribute's getter
 (`onclick`, `onload`, ... -- 406 members, 169 names; their setters bind),
 workarounds ledger row 11. Fixture:

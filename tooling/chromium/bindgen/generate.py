@@ -954,13 +954,17 @@ class Generator:
         Blink's own attribute accessors, so a handler lands where the
         attribute puts it (body's `onblur` on the window), replaces the
         program's previous one in place, and gives that one's closure back.
-        The getter would answer the program's closure, which no binding
-        returns yet."""
+        The getter answers the closure the program set, retained for it
+        (NtsDomContext::HandlerClosure), so it is `===` the one written; null
+        for none, or for page script's handler. It is typed by the void arm:
+        a boolean arm's closure read back and called through it has its
+        result ignored, which the closure ABI allows (an exact thunk per
+        signature would make it strictly so)."""
         identifier = attribute.identifier
-        self.skip(interface, "get " + identifier, "an event handler's value is the program's closure")
         try:
             self.check_member(attribute)
         except Skip as why:
+            self.skip(interface, "get " + identifier, str(why))
             self.skip(interface, "set " + identifier, str(why))
             return
         self.include(attribute)
@@ -968,6 +972,15 @@ class Generator:
         set_context = base.make_copy(attribute=attribute, attribute_set=True)
         previous = self.call(get_context, {})
         lines = self.members.setdefault(interface.identifier, [])
+        local_window = interface.identifier == "Window" and "CrossOrigin" not in attribute.extended_attributes
+        getter = Function(interface, f"nts_dom_{interface.identifier}_get_{identifier}", [],
+                          Result("struct NtsHeader*", "Closure<(event: Event) => void> | null", "closure"),
+                          f"context.HandlerClosure({previous})", False, False)
+        getter.local_window = local_window
+        getter.statements = ["nts_dom::HandlerAccess access"]
+        self.functions.append(getter)
+        lines.append(self.method_line(interface, f"_get_{identifier}", getter))
+        lines.append(f"    /** @ntsGet _get_{identifier} */\n    readonly {identifier}: {getter.result.ts};")
         arms = dict(self.HANDLER_ARMS)
         arms["null"] = None
         for arm, shape in arms.items():
@@ -982,10 +995,9 @@ class Generator:
                 value = f"context.Handler({chosen}, handler_closure, handler_destroy)"
             setter = Function(interface, f"nts_dom_{interface.identifier}_set_{identifier}_{arm}", params,
                               Result("void", "void", "void"), "context.Replaced(previous)", False, False)
-            setter.local_window = (interface.identifier == "Window"
-                                   and "CrossOrigin" not in attribute.extended_attributes)
+            setter.local_window = local_window
             setter.statements = [
-                "nts_dom::HandlerWrite write",
+                "nts_dom::HandlerAccess access",
                 f"blink::EventListener* previous = {previous}",
                 self.call(set_context, {"arg1_value": value}),
             ]

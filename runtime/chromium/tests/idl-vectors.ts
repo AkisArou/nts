@@ -314,6 +314,22 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("handlerCancel", (cancelled ? "checked" : "unchecked") + "|" + (checkbox.checked ? "checked" : "unchecked") + "|" + prevented);
   checkbox._set_onclick_null();
   checkbox.removeEventListener("click", seen);
+  // Read back: the closure written, the same one, a boolean arm's too;
+  // null before any and after null. The one read back can be called.
+  // Through the getter's method, not the property (ledger row 11).
+  const fresh = asHTMLElement(d.createElement("div"))!;
+  const unset = fresh._get_onclick() === null;
+  const handler = (event: Event): void => { order.push("read " + event.type); };
+  fresh._set_onclick_void(handler);
+  const same = fresh._get_onclick() === handler;
+  const read = fresh._get_onclick();
+  if (read !== null) read(newEvent("ping"));
+  const refuse = (event: Event): boolean => false;
+  fresh._set_onclick_boolean(refuse);
+  const sameCancel = fresh._get_onclick() === refuse;
+  fresh._set_onclick_null();
+  log("handlerRead", (unset ? "null" : "set") + "|" + (same ? "same" : "other") + "|" + (sameCancel ? "same" : "other") + "|" +
+    (fresh._get_onclick() === null ? "null" : "set") + "|" + order[order.length - 1]);
 
   // USVString: a lone surrogate becomes U+FFFD before Blink sees it (ping,
   // href, hash), where a DOMString keeps it (title). Read back as UTF-16

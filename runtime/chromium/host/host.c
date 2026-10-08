@@ -174,10 +174,15 @@ __attribute__((constructor)) static void register_dom_handles(void) {
                              dom_handle_release, "dom");
 }
 
+/* A closure the program set as an event handler, read back: the caller's
+   reference. */
+static void retain_object(void *object) { nts_retain((NtsHeader *)object); }
+
 void nts_chromium_host_attach(NtsChromiumHost *host, NtsDomContext *context) {
   host->dom = context;
   nts_blink_dom_set_invoker(context, invoke, host);
   nts_blink_dom_set_promise_ops(context, &promise_ops, host);
+  nts_blink_dom_set_retain(context, retain_object);
 }
 
 typedef struct QueuedTask {
