@@ -29961,6 +29961,51 @@ impl<'a> FuncBuilder<'a> {
         super::native::scalar(self.snapshot, *self.snapshot.node_types.get(&name)?)
     }
 
+    /// `x!`, `x as T` and `x satisfies T`.
+    fn lower_assertion(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let Some(inner) = self.children(id).first().copied() else {
+            return Err(self.unsupported(id, "an assertion with no operand"));
+        };
+        let value = if self.type_of(inner) == Some(HirType::Void) {
+            self.lower_expecting(inner, &HirType::Erased)?
+        } else {
+            self.lower_expression(inner)?
+        };
+        // `n as Uint16` keeps TypeScript's meaning -- no run-time effect --
+        // and nts verifies it (D4): it must be proven.
+        if self.kind_of(id) == Some(syntax::AS_EXPRESSION)
+            && let Some(kind) = self.snapshot.node_types.get(&id).and_then(|ty| super::native::scalar(self.snapshot, *ty))
+        {
+            self.oblige(value, kind, super::obligations::Into::Assertion, id);
+        }
+        assertions::lower(self, id, value)
+    }
+
+    /// A store of `value` into the local `symbol`: an obligation where its
+    /// declaration was written as a kind (`let n: Uint8`), at its declaration
+    /// and at every later assignment.
+    fn oblige_local(&mut self, symbol: u32, value: ValueId, at: NodeId) {
+        let Some(record) = self.snapshot.symbols.get(symbol as usize) else { return };
+        let kind = record.declarations.iter().find_map(|declaration| {
+            let name = self
+                .children(*declaration)
+                .into_iter()
+                .find(|child| self.node(*child).symbol.is_some_and(|named| named.0 == symbol))?;
+            self.written_kind(name)
+        });
+        if let Some(kind) = kind {
+            let local = record.name.clone();
+            self.oblige(value, kind, super::obligations::Into::Local { local }, at);
+        }
+    }
+
+    /// Record that `value` must fit `kind` (see [`super::obligations`]): a
+    /// store the HIR keeps no slot for.
+    fn oblige(&mut self, value: ValueId, kind: super::native::Scalar, into: super::obligations::Into, at: NodeId) {
+        let location = self.location(at);
+        self.obligations.push(super::obligations::Obligation { value, block: self.current, kind, bits: None, into, location });
+    }
+
     /// The scalar kind a function's return type was **written** as: its
     /// annotation's, as [`Self::written_kind`] reads a variable's.
     fn written_return(&self, declaration: NodeId) -> Option<super::native::Scalar> {
@@ -42183,6 +42228,7 @@ impl<'a> FuncBuilder<'a> {
                 self.push(OpKind::GlobalSet { global, value }, HirType::Void, origin);
             }
             Place::Binding { symbol, .. } => {
+                self.oblige_local(symbol, value, id);
                 // An unrepresented module slot is not a local SSA binding.
                 // Otherwise assigning a native address silently discards the
                 // global store before the lifetime checker can observe it.
@@ -43177,17 +43223,7 @@ impl<'a> FuncBuilder<'a> {
             // payload; satisfies only checks the source without changing it.
             Some(
                 syntax::NON_NULL_EXPRESSION | syntax::AS_EXPRESSION | syntax::SATISFIES_EXPRESSION,
-            ) => {
-                let Some(inner) = self.children(id).first().copied() else {
-                    return Err(self.unsupported(id, "an assertion with no operand"));
-                };
-                let value = if self.type_of(inner) == Some(HirType::Void) {
-                    self.lower_expecting(inner, &HirType::Erased)?
-                } else {
-                    self.lower_expression(inner)?
-                };
-                assertions::lower(self, id, value)
-            }
+            ) => self.lower_assertion(id),
             Some(syntax::PREFIX_UNARY_EXPRESSION) => self.lower_prefix_unary(id),
             Some(syntax::POSTFIX_UNARY_EXPRESSION) => self.lower_postfix_unary(id),
             Some(syntax::TRUE_KEYWORD) => {
@@ -53916,6 +53952,7 @@ impl<'a> FuncBuilder<'a> {
             // and coercing it to the `WritableImplementation` the declaration
             // says would be the very cast the copy exists to avoid. See
             // `retyped_symbols`.
+            if initializer.is_some() { self.oblige_local(symbol.0, value, declaration); }
             let declared = self
                 .retyped_symbols
                 .get(&symbol.0)
@@ -63169,6 +63206,21 @@ impl<'a> FuncBuilder<'a> {
         let callee = self.closure_callee(id, callee_node, receiver)?;
         let mut args = vec![receiver];
         args.extend(self.lower_arguments_on(id, arguments, receiver)?);
+        // Through a function type, the callee is any function of the type, so
+        // the type's parameter kinds are what a call must fit -- which every
+        // function of the type writes too (Q1). A direct call is obliged by
+        // its callee's own parameters (`obligations`).
+        if matches!(callee, Callee::Closure { .. }) {
+            for (position, (ty, _, rest)) in self.effective_parameters(id).into_iter().enumerate() {
+                if rest {
+                    break;
+                }
+                let (Some(ty), Some(&value)) = (ty, args.get(position + 1)) else { continue };
+                if let Some(kind) = super::native::scalar(self.snapshot, ty) {
+                    self.oblige(value, kind, super::obligations::Into::ClosureArgument { position }, id);
+                }
+            }
+        }
         self.finish_closure_call(id, receiver, callee, args)
     }
 

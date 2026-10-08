@@ -1520,6 +1520,9 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
             Into::Global { global } => format!("global {global}"),
             Into::Return => format!("{}'s result", one.func),
             Into::CallbackReturn { callback } => format!("{callback}'s result (native callback)"),
+            Into::Local { local } => format!("local {local}"),
+            Into::ClosureArgument { position } => format!("argument #{position} through a function type"),
+            Into::Assertion => "an `as`".to_owned(),
         };
         let range = obligation.range().map_or_else(|| "float".to_owned(), |(lo, hi)| format!("{lo}..{hi}"));
         let verdict = if one.proven() { "proven" } else { "unproven" };

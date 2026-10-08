@@ -930,6 +930,13 @@ fn transfer_op(
         // and an operand with no facts is an operand nothing can specialize.
         // `bytes` compiled its two `% 65521` to `fmod`, a library call, two
         // per byte, and ran at 2.36x the C++ reference.
+        // What an erased value holds, as the type the checker narrowed it to.
+        // Its facts are about the number it is when it is one -- a written
+        // parameter's kind, through a uniform closure entry -- and this is
+        // emitted only where a test proved it is one.
+        OpKind::Unerase { value } if matches!(op.ty, super::HirType::Int { .. } | super::HirType::Float { .. }) => {
+            lookup(refinements, values, *value)
+        }
         OpKind::Convert(operand) => {
             let incoming = lookup(refinements, values, *operand);
             match held_by(&op.ty) {

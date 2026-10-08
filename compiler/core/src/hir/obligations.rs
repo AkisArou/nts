@@ -101,6 +101,15 @@ pub enum Into {
     /// The result of a function C calls back through `callback`, which C
     /// reads as the callback type's result.
     CallbackReturn { callback: String },
+    /// A local written as a kind (`let n: Uint8 = ...`, and every later
+    /// assignment): recorded by the lowering, as the HIR keeps no slot for it.
+    Local { local: String },
+    /// The `position`th argument of a call through a function type, whose
+    /// parameter is written as a kind: recorded by the lowering, as the callee
+    /// is any function of the type.
+    ClosureArgument { position: usize },
+    /// `n as Uint16`, which nts verifies (D4): recorded by the lowering.
+    Assertion,
 }
 
 /// What crosses: a `number` (with what the analysis knows), an integer the
@@ -332,7 +341,10 @@ impl<'a> Slots<'a> {
                 }
             }
         }
-        found.extend(func.obligations.iter().cloned());
+        found.extend(func.obligations.iter().map(|obligation| Obligation {
+            value: before_conversion(func, obligation.value),
+            ..obligation.clone()
+        }));
         found
     }
 
