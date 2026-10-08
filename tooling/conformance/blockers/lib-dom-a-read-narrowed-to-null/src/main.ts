@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> NTS1001 a call result of unrepresentable type (null)
+// expect: emit-c --rc -> emits-c nts_dom_HTMLElement_get_onclick(
 //
 // A bound property read that TypeScript has narrowed to `null` -- after
 // `target.onclick = null`, `target.onclick` is typed `null` -- is refused,
@@ -8,6 +8,8 @@
 //
 // Control (emit-c --rc), one difference -- the write is to another
 // element, so the read is not narrowed: nothing refused.
+//
+// **A guard since 2026-10-08** (MainClaude): a read the checker narrowed to `null` is typed as the getter declares its result (`call_bound_method`).
 export function clearedReadsNull(): boolean {
   const target = document.createElement("div");
   const other = document.createElement("div");

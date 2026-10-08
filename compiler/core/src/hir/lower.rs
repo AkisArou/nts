@@ -40220,13 +40220,21 @@ impl<'a> FuncBuilder<'a> {
         // a-closure-typed-property-read) -- where `el._get_onclick()`, whose
         // node *is* the call, compiled.
         let declared = target.result.representation();
-        if written == 0
-            && matches!(declared, HirType::Managed(ManagedType::Object(_)))
-            && let Some(read) = self.type_of(id)
-            && declared != read
-        {
-            let call = self.finish_call_typed(id, callee, args, lent, Some(declaration), Some(declared))?;
-            return self.coerce(call, &read, id);
+        if written == 0 && matches!(declared, HirType::Managed(ManagedType::Object(_))) {
+            match self.type_of(id) {
+                Some(read) if declared != read => {
+                    let call = self.finish_call_typed(id, callee, args, lent, Some(declaration), Some(declared))?;
+                    return self.coerce(call, &read, id);
+                }
+                // **And a read the checker narrowed to `null`**, which has no
+                // representation: after `el.onclick = null`, `el.onclick` is
+                // typed `null`, and the call's result was refused as "of
+                // unrepresentable type (null)". The narrowing says what the
+                // getter's object holds, not what it is, so the read is the
+                // getter's (the Chromium lane's lib-dom-a-read-narrowed-to-null).
+                None => return self.finish_call_typed(id, callee, args, lent, Some(declaration), Some(declared)),
+                Some(_) => {}
+            }
         }
         self.finish_call(id, callee, args, lent, Some(declaration))
     }
