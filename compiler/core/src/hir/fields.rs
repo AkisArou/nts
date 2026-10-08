@@ -311,7 +311,7 @@ fn keep_arms_together(program: &Program, layouts: &LayoutIndex, narrowed: &mut F
 
 /// The width a field's contents fit in, if any.
 fn width_for(held: Facts) -> Option<u8> {
-    if held.is_bottom() || !held.whole || held.maybe_nan || held.maybe_negative_zero {
+    if held.is_bottom() || !held.integral() || held.maybe_nan || held.maybe_negative_zero {
         return None;
     }
     if held.lo >= -2_147_483_648.0 && held.hi <= 2_147_483_647.0 {

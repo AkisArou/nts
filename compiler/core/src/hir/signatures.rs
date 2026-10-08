@@ -153,7 +153,7 @@ fn returns_of(func: &super::Func, analysis: &Analysis) -> super::facts::Facts {
 
 /// The width a set of values fits in, if any.
 fn width_of(known: super::facts::Facts) -> Option<u8> {
-    if known.is_bottom() || !known.whole || known.maybe_nan || known.maybe_negative_zero {
+    if known.is_bottom() || !known.integral() || known.maybe_nan || known.maybe_negative_zero {
         return None;
     }
     if known.lo >= I32_MIN && known.hi <= I32_MAX {

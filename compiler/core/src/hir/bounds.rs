@@ -118,7 +118,7 @@ fn provably_in_bounds(
     // The index has to name a slot at all: a whole number, not NaN, not
     // negative. `-0` would be a valid slot but the flag means "may be", and a
     // may-be is not a proof.
-    if facts.is_bottom() || !facts.whole || facts.maybe_nan || facts.lo < 0.0 {
+    if facts.is_bottom() || !facts.integral() || facts.maybe_nan || facts.lo < 0.0 {
         return false;
     }
 

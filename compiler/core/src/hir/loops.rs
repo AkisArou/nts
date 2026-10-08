@@ -302,7 +302,7 @@ pub(super) fn prefix_loops(
             || !step.is_singleton()
             || step.lo.to_bits() != 1.0_f64.to_bits()
             || !length.is_singleton()
-            || !length.whole
+            || !length.integral()
             || length.maybe_nan
             || !(0.0..=f64::from(u32::MAX)).contains(&length.lo)
             || !dominates(header, shape.latch)

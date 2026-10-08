@@ -221,7 +221,7 @@ impl Analysis {
     fn integral_within(&self, value: ValueId, lo: f64, hi: f64, any_zero: bool) -> bool {
         let facts = self.get(value);
         !facts.is_bottom()
-            && facts.whole
+            && facts.integral()
             && !facts.maybe_nan
             && (any_zero || !facts.maybe_negative_zero)
             && facts.lo >= lo
@@ -1133,6 +1133,18 @@ fn refine_edge(
     taken: bool,
 ) -> Refinements {
     let mut refined = refinements.clone();
+    // `Number.isInteger(x)` taken: `x` is a finite integer -- whole and not
+    // NaN, which a guard on its bounds then makes integral. `-0` passes it.
+    if let OpKind::Call { callee: Callee::External(name), args, .. } = &func.values[cond.0 as usize].kind
+        && name == "nts_is_integer"
+        && let [tested] = args[..]
+    {
+        if taken {
+            let facts = lookup(refinements, values, tested);
+            refined.insert(tested, facts.narrow(Facts::new(f64::NEG_INFINITY, f64::INFINITY, true, false, true)));
+        }
+        return refined;
+    }
     let OpKind::Binary {
         op: comparison,
         lhs,

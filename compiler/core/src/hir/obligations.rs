@@ -112,6 +112,29 @@ pub enum Into {
     Assertion,
 }
 
+impl Into {
+    /// Whether the program can read the value back from the slot, so that
+    /// holding it at an integer width would show: then `-0` must be ruled out
+    /// (Q3), since node keeps it and `1 / x` tells.
+    ///
+    /// Not where the value leaves the program -- C, Java and wasm can't tell
+    /// `-0` from `0`, and receive the same integer either way -- nor at an
+    /// `as`, which stores nothing: the value stays what it was, in nts as in
+    /// node, and wherever it is stored next is obliged there.
+    #[must_use]
+    pub const fn reads_back(&self) -> bool {
+        match self {
+            Self::Parameter { .. }
+            | Self::Field { .. }
+            | Self::Global { .. }
+            | Self::Return
+            | Self::Local { .. }
+            | Self::ClosureArgument { .. } => true,
+            Self::NativeArgument { .. } | Self::NativeStore | Self::CallbackReturn { .. } | Self::Assertion => false,
+        }
+    }
+}
+
 /// What crosses: a `number` (with what the analysis knows), an integer the
 /// program already holds at a width, a `bigint`, a boolean, or something else.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -136,8 +159,9 @@ pub enum Why {
     Fraction,
     /// It may be NaN.
     NaN,
-    /// It may be `-0`, which an integer slot would store as `0` -- a value
-    /// node keeps distinct (`1 / x`), so ruled out or written (decision Q3).
+    /// It may be `-0`, which a program slot held at an integer width would
+    /// read back as `0` where node keeps it (`1 / x`): ruled out, or written
+    /// (Q3). Only where the program can read it back -- see [`Into::reads_back`].
     NegativeZero,
     /// It may be below the kind's least value: the analysis's lower bound.
     Below(f64),
@@ -489,7 +513,7 @@ fn number_fits(facts: Facts, obligation: &Obligation) -> Vec<Why> {
     if facts.maybe_nan {
         why.push(Why::NaN);
     }
-    if facts.maybe_negative_zero {
+    if facts.maybe_negative_zero && obligation.into.reads_back() {
         why.push(Why::NegativeZero);
     }
     // As `f64`: the integer bounds are exact up to 2^53, and past it no
@@ -546,10 +570,20 @@ mod tests {
     #[test]
     fn a_whole_number_in_range_fits() {
         assert!(number_fits(Facts::new(0.0, 255.0, true, false, false), &into(Scalar::UInt8, None)).is_empty());
+    }
+
+    #[test]
+    fn negative_zero_matters_only_where_the_program_reads_it_back() {
+        let maybe_negative_zero = Facts::new(0.0, 255.0, true, false, true);
+        assert!(
+            number_fits(maybe_negative_zero, &into(Scalar::UInt8, None)).is_empty(),
+            "C stores -0 and 0 as the same integer"
+        );
+        let field = Obligation { into: Into::Field { field: "size".to_owned() }, ..into(Scalar::UInt8, None) };
         assert_eq!(
-            number_fits(Facts::new(0.0, 255.0, true, false, true), &into(Scalar::UInt8, None)),
+            number_fits(maybe_negative_zero, &field),
             vec![Why::NegativeZero],
-            "an integer slot would store -0 as 0, which node keeps distinct"
+            "a field held at an integer width would read back 0 where node keeps -0"
         );
     }
 

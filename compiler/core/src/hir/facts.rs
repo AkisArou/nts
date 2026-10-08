@@ -67,7 +67,15 @@ pub struct Facts {
     pub lo: f64,
     /// Upper bound, inclusive. Never NaN.
     pub hi: f64,
-    /// Every numeric member is a finite integer-valued `f64`.
+    /// Every **finite** numeric member is integer-valued. An infinity may be a
+    /// member too -- `Math.round(x)` is whole and may be `Infinity` -- which
+    /// the bounds say; [`Self::integral`] is the claim that every member is a
+    /// finite integer.
+    ///
+    /// Kept apart from finiteness so that a later bound can complete it:
+    /// `Math.round(x)` guarded by `r >= 0 && r <= 100` is a finite integer,
+    /// and a flag that had already refused it for its infinite bounds could
+    /// not say so.
     pub whole: bool,
     /// NaN may be a member.
     pub maybe_nan: bool,
@@ -156,14 +164,19 @@ impl Facts {
         Self {
             lo,
             hi,
-            // An infinity is not an integer. A set that may contain one cannot
-            // claim every member is whole.
-            whole: whole && lo.is_finite() && hi.is_finite(),
+            whole,
             maybe_nan,
             // `-0` is only possible if the interval straddles zero, since `-0`
             // compares equal to `0`.
             maybe_negative_zero: maybe_negative_zero && lo <= 0.0 && hi >= 0.0,
         }
+    }
+
+    /// Every member is a finite integer: whole, with finite bounds. What a
+    /// consumer acting on integer-ness asks -- an integer slot, an index.
+    #[must_use]
+    pub fn integral(&self) -> bool {
+        self.whole && self.lo.is_finite() && self.hi.is_finite()
     }
 
     /// Exactly one value.
@@ -247,7 +260,7 @@ impl Facts {
         if value == 0.0 && value.is_sign_negative() && !self.maybe_negative_zero {
             return false;
         }
-        if self.whole && !(value.fract() == 0.0 && value.is_finite()) {
+        if self.whole && value.is_finite() && value.fract() != 0.0 {
             return false;
         }
         self.lo <= value && value <= self.hi
@@ -1138,11 +1151,14 @@ mod tests {
     }
 
     #[test]
-    fn an_infinite_bound_refutes_wholeness() {
-        // Infinity is not an integer, so a set that may contain one cannot claim
-        // every member is whole — however the flag was passed in.
+    fn an_infinite_bound_refutes_integrality_and_not_wholeness() {
+        // Infinity is not an integer, so a set that may contain one has members
+        // that are not finite integers -- but its finite members still are, and
+        // a bound that excludes the infinity completes the claim.
         let claimed = Facts::new(0.0, f64::INFINITY, true, false, false);
-        assert!(!claimed.whole);
+        assert!(claimed.whole && !claimed.integral());
+        assert!(claimed.contains(f64::INFINITY) && !claimed.contains(0.5));
+        assert!(claimed.narrow(Facts::new(0.0, 100.0, false, false, false)).integral());
     }
 
     #[test]

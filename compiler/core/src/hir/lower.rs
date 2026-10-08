@@ -42850,6 +42850,138 @@ impl<'a> FuncBuilder<'a> {
         lowered
     }
 
+    /// An `if`'s test, and the blocks it leads to: the then block, the else
+    /// block -- the merge itself where there is no `else`, which is then also
+    /// returned as allocated -- and each block whose branch goes to them.
+    ///
+    /// A condition that assigns nothing is lowered as jumps
+    /// ([`Self::lower_jumps`]): with no name rebound inside it, every edge into
+    /// an arm leaves with the bindings the `if` began with, so the arms and
+    /// their merge are an ordinary `if`'s.
+    fn lower_if_test(
+        &mut self,
+        condition: NodeId,
+        else_branch: Option<NodeId>,
+    ) -> Result<(BlockId, BlockId, Option<BlockId>, Vec<BlockId>), Diagnostic> {
+        // With no `else`, the false edge goes straight to the merge. Allocating an
+        // else block for it would leave a block whose only content is a jump —
+        // once per `if` without an else, which is most of them.
+        let else_target = |this: &mut Self| {
+            let block = this.new_block();
+            (block, else_branch.is_none().then_some(block))
+        };
+        if self.connective(condition).is_some() && !self.assigns(condition) {
+            let then_block = self.new_block();
+            let (else_block, preallocated) = else_target(self);
+            let mut tests = Vec::new();
+            self.lower_jumps(condition, (then_block, else_block), &mut tests)?;
+            return Ok((then_block, else_block, preallocated, tests));
+        }
+        let cond = self.lower_expression(condition)?;
+        // `if (x)` takes any value, not just a boolean, and JavaScript decides
+        // which are false. An empty string and a NaN are, which is why this
+        // cannot be left to C's own idea of a condition.
+        let cond = self.truthy(condition, cond);
+        let then_block = self.new_block();
+        let (else_block, preallocated) = else_target(self);
+        let branch_block = self.current;
+        self.terminate(Terminator::Branch {
+            cond,
+            then_target: then_block,
+            then_args: Vec::new(),
+            else_target: else_block,
+            else_args: Vec::new(),
+        });
+        Ok((then_block, else_block, preallocated, vec![branch_block]))
+    }
+
+    /// `condition` as jumps: to `when_true` where it holds and `when_false`
+    /// where it does not, with `&&`, `||` and `!` as the branches they are
+    /// rather than a merged boolean, each block that branches recorded in
+    /// `tests`. Every test is then an edge the range analysis narrows on, as it
+    /// narrows a nested `if` -- `x >= 0 && x <= 100` proves `[0, 100]` in the
+    /// arm, and `x < 0 || x > 100` with an early exit proves it after -- and
+    /// the arm costs no merged value.
+    fn lower_jumps(
+        &mut self,
+        condition: NodeId,
+        (when_true, when_false): (BlockId, BlockId),
+        tests: &mut Vec<BlockId>,
+    ) -> Result<(), Diagnostic> {
+        match self.connective(condition) {
+            Some(Connective::And(left, right)) => {
+                let next = self.new_block();
+                self.lower_jumps(left, (next, when_false), tests)?;
+                self.switch_to(next);
+                self.lower_jumps(right, (when_true, when_false), tests)
+            }
+            Some(Connective::Or(left, right)) => {
+                let next = self.new_block();
+                self.lower_jumps(left, (when_true, next), tests)?;
+                self.switch_to(next);
+                self.lower_jumps(right, (when_true, when_false), tests)
+            }
+            Some(Connective::Not(operand)) => self.lower_jumps(operand, (when_false, when_true), tests),
+            None => {
+                let value = self.lower_expression(condition)?;
+                let cond = self.truthy(condition, value);
+                if !self.is_terminated() {
+                    tests.push(self.current);
+                    self.terminate(Terminator::Branch {
+                        cond,
+                        then_target: when_true,
+                        then_args: Vec::new(),
+                        else_target: when_false,
+                        else_args: Vec::new(),
+                    });
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// `condition`'s own `&&`, `||` or `!`, through parentheses.
+    fn connective(&self, condition: NodeId) -> Option<Connective> {
+        let mut node = condition;
+        while self.kind_of(node) == Some(syntax::PARENTHESIZED_EXPRESSION) {
+            node = *self.children(node).first()?;
+        }
+        match self.kind_of(node) {
+            Some(syntax::BINARY_EXPRESSION) => {
+                let [left, operator, right] = self.children(node)[..] else { return None };
+                match self.kind_of(operator) {
+                    Some(syntax::AMPERSAND_AMPERSAND_TOKEN) => Some(Connective::And(left, right)),
+                    Some(syntax::BAR_BAR_TOKEN) => Some(Connective::Or(left, right)),
+                    _ => None,
+                }
+            }
+            Some(syntax::PREFIX_UNARY_EXPRESSION) => {
+                let NodeData::Children { small, .. } = self.node(node).data else { return None };
+                if small & syntax::prefix_operator::MASK != syntax::prefix_operator::EXCLAMATION {
+                    return None;
+                }
+                self.children(node).first().copied().map(Connective::Not)
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether evaluating `node` may assign: an assignment, compound or
+    /// logical, or a `++`/`--`, anywhere under it.
+    fn assigns(&self, node: NodeId) -> bool {
+        let writes = match self.kind_of(node) {
+            Some(syntax::BINARY_EXPRESSION) => self.children(node).get(1).is_some_and(|operator| {
+                let token = self.kind_of(*operator).unwrap_or(0);
+                token == syntax::EQUALS_TOKEN || compound_operator(token).is_some() || logical_assignment(token).is_some()
+            }),
+            Some(syntax::POSTFIX_UNARY_EXPRESSION) => true,
+            Some(syntax::PREFIX_UNARY_EXPRESSION) => matches!(self.node(node).data, NodeData::Children { small, .. }
+                if matches!(small & syntax::prefix_operator::MASK, syntax::prefix_operator::PLUS_PLUS | syntax::prefix_operator::MINUS_MINUS)),
+            _ => false,
+        };
+        writes || self.children(node).into_iter().any(|child| self.assigns(child))
+    }
+
     fn lower_if(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let (condition, then_branch, else_branch) = match children.as_slice() {
@@ -42863,33 +42995,9 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let origin = self.origin(id);
-        let cond = self.lower_expression(condition)?;
-        // `if (x)` takes any value, not just a boolean, and JavaScript decides
-        // which are false. An empty string and a NaN are, which is why this
-        // cannot be left to C's own idea of a condition.
-        let cond = self.truthy(condition, cond);
-        let then_block = self.new_block();
-
-        // With no `else`, the false edge goes straight to the merge. Allocating an
-        // else block for it would leave a block whose only content is a jump —
-        // once per `if` without an else, which is most of them.
-        let (else_block, preallocated) = if else_branch.is_some() {
-            (self.new_block(), None)
-        } else {
-            let merge = self.new_block();
-            (merge, Some(merge))
-        };
-
-        // Remembered because the false edge's arguments are not known until the
+        // Remembered because the false edges' arguments are not known until the
         // merge has parameters, which is after both arms are lowered.
-        let branch_block = self.current;
-        self.terminate(Terminator::Branch {
-            cond,
-            then_target: then_block,
-            then_args: Vec::new(),
-            else_target: else_block,
-            else_args: Vec::new(),
-        });
+        let (then_block, else_block, preallocated, tests) = self.lower_if_test(condition, else_branch)?;
 
         // What each name held on entry: the baseline the arms are compared
         // against, and what the false edge carries when there is no `else`.
@@ -42964,12 +43072,21 @@ impl<'a> FuncBuilder<'a> {
                     args,
                 });
             }
-        } else if let Some(Terminator::Branch { else_args, .. }) =
-            &mut self.blocks[branch_block.0 as usize].terminator
-        {
-            // The false edge points at the merge directly, so its arguments live
-            // on the branch rather than on a jump of its own.
-            *else_args = merged.iter().map(|(_, _, from_else)| *from_else).collect();
+        } else {
+            // The false edges point at the merge directly, so their arguments
+            // live on the branches rather than on a jump of their own.
+            let args: Vec<ValueId> = merged.iter().map(|(_, _, from_else)| *from_else).collect();
+            for test in tests {
+                if let Some(Terminator::Branch { then_target, then_args, else_target, else_args, .. }) =
+                    &mut self.blocks[test.0 as usize].terminator
+                {
+                    for (target, passed) in [(*then_target, then_args), (*else_target, else_args)] {
+                        if target == merge {
+                            passed.clone_from(&args);
+                        }
+                    }
+                }
+            }
         }
 
         self.switch_to(merge);
@@ -70362,6 +70479,15 @@ enum Place {
         symbol: u32,
         ty: Option<HirType>,
     },
+}
+
+/// A condition's own logical connective, which [`FuncBuilder::lower_jumps`]
+/// lowers as branches.
+#[derive(Clone, Copy)]
+enum Connective {
+    And(NodeId, NodeId),
+    Or(NodeId, NodeId),
+    Not(NodeId),
 }
 
 /// How a `for...of` steps through what it was given.

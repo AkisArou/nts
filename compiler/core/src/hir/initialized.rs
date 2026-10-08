@@ -88,7 +88,7 @@ impl Reads {
                     continue;
                 };
                 let range = analysis.get_at(block, index);
-                let finite_range = range.whole
+                let finite_range = range.integral()
                     && !range.maybe_nan
                     && !range.is_bottom()
                     && range.lo >= 0.0
@@ -125,7 +125,7 @@ fn allocated_length(func: &Func, analysis: &super::flow::Analysis, array: ValueI
     };
     let length = analysis.get(length);
     (length.is_singleton()
-        && length.whole
+        && length.integral()
         && !length.maybe_nan
         && (0.0..=f64::from(u32::MAX)).contains(&length.lo))
     .then_some(length.lo)
@@ -182,7 +182,7 @@ fn constants_cover(
         if before(*store) {
             let at = analysis.get(*index);
             if at.is_singleton()
-                && at.whole
+                && at.integral()
                 && !at.maybe_nan
                 && (range.lo..=range.hi).contains(&at.lo)
             {

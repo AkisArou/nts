@@ -419,7 +419,7 @@ fn read_into_floating_point(program: &Program) -> rustc_hash::FxHashSet<HirType>
 /// A `NaN` or a negative zero is not an integer, and neither is a fraction. The
 /// second is the one that matters here: an array of prices is `number[]` too.
 fn width_for(facts: Facts) -> Option<HirType> {
-    if facts.is_bottom() || !facts.whole || facts.maybe_nan || facts.maybe_negative_zero {
+    if facts.is_bottom() || !facts.integral() || facts.maybe_nan || facts.maybe_negative_zero {
         return None;
     }
     let bits = if facts.lo >= -2_147_483_648.0 && facts.hi <= 2_147_483_647.0 {

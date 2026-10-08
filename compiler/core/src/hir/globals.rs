@@ -125,7 +125,7 @@ pub fn representations(program: &Program, facts: &GlobalFacts) -> GlobalWidths {
 /// its own function rather than shared, because the two differ in what they
 /// return and sharing them would mean a type parameter for four lines.
 fn width_for(held: Facts) -> Option<HirType> {
-    if held.is_bottom() || !held.whole || held.maybe_nan || held.maybe_negative_zero {
+    if held.is_bottom() || !held.integral() || held.maybe_nan || held.maybe_negative_zero {
         return None;
     }
     if held.lo >= -2_147_483_648.0 && held.hi <= 2_147_483_647.0 {
