@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> invalid HIR: CallArgumentType { func: "start", callee: "nts_dom_Window_fetch_2", at: 2
+// expect: emit-c --rc -> emits-c nts_dom_Window_fetch_2(
 //
 // A bare lib.dom global (550a0ad2f routes it to the window binding) given a
 // dictionary argument -- `fetch(url, { keepalive: true })`, any member --
@@ -9,6 +9,10 @@
 //
 // Control (emit-c --rc), one difference -- `window.fetch(url, {...})`:
 // nothing refused.
+//
+// **A guard since 2026-10-08** (MainClaude): a native slot decides what its
+// argument is (`native_slot`) -- a string for a string slot, and the record
+// for one C takes by value, which the literal is copied into.
 export function start(url: string): void {
   fetch(url, { keepalive: true });
 }

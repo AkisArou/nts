@@ -24475,17 +24475,24 @@ impl<'a> FuncBuilder<'a> {
         self.coerce(value, &want, argument)
     }
 
-    /// A string, where `call` is the native call being lowered (`omitting_for`)
-    /// and feeds its written argument `at` into a string slot (`Role::String`).
-    fn native_string_slot(&self, call: NodeId, at: usize) -> Option<HirType> {
+    /// What the native call being lowered (`omitting_for`, when it is `call`)
+    /// wants its written argument `at` as, where the slot decides it: a string
+    /// for a string slot (`Role::String`), and the record for one C takes by
+    /// value -- which an object literal is built as, and a held object copied
+    /// into (`native_record_from_object`).
+    fn native_slot(&self, call: NodeId, at: usize) -> Option<HirType> {
         let (target, spelled, lowering) = self.omitting_for.as_ref()?;
         if *lowering != call {
             return None;
         }
-        target
-            .slots()
-            .any(|(_, role, fed)| fed == Some(at + spelled) && matches!(role, super::native::Role::String(_)))
-            .then_some(HirType::Managed(ManagedType::String))
+        let (slot, role, _) = target.slots().find(|(_, _, fed)| *fed == Some(at + spelled))?;
+        match role {
+            super::native::Role::String(_) => Some(HirType::Managed(ManagedType::String)),
+            super::native::Role::Plain if matches!(target.parameters[slot], super::native::Type::Record(_)) => {
+                Some(target.parameters[slot].representation())
+            }
+            _ => None,
+        }
     }
 
     /// Whether the call's `at`th parameter is `CHandles`.
@@ -24501,7 +24508,7 @@ impl<'a> FuncBuilder<'a> {
     /// and the copy takes a `Thing`; coercing to the declaration would meet the
     /// prefix check that the copy exists to avoid.
     fn parameter_representation(&self, call: NodeId, at: usize) -> Option<HirType> {
-        // **A native string slot takes a string, whatever declared the call.**
+        // **A native slot decides what its argument is, whatever declared the call.**
         // A lib.dom global or member a binding implements is resolved by the
         // checker to lib.dom's declaration, which can be wider than the
         // binding's: `alert(message?: any)`, `fetch(input: RequestInfo | URL)`.
@@ -24509,9 +24516,13 @@ impl<'a> FuncBuilder<'a> {
         // `nts_dom_Window_fetch_1`'s `StringView` and refused there as "a value
         // that is not a string". The slot the argument feeds is the truth, and
         // the one answer both lowering and coercion read; a value that really
-        // is not a string still meets `coerce`'s refusal.
-        if let Some(string) = self.native_string_slot(call, at) {
-            return Some(string);
+        // is not a string still meets `coerce`'s refusal. A record C takes by
+        // value is the same question: `fetch(url, { keepalive: true })` passed
+        // lib.dom's `RequestInit` object where `nts_dom_Window_fetch_2` takes
+        // the struct -- invalid HIR -- while `window.fetch(...)` compiled (the
+        // Chromium lane's lib-dom-bare-global-with-a-dictionary).
+        if let Some(slot) = self.native_slot(call, at) {
+            return Some(slot);
         }
         if let Some(bound) = self
             .structural_calls
