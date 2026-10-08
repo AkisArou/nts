@@ -102,7 +102,8 @@ pub fn analyze_program(program: &Program, roots: super::reachable::Roots<'_>) ->
         .collect();
     let mut caps: Vec<FxHashMap<ValueId, Facts>> =
         program.funcs.iter().map(|_| FxHashMap::default()).collect();
-    let mut analyses = settle(program, &in_slot, &outward, &caps);
+    let written = flow::Written::of(program);
+    let mut analyses = settle(program, &in_slot, &outward, &written, &caps);
 
     for _ in 0..FEEDBACK_CAP {
         let next: Vec<_> = program
@@ -115,7 +116,7 @@ pub fn analyze_program(program: &Program, roots: super::reachable::Roots<'_>) ->
             break;
         }
         caps = next;
-        analyses = settle(program, &in_slot, &outward, &caps);
+        analyses = settle(program, &in_slot, &outward, &written, &caps);
     }
     analyses
 }
@@ -125,6 +126,7 @@ fn settle(
     program: &Program,
     in_slot: &FxHashMap<u32, Vec<usize>>,
     outward: &rustc_hash::FxHashSet<&str>,
+    written: &flow::Written,
     caps: &[FxHashMap<ValueId, Facts>],
 ) -> Vec<Analysis> {
     let by_name: FxHashMap<&str, usize> = program
@@ -161,10 +163,10 @@ fn settle(
             growable,
         },
     };
-    let mut analyses = analyze_all(program, &crossing, caps);
+    let mut analyses = analyze_all(program, &crossing, written, caps);
 
     for _ in 0..ROUND_CAP {
-        analyses = analyze_all(program, &crossing, caps);
+        analyses = analyze_all(program, &crossing, written, caps);
 
         // Rebuilt from nothing each round rather than accumulated, so that this
         // is a Kleene iteration over the whole system and not a monotone drift
@@ -287,6 +289,7 @@ pub(super) fn targets_of(
 fn analyze_all(
     program: &Program,
     crossing: &Crossing,
+    written: &flow::Written,
     caps: &[FxHashMap<ValueId, Facts>],
 ) -> Vec<Analysis> {
     // A function with no loop bounds of its own borrows this rather than
@@ -305,6 +308,7 @@ fn analyze_all(
                     param_lengths: &crossing.param_lengths[index],
                     caps: caps.get(index).unwrap_or(&nothing),
                     whole: &crossing.whole,
+                    written,
                 },
             )
         })

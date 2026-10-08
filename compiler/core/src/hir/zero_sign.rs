@@ -260,6 +260,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         }
     }
 
@@ -386,6 +388,8 @@ mod rounding_tests {
                 async_result: None,
                 frame: None,
                 abstract_declaration: false,
+                obligations: Vec::new(),
+                written_return: None,
             };
             let seen = observed(&func);
             assert!(

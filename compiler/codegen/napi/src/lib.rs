@@ -4289,6 +4289,7 @@ mod tests {
                     ty: ty.clone(),
                     declared_by: None,
                     readonly: false,
+                    written: None,
                 }],
                 methods: Vec::new(),
                 interfaces: Vec::new(),

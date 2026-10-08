@@ -731,15 +731,15 @@ fn main() -> Result<()> {
             let tsconfig = project(&rest)?;
             dump_hir(&tsconfig)
         }
-        // `--crossings`: every place a number or bigint crosses into a
-        // native integer, and whether the range analysis proves it fits --
-        // the census strict native calls are measured by
-        // (docs/scalar-numbers.md, step 0). Report only. `--tsv` for tools.
+        // `--obligations`: every store into a slot of a written scalar kind
+        // -- a native argument, a native store, a written parameter -- and
+        // whether the range analysis proves the value fits
+        // (docs/scalar-numbers.md, step 1). Report only. `--tsv` for tools.
         Some("facts") => {
             let rest: Vec<String> = args.collect();
             let tsconfig = project(&rest)?;
-            if rest.iter().any(|arg| arg == "--crossings") {
-                return dump_crossings(&tsconfig, rest.iter().any(|arg| arg == "--tsv"));
+            if rest.iter().any(|arg| arg == "--obligations") {
+                return dump_obligations(&tsconfig, rest.iter().any(|arg| arg == "--tsv"));
             }
             dump_facts(&tsconfig, rest.iter().any(|arg| arg == "--prepared"))
         }
@@ -1460,10 +1460,11 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-/// `nts facts --crossings`: [`hir::crossings::census`] over the lowered
-/// program, each crossing judged by local facts only (decision Q2).
-fn dump_crossings(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
-    use hir::crossings::{Into, Source, Why};
+/// `nts facts --obligations`: [`hir::obligations::census`] over the lowered
+/// program: every store into a slot of a written scalar kind, each judged by
+/// local facts only (decision Q2).
+fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
+    use hir::obligations::{Into, Source, Why};
     let tsgo_binary = frontend_binary();
     let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
@@ -1471,17 +1472,19 @@ fn dump_crossings(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
         bail!("the program does not typecheck");
     }
     let program = hir::lower::lower(&snapshot).program;
-    let crossings = hir::crossings::census(&program);
+    let judged = hir::obligations::census(&program);
 
     let reasons = |why: &[Why]| -> String {
         why.iter()
             .map(|why| match why {
                 Why::Fraction => "may be a fraction".to_owned(),
                 Why::NaN => "may be NaN".to_owned(),
+                Why::NegativeZero => "may be -0".to_owned(),
                 Why::Below(lo) => format!("may be as low as {}", render_bound(*lo)),
                 Why::Above(hi) => format!("may be as high as {}", render_bound(*hi)),
                 Why::NoBigIntRanges => "a bigint (no bigint ranges yet)".to_owned(),
                 Why::LiteralOutside(literal) => format!("the literal {literal} doesn't fit"),
+                Why::FloatExactness => "a float (exactness not modelled yet)".to_owned(),
             })
             .collect::<Vec<_>>()
             .join("; ")
@@ -1495,58 +1498,49 @@ fn dump_crossings(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
                 if facts.whole { " whole" } else { "" },
                 if facts.maybe_nan { " nan?" } else { "" },
             ),
+            Source::Integer { lo, hi } => format!("an integer {lo}..{hi}"),
             Source::BigInt(Some(literal)) => format!("{literal}n"),
             Source::BigInt(None) => "bigint".to_owned(),
         }
     };
     let (mut proven, mut unproven) = (0usize, 0usize);
-    let mut by_reason: std::collections::BTreeMap<&'static str, usize> = std::collections::BTreeMap::new();
-    for crossing in &crossings {
-        let place = nts_diagnostics::where_it_is(&snapshot.sources, &crossing.location);
-        let (kind, target, c_type) = match &crossing.into {
-            Into::Argument { function, position, c_type } => ("argument", format!("{function}#{position}"), c_type.as_str()),
-            Into::Store { c_type } => ("store", String::new(), c_type.as_str()),
+    for one in &judged {
+        let obligation = &one.obligation;
+        let place = nts_diagnostics::where_it_is(&snapshot.sources, &obligation.location);
+        let c_type = hir::native::Type::Scalar(obligation.kind).c_type().into_owned();
+        let into = match &obligation.into {
+            Into::Parameter { function, position } => format!("{function}#{position}"),
+            Into::NativeArgument { function, position } => format!("{function}#{position} (native)"),
+            Into::NativeStore => "a native store".to_owned(),
+            Into::Field { field } => format!("field {field}"),
+            Into::Global { global } => format!("global {global}"),
+            Into::Return => format!("{}'s result", one.func),
+            Into::CallbackReturn { callback } => format!("{callback}'s result (native callback)"),
         };
-        let (lo, hi) = crossing.range();
-        let verdict = if crossing.proven() { "proven" } else { "unproven" };
-        if crossing.proven() {
+        let range = obligation.range().map_or_else(|| "float".to_owned(), |(lo, hi)| format!("{lo}..{hi}"));
+        let verdict = if one.proven() { "proven" } else { "unproven" };
+        if one.proven() {
             proven += 1;
         } else {
             unproven += 1;
-            for why in &crossing.unproven {
-                *by_reason
-                    .entry(match why {
-                        Why::Fraction => "may be a fraction",
-                        Why::NaN => "may be NaN",
-                        Why::Below(_) => "may be below the range",
-                        Why::Above(_) => "may be above the range",
-                        Why::NoBigIntRanges => "a bigint (no ranges)",
-                        Why::LiteralOutside(_) => "a literal outside",
-                    })
-                    .or_default() += 1;
-            }
         }
         if tsv {
             println!(
-                "{verdict}\t{place}\t{}\t{kind}\t{target}\t{c_type}\t{lo}..{hi}\t{}\t{}\t{:?}",
-                crossing.func,
-                known(&crossing.source),
-                reasons(&crossing.unproven),
-                crossing.made
+                "{verdict}\t{place}\t{}\t{into}\t{c_type}\t{range}\t{}\t{}\t{:?}",
+                one.func,
+                known(&one.source),
+                reasons(&one.unproven),
+                one.made
             );
         } else {
-            let into = if target.is_empty() { format!("a store into {c_type}") } else { format!("{target} ({c_type})") };
-            println!("{verdict:<9} {place}  {into}, {lo}..{hi}: knows {}, made by {:?}", known(&crossing.source), crossing.made);
-            if !crossing.proven() {
-                println!("          {}", reasons(&crossing.unproven));
+            println!("{verdict:<9} {place}  {into} ({c_type}, {range}): knows {}, made by {:?}", known(&one.source), one.made);
+            if !one.proven() {
+                println!("          {}", reasons(&one.unproven));
             }
         }
     }
     if !tsv {
-        println!("{} crossing(s): {proven} proven, {unproven} unproven", crossings.len());
-        for (reason, count) in by_reason {
-            println!("  {count:>5}  {reason}");
-        }
+        println!("{} obligation(s): {proven} proven, {unproven} unproven", judged.len());
     }
     Ok(())
 }

@@ -46,6 +46,8 @@ fn eraser(name: &str, ty: &HirType, absent: Absent) -> hir::Func {
         abstract_declaration: false,
         async_result: None,
         frame: None,
+        obligations: Vec::new(),
+        written_return: None,
     }
 }
 

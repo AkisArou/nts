@@ -801,6 +801,8 @@ fn entry_function(
             abstract_declaration: false,
         async_result: None,
         frame: None,
+        obligations: Vec::new(),
+        written_return: None,
     }
 }
 
@@ -904,6 +906,7 @@ fn state_field() -> Field {
         },
         readonly: false,
         declared_by: None,
+        written: None,
     }
 }
 
@@ -972,6 +975,7 @@ pub fn generator_prefix(yields: &HirType) -> Vec<Field> {
             ty: yields.clone(),
             readonly: false,
             declared_by: None,
+            written: None,
         },
     ]
 }
@@ -997,12 +1001,14 @@ pub fn async_generator_prefix(yields: &HirType) -> Vec<Field> {
         ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
         readonly: false,
         declared_by: None,
+        written: None,
     });
     fields.push(Field {
         name: "result".to_owned(),
         ty: step_promise(),
         readonly: false,
         declared_by: None,
+        written: None,
     });
     fields
 }
@@ -1028,6 +1034,7 @@ fn frame_fields(
                 ty: func.return_type.clone(),
                 readonly: false,
                 declared_by: None,
+                written: None,
             },
             Field {
                 name: "awaited".to_owned(),
@@ -1037,6 +1044,7 @@ fn frame_fields(
                 ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
                 readonly: false,
                 declared_by: None,
+                written: None,
             },
         ],
         Mode::Generator => generator_prefix(yields.unwrap_or(&HirType::Void)),
@@ -1053,6 +1061,7 @@ fn frame_fields(
             ty: param.ty.clone(),
             readonly: false,
             declared_by: None,
+            written: None,
         });
     }
     for (at, value) in spilled.iter().enumerate() {
@@ -1063,6 +1072,7 @@ fn frame_fields(
             ty: func.values[value.0 as usize].ty.clone(),
             readonly: false,
             declared_by: None,
+            written: None,
         });
     }
     fields
@@ -1357,6 +1367,8 @@ fn assembled_resume(
             abstract_declaration: false,
         async_result: None,
         frame: None,
+        obligations: Vec::new(),
+        written_return: None,
     }
 }
 

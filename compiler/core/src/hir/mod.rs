@@ -27,7 +27,7 @@
 pub mod bounds;
 pub mod builtin;
 mod boxing;
-pub mod crossings;
+pub mod obligations;
 pub mod dce;
 pub mod elements;
 pub mod escape;
@@ -514,6 +514,10 @@ pub struct Func {
     pub name: String,
     pub params: Vec<Param>,
     pub return_type: HirType,
+    /// The scalar kind the return type was **written** as, or `None`; see
+    /// [`Param::written`]. Every `return` must prove its value fits, and so a
+    /// call's result is the kind's range.
+    pub written_return: Option<native::Scalar>,
     /// Every value the function defines. [`ValueId`] indexes this.
     ///
     /// Separate from the blocks so that a value's identity survives blocks being
@@ -570,6 +574,11 @@ pub struct Func {
     /// before the pass runs and cannot predict an index that refusals will
     /// shift. So the lowering reserves it and both sides read it from here.
     pub frame: Option<GeneratorFrame>,
+    /// Where a value must fit a slot of a written scalar kind, recorded by the
+    /// lowering (see [`obligations`]). Meaningful only on the program the
+    /// lowering produced: the strict check takes it before any pass renumbers
+    /// values, and every later function has it empty.
+    pub obligations: Vec<obligations::Obligation>,
 }
 
 /// Which of the two generator protocols a `function*` speaks.
@@ -1843,6 +1852,10 @@ pub enum UnOp {
 pub struct Field {
     pub name: String,
     pub ty: HirType,
+    /// The scalar kind the property's type was **written** as, or `None`;
+    /// see [`Param::written`]. Every store must prove its value fits, and so
+    /// a read is the kind's range.
+    pub written: Option<native::Scalar>,
     /// The class that declares this field, where it is a class's at all.
     ///
     /// **A stated fact rather than a derived one.** A `#` name is per class, so
@@ -3020,6 +3033,9 @@ pub struct Program {
 pub struct Global {
     pub name: String,
     pub ty: HirType,
+    /// The scalar kind the variable's type was **written** as, or `None`;
+    /// see [`Param::written`].
+    pub written: Option<native::Scalar>,
     /// What it holds before anything runs. A `bool` stores its truth value here;
     /// `ty` says which of the two a zero means.
     pub initial: f64,
@@ -7054,6 +7070,7 @@ mod tests {
                 ty: HirType::Managed(ManagedType::String),
                 readonly: false,
                 declared_by: None,
+                written: None,
             }],
         );
         for value in [ValueId(1), ValueId(4)] {
@@ -7079,6 +7096,7 @@ mod tests {
                 ty: HirType::Float { bits: 64 },
                 readonly: false,
                 declared_by: None,
+                written: None,
             }],
         );
         for value in [ValueId(1), ValueId(4)] {
@@ -7183,6 +7201,8 @@ mod tests {
                     async_result: None,
                     frame: None,
                     abstract_declaration: false,
+                    obligations: Vec::new(),
+                    written_return: None,
                 }],
                 ..Program::default()
             }
@@ -7221,6 +7241,7 @@ mod tests {
             ty,
             readonly: false,
             declared_by: None,
+            written: None,
         }
     }
 
@@ -7295,6 +7316,8 @@ mod tests {
                 async_result: None,
                 frame: None,
                 abstract_declaration: false,
+                obligations: Vec::new(),
+                written_return: None,
             }],
             globals: Vec::new(),
             layouts: Vec::new(),
@@ -7485,6 +7508,8 @@ mod tests {
                 async_result: None,
                 frame: None,
                 abstract_declaration: false,
+                obligations: Vec::new(),
+                written_return: None,
             }],
             globals: Vec::new(),
             layouts: Vec::new(),

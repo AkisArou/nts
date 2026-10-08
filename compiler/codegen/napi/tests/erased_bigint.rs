@@ -56,6 +56,8 @@ fn function(
         abstract_declaration: false,
         async_result: None,
         frame: None,
+        obligations: Vec::new(),
+        written_return: None,
     }
 }
 
@@ -162,6 +164,7 @@ fn program() -> hir::Program {
             exported: false,
             deferred: false,
             origin: origin(),
+            written: None,
         }],
         ..hir::Program::default()
     };

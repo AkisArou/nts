@@ -219,6 +219,8 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
         abstract_declaration: false,
         async_result: None,
         frame: None,
+        obligations: Vec::new(),
+        written_return: None,
     }
 }
 

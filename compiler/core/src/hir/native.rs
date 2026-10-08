@@ -4331,6 +4331,20 @@ impl Scalar {
         }
     }
 
+    /// What every value of the kind is, as the range analysis states it: an
+    /// integer kind's range, whole, never NaN and never `-0`; anything for a
+    /// float kind, which holds infinities, NaN and `-0` too.
+    ///
+    /// A fact only where every store into the slot was proven to fit
+    /// (`docs/scalar-numbers.md`, Q1), or where C made the value.
+    #[must_use]
+    pub fn facts(self) -> super::facts::Facts {
+        #[allow(clippy::cast_precision_loss)]
+        self.integer_range().map_or(super::facts::Facts::TOP, |(lo, hi)| {
+            super::facts::Facts::new(lo as f64, hi as f64, true, false, false)
+        })
+    }
+
     #[must_use]
     pub const fn representation(self) -> HirType {
         match self {

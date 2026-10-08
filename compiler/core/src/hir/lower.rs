@@ -2435,21 +2435,21 @@ fn erased_promise() -> HirType {
 /// A thenable job's fields: the thenable, and the promise it resolves.
 fn thenable_job_fields(thenable: HirType) -> Vec<Field> {
     vec![
-        Field { name: "thenable".to_owned(), ty: thenable, readonly: true, declared_by: None },
-        Field { name: "promise".to_owned(), ty: erased_promise(), readonly: true, declared_by: None },
+        Field { name: "thenable".to_owned(), ty: thenable, readonly: true, declared_by: None, written: None },
+        Field { name: "promise".to_owned(), ty: erased_promise(), readonly: true, declared_by: None, written: None },
     ]
 }
 
 /// A module job's one field: the import's promise.
 fn module_job_fields(promise: HirType) -> Vec<Field> {
-    vec![Field { name: "promise".to_owned(), ty: promise, readonly: true, declared_by: None }]
+    vec![Field { name: "promise".to_owned(), ty: promise, readonly: true, declared_by: None, written: None }]
 }
 
 /// A resolving function's fields: the promise, and which pair it is.
 fn resolving_function_fields() -> Vec<Field> {
     vec![
-        Field { name: "promise".to_owned(), ty: erased_promise(), readonly: true, declared_by: None },
-        Field { name: "pair".to_owned(), ty: PAIR, readonly: true, declared_by: None },
+        Field { name: "promise".to_owned(), ty: erased_promise(), readonly: true, declared_by: None, written: None },
+        Field { name: "pair".to_owned(), ty: PAIR, readonly: true, declared_by: None, written: None },
     ]
 }
 
@@ -2588,7 +2588,7 @@ impl ReactionShape {
 
     /// The source, the result, and the handlers present.
     fn fields(&self) -> Vec<Field> {
-        let field = |name: &str, ty: HirType| Field { name: name.to_owned(), ty, readonly: true, declared_by: None };
+        let field = |name: &str, ty: HirType| Field { name: name.to_owned(), ty, readonly: true, declared_by: None, written: None };
         let mut fields = vec![
             field("source", HirType::Managed(ManagedType::Promise(Box::new(self.payload.clone())))),
             field("result", HirType::Managed(ManagedType::Promise(Box::new(self.answer.clone())))),
@@ -6870,6 +6870,7 @@ fn declare_a_closure_global(
         // A closure global always is: an arrow is code, never a constant.
         deferred: initializer.is_some(),
         origin: probe.origin(name_node),
+        written: None,
     });
     scope.variables.insert(symbol.0, global);
     scope.types.push(ty);
@@ -7371,6 +7372,7 @@ fn add_initialized_flags(probe: &FuncBuilder, scope: &mut ModuleScope) {
             exported: false,
             deferred: false,
             origin: probe.origin(name),
+            written: None,
         });
         scope.types.push(HirType::Bool);
         scope.initialized.insert(symbol, flag);
@@ -8084,6 +8086,7 @@ fn declare_a_module_global(
         exported: false,
         deferred: needs_code,
         origin: probe.origin(name_node),
+        written: probe.written_kind(name_node),
     });
     scope.variables.insert(symbol.0, global);
     scope.types.push(ty.clone());
@@ -8256,6 +8259,7 @@ fn collect_static_fields(
             exported: false,
             deferred: constant.is_none() && initializer.is_some(),
             origin: probe.origin(name_node),
+            written: probe.written_kind(name_node),
         });
         scope.variables.insert(symbol.0, global);
         scope.types.push(ty);
@@ -11639,7 +11643,7 @@ fn add_lazy_modules(snapshot: &SemanticSnapshot, module: &mut ModuleScope) {
         let origin = probe.origin(snapshot.modules[at].root);
         let mut global = |name: String, ty: HirType| {
             let index = u32::try_from(module.globals.len()).unwrap_or(u32::MAX);
-            module.globals.push(super::Global { name, ty: ty.clone(), initial: 0.0, exported: false, deferred: false, origin: origin.clone() });
+            module.globals.push(super::Global { name, ty: ty.clone(), initial: 0.0, exported: false, deferred: false, origin: origin.clone(), written: None });
             module.types.push(ty);
             index
         };
@@ -14723,6 +14727,8 @@ fn erased_call(
         abstract_declaration: false,
         async_result: None,
         frame: None,
+        obligations: Vec::new(),
+        written_return: None,
     })
 }
 
@@ -14829,6 +14835,8 @@ fn refuses_to_cross(
         abstract_declaration: false,
         async_result: None,
         frame: None,
+        obligations: Vec::new(),
+        written_return: None,
     }
 }
 
@@ -15207,6 +15215,8 @@ fn declare_erased_entries(
                 abstract_declaration: true,
                 async_result: None,
                 frame: None,
+                obligations: Vec::new(),
+                written_return: None,
             },
         ));
     }
@@ -18120,6 +18130,9 @@ struct FuncBuilder<'a> {
     values: Vec<Op>,
     blocks: Vec<PartialBlock>,
     current: BlockId,
+    /// Where a value must fit a written scalar kind, in this function (see
+    /// [`super::obligations`]); moved onto the function by `finish`.
+    obligations: Vec<super::obligations::Obligation>,
     /// Symbol index → the value holding it.
     ///
     /// This is what makes two identifiers with one symbol become one value
@@ -18587,6 +18600,7 @@ impl<'a> FuncBuilder<'a> {
                 terminator: None,
             }],
             current: BlockId(0),
+            obligations: Vec::new(),
             bindings: rustc_hash::FxHashMap::default(),
             tested_by_instanceof: rustc_hash::FxHashMap::default(),
             narrowed_past_an_if: Vec::new(),
@@ -22573,6 +22587,7 @@ impl<'a> FuncBuilder<'a> {
         // A constructor runs over an object `new` allocated a moment ago, so
         // every field it writes is writing over a zero.
         func.initializes_receiver = is_constructor;
+        func.written_return = self.written_return(member);
         // A signature and nothing else. `body` is `None` exactly when the
         // method is `abstract`, which `method_body` is the only decider of.
         func.abstract_declaration = body.is_none();
@@ -25884,7 +25899,9 @@ impl<'a> FuncBuilder<'a> {
                 .node(id)
                 .modifiers
                 .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
-        Ok(self.finish(name, params, return_type, origin, exported))
+        let mut func = self.finish(name, params, return_type, origin, exported);
+        func.written_return = self.written_return(id);
+        Ok(func)
     }
 
     /// End a method's body: settle its promise where it is `async`.
@@ -26408,7 +26425,9 @@ impl<'a> FuncBuilder<'a> {
         // Not exported: a closure has no name to import. It stays only because
         // something dispatches through its slot, which `hir::reachable` decides
         // the same way it decides an override's fate.
-        Ok(self.finish(name, params, return_type, origin, false))
+        let mut func = self.finish(name, params, return_type, origin, false);
+        func.written_return = self.written_return(id);
+        Ok(func)
     }
 
     /// The value a parameter was lowered to, by its index.
@@ -27348,6 +27367,7 @@ impl<'a> FuncBuilder<'a> {
             ty,
             readonly: true,
             declared_by: None,
+            written: None,
         })
     }
 
@@ -27455,6 +27475,7 @@ impl<'a> FuncBuilder<'a> {
                 ty,
                 readonly: true,
                 declared_by: None,
+                written: None,
             });
         }
         Ok(fields)
@@ -27525,7 +27546,7 @@ impl<'a> FuncBuilder<'a> {
                 types: vec![ty],
                 name: name.to_owned(),
                 interfaces: Vec::new(),
-                fields: vec![Field { name: "handle".to_owned(), ty: HirType::NativePointer(root.clone()), readonly: true, declared_by: None }],
+                fields: vec![Field { name: "handle".to_owned(), ty: HirType::NativePointer(root.clone()), readonly: true, declared_by: None, written: None }],
                 methods: vec![None; self.hierarchy.table_size()],
                 base: None,
             });
@@ -27553,7 +27574,7 @@ impl<'a> FuncBuilder<'a> {
     fn boxed_record_layout(&mut self) -> TypeId {
         let ty = TypeId(super::BOXED_RECORD);
         if !self.layouts.iter().any(|layout| layout.types.contains(&ty)) {
-            let field = |name: &str, ty: HirType| Field { name: name.to_owned(), ty, readonly: true, declared_by: None };
+            let field = |name: &str, ty: HirType| Field { name: name.to_owned(), ty, readonly: true, declared_by: None, written: None };
             let pointer = HirType::NativePointer(super::native::Pointee::Void);
             self.layouts.push(Layout {
                 types: vec![ty],
@@ -27657,6 +27678,7 @@ impl<'a> FuncBuilder<'a> {
             // Written by definition -- being written is why it exists.
             readonly: false,
             declared_by: None,
+            written: None,
         }];
         // Zero until the declaration runs, which is what the guard reads. Only
         // on a cell that has the window; every other one carries nothing.
@@ -27666,6 +27688,7 @@ impl<'a> FuncBuilder<'a> {
                 ty: HirType::Bool,
                 readonly: false,
                 declared_by: None,
+                written: None,
             });
         }
         Layout {
@@ -27937,6 +27960,8 @@ impl<'a> FuncBuilder<'a> {
             // finished saying so.
             async_result: self.async_result.as_ref().map(|result| result.promise),
             frame: self.generator.clone(),
+            obligations: std::mem::take(&mut self.obligations),
+            written_return: None,
         }
     }
 
@@ -29910,19 +29935,39 @@ impl<'a> FuncBuilder<'a> {
             ParamShape::Ordinary
         };
 
-        // A parameter's type is always a declared one -- annotated, or
-        // contextual from a declared function type, a binding's callback
-        // included; TypeScript never infers it from the body -- so its kind is
-        // a written one.
         Ok(vec![Param { name, ty, origin, shape, known, written: self.written_kind(name_node) }])
     }
 
-    /// The scalar kind `node`'s type is (`n: c_int` is `Int`), through the
-    /// one recognizer ([`super::native::scalar`]); `None` for any other type.
-    /// The caller decides whether the type at `node` was written.
-    fn written_kind(&self, node: NodeId) -> Option<super::native::Scalar> {
-        let declared = *self.snapshot.node_types.get(&node)?;
-        super::native::scalar(self.snapshot, declared)
+    /// Whether `declaration` -- a variable, a parameter, a property, a
+    /// function -- has a type annotation: a type node among its own children,
+    /// which for a function is its return type's.
+    fn annotated(&self, declaration: NodeId) -> bool {
+        self.children(declaration).into_iter().any(|child| syntax::is_type_node(self.kind_of(child).unwrap_or(0)))
+    }
+
+    /// The scalar kind `name`'s declaration was **written** as
+    /// (`docs/scalar-numbers.md`, S3): the type its annotation names, or for a
+    /// parameter with neither annotation nor default, the type its context
+    /// declares -- a binding's callback, a declared function type. Never an
+    /// inferred type: `let n = get_n_items()` holds a `number`, and what is
+    /// later stored into it is the program's own business. Through the one
+    /// recognizer, [`super::native::scalar`].
+    fn written_kind(&self, name: NodeId) -> Option<super::native::Scalar> {
+        let declaration = self.syntactic_parent(name)?;
+        let contextual = self.kind_of(declaration) == Some(syntax::PARAMETER) && self.default_of(declaration).is_none();
+        if !(contextual || self.annotated(declaration)) {
+            return None;
+        }
+        super::native::scalar(self.snapshot, *self.snapshot.node_types.get(&name)?)
+    }
+
+    /// The scalar kind a function's return type was **written** as: its
+    /// annotation's, as [`Self::written_kind`] reads a variable's.
+    fn written_return(&self, declaration: NodeId) -> Option<super::native::Scalar> {
+        if !self.annotated(declaration) {
+            return None;
+        }
+        super::native::scalar(self.snapshot, self.declared_result_type(declaration)?)
     }
 
     /// An override's string argument, lent by the Windows Runtime as its
@@ -45586,6 +45631,7 @@ impl<'a> FuncBuilder<'a> {
                 ty: held,
                 readonly: true,
                 declared_by: None,
+                written: None,
             }],
         ));
         let _ = member_name;
@@ -46207,6 +46253,12 @@ impl<'a> FuncBuilder<'a> {
                 // which holds the base's records and so holds the answer; a
                 // class with no base has no inherited property to mistake.
                 declared_by: property.own.then_some(ty),
+                // Only an annotated property's (S3): a field inferred from its
+                // initializer holds whatever the program later stores.
+                written: property
+                    .declaration
+                    .filter(|declaration| self.annotated(*declaration))
+                    .and_then(|_| super::native::scalar(self.snapshot, property.ty)),
             });
         }
         Ok(fields)
@@ -46401,6 +46453,7 @@ impl<'a> FuncBuilder<'a> {
                 // accepts.
                 readonly: false,
                 declared_by: None,
+                written: None,
             });
         }
         let layout = Layout {
@@ -47162,6 +47215,7 @@ impl<'a> FuncBuilder<'a> {
                     ty: field_ty,
                     readonly: true,
                     declared_by: None,
+                    written: None,
                 });
                 continue;
             }
@@ -47204,6 +47258,7 @@ impl<'a> FuncBuilder<'a> {
                     ty: field_ty,
                     readonly: true,
                     declared_by: None,
+                    written: None,
                 });
                 continue;
             }
@@ -47283,6 +47338,7 @@ impl<'a> FuncBuilder<'a> {
                 ty: field_ty,
                 readonly: true,
                 declared_by: None,
+                written: None,
             });
         }
         // The same layout the body's side builds. Both are pushed, and
@@ -70741,6 +70797,7 @@ mod tests {
                     ty: super::HirType::NUMBER,
                     declared_by: None,
                     readonly: false,
+                    written: None,
                 })
                 .collect(),
             methods: Vec::new(),
@@ -70879,6 +70936,8 @@ mod tests {
             abstract_declaration: false,
             async_result: None,
             frame: None,
+            obligations: Vec::new(),
+            written_return: None,
         });
 
         super::declare_interface_methods(&hierarchy, &mut program);

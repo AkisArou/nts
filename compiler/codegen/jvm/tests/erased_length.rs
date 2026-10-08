@@ -46,6 +46,8 @@ fn length(name: &str, returns: HirType) -> hir::Func {
         abstract_declaration: false,
         async_result: None,
         frame: None,
+        obligations: Vec::new(),
+        written_return: None,
     }
 }
 

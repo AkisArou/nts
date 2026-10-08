@@ -1100,6 +1100,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         }
     }
 
@@ -1190,6 +1192,7 @@ mod tests {
                     ty: HirType::NUMBER,
                     readonly: false,
                     declared_by: None,
+                    written: None,
                 }],
                 methods: Vec::new(),
                 base: None,
@@ -1305,6 +1308,7 @@ mod tests {
                     ty: HirType::NUMBER,
                     readonly: false,
                     declared_by: None,
+                    written: None,
                 }],
                 methods: Vec::new(),
                 base: None,
@@ -1396,6 +1400,7 @@ mod tests {
                     ty: HirType::NUMBER,
                     readonly: false,
                     declared_by: None,
+                    written: None,
                 }],
                 methods: Vec::new(),
                 base: None,

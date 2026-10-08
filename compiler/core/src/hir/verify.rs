@@ -1858,6 +1858,8 @@ mod tests {
                 async_result: None,
                 frame: None,
                 abstract_declaration: false,
+                obligations: Vec::new(),
+                written_return: None,
             }],
             ..Program::default()
         }
@@ -1925,6 +1927,7 @@ mod tests {
                 },
                 readonly: false,
                 declared_by: None,
+                written: None,
             }],
             methods: Vec::new(),
             base: None,
@@ -2009,6 +2012,7 @@ mod tests {
                 ty: HirType::Int { bits: 32, signed: true },
                 readonly: false,
                 declared_by: None,
+                written: None,
             }],
             methods: Vec::new(),
             base: None,
@@ -2118,6 +2122,7 @@ mod tests {
             ty,
             readonly: false,
             declared_by: None,
+            written: None,
         };
         let integer = HirType::Int { bits: 32, signed: true };
         let laid_out = |id: u32, name: &str, fields: Vec<Field>| Layout {
@@ -2221,6 +2226,7 @@ mod tests {
             ty: HirType::Float { bits: 64 },
             readonly: false,
             declared_by: None,
+            written: None,
         };
         let laid_out = |base: Option<TypeId>, id: u32, name: &str, fields: Vec<Field>| Layout {
             types: vec![TypeId(id)],
@@ -2513,6 +2519,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         };
         let passes_one = Func {
             name: "g".to_owned(),
@@ -2537,6 +2545,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         };
         let program = Program {
             funcs: vec![takes_two, passes_one],

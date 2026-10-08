@@ -283,6 +283,49 @@ pub struct Whole {
 
 /// What the rest of the program contributes to one function's analysis.
 ///
+/// The scalar kinds slots were **written** as (`docs/scalar-numbers.md`,
+/// step 1), as facts: every store into one was proven to fit
+/// (`super::obligations`), so a read is the kind's range whoever stored.
+///
+/// Declared rather than inferred, unlike [`Whole`]: the same in every round of
+/// the whole-program fixpoint, and the only one of the two the strict check
+/// may rely on (decision Q2). A parameter's is on the parameter
+/// ([`super::Param::written`]), which every analysis already reads.
+#[derive(Debug, Default)]
+pub struct Written {
+    /// What a call to each function returns, by name.
+    pub returns: FxHashMap<String, Facts>,
+    /// By `(object type, field)`, as [`Whole::field_facts`] is keyed.
+    pub fields: super::fields::FieldFacts,
+    /// By global, as [`Whole::global_facts`] is keyed.
+    pub globals: super::globals::GlobalFacts,
+}
+
+impl Written {
+    #[must_use]
+    pub fn of(program: &super::Program) -> Self {
+        let returns = program
+            .funcs
+            .iter()
+            .filter_map(|func| Some((func.name.clone(), func.written_return?.facts())))
+            .collect();
+        let mut fields = super::fields::FieldFacts::default();
+        for layout in &program.layouts {
+            for (index, field) in layout.fields.iter().enumerate() {
+                let (Some(kind), Ok(index)) = (field.written, u32::try_from(index)) else { continue };
+                fields.extend(layout.types.iter().map(|ty| ((*ty, index), kind.facts())));
+            }
+        }
+        let globals = program
+            .globals
+            .iter()
+            .enumerate()
+            .filter_map(|(index, global)| Some((u32::try_from(index).ok()?, global.written?.facts())))
+            .collect();
+        Self { returns, fields, globals }
+    }
+}
+
 /// Empty means "assume nothing", which is what a function analyzed on its own
 /// must do. Neither part can be inferred from inside the function: a parameter
 /// is written by callers and a call's result by the callee.
@@ -305,6 +348,8 @@ pub struct Context<'a> {
     pub param_lengths: &'a [Facts],
     /// What every function reads this round.
     pub whole: &'a Whole,
+    /// What the program wrote, which narrows every read of `whole`.
+    pub written: &'a Written,
 }
 
 /// Compute what is provable about every value in a function, alone.
@@ -319,6 +364,7 @@ pub fn analyze(func: &Func) -> Analysis {
             caps: &caps,
             param_lengths: &[],
             whole: &whole,
+            written: &Written::default(),
         },
     )
 }
@@ -492,12 +538,13 @@ fn merge(slot: &mut Option<Relations>, arriving: Relations) {
 
 /// Run one block, then hand its successors what it proved.
 /// What a parameter holds: what callers were proven to pass, if anything
-/// determined that, and otherwise what its declared type admits.
+/// determined that, and otherwise what its declared type admits -- a literal
+/// union's members, and a written scalar kind's range, which every call was
+/// proven to fit (`super::obligations`).
 fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
-    let declared = func
-        .params
-        .get(slot as usize)
-        .map_or(Facts::TOP, |param| param.known);
+    let declared = func.params.get(slot as usize).map_or(Facts::TOP, |param| {
+        param.written.map_or(param.known, |kind| param.known.narrow(kind.facts()))
+    });
     context
         .params
         .get(slot as usize)
@@ -511,9 +558,15 @@ fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
 /// tables are the complete list, so the join is sound. One of the runtime's own
 /// has a known result. Anything else is a wall.
 fn call_result(context: &Context, callee: &Callee) -> Facts {
+    // A method's override can't write its result wider than the declaration
+    // it overrides (Q1), so the declaration's kind holds for the dispatch.
+    let written = |name: &String| context.written.returns.get(name).copied().unwrap_or(Facts::TOP);
     match callee {
-        Callee::Direct(name) => context.whole.returns.get(name).copied().unwrap_or(Facts::TOP),
-        Callee::Virtual { slot, .. } | Callee::Closure { slot } => context
+        Callee::Direct(name) => context.whole.returns.get(name).copied().unwrap_or(Facts::TOP).narrow(written(name)),
+        Callee::Virtual { slot, declared } => {
+            context.whole.slot_returns.get(slot).copied().unwrap_or(Facts::TOP).narrow(written(declared))
+        }
+        Callee::Closure { slot } => context
             .whole
             .slot_returns
             .get(slot)
@@ -522,11 +575,12 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
         Callee::External(name) => {
             runtime_result(name).or_else(|| foreign_result(name)).unwrap_or(Facts::TOP)
         }
-        // A native callee's declared return type would seed this the same way
-        // `foreign_result` seeds a JVM descriptor -- the native lane owns that
-        // answer and does not have it yet, so TOP, which is pessimistic and
-        // never wrong.
-        Callee::Native(_) => Facts::TOP,
+        // What C returns is its declared type's: an `unsigned int` result is
+        // 0..2^32-1, whole, as `foreign_result` reads a JVM descriptor.
+        Callee::Native(target) => match target.result {
+            super::native::Type::Scalar(kind) => kind.facts(),
+            _ => Facts::TOP,
+        },
     }
 }
 
@@ -699,12 +753,14 @@ fn field_facts(context: &Context, object: &super::HirType, field: u32) -> Facts 
     let super::HirType::Managed(super::ManagedType::Object(ty)) = object else {
         return Facts::TOP;
     };
+    let written = context.written.fields.get(&(*ty, field)).copied().unwrap_or(Facts::TOP);
     context
         .whole
         .field_facts
         .get(&(*ty, field))
         .copied()
         .unwrap_or(Facts::TOP)
+        .narrow(written)
 }
 
 /// What one operation says about its result.
@@ -825,7 +881,8 @@ fn transfer_op(
             .global_facts
             .get(global)
             .copied()
-            .unwrap_or(Facts::TOP),
+            .unwrap_or(Facts::TOP)
+            .narrow(context.written.globals.get(global).copied().unwrap_or(Facts::TOP)),
         // What anything in the program stored into an array of this type,
         // but *only once the storage agrees*.
         //
@@ -1234,6 +1291,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         }
     }
 

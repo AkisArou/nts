@@ -65,6 +65,8 @@ fn program() -> hir::Program {
             abstract_declaration: false,
             async_result: None,
             frame: None,
+            obligations: Vec::new(),
+            written_return: None,
         }],
         layouts: vec![hir::Layout {
             types: vec![TypeId(1)],
@@ -74,6 +76,7 @@ fn program() -> hir::Program {
                 ty: HirType::NUMBER,
                 readonly: false,
                 declared_by: None,
+                written: None,
             }],
             methods: Vec::new(),
             interfaces: Vec::new(),

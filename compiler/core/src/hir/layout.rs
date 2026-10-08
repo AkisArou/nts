@@ -395,6 +395,7 @@ mod tests {
             readonly: false,
             // Placement depends on width and order, never on who declared what.
             declared_by: None,
+            written: None,
         }
     }
 

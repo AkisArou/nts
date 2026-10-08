@@ -427,6 +427,8 @@ pub(in crate::hir) mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         }
     }
 
@@ -503,6 +505,8 @@ pub(in crate::hir) mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         }
     }
 
@@ -632,6 +636,8 @@ pub(in crate::hir) mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         };
 
         let live = analyze(&func);

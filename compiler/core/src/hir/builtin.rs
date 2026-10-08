@@ -206,12 +206,14 @@ pub(super) fn iterator_result_fields(value: HirType) -> Vec<Field> {
             ty: HirType::Bool,
             readonly: false,
             declared_by: None,
+            written: None,
         },
         Field {
             name: "value".to_owned(),
             ty: value,
             readonly: false,
             declared_by: None,
+            written: None,
         },
     ]
 }
@@ -233,6 +235,7 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
             ty: HirType::Managed(ManagedType::String),
             readonly: false,
             declared_by: None,
+            written: None,
         })
         .collect();
     // **After the shared two, which is what keeps base-first layout true.**
@@ -267,6 +270,7 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
         ty: HirType::Erased,
         readonly: false,
         declared_by: None,
+        written: None,
     });
     if class == "AggregateError" {
         fields.push(Field {
@@ -292,6 +296,7 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
             ty: HirType::Erased,
             readonly: false,
             declared_by: None,
+            written: None,
         });
     }
     fields

@@ -1347,6 +1347,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         };
         Program { funcs: vec![func], ..Program::default() }
     }
@@ -1389,7 +1391,7 @@ mod tests {
             types: vec![nts_semantic_schema::TypeId(1)],
             name: "Cell".to_owned(),
             interfaces: Vec::new(),
-            fields: vec![crate::hir::Field { name: "value".to_owned(), ty: string(), readonly: false, declared_by: None }],
+            fields: vec![crate::hir::Field { name: "value".to_owned(), ty: string(), readonly: false, declared_by: None, written: None }],
             methods: Vec::new(),
             base: None,
         }];

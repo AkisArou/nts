@@ -259,6 +259,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         }
     }
 
@@ -465,6 +467,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         };
         assert_eq!(narrow_truncated(&mut it), 2);
         assert_eq!(it.values[2].ty, I32);

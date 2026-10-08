@@ -5855,6 +5855,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         };
         let op = value(i32_ty);
         for (bin, operator) in [(BinOp::Add, "+"), (BinOp::Sub, "-"), (BinOp::Mul, "*")] {
@@ -5906,6 +5908,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         };
         let calling = |name: &str| Op {
             kind: OpKind::Call {
@@ -6020,6 +6024,8 @@ mod tests {
             async_result: None,
             frame: None,
             abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
         };
         let defined: rustc_hash::FxHashSet<String> = ["holds".to_owned()].into_iter().collect();
 
