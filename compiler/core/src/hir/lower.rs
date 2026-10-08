@@ -17279,7 +17279,10 @@ fn representation_of(
         // 128 bits, which is not what the specification says. See
         // `lower_bigint`, where the boundary is drawn and made visible.
         TypeKind::BigInt | TypeKind::Literal(LiteralValue::BigInt(_)) => HirType::BigInt,
-        TypeKind::String | TypeKind::Literal(LiteralValue::String(_)) => {
+        // A template literal type (`${string}-${string}`, which lib.dom's
+        // `crypto.randomUUID()` answers) constrains which strings, never that
+        // it is one: every value of it is a string.
+        TypeKind::String | TypeKind::Literal(LiteralValue::String(_)) | TypeKind::TemplateLiteral { .. } => {
             HirType::Managed(ManagedType::String)
         }
         // Every symbol has one representation, including a `unique symbol`.
@@ -24679,7 +24682,9 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
             .and_then(|record| match &record.kind {
                 TypeKind::Number | TypeKind::Literal(LiteralValue::Number(_)) => Some("number"),
-                TypeKind::String | TypeKind::Literal(LiteralValue::String(_)) => Some("string"),
+                TypeKind::String | TypeKind::Literal(LiteralValue::String(_)) | TypeKind::TemplateLiteral { .. } => {
+                    Some("string")
+                }
                 TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => Some("boolean"),
                 TypeKind::BigInt => Some("bigint"),
                 TypeKind::Symbol => Some("symbol"),
@@ -39860,7 +39865,9 @@ impl<'a> FuncBuilder<'a> {
             TypeKind::Null => "null",
             TypeKind::Boolean | TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(_)) => "boolean",
             TypeKind::Number | TypeKind::Literal(nts_semantic_schema::LiteralValue::Number(_)) => "number",
-            TypeKind::String | TypeKind::Literal(nts_semantic_schema::LiteralValue::String(_)) => "string",
+            TypeKind::String
+            | TypeKind::Literal(nts_semantic_schema::LiteralValue::String(_))
+            | TypeKind::TemplateLiteral { .. } => "string",
             TypeKind::Function(signature) => {
                 let result = self.snapshot.signatures.get(signature.0 as usize)?.return_type;
                 match self.snapshot.types.get(result.0 as usize)?.kind {

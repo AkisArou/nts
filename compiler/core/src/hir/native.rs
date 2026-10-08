@@ -4039,7 +4039,8 @@ pub(crate) fn is_branded_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool
 pub(crate) fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Encoding> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
     match kind(ty)? {
-        TypeKind::String => Some(Encoding::Utf8),
+        // A template literal type is a set of strings, and crosses as one.
+        TypeKind::String | TypeKind::TemplateLiteral { .. } => Some(Encoding::Utf8),
         TypeKind::Intersection(parts) => {
             let [a, b] = parts.as_slice() else { return None };
             let (text, brand) = if matches!(kind(*a), Some(TypeKind::String)) { (a, b) } else { (b, a) };

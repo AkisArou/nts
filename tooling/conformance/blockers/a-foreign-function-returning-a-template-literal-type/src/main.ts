@@ -1,4 +1,4 @@
-// expect: NTS1001 a returned string of unrepresentable type (a template literal type)
+// expect: nothing refused
 //
 // A template literal type is refused, though every value of one is a string.
 // lib.dom declares `crypto.randomUUID()` as returning
@@ -10,6 +10,9 @@
 //
 // Control, one difference -- `make_id` declared returning `string`
 // (types/host.d.ts): nothing refused.
+//
+// **A guard since 2026-10-08** (MainClaude): a template literal type is
+// `Managed(String)`. examples/a-template-literal-type-is-a-string runs it.
 import { make_id } from "host";
 
 export function idLength(): number {
