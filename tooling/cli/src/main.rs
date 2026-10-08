@@ -731,9 +731,16 @@ fn main() -> Result<()> {
             let tsconfig = project(&rest)?;
             dump_hir(&tsconfig)
         }
+        // `--crossings`: every place a number or bigint crosses into a
+        // native integer, and whether the range analysis proves it fits --
+        // the census strict native calls are measured by
+        // (docs/scalar-numbers.md, step 0). Report only. `--tsv` for tools.
         Some("facts") => {
             let rest: Vec<String> = args.collect();
             let tsconfig = project(&rest)?;
+            if rest.iter().any(|arg| arg == "--crossings") {
+                return dump_crossings(&tsconfig, rest.iter().any(|arg| arg == "--tsv"));
+            }
             dump_facts(&tsconfig, rest.iter().any(|arg| arg == "--prepared"))
         }
         Some("refusals") => {
@@ -1449,6 +1456,97 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     let prepared = hir::prepare_unverified(&snapshot, &hir::Options::default());
     for (name, why) in &prepared.program.uncompiled {
         println!("{name}\t{why}");
+    }
+    Ok(())
+}
+
+/// `nts facts --crossings`: [`hir::crossings::census`] over the lowered
+/// program, with the whole-program analysis, as `dump_facts` reads it.
+fn dump_crossings(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
+    use hir::crossings::{Into, Source, Why};
+    let tsgo_binary = frontend_binary();
+    let mut source = frontend_for(tsconfig, tsgo_binary)?;
+    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    if snapshot.has_errors() {
+        bail!("the program does not typecheck");
+    }
+    let program = hir::lower::lower(&snapshot).program;
+    let analyses = hir::interprocedural::analyze_program(&program, hir::reachable::Roots::EveryExport);
+    let crossings = hir::crossings::census(&program, &analyses);
+
+    let reasons = |why: &[Why]| -> String {
+        why.iter()
+            .map(|why| match why {
+                Why::Fraction => "may be a fraction".to_owned(),
+                Why::NaN => "may be NaN".to_owned(),
+                Why::Below(lo) => format!("may be as low as {}", render_bound(*lo)),
+                Why::Above(hi) => format!("may be as high as {}", render_bound(*hi)),
+                Why::NoBigIntRanges => "a bigint (no bigint ranges yet)".to_owned(),
+                Why::LiteralOutside(literal) => format!("the literal {literal} doesn't fit"),
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    let known = |source: &Source| -> String {
+        match source {
+            Source::Number(facts) => format!(
+                "[{}, {}]{}{}",
+                render_bound(facts.lo),
+                render_bound(facts.hi),
+                if facts.whole { " whole" } else { "" },
+                if facts.maybe_nan { " nan?" } else { "" },
+            ),
+            Source::BigInt(Some(literal)) => format!("{literal}n"),
+            Source::BigInt(None) => "bigint".to_owned(),
+        }
+    };
+    let (mut proven, mut unproven) = (0usize, 0usize);
+    let mut by_reason: std::collections::BTreeMap<&'static str, usize> = std::collections::BTreeMap::new();
+    for crossing in &crossings {
+        let place = nts_diagnostics::where_it_is(&snapshot.sources, &crossing.location);
+        let (kind, target, c_type) = match &crossing.into {
+            Into::Argument { function, position, c_type } => ("argument", format!("{function}#{position}"), c_type.as_str()),
+            Into::Store { c_type } => ("store", String::new(), c_type.as_str()),
+        };
+        let (lo, hi) = crossing.range();
+        let verdict = if crossing.proven() { "proven" } else { "unproven" };
+        if crossing.proven() {
+            proven += 1;
+        } else {
+            unproven += 1;
+            for why in &crossing.unproven {
+                *by_reason
+                    .entry(match why {
+                        Why::Fraction => "may be a fraction",
+                        Why::NaN => "may be NaN",
+                        Why::Below(_) => "may be below the range",
+                        Why::Above(_) => "may be above the range",
+                        Why::NoBigIntRanges => "a bigint (no ranges)",
+                        Why::LiteralOutside(_) => "a literal outside",
+                    })
+                    .or_default() += 1;
+            }
+        }
+        if tsv {
+            println!(
+                "{verdict}\t{place}\t{}\t{kind}\t{target}\t{c_type}\t{lo}..{hi}\t{}\t{}",
+                crossing.func,
+                known(&crossing.source),
+                reasons(&crossing.unproven)
+            );
+        } else {
+            let into = if target.is_empty() { format!("a store into {c_type}") } else { format!("{target} ({c_type})") };
+            println!("{verdict:<9} {place}  {into}, {lo}..{hi}: knows {}", known(&crossing.source));
+            if !crossing.proven() {
+                println!("          {}", reasons(&crossing.unproven));
+            }
+        }
+    }
+    if !tsv {
+        println!("{} crossing(s): {proven} proven, {unproven} unproven", crossings.len());
+        for (reason, count) in by_reason {
+            println!("  {count:>5}  {reason}");
+        }
     }
     Ok(())
 }
