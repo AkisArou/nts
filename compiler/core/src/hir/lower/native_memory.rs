@@ -583,9 +583,22 @@ impl FuncBuilder<'_> {
     /// (`Fields<T>` in a variable): each field read from it and written into
     /// storage in the frame, as labels in a variable are read at the call.
     /// A field the object does not have stays zero, as a literal's does.
+    ///
+    /// **A `StringView` field is lent, as a literal's is** (`native_record_literal`):
+    /// what was lent waits beside the storage (`copied_lent`) for the call it
+    /// is passed to. Without it every dictionary reached through lib.dom's
+    /// delegation was refused for its string -- `new KeyboardEvent("keydown",
+    /// { key: "a" })`, `attachShadow({ mode: "open" })` -- because the
+    /// delegating wrapper holds the literal as an object and hands it on, so
+    /// it arrives here and not at the literal (the Chromium lane's
+    /// lib-dom-dictionary-with-a-string-member).
     pub(super) fn native_record_from_object(&mut self, id: NodeId, object: ValueId, ty: HirType) -> Result<ValueId, Diagnostic> {
         let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
-        self.copy_into_native_record(id, object, storage, None)?;
+        let mut lent = Vec::new();
+        self.copy_into_native_record(id, object, storage, Some(&mut lent))?;
+        if !lent.is_empty() {
+            self.copied_lent.insert(storage, lent);
+        }
         Ok(storage)
     }
 

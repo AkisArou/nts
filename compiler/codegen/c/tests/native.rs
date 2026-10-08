@@ -1298,3 +1298,101 @@ void handler_clear(void) {
         assert!(status.success(), "{provider:?}: the caller answered {status}");
     }
 }
+
+/// A `StringView` member of a record passed by value, from an object the
+/// program *holds* (`Fields<T>` in a variable, and a parameter handing one
+/// on, which is how lib.dom's delegation reaches the binding) rather than
+/// from a literal written at the call: the string is lent for the call, as a
+/// literal's is. Run under reference counting with `-fsanitize=address`, since
+/// the question is whether the string the host reads is alive and released
+/// exactly once; heap strings, so a miscount is a use-after-free or a double
+/// free and not a quiet no-op on an immortal constant.
+#[test]
+fn a_held_record_lends_its_string_member_for_the_call() {
+    let binding = r#"
+declare module "x:ev" {
+  import type { ByValue, CBool, Fields, StringView, Struct, c_double, c_uint8 } from "c:types";
+  export type Init = Struct<{ key: StringView | null; repeat: CBool<c_uint8> }, "EvInit">;
+  /** @ntsSymbol ev_key_length */
+  export function keyLength(init: ByValue<Init> | Fields<Init>): c_double;
+}
+"#;
+    let source = r#"
+import { keyLength, type Init } from "x:ev";
+import type { Fields } from "c:types";
+export function literal(n: number): number {
+  return keyLength({ key: "k".repeat(n), repeat: true }) as number;
+}
+export function held(n: number): number {
+  const init: Fields<Init> = { key: "k".repeat(n), repeat: true };
+  return keyLength(init) as number;
+}
+interface KeyInit { key: string; repeat: boolean }
+function handOn(init: KeyInit): number {
+  return keyLength(init) as number;
+}
+export function handedOn(n: number): number {
+  return handOn({ key: "x".repeat(n), repeat: false });
+}
+"#;
+    let host = "#include <stddef.h>\n#include <stdint.h>\n#include <stdbool.h>\n#include \"nts_string_view.h\"\n\
+                struct EvInit { const NtsBorrowedString *key; uint8_t repeat; };\n\
+                double ev_key_length(struct EvInit init) {\n\
+                \x20 if (init.key == NULL) return -1;\n\
+                \x20 NtsStringView view = nts_string_view(init.key);\n\
+                \x20 return (double)view.length + (init.repeat ? 1000 : 0);\n}\n";
+    let caller = "#include \"program.h\"\n\
+                  int main(void) {\n\
+                  \x20 for (int i = 0; i < 50; i++) {\n\
+                  \x20   if (literal(40) != 1040) return 1;\n\
+                  \x20   if (held(30) != 1030) return 2;\n\
+                  \x20   if (handedOn(20) != 20) return 3;\n\
+                  \x20 }\n\
+                  \x20 return 0;\n}\n";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+        let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
+        let dir = root.join(format!("target/native-c-tests/{}-held-record-{provider:?}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("tsconfig.json"),
+            format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts"]}}"#),
+        )
+        .unwrap();
+        std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
+        std::fs::write(dir.join("main.ts"), source).unwrap();
+        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+        assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+        let options = hir::Options { provider, ..hir::Options::default() };
+        let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
+        assert!(prepared.diagnostics.is_empty(), "{provider:?}: {:?}", prepared.diagnostics);
+        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+        std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
+        for file in emitted.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(dir.join("host.c"), host).unwrap();
+        std::fs::write(dir.join("caller.c"), caller).unwrap();
+        let mut objects = Vec::new();
+        for source in ["program.c", "nts_runtime.c", "host.c", "caller.c"] {
+            let object = format!("{source}.o");
+            let mut args = vec!["-std=gnu11", "-D_GNU_SOURCE", "-O1", "-g0", "-w", "-fsanitize=address", "-I", ".", "-c", source, "-o", &object];
+            if provider == hir::Provider::ReferenceCounting {
+                args.push("-DNTS_PROVIDER_RC");
+            }
+            let result = Command::new("clang").current_dir(&dir).args(&args).output().unwrap();
+            assert!(result.status.success(), "{provider:?} {source}: {}", String::from_utf8_lossy(&result.stderr));
+            objects.push(object);
+        }
+        let result = Command::new("clang")
+            .current_dir(&dir)
+            .args(&objects)
+            .args(["-fsanitize=address", "-lm", "-lpthread", "-o", "caller"])
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{provider:?}: {}", String::from_utf8_lossy(&result.stderr));
+        let run = Command::new(dir.join("caller")).env("ASAN_OPTIONS", "detect_leaks=0").output().unwrap();
+        assert!(run.status.success(), "{provider:?}: {}\n{}", run.status, String::from_utf8_lossy(&run.stderr));
+    }
+}
