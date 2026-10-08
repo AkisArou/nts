@@ -30,7 +30,7 @@ runtime/node/stream	394.7	30.0
 runtime/node/string_decoder	74.5	4.5
 runtime/node/timers	32.8	2.0
 runtime/node/tty	0.0	0.0
-runtime/node/url	74.5	4.1
+runtime/node/url	303.1	4.1
 runtime/node/util	301.0	21.1
 runtime/node/zlib	413.9	30.3
 runtime/web-platform	377.7	26.3
