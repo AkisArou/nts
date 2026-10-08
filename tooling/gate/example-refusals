@@ -113,3 +113,4 @@ a-nested-function-used-before-its-declaration 1 the boundary arm: a hoisted clos
 a-closed-call-recovers-an-erased-parameter 9 ordinary erased arithmetic and method receivers still refuse; closed number/string copies supply the behavioral roots
 a-closed-call-recovers-an-erased-object-parameter 6 the erased originals still refuse a field, two methods, two `length`s and an index on `any`; object, array and boolean copies supply every root
 a-module-read-of-a-cut-binding 1 `make`'s `Object.defineProperty`, on purpose: the module-scope cut it starts is the subject
+an-inferred-array-literal-at-its-binding 1 `passed`: an inferred array of records handed to an `Entry[]` parameter, whose nested records are one layout only after `collect_layouts`

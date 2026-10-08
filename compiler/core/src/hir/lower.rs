@@ -53655,15 +53655,27 @@ impl<'a> FuncBuilder<'a> {
                 // `lower_array_literal` already prefers the expected type over
                 // its own; it was never given one here.
                 //
-                // Only where an annotation was **written**. Without one,
-                // `type_of(name)` is the checker's inference, which is what the
-                // expression produces anyway -- passing it as a contextual type
-                // would be this deciding a literal's shape from a type the
-                // literal itself decided, which is a loop rather than a slot.
-                Some(initializer) => match annotation.and_then(|_| self.type_of(name)) {
-                    Some(declared) => self.lower_expecting(initializer, &declared)?,
-                    None => self.lower_expression(initializer)?,
-                },
+                // And an **inferred** binding, where the initializer is a fresh
+                // array literal. This said once that without an annotation
+                // `type_of(name)` is what the expression produces anyway, so
+                // passing it would be a loop rather than a slot. It is not: the
+                // binding's type is the literal's *widened*, and the checker
+                // gives the two -- and each nested record -- distinct ids, so
+                // `const backing = [{ value: n, nested: { text: "a" } }]` built
+                // an array of one id and met `coerce` wanting another: "an
+                // array of Object(124) where an array of Object(126) is wanted".
+                // Built at the binding's type instead, each element is lowered
+                // and coerced as before. Only a *fresh* literal: an array that
+                // already exists, or a pattern, has no construction to steer.
+                // (Re-derived from Codex 7dab54f0a.)
+                Some(initializer) => {
+                    let fresh_array = self.kind_of(name) == Some(syntax::IDENTIFIER)
+                        && self.kind_of(initializer) == Some(syntax::ARRAY_LITERAL_EXPRESSION);
+                    match (annotation.is_some() || fresh_array).then(|| self.type_of(name)).flatten() {
+                        Some(declared) => self.lower_expecting(initializer, &declared)?,
+                        None => self.lower_expression(initializer)?,
+                    }
+                }
                 None => self.unwritten(name, declaration)?,
             };
             // `const { a, b } = o` and `const [a, b] = xs`: one initializer,
