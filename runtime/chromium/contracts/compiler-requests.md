@@ -439,3 +439,19 @@ The adapter's half (the lane's, once this exists): a native
 whose construction and reactions call the program's constructor and
 callbacks through the invoker, under a ProgramScope, as listeners are
 called today; `customElements` bound on Window.
+
+## 14. A foreign function returning a Closure
+
+**Requested 2026-10-08. Blocks: every event handler attribute's getter
+(`onclick`, `onload`, ... -- 406 members, 169 names; their setters bind),
+workarounds ledger row 11. Fixture:
+`blockers/a-foreign-function-returning-a-closure`.**
+
+A `Closure<F>` goes to C as a parameter (the host retains it) but a foreign
+function's return of type `Closure<F>` (or `Closure<F> | null`) is refused:
+"a type with no native ABI". The host hands back a closure the program made
+and lent -- Blink keeps the attribute's listener, the adapter returns the
+NtsClosure it holds -- retained for the caller, as handles are returned
+today. What the lane needs: `Closure<F>` and `Closure<F> | null` as foreign
+results (NULL is null), owned by the caller, callable and comparable by
+identity (`button.onclick === handler`).
