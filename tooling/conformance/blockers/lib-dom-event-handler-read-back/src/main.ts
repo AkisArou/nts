@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> invalid HIR: CallResultType { func: "isUnset", callee: "nts_dom_HTMLElement_get_onclick"
+// expect: emit-c --rc -> emits-c nts_dom_HTMLElement_get_onclick(
 //
 // An event handler attribute read under lib.dom's types -- `el.onclick`,
 // typed `((this: GlobalEventHandlers, ev: PointerEvent) => any) | null` --
@@ -14,6 +14,11 @@
 //
 // Control (emit-c --rc), one difference -- the attribute written
 // (`target.onclick = null; return true;`), not read: nothing refused.
+//
+// **A guard since 2026-10-08** (MainClaude): the getter's result and the
+// property spell one signature twice, and `canonicalize_objects` now gives a
+// native call's own result the representative its value gets; the read is
+// typed as the getter declares it, so both ids are seen.
 export function isUnset(): boolean {
   const target = document.createElement("div");
   return target.onclick === null;

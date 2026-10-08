@@ -15609,6 +15609,22 @@ fn canonicalize_objects(program: &mut Program) {
         }
     };
 
+    // **And a native call's own signature**, where it names an object: a
+    // closure a foreign function answers (`Closure<F>`, request 14) is the
+    // program's object of `F`'s signature type. The getter and the property
+    // reading it spell that type twice -- two ids, one layout -- so the call's
+    // value was rewritten to the representative and its callee's result was
+    // not, and the verifier saw them disagree.
+    let canonical_native = |ty: &mut super::native::Type| {
+        if let super::native::Type::Managed(managed @ ManagedType::Object(_)) = ty {
+            let mut whole = HirType::Managed(managed.clone());
+            canonical(&mut whole);
+            if let HirType::Managed(object) = whole {
+                *managed = object;
+            }
+        }
+    };
+
     for func in &mut program.funcs {
         canonical(&mut func.return_type);
         for param in &mut func.params {
@@ -15616,6 +15632,11 @@ fn canonicalize_objects(program: &mut Program) {
         }
         for value in &mut func.values {
             canonical(&mut value.ty);
+            if let OpKind::Call { callee: Callee::Native(target), .. } = &mut value.kind
+                && matches!(&target.result, super::native::Type::Managed(ManagedType::Object(_)))
+            {
+                canonical_native(&mut std::sync::Arc::make_mut(target).result);
+            }
         }
     }
 }
@@ -40183,6 +40204,24 @@ impl<'a> FuncBuilder<'a> {
         }
         let written = args.len();
         let (args, lent) = self.native_arguments(id, &target.clone(), args, written, Some(receiver))?;
+        // **A read is typed as the getter declares its result, then as the
+        // property.** The node read is the property (`el.onclick`), and the
+        // getter (`_get_onclick`) spells the same type separately: two ids for
+        // one signature, which `canonicalize_objects` makes one only where a
+        // value mentions both. Typed as the property alone, the getter's id
+        // appeared nowhere but in its callee, and the call's result disagreed
+        // with it -- invalid HIR, nothing emitted (the Chromium lane's
+        // a-closure-typed-property-read) -- where `el._get_onclick()`, whose
+        // node *is* the call, compiled.
+        let declared = target.result.representation();
+        if written == 0
+            && matches!(declared, HirType::Managed(ManagedType::Object(_)))
+            && let Some(read) = self.type_of(id)
+            && declared != read
+        {
+            let call = self.finish_call_typed(id, callee, args, lent, Some(declaration), Some(declared))?;
+            return self.coerce(call, &read, id);
+        }
         self.finish_call(id, callee, args, lent, Some(declaration))
     }
 
