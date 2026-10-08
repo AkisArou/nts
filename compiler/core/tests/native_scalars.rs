@@ -243,7 +243,7 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
 
 #[test]
 fn native_memory_verifier_rejects_corrupted_widths_and_indices() {
-    let Some(snapshot) = snapshot("native-memory-verifier", "import type { Ptr } from \"c:types\"; export function run(p: Ptr<c_uint8>, n: number): number { p[0] = n; return p[1]; }") else { return; };
+    let Some(snapshot) = snapshot("native-memory-verifier", "import type { Ptr } from \"c:types\"; export function run(p: Ptr<c_uint8>, n: c_uint8): number { p[0] = n; return p[1]; }") else { return; };
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let function = prepared.program.funcs.iter().position(|f| f.name == "run").unwrap();
@@ -921,7 +921,7 @@ fn a_retained_callback_refuses_a_local_context_and_accepts_a_heap_one() {
          import { local, sizeof } from \"c:memory\";\n\
          import { malloc, free } from \"c:stdlib\";\n\
          type Slot = Struct<{ n: c_int }, \"slot\">;\n\
-         function tick(ctx: Ptr<Slot>, n: c_int): void { ctx.n = (ctx.n + n) as c_int; }\n\
+         function tick(ctx: Ptr<Slot>, n: c_int): void { ctx.n = n; }\n\
          declare function subscribe(cb: (c: Ptr<Slot>, n: c_int) => void, ctx: Ptr<Slot>): c_int;\n";
     for (name, body, refused) in [
         (
@@ -977,8 +977,8 @@ fn an_async_callback_is_refused_and_an_async_caller_is_not() {
          import { malloc, free } from \"c:stdlib\";\n\
          import { sizeof } from \"c:memory\";\n\
          type Slot = Struct<{ n: c_int }, \"slot\">;\n\
-         function now(ctx: Ptr<Slot>, n: c_int): void { ctx.n = (ctx.n + n) as c_int; }\n\
-         async function later(ctx: Ptr<Slot>, n: c_int): Promise<void> { ctx.n = (ctx.n + n) as c_int; }\n\
+         function now(ctx: Ptr<Slot>, n: c_int): void { ctx.n = n; }\n\
+         async function later(ctx: Ptr<Slot>, n: c_int): Promise<void> { ctx.n = n; }\n\
          declare function subscribe(cb: (c: Ptr<Slot>, n: c_int) => void, ctx: Ptr<Slot>): c_int;\n";
     for (name, body, refused) in [
         (

@@ -242,6 +242,17 @@ machine:
   - what to write instead.
 - **Where it shows:** at build time, from the compiler (D7). A language
   server comes later.
+- **The codes** (`hir::obligations::check`):
+  - `NTS5001`: a value that may not fit what it is stored into, with why and
+    how to prove it using what JavaScript already has (`Number.isInteger`, a
+    guard on the range, `Math.fround`), so the fix runs the same under node;
+  - `NTS5002`: a function let into a function type whose parameter is not
+    written as the kind the function's own parameter is;
+  - `NTS5003`: an override that writes a parameter or its result as another
+    kind than the method it overrides.
+
+  A program with any of them does not compile (`Unprepared::Rejected`), as one
+  that does not typecheck does not.
 
 ## 5. Build order
 
@@ -380,6 +391,23 @@ design above became in the code, and the choices made on the way:
   (`Facts::integral` is the old meaning). Facts flow through an `Unerase`,
   emitted only where a test proved the value is a number, which a uniform
   closure entry needs to pass its written parameters on.
+- **Bigints have exact ranges of their own** (1h): a double can't tell
+  `2^63 - 1` from `2^63`, the very edge `BigInt.asIntN(64, x)` sits on, so the
+  strict check runs a small local analysis of exact 128-bit intervals over
+  them: written kinds, native results, literals, `asIntN`/`asUintN`, `+ - * &
+  >>` and negation, joins, and comparison guards.
+- **A `float` slot takes a value proven exact**, judged from how it was made:
+  `Math.fround(x)` (JavaScript's own narrowing, so node runs it too), a value
+  that was a `float` already, a number a `float` holds exactly, or a join of
+  those.
+- **Targets** (`Options::targets`, default the host): an obligation's kind is
+  the one every target holds (`Scalar::on`), so `long` is 32 bits for a build
+  that includes Windows. This is today's two ABI models; **the platform
+  tables move to step 2**, where they are keyed by the new vocabulary's names.
+- **Strict is on, and the wrapping is gone**: `prepare` runs the check right
+  after lowering, and a `number` into a C integer argument or store is
+  converted exactly, being proven to fit. A typed array keeps `ToInt32` (C27).
+
 
 
 **2. Written scalar types** (B, D, E, G):
