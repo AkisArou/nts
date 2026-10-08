@@ -5652,6 +5652,26 @@ fn doomed_values(
                 grew = true;
             }
         }
+        // **And the object a doomed constructor would have built.** The rule
+        // above leaves a seed's arguments standing, and for a constructor call
+        // its first is the allocation it was to fill: `const held = new
+        // Holder(refused)` kept `held = ObjectNew` and lost only the call, so
+        // the global held an object no constructor wrote -- `held.callback(1)`
+        // read a null callback and the program died of SIGSEGV. Doomed with
+        // its constructor, the store is cut and `held` is a stale global whose
+        // readers are refused. Re-derived from Codex 3e0d29f34.
+        for (index, op) in func.values.iter().enumerate() {
+            let OpKind::Call { callee: Callee::Direct(name), args, .. } = &op.kind else { continue };
+            let Some(&receiver) = args.first() else { continue };
+            let Some(cause) = doomed.get(&ValueId(u32::try_from(index).unwrap_or(u32::MAX))) else { continue };
+            if name.ends_with("#constructor")
+                && !doomed.contains_key(&receiver)
+                && matches!(func.values[receiver.0 as usize].kind, OpKind::ObjectNew { .. })
+            {
+                doomed.insert(receiver, cause.clone());
+                grew = true;
+            }
+        }
         let lost: rustc_hash::FxHashSet<u32> = doomed
             .keys()
             .filter_map(|value| match func.values[value.0 as usize].kind {
