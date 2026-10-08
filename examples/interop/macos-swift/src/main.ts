@@ -15,6 +15,7 @@
 //   greeter gone     the Greeter released once the program drops it
 import { Greeter, Watch, type GreeterDelegate } from "objc:Greeter";
 import { NSObject } from "objc:Foundation";
+import type { Int } from "objc:types";
 
 class Watcher extends NSObject implements GreeterDelegate {
   shout = false;
@@ -29,7 +30,7 @@ class Watcher extends NSObject implements GreeterDelegate {
 }
 
 // Made and dropped here: once this returns, nothing holds the Greeter.
-async function greetings(watcher: Watcher): Promise<number> {
+async function greetings(watcher: Watcher): Promise<Int> {
   const greeter = new Greeter({ name: "nts" });
   const watch = Watch.watch(greeter);
   console.log(`greet ${greeter.greet({ withTimes: 2 })}`);

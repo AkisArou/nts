@@ -24,7 +24,7 @@ import {
 import type { c_double, c_int, c_size_t } from "c:types";
 
 let clicks = 0;
-let targetWatch = 0 as c_int;
+let targetWatch: c_int = 0 as c_int;
 
 function define(): void {
   const base = objc_getClass("NSObject");

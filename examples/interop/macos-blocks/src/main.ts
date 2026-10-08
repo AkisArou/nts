@@ -102,8 +102,8 @@ function cancelled(): c_int {
   return watch;
 }
 
-let cancelledWatch = 0 as c_int;
-let tickingWatch = 0 as c_int;
+let cancelledWatch: c_int = 0 as c_int;
+let tickingWatch: c_int = 0 as c_int;
 
 function ticking(): void {
   const sentinel = newObject();
@@ -125,7 +125,7 @@ function ticking(): void {
 // and is released here, with the object it captured. Only when
 // `BLOCKS_OFF_THREAD` is set (build.sh's arm), since Objective-C itself runs
 // the block where it is called, and the oracle is Objective-C.
-let offWatch = 0 as c_int;
+let offWatch: c_int = 0 as c_int;
 
 function offThread(): void {
   const sentinel = newObject();

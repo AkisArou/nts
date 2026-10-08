@@ -48,7 +48,7 @@ function row(pixels: Ptr<c_uint8>, y: number, width: number): string {
   return text;
 }
 
-let watch = 0 as c_int;
+let watch: c_int = 0 as c_int;
 
 // The colours, made and dropped here: once this returns, nothing holds them
 // but the context's own state, which a later colour replaces.

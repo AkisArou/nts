@@ -82,7 +82,7 @@ class Fruits extends NSObject implements UITableViewDataSource, UITableViewDeleg
 }
 
 // The label of the row `row` shows, or `none`.
-function shown(table: UITableView, row: number): string {
+function shown(table: UITableView, row: Int): string {
   return table.cellForRow({ at: new NSIndexPath({ forRow: row, inSection: 0 }) })?.textLabel?.text ?? "none";
 }
 

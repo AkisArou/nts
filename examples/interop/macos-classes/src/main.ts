@@ -26,7 +26,7 @@ import type { c_int } from "c:types";
 import type { ObjCBool, UInt } from "objc:types";
 import { local } from "c:memory";
 
-let watch = 0 as c_int;
+let watch: c_int = 0 as c_int;
 
 // `new` hands over an object the caller owns: once this returns, nothing
 // holds it, and it is gone.
@@ -35,9 +35,9 @@ function made(): void {
   watch = weak_watch(object);
 }
 
-let replaced = 0 as c_int;
-let held = 0 as c_int;
-let mapped = 0 as c_int;
+let replaced: c_int = 0 as c_int;
+let held: c_int = 0 as c_int;
+let mapped: c_int = 0 as c_int;
 
 // A weak watch on a map's entry, in a function of its own: a counted handle a
 // function reads is held to the end of its block, and this one's ends here.
@@ -114,7 +114,7 @@ class Tally extends NSObject {
   }
 }
 
-let tallyWatch = 0 as c_int;
+let tallyWatch: c_int = 0 as c_int;
 
 function tallied(): string {
   const tally = new Tally();
@@ -143,7 +143,7 @@ class Scored extends Tally {
 
 class Plain extends Tally {}
 
-let scoredWatch = 0 as c_int;
+let scoredWatch: c_int = 0 as c_int;
 
 function scored(): string {
   const scored = new Scored();
@@ -267,7 +267,7 @@ class Ledger extends NSObject {
   }
 }
 
-let ledgerWatch = 0 as c_int;
+let ledgerWatch: c_int = 0 as c_int;
 
 function ledgered(): string {
   const ledger = new Ledger("ada", 10);
@@ -342,7 +342,7 @@ function optional(operation: NSOperation | null): string {
 function main(): void {
   const list = new NSMutableArray();
   console.log(`empty ${list.count}`);
-  for (const n of [1, 2, 3]) {
+  for (let n = 1; n <= 3; n++) {
     list.addObject(new NSNumber(n));
   }
   console.log(`count ${list.count}`);

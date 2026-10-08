@@ -114,7 +114,10 @@ class Column extends Panel {
     for (const child of this.children) {
       child.measure({ width: available.width, height: Infinity });
       width = Math.max(width, child.desiredSize.width);
-      height += child.desiredSize.height;
+      // `Size` holds `float`s, and two `float`s added as doubles are not
+      // always a `float`: each step rounds back to one, as C's `float`
+      // arithmetic would.
+      height = Math.fround(height + child.desiredSize.height);
     }
     const size = local<Size>();
     size.width = width;
@@ -127,7 +130,7 @@ class Column extends Panel {
     for (const child of this.children) {
       const height = child.desiredSize.height;
       child.arrange({ x: 0, y, width: final.width, height });
-      y += height;
+      y = Math.fround(y + height);
     }
     return final;
   }
