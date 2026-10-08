@@ -237,9 +237,9 @@ try {
   // events, whose check counts the program's live objects, which pending
   // timers hold.
   if (nativeDom) await until(async () => await evaluate<string | null>("document.querySelector('#native-timers')?.getAttribute('data-done') ?? null") === "1", "timer vectors");
-  // So do the lib.dom promise vectors (tests/lib-dom-vectors.ts): eight
+  // So do the lib.dom promise vectors (tests/lib-dom-vectors.ts): their
   // outcomes, each an attribute of the transcript's element once settled.
-  const promiseLabels = ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard"];
+  const promiseLabels = ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched"];
   const promisesSettled = async () => await evaluate<number>(`${JSON.stringify(promiseLabels)}
     .filter(name => (document.querySelector('#native-lib-dom')?.getAttribute('data-' + name) ?? 'pending') !== 'pending').length`) === promiseLabels.length;
   if (nativeDom) await until(promisesSettled, "lib.dom promise vectors");

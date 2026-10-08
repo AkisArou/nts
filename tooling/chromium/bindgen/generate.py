@@ -101,9 +101,12 @@ SCALARS = {
     "unrestricted double": ("double", 'CNumber<"double">'),
 }
 # DOMString and CSSOMString are one type to Blink. A USVString's lone
-# surrogates become U+FFFD, as V8's conversion makes them. A ByteString
-# throws on a unit above 0xFF, which no program string is checked for yet.
+# surrogates become U+FFFD, as V8's conversion makes them. A ByteString is
+# a String too, read as one; given one, a unit above 0xFF throws page
+# script's TypeError (nts_dom::ByteText), which parameters and dictionary
+# members check.
 STRINGS = {"DOMString", "CSSOMString", "USVString"}
+BYTE_STRING = "ByteString"
 
 # Words a parameter cannot be named in TypeScript or C++, and the one the
 # error slot takes.
@@ -357,8 +360,8 @@ class Generator:
             # A string or an enum is a StringView field, lent for the call;
             # NULL is left out, so Blink's own default applies, whatever it
             # is. An enum is matched when converted.
-            if not nullable and (keyword in STRINGS or idl_type.is_enumeration):
-                kind = "enum" if idl_type.is_enumeration else "string"
+            if not nullable and (keyword in STRINGS or keyword == BYTE_STRING or idl_type.is_enumeration):
+                kind = "enum" if idl_type.is_enumeration else "bytes" if keyword == BYTE_STRING else "string"
                 if kind == "enum":
                     self.headers.add(PathManager(idl_type.type_definition_object).api_path(ext="h"))
                 fields.append((member.identifier, kind, idl_type, member.is_required))
@@ -404,11 +407,17 @@ class Generator:
             blink_name = implemented[name]
             setter = "set" + blink_name[0].upper() + blink_name[1:]
             field = native_member(name)
-            if keyword in ("string", "enum"):
+            if keyword in ("string", "bytes", "enum"):
                 if required:
                     body.append(f"  if (!from.{field}) {{ exception_state.ThrowTypeError(\"Required member is undefined.\"); return nullptr; }}")
                 if keyword == "string":
                     body.append(f"  if (from.{field}) to->{setter}({self.text(idl_type, 'from.' + field)});")
+                elif keyword == "bytes":
+                    body += [f"  if (from.{field}) {{",
+                             f"    const blink::String text = nts_dom::ByteText(context, from.{field}, exception_state);",
+                             "    if (exception_state.HadException()) return nullptr;",
+                             f"    to->{setter}(text);",
+                             "  }"]
                 else:
                     enumeration = idl_type.type_definition_object
                     cls = f"blink::{blink_class_name(enumeration)}"
@@ -435,7 +444,7 @@ class Generator:
                             f"isolate, v8::Number::New(isolate, from.{field}), conversion));")
         body += ["  return to;", "}"]
         self.statics.append("\n".join(body))
-        throws = any(keyword == "enum" or required for _, keyword, _, required in fields)
+        throws = any(keyword in ("enum", "bytes") or required for _, keyword, _, required in fields)
         self.dictionaries[identifier] = (fields, convert, throws)
         return self.dictionaries[identifier]
 
@@ -483,6 +492,10 @@ class Generator:
         if keyword in STRINGS:
             return Param(name, f"const NtsBorrowedString* {name}", f"{name}: StringView{or_null}",
                          self.text(unwrapped, name), True)
+        if keyword == BYTE_STRING:
+            prelude = f"const blink::String {name}_converted = nts_dom::ByteText(context, {name}, {{exceptions}});"
+            return Param(name, f"const NtsBorrowedString* {name}", f"{name}: StringView{or_null}",
+                         f"{name}_converted", True, prelude=prelude, may_throw=True)
         if keyword in NUMERIC and not nullable:
             ts = f'{name}: CNumber<"double">'
             if keyword == "unrestricted double":
@@ -616,7 +629,7 @@ class Generator:
                 return Result("struct NtsPromise*", f"Promise<{settled.identifier}>", "promise_handle")
             raise Skip(f"result type {idl_type.syntactic_form}")
         keyword = unwrapped.keyword_typename
-        if keyword in STRINGS:
+        if keyword in STRINGS or keyword == BYTE_STRING:
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
         # `(DOMString or TrustedScript)?`: Blink's implementation answers the
         # string (`textContentForBinding` is a `String`), and nts_dom::AsString
@@ -1510,7 +1523,7 @@ class Generator:
         for identifier, entry in sorted(self.dictionaries.items()):
             if isinstance(entry, str):
                 continue
-            ts = {"boolean": "CBool<c_uint8>", "string": "StringView", "enum": "StringView"}
+            ts = {"boolean": "CBool<c_uint8>", "string": "StringView", "bytes": "StringView", "enum": "StringView"}
             members = "; ".join(f"{name}: " + (f"{keyword[len('handle:'):]} | null" if keyword.startswith("handle:")
                                                else ts.get(keyword, "c_double")) for name, keyword, _, _ in entry[0])
             lines.append(f'  export type {identifier} = Struct<{{ {members} }}, "NtsDom{identifier}">;')
@@ -1585,7 +1598,8 @@ class Generator:
         for identifier, entry in sorted(self.dictionaries.items()):
             if isinstance(entry, str):
                 continue
-            c = {"boolean": "uint8_t", "string": "const NtsBorrowedString*", "enum": "const NtsBorrowedString*"}
+            c = {"boolean": "uint8_t", "string": "const NtsBorrowedString*", "bytes": "const NtsBorrowedString*",
+                 "enum": "const NtsBorrowedString*"}
             members = "".join(f"  {self.handle_tag(keyword[len('handle:'):]) + '*' if keyword.startswith('handle:') else c.get(keyword, 'double')} "
                               f"{native_member(name)};\n" for name, keyword, _, _ in entry[0])
             typedefs += f"\ntypedef struct NtsDom{identifier} {{\n{members}}} NtsDom{identifier};"

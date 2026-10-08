@@ -967,6 +967,7 @@ interface HTMLVideoElement {}
  */
 interface HashChangeEvent {}
 /**
+ * @ntsBoundBy "nts:dom" Headers
  * @ntsIs nts_dom_is 262
  */
 interface Headers {}
@@ -1298,6 +1299,7 @@ interface ReportBody {}
  */
 interface ReportingObserver {}
 /**
+ * @ntsBoundBy "nts:dom" Request
  * @ntsIs nts_dom_is 384
  */
 interface Request {}
@@ -1317,6 +1319,7 @@ interface ResizeObserverEntry {}
  */
 interface ResizeObserverSize {}
 /**
+ * @ntsBoundBy "nts:dom" Response
  * @ntsIs nts_dom_is 389
  */
 interface Response {}

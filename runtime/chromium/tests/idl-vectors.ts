@@ -14,7 +14,7 @@
 // error reads as is passed in.
 import { AbortSignal_abort, AbortSignal_timeout, DOMRect_fromRect, Document_parseHTMLUnsafe, URL_canParse, URL_parse } from "nts:dom";
 import { newInputEvent } from "nts:dom";
-import { newBlob, newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
+import { newBlob, newDataTransfer, newDOMParser, newDOMPoint, newDragEvent, newFormData, newMutationObserver, newProgressEvent, newRequest, newXMLSerializer, newAbortController, newCustomEvent, newEvent, newKeyboardEvent, newMouseEvent, newURL, newURLSearchParams, window } from "nts:dom";
 import { asCSSStyleSheet, asElement, asHTMLFormElement, asHTMLVideoElement, asHTMLAnchorElement, asHTMLCanvasElement, asHTMLDetailsElement, asHTMLDialogElement, asHTMLProgressElement, asHTMLSlotElement, asHTMLElement, asHTMLImageElement, asHTMLOListElement, asHTMLTableCellElement, asHTMLInputElement, asHTMLOptionElement, asHTMLSelectElement, asHTMLTableElement, asHTMLTextAreaElement, asText } from "nts:dom";
 import type { CanvasFillRule, ChildNode, Document, Element, Event, EventTarget, MutationObserver, MutationRecordSequence, Node, ParentNode, ScrollRestoration, SelectionMode, Text } from "nts:dom";
 
@@ -834,6 +834,14 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   // and left out.
   const typed = newInputEvent("beforeinput", { data: "é✓", inputType: "insertText" });
   log("inputInit", shown(typed.data) + "|" + typed.inputType + "|" + shown(newInputEvent("input", { bubbles: true }).data));
+  // A ByteString member (RequestInit.method): read before Blink is called,
+  // which normalizes it; a unit above 0xFF throws TypeError, and Blink is
+  // not called.
+  const request = newRequest("https://x.test/a", { method: "post" });
+  log("requestInit", request.method + "|" + request.url);
+  thrown("requestInitWide", (): void => {
+    newRequest("https://x.test/", { method: "✓" });
+  });
 
   // MutationObserver: the records of a child list and an attribute change,
   // taken before delivery; a sequence of interfaces, read by index.

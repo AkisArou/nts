@@ -148,6 +148,9 @@
     "DocumentTimeline",
     "CaretPosition",
     "Storage",
+    "Response",
+    "Request",
+    "Headers",
     "Crypto",
     "Clipboard",
     "CanvasPattern"

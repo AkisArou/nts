@@ -189,6 +189,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_fence.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_fenced_frame_config.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_fetch_later_result.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_fetch_priority.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_file.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_file_list.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_file_property_bag.h"
@@ -443,11 +444,19 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_byob_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_default_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream_default_reader.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_referrer_policy.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_replace_state.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_report.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_report_body.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_reporting_observer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_request.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_cache.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_credentials.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_destination.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_duplex.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_mode.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_redirect.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_box_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_entry.h"
@@ -455,6 +464,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_size.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_resource_progress_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_response.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_response_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_response_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_sanitizer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scheduler.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scheduling.h"
@@ -640,6 +651,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmloptgroupelement_htmloptionelement.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_node_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_performancemeasureoptions_string.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_request_usvstring.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedhtml.h"
@@ -771,6 +783,9 @@
 #include "third_party/blink/renderer/core/events/ui_event.h"
 #include "third_party/blink/renderer/core/events/wheel_event.h"
 #include "third_party/blink/renderer/core/fetch/global_fetch.h"
+#include "third_party/blink/renderer/core/fetch/headers.h"
+#include "third_party/blink/renderer/core/fetch/request.h"
+#include "third_party/blink/renderer/core/fetch/response.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/fileapi/file.h"
 #include "third_party/blink/renderer/core/fileapi/file_list.h"
@@ -5540,6 +5555,83 @@ blink::CustomEventInit* NtsDomToCustomEventInit(NtsDomContext& context, const Nt
   if (from.bubbles) to->setBubbles(true);
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
+  return to;
+}
+blink::RequestInit* NtsDomToRequestInit(NtsDomContext& context, const NtsDomRequestInit& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::RequestInit::Create(isolate);
+  if (from.cache) {
+    const blink::String text = NtsText(context, from.cache).Text();
+    const auto value = blink::V8RequestCache::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type RequestCache."}));
+      return nullptr;
+    }
+    to->setCache(*value);
+  }
+  if (from.credentials) {
+    const blink::String text = NtsText(context, from.credentials).Text();
+    const auto value = blink::V8RequestCredentials::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type RequestCredentials."}));
+      return nullptr;
+    }
+    to->setCredentials(*value);
+  }
+  if (from.duplex) {
+    const blink::String text = NtsText(context, from.duplex).Text();
+    const auto value = blink::V8RequestDuplex::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type RequestDuplex."}));
+      return nullptr;
+    }
+    to->setDuplex(*value);
+  }
+  if (from.integrity) to->setIntegrity(NtsText(context, from.integrity));
+  if (from.keepalive) to->setKeepalive(true);
+  if (from.method) {
+    const blink::String text = nts_dom::ByteText(context, from.method, exception_state);
+    if (exception_state.HadException()) return nullptr;
+    to->setMethod(text);
+  }
+  if (from.mode) {
+    const blink::String text = NtsText(context, from.mode).Text();
+    const auto value = blink::V8RequestMode::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type RequestMode."}));
+      return nullptr;
+    }
+    to->setMode(*value);
+  }
+  if (from.priority) {
+    const blink::String text = NtsText(context, from.priority).Text();
+    const auto value = blink::V8FetchPriority::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type FetchPriority."}));
+      return nullptr;
+    }
+    to->setPriority(*value);
+  }
+  if (from.redirect) {
+    const blink::String text = NtsText(context, from.redirect).Text();
+    const auto value = blink::V8RequestRedirect::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type RequestRedirect."}));
+      return nullptr;
+    }
+    to->setRedirect(*value);
+  }
+  if (from.referrer) to->setReferrer(NtsText(context, from.referrer, /*scalar_values=*/true));
+  if (from.referrerPolicy) {
+    const blink::String text = NtsText(context, from.referrerPolicy).Text();
+    const auto value = blink::V8ReferrerPolicy::Create(text);
+    if (!value) {
+      exception_state.ThrowTypeError(blink::StrCat({"The provided value '", text, "' is not a valid enum value of type ReferrerPolicy."}));
+      return nullptr;
+    }
+    to->setReferrerPolicy(*value);
+  }
+  if (from.signal) to->setSignal(ObjectOf<blink::AbortSignal>(from.signal));
   return to;
 }
 blink::PerformanceMarkOptions* NtsDomToPerformanceMarkOptions(NtsDomContext& context, const NtsDomPerformanceMarkOptions& from, blink::ExceptionState& exception_state) {
@@ -34007,6 +34099,26 @@ bool nts_dom_Window_confirm_0(NtsDomWindow* self) {
   return static_cast<bool>(receiver->confirm(script_state, blink::AtomicString("")));
 }
 
+struct NtsPromise* nts_dom_Window_fetch_2(NtsDomWindow* self, const NtsBorrowedString* input, NtsDomRequestInit init) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  auto* init_converted = NtsDomToRequestInit(context, init, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return nts_dom::Rejected(context, exception_state);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, GlobalFetch::fetch(script_state, *receiver, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(NtsText(context, input, /*scalar_values=*/true).Text()), init_converted, exception_state));
+}
+
+struct NtsPromise* nts_dom_Window_fetch_1(NtsDomWindow* self, const NtsBorrowedString* input) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, GlobalFetch::fetch(script_state, *receiver, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(NtsText(context, input, /*scalar_values=*/true).Text()), blink::RequestInit::Create(context.v8_isolate.get()), exception_state));
+}
+
 bool nts_dom_Window_find_7(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames, bool showDialog) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
@@ -41848,6 +41960,342 @@ void nts_dom_Storage_named_delete(NtsDomStorage* self, const NtsBorrowedString* 
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::StorageArea>(self);
   receiver->removeItem(NtsText(context, name), exception_state);
+}
+
+NtsDomResponse* nts_dom_new_Response_0(NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomResponse>(Response::Create(script_state, exception_state));
+}
+
+const char* nts_dom_Response_get_type(NtsDomResponse* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Response>(self);
+  return nts_dom::EnumText(receiver->type());
+}
+
+const NtsStringView* nts_dom_Response_get_url(NtsDomResponse* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Response>(self);
+  return context.Lend(nts_dom::AsString(receiver->url()), false);
+}
+
+bool nts_dom_Response_get_redirected(NtsDomResponse* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Response>(self);
+  return static_cast<bool>(receiver->redirected());
+}
+
+double nts_dom_Response_get_status(NtsDomResponse* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Response>(self);
+  return static_cast<double>(receiver->status());
+}
+
+bool nts_dom_Response_get_ok(NtsDomResponse* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Response>(self);
+  return static_cast<bool>(receiver->ok());
+}
+
+const NtsStringView* nts_dom_Response_get_statusText(NtsDomResponse* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Response>(self);
+  return context.Lend(nts_dom::AsString(receiver->statusText()), false);
+}
+
+NtsDomHeaders* nts_dom_Response_get_headers(NtsDomResponse* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Response>(self);
+  return HandleOf<NtsDomHeaders>(receiver->headers());
+}
+
+bool nts_dom_Response_get_bodyUsed(NtsDomResponse* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Response>(self);
+  return static_cast<bool>(receiver->bodyUsed());
+}
+
+struct NtsPromise* nts_dom_Response_blob(NtsDomResponse* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Response>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->blob(script_state, exception_state));
+}
+
+NtsDomResponse* nts_dom_Response_clone(NtsDomResponse* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Response>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomResponse>(receiver->clone(script_state, exception_state));
+}
+
+struct NtsPromise* nts_dom_Response_formData(NtsDomResponse* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Response>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->formData(script_state, exception_state));
+}
+
+struct NtsPromise* nts_dom_Response_text(NtsDomResponse* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Response>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->text(script_state, exception_state));
+}
+
+NtsDomResponse* nts_dom_Response_error() {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomResponse>(Response::error(script_state));
+}
+
+NtsDomResponse* nts_dom_Response_redirect_2(const NtsBorrowedString* url, double status, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  const auto status_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), status), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomResponse>(Response::redirect(script_state, NtsText(context, url, /*scalar_values=*/true), status_converted, exception_state));
+}
+
+NtsDomResponse* nts_dom_Response_redirect_1(const NtsBorrowedString* url, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomResponse>(Response::redirect(script_state, NtsText(context, url, /*scalar_values=*/true), 302, exception_state));
+}
+
+NtsDomRequest* nts_dom_new_Request_2(const NtsBorrowedString* input, NtsDomRequestInit init, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* init_converted = NtsDomToRequestInit(context, init, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomRequest>(Request::Create(script_state, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(NtsText(context, input, /*scalar_values=*/true).Text()), init_converted, exception_state));
+}
+
+NtsDomRequest* nts_dom_new_Request_1(const NtsBorrowedString* input, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomRequest>(Request::Create(script_state, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(NtsText(context, input, /*scalar_values=*/true).Text()), blink::RequestInit::Create(context.v8_isolate.get()), exception_state));
+}
+
+const NtsStringView* nts_dom_Request_get_method(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return context.Lend(nts_dom::AsString(receiver->method()), false);
+}
+
+const NtsStringView* nts_dom_Request_get_url(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return context.Lend(nts_dom::AsString(receiver->url()), false);
+}
+
+NtsDomHeaders* nts_dom_Request_get_headers(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return HandleOf<NtsDomHeaders>(receiver->getHeaders());
+}
+
+const char* nts_dom_Request_get_destination(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return nts_dom::EnumText(receiver->destination());
+}
+
+const NtsStringView* nts_dom_Request_get_referrer(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return context.Lend(nts_dom::AsString(receiver->referrer()), false);
+}
+
+const char* nts_dom_Request_get_referrerPolicy(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return nts_dom::EnumText(receiver->getReferrerPolicy());
+}
+
+const char* nts_dom_Request_get_mode(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return nts_dom::EnumText(receiver->mode());
+}
+
+const char* nts_dom_Request_get_credentials(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return nts_dom::EnumText(receiver->credentials());
+}
+
+const char* nts_dom_Request_get_cache(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return nts_dom::EnumText(receiver->cache());
+}
+
+const char* nts_dom_Request_get_redirect(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return nts_dom::EnumText(receiver->redirect());
+}
+
+const NtsStringView* nts_dom_Request_get_integrity(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return context.Lend(nts_dom::AsString(receiver->integrity()), false);
+}
+
+bool nts_dom_Request_get_keepalive(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return static_cast<bool>(receiver->keepalive());
+}
+
+NtsDomAbortSignal* nts_dom_Request_get_signal(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return HandleOf<NtsDomAbortSignal>(receiver->signal());
+}
+
+const char* nts_dom_Request_get_duplex(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return nts_dom::EnumText(receiver->duplex());
+}
+
+bool nts_dom_Request_get_isHistoryNavigation(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return static_cast<bool>(receiver->isHistoryNavigation());
+}
+
+bool nts_dom_Request_get_isReloadNavigation(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return static_cast<bool>(receiver->isReloadNavigation());
+}
+
+bool nts_dom_Request_get_bodyUsed(NtsDomRequest* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Request>(self);
+  return static_cast<bool>(receiver->bodyUsed());
+}
+
+struct NtsPromise* nts_dom_Request_blob(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Request>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->blob(script_state, exception_state));
+}
+
+NtsDomRequest* nts_dom_Request_clone(NtsDomRequest* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Request>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomRequest>(receiver->clone(script_state, exception_state));
+}
+
+struct NtsPromise* nts_dom_Request_formData(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Request>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->formData(script_state, exception_state));
+}
+
+struct NtsPromise* nts_dom_Request_text(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Request>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->text(script_state, exception_state));
+}
+
+NtsDomHeaders* nts_dom_new_Headers_0(NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomHeaders>(Headers::Create(script_state, exception_state));
+}
+
+void nts_dom_Headers_append(NtsDomHeaders* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Headers>(self);
+  const blink::String name_converted = nts_dom::ByteText(context, name, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const blink::String value_converted = nts_dom::ByteText(context, value, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->append(script_state, name_converted, value_converted, exception_state);
+}
+
+void nts_dom_Headers_delete(NtsDomHeaders* self, const NtsBorrowedString* key, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Headers>(self);
+  const blink::String key_converted = nts_dom::ByteText(context, key, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->remove(script_state, key_converted, exception_state);
+}
+
+const NtsStringView* nts_dom_Headers_get(NtsDomHeaders* self, const NtsBorrowedString* key, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Headers>(self);
+  const blink::String key_converted = nts_dom::ByteText(context, key, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return context.Lend(nts_dom::AsString(receiver->get(key_converted, exception_state)), true);
+}
+
+bool nts_dom_Headers_has(NtsDomHeaders* self, const NtsBorrowedString* key, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Headers>(self);
+  const blink::String key_converted = nts_dom::ByteText(context, key, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return static_cast<bool>(receiver->has(key_converted, exception_state));
+}
+
+void nts_dom_Headers_set(NtsDomHeaders* self, const NtsBorrowedString* key, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Headers>(self);
+  const blink::String key_converted = nts_dom::ByteText(context, key, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const blink::String value_converted = nts_dom::ByteText(context, value, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->set(script_state, key_converted, value_converted, exception_state);
 }
 
 const NtsStringView* nts_dom_Crypto_randomUUID(NtsDomCrypto* self) {

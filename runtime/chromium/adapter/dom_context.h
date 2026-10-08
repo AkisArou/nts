@@ -417,6 +417,20 @@ private:
   bool scalar_values_;
 };
 
+// A program's string as a ByteString parameter or member takes it: the
+// text, refused with page script's TypeError when a unit is above 0xFF (as
+// NativeValueTraits<IDLByteString> refuses it), and Blink is not called.
+inline blink::String ByteText(NtsDomContext &context,
+                              const NtsBorrowedString *string,
+                              blink::ExceptionState &exception_state) {
+  blink::String text = NtsText(context, string).Text();
+  if (!text.ContainsOnlyLatin1OrEmpty()) {
+    exception_state.ThrowTypeError("String contains non ISO-8859-1 code point.");
+    return blink::String();
+  }
+  return text;
+}
+
 // A text result as Blink's implementation answers it. A union the IDL
 // declares with one string member (`(DOMString or TrustedScript)?`) is that
 // string -- the only member the generator binds such a result for -- and a

@@ -20,7 +20,15 @@ declare module "nts:dom" {
   export type ImageDataPixelFormat = "rgba-unorm8" | "rgba-float16" | "rgba-float32";
   export type ImageSmoothingQuality = "low" | "medium" | "high";
   export type PredefinedColorSpace = "srgb" | "rec2020" | "display-p3" | "rec2100-hlg" | "rec2100-pq" | "srgb-linear" | "display-p3-linear" | "rec2100-linear";
+  export type ReferrerPolicy = "" | "no-referrer" | "no-referrer-when-downgrade" | "same-origin" | "origin" | "strict-origin" | "origin-when-cross-origin" | "strict-origin-when-cross-origin" | "unsafe-url";
   export type ReplaceState = "active" | "removed" | "persisted";
+  export type RequestCache = "default" | "no-store" | "reload" | "no-cache" | "force-cache" | "only-if-cached";
+  export type RequestCredentials = "omit" | "same-origin" | "include";
+  export type RequestDestination = "" | "audio" | "audioworklet" | "document" | "embed" | "font" | "frame" | "iframe" | "image" | "json" | "manifest" | "object" | "paintworklet" | "report" | "script" | "serviceworker" | "sharedworker" | "style" | "text" | "track" | "video" | "worker" | "xslt" | "fencedframe" | "compression-dictionary" | "speculationrules" | "webbundle";
+  export type RequestDuplex = "half";
+  export type RequestMode = "navigate" | "same-origin" | "no-cors" | "cors";
+  export type RequestRedirect = "follow" | "error" | "manual";
+  export type ResponseType = "basic" | "cors" | "default" | "error" | "opaque" | "opaqueredirect";
   export type ScrollRestoration = "auto" | "manual";
   export type SelectionMode = "select" | "start" | "end" | "preserve";
   export type ShadowRootMode = "open" | "closed";
@@ -63,6 +71,7 @@ declare module "nts:dom" {
   export type PointerEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; region: StringView; relatedTarget: EventTarget | null; screenX: c_double; screenY: c_double; altitudeAngle: c_double; azimuthAngle: c_double; isPrimary: CBool<c_uint8>; persistentDeviceId: c_double; pointerId: c_double; pointerType: StringView; pressure: c_double; tangentialPressure: c_double; tiltX: c_double; tiltY: c_double; twist: c_double }, "NtsDomPointerEventInit">;
   export type PointerLockOptions = Struct<{ unadjustedMovement: CBool<c_uint8> }, "NtsDomPointerLockOptions">;
   export type ProgressEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; lengthComputable: CBool<c_uint8>; loaded: c_double; total: c_double }, "NtsDomProgressEventInit">;
+  export type RequestInit = Struct<{ cache: StringView; credentials: StringView; duplex: StringView; integrity: StringView; keepalive: CBool<c_uint8>; method: StringView; mode: StringView; priority: StringView; redirect: StringView; referrer: StringView; referrerPolicy: StringView; signal: AbortSignal | null }, "NtsDomRequestInit">;
   export type ResizeObserverOptions = Struct<{ box: StringView }, "NtsDomResizeObserverOptions">;
   export type ScrollIntoViewOptions = Struct<{ behavior: StringView; block: StringView; container: StringView; inline: StringView }, "NtsDomScrollIntoViewOptions">;
   export type ScrollToOptions = Struct<{ behavior: StringView; left: c_double; top: c_double }, "NtsDomScrollToOptions">;
@@ -22032,6 +22041,14 @@ declare module "nts:dom" {
      */
     confirm(this: Window): boolean;
     /**
+     * @ntsSymbol nts_dom_Window_fetch_2
+     */
+    fetch(this: Window, input: StringView, init: ByValue<RequestInit> | Fields<RequestInit>): Promise<Response>;
+    /**
+     * @ntsSymbol nts_dom_Window_fetch_1
+     */
+    fetch(this: Window, input: StringView): Promise<Response>;
+    /**
      * @ntsSymbol nts_dom_Window_find_7
      */
     find(this: Window, string: StringView, caseSensitive: boolean, backwards: boolean, wrap: boolean, wholeWord: boolean, searchInFrames: boolean, showDialog: boolean): boolean;
@@ -29502,6 +29519,324 @@ declare module "nts:dom" {
   }
   export type StorageMethods = StorageOwnMethods;
   export type Storage = HostClass<"NtsDomStorage", null, "nts_dom_retain", "nts_dom_release"> & StorageMethods;
+  export interface ResponseOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Response_get_type
+     */
+    _get_type(this: Response): ResponseType;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: ResponseType;
+    /**
+     * @ntsSymbol nts_dom_Response_get_url
+     */
+    _get_url(this: Response): StringView;
+    /**
+     * @ntsGet _get_url
+     */
+    readonly url: StringView;
+    /**
+     * @ntsSymbol nts_dom_Response_get_redirected
+     */
+    _get_redirected(this: Response): boolean;
+    /**
+     * @ntsGet _get_redirected
+     */
+    readonly redirected: boolean;
+    /**
+     * @ntsSymbol nts_dom_Response_get_status
+     */
+    _get_status(this: Response): CNumber<"double">;
+    /**
+     * @ntsGet _get_status
+     */
+    readonly status: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Response_get_ok
+     */
+    _get_ok(this: Response): boolean;
+    /**
+     * @ntsGet _get_ok
+     */
+    readonly ok: boolean;
+    /**
+     * @ntsSymbol nts_dom_Response_get_statusText
+     */
+    _get_statusText(this: Response): StringView;
+    /**
+     * @ntsGet _get_statusText
+     */
+    readonly statusText: StringView;
+    /**
+     * @ntsSymbol nts_dom_Response_get_headers
+     */
+    _get_headers(this: Response): Headers;
+    /**
+     * @ntsGet _get_headers
+     */
+    readonly headers: Headers;
+    /**
+     * @ntsSymbol nts_dom_Response_get_bodyUsed
+     */
+    _get_bodyUsed(this: Response): boolean;
+    /**
+     * @ntsGet _get_bodyUsed
+     */
+    readonly bodyUsed: boolean;
+    /**
+     * @ntsSymbol nts_dom_Response_blob
+     */
+    blob(this: Response): Promise<Blob>;
+    /**
+     * @ntsSymbol nts_dom_Response_clone
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    clone(this: Response, error?: Ptr<DOMException | null>): Response;
+    /**
+     * @ntsSymbol nts_dom_Response_formData
+     */
+    formData(this: Response): Promise<FormData>;
+    /**
+     * @ntsSymbol nts_dom_Response_text
+     */
+    text(this: Response): Promise<string>;
+  }
+  export type ResponseMethods = ResponseOwnMethods;
+  export type Response = HostClass<"NtsDomResponse", null, "nts_dom_retain", "nts_dom_release"> & ResponseMethods;
+  /**
+   * @ntsSymbol nts_dom_Response_error
+   */
+  export function Response_error(): Response;
+  /**
+   * @ntsSymbol nts_dom_Response_redirect_2
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function Response_redirect(url: StringView, status: CNumber<"double">, error?: Ptr<DOMException | null>): Response;
+  /**
+   * @ntsSymbol nts_dom_Response_redirect_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function Response_redirect(url: StringView, error?: Ptr<DOMException | null>): Response;
+  /**
+   * @ntsSymbol nts_dom_new_Response_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newResponse(error?: Ptr<DOMException | null>): Response;
+  export interface RequestOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Request_get_method
+     */
+    _get_method(this: Request): StringView;
+    /**
+     * @ntsGet _get_method
+     */
+    readonly method: StringView;
+    /**
+     * @ntsSymbol nts_dom_Request_get_url
+     */
+    _get_url(this: Request): StringView;
+    /**
+     * @ntsGet _get_url
+     */
+    readonly url: StringView;
+    /**
+     * @ntsSymbol nts_dom_Request_get_headers
+     */
+    _get_headers(this: Request): Headers;
+    /**
+     * @ntsGet _get_headers
+     */
+    readonly headers: Headers;
+    /**
+     * @ntsSymbol nts_dom_Request_get_destination
+     */
+    _get_destination(this: Request): RequestDestination;
+    /**
+     * @ntsGet _get_destination
+     */
+    readonly destination: RequestDestination;
+    /**
+     * @ntsSymbol nts_dom_Request_get_referrer
+     */
+    _get_referrer(this: Request): StringView;
+    /**
+     * @ntsGet _get_referrer
+     */
+    readonly referrer: StringView;
+    /**
+     * @ntsSymbol nts_dom_Request_get_referrerPolicy
+     */
+    _get_referrerPolicy(this: Request): ReferrerPolicy;
+    /**
+     * @ntsGet _get_referrerPolicy
+     */
+    readonly referrerPolicy: ReferrerPolicy;
+    /**
+     * @ntsSymbol nts_dom_Request_get_mode
+     */
+    _get_mode(this: Request): RequestMode;
+    /**
+     * @ntsGet _get_mode
+     */
+    readonly mode: RequestMode;
+    /**
+     * @ntsSymbol nts_dom_Request_get_credentials
+     */
+    _get_credentials(this: Request): RequestCredentials;
+    /**
+     * @ntsGet _get_credentials
+     */
+    readonly credentials: RequestCredentials;
+    /**
+     * @ntsSymbol nts_dom_Request_get_cache
+     */
+    _get_cache(this: Request): RequestCache;
+    /**
+     * @ntsGet _get_cache
+     */
+    readonly cache: RequestCache;
+    /**
+     * @ntsSymbol nts_dom_Request_get_redirect
+     */
+    _get_redirect(this: Request): RequestRedirect;
+    /**
+     * @ntsGet _get_redirect
+     */
+    readonly redirect: RequestRedirect;
+    /**
+     * @ntsSymbol nts_dom_Request_get_integrity
+     */
+    _get_integrity(this: Request): StringView;
+    /**
+     * @ntsGet _get_integrity
+     */
+    readonly integrity: StringView;
+    /**
+     * @ntsSymbol nts_dom_Request_get_keepalive
+     */
+    _get_keepalive(this: Request): boolean;
+    /**
+     * @ntsGet _get_keepalive
+     */
+    readonly keepalive: boolean;
+    /**
+     * @ntsSymbol nts_dom_Request_get_signal
+     */
+    _get_signal(this: Request): AbortSignal;
+    /**
+     * @ntsGet _get_signal
+     */
+    readonly signal: AbortSignal;
+    /**
+     * @ntsSymbol nts_dom_Request_get_duplex
+     */
+    _get_duplex(this: Request): RequestDuplex;
+    /**
+     * @ntsGet _get_duplex
+     */
+    readonly duplex: RequestDuplex;
+    /**
+     * @ntsSymbol nts_dom_Request_get_isHistoryNavigation
+     */
+    _get_isHistoryNavigation(this: Request): boolean;
+    /**
+     * @ntsGet _get_isHistoryNavigation
+     */
+    readonly isHistoryNavigation: boolean;
+    /**
+     * @ntsSymbol nts_dom_Request_get_isReloadNavigation
+     */
+    _get_isReloadNavigation(this: Request): boolean;
+    /**
+     * @ntsGet _get_isReloadNavigation
+     */
+    readonly isReloadNavigation: boolean;
+    /**
+     * @ntsSymbol nts_dom_Request_get_bodyUsed
+     */
+    _get_bodyUsed(this: Request): boolean;
+    /**
+     * @ntsGet _get_bodyUsed
+     */
+    readonly bodyUsed: boolean;
+    /**
+     * @ntsSymbol nts_dom_Request_blob
+     */
+    blob(this: Request): Promise<Blob>;
+    /**
+     * @ntsSymbol nts_dom_Request_clone
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    clone(this: Request, error?: Ptr<DOMException | null>): Request;
+    /**
+     * @ntsSymbol nts_dom_Request_formData
+     */
+    formData(this: Request): Promise<FormData>;
+    /**
+     * @ntsSymbol nts_dom_Request_text
+     */
+    text(this: Request): Promise<string>;
+  }
+  export type RequestMethods = RequestOwnMethods;
+  export type Request = HostClass<"NtsDomRequest", null, "nts_dom_retain", "nts_dom_release"> & RequestMethods;
+  /**
+   * @ntsSymbol nts_dom_new_Request_2
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newRequest(input: StringView, init: ByValue<RequestInit> | Fields<RequestInit>, error?: Ptr<DOMException | null>): Request;
+  /**
+   * @ntsSymbol nts_dom_new_Request_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newRequest(input: StringView, error?: Ptr<DOMException | null>): Request;
+  export interface HeadersOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Headers_append
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    append(this: Headers, name: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Headers_delete
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    delete(this: Headers, key: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Headers_get
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    get(this: Headers, key: StringView, error?: Ptr<DOMException | null>): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Headers_has
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    has(this: Headers, key: StringView, error?: Ptr<DOMException | null>): boolean;
+    /**
+     * @ntsSymbol nts_dom_Headers_set
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    set(this: Headers, key: StringView, value: StringView, error?: Ptr<DOMException | null>): void;
+  }
+  export type HeadersMethods = HeadersOwnMethods;
+  export type Headers = HostClass<"NtsDomHeaders", null, "nts_dom_retain", "nts_dom_release"> & HeadersMethods;
+  /**
+   * @ntsSymbol nts_dom_new_Headers_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newHeaders(error?: Ptr<DOMException | null>): Headers;
   export interface CryptoOwnMethods {
     /**
      * @ntsSymbol nts_dom_Crypto_randomUUID

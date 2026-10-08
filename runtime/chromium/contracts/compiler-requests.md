@@ -455,3 +455,18 @@ NtsClosure it holds -- retained for the caller, as handles are returned
 today. What the lane needs: `Closure<F>` and `Closure<F> | null` as foreign
 results (NULL is null), owned by the caller, callable and comparable by
 identity (`button.onclick === handler`).
+
+## 15. A reported error thrown as a named error
+
+**Requested 2026-10-08. Low priority. Blocks: lib.dom fidelity of
+`catch (e) { e.name }` / `e instanceof TypeError` around DOM calls; ledger
+row 27.**
+
+A failure a host reports through `@ntsThrows` is thrown as a plain `Error`
+whose message the converter makes, so the DOM's `TypeError` and its
+`DOMException`s (`NotFoundError`, `HierarchyRequestError`) all reach a
+lib.dom program as `Error` with `name === "Error"` and the name folded into
+the message. What would match page script: the converter naming the class
+(or at least the `name`) of what is thrown -- `TypeError`, `RangeError`, or
+an `Error` whose `name` is the DOMException's -- so `e.name` and
+`e instanceof TypeError` read as they do in page script.

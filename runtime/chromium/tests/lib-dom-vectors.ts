@@ -18,9 +18,11 @@ async function settle(label: string, run: () => Promise<void>): Promise<void> {
     await run();
   } catch (error) {
     // V8's binding prefixes an exception it turns into a rejection with its
-    // context ("Failed to execute 'x' on 'Y': "); the program's has none.
+    // context ("Failed to execute 'x' on 'Y': ", and for a dictionary's
+    // member "Failed to read the 'm' property from 'D': "); the program's
+    // has none.
     let message = (error as Error).message;
-    if (message.startsWith("Failed to ")) message = message.slice(message.indexOf("': ") + 3);
+    if (message.startsWith("Failed to ")) message = message.slice(message.lastIndexOf("': ") + 3);
     outcome = "rejected " + (error as Error).name + ": " + message;
   }
   document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
@@ -31,6 +33,23 @@ async function settleText(label: string, run: () => Promise<string>): Promise<vo
   let outcome = "";
   try {
     outcome = "fulfilled " + (await run());
+  } catch (error) {
+    outcome = "rejected " + (error as Error).name;
+  }
+  document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
+}
+
+// fetch, from a data: URL: the Response it fulfils with, and its body read
+// as text (Response.text(), a second promise).
+async function settleFetch(label: string): Promise<void> {
+  let outcome = "";
+  try {
+    // window.fetch: the global is refused (blockers/lib-dom-global-fetch-is-
+    // taken-as-a-builtin; ledger row 26).
+    const response = await window.fetch("data:text/plain;charset=utf-8,hello%20nts");
+    const body = await response.text();
+    outcome = "fulfilled " + response.status + " " + (response.ok ? "ok" : "not ok") + " " +
+      (response.headers.get("content-type") ?? "none") + " " + body;
   } catch (error) {
     outcome = "rejected " + (error as Error).name;
   }
@@ -227,6 +246,38 @@ export function libDomTranscript(): string {
       rect.right + "," + rect.bottom + "|" + (AbortSignal.abort().aborted ? "aborted" : "live") + "|" + parsed.querySelector("#q")!.textContent);
   }
 
+  // fetch's own types. A ByteString (a header here; RequestInit's method in
+  // idl-vectors.ts, until blockers/lib-dom-dictionary-with-a-string-member)
+  // is a string whose
+  // every unit is at most 0xFF -- "café" is one -- and one above throws
+  // TypeError before Blink is called. V8's message carries its context
+  // first ("Failed to execute 'set' on 'Headers': "); the program's does not.
+  {
+    const failure = (run: () => void): string => {
+      try {
+        run();
+        return "ok";
+      } catch (error) {
+        const message = (error as Error).message;
+        const at = message.lastIndexOf("': ");
+        const text = at < 0 ? message : message.slice(at + 3);
+        // The program's is an Error whose message is "Name: message"; page
+        // script's is the named error itself (ledger row 27).
+        return (error as Error).name === "Error" ? text : (error as Error).name + ": " + text;
+      }
+    };
+    const headers = new Headers();
+    headers.set("X-Name", "café");
+    headers.append("x-list", "a");
+    headers.append("X-List", "b");
+    log("headers", (headers.get("x-name") ?? "null") + "|" + (headers.get("x-list") ?? "null") + "|" +
+      (headers.has("X-LIST") ? "has" : "lacks") + "|" + (headers.get("absent") ?? "null"));
+    headers.delete("x-list");
+    log("headersDeleted", headers.has("x-list") ? "has" : "lacks");
+    log("headersWide", failure((): void => headers.set("x-name", "✓")));
+    log("headersBadName", failure((): void => headers.set("bad name", "v")));
+  }
+
   root.remove();
   return lines.join("\n");
 }
@@ -241,7 +292,7 @@ export function startLibDomPromises(): void {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -260,5 +311,6 @@ export function startLibDomPromises(): void {
     // Blink's, carried through the promise bridge. (An app's round trip is
     // app.ts check's.)
     settle("clipboard", (): Promise<void> => navigator.clipboard.writeText("copied"));
+    settleFetch("fetched");
   }, 0);
 }

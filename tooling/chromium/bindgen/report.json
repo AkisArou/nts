@@ -1,5 +1,5 @@
 {
-  "bound": 4902,
+  "bound": 4949,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -5607,9 +5607,14 @@
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
-      "interface": "Window",
-      "member": "fetch/2",
-      "why": "result type Promise<Response>"
+      "interface": "RequestInit",
+      "member": "body",
+      "why": "dictionary member of type optional any"
+    },
+    {
+      "interface": "RequestInit",
+      "member": "headers",
+      "why": "dictionary member of type optional HeadersInit"
     },
     {
       "interface": "Window",
@@ -7535,6 +7540,96 @@
       "interface": "AnimationTimeline",
       "member": "getCurrentTime/1",
       "why": "[RuntimeEnabled=ScrollTimelineCurrentTime] experimental"
+    },
+    {
+      "interface": "Response",
+      "member": "constructor/2",
+      "why": "parameter type optional any"
+    },
+    {
+      "interface": "Response",
+      "member": "constructor/1",
+      "why": "parameter type optional any"
+    },
+    {
+      "interface": "Response",
+      "member": "get body",
+      "why": "interface ReadableStream is not bound"
+    },
+    {
+      "interface": "Response",
+      "member": "arrayBuffer/0",
+      "why": "result type Promise<ArrayBuffer>"
+    },
+    {
+      "interface": "Response",
+      "member": "bytes/0",
+      "why": "result type Promise<Uint8Array>"
+    },
+    {
+      "interface": "Response",
+      "member": "json/0",
+      "why": "result type Promise<any>"
+    },
+    {
+      "interface": "Response",
+      "member": "textStream/0",
+      "why": "interface ReadableStream is not bound"
+    },
+    {
+      "interface": "Response",
+      "member": "json/2",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Response",
+      "member": "json/1",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "Request",
+      "member": "get targetAddressSpace",
+      "why": "[RuntimeEnabled=LocalNetworkAccessPermissionPolicy] overridable"
+    },
+    {
+      "interface": "Request",
+      "member": "get body",
+      "why": "interface ReadableStream is not bound"
+    },
+    {
+      "interface": "Request",
+      "member": "arrayBuffer/0",
+      "why": "result type Promise<ArrayBuffer>"
+    },
+    {
+      "interface": "Request",
+      "member": "bytes/0",
+      "why": "result type Promise<Uint8Array>"
+    },
+    {
+      "interface": "Request",
+      "member": "getRetryOptions/0",
+      "why": "[RuntimeEnabled=FetchRetry] overridable"
+    },
+    {
+      "interface": "Request",
+      "member": "json/0",
+      "why": "result type Promise<any>"
+    },
+    {
+      "interface": "Request",
+      "member": "textStream/0",
+      "why": "interface ReadableStream is not bound"
+    },
+    {
+      "interface": "Headers",
+      "member": "constructor/1",
+      "why": "parameter type optional HeadersInit"
+    },
+    {
+      "interface": "Headers",
+      "member": "getSetCookie/0",
+      "why": "result type sequence<ByteString>"
     },
     {
       "interface": "Crypto",
