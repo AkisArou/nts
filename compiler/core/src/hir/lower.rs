@@ -11984,12 +11984,31 @@ fn drop_the_unlowerable(
                 // Syntax answers it here and nothing else has to: a
                 // variable statement's declarations are its children, and
                 // the global a later pass finds unwritten is one of them.
-                let names: Vec<String> = probe
+                //
+                // **Every binding a pattern declares**, not the declaration's
+                // name: `const { a, b: { c } } = ...` has none, and leaves
+                // `a` and `c` unwritten all the same. Property names and
+                // defaults are not bindings; `pattern_names` is the walk that
+                // knows. (Re-derived from Codex 84711414b.)
+                let mut bindings = Vec::new();
+                for declaration in probe
                     .children(*statement)
                     .into_iter()
                     .flat_map(|child| probe.children(child))
                     .filter(|at| probe.kind_of(*at) == Some(syntax::VARIABLE_DECLARATION))
-                    .filter_map(|at| probe.declared_name(at))
+                {
+                    let Some(name) = probe.children(declaration).first().copied() else { continue };
+                    match probe.kind_of(name) {
+                        Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN) => {
+                            probe.pattern_names(name, &mut bindings);
+                        }
+                        Some(syntax::IDENTIFIER) => bindings.push(name),
+                        _ => {}
+                    }
+                }
+                let names: Vec<String> = bindings
+                    .into_iter()
+                    .filter_map(|name| probe.node(name).text.as_ref())
                     .map(|name| format!("`{name}`"))
                     .collect();
                 // And every global the statement assigns, in any form
