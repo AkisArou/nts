@@ -1485,6 +1485,7 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
                 Why::NoBigIntRanges => "a bigint (no bigint ranges yet)".to_owned(),
                 Why::LiteralOutside(literal) => format!("the literal {literal} doesn't fit"),
                 Why::FloatExactness => "a float (exactness not modelled yet)".to_owned(),
+                Why::NotANumber => "may not be a number".to_owned(),
             })
             .collect::<Vec<_>>()
             .join("; ")
@@ -1501,6 +1502,9 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
             Source::Integer { lo, hi } => format!("an integer {lo}..{hi}"),
             Source::BigInt(Some(literal)) => format!("{literal}n"),
             Source::BigInt(None) => "bigint".to_owned(),
+            Source::Bool => "a boolean".to_owned(),
+            Source::Absent => "an absence".to_owned(),
+            Source::Other => "a value of another type".to_owned(),
         }
     };
     let (mut proven, mut unproven) = (0usize, 0usize);

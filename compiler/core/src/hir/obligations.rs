@@ -104,7 +104,7 @@ pub enum Into {
 }
 
 /// What crosses: a `number` (with what the analysis knows), an integer the
-/// program already holds at a width, or a `bigint`.
+/// program already holds at a width, a `bigint`, a boolean, or something else.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Source {
     Number(Facts),
@@ -112,6 +112,12 @@ pub enum Source {
     Integer { lo: i128, hi: i128 },
     /// A `bigint`: its literal value when it is one, and otherwise unknown.
     BigInt(Option<i128>),
+    /// A boolean, which C's integer kinds take as 0 or 1.
+    Bool,
+    /// `undefined` or `null` into an optional slot: an absence, which fits.
+    Absent,
+    /// A value of any other representation: an erased union, an `any`.
+    Other,
 }
 
 /// Why an obligation isn't proven.
@@ -135,6 +141,9 @@ pub enum Why {
     /// A `float` slot: whether the value is exactly a `float` isn't modelled
     /// yet (decision Q3 makes it an obligation).
     FloatExactness,
+    /// It may not be a number at all: an `any`, or a union the program holds
+    /// erased (Q1: `any` into a written kind is a store like any other).
+    NotANumber,
 }
 
 /// What made the value: which kind of fact would prove it.
@@ -363,7 +372,9 @@ fn record_of(pointee: &Pointee) -> Option<&super::native::Record> {
 fn before_conversion(func: &Func, value: ValueId) -> ValueId {
     let op = func.value(value);
     match &op.kind {
-        OpKind::Convert(from) => *from,
+        // An optional slot holds its value erased beside the tag that says
+        // it is there.
+        OpKind::Convert(from) | OpKind::Erase { value: from, .. } => *from,
         OpKind::Call { callee: Callee::External(name), args, .. }
             if super::builtin::element_coercion(&op.ty) == Some(name.as_str()) =>
         {
@@ -439,7 +450,13 @@ fn judge(func: &Func, analysis: &Analysis, obligation: &Obligation) -> Judged {
             };
             (Source::BigInt(literal), why)
         }
-        _ => (Source::Number(Facts::TOP), Vec::new()),
+        HirType::Bool => {
+            let fits = obligation.range().is_none_or(|(lo, hi)| lo <= 0 && hi >= 1);
+            (Source::Bool, if fits { Vec::new() } else { vec![Why::Above(1.0)] })
+        }
+        // An optional slot's absence (`x?: Uint8`, S4).
+        _ if matches!(func.value(value).kind, OpKind::ConstUndefined | OpKind::ConstNull) => (Source::Absent, Vec::new()),
+        _ => (Source::Other, vec![Why::NotANumber]),
     };
     Judged { func: func.name.clone(), obligation: obligation.clone(), source, made: made_by(func, value), unproven }
 }
