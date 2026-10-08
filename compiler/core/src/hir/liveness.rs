@@ -429,6 +429,7 @@ pub(in crate::hir) mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         }
     }
 
@@ -507,6 +508,7 @@ pub(in crate::hir) mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         }
     }
 
@@ -638,6 +640,7 @@ pub(in crate::hir) mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         };
 
         let live = analyze(&func);

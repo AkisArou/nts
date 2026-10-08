@@ -67,6 +67,7 @@ fn program() -> hir::Program {
             frame: None,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         }],
         layouts: vec![hir::Layout {
             types: vec![TypeId(1)],

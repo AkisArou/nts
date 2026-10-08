@@ -443,7 +443,8 @@ class Square extends GtkWidget {
 class Wider extends GtkLabel {
   vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<"int">): [CNumber<"int">, CNumber<"int">, CNumber<"int">, CNumber<"int">] {
     const [minimum, natural, minimum_baseline, natural_baseline] = super.vfunc_measure(orientation, for_size);
-    return [minimum + 10, natural + 10, minimum_baseline, natural_baseline];
+    // GTK's sizes are C `int`s, and ten more than the largest one isn't.
+    return [Math.min(minimum + 10, 2147483647), Math.min(natural + 10, 2147483647), minimum_baseline, natural_baseline];
   }
 }
 
@@ -552,8 +553,8 @@ class Words extends GObject<{}, GListModelImplementation> {
   // The interface's own method, on `this`: whoever watches the model hears
   // of the row.
   add(word: string): void {
-    this.words.push(word);
-    this.items_changed(this.words.length - 1, 0, 1);
+    const position = this.words.push(word) - 1;
+    this.items_changed(position, 0, 1);
   }
 }
 
@@ -563,8 +564,7 @@ class Words extends GObject<{}, GListModelImplementation> {
 class Dtls extends GObject<{}, GDtlsClientConnectionImplementation | GDtlsConnectionImplementation | GDatagramBasedImplementation> {}
 
 function dtls(): string {
-  const type = Dtls.$gtype;
-  const is = (name: string): string => String(g_type_is_a(type, g_type_from_name(name)));
+  const is = (name: string): string => String(g_type_is_a(Dtls.$gtype, g_type_from_name(name)));
   return "dtls " + is("GDtlsClientConnection") + " " + is("GDatagramBased");
 }
 

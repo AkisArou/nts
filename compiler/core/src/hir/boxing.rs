@@ -107,6 +107,7 @@ mod tests {
             frame: None,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         }
     }
 

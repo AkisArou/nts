@@ -518,6 +518,11 @@ pub struct Func {
     /// [`Param::written`]. Every `return` must prove its value fits, and so a
     /// call's result is the kind's range.
     pub written_return: Option<native::Scalar>,
+    /// Where the return type is a tuple written with scalar kinds
+    /// (`[CNumber<"int">, CNumber<"int">]`), each position's kind; empty
+    /// otherwise. Every `return` must prove each element fits, and so a
+    /// read of that position of a call's result is the kind's range.
+    pub written_return_elements: Vec<Option<native::Scalar>>,
     /// Every value the function defines. [`ValueId`] indexes this.
     ///
     /// Separate from the blocks so that a value's identity survives blocks being
@@ -7262,6 +7267,7 @@ mod tests {
                     abstract_declaration: false,
                     obligations: Vec::new(),
                     written_return: None,
+                    written_return_elements: Vec::new(),
                 }],
                 ..Program::default()
             }
@@ -7377,6 +7383,7 @@ mod tests {
                 abstract_declaration: false,
                 obligations: Vec::new(),
                 written_return: None,
+                written_return_elements: Vec::new(),
             }],
             globals: Vec::new(),
             layouts: Vec::new(),
@@ -7569,6 +7576,7 @@ mod tests {
                 abstract_declaration: false,
                 obligations: Vec::new(),
                 written_return: None,
+                written_return_elements: Vec::new(),
             }],
             globals: Vec::new(),
             layouts: Vec::new(),

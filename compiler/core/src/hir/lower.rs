@@ -14733,6 +14733,7 @@ fn erased_call(
         frame: None,
         obligations: Vec::new(),
         written_return: None,
+        written_return_elements: Vec::new(),
     })
 }
 
@@ -14841,6 +14842,7 @@ fn refuses_to_cross(
         frame: None,
         obligations: Vec::new(),
         written_return: None,
+        written_return_elements: Vec::new(),
     }
 }
 
@@ -15221,6 +15223,7 @@ fn declare_erased_entries(
                 frame: None,
                 obligations: Vec::new(),
                 written_return: None,
+                written_return_elements: Vec::new(),
             },
         ));
     }
@@ -18137,6 +18140,13 @@ struct FuncBuilder<'a> {
     /// Where a value must fit a written scalar kind, in this function (see
     /// [`super::obligations`]); moved onto the function by `finish`.
     obligations: Vec<super::obligations::Obligation>,
+    /// The kind of each position of the tuple the function being lowered was
+    /// written to return, for each `return` to be obliged to; empty unless it
+    /// returns one.
+    return_elements: Vec<Option<super::native::Scalar>>,
+    /// The tuple literal a `return` of such a function is lowering, whose
+    /// elements are obliged as each is lowered rather than read back.
+    returned_literal: Option<NodeId>,
     /// Symbol index → the value holding it.
     ///
     /// This is what makes two identifiers with one symbol become one value
@@ -18605,6 +18615,8 @@ impl<'a> FuncBuilder<'a> {
             }],
             current: BlockId(0),
             obligations: Vec::new(),
+            return_elements: Vec::new(),
+            returned_literal: None,
             bindings: rustc_hash::FxHashMap::default(),
             tested_by_instanceof: rustc_hash::FxHashMap::default(),
             narrowed_past_an_if: Vec::new(),
@@ -21007,7 +21019,9 @@ impl<'a> FuncBuilder<'a> {
         let mut arguments = Vec::new();
         for (at, param) in func.params.iter().enumerate() {
             let value = self.push(OpKind::Param(u32::try_from(at).unwrap_or(0)), param.ty.clone(), origin.clone());
-            params.push(Param { name: param.name.clone(), shape: ParamShape::Ordinary, ty: param.ty.clone(), origin: origin.clone(), known: Facts::TOP, written: None });
+            // C's own argument, so the override's written kind: C passes the
+            // type its slot declares, which the override's parameter is.
+            params.push(Param { name: param.name.clone(), shape: ParamShape::Ordinary, ty: param.ty.clone(), origin: origin.clone(), known: Facts::TOP, written: param.written });
             arguments.push(value);
         }
         self.this = arguments.first().copied();
@@ -22518,6 +22532,7 @@ impl<'a> FuncBuilder<'a> {
         // `begin_async` and `finish_params` stay below: the first allocates the
         // promise before the body runs and the second needs the bound parameters.
         self.returns = return_type.clone();
+        self.return_elements = self.written_tuple_return(member);
 
         let mut declared = Vec::new();
         for child in self.children(member) {
@@ -22592,6 +22607,7 @@ impl<'a> FuncBuilder<'a> {
         // every field it writes is writing over a zero.
         func.initializes_receiver = is_constructor;
         func.written_return = self.written_return(member);
+        func.written_return_elements = self.written_tuple_return(member);
         // A signature and nothing else. `body` is `None` exactly when the
         // method is `abstract`, which `method_body` is the only decider of.
         func.abstract_declaration = body.is_none();
@@ -25868,6 +25884,7 @@ impl<'a> FuncBuilder<'a> {
         // is: it allocates the promise before the body runs and nothing above needs
         // it.
         self.returns = return_type.clone();
+        self.return_elements = self.written_tuple_return(id);
 
         let mut params = Vec::new();
         for child in &children {
@@ -25920,6 +25937,7 @@ impl<'a> FuncBuilder<'a> {
                 .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
         let mut func = self.finish(name, params, return_type, origin, exported);
         func.written_return = self.written_return(id);
+        func.written_return_elements = self.written_tuple_return(id);
         Ok(func)
     }
 
@@ -26382,6 +26400,8 @@ impl<'a> FuncBuilder<'a> {
         //
         // Saved and restored rather than assigned, because closures nest.
         let enclosing = std::mem::replace(&mut self.returns, return_type.clone());
+        let elements = self.written_tuple_return(id);
+        let enclosing_elements = std::mem::replace(&mut self.return_elements, elements);
         let lowered = if self.kind_of(body) == Some(syntax::BLOCK) {
             let outcome = self.lower_block(body);
             if outcome.is_ok() {
@@ -26439,6 +26459,7 @@ impl<'a> FuncBuilder<'a> {
             })
         };
         self.returns = enclosing;
+        self.return_elements = enclosing_elements;
         lowered?;
 
         // Not exported: a closure has no name to import. It stays only because
@@ -26446,6 +26467,7 @@ impl<'a> FuncBuilder<'a> {
         // the same way it decides an override's fate.
         let mut func = self.finish(name, params, return_type, origin, false);
         func.written_return = self.written_return(id);
+        func.written_return_elements = self.written_tuple_return(id);
         Ok(func)
     }
 
@@ -27966,6 +27988,7 @@ impl<'a> FuncBuilder<'a> {
             frame: self.generator.clone(),
             obligations: std::mem::take(&mut self.obligations),
             written_return: None,
+            written_return_elements: Vec::new(),
         }
     }
 
@@ -29966,13 +29989,10 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The scalar kind `ty` is, an optional one's included: `T | undefined`
-    /// of a scalar is written as `T` (S3), and the absence is the slot's own.
-    /// Through the one recognizer, [`super::native::scalar`].
-    ///
-    /// The type itself first: a `CEnum<E, B>` is a union of `E`'s members,
-    /// which the recognizer reads as one kind and no absence-stripping could.
+    /// of a scalar is written as `T` (S3), and the absence is the slot's own
+    /// ([`super::native::present_scalar`]).
     fn written_scalar(&self, ty: TypeId) -> Option<super::native::Scalar> {
-        super::native::scalar(self.snapshot, ty).or_else(|| super::native::scalar(self.snapshot, self.present_part(ty)?))
+        super::native::present_scalar(self.snapshot, ty)
     }
 
     /// `x!`, `x as T` and `x satisfies T`.
@@ -30018,6 +30038,49 @@ impl<'a> FuncBuilder<'a> {
     fn oblige(&mut self, value: ValueId, kind: super::native::Scalar, into: super::obligations::Into, at: NodeId) {
         let location = self.location(at);
         self.obligations.push(super::obligations::Obligation { value, block: self.current, kind, bits: None, into, location });
+    }
+
+    /// The kind each position of a tuple a function's return type was
+    /// **written** as (`[CNumber<"int">, CNumber<"int">]`); empty for any other
+    /// return type, or one not annotated.
+    fn written_tuple_return(&self, declaration: NodeId) -> Vec<Option<super::native::Scalar>> {
+        if !self.annotated(declaration) {
+            return Vec::new();
+        }
+        let elements = match self.declared_result_type(declaration).and_then(|ty| self.snapshot.types.get(ty.0 as usize)) {
+            Some(record) => match &record.kind {
+                TypeKind::Tuple(elements) => elements.clone(),
+                _ => return Vec::new(),
+            },
+            None => return Vec::new(),
+        };
+        let kinds: Vec<_> = elements.iter().map(|element| self.written_scalar(*element)).collect();
+        if kinds.iter().any(Option::is_some) { kinds } else { Vec::new() }
+    }
+
+    /// A `return` of a tuple the function was written to return with scalar
+    /// kinds: each position is obliged to fit its kind, read from the value
+    /// returned, so a caller may read that position as the kind's range.
+    fn oblige_tuple_return(&mut self, value: ValueId, at: NodeId) -> Result<(), Diagnostic> {
+        let kinds = self.return_elements.clone();
+        let ty = self.values[value.0 as usize].ty.clone();
+        for (position, kind) in kinds.iter().enumerate() {
+            let Some(kind) = *kind else { continue };
+            let element = self.tuple_element(at, value, &ty, kinds.len(), position)?;
+            self.oblige(element, kind, super::obligations::Into::ReturnElement { position }, at);
+        }
+        Ok(())
+    }
+
+    /// An element of the tuple literal a `return` is lowering
+    /// ([`Self::returned_literal`]), obliged to the kind its position was
+    /// written as.
+    fn oblige_returned_element(&mut self, literal: NodeId, position: usize, value: ValueId, element: NodeId) {
+        if self.returned_literal == Some(literal)
+            && let Some(Some(kind)) = self.return_elements.get(position).copied()
+        {
+            self.oblige(value, kind, super::obligations::Into::ReturnElement { position }, element);
+        }
     }
 
     /// The scalar kind a function's return type was **written** as: its
@@ -30145,13 +30208,26 @@ impl<'a> FuncBuilder<'a> {
                 self.terminate(Terminator::Unreachable);
                 return Ok(());
             }
+            // The function's own return of a tuple written with scalar kinds,
+            // not an inlined callback's: a literal's elements are obliged as
+            // they are lowered, anything else read back.
+            let obliged = expression.filter(|_| self.callback_returns.is_empty() && !self.return_elements.is_empty());
+            let literal = obliged
+                .map(|expression| self.through_parentheses(expression))
+                .filter(|node| self.kind_of(*node) == Some(syntax::ARRAY_LITERAL_EXPRESSION));
+            let outer = std::mem::replace(&mut self.returned_literal, literal);
             let value = match (expression, &want) {
                 (Some(expression), Some(want)) => {
-                    Some(self.lower_expecting(expression, want)?)
+                    self.lower_expecting(expression, want).map(Some)
                 }
-                (Some(expression), None) => Some(self.lower_expression(expression)?),
-                (None, _) => None,
+                (Some(expression), None) => self.lower_expression(expression).map(Some),
+                (None, _) => Ok(None),
             };
+            self.returned_literal = outer;
+            let value = value?;
+            if let (Some(value), Some(expression), None) = (value, obliged, literal) {
+                self.oblige_tuple_return(value, expression)?;
+            }
             if let Some(target) = self.callback_returns.last().copied() {
                 // Only the `try`s inside the callback. A `return` here means
                 // "this element is done", so it leaves the `try`s written in
@@ -43869,6 +43945,7 @@ impl<'a> FuncBuilder<'a> {
                     None => self.lower_expression(*element_node)?,
                 }
             };
+            self.oblige_returned_element(id, index, value, *element_node);
             #[allow(clippy::cast_precision_loss)]
             let position = index as f64;
             let index = self.push(
@@ -46420,12 +46497,14 @@ impl<'a> FuncBuilder<'a> {
                 // which holds the base's records and so holds the answer; a
                 // class with no base has no inherited property to mistake.
                 declared_by: property.own.then_some(ty),
-                // Only an annotated property's (S3): a field inferred from its
-                // initializer holds whatever the program later stores.
-                written: property
-                    .declaration
-                    .filter(|declaration| self.annotated(*declaration))
-                    .and_then(|_| self.written_scalar(property.ty)),
+                // Not one inferred from its initializer (S3), which holds
+                // whatever the program later stores. One with no declaration
+                // was made by a type -- a mapped type's, a tuple's -- whose
+                // author wrote it.
+                written: match property.declaration {
+                    Some(declaration) if !self.annotated(declaration) => None,
+                    _ => self.written_scalar(property.ty),
+                },
             });
         }
         Ok(fields)
@@ -46468,6 +46547,7 @@ impl<'a> FuncBuilder<'a> {
             // object, and erased it as an object-tagged NULL -- a value
             // `!== null` answered true for, so a loop waiting for it ran on.
             let value = self.lower_expecting(element, &want)?;
+            self.oblige_returned_element(id, at, value, element);
             let stored = self.coerce(value, &want, element)?;
             let field = u32::try_from(at).unwrap_or(0);
             self.field_set(object, field, stored, &origin);
@@ -71153,6 +71233,7 @@ mod tests {
             frame: None,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         });
 
         super::declare_interface_methods(&hierarchy, &mut program);

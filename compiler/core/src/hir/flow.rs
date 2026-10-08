@@ -295,6 +295,9 @@ pub struct Whole {
 pub struct Written {
     /// What a call to each function returns, by name.
     pub returns: FxHashMap<String, Facts>,
+    /// Each position of the tuple a function returns, by name, where the
+    /// return type is a tuple written with scalar kinds.
+    pub return_elements: FxHashMap<String, Vec<Facts>>,
     /// By `(object type, field)`, as [`Whole::field_facts`] is keyed.
     pub fields: super::fields::FieldFacts,
     /// By global, as [`Whole::global_facts`] is keyed.
@@ -309,6 +312,15 @@ impl Written {
             .iter()
             .filter_map(|func| Some((func.name.clone(), func.written_return?.facts())))
             .collect();
+        let return_elements = program
+            .funcs
+            .iter()
+            .filter(|func| func.written_return_elements.iter().any(Option::is_some))
+            .map(|func| {
+                let facts = func.written_return_elements.iter().map(|kind| kind.map_or(Facts::TOP, super::native::Scalar::facts));
+                (func.name.clone(), facts.collect())
+            })
+            .collect();
         let mut fields = super::fields::FieldFacts::default();
         for layout in &program.layouts {
             for (index, field) in layout.fields.iter().enumerate() {
@@ -322,7 +334,7 @@ impl Written {
             .enumerate()
             .filter_map(|(index, global)| Some((u32::try_from(index).ok()?, global.written?.facts())))
             .collect();
-        Self { returns, fields, globals }
+        Self { returns, return_elements, fields, globals }
     }
 }
 
@@ -372,6 +384,7 @@ pub fn analyze(func: &Func) -> Analysis {
 /// Compute what is provable, given what the rest of the program contributes.
 #[must_use]
 pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
+    let tuples = local_tuples(func);
     // Start at BOTTOM and grow. A value's fact only ever widens as more paths
     // are discovered, so the fixpoint is the least one.
     let mut values = vec![Facts::BOTTOM; func.values.len()];
@@ -447,7 +460,7 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
 
             changed |= transfer_block(
                 func,
-                context,
+                (context, &tuples),
                 BlockId(u32::try_from(index).unwrap_or(0)),
                 &refinements,
                 &mut values,
@@ -738,8 +751,9 @@ fn runtime_result(name: &str) -> Option<Facts> {
         "nts_array_index_of",
         "nts_array_last_index_of",
     ];
-    // The length after one element was added: one at least.
-    const LENGTH: &[&str] = &["nts_array_push"];
+    // The length after one element was added: one at least. A number's
+    // array, a reference's, an erased value's.
+    const LENGTH: &[&str] = &["nts_array_push", "nts_array_push_ref", "nts_array_push_value"];
     // A view's, a buffer's or a `DataView`'s length counts what was
     // allocated, which no machine holds 2^53 of.
     const STORAGE: &[&str] = &[
@@ -759,6 +773,131 @@ fn runtime_result(name: &str) -> Option<Facts> {
         return Some(Facts::new(0.0, facts::SAFE_MAX, true, false, false));
     }
     None
+}
+
+/// What each position of each **local tuple** in a function holds: an array
+/// the function builds and only ever stores into and reads at constant
+/// positions, every position stored in the block that builds it before
+/// anything there reads it. A tuple made and taken apart in one function --
+/// a chain-up answering its out values, taken apart by `const [a, b] = ...`
+/// -- whose round trip through the array otherwise loses every fact. Nothing
+/// else can write one, since nothing else holds it, so a read is the join of
+/// what was stored at its position.
+type LocalTuples = FxHashMap<ValueId, Vec<Vec<ValueId>>>;
+
+fn local_tuples(func: &Func) -> LocalTuples {
+    let position = |value: ValueId| -> Option<usize> {
+        match func.values[value.0 as usize].kind {
+            OpKind::ConstInt(at) => usize::try_from(at).ok(),
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            OpKind::ConstFloat(at) if at >= 0.0 && at.fract() == 0.0 && at < 65_536.0 => Some(at as usize),
+            _ => None,
+        }
+    };
+    let mut tuples: LocalTuples = FxHashMap::default();
+    for (index, op) in func.values.iter().enumerate() {
+        if let OpKind::ArrayNew { length, .. } = op.kind
+            && let Some(length) = position(length)
+        {
+            tuples.insert(ValueId(u32::try_from(index).unwrap_or(u32::MAX)), vec![Vec::new(); length]);
+        }
+    }
+    if tuples.is_empty() {
+        return tuples;
+    }
+    // Any other use is an escape: it stops being a local tuple.
+    let mut escaped: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        for &op in &block.ops {
+            match &func.values[op.0 as usize].kind {
+                OpKind::ArraySet { array, index, value, .. } if tuples.contains_key(array) => {
+                    match (position(*index), tuples.get_mut(array)) {
+                        (Some(at), Some(slots)) if at < slots.len() => slots[at].push(*value),
+                        _ => {
+                            escaped.insert(*array);
+                        }
+                    }
+                    escaped.extend(std::iter::once(*value).filter(|v| tuples.contains_key(v)));
+                }
+                OpKind::ArrayGet { array, index, .. } if tuples.contains_key(array) && position(*index).is_some() => {}
+                kind => escaped.extend(super::operands_of(kind).into_iter().filter(|v| tuples.contains_key(v))),
+            }
+        }
+        escaped.extend(super::operands_of_terminator(&block.terminator).into_iter().filter(|v| tuples.contains_key(v)));
+    }
+    // Every position stored where the tuple is built, before any read there.
+    for block in &func.blocks {
+        for (at, &op) in block.ops.iter().enumerate() {
+            if !tuples.contains_key(&op) || escaped.contains(&op) {
+                continue;
+            }
+            let length = tuples[&op].len();
+            let mut stored = vec![false; length];
+            for &later in &block.ops[at + 1..] {
+                match &func.values[later.0 as usize].kind {
+                    OpKind::ArraySet { array, index, .. } if *array == op => {
+                        if let Some(slot) = position(*index).and_then(|at| stored.get_mut(at)) {
+                            *slot = true;
+                        }
+                    }
+                    OpKind::ArrayGet { array, .. } if *array == op => break,
+                    _ => {}
+                }
+            }
+            if stored.contains(&false) {
+                escaped.insert(op);
+            }
+        }
+    }
+    tuples.retain(|array, _| !escaped.contains(array));
+    tuples
+}
+
+/// A read of a local tuple's position ([`LocalTuples`]): the join of what was
+/// stored there.
+fn local_tuple_read(tuples: &LocalTuples, kind: &OpKind, refinements: &Refinements, values: &[Facts]) -> Option<Facts> {
+    let OpKind::ArrayGet { array, index, .. } = kind else { return None };
+    let slots = tuples.get(array)?;
+    let at = lookup(refinements, values, *index);
+    if !(at.is_singleton() && at.integral()) {
+        return None;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let stored = slots.get(at.lo as usize)?;
+    Some(stored.iter().fold(Facts::BOTTOM, |joined, value| joined.join(lookup(refinements, values, *value))))
+}
+
+/// What native memory of a scalar type holds: that type's values. C wrote
+/// them as its type, and a store of the program's was proven to fit
+/// (`super::obligations`). A bit-field holds its width's.
+fn native_load_facts(func: &Func, kind: &OpKind) -> Facts {
+    use super::native::Pointee;
+    let (OpKind::NativeLoad { pointer, .. } | OpKind::NativeBitLoad { pointer, .. }) = kind else { return Facts::TOP };
+    let super::HirType::NativePointer(pointee) = &func.values[pointer.0 as usize].ty else { return Facts::TOP };
+    match (kind, pointee.viewed()) {
+        (OpKind::NativeLoad { .. }, Pointee::Scalar(scalar)) => scalar.facts(),
+        (OpKind::NativeBitLoad { field, .. }, Pointee::Record(record)) => {
+            match record.fields.get(*field as usize).map(|member| member.ty.viewed()) {
+                Some(Pointee::Bits { unit, width }) => bit_field_facts(*unit, *width),
+                _ => Facts::TOP,
+            }
+        }
+        _ => Facts::TOP,
+    }
+}
+
+/// What a bit-field of `width` bits of a `unit` holds.
+fn bit_field_facts(unit: super::native::Scalar, width: u32) -> Facts {
+    if width == 0 || width > 52 {
+        return unit.facts();
+    }
+    let span = f64::from(1u32 << width.min(31)) * f64::from(1u32 << width.saturating_sub(31));
+    let signed = unit.integer_range().is_some_and(|(lo, _)| lo < 0);
+    if signed {
+        Facts::new(-span / 2.0, span / 2.0 - 1.0, true, false, false)
+    } else {
+        Facts::new(0.0, span - 1.0, true, false, false)
+    }
 }
 
 /// What a field of an object of this type can hold.
@@ -908,6 +1047,18 @@ fn transfer_op(
         // iteration and 18% slower.
         //
         // So `hir::elements` decides the storage, and the fact follows it.
+        // A position of a tuple a function was written to return: that
+        // position's kind, which each of its `return`s was proven to fit.
+        OpKind::ArrayGet { array, index, .. }
+            if let OpKind::Call { callee: Callee::Direct(name), .. } = &func.values[array.0 as usize].kind
+                && let Some(elements) = context.written.return_elements.get(name)
+                && let position = lookup(refinements, values, *index)
+                && position.is_singleton()
+                && position.integral() =>
+        {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            elements.get(position.lo as usize).copied().unwrap_or(Facts::TOP)
+        }
         OpKind::ArrayGet { array, .. } => match &func.values[array.0 as usize].ty {
             // A view's element carries the same fact for the same reason: the
             // width *is* the range. Missing this left a `Uint8Array` read with
@@ -936,13 +1087,7 @@ fn transfer_op(
             }
             _ => Facts::TOP,
         },
-        // A conversion keeps the value it was given, as far as it fits.
-        //
-        // Without this every typed array read was TOP: the read is narrow
-        // and the expression around it is `number`, so lowering converts —
-        // and an operand with no facts is an operand nothing can specialize.
-        // `bytes` compiled its two `% 65521` to `fmod`, a library call, two
-        // per byte, and ran at 2.36x the C++ reference.
+        OpKind::NativeLoad { .. } | OpKind::NativeBitLoad { .. } => native_load_facts(func, &op.kind),
         // What an erased value holds, as the type the checker narrowed it to.
         // Its facts are about the number it is when it is one -- a written
         // parameter's kind, through a uniform closure entry -- and this is
@@ -950,6 +1095,13 @@ fn transfer_op(
         OpKind::Unerase { value } if matches!(op.ty, super::HirType::Int { .. } | super::HirType::Float { .. }) => {
             lookup(refinements, values, *value)
         }
+        // A conversion keeps the value it was given, as far as it fits.
+        //
+        // Without this every typed array read was TOP: the read is narrow
+        // and the expression around it is `number`, so lowering converts —
+        // and an operand with no facts is an operand nothing can specialize.
+        // `bytes` compiled its two `% 65521` to `fmod`, a library call, two
+        // per byte, and ran at 2.36x the C++ reference.
         OpKind::Convert(operand) => {
             let incoming = lookup(refinements, values, *operand);
             match held_by(&op.ty) {
@@ -980,7 +1132,7 @@ fn transfer_op(
 /// a guard's narrowing and a block parameter's argument.
 fn transfer_block(
     func: &Func,
-    context: &Context,
+    (context, tuples): (&Context, &LocalTuples),
     block: BlockId,
     refinements: &Refinements,
     values: &mut [Facts],
@@ -999,7 +1151,10 @@ fn transfer_block(
 
     for &value in &record.ops {
         let op = &func.values[value.0 as usize];
-        let computed = transfer_op(func, context, op, refinements, values);
+        let computed = match local_tuple_read(tuples, &op.kind, refinements, values) {
+            Some(stored) => stored,
+            None => transfer_op(func, context, op, refinements, values),
+        };
         // Monotone: a value's fact only grows as more paths reach it, so joining
         // rather than assigning keeps the iteration from oscillating.
         let slot = &mut values[value.0 as usize];
@@ -1325,6 +1480,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         }
     }
 

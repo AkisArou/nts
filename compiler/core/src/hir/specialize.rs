@@ -1648,6 +1648,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         };
         let analysis = crate::hir::flow::analyze(&func);
         super::specialize(&mut func, &analysis, &crate::hir::signatures::Expected::default());

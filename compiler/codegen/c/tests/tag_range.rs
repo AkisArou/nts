@@ -73,6 +73,7 @@ fn predicate(name: &str, negate: bool) -> hir::Func {
         frame: None,
         obligations: Vec::new(),
         written_return: None,
+        written_return_elements: Vec::new(),
     };
     assert_eq!(hir::tags::fold_comparisons(&mut func), 1);
     hir::dce::eliminate(&mut func);

@@ -4567,6 +4567,28 @@ fn enum_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     }
 }
 
+/// The kind of `ty` without its absences: an optional slot's (`n?: c_int`,
+/// `align?: CEnum<GtkAlign, c_uint>`), which holds its absence beside the
+/// kind. For the kind a slot was **written** as (`docs/scalar-numbers.md`,
+/// S3) -- not for a representation, which the absence changes, and which
+/// [`scalar`] answers.
+#[must_use]
+pub fn present_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
+    if let Some(kind) = scalar(snapshot, ty) {
+        return Some(kind);
+    }
+    let TypeKind::Union(parts) = &snapshot.types.get(ty.0 as usize)?.kind else { return None };
+    let present: Vec<TypeId> = parts
+        .iter()
+        .copied()
+        .filter(|part| !matches!(snapshot.types.get(part.0 as usize).map(|t| &t.kind), Some(TypeKind::Undefined | TypeKind::Null)))
+        .collect();
+    match present.as_slice() {
+        [one] => scalar(snapshot, *one),
+        members => enum_members_scalar(snapshot, members),
+    }
+}
+
 /// [`enum_scalar`] over the members themselves, for a union the checker
 /// flattened further -- an optional `CEnum` parameter is its members and
 /// `undefined`, in one union.

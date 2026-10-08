@@ -103,6 +103,9 @@ pub enum Into {
     Global { global: String },
     /// The function's own result, written as a kind.
     Return,
+    /// The `position`th element of the tuple the function was written to
+    /// return with scalar kinds: recorded by the lowering at each `return`.
+    ReturnElement { position: usize },
     /// The result of a function C calls back through `callback`, which C
     /// reads as the callback type's result.
     CallbackReturn { callback: String },
@@ -133,6 +136,7 @@ impl Into {
             | Self::Field { .. }
             | Self::Global { .. }
             | Self::Return
+            | Self::ReturnElement { .. }
             | Self::Local { .. }
             | Self::ClosureArgument { .. } => true,
             Self::NativeArgument { .. } | Self::NativeStore | Self::CallbackReturn { .. } | Self::Assertion => false,
@@ -465,6 +469,9 @@ impl<'a> Slots<'a> {
             Into::Field { field } => (format!("this store into `{field}`, written as {kind},"), None),
             Into::Global { global } => (format!("this store into `{global}`, written as {kind},"), None),
             Into::Return => (format!("this result, which `{}` is written to return as {kind},", judged.func), None),
+            Into::ReturnElement { position } => {
+                (format!("element {position} of this result, which `{}` is written to return as {kind},", judged.func), None)
+            }
             Into::CallbackReturn { callback } => (format!("this result, which C reads back from `{callback}` as {kind},"), None),
             Into::Local { local } => (format!("this store into `{local}`, written as {kind},"), None),
             Into::ClosureArgument { position } => {
@@ -768,6 +775,9 @@ fn exact_in_float(&self, func: &Func, analysis: &Analysis, (block, value): (Bloc
         OpKind::Call { callee: Callee::Native(target), .. } => target.result == super::native::Type::Scalar(Scalar::Float),
         OpKind::Call { callee: Callee::Direct(name), .. } => self.by_name.get(name.as_str()).is_some_and(|callee| callee.written_return == float),
         OpKind::Convert(from) => func.value(*from).ty == HirType::Float { bits: 32 },
+        // C's own `float` storage holds `float`s.
+        OpKind::NativeLoad { pointer, .. } => matches!(&func.value(*pointer).ty,
+            HirType::NativePointer(pointee) if matches!(pointee.viewed(), Pointee::Scalar(Scalar::Float))),
         OpKind::Param(slot) => func.params.get(*slot as usize).is_some_and(|param| param.written == float),
         OpKind::FieldGet { object, field } => self.field(&func.value(*object).ty, *field).is_some_and(|(kind, _)| kind == Scalar::Float),
         OpKind::GlobalGet(global) => self.globals.get(*global as usize).is_some_and(|slot| slot.written == float),

@@ -57,6 +57,7 @@ fn func(name: &str, params: &[HirType], returns: HirType, values: Vec<hir::Op>, 
         frame: None,
         obligations: Vec::new(),
         written_return: None,
+        written_return_elements: Vec::new(),
     }
 }
 

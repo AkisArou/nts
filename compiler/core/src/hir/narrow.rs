@@ -261,6 +261,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         }
     }
 
@@ -469,6 +470,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         };
         assert_eq!(narrow_truncated(&mut it), 2);
         assert_eq!(it.values[2].ty, I32);

@@ -1537,6 +1537,7 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
             Into::Field { field } => format!("field {field}"),
             Into::Global { global } => format!("global {global}"),
             Into::Return => format!("{}'s result", one.func),
+            Into::ReturnElement { position } => format!("element {position} of {}'s result", one.func),
             Into::CallbackReturn { callback } => format!("{callback}'s result (native callback)"),
             Into::Local { local } => format!("local {local}"),
             Into::ClosureArgument { position } => format!("argument #{position} through a function type"),

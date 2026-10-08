@@ -1860,6 +1860,7 @@ mod tests {
                 abstract_declaration: false,
                 obligations: Vec::new(),
                 written_return: None,
+                written_return_elements: Vec::new(),
             }],
             ..Program::default()
         }
@@ -2521,6 +2522,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         };
         let passes_one = Func {
             name: "g".to_owned(),
@@ -2547,6 +2549,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            written_return_elements: Vec::new(),
         };
         let program = Program {
             funcs: vec![takes_two, passes_one],

@@ -554,6 +554,7 @@ mod tests {
                 abstract_declaration: false,
                 obligations: Vec::new(),
                 written_return: None,
+                written_return_elements: Vec::new(),
             }],
             layouts: Vec::new(),
             globals: Vec::new(),
