@@ -2073,13 +2073,23 @@ interface CanvasPattern {}
  */
 interface CanvasRenderingContext2D {}
 /**
- * @ntsBoundBy "nts:dom" Path2D
+ * @ntsBoundBy "nts:dom" Clipboard
  * @ntsIs nts_dom_is 587
+ */
+interface Clipboard {}
+/**
+ * @ntsBoundBy "nts:dom" Crypto
+ * @ntsIs nts_dom_is 588
+ */
+interface Crypto {}
+/**
+ * @ntsBoundBy "nts:dom" Path2D
+ * @ntsIs nts_dom_is 589
  */
 interface Path2D {}
 /**
  * @ntsBoundBy "nts:dom" Storage
- * @ntsIs nts_dom_is 588
+ * @ntsIs nts_dom_is 590
  */
 interface Storage {}
 /** @ntsBoundBy "nts:dom" HTMLCollection */

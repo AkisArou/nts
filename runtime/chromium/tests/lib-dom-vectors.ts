@@ -235,13 +235,13 @@ export function libDomTranscript(): string {
 // (so the probe's count of what outlives its synchronous run sees one timer,
 // not five pending chains). Each outcome is written on the transcript's
 // element as its own attribute, whatever order they settle in -- fulfilled,
-// or the rejection's name and message; the smoke waits for all five.
+// or the rejection's name and message; the smoke waits for all of them.
 export function startLibDomPromises(): void {
   setTimeout((): void => {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -255,5 +255,10 @@ export function startLibDomPromises(): void {
     // (blockers/lib-dom-new-that-fits-no-constructor).
     settleText("text", (): Promise<string> => new Blob().text());
     settleSheet("sheet");
+    // Rejected here, before any permission is asked: the harness's page is
+    // not focused, which the Clipboard API requires. The rejection is
+    // Blink's, carried through the promise bridge. (An app's round trip is
+    // app.ts check's.)
+    settle("clipboard", (): Promise<void> => navigator.clipboard.writeText("copied"));
   }, 0);
 }

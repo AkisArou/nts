@@ -161,6 +161,8 @@ typedef struct NtsDomAnimationTimeline NtsDomAnimationTimeline;
 typedef struct NtsDomDocumentTimeline NtsDomDocumentTimeline;
 typedef struct NtsDomCaretPosition NtsDomCaretPosition;
 typedef struct NtsDomStorage NtsDomStorage;
+typedef struct NtsDomCrypto NtsDomCrypto;
+typedef struct NtsDomClipboard NtsDomClipboard;
 typedef struct NtsDomCanvasPattern NtsDomCanvasPattern;
 typedef struct NtsDomChildNode NtsDomChildNode;
 typedef struct NtsDomNonDocumentTypeChildNode NtsDomNonDocumentTypeChildNode;
@@ -1184,8 +1186,10 @@ enum NtsDomInterface {
   NTS_DOM_CanvasGradient = 584,
   NTS_DOM_CanvasPattern = 585,
   NTS_DOM_CanvasRenderingContext2D = 586,
-  NTS_DOM_Path2D = 587,
-  NTS_DOM_Storage = 588,
+  NTS_DOM_Clipboard = 587,
+  NTS_DOM_Crypto = 588,
+  NTS_DOM_Path2D = 589,
+  NTS_DOM_Storage = 590,
 };
 /* `object instanceof <interface>`, as V8's binding answers it: whether the
  * object's wrapper type is the interface's or derives from it. NULL is no. */
@@ -4800,6 +4804,7 @@ void nts_dom_Window_set_onunload_null(NtsDomWindow* self);
 bool nts_dom_Window_get_isSecureContext(NtsDomWindow* self);
 bool nts_dom_Window_get_crossOriginIsolated(NtsDomWindow* self);
 NtsDomPerformance* nts_dom_Window_get_performance(NtsDomWindow* self);
+NtsDomCrypto* nts_dom_Window_get_crypto(NtsDomWindow* self);
 NtsDomStorage* nts_dom_Window_get_localStorage(NtsDomWindow* self, NtsDomException** error);
 NtsDomStorage* nts_dom_Window_get_sessionStorage(NtsDomWindow* self, NtsDomException** error);
 void nts_dom_Window_alert_0(NtsDomWindow* self);
@@ -5309,6 +5314,7 @@ const NtsStringView* nts_dom_Navigator_get_productSub(NtsDomNavigator* self);
 const NtsStringView* nts_dom_Navigator_get_vendor(NtsDomNavigator* self);
 double nts_dom_Navigator_get_maxTouchPoints(NtsDomNavigator* self);
 double nts_dom_Navigator_get_cpuPerformance(NtsDomNavigator* self);
+NtsDomClipboard* nts_dom_Navigator_get_clipboard(NtsDomNavigator* self);
 double nts_dom_Navigator_get_hardwareConcurrency(NtsDomNavigator* self);
 bool nts_dom_Navigator_get_cookieEnabled(NtsDomNavigator* self);
 double nts_dom_Navigator_get_deviceMemory(NtsDomNavigator* self);
@@ -5982,6 +5988,13 @@ void nts_dom_Storage_setItem(NtsDomStorage* self, const NtsBorrowedString* key, 
 const NtsStringView* nts_dom_Storage_named_get(NtsDomStorage* self, const NtsBorrowedString* name, NtsDomException** error);
 void nts_dom_Storage_named_set(NtsDomStorage* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error);
 void nts_dom_Storage_named_delete(NtsDomStorage* self, const NtsBorrowedString* name, NtsDomException** error);
+const NtsStringView* nts_dom_Crypto_randomUUID(NtsDomCrypto* self);
+NtsDomClipboard* nts_dom_as_Clipboard(NtsDomEventTarget* target);
+void nts_dom_Clipboard_set_onclipboardchange_void(NtsDomClipboard* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*));
+void nts_dom_Clipboard_set_onclipboardchange_boolean(NtsDomClipboard* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*));
+void nts_dom_Clipboard_set_onclipboardchange_null(NtsDomClipboard* self);
+struct NtsPromise* nts_dom_Clipboard_readText(NtsDomClipboard* self);
+struct NtsPromise* nts_dom_Clipboard_writeText(NtsDomClipboard* self, const NtsBorrowedString* data);
 void nts_dom_CanvasPattern_setTransform_1(NtsDomCanvasPattern* self, NtsDomDOMMatrix2DInit transform, NtsDomException** error);
 void nts_dom_CanvasPattern_setTransform_0(NtsDomCanvasPattern* self, NtsDomException** error);
 void nts_dom_ChildNode_after_sss(NtsDomChildNode* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error);

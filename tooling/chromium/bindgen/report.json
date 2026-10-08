@@ -1,5 +1,5 @@
 {
-  "bound": 4893,
+  "bound": 4902,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -5588,11 +5588,6 @@
     },
     {
       "interface": "Window",
-      "member": "get crypto",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
       "member": "get indexedDB",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -6359,11 +6354,6 @@
     {
       "interface": "Navigator",
       "member": "get bluetooth",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Navigator",
-      "member": "get clipboard",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
@@ -7545,6 +7535,41 @@
       "interface": "AnimationTimeline",
       "member": "getCurrentTime/1",
       "why": "[RuntimeEnabled=ScrollTimelineCurrentTime] experimental"
+    },
+    {
+      "interface": "Crypto",
+      "member": "get subtle",
+      "why": "interface SubtleCrypto is not bound"
+    },
+    {
+      "interface": "Crypto",
+      "member": "getRandomValues/1",
+      "why": "result type ArrayBufferView"
+    },
+    {
+      "interface": "Clipboard",
+      "member": "get onclipboardchange",
+      "why": "result type EventHandler"
+    },
+    {
+      "interface": "Clipboard",
+      "member": "get onclipboardchange",
+      "why": "an event handler's value is the program's closure"
+    },
+    {
+      "interface": "Clipboard",
+      "member": "read/0",
+      "why": "result type Promise<sequence<ClipboardItem>>"
+    },
+    {
+      "interface": "Clipboard",
+      "member": "read/1",
+      "why": "result type Promise<sequence<ClipboardItem>>"
+    },
+    {
+      "interface": "Clipboard",
+      "member": "write/1",
+      "why": "parameter type sequence<ClipboardItem>"
     },
     {
       "interface": "ChildNode",

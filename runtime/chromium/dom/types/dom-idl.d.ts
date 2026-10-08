@@ -21940,6 +21940,14 @@ declare module "nts:dom" {
      */
     readonly performance: Performance;
     /**
+     * @ntsSymbol nts_dom_Window_get_crypto
+     */
+    _get_crypto(this: Window): Crypto;
+    /**
+     * @ntsGet _get_crypto
+     */
+    readonly crypto: Crypto;
+    /**
      * @ntsSymbol nts_dom_Window_get_localStorage
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -25051,6 +25059,14 @@ declare module "nts:dom" {
      * @ntsGet _get_cpuPerformance
      */
     readonly cpuPerformance: CNumber<"double">;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_clipboard
+     */
+    _get_clipboard(this: Navigator): Clipboard;
+    /**
+     * @ntsGet _get_clipboard
+     */
+    readonly clipboard: Clipboard;
     /**
      * @ntsSymbol nts_dom_Navigator_get_hardwareConcurrency
      */
@@ -29486,6 +29502,40 @@ declare module "nts:dom" {
   }
   export type StorageMethods = StorageOwnMethods;
   export type Storage = HostClass<"NtsDomStorage", null, "nts_dom_retain", "nts_dom_release"> & StorageMethods;
+  export interface CryptoOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Crypto_randomUUID
+     */
+    randomUUID(this: Crypto): StringView;
+  }
+  export type CryptoMethods = CryptoOwnMethods;
+  export type Crypto = HostClass<"NtsDomCrypto", null, "nts_dom_retain", "nts_dom_release"> & CryptoMethods;
+  export interface ClipboardOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Clipboard_set_onclipboardchange_void
+     */
+    _set_onclipboardchange_void(this: Clipboard, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_Clipboard_set_onclipboardchange_boolean
+     */
+    _set_onclipboardchange_boolean(this: Clipboard, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_Clipboard_set_onclipboardchange_null
+     */
+    _set_onclipboardchange_null(this: Clipboard): void;
+    /**
+     * @ntsSymbol nts_dom_Clipboard_readText
+     */
+    readText(this: Clipboard): Promise<string>;
+    /**
+     * @ntsSymbol nts_dom_Clipboard_writeText
+     */
+    writeText(this: Clipboard, data: StringView): Promise<void>;
+  }
+  export type ClipboardMethods = ClipboardOwnMethods & EventTargetMethods;
+  export type Clipboard = HostClass<"NtsDomClipboard", EventTarget> & ClipboardMethods;
+  /** @ntsSymbol nts_dom_as_Clipboard */
+  export function asClipboard(target: EventTarget): Clipboard | null;
   export interface CanvasPatternOwnMethods {
     /**
      * @ntsSymbol nts_dom_CanvasPattern_setTransform_1

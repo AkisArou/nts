@@ -695,6 +695,8 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_pattern.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_rendering_context_2d.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_text_rendering.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_clipboard.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_crypto.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_image_smoothing_quality.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_path_2d.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage.h"
@@ -868,34 +870,15 @@
 #include "third_party/blink/renderer/core/xml/document_xpath_evaluator.h"
 #include "third_party/blink/renderer/core/xml/dom_parser.h"
 #include "third_party/blink/renderer/core/xml/xml_serializer.h"
-#include "third_party/blink/renderer/modules/app_banner/dom_window_installation.h"
-#include "third_party/blink/renderer/modules/awc/additional_windowing_controls.h"
-#include "third_party/blink/renderer/modules/cache_storage/global_cache_storage.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_gradient.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_pattern.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/path_2d.h"
-#include "third_party/blink/renderer/modules/canvas/imagebitmap/image_bitmap_factories.h"
-#include "third_party/blink/renderer/modules/cookie_store/global_cookie_store.h"
+#include "third_party/blink/renderer/modules/clipboard/clipboard.h"
+#include "third_party/blink/renderer/modules/crypto/crypto.h"
 #include "third_party/blink/renderer/modules/crypto/global_crypto.h"
-#include "third_party/blink/renderer/modules/device_orientation/dom_window_device_motion.h"
-#include "third_party/blink/renderer/modules/device_orientation/dom_window_device_orientation.h"
-#include "third_party/blink/renderer/modules/document_picture_in_picture/document_picture_in_picture.h"
-#include "third_party/blink/renderer/modules/file_system_access/global_file_system_access.h"
-#include "third_party/blink/renderer/modules/filesystem/dom_window_file_system.h"
-#include "third_party/blink/renderer/modules/font_access/font_access.h"
-#include "third_party/blink/renderer/modules/gamepad/dom_window_gamepad.h"
-#include "third_party/blink/renderer/modules/indexeddb/global_indexed_db.h"
-#include "third_party/blink/renderer/modules/launch/launch_queue.h"
-#include "third_party/blink/renderer/modules/payments/goods/dom_window_digital_goods.h"
-#include "third_party/blink/renderer/modules/printing/web_printing_manager.h"
-#include "third_party/blink/renderer/modules/screen_details/window_screen_details.h"
-#include "third_party/blink/renderer/modules/shared_storage/window_shared_storage.h"
-#include "third_party/blink/renderer/modules/speech/speech_synthesis.h"
 #include "third_party/blink/renderer/modules/storage/dom_window_storage.h"
 #include "third_party/blink/renderer/modules/storage/storage_area.h"
-#include "third_party/blink/renderer/modules/subapps/sub_apps.h"
-#include "third_party/blink/renderer/modules/xr/global_event_handlers_xr.h"
 
 
 namespace {
@@ -5863,7 +5846,7 @@ blink::DocumentTimelineOptions* NtsDomToDocumentTimelineOptions(NtsDomContext& c
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 // What `instanceof` checks against, by NtsDomInterface id: each interface's
 // wrapper type, which knows its parent's.
-constexpr std::array<const blink::WrapperTypeInfo*, 589> kInterfaces = {
+constexpr std::array<const blink::WrapperTypeInfo*, 591> kInterfaces = {
     blink::V8AbortController::GetWrapperTypeInfo(),
     blink::V8AbortSignal::GetWrapperTypeInfo(),
     blink::V8AbstractRange::GetWrapperTypeInfo(),
@@ -6451,6 +6434,8 @@ constexpr std::array<const blink::WrapperTypeInfo*, 589> kInterfaces = {
     blink::V8CanvasGradient::GetWrapperTypeInfo(),
     blink::V8CanvasPattern::GetWrapperTypeInfo(),
     blink::V8CanvasRenderingContext2D::GetWrapperTypeInfo(),
+    blink::V8Clipboard::GetWrapperTypeInfo(),
+    blink::V8Crypto::GetWrapperTypeInfo(),
     blink::V8Path2D::GetWrapperTypeInfo(),
     blink::V8Storage::GetWrapperTypeInfo(),
 };
@@ -33894,6 +33879,12 @@ NtsDomPerformance* nts_dom_Window_get_performance(NtsDomWindow* self) {
   return HandleOf<NtsDomPerformance>(GlobalPerformance::performance(*receiver));
 }
 
+NtsDomCrypto* nts_dom_Window_get_crypto(NtsDomWindow* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  return HandleOf<NtsDomCrypto>(GlobalCrypto::crypto(*receiver));
+}
+
 NtsDomStorage* nts_dom_Window_get_localStorage(NtsDomWindow* self, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
@@ -37396,6 +37387,12 @@ double nts_dom_Navigator_get_cpuPerformance(NtsDomNavigator* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Navigator>(self);
   return static_cast<double>(NavigatorCPUPerformance::cpuPerformance(*receiver));
+}
+
+NtsDomClipboard* nts_dom_Navigator_get_clipboard(NtsDomNavigator* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Navigator>(self);
+  return HandleOf<NtsDomClipboard>(Clipboard::clipboard(*receiver));
 }
 
 double nts_dom_Navigator_get_hardwareConcurrency(NtsDomNavigator* self) {
@@ -41851,6 +41848,62 @@ void nts_dom_Storage_named_delete(NtsDomStorage* self, const NtsBorrowedString* 
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::StorageArea>(self);
   receiver->removeItem(NtsText(context, name), exception_state);
+}
+
+const NtsStringView* nts_dom_Crypto_randomUUID(NtsDomCrypto* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Crypto>(self);
+  return context.Lend(nts_dom::AsString(receiver->randomUUID()), false);
+}
+
+NtsDomClipboard* nts_dom_as_Clipboard(NtsDomEventTarget* target) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomClipboard>(nts_dom_is(target, NTS_DOM_Clipboard) ? WrappableOf(target) : nullptr);
+}
+
+void nts_dom_Clipboard_set_onclipboardchange_void(NtsDomClipboard* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Clipboard>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclipboardchange();
+  receiver->setOnclipboardchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Clipboard_set_onclipboardchange_boolean(NtsDomClipboard* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Clipboard>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclipboardchange();
+  receiver->setOnclipboardchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_Clipboard_set_onclipboardchange_null(NtsDomClipboard* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Clipboard>(self);
+  nts_dom::HandlerWrite write;
+  blink::EventListener* previous = receiver->onclipboardchange();
+  receiver->setOnclipboardchange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsPromise* nts_dom_Clipboard_readText(NtsDomClipboard* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Clipboard>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->readText(script_state, exception_state));
+}
+
+struct NtsPromise* nts_dom_Clipboard_writeText(NtsDomClipboard* self, const NtsBorrowedString* data) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Clipboard>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->writeText(script_state, NtsText(context, data), exception_state));
 }
 
 void nts_dom_CanvasPattern_setTransform_1(NtsDomCanvasPattern* self, NtsDomDOMMatrix2DInit transform, NtsDomException** error) {

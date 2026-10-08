@@ -148,6 +148,8 @@
     "DocumentTimeline",
     "CaretPosition",
     "Storage",
+    "Crypto",
+    "Clipboard",
     "CanvasPattern"
   ],
   "sequences": [
@@ -164,7 +166,11 @@
     "Storage",
     "Window.localStorage",
     "Window.sessionStorage",
-    "CanvasPattern"
+    "CanvasPattern",
+    "Crypto",
+    "Window.crypto",
+    "Clipboard",
+    "Navigator.clipboard"
   ],
   "mixins": {
     "ParentNode": {

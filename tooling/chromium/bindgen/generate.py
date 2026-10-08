@@ -721,14 +721,31 @@ class Generator:
 
     def include(self, member):
         """The headers declaring what a member's call names. Blink records
-        them per interface, merged across its partials and mixins; the
-        modules-side ones are for members skipped below."""
+        them per interface, merged across its partials and mixins: the core
+        ones are taken whole, and the modules ones only for a modules
+        interface the allowlist takes whole. A member one modules partial
+        adds to another interface (`"Navigator.clipboard"`) takes that
+        partial's header alone -- the interface's record holds every modules
+        partial's, some of which do not compile outside their own unit."""
+        whole = getattr(getattr(member, "owner", None), "identifier", None) in self.modules
         for owner in (getattr(member, "owner", None), getattr(member, "owner_mixin", None)):
             info = getattr(owner, "code_generator_info", None)
             if info is not None and info.blink_headers:
                 self.headers.update(path for path in info.blink_headers
-                                    if self.from_modules(member)
-                                    or not path.startswith("third_party/blink/renderer/modules/"))
+                                    if whole or not path.startswith("third_party/blink/renderer/modules/"))
+        if self.from_modules(member) and not whole:
+            self.headers.add(self.partial_header(member))
+
+    @staticmethod
+    def partial_header(member):
+        """The header of the partial interface declaring a member, as Blink
+        names it (web_idl's _determine_blink_headers): the IDL file's path,
+        with the file named by the partial's [ImplementedAs] when it has one."""
+        directory, name = os.path.split(os.path.splitext(member.debug_info.location.filepath)[0])
+        implemented_as = member.code_generator_info.receiver_implemented_as
+        if implemented_as:
+            name = name_style.file(implemented_as)
+        return os.path.join(directory, name + ".h")
 
     @staticmethod
     def includes(interface, mixin):
