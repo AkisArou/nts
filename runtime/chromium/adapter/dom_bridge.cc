@@ -1129,8 +1129,16 @@ int32_t NtsDomContext::SetTimer(NtsDomTimerCallback callback, void *closure,
   return id;
 }
 
-void NtsDomContext::ClearTimer(int32_t id) {
-  const auto found = listeners->timers.find(id);
+void NtsDomContext::ClearTimer(double id) {
+  // WebIDL's `long id`: ToInt32, as page script's binding converts it.
+  blink::DummyExceptionStateForTesting conversion;
+  const int32_t timer_id = blink::NativeValueTraits<blink::IDLLong>::NativeValue(
+      v8_isolate.get(), v8::Number::New(v8_isolate.get(), id), conversion);
+  // Ids start at 1: 0 and below name no timer, and are the map's reserved
+  // keys (NaN and an omitted id convert to 0).
+  if (timer_id <= 0)
+    return;
+  const auto found = listeners->timers.find(timer_id);
   if (found == listeners->timers.end())
     return;
   nts_dom::NtsTimer *timer = found->value.Get();
@@ -1824,8 +1832,8 @@ int32_t nts_dom_set_interval_default(NtsDomTimerCallback callback,
 }
 // HTML's clearTimeout and clearInterval clear from one list: either clears
 // either kind.
-void nts_dom_clear_timeout(int32_t id) { nts_dom::Current().ClearTimer(id); }
-void nts_dom_clear_interval(int32_t id) { nts_dom::Current().ClearTimer(id); }
+void nts_dom_clear_timeout(double id) { nts_dom::Current().ClearTimer(id); }
+void nts_dom_clear_interval(double id) { nts_dom::Current().ClearTimer(id); }
 
 // `requestIdleCallback(callback, {timeout})`, in the queue page script's
 // uses; the id cancelIdleCallback takes. WebIDL's `unsigned long timeout`

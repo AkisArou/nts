@@ -48,10 +48,17 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_set_interval_default
    */
   export function setInterval(handler: Closure<() => void>): CNumber<"int32">;
-  /** @ntsSymbol nts_dom_clear_timeout */
-  export function clearTimeout(id: CNumber<"int32">): void;
-  /** @ntsSymbol nts_dom_clear_interval */
-  export function clearInterval(id: CNumber<"int32">): void;
+  /**
+   * `clearTimeout(id)`: any number, converted as WebIDL's `long` (ToInt32),
+   * as page script's binding converts it.
+   * @ntsSymbol nts_dom_clear_timeout
+   */
+  export function clearTimeout(id: CNumber<"double">): void;
+  /**
+   * `clearInterval(id)`: as clearTimeout.
+   * @ntsSymbol nts_dom_clear_interval
+   */
+  export function clearInterval(id: CNumber<"double">): void;
   /**
    * `new MutationObserver(callback)`: Blink's own observer, delivering to
    * the closure with the records and the observer, at the microtask

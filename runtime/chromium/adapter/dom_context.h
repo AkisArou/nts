@@ -250,7 +250,7 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
                    NtsDomDestroy destroy, double timeout, bool repeat);
   // `clearTimeout`/`clearInterval`: the timer stops and its closure goes
   // back -- after its own run, when it is the one running.
-  void ClearTimer(int32_t id);
+  void ClearTimer(double id);
   // A timer's run: its own entry, like a frame callback's.
   void RunTimer(nts_dom::NtsTimer *timer);
   // A native callback into the program -- an observer's delivery -- as its

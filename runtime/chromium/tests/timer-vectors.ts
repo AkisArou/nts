@@ -226,6 +226,13 @@ export function startTimerVectors(): void {
   clearTimeout(setInterval((): void => { log("intervalClearedByTimeout"); }, 1));
   // An unknown id clears nothing.
   clearInterval(987654);
+  // The id is converted as WebIDL's long (ToInt32): one 2^32 above a
+  // timer's id clears it; NaN, 0, -1 and a fraction of 1 name no timer.
+  clearTimeout(setTimeout((): void => { log("wrapped"); }, 0) + 4294967296);
+  clearTimeout(0 / 0);
+  clearTimeout(0);
+  clearTimeout(-1);
+  clearInterval(0.5);
 }
 
 // An interval that clears itself from inside its third run, then nests.

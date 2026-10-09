@@ -185,9 +185,10 @@ int32_t nts_dom_set_interval_default(void (*callback)(void* closure),
                                      void (*destroy)(void* closure));
 /* `clearTimeout(id)` / `clearInterval(id)`, either for either kind, as in
  * HTML: the timer stops and its closure goes back -- once its own run
- * returns, when cleared from inside it. An unknown id does nothing. */
-void nts_dom_clear_timeout(int32_t id);
-void nts_dom_clear_interval(int32_t id);
+ * returns, when cleared from inside it. The id is any number, converted as
+ * WebIDL's `long` (ToInt32); an unknown id does nothing. */
+void nts_dom_clear_timeout(double id);
+void nts_dom_clear_interval(double id);
 
 /* `requestIdleCallback(callback, {timeout})`: once, in an idle period or once
  * the timeout (ms; 0 is none) passes, with the IdleDeadline, in the queue
