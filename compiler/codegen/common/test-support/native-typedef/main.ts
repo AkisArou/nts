@@ -9,18 +9,18 @@ import type { c_int } from "c:types";
 //
 // Storage this program owns, filled and read through libc's own functions, so
 // the answer comes from the platform rather than from a constant here.
-export function holds(signo: number): number {
+export function holds(signo: c_int): number {
   const set = local<SigSet>();
   if (sigemptyset(set) !== 0) return -1;
-  if (sigaddset(set, signo as c_int) !== 0) return -2;
-  return sigismember(set, signo as c_int);
+  if (sigaddset(set, signo) !== 0) return -2;
+  return sigismember(set, signo);
 }
 
 // The arm that fails if the set was never emptied: a signal that was not added
 // must not be a member.
-export function holdsOther(added: number, asked: number): number {
+export function holdsOther(added: c_int, asked: c_int): number {
   const set = local<SigSet>();
   if (sigemptyset(set) !== 0) return -1;
-  if (sigaddset(set, added as c_int) !== 0) return -2;
-  return sigismember(set, asked as c_int);
+  if (sigaddset(set, added) !== 0) return -2;
+  return sigismember(set, asked);
 }

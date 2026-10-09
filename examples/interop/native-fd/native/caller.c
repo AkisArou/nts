@@ -7,7 +7,9 @@
 // and "the buffer holds those five bytes" become separate checkable claims
 // rather than one. The write end is closed before the call so that an empty
 // payload reaches end of file instead of blocking.
-static double through_pipe(const char *payload, double (*call)(double, double), double max) {
+// `readCount(fd: Fd, max: c_uint)` is `readCount(int32_t, uint32_t)` here: a
+// parameter written as a C type is that type at the export.
+static double through_pipe(const char *payload, double (*call)(int32_t, uint32_t), uint32_t max) {
   int fds[2];
   if (pipe(fds) != 0) return -99;
   size_t length = strlen(payload);
@@ -17,7 +19,7 @@ static double through_pipe(const char *payload, double (*call)(double, double), 
     return -98;
   }
   close(fds[1]);
-  double out = call((double)fds[0], max);
+  double out = call(fds[0], max);
   close(fds[0]);
   return out;
 }
@@ -46,7 +48,7 @@ int main(void) {
   {
     int fds[2];
     if (pipe(fds) != 0) return 6;
-    if (writeBytes((double)fds[1], 'o', 'k') != 2) return 7;
+    if (writeBytes(fds[1], 'o', 'k') != 2) return 7;
     close(fds[1]);
     char got[2] = {0, 0};
     if (read(fds[0], got, 2) != 2) return 8;

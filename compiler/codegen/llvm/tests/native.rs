@@ -19,6 +19,14 @@ fn prepare_with_provider(name: &str, source: &str, provider: hir::Provider) -> O
 }
 
 fn prepare_with_files(name: &str, source: &str, provider: hir::Provider, declarations: &[(&str, &str)]) -> Option<(Utf8PathBuf, hir::Prepared)> {
+    let (dir, snapshot) = snapshot_of(name, source, declarations)?;
+    let prepared = hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() });
+    Some((dir, prepared.unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
+}
+
+/// `source` written beside `declarations` and read by the checker, for a test
+/// that prepares it with options of its own.
+fn snapshot_of(name: &str, source: &str, declarations: &[(&str, &str)]) -> Option<(Utf8PathBuf, nts_semantic_schema::SemanticSnapshot)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -42,7 +50,7 @@ fn prepare_with_files(name: &str, source: &str, provider: hir::Provider, declara
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).unwrap()))
+    Some((dir, snapshot))
 }
 
 /// An `async` callback is bridged only where the program's loop checkpoints
@@ -558,14 +566,14 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
     let mut ts = format!("import type {{ {brands} }} from \"c:types\";\n");
     let mut header = "#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n".to_owned();
     let mut implementation = "#include \"native.h\"\n".to_owned();
-    let mut prototypes = String::new();
+    let mut prototypes = "#include <stdint.h>\n".to_owned();
     let mut caller = "int main(void) {\n".to_owned();
     for (i, (brand, c_type, input, expected)) in CASES.iter().enumerate() {
         writeln!(
             ts,
             "declare function take_{i}(v: {brand}): c_double;
             declare function give_{i}(): {brand};
-            export function argument_{i}(v: number): number {{ return take_{i}(v as {brand}); }}
+            export function argument_{i}(v: {brand}): number {{ return take_{i}(v); }}
             export function result_{i}(): number {{ return give_{i}(); }}"
         )
         .unwrap();
@@ -580,27 +588,29 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
             {c_type} give_{i}(void) {{ return ({c_type})({input}); }}"
         )
         .unwrap();
+        // The argument is the brand's C type at the export too (`written_roots`),
+        // so C converts the input, as `give` does.
         writeln!(
             prototypes,
-            "double argument_{i}(double);\ndouble result_{i}(void);"
+            "double argument_{i}({c_type});\ndouble result_{i}(void);"
         )
         .unwrap();
         writeln!(
             caller,
-            "if (argument_{i}({input}) != {expected} || result_{i}() != {expected}) return {};",
+            "if (argument_{i}(({c_type})({input})) != {expected} || result_{i}() != {expected}) return {};",
             i + 1
         )
         .unwrap();
     }
     ts.push_str("import { abs } from \"c:stdlib\"; import * as math from \"c:math\";
         declare function native_not(v: boolean): boolean;
-        export function library(n: number): number { return abs(n as c_int) + math.sqrt(4 as c_double); }
+        export function library(n: c_int): number { return abs(n) + math.sqrt(4 as c_double); }
         export function toggle(v: boolean): boolean { return native_not(v); }");
     header.push_str("bool native_not(bool);\n");
     implementation.push_str("bool native_not(bool v) { return !v; }\n");
-    prototypes.push_str("double library(double);\n_Bool toggle(_Bool);\n");
+    prototypes.push_str("double library(int);\n_Bool toggle(_Bool);\n");
     caller
-        .push_str("if (library(-3.75) != 5 || toggle(1) || !toggle(0)) return 99;\nreturn 0; }\n");
+        .push_str("if (library(-3) != 5 || toggle(1) || !toggle(0)) return 99;\nreturn 0; }\n");
     let Some((dir, prepared)) = prepare("scalar-abi", &ts) else {
         return;
     };
@@ -708,9 +718,13 @@ fn abi_tokens(line: &str) -> Vec<&str> {
 
 fn assert_unsigned_return_control(dir: &Utf8Path, ir: &str) {
     // One changed conversion, with identical C callee and caller objects.
-    // Treating UINT32_MAX as signed must be observable in the return arm.
-    assert!(ir.contains("uitofp i32"));
-    let bad = ir.replacen("uitofp i32", "sitofp i32", 1);
+    // Treating UINT32_MAX as signed must be observable in the return arm --
+    // `result_1`'s, by name: an export's `c_uint` parameter is widened with a
+    // `uitofp` too, earlier in the module, and LLVM folds that one's round
+    // trip whichever way it is spelled.
+    let returned = ir.find("@result_1(").expect("`result_1` is defined");
+    let at = returned + ir[returned..].find("uitofp i32").expect("`result_1` widens an unsigned result");
+    let bad = format!("{}sitofp i32{}", &ir[..at], &ir[at + "uitofp i32".len()..]);
     std::fs::write(dir.join("bad.ll"), bad).unwrap();
     clang(dir, &["-O2", "-c", "bad.ll", "-o", "bad.o"]);
     clang(dir, &["bad.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "bad"]);
@@ -721,9 +735,9 @@ fn assert_unsigned_return_control(dir: &Utf8Path, ir: &str) {
 fn conflicting_abis_and_runtime_collisions_are_refused() {
     for (name, source, expected) in [
         ("overloads", "declare function foreign(v: c_int): c_int; declare function foreign(v: c_uint): c_uint;
-            export function run(n: number): number { return foreign(n as c_int) + foreign(n as c_uint); }", "conflicting ABI"),
+            export function run(n: c_int, m: c_uint): number { return foreign(n) + foreign(m); }", "conflicting ABI"),
         ("runtime", "declare function nts_math_pow(v: c_int): c_int;
-            export function run(n: number): number { return nts_math_pow(n as c_int); }", "collides"),
+            export function run(n: c_int): number { return nts_math_pow(n); }", "collides"),
     ] {
         let source = format!("import type {{ c_int, c_uint }} from \"c:types\";\n{source}");
         let Some((_, prepared)) = prepare(name, &source) else { return; };
@@ -739,8 +753,8 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
     let source = "import type { c_int, c_int32 } from \"c:types\";
         declare function native_identity(v: c_int): c_int;
         declare function native_identity(v: c_int32): c_int32;
-        export function run(n: number): number {
-            return native_identity(n as c_int) + native_identity(n as c_int32) + 0.5;
+        export function run(n: c_int, m: c_int32): number {
+            return native_identity(n) + native_identity(m) + 0.5;
         }";
     let Some((dir, prepared)) = prepare("compatible-aliases", source) else {
         return;
@@ -772,7 +786,7 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
     .unwrap();
     std::fs::write(
         dir.join("caller.c"),
-        "double run(double);\nint main(void) { return run(3.75) != 6.5; }\n",
+        "double run(int, int);\nint main(void) { return run(3, 3) != 6.5; }\n",
     )
     .unwrap();
     clang(&dir, &["-O2", "-c", "native.c", "-o", "native.o"]);
@@ -864,8 +878,8 @@ declare function box_items(b: Box): c_int;
 function asBox(w: Widget | null): Box | null {
     return unsafeDowncast<Box>(w, w !== null && kind_of(w) === 1);
 }
-export function run(kind: number): number {
-    const b = asBox(make(kind as c_int));
+export function run(kind: c_int): number {
+    const b = asBox(make(kind));
     return b === null ? -1 : box_items(b);
 }
 "#;
@@ -1123,7 +1137,7 @@ fn a_closure_to_c_keeps_its_refusals_and_its_boundary() {
 import type { c_int } from "c:types";
 declare function apply_twice(f: (n: c_int) => c_int, x: c_int): c_int;
 export function run(k: number): number {
-    return apply_twice((n) => (n + k) as c_int, 1 as c_int);
+    return apply_twice((n) => ((n + k) | 0) as c_int, 1 as c_int);
 }
 "#;
     let Some((_, prepared)) = prepare("closure-plain", plain) else { return; };
@@ -1242,8 +1256,8 @@ declare function wide_new(): Wide;
 declare function wide_valid(w: Wide): boolean;
 /** @ntsAbi managed */
 declare function invoke(f: () => number): number;
-export function run(n: number): number {
-    const c = counter_new(n as c_int);
+export function run(n: c_int): number {
+    const c = counter_new(n);
     if (c === null) return -1;
     counter_bump(c, 2 as c_int);
     const answer = invoke(() => counter_read(c));
@@ -1290,7 +1304,7 @@ double invoke(NtsHeader *cb) {
 #include "program.h"
 #include "counter.h"
 int main(void) {
-    if (run(3.75) != 5.25 || run(-1) != -1 || counter_live() != 0) return 1;
+    if (run(3) != 5.25 || run(-1) != -1 || counter_live() != 0) return 1;
     if (!wide()) return 2;
     Counter *c = counter_new(9);
     if (identity(c) != c || identity(NULL) != NULL) return 3;
@@ -1315,7 +1329,7 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
     let mut source = format!("import type {{ Ptr, {brands} }} from \"c:types\";\n");
     let mut caller = "#include \"program.h\"\nint main(void) {\n".to_owned();
     for (i, (brand, ctype, input, expected)) in CASES.iter().enumerate() {
-        writeln!(source, "export function memory_{i}(p: Ptr<{brand}>, q: Ptr<{brand}>, n: number): number {{
+        writeln!(source, "export function memory_{i}(p: Ptr<{brand}>, q: Ptr<{brand}>, n: {brand}): number {{
             p[1] = n;
             const before = q[1];
             let index = 1;
@@ -1324,7 +1338,7 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
             return before + q[index] + index;
         }}").unwrap();
         writeln!(caller, "{{ {ctype} data[4] = {{11, 0, 0, 23}};
-            if (memory_{i}(data, data, {input}) != (double)({expected}) + 9) return {};
+            if (memory_{i}(data, data, ({ctype})({input})) != (double)({expected}) + 9) return {};
             if (data[0] != 11 || data[1] != ({ctype})({expected}) || data[2] != 7 || data[3] != 23) return {};
         }}", i * 2 + 1, i * 2 + 2).unwrap();
     }
@@ -1524,9 +1538,9 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
     let source = "import { read, type Fd, type Count } from \"c:unistd\";\n\
          import { local } from \"c:memory\";\n\
          import type { c_uint8 } from \"c:types\";\n\
-         export function readCount(fd: number): number {\n\
+         export function readCount(fd: Fd): number {\n\
          const buf = local<c_uint8>(8);\n\
-         return Number(read(fd as Fd, buf, 8n as Count));\n\
+         return Number(read(fd, buf, 8n as Count));\n\
          }\n";
     let Some((dir, prepared)) =
         prepare_with_files("native-fd-typed", source, hir::Provider::NoGc, &declarations)
@@ -2017,10 +2031,10 @@ type GError = Class<'_GError'>;
  * @ntsNoEscape error
  */
 declare function might(ok: c_int, out: Ptr<c_int>, error: Ptr<GError | null>): c_int;
-export function attempt(ok: number): number {
+export function attempt(ok: c_int): number {
     const n = local<c_int>();
     const error = local<GError | null>();
-    const r = might(ok as c_int, n, error);
+    const r = might(ok, n, error);
     if (error[0] !== null) return -1;
     return (r as number) * 100 + (n[0] as number);
 }
@@ -2478,18 +2492,18 @@ import type { OnceClosure, c_int } from 'c:types';
 declare function start_async(value: c_int, ready: OnceClosure<(result: c_int) => void>): void;
 declare function fire_all(): void;
 let total = 0;
-function start(k: number): void {
-    start_async(k as c_int, (result) => { total += result * k; });
+function start(k: c_int): void {
+    start_async(k, (result) => { total += result * k; });
 }
 export function run(): number {
     total = 0;
-    start(1);
-    start(10);
+    start(1 as c_int);
+    start(10 as c_int);
     fire_all();
     fire_all();
     return total;
 }
-export function started(): void { start(3); start(4); }
+export function started(): void { start(3 as c_int); start(4 as c_int); }
 export function fired(): void { fire_all(); }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
@@ -2521,14 +2535,14 @@ import type { OnceClosure, c_int } from 'c:types';
 declare function start_async(value: c_int, ready: OnceClosure<(result: c_int) => void>): void;
 declare function fire_all(): void;
 let total = 0;
-function start(k: number, ready: (result: c_int) => void): void {
-    start_async(k as c_int, ready);
+function start(k: c_int, ready: (result: c_int) => void): void {
+    start_async(k, ready);
 }
 export function run(): number {
     total = 0;
     const scale = 100;
-    start(1, (result) => { total += result; });
-    start(2, (result) => { total += result * scale; });
+    start(1 as c_int, (result) => { total += result; });
+    start(2 as c_int, (result) => { total += result * scale; });
     fire_all();
     return total;
 }
@@ -2866,10 +2880,10 @@ declare function retains_seen(): c_int;
 declare function errors_seen(): c_int;
 let kept: Node | null = null;
 export function local(): number { const e = node_at(0 as c_int); return node_value(e) + node_value(node_at(1 as c_int)); }
-function made(i: number): Element { return node_at(i as c_int); }
+function made(i: c_int): Element { return node_at(i); }
 interface Holder { node: Element }
 function unwrapped(): Element { const holder: Holder = { node: node_at(2 as c_int) }; return holder.node; }
-export function helper(): number { const e = made(0); return node_value(e) + node_value(made(1)) + node_value(unwrapped()); }
+export function helper(): number { const e = made(0 as c_int); return node_value(e) + node_value(made(1 as c_int)) + node_value(unwrapped()); }
 export function maybe(flag: boolean): number { const n: Node | null = flag ? node_at(1 as c_int) : null; return n === null ? 0 : node_value(n); }
 export function walk(): number {
     let n: Node | null = node_at(0 as c_int);
@@ -2966,13 +2980,13 @@ declare function instance_value(instance: GTypeInstance): c_int;
 declare function live_objects(): c_int;
 declare function errors_seen(): c_int;
 let total = 0;
-async function later(value: number): Promise<Thing> {
-    return thing_new_owned(value as c_int);
+async function later(value: c_int): Promise<Thing> {
+    return thing_new_owned(value);
 }
 async function use(): Promise<void> {
-    const first = await later(4);
-    const second = await later(2);
-    const third = await later(7);
+    const first = await later(4 as c_int);
+    const second = await later(2 as c_int);
+    const third = await later(7 as c_int);
     total = (instance_value(first) as number) * 100 + (instance_value(second) as number) * 10 + (instance_value(third) as number);
 }
 export function start(): void {
@@ -3228,7 +3242,7 @@ declare const Other: {
     new (props?: ThingProps): Thing;
 };
 let evaluated = 0;
-function next(): c_int { evaluated = evaluated * 10 + 1; return evaluated as c_int; }
+function next(): c_int { const value = (evaluated * 10 + 1) | 0; evaluated = value; return value as c_int; }
 export function run(): number {
     const label = "ab";
     // Written width first, then label: the type declares label first.
@@ -3783,9 +3797,10 @@ type Slot = Struct<{ before: c_int; value: c_long; after: c_int }, "slot">;
 declare function echo_long(value: c_long): c_long;
 declare function echo_ulong(value: c_ulong): c_ulong;
 export function probe(seed: number): number {
-    const low = (BigInt(seed) * -2147483648n) as c_long;
-    const high = (BigInt(seed) * 2147483648n) as c_ulong;
-    const wide = (BigInt(seed) * 4294967301n) as c_long;
+    // The edges of Win64's 32-bit `long` slot, which the program is checked
+    // for as well.
+    const low = -2147483648n as c_long;
+    const high = 2147483648n as c_ulong;
     const slot = local<Slot>();
     slot[0].before = 1 as c_int;
     slot[0].after = 7 as c_int;
@@ -3793,7 +3808,6 @@ export function probe(seed: number): number {
     let mask = 0;
     if (echo_long(low) === low) mask |= 1;
     if (echo_ulong(high) === high) mask |= 2;
-    if (echo_long(wide) === ((BigInt(seed) * 5n) as c_long)) mask |= 4;
     // Compared directly, which is the shape that could not be written until the
     // `i64`-against-`i128` defect was fixed: a `c_long` field loads as an `i64`
     // and a `c_long`-branded bigint is the `i128` it lives in, and nothing
@@ -3814,10 +3828,14 @@ export function probe(seed: number): number {
     let caller = "#include <stdio.h>\ndouble probe(double);\nint main(void) { printf(\"%.0f\\n\", probe(1)); return 0; }\n";
     let win64_helpers = "#include <stdint.h>\nint32_t echo_long(int32_t v) { return v; }\nuint32_t echo_ulong(uint32_t v) { return v; }\n";
     let sysv_helpers = "long echo_long(long v) { return v; }\nunsigned long echo_ulong(unsigned long v) { return v; }\n";
-    let Some((dir, prepared)) = prepare("win64-long", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let win64 = nts_core::hir::native::NativeAbi::Win64;
     let sysv = nts_core::hir::native::NativeAbi::SysV;
+    // Prepared for both: a value past Win64's 32-bit `long` is refused where
+    // it is claimed, so there is no truncation at the slot left to observe.
+    let Some((dir, snapshot)) = snapshot_of("win64-long", source, &[]) else { return; };
+    let prepared = hir::prepare_with(&snapshot, &hir::Options { targets: &[sysv, win64], ..hir::Options::default() })
+        .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
 
     let run = |abi, helpers: &str, name: &str| -> String {
         let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi, arch: nts_codegen_llvm::Arch::X86_64 });
@@ -3837,8 +3855,7 @@ export function probe(seed: number): number {
         assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
         String::from_utf8_lossy(&out.stdout).trim().to_owned()
     };
-    // The control: on SysV nothing truncates, so `2^32 + 5` comes back whole.
-    assert_eq!(run(sysv, sysv_helpers, "llvm-sysv"), "27", "the SysV control did not differ in exactly the truncation");
+    assert_eq!(run(sysv, sysv_helpers, "llvm-sysv"), "27", "a value at the edge of Win64's slot did not round-trip on SysV");
 
     let zig = Command::new("zig").arg("env").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
     let Some(lib) = zig.as_deref().and_then(|env| env.split_once("lib_dir")).and_then(|(_, rest)| rest.split('"').nth(1).map(str::to_owned)) else {
@@ -3865,7 +3882,7 @@ export function probe(seed: number): number {
         eprintln!("llvm-win64: not run -- no Windows reachable (tooling/windows/vm.md)");
     } else {
         assert!(ran.status.success(), "llvm-win64 on Windows: {}", String::from_utf8_lossy(&ran.stderr));
-        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "31", "the Win64 slot did not round-trip on Windows");
+        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "27", "the Win64 slot did not round-trip on Windows");
     }
 
     // C's Win64 program, checked by an LLP64 compiler. Its assertions state
@@ -3885,9 +3902,14 @@ export function probe(seed: number): number {
     ]);
 }
 
-/// A constant that does not fit Win64's 32-bit `long` is refused by both
-/// backends, and not on `SysV`, where it fits. A wrap the compiler can see is not
-/// left to happen silently.
+/// A constant that does not fit Win64's 32-bit `long` is refused, and not on
+/// `SysV`, where it fits. A wrap the compiler can see is not left to happen
+/// silently.
+///
+/// Where the build's targets include Win64, the strict check refuses it at the
+/// `as` that claims it. A program checked for `SysV` alone and emitted for
+/// Win64 meets the same refusal in both backends. A negative `unsigned long`
+/// is refused by the check on every target: no `long` holds it.
 #[test]
 fn a_c_long_constant_too_wide_for_win64_is_refused_on_both_backends() {
     let source = r#"
@@ -3896,20 +3918,32 @@ declare function take_long(value: c_long): void;
 declare function take_ulong(value: c_ulong): void;
 export function fits(): void { take_long(-2147483648n as c_long); take_ulong(4294967295n as c_ulong); }
 export function wide(): void { take_long(2147483648n as c_long); }
-export function negative(): void { take_ulong(-1n as c_ulong); }
 "#;
-    let Some((_, prepared)) = prepare("win64-constants", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let win64 = nts_core::hir::native::NativeAbi::Win64;
+    let rejected = |name: &str, source: &str, targets: &[nts_core::hir::native::NativeAbi]| -> Vec<String> {
+        let (_, snapshot) = snapshot_of(name, source, &[]).unwrap();
+        match hir::prepare_with(&snapshot, &hir::Options { targets, ..hir::Options::default() }) {
+            Err(hir::Unprepared::Rejected(errors)) => errors.into_iter().map(|error| format!("{} {}", error.code, error.message)).collect(),
+            Ok(_) => Vec::new(),
+            Err(invalid) => panic!("{}", invalid.render(&snapshot.sources)),
+        }
+    };
+    let Some((_, prepared)) = prepare("win64-constants", source) else { return; };
+    let for_win64 = rejected("win64-constants-checked", source, &[win64]);
+    assert!(for_win64.len() == 1 && for_win64[0].starts_with("NTS5001") && for_win64[0].contains("`long`"), "{for_win64:?}");
+    let negative = "import type { c_ulong } from \"c:types\";\ndeclare function take_ulong(value: c_ulong): void;\nexport function negative(): void { take_ulong(-1n as c_ulong); }\n";
+    let refused_negative = rejected("win64-constants-negative", negative, &[]);
+    assert!(refused_negative.len() == 1 && refused_negative[0].starts_with("NTS5001"), "{refused_negative:?}");
+    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let sysv = nts_core::hir::native::NativeAbi::SysV;
     let refused = |diagnostics: &[nts_diagnostics::Diagnostic]| -> Vec<String> {
         diagnostics.iter().filter(|d| d.message.contains("does not fit")).map(|d| d.message.clone()).collect()
     };
     let c = refused(&nts_codegen_c::emit(&prepared.program, win64).diagnostics);
     let llvm = refused(&nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: win64, arch: nts_codegen_llvm::Arch::X86_64 }).diagnostics);
-    assert_eq!(c.len(), 2, "C refused {c:?}");
+    assert_eq!(c.len(), 1, "C refused {c:?}");
     assert_eq!(c, llvm, "the two backends refused different constants");
-    assert!(c.iter().any(|m| m.contains("2147483648")) && c.iter().any(|m| m.contains("-1")), "{c:?}");
+    assert!(c[0].contains("2147483648"), "{c:?}");
     assert!(refused(&nts_codegen_c::emit(&prepared.program, sysv).diagnostics).is_empty(), "SysV refused a constant that fits");
     assert!(refused(&nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: sysv, arch: nts_codegen_llvm::Arch::X86_64 }).diagnostics).is_empty(), "SysV refused a constant that fits");
 }
@@ -3929,7 +3963,7 @@ import type { Ptr, c_int } from "c:types";
 declare function some_address(): Ptr<void>;
 declare function apply_or(f: ((n: c_int) => c_int) | null, x: c_int, fallback: c_int): c_int;
 declare function is_null(p: Ptr<void> | null): c_int;
-function triple(n: c_int): c_int { return (n * 3) as c_int; }
+function triple(n: c_int): c_int { return ((n * 3) | 0) as c_int; }
 export function withCallback(): number { return apply_or(triple, 5 as c_int, -1 as c_int); }
 export function withNull(): number { return apply_or(null, 5 as c_int, -1 as c_int); }
 export function nullPointer(): number { return is_null(null); }
@@ -4399,10 +4433,11 @@ export function live(): number { return live_objects() as number; }
 }
 
 /// `CNumber<C>`: a C number a binding takes and gives as a plain `number`, as
-/// GJS does -- `gtk_box_new(VERTICAL, 4)`, no cast. The argument converts to
-/// C's type at the call (2.9 to an `int` is 2, as a cast was), a result reads
-/// back as a `number` that arithmetic keeps fractional, and a callback's
-/// parameter and result cross the same way both directions.
+/// GJS does -- `gtk_box_new(VERTICAL, 4)`, no cast. An argument proven to be
+/// one of C's type's values crosses as it is, and a fraction is refused where
+/// it would cross into an integer (`add(2.9, …)`, which once truncated to 2); a
+/// result reads back as a `number` that arithmetic keeps fractional, and a
+/// callback's parameter and result cross the same way both directions.
 #[test]
 fn a_plain_number_crosses_as_its_c_type_on_both_backends() {
     let source = r#"
@@ -4411,11 +4446,11 @@ declare function add(a: CNumber<"int">, b: CNumber<"double">): CNumber<"int">;
 declare function halve(x: CNumber<"float">): CNumber<"double">;
 declare function twice(callback: (n: CNumber<"int">) => CNumber<"int">, n: CNumber<"int">): CNumber<"int">;
 declare function doubled(n: CNumber<"size_t">): CNumber<"size_t">;
-function plus_one(n: number): number { return n + 1; }
+function plus_one(n: CNumber<"int">): CNumber<"int"> { return (n + 1) | 0; }
 // A 64-bit one crosses as C's `size_t` and is a `number` to the program.
-export function wide(): number { return doubled(3.5) / 2 + 0.5; }
+export function wide(): number { return doubled(3) / 2 + 0.5; }
 export function run(): number {
-    const sum = add(2.9, 3.5);
+    const sum = add(2, 3.5);
     const half = halve(5);
     return (sum + 0.25) * 1000 + half * 100 + twice(plus_one, 40);
 }
@@ -4431,9 +4466,9 @@ size_t doubled(size_t n) { return 2 * n + 1; }
         let caller = counted_caller(r#"printf("%.2f %.2f", run(), wide());"#, "run(); wide();");
         let Some((text, outputs)) = run_on_both_backends("cnumber", source, provider, library, &caller) else { return; };
         assert!(text.contains("int add(int, double)"), "a `CNumber` is not C's type");
-        // add: 2 + 3 = 5 (2.9 truncates, 3.5 truncates in C), + 0.25 kept;
-        // halve(5) = 2.5; twice: 40 -> 41 -> 42, minus 40 = 2. wide: 3.5
-        // truncates to 3 in C, 2 * 3 + 1 = 7, / 2 = 3.5, + 0.5 = 4.
+        // add: 2 + 3 = 5 (the double 3.5 truncates in C), + 0.25 kept;
+        // halve(5) = 2.5; twice: 40 -> 41 -> 42, minus 40 = 2. wide:
+        // 2 * 3 + 1 = 7, / 2 = 3.5, + 0.5 = 4.
         for output in outputs {
             assert_eq!(output, expect("5502.00 4.00", provider), "{provider:?}");
         }
@@ -4447,6 +4482,13 @@ size_t doubled(size_t n) { return 2 * n + 1; }
     );
     let Some((_, prepared)) = prepare("cnumber-promise", &settled) else { return; };
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    // A fraction into C's `int` is refused where it is passed.
+    let fraction = source.replace("add(2, 3.5)", "add(2.9, 3.5)");
+    let (_, snapshot) = snapshot_of("cnumber-fraction", &fraction, &[]).unwrap();
+    let Err(hir::Unprepared::Rejected(errors)) = hir::prepare(&snapshot) else {
+        panic!("`add(2.9, …)` must be refused");
+    };
+    assert!(errors.iter().all(|error| error.code == "NTS5001") && errors.iter().any(|error| error.message.contains("a fraction")), "{errors:?}");
 }
 
 /// A `GObject` interface as a handle type: `GObjectInterface<Tag, Prerequisite>`

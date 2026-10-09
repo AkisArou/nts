@@ -82,7 +82,7 @@ fn prepare_with(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf,
     std::fs::write(dir.join("main.ts"), source).unwrap();
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
     assert!(!snapshot.has_errors(), "{name}: {:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap()))
+    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
 }
 
 const PROGRAM: &str = r#"import { Application } from "winrt:Test.Xaml";
@@ -936,7 +936,7 @@ const STATICS: &str = r#"declare module "winrt:Test.Statics" {
 /// method's receiver -- the namespace written before it is no value.
 #[test]
 fn a_static_property_is_called_on_its_factory() {
-    let source = "import { Clock } from \"winrt:Test.Statics\";\nexport function tick(): number {\n  Clock.ticks = Clock.ticks + 1;\n  return Clock.ticks;\n}\n";
+    let source = "import { Clock } from \"winrt:Test.Statics\";\nexport function tick(): number {\n  Clock.ticks = (Clock.ticks + 1) | 0;\n  return Clock.ticks;\n}\n";
     let Some((dir, prepared)) = prepare_with("statics", STATICS, source) else {
         eprintln!("skipped: no tsgo");
         return;

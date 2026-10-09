@@ -18,7 +18,10 @@ function chooseKey(): "count" { keyCalls++; return "count"; }
 export function computedKey(p: Ptr<Keys>): number {
   const key = "count";
   const before = p[chooseKey()];
-  p[chooseKey()] += 2;
+  // A compound assignment through a computed key: `|`, whose result stays an
+  // `int32_t` (17 | 2 is the 19 that `+= 2` gave), where `+ 2` could not be
+  // proven to.
+  p[chooseKey()] |= 2;
   address(p[chooseKey()])[0] = 25;
   return before * 100 + p[key] + keyCalls;
 }

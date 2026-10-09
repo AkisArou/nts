@@ -13,5 +13,5 @@ export function typeOf(c: Ptr<CmsgHdr>): number { return c.cmsg_type; }
 export function lenOf(c: Ptr<CmsgHdr>): number { return Number(c.cmsg_len); }
 export function dataAt(c: Ptr<CmsgHdr>, i: number): number { return c.__cmsg_data[i]; }
 export function setDataAt(c: Ptr<CmsgHdr>, i: number, v: number): void {
-  c.__cmsg_data[i] = v;
+  c.__cmsg_data[i] = v & 0xff;
 }

@@ -407,6 +407,38 @@ design above became in the code, and the choices made on the way:
 - **Strict is on, and the wrapping is gone**: `prepare` runs the check right
   after lowering, and a `number` into a C integer argument or store is
   converted exactly, being proven to fit. A typed array keeps `ToInt32` (C27).
+- **More slots carry kinds** than the first list:
+  - an `async` function's written payload (`Promise<c_long>`): each `return`
+    settling it is obliged, and an `await` of a call to it reads the range;
+  - a tuple's elements, where the tuple is a record (mixed element types). A
+    tuple literal passed to a tuple parameter is built as the parameter's
+    tuple, so its elements are stores into it. A homogeneous tuple is an
+    array, and arrays of written kinds are step 2's (S4);
+  - a written local a closure captures, through its cell;
+  - `number & { readonly __c_of?: T }` is `T`'s kind, which is how a mapped
+    record (`Copied<T>`, `Fields<T>`) keeps each number field's C type.
+- **A count a binding declares narrower than any array** (WinRT's `uint32_t`
+  beside every array) is bounded before the call: an array too long for it
+  throws a `RangeError`. The binding wrote that check by declaring the count
+  (Q4), as with `AsNumber`.
+- **More facts the examples needed:** a code unit read below its string's
+  length is never NaN (the relation `bounds.rs` uses); `Math.sign` is -1, 0 or
+  1; `Math.min`, `Math.max`, negation and `abs` of exact `float`s are exact,
+  and so are `x ± 0`, `x * ±1` and `x / ±1`.
+- **A root's written parameter is its kind at the boundary**
+  (`written_roots`). Inside, `n: c_int` is the kind's range because every call
+  in the program was obliged; a caller outside was not, and a `double` slot
+  let it pass anything -- `3e10` reaching the body's conversion to `int` was
+  undefined behaviour. So C's header says `double f(int32_t)` and C converts
+  at its own call; the node addon reads a number into the slot only where it
+  is one exactly and throws node's `ERR_OUT_OF_RANGE` `RangeError` otherwise
+  (-0, a fraction, NaN, out of range); the body widens it exactly. Q4's rule:
+  the declaration wrote the check. A method keeps its signature, which every
+  implementation of its slot shares.
+- **Tests that asserted the old conversions now assert the rule.** `add(2.9,
+  …)` into an `int` truncated to 2; it is refused. A constant too wide for
+  Win64's `long` is refused at its `as` when the build's targets include
+  Win64, and `-1n as c_ulong` on every target.
 
 
 

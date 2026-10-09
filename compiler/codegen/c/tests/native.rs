@@ -48,7 +48,7 @@ fn prepare_with_binding(
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap()))
+    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
 }
 
 fn prepare_with_types(
@@ -57,7 +57,7 @@ fn prepare_with_types(
     include_types: bool,
 ) -> Option<(Utf8PathBuf, hir::Prepared)> {
     let (dir, snapshot) = snapshot_with_types(name, source, include_types)?;
-    Some((dir, hir::prepare(&snapshot).unwrap()))
+    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
 }
 
 fn snapshot_with_types(
@@ -143,7 +143,7 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
             "declare function take_{i}(n: {brand}): c_double;\n\
              declare function give_{i}(): {brand};\n\
              declare function give_wide_{i}(): {brand};\n\
-             export function argument_{i}(n: number): number {{ return take_{i}(n as {brand}); }}\n\
+             export function argument_{i}(n: {brand}): number {{ return take_{i}(n); }}\n\
              export function result_{i}(): number {{ return give_{i}() + 0.25; }}\n\
              export function wide_result_{i}(): number {{ return give_wide_{i}(); }}\n"
         )
@@ -159,9 +159,11 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
              {c_type} give_wide_{i}(void) {{ return ({c_type})({input}); }}\n"
         )
         .unwrap();
+        // The argument is the brand's C type at the export too (`written_roots`),
+        // so C converts the input, as it does for `give_wide`.
         writeln!(
             caller,
-            "if (argument_{i}({input}) != {expected} || result_{i}() != 7.25 || wide_result_{i}() != {expected}) return {};",
+            "if (argument_{i}(({c_type})({input})) != {expected} || result_{i}() != 7.25 || wide_result_{i}() != {expected}) return {};",
             i + 1
         )
         .unwrap();
@@ -349,7 +351,7 @@ fn conflicting_authored_abis_and_runtime_symbol_collisions_are_errors() {
             r"
             declare function foreign(n: c_int): c_int;
             declare function foreign(n: c_double): c_double;
-            export function a(n: number): number { return foreign(n as c_int); }
+            export function a(n: c_int): number { return foreign(n); }
             export function b(n: number): number { return foreign(n as c_double); }
         ",
             "conflicting ABI declarations",
@@ -358,7 +360,7 @@ fn conflicting_authored_abis_and_runtime_symbol_collisions_are_errors() {
             "runtime",
             r"
             declare function nts_math_pow(n: c_int): c_int;
-            export function run(n: number): number { return nts_math_pow(n as c_int); }
+            export function run(n: c_int): number { return nts_math_pow(n); }
         ",
             "collides with a runtime or compiled function",
         ),
@@ -411,7 +413,7 @@ fn unrelated_declarations_cannot_supply_a_calls_abi() {
             (
                 "parameter",
                 format!(
-                    "declare function native_value(n: {brand}): void;\nexport function run(n: {base}): void {{ native_value(n as {brand}); }}"
+                    "declare function native_value(n: {brand}): void;\nexport function run(n: {brand}): void {{ native_value(n); }}"
                 ),
             ),
             (
@@ -468,14 +470,14 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
         import { abs, exit, labs } from "c:stdlib";
         import { fabs, fabsf, sqrtf, pow, fmod, floor, ceil, trunc, copysign, ldexp } from "c:math";
         import * as math from "c:math";
-        export function run(n: number): number {
+        export function run(n: number, k: c_int): number {
             // `exit` is called where the caller's argument never goes: its
             // prototype still meets `stdlib.h`'s, and its call is emitted.
             if (n > 1e300) exit(3 as c_int);
             // `long` is 64 bits here and bigint-branded. A literal rather than
             // `BigInt(n)`, which is a runtime call this translation unit does
             // not link -- the value is the same one `(long)(-3.75)` gave.
-            return abs(n as c_int) + Number(labs(-3n as c_long))
+            return abs(k) + Number(labs(-3n as c_long))
                 + fabs(-1.25 as c_double) + fabsf(-1.25 as c_float)
                 + math.sqrt(4 as c_double) + sqrtf(4 as c_float)
                 + pow(2 as c_double, 3 as c_double)
@@ -523,7 +525,7 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
     }
     std::fs::write(
         dir.join("caller.c"),
-        "#include \"program.h\"\nint main(void) { return run(-3.75) != 27.75; }\n",
+        "#include \"program.h\"\nint main(void) { return run(-3.75, -3) != 27.75; }\n",
     )
     .unwrap();
     let compiled = Command::new("clang")
@@ -562,8 +564,8 @@ fn type_headers_preserve_brands_and_boolean_abi() {
         import type { size_t } from "c:stddef";
         import type { bool } from "c:stdbool";
         declare function native_alias(n: stdint.int32_t, length: size_t, flag: bool): bool;
-        export function run(n: number): boolean {
-            return native_alias(n as stdint.int32_t, 1n as size_t, true);
+        export function run(n: stdint.int32_t): boolean {
+            return native_alias(n, 1n as size_t, true);
         }
     "#;
     let Some((dir, prepared)) = prepare_with_types("type-headers", source, false) else {
@@ -593,7 +595,7 @@ fn type_headers_preserve_brands_and_boolean_abi() {
         bool native_alias(int32_t n, size_t length, bool flag) {
             return n == -3 && length == 1 && flag;
         }
-        int main(void) { return !run(-3.75); }
+        int main(void) { return !run(-3); }
     "#,
     )
     .unwrap();
@@ -670,11 +672,11 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
     let program = |cast: &str| format!("import {{ collide as viaOne }} from \"c:a\";\n\
          import {{ collide as viaTwo }} from \"c:b\";\n\
          import type {{ Ptr, c_int, c_size_t }} from \"c:types\";\n\
-         export function one(fd: number, buf: Ptr<c_int>): number {{\n\
-         return Number(viaOne(fd as c_int, buf, 4 as c_int));\n\
+         export function one(fd: c_int, buf: Ptr<c_int>): number {{\n\
+         return Number(viaOne(fd, buf, 4 as c_int));\n\
          }}\n\
-         export function two(fd: number, buf: Ptr<c_int>): number {{\n\
-         return Number(viaTwo(fd as c_int, buf, {cast}));\n\
+         export function two(fd: c_int, buf: Ptr<c_int>): number {{\n\
+         return Number(viaTwo(fd, buf, {cast}));\n\
          }}\n");
     // The arms differ in one thing: `b`'s third parameter. Both are pointers a
     // caller passes in, so neither call is an escape of local storage -- which
@@ -779,9 +781,9 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
 fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
     const PROGRAM: &str = "import { poll, type PollFd, type Count, type Timeout } from \"c:poll\";\n\
          import { local } from \"c:memory\";\n\
-         export function go(timeout: number): number {\n\
+         export function go(timeout: Timeout): number {\n\
          const fds = local<PollFd>();\n\
-         return poll(fds, 1n as Count, timeout as Timeout);\n\
+         return poll(fds, 1n as Count, timeout);\n\
          }\n";
     // `count` is the function's own claim, apart from the struct's: `c_ulong`
     // is what <poll.h> says `nfds_t` is.
@@ -969,10 +971,10 @@ declare module "c:bridge" {
 import type {{ c_int }} from "c:types";
 {shapes}
 function addOne(n: c_int): c_int {{
-  return (n + 1) as c_int;
+  return ((n + 1) | 0) as c_int;
 }}
-export function run(x: number): number {{
-  return apply(addOne, x as c_int);
+export function run(x: c_int): number {{
+  return apply(addOne, x);
 }}
 "#
         )

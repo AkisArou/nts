@@ -31,7 +31,7 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir:
     std::fs::write(dir.join("main.ts"), source).unwrap();
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap()))
+    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
 }
 
 /// `Windows.Data.Json` as `examples/interop/windows-winrt` binds it, with
@@ -310,11 +310,18 @@ export function run(frame: IFrame): string {{
 #[test]
 fn a_struct_holding_a_string_is_copied_at_the_call() {
     let (binding, source) = copied(
-        r#"  const held = { name: "App.Held", kind: TypeKind.Custom };
+        r#"  const held: Copied<TypeName> = { name: "App.Held", kind: TypeKind.Custom };
   const literal = frame.Navigate({ name: "App.Page", kind: TypeKind.Metadata });
   const copied = frame.Navigate(held);
   const page = frame.get_SourcePageType();
   return String(literal) + String(copied) + page.name + String(page.kind);"#,
+    );
+    // A held record is written as the struct's copy, which keeps each
+    // field's C type: inferred, `kind` would be a plain number C's `int32_t`
+    // cannot be proven to take.
+    let source = source.replace(
+        "import { type IFrame, TypeKind }",
+        "import type { Copied } from \"winrt:types\";\nimport { type IFrame, type TypeName, TypeKind }",
     );
     let Some((dir, prepared)) = prepare("copied", &binding, &source) else {
         eprintln!("skipped: no tsgo");

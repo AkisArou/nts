@@ -34,7 +34,7 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir:
     std::fs::write(dir.join("main.ts"), source).unwrap();
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap()))
+    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
 }
 
 /// A binding with one class method and two instance methods. `{extra}` is
@@ -548,7 +548,9 @@ declare module "objc:Foundation" {
 
 /// Swift's numbers: a binding says `Int`, `UInt` or `CGFloat`, a program
 /// passes a plain `number`, and the send carries the brand's C type --
-/// `long`, `unsigned long`, `double` -- with no cast written anywhere.
+/// `long`, `unsigned long`, `double` -- with no cast written anywhere. The
+/// computed one, `n + 1`, is proven to fit `long` because `n` is written
+/// `c_int`; an unknown `number` would not be.
 #[test]
 fn swift_numbers_take_plain_numbers_and_cross_as_c_types() {
     let binding = r#"declare module "objc:Foundation" {
@@ -561,7 +563,8 @@ fn swift_numbers_take_plain_numbers_and_cross_as_c_types() {
 }
 "#;
     let source = "import { NSScaler } from \"objc:Foundation\";\n\
-                  export function run(s: NSScaler, n: number): number {\n  return s.scale(n + 1, { by: 1.5, at: 2 }) * 2;\n}\n";
+                  import type { c_int } from \"c:types\";\n\
+                  export function run(s: NSScaler, n: c_int): number {\n  return s.scale(n + 1, { by: 1.5, at: 2 }) * 2;\n}\n";
     let Some((_, prepared)) = prepare("swift-numbers", binding, source) else {
         eprintln!("skipped: no tsgo");
         return;

@@ -31,7 +31,7 @@
 // One tag to a line. The slot and the method name are both the metadata's, and the compiler
 // refuses a declaration whose name is not the method its slot is said to be.
 declare module "winrt:types" {
-  import type { CArray, CEnum, Class, ClassChain, c_int64, c_uint8, c_uint16, c_uint32, Struct } from "c:types";
+  import type { CArray, Class, ClassChain, c_int64, c_uint8, c_uint16, c_uint32, Struct } from "c:types";
 
   export type ComClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
     readonly __com: true;
@@ -120,18 +120,16 @@ declare module "winrt:types" {
   };
   // A number field is a `number` that keeps its C type (`__c_of`), as
   // `Fields<T>` writes one: a plain number is assignable, and the field is
-  // written as the C type -- except an enum, which keeps its members. The
-  // enum's own marker decides, since a C scalar's brand matches the `CEnum`
-  // pattern too.
+  // written as the C type. An enum stays itself, `CEnum<E, B>`: its members,
+  // and the C type its optional marker carries. The marker decides, since a
+  // C scalar's brand matches the `CEnum` pattern too.
   type CopiedField<V> = [V] extends [Struct<object, string>]
     ? Copied<V>
     : [V] extends [HString]
       ? string
       : [V] extends [number]
         ? "__c_enum" extends keyof V
-          ? V extends CEnum<infer E, number>
-            ? E
-            : number
+          ? V
           : number & { readonly __c_of?: V }
         : V;
 

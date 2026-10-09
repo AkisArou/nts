@@ -812,6 +812,21 @@ fn exact_in_float(&self, func: &Func, analysis: &Analysis, (block, value): (Bloc
             self.exact_in_float(func, analysis, (block, *lhs), seen) && self.exact_in_float(func, analysis, (block, *rhs), seen)
         }
         OpKind::Unary { op: UnOp::Neg | UnOp::Abs, operand } => self.exact_in_float(func, analysis, (block, *operand), seen),
+        // An identity on its other operand, but for the sign of a zero, which
+        // a `float` holds too: `x + 0`, `x - 0`, `x * 1`, `x / -1`.
+        OpKind::Binary { op, lhs, rhs } => {
+            let constant = |value: ValueId| match func.value(value).kind {
+                OpKind::ConstFloat(constant) => Some(constant),
+                _ => None,
+            };
+            // `0.0` matches `-0.0` too, as `==` does.
+            let identity = match (op, constant(*lhs), constant(*rhs)) {
+                (BinOp::Add | BinOp::Sub, _, Some(0.0)) | (BinOp::Mul | BinOp::Div, _, Some(1.0 | -1.0)) => Some(*lhs),
+                (BinOp::Add, Some(0.0), _) | (BinOp::Mul, Some(1.0 | -1.0), _) => Some(*rhs),
+                _ => None,
+            };
+            identity.is_some_and(|operand| self.exact_in_float(func, analysis, (block, operand), seen))
+        }
         _ => false,
     }
 }
