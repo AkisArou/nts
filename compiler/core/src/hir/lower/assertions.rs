@@ -242,12 +242,23 @@ fn recover_matching(
     if !compatible {
         return None;
     }
+    // **A placeholder is not a claim.** `null as unknown as Fiber` -- React's
+    // fiber before it renders one, the expression form of `let x!: T` -- asserts
+    // presence of the null constant itself, a check that could only fail. Node
+    // evaluates it to `null`, so it is the null pointer, which a reference
+    // holds; checking it threw at module init and ended every native React
+    // program. A value that *may* be absent stays checked: the compiler
+    // trusts the asserted type from here on, reading through it and folding
+    // `=== null` by it, so an unchecked absence would be a crash at the read.
+    let placeholder = matches!(builder.values[concrete.0 as usize].kind, OpKind::ConstNull)
+        && matches!(target, HirType::Managed(_) | HirType::NativePointer(_));
     Some((|| {
-        let needs_presence = if concrete == value {
-            removes_absence(builder, source, id)
-        } else {
-            absent.is_some_and(|tag| !allowed.contains(&tag))
-        };
+        let needs_presence = !placeholder
+            && if concrete == value {
+                removes_absence(builder, source, id)
+            } else {
+                absent.is_some_and(|tag| !allowed.contains(&tag))
+            };
         if needs_presence && let Some(absent) = builder.absence_of(id, concrete) {
             reject_when(
                 builder,

@@ -1,8 +1,0 @@
-{
-  "run": "build",
-  "category": "aborted",
-  "nts": "exit 1; nts: refused: The asserted native representation requires a present value",
-  "node": "exit 1; nts: uncaught Observed: typed with null (control)=root;cast through unknown=root;",
-  "measured_with": "417fd80eda33cbe9",
-  "source": "measured"
-}
