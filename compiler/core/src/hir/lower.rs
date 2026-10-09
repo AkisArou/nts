@@ -5531,7 +5531,10 @@ fn walk_one_declaration(
                     | syntax::TAGGED_TEMPLATE_EXPRESSION
             )
         ) {
-            let callee = probe.children(at).first().copied();
+            // `f.call(r)` reaches `f` ([`FuncBuilder::through_call_or_apply`]).
+            let callee = probe
+                .through_call_or_apply(at)
+                .or_else(|| probe.children(at).first().copied());
             // **`super(…)` is a call to the base's constructor, and the `super`
             // keyword carries no symbol.** So it read as an *unresolved* callee,
             // which puts its caller in the set at once -- and since a class now
@@ -6908,7 +6911,11 @@ fn a_call_that_can_raise(
             .and_then(|member| probe.node(*member).symbol)
             .is_none_or(|symbol| throwing.any.contains(&symbol.0));
     }
-    let Some(callee) = probe.children(call).first().copied() else {
+    // `f.call(r)` can raise what `f` can ([`FuncBuilder::through_call_or_apply`]).
+    let Some(callee) = probe
+        .through_call_or_apply(call)
+        .or_else(|| probe.children(call).first().copied())
+    else {
         return false;
     };
     // **A symbol is not a function, and asking the set about one that names no body is
@@ -7022,6 +7029,12 @@ fn a_value_held_callee(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol:
 fn a_value_held_call(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: NodeId) -> bool {
     if probe.reads_an_accessor(call) {
         return false;
+    }
+    // `f.call(r)` and `f.apply(r, list)` dispatch at the uniform entry whatever `f`
+    // is, a declaration included: it is lowered as a value first
+    // ([`FuncBuilder::through_call_or_apply`]).
+    if probe.through_call_or_apply(call).is_some() {
+        return true;
     }
     let Some(callee) = probe
         .children(call)
@@ -30146,7 +30159,14 @@ impl<'a> FuncBuilder<'a> {
             .children(site)
             .first()
             .ok_or_else(|| self.unsupported(site, "a `bind` with no callee"))?;
-        let callee = self.closure_callee(site, callee_node, function)?;
+        // Inside the raising variant the call is at the raising entry, so a raise
+        // goes on to this body's caller; the call has no node to ask. The test
+        // after it returns a zero of this body's result, which is what
+        // `self.returns` is for: unset, it was `void`, and a bound function
+        // returning a number returned nothing (`ReturnType`, invalid HIR).
+        let raising = self.raises && self.hierarchy.raising_call_slot.is_some();
+        let callee = self.closure_entry(site, callee_node, function, raising)?;
+        self.returns = returns.clone();
         let answered = self.call_a_closure_entry(site, callee, Some(this), args, &returns)?;
         let carried = (!matches!(returns, HirType::Void | HirType::Never)).then_some(answered);
         self.terminate(Terminator::Return(carried));
@@ -58834,6 +58854,10 @@ impl<'a> FuncBuilder<'a> {
         if erased_calls::inline_method(self, call) {
             return false;
         }
+        // A function value of this program, called through `call` or `apply`.
+        if self.through_call_or_apply(call).is_some() {
+            return true;
+        }
         // A bound foreign member, reached through the binding table. It can
         // raise, and the premise above -- "only compiled code can" -- was
         // written before there was a backend where that is false. A Java method
@@ -71000,6 +71024,28 @@ impl<'a> FuncBuilder<'a> {
         signature_key(self.snapshot, ty).map(|_| ty)
     }
 
+    /// The function `f.call(...)` or `f.apply(...)` calls: `f`, where it is a
+    /// function value. The lowering makes such a call a call of `f` through the
+    /// entry every call of a function value takes ([`Self::lower_call_with_receiver`],
+    /// [`Self::lower_apply_with_receiver`]), asking [`Self::function_type_of_receiver`]
+    /// as this does, so the questions about what a call reaches -- can it
+    /// raise, is it held in a value, is it compiled code -- ask about `f`.
+    ///
+    /// The checker resolves the callee to `CallableFunction.call`, a provided
+    /// signature with no body, and every one of those questions answered for
+    /// it: "cannot raise". So `try { f.call(r) }` handled nothing, and a `throw`
+    /// from `f` ended the program where node catches it -- a declared `f`, a
+    /// `function` expression, and the same through a bound function's body.
+    fn through_call_or_apply(&self, call: NodeId) -> Option<NodeId> {
+        let callee = self.through_assertions(*self.children(call).first()?);
+        let (function, name) = self.member_access(callee)?;
+        let member = *self.children(callee).last()?;
+        let ty = *self.snapshot.node_types.get(&function)?;
+        (matches!(name.as_str(), "call" | "apply")
+            && self.function_type_of_receiver(member, ty).is_some())
+        .then_some(function)
+    }
+
     /// `f.call(receiver, ...rest)` -- an explicit JavaScript receiver.
     ///
     /// ```text
@@ -71081,6 +71127,20 @@ impl<'a> FuncBuilder<'a> {
         callee_node: NodeId,
         receiver: ValueId,
     ) -> Result<ClosureEntry, Diagnostic> {
+        let raising = self.dispatches_to_a_raising_entry(id);
+        self.closure_entry(id, callee_node, receiver, raising)
+    }
+
+    /// [`Self::closure_callee`], told whether the call dispatches at the raising
+    /// entry rather than asking the call node: a call a body makes with no node
+    /// of its own -- a bound function's -- has nothing to ask.
+    fn closure_entry(
+        &mut self,
+        id: NodeId,
+        callee_node: NodeId,
+        receiver: ValueId,
+        raising: bool,
+    ) -> Result<ClosureEntry, Diagnostic> {
         let HirType::Managed(ManagedType::Object(receiver_ty)) =
             self.values[receiver.0 as usize].ty
         else {
@@ -71107,7 +71167,6 @@ impl<'a> FuncBuilder<'a> {
         // the raising slot inside a `try` that refused the call, and cannot fail to
         // name it inside one that accepted it -- and also answers for a raising
         // copy's own body, where every call that can raise names its raising form.
-        let raising = self.dispatches_to_a_raising_entry(id);
         // **And a raising call goes through the slot even here**, where the class *is*
         // known. The direct name would have to be the raising body, and that body
         // exists only where it is a different program -- which this site cannot know,
