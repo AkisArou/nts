@@ -10,6 +10,8 @@ import type { c_uint32 } from "c:types";
 /** The FNV offset basis, which a chain of `digest` calls starts from. */
 export const seed = 2166136261;
 
+// FNV works on 32-bit words, so each operand is one: `>>> 0` is the word a
+// number wraps to, which is what lets C's `uint32_t` take it.
 export function digest(from: number, value: number): number {
-  return digest_step(from as c_uint32, value as c_uint32);
+  return digest_step((from >>> 0) as c_uint32, (value >>> 0) as c_uint32);
 }

@@ -12,6 +12,15 @@ import { g_dcgettext, g_dgettext, g_dngettext, g_dpgettext2 } from "c:GLib-2.0";
 import { bind_textdomain_codeset, bindtextdomain, textdomain } from "c:libintl";
 import { setlocale } from "c:locale";
 import { stringFrom } from "c:memory";
+import type { CNumber } from "c:types";
+
+/**
+ * The count a plural form is chosen for: C's `unsigned long`, which is what
+ * `g_dngettext` reads it as. A caller passes a count it can show is one -- a
+ * literal, a length -- and any other is refused where it is passed, rather
+ * than reaching C as something it never meant.
+ */
+export type Count = CNumber<"ulong">;
 
 /** `setlocale`'s categories, glibc's `LC_*` values. */
 export enum LocaleCategory {
@@ -59,11 +68,11 @@ export function dcgettext(domain: string | null, msgid: string, category: Locale
 }
 
 /** `msgid` for one of `n`, and `msgid_plural` for any other count, translated. */
-export function ngettext(msgid: string, msgid_plural: string, n: number): string {
+export function ngettext(msgid: string, msgid_plural: string, n: Count): string {
   return g_dngettext(null, msgid, msgid_plural, n);
 }
 
-export function dngettext(domain: string | null, msgid: string, msgid_plural: string, n: number): string {
+export function dngettext(domain: string | null, msgid: string, msgid_plural: string, n: Count): string {
   return g_dngettext(domain, msgid, msgid_plural, n);
 }
 
@@ -79,7 +88,7 @@ export function dpgettext(domain: string | null, context: string, msgid: string)
 /** The translating functions of one domain, a library's rather than the program's. */
 export interface Domain {
   gettext(msgid: string): string;
-  ngettext(msgid: string, msgid_plural: string, n: number): string;
+  ngettext(msgid: string, msgid_plural: string, n: Count): string;
   pgettext(context: string, msgid: string): string;
 }
 
