@@ -1,7 +1,7 @@
 # Function values that carry `this`: the plan
 
-**Status: A, refined (below). Steps 1 and 2 built 2026-10-09; `.bind`, function
-declarations and method values next.**
+**Status: A, refined (below). Steps 1 and 2 built 2026-10-09, `.bind`
+2026-10-10; function declarations and method values reading `this` next.**
 
 ## The problem
 
@@ -121,7 +121,7 @@ it is:
    - Any other annotation (a union, a primitive) has no test yet and is refused
      by name.
 3. **`.bind(r, ...)`** makes a closure that holds `r` and the bound arguments and
-   calls through the uniform entry with them. It is unsupported today.
+   calls through the uniform entry with them. Built 2026-10-10: see below.
 
 **What it touches.** About 14 HIR call sites, all funnelled into
 `call_a_closure_entry`, plus `erased_call`, `uniform_params` and the
@@ -208,6 +208,19 @@ JVM and C under reference counting, 290 cases. Each control fails:
 - on main the example compiles nothing.
 
 Over all 471 examples, step 1 against step 2: 470 unchanged, 1 fixed.
+
+**`.bind`, as built (2026-10-10).** Each `f.bind(r, ...bound)` on a function
+value is a closure of its own (`ClosureSource::Bound`, collected beside the
+reactions). It holds `f`, `r` and the bound arguments, at the types `f`
+declares for them, and its `#call` takes what remains, from the signature the
+checker gives the call. `bind`'s declaration types that as one rest parameter
+of a tuple, which is expanded to one parameter per element. The body calls `f`
+through `closure_callee`, the path every call of a function value takes, so `f`
+may be a declared function, a closure or a `function` that reads `this`.
+`bound_shape` derives the fields for both the site and the body. Refused for
+now: a rest on either side, and a `bind` inside a generic.
+`examples/a-bound-function` agrees on C, LLVM, the JVM and rc, 116 cases. The
+control that drops the bound `this` stops at the `this` test by name.
 
 Verified by:
 - React's two sites, and its demos' `main`;

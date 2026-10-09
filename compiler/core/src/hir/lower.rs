@@ -2477,6 +2477,10 @@ enum ClosureSource {
     /// run, then settle the import's promise with its namespace or its error. The
     /// node is the module's root. See [`module_jobs`].
     ModuleJob { module: usize },
+    /// The function `f.bind(r, ...bound)` makes: it holds `f`, `r` and the bound
+    /// arguments, and calls `f` with `r` as its `this` and the bound arguments
+    /// before its own. The node is the call. See [`bound_functions`].
+    Bound,
 }
 
 /// Which `then` a [`ClosureSource::Job`] calls.
@@ -2704,6 +2708,51 @@ fn reactions(probe: &FuncBuilder, closures: &mut Vec<ClosureInfo>) {
 /// One job per module an `import()` names: see [`ClosureSource::ModuleJob`].
 /// Per module rather than per site, because what a job does depends only on the
 /// module -- every `import()` of it settles with the same namespace or error.
+/// One closure per `f.bind(...)` whose receiver is a function value: the bound
+/// function it makes ([`ClosureSource::Bound`]). Refused in a generic context,
+/// for the reason a reaction is: its fields are typed from the checker's types
+/// at the site, which a copy re-types.
+fn bound_functions(probe: &FuncBuilder, closures: &mut Vec<ClosureInfo>) {
+    for at in 0..probe.snapshot.nodes.len() {
+        let site = NodeId(u32::try_from(at).unwrap_or(u32::MAX));
+        if probe.kind_of(site) != Some(syntax::CALL_EXPRESSION) {
+            continue;
+        }
+        let Some((receiver, method)) = probe
+            .children(site)
+            .first()
+            .and_then(|callee| probe.member_access(*callee))
+        else {
+            continue;
+        };
+        let function = probe
+            .snapshot
+            .node_types
+            .get(&receiver)
+            .and_then(|ty| probe.snapshot.types.get(ty.0 as usize))
+            .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)));
+        if method != "bind" || !function {
+            continue;
+        }
+        let generic = std::iter::successors(probe.node(site).parent, |at| probe.node(*at).parent)
+            .any(|enclosing| {
+                probe
+                    .children(enclosing)
+                    .into_iter()
+                    .any(|child| probe.kind_of(child) == Some(syntax::TYPE_PARAMETER))
+            });
+        closures.push(ClosureInfo {
+            source: ClosureSource::Bound,
+            refusal: generic.then_some(A_BOUND_FUNCTION_IN_A_GENERIC),
+            ..ClosureInfo::as_written(site)
+        });
+    }
+}
+
+/// Why a `bind` in a generic context is refused: see [`bound_functions`].
+const A_BOUND_FUNCTION_IN_A_GENERIC: &str =
+    "a `bind` inside a generic function or class, whose bound values a copy would re-type";
+
 fn module_jobs(snapshot: &SemanticSnapshot, roles: &ModuleRoles, closures: &mut Vec<ClosureInfo>) {
     for (module, namespace) in roles.namespace.iter().enumerate() {
         if namespace.is_some() {
@@ -12155,6 +12204,7 @@ impl Shared {
         ));
         // And for the same reason: a reaction captures nothing a copy could re-type.
         reactions(&probe, &mut closures);
+        bound_functions(&probe, &mut closures);
         module_jobs(snapshot, &module.roles, &mut closures);
         Self {
             module: module.clone(),
@@ -29373,6 +29423,7 @@ impl<'a> FuncBuilder<'a> {
                 Some(self.lower_resolving_function(index, info.node, rejects))
             }
             ClosureSource::Reaction => Some(self.lower_reaction(index, info)),
+            ClosureSource::Bound => Some(self.lower_bound_function(index, info)),
             ClosureSource::ModuleJob { module } => Some(self.lower_module_job(index, module)),
             ClosureSource::Authored | ClosureSource::Function | ClosureSource::Method => None,
         }
@@ -29902,6 +29953,251 @@ impl<'a> FuncBuilder<'a> {
             origin,
         );
         Ok(result)
+    }
+
+    /// What a bound function holds and takes, from the `bind` call's node: its
+    /// fields -- the function, the `this`, the bound arguments at the types the
+    /// function declares for them -- and its own parameters and result, from the
+    /// signature the checker gives the call. One derivation for the site that
+    /// fills the fields and the body that reads them.
+    fn bound_shape(
+        &mut self,
+        site: NodeId,
+    ) -> Result<(Vec<Field>, Vec<Param>, HirType), Diagnostic> {
+        let callee = *self
+            .children(site)
+            .first()
+            .ok_or_else(|| self.unsupported(site, "a `bind` with no callee"))?;
+        let (function, _) = self
+            .member_access(callee)
+            .ok_or_else(|| self.unsupported(site, "a `bind` not on a member"))?;
+        let signature_of = |this: &Self, node: NodeId| {
+            this.snapshot
+                .node_types
+                .get(&node)
+                .and_then(|ty| this.snapshot.types.get(ty.0 as usize))
+                .and_then(|record| match record.kind {
+                    TypeKind::Function(signature) => {
+                        this.snapshot.signatures.get(signature.0 as usize)
+                    }
+                    _ => None,
+                })
+                .cloned()
+        };
+        let (Some(target), Some(result)) = (signature_of(self, function), signature_of(self, site))
+        else {
+            return Err(
+                self.unsupported(site, "a `bind` whose function or result has no signature")
+            );
+        };
+        let bound = self.arguments_of(site).len().saturating_sub(1);
+        let function_ty = self
+            .type_of(function)
+            .ok_or_else(|| self.unrepresentable(function, "a bound function"))?;
+        let mut fields = vec![
+            Field {
+                name: "function".to_owned(),
+                ty: function_ty,
+                readonly: true,
+                declared_by: None,
+                written: None,
+            },
+            Field {
+                name: "this".to_owned(),
+                ty: HirType::Erased,
+                readonly: true,
+                declared_by: None,
+                written: None,
+            },
+        ];
+        for (at, parameter) in target.parameters.iter().take(bound).enumerate() {
+            if parameter.rest {
+                return Err(self.unsupported(site, "a `bind` that binds into a rest parameter"));
+            }
+            let ty = self
+                .represent(parameter.ty)
+                .ok_or_else(|| self.unrepresentable(site, "a bound argument"))?;
+            fields.push(Field {
+                name: format!("bound{at}"),
+                ty,
+                readonly: true,
+                declared_by: None,
+                written: None,
+            });
+        }
+        let params = self.bound_parameters(site, &result)?;
+        let returns = self
+            .represent(result.return_type)
+            .ok_or_else(|| self.unrepresentable(site, "a bound function's result"))?;
+        Ok((fields, params, returns))
+    }
+
+    /// A bound function's own parameters: the closure, then what remains of the
+    /// function's after the bound ones, from the signature the checker gives the
+    /// `bind` call. Parameter zero's type is the caller's to set.
+    fn bound_parameters(
+        &mut self,
+        site: NodeId,
+        result: &nts_semantic_schema::SignatureRecord,
+    ) -> Result<Vec<Param>, Diagnostic> {
+        let origin = self.origin(site);
+        let mut params = vec![Param {
+            name: "this".to_owned(),
+            shape: ParamShape::Ordinary,
+            ty: HirType::Managed(ManagedType::Object(TypeId(0))),
+            origin: origin.clone(),
+            known: Facts::TOP,
+            written: None,
+        }];
+        // `bind`'s own declaration types its result `(...args: A) => R`, so the
+        // checker's signature is one rest parameter whose type is the tuple of
+        // what remains -- which is exactly that many parameters, one per
+        // element. A rest of an array type is not, and is refused.
+        let mut remaining: Vec<(String, TypeId)> = Vec::new();
+        for parameter in &result.parameters {
+            if !parameter.rest {
+                remaining.push((parameter.name.clone(), parameter.ty));
+                continue;
+            }
+            let Some(TypeKind::Tuple(elements)) = self
+                .snapshot
+                .types
+                .get(parameter.ty.0 as usize)
+                .map(|record| &record.kind)
+            else {
+                return Err(self.unsupported(
+                    site,
+                    "a bound function whose remaining parameters end in a rest",
+                ));
+            };
+            for (at, element) in elements.iter().enumerate() {
+                remaining.push((format!("{}{at}", parameter.name), *element));
+            }
+        }
+        for (name, ty) in remaining {
+            let ty = self
+                .represent(ty)
+                .ok_or_else(|| self.unrepresentable(site, "a bound function's parameter"))?;
+            params.push(Param {
+                name,
+                shape: ParamShape::Ordinary,
+                ty,
+                origin: origin.clone(),
+                known: Facts::TOP,
+                written: None,
+            });
+        }
+        Ok(params)
+    }
+
+    /// The body of a bound function ([`ClosureSource::Bound`]): read the
+    /// function, the `this` and the bound arguments back, and call the function
+    /// through the entry any call of a function value takes, the bound
+    /// arguments before its own.
+    fn lower_bound_function(
+        &mut self,
+        index: usize,
+        info: &ClosureInfo,
+    ) -> Result<Func, Diagnostic> {
+        let site = info.node;
+        if let Some(reason) = info.refusal {
+            return Err(self.unsupported(site, reason));
+        }
+        let (fields, mut params, returns) = self.bound_shape(site)?;
+        let (_, name) = closure_names(index);
+        let receiver_ty = HirType::Managed(ManagedType::Object(closure_type(index)));
+        params[0].ty = receiver_ty.clone();
+        let origin = self.origin(site);
+        let receiver = self.push(OpKind::Param(0), receiver_ty, origin.clone());
+        let mut own = Vec::new();
+        for (at, param) in params.iter().enumerate().skip(1) {
+            let at = u32::try_from(at).unwrap_or(u32::MAX);
+            own.push(self.push(OpKind::Param(at), param.ty.clone(), origin.clone()));
+        }
+        // The layout first: parameter zero is the closure itself, and
+        // materialising it looks its layout up.
+        self.layouts
+            .push(self.closure_layout(index, fields.clone()));
+        for field in &fields {
+            self.materialize(site, &field.ty)?;
+        }
+        for param in &params {
+            self.materialize(site, &param.ty)?;
+        }
+        let read = |this: &mut Self, at: usize| {
+            let field = u32::try_from(at).unwrap_or(u32::MAX);
+            this.push(
+                OpKind::FieldGet {
+                    object: receiver,
+                    field,
+                },
+                fields[at].ty.clone(),
+                origin.clone(),
+            )
+        };
+        let function = read(self, 0);
+        let this = read(self, 1);
+        let mut args = vec![function];
+        for at in 2..fields.len() {
+            args.push(read(self, at));
+        }
+        args.extend(own);
+        let callee_node = *self
+            .children(site)
+            .first()
+            .ok_or_else(|| self.unsupported(site, "a `bind` with no callee"))?;
+        let callee = self.closure_callee(site, callee_node, function)?;
+        let answered = self.call_a_closure_entry(site, callee, Some(this), args, &returns)?;
+        let carried = (!matches!(returns, HirType::Void | HirType::Never)).then_some(answered);
+        self.terminate(Terminator::Return(carried));
+        Ok(self.finish(name, params, returns, origin, false))
+    }
+
+    /// `f.bind(r, ...bound)`: the bound function ([`ClosureSource::Bound`]), its
+    /// fields filled here. `r` is the `this` the call writes, `undefined` where
+    /// it writes none, lowered as `.call` lowers its own.
+    fn lower_bind(
+        &mut self,
+        id: NodeId,
+        function: ValueId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(index) = self
+            .closures
+            .iter()
+            .position(|closure| closure.source == ClosureSource::Bound && closure.node == id)
+        else {
+            return Err(self.unsupported(id, "a `bind` the closure collector did not see"));
+        };
+        if let Some(reason) = self.closures[index].refusal {
+            return Err(self.unsupported(id, reason));
+        }
+        let (fields, _, _) = self.bound_shape(id)?;
+        let origin = self.origin(id);
+        let this = match arguments.first() {
+            Some(given) => self.lower_this_argument(*given)?,
+            None => self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone()),
+        };
+        let mut bound = Vec::new();
+        for (at, argument) in arguments.iter().skip(1).enumerate() {
+            let ty = fields[2 + at].ty.clone();
+            let value = self.lower_expecting(*argument, &ty)?;
+            bound.push(self.coerce(value, &ty, *argument)?);
+        }
+        self.used_closures.push(index);
+        let object = self.push(
+            OpKind::ObjectNew { frame: false },
+            HirType::Managed(ManagedType::Object(closure_type(index))),
+            origin.clone(),
+        );
+        self.field_set(object, 0, function, &origin);
+        self.field_set(object, 1, this, &origin);
+        for (at, value) in bound.into_iter().enumerate() {
+            let field = u32::try_from(2 + at).unwrap_or(u32::MAX);
+            self.field_set(object, field, value, &origin);
+        }
+        self.layouts.push(self.closure_layout(index, fields));
+        Ok(object)
     }
 
     /// A reaction's body: the specification's `NewPromiseReactionJob`, for whichever
@@ -75539,6 +75835,9 @@ impl<'a> FuncBuilder<'a> {
             && let Some(function_ty) = self.function_type_of_receiver(member, type_id)
         {
             return self.lower_apply_with_receiver(id, member, receiver, function_ty, arguments);
+        }
+        if member_name == "bind" && self.function_type_of_receiver(member, type_id).is_some() {
+            return self.lower_bind(id, receiver, arguments);
         }
 
         let callee = self.callee_for(id, type_id, &member_name)?;
