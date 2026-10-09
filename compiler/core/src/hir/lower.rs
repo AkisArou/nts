@@ -3898,15 +3898,18 @@ enum ClosureEntry {
     Uniform(u32),
 }
 
-/// A `this`-reading closure's written `#call`: its body, called with
-/// `undefined`, the `this` JavaScript gives a plain call.
+/// A `this`-reading function's written entry: its body, called with
+/// `undefined`, the `this` JavaScript gives a plain call. `this_at` is where
+/// the body takes it: after the closure for a closure's `#call`
+/// ([`super::UNIFORM_THIS`]), first for a declaration ([`receiving_function_name`]).
 ///
-/// For the callers that reach a closure by its written slot and have no `this`
-/// to give -- the C runtime's timers and reactions, the native callback
-/// bridges, the JVM's callback interfaces -- so none of them changes shape for
-/// a closure that reads one (`docs/function-receivers.md`). A call from the
-/// program itself names the body, with its `this`.
-fn passing_undefined(name: String, body: &Func) -> Func {
+/// For the callers that reach a closure by its written slot, or a function by
+/// its name, and have no `this` to give -- the C runtime's timers and
+/// reactions, the native callback bridges, the JVM's callback interfaces, a
+/// plain call, an importer, the export surface -- so none of them changes
+/// shape for a function that reads one (`docs/function-receivers.md`). A call
+/// that has a `this` names the body.
+fn passing_undefined(name: String, body: &Func, this_at: usize) -> Func {
     let origin = Origin::generated(
         body.origin.location,
         nts_semantic_schema::GeneratedReason::ClosureLowering,
@@ -3915,7 +3918,7 @@ fn passing_undefined(name: String, body: &Func) -> Func {
         .params
         .iter()
         .enumerate()
-        .filter(|(at, _)| *at != super::UNIFORM_THIS)
+        .filter(|(at, _)| *at != this_at)
         .map(|(_, param)| param.clone())
         .collect();
     let mut values: Vec<Op> = (0..params.len())
@@ -3933,7 +3936,7 @@ fn passing_undefined(name: String, body: &Func) -> Func {
         origin: origin.clone(),
     });
     let mut args: Vec<ValueId> = (0..params.len()).map(id).collect();
-    args.insert(super::UNIFORM_THIS, undefined);
+    args.insert(this_at, undefined);
     let answered = id(values.len());
     values.push(Op {
         kind: OpKind::Call {
@@ -3980,6 +3983,20 @@ fn closure_body_name(index: usize, reads_this: bool) -> String {
         closure_names(index).1
     }
 }
+
+/// The name the body of a `function` declaration that reads its own `this` is
+/// lowered under ([`FuncBuilder::declaration_reads_this`]): the emitted name
+/// with [`RECEIVING_SUFFIX`] before any raising suffix, so a raising copy's
+/// body is still named as one (`plain@this@raises`) and a wrapper's raising
+/// rename of `plain@this` reaches it. The emitted name itself is the entry
+/// passing `undefined` ([`passing_undefined`]).
+fn receiving_function_name(emitted: &str) -> String {
+    let (plain, raising) = without_the_raising_suffix(emitted);
+    format!("{plain}{RECEIVING_SUFFIX}{raising}")
+}
+
+/// See [`receiving_function_name`].
+const RECEIVING_SUFFIX: &str = "@this";
 
 /// The name of a closure's erased entry. See [`Hierarchy::erased_call_slot`].
 fn erased_call_name(index: usize) -> String {
@@ -4449,8 +4466,10 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
             continue;
         }
         let mut info = captures_of(&probe, snapshot, id, &settlers, &assigned, &nested);
-        info.reads_this =
-            node.kind == NodeKind::Syntax(syntax::FUNCTION_EXPRESSION) && probe.binds_this(id);
+        info.reads_this = matches!(
+            node.kind,
+            NodeKind::Syntax(syntax::FUNCTION_EXPRESSION | syntax::FUNCTION_DECLARATION)
+        ) && probe.binds_this(id);
         closures.push(info);
     }
 
@@ -4618,16 +4637,41 @@ fn collect_function_values(
         }
     }
 
-    closures.extend(wrapped.into_iter().map(|declaration| ClosureInfo {
-        source: ClosureSource::Function,
-        ..ClosureInfo::as_written(declaration)
-    }));
+    closures.extend(
+        wrapped
+            .into_iter()
+            .map(|declaration| function_value(snapshot, probe, declaration)),
+    );
     closures.extend(bound.into_iter().map(|declaration| ClosureInfo {
         refusal: refusal_for_a_method_value(probe, declaration),
         source: ClosureSource::Method,
         ..ClosureInfo::as_written(declaration)
     }));
 }
+
+/// The closure a declared function is wrapped in where it is used as a value.
+/// One that reads its own `this` takes the call's, so its wrapper does too, and
+/// hands it on ([`FuncBuilder::wrapped_call`]).
+fn function_value(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    declaration: NodeId,
+) -> ClosureInfo {
+    let reads_this = probe.declaration_reads_this(probe.implementation_of(declaration));
+    ClosureInfo {
+        source: ClosureSource::Function,
+        reads_this,
+        refusal: (reads_this && is_generic_function(snapshot, declaration))
+            .then_some(A_GENERIC_DECLARATION_READING_THIS),
+        ..ClosureInfo::as_written(declaration)
+    }
+}
+
+/// Why a generic `function` declaration that reads its own `this` is refused
+/// as a value: its copies are reached through the canonical generic value,
+/// whose kernels name the written entry, which passes `undefined`.
+const A_GENERIC_DECLARATION_READING_THIS: &str =
+    "a generic `function` declaration that reads its own `this`, used as a value";
 
 /// Why this method cannot be used as a value, if it cannot.
 fn refusal_for_a_method_value(probe: &FuncBuilder, method: NodeId) -> Option<&'static str> {
@@ -14531,10 +14575,11 @@ fn lower_wanted_closures(
                         .program
                         .receiving
                         .insert(written.clone(), body.name.clone());
-                    lowered
-                        .program
-                        .funcs
-                        .push(passing_undefined(written, &body));
+                    lowered.program.funcs.push(passing_undefined(
+                        written,
+                        &body,
+                        super::UNIFORM_THIS,
+                    ));
                 }
                 lowered.program.funcs.push(body);
             }
@@ -14912,7 +14957,19 @@ pub fn lower_with(
             let mut builder = shared.builder(snapshot, foreign, copy);
             builder.retyped_symbols = retyped_symbols;
             match builder.lower_function(id) {
-                Ok(func) => lowered.program.funcs.push(func),
+                Ok(mut func) => {
+                    // A body that takes the call's `this`, and the entry by its
+                    // emitted name for every caller with none to give: a plain
+                    // call, an importer, the export surface.
+                    if builder.declaration_reads_this(id)
+                        && let Some(written) = builder.emitted_function_name(id)
+                    {
+                        let mut entry = passing_undefined(written, &func, 0);
+                        entry.exported = std::mem::take(&mut func.exported);
+                        lowered.program.funcs.push(entry);
+                    }
+                    lowered.program.funcs.push(func);
+                }
                 Err(diagnostic) => {
                     // **Recorded by declaration, not by span.** The refusal's
                     // location is the offending construct, which is routinely
@@ -21944,10 +22001,11 @@ impl<'a> FuncBuilder<'a> {
     /// At **module scope** it stays a plain function -- there is one of it for
     /// the whole program and every caller reaches it by name, so a closure
     /// would be storage for nothing, which is the rule [`reached_by_name`]
-    /// states for exactly that case. One that binds its own `this` is not a
-    /// closure either, by the same test the `function` *expression* arm uses.
+    /// states for exactly that case. One that reads its own `this` is a closure
+    /// too, taking the call's as a `function` expression does
+    /// (`ClosureInfo::reads_this`); it was excluded while neither could.
     fn is_nested_closure(&self, id: NodeId) -> bool {
-        self.is_within_a_function(id) && !self.binds_this(id)
+        self.is_within_a_function(id)
     }
 
     /// Whether this declaration is a loop head's **`let` or `const`**.
@@ -25268,6 +25326,15 @@ impl<'a> FuncBuilder<'a> {
                 .node(id)
                 .modifiers
                 .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
+    }
+
+    /// Whether a `function` declaration lowered as a function of this program
+    /// reads its own `this`, and so takes the call's: its body is lowered under
+    /// [`receiving_function_name`] and its name passes `undefined`. A nested
+    /// one that captures is a closure instead, and takes it as a `function`
+    /// expression does (`ClosureInfo::reads_this`).
+    fn declaration_reads_this(&self, id: NodeId) -> bool {
+        self.kind_of(id) == Some(syntax::FUNCTION_DECLARATION) && self.binds_this(id)
     }
 
     /// Whether a function expression's own `this` is reachable from its body.
@@ -28621,6 +28688,15 @@ impl<'a> FuncBuilder<'a> {
         let name = self
             .emitted_function_name(id)
             .ok_or_else(|| self.unsupported(id, "an anonymous function"))?;
+        // A body that reads its own `this` takes the call's first, under a name
+        // of its own; the emitted name is the entry passing `undefined`, which
+        // the driver adds beside it ([`receiving_function_name`]).
+        let reads_this = self.declaration_reads_this(id);
+        let name = if reads_this {
+            receiving_function_name(&name)
+        } else {
+            name
+        };
 
         // The return type comes from the annotation when there is one. Without it
         // the checker's inferred type is on the signature, not on any node, so an
@@ -28665,6 +28741,18 @@ impl<'a> FuncBuilder<'a> {
         self.return_elements = self.written_tuple_return(id);
 
         let mut params = Vec::new();
+        let this_argument = reads_this.then(|| {
+            let origin = self.origin(id);
+            params.push(Param {
+                name: "this_argument".to_owned(),
+                shape: ParamShape::Ordinary,
+                ty: HirType::Erased,
+                origin: origin.clone(),
+                known: Facts::TOP,
+                written: None,
+            });
+            self.push(OpKind::Param(0), HirType::Erased, origin)
+        });
         for child in &children {
             if self.kind_of(*child) != Some(syntax::PARAMETER) {
                 continue;
@@ -28676,6 +28764,11 @@ impl<'a> FuncBuilder<'a> {
         // that every `return` has one to settle -- and so that the allocation
         // happens once rather than on each path out.
         let asynchronous = self.begin_async(id, &return_type)?;
+        // **The body's `this` is the call's**, proven at the declared type, as a
+        // closure's is ([`Self::receive_this`]).
+        if let Some(this_argument) = this_argument {
+            self.this = Some(self.receive_this(id, this_argument, generated.is_some())?);
+        }
         self.lower_block(body)?;
 
         if let Some(result) = asynchronous {
@@ -29173,17 +29266,19 @@ impl<'a> FuncBuilder<'a> {
         // into the function around it.
         let asynchronous = self.begin_async(id, &return_type)?;
 
-        // **The body's `this` is the call's**, proven at the declared type.
-        if let Some(this_argument) = this_argument {
-            self.this = Some(self.receive_this(id, this_argument, generated.is_some())?);
-        }
-
         // A wrapper has no body of its own. It forwards to the function it
         // stands for, which keeps that function's one definition the only one:
         // re-lowering the declaration's body here would compile it twice and
-        // give recursion two things to mean.
+        // give recursion two things to mean. A `this` it takes is handed on as
+        // it came, and the body it forwards to proves it.
         if info.source.wraps() {
-            return self.lower_wrapper_body(index, info, forwarded, params, return_type);
+            let carried = (this_argument, forwarded);
+            return self.lower_wrapper_body(index, info, carried, params, return_type);
+        }
+
+        // **The body's `this` is the call's**, proven at the declared type.
+        if let Some(this_argument) = this_argument {
+            self.this = Some(self.receive_this(id, this_argument, generated.is_some())?);
         }
 
         // `x => x * 2` and `x => { return x * 2; }` are the same function, and
@@ -30632,12 +30727,12 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         index: usize,
         info: &ClosureInfo,
-        forwarded: Vec<ValueId>,
+        (this_argument, forwarded): (Option<ValueId>, Vec<ValueId>),
         params: Vec<Param>,
         return_type: HirType,
     ) -> Result<Func, Diagnostic> {
         let id = info.node;
-        let (_, name) = closure_names(index);
+        let name = closure_body_name(index, info.reads_this);
         let origin = self.origin(id);
 
         // The name the wrapped function is *emitted* under, which is not
@@ -30653,13 +30748,13 @@ impl<'a> FuncBuilder<'a> {
         // `path` has `isPosixPathSeparator` in both `posix.ts` and
         // `win32.ts` and passes it to `normalizeString`, which is exactly
         // this shape.
-        if forwarded.len() + 1 != params.len() {
+        if forwarded.len() + 1 + usize::from(this_argument.is_some()) != params.len() {
             return Err(self.unsupported(
                 id,
                 "a function used as a value whose parameters are not plain names",
             ));
         }
-        let (callee, args) = self.wrapped_call(id, info, forwarded)?;
+        let (callee, args) = self.wrapped_call(id, info, this_argument, forwarded)?;
         // **A wrapper has to carry its callee's raise too, and nothing did it.**
         // Its body is one call *built* here rather than lowered from source, so
         // `raising_suffix_of` and `test_for_a_raise` -- both keyed on a call node
@@ -30761,6 +30856,7 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         id: NodeId,
         info: &ClosureInfo,
+        this_argument: Option<ValueId>,
         forwarded: Vec<ValueId>,
     ) -> Result<(Callee, Vec<ValueId>), Diagnostic> {
         if !info.source.binds_receiver() {
@@ -30771,6 +30867,13 @@ impl<'a> FuncBuilder<'a> {
                 .or_else(|| self.static_method_name(id))
                 .or_else(|| self.declared_name(id))
                 .ok_or_else(|| self.unsupported(id, "a function declaration with no name"))?;
+            // A declaration that reads its own `this` is called at the body
+            // taking it, with the call's.
+            if let Some(this) = this_argument {
+                let mut args = vec![this];
+                args.extend(forwarded);
+                return Ok((Callee::Direct(receiving_function_name(&called)), args));
+            }
             return Ok((Callee::Direct(called), forwarded));
         }
         let receiver = self

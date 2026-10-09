@@ -47,19 +47,17 @@
 // enclosing-scope refusals, with module totals falling 4 to 30 as the cascades
 // behind them clear. Nothing went up.
 //
-// # What is still refused
+// # What was refused, and is not
 //
-// A nested function that **binds its own `this`** — `function f(this: T, …)` or
-// one whose body mentions `this` — is not a closure by the same test the
-// `function` *expression* arm uses, and stays a plain function. That is the
-// whole of what remains in the corpus: `util`'s one is `promisified`.
+// A nested function that **reads its own `this`** was not a closure, by the test
+// the `function` *expression* arm then used, so it stayed a plain function that
+// could not read the local. Since 2026-10-10 it is a closure taking the call's
+// `this`, as a `function` expression is:
+// `examples/a-function-declaration-that-reads-its-own-this`, which took the
+// subject of `blockers/enclosing-scope-name-in-a-nested-function` with it.
 //
-// And **use before the declaration**, which is hoisting. A declaration is
-// usable above its textual position and a `const` is not, and this captures *by
-// value* at the allocation — so hoisting the allocation to the top of the block
-// would capture locals that do not have their values yet. Not a limitation of
-// the desugaring but of capture-by-value, and
-// `blockers/enclosing-scope-name-in-a-nested-function` holds it.
+// And **use before the declaration**, which is hoisting:
+// `examples/a-nested-function-used-before-its-declaration`.
 
 /** Captures a local and is called directly. */
 export function captures(columns: number): number {

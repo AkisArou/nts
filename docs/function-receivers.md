@@ -1,7 +1,7 @@
 # Function values that carry `this`: the plan
 
-**Status: A, refined (below). Steps 1 and 2 built 2026-10-09, `.bind`
-2026-10-10; function declarations and method values reading `this` next.**
+**Status: A, refined (below). Steps 1 and 2 built 2026-10-09; `.bind` and
+`function` declarations reading `this` 2026-10-10; method values next.**
 
 ## The problem
 
@@ -198,8 +198,16 @@ Not yet, and refused rather than wrong:
   program did not compile at all.
 - A generator `function` that reads `this`: its body runs at the first
   `next()`, and a frame has no place for the `this` yet.
-- `function` declarations and method values reading `this`:
+- A method taken as a value whose body reads `this`:
   `blockers/a-call-with-a-receiver-that-is-read`.
+- A `this` proven only by structure. The proof is `instanceof` over the
+  classes the hierarchy places under the declared type, so a `this` that is
+  merely shaped like it -- `const o = { v: 1 }; f.call(o)` where `f` takes
+  `this: Valued`, or an object typed `Method` that repeats `Valued`'s fields
+  without extending it -- stops at the test by name, though the checker
+  accepted the call. A literal written at the call is typed by it and passes,
+  and so does a class the hierarchy relates. The fix is structural
+  assignability, the decision `Wakeable#then` waits on too.
 
 `examples/a-function-that-reads-its-own-this` agrees with node on C, LLVM, the
 JVM and C under reference counting, 290 cases. Each control fails:
@@ -208,6 +216,52 @@ JVM and C under reference counting, 290 cases. Each control fails:
 - on main the example compiles nothing.
 
 Over all 471 examples, step 1 against step 2: 470 unchanged, 1 fixed.
+
+**`function` declarations, as built (2026-10-10).** One that reads its own
+`this` is lowered under `name@this`, taking the call's `this` first and proving
+it as a closure's body does (`receive_this`). Its own name is an entry passing
+`undefined` (`passing_undefined`, now told where the `this` sits), so a plain
+call, an importer and the export surface keep their shape. `@this` goes before
+`@raises`, so a raising copy's body is `name@this@raises` and a wrapper's
+raising rename of `name@this` reaches it. Used as a value, the wrapper closure
+takes the call's `this` and hands it on unproven, and the body proves it. A
+nested declaration that captures and reads `this` is now a closure taking it,
+as a `function` expression is; one that captures nothing is a function of the
+program like a module-scope one. A generic one used as a value is refused by
+name, since the canonical generic value's kernels name the written entry.
+`examples/a-function-declaration-that-reads-its-own-this`: `.call`, `.apply`,
+a method through a field, `.bind`, a plain call's `undefined`, a body handing
+its `this` on, nested with and without captures, a `throw` caught around the
+call, and `async`. 290 cases on C, LLVM, the JVM and rc; on main it compiles
+nothing.
+
+**And a `throw` through `call` or `apply` (2026-10-10).** `try { f.call(r) }`
+did not catch: the checker resolves the callee to `CallableFunction.call`,
+which has no body, so the raising analysis answered "cannot raise" and the
+`throw` ended the program. `FuncBuilder::through_call_or_apply` makes those
+questions ask about `f`. This dated from before receivers.
+`examples/a-throw-through-call-or-apply-inside-a-try`, 145 cases; a control
+that drops the rule from `a_value_held_call` refuses the arm one call below
+the `try`. A bound function's raising variant also returned nothing where its
+result was due (invalid HIR on main), and it now sets its result type.
+
+Measured over the runtime against main: every module emits as many functions
+as before except `http`, which emits ten fewer `HTTPParser` methods.
+`#callBody` and its siblings wrap `callback.call(this, …)` in `try`/`finally`.
+In `http` the raising gate is held off (a closure in `bind` calls
+`runInAsyncScope`), so that `try` now refuses, as one around a parameter callee
+already did. Before, it compiled and skipped the `finally` when a callback
+threw. All ten are reachable only through `HTTPParser#execute`, which main
+already refuses for a regular-expression literal, so no reachable code is
+lost. They will be `execute`'s next blocker once the regex lands, and carrying
+the gate past `runInAsyncScope` clears them.
+
+Still escaping, and recorded as `outcomes/a-throw-from-a-function-made-at-run-time`:
+a bound function, or any `const` holding a function made at run time, called
+inside a `try`. `calls_compiled_code` says "cannot raise" for it, and the
+one-line rule that says "can" was measured. Where the raising gate is held off,
+it turns about 660 runtime functions across twenty modules from compiled into
+refused. So it waits for the gate to be carried there.
 
 **`.bind`, as built (2026-10-10).** Each `f.bind(r, ...bound)` on a function
 value is a closure of its own (`ClosureSource::Bound`, collected beside the
