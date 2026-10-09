@@ -130,7 +130,10 @@ function drive(journal: Journal): void {
   started = now();
   for (let i = 0; i < 200; i++) {
     app.activate_action("new", null);
-    sidebar.selection.selected = sidebar.visible.get_n_items() - 1;
+    // The last row, where there is one: an empty list has none, and `- 1`
+    // would ask C for row 4294967295.
+    const rows = sidebar.visible.get_n_items();
+    if (rows > 0) sidebar.selection.selected = rows - 1;
     journal.editor.title_row.text = "edited " + String(i);
   }
   const edited = sidebar.selected();

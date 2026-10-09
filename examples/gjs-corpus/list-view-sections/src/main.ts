@@ -19,7 +19,7 @@ import { run, type Workbench } from "../../host/workbench.ts";
 class CustomModel extends GtkStringList<{}, GtkSectionModelImplementation> {
   vfunc_get_section(position: CNumber<"uint">): [CNumber<"uint">, CNumber<"uint">] {
     const start = position;
-    const end = start + 5;
+    const end = Math.min(start + 5, 4294967295);
     return [start, end];
   }
 }

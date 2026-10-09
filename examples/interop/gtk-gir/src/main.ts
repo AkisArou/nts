@@ -33,7 +33,7 @@
 //   made press false  `new GtkButton({ label: "press", has_frame: false })`:
 //                 `gtk_button_new`, then each setter the literal writes -- a
 //                 frame is on by default, so `false` is the setter's doing
-//   compound 6    `label.width_chars += 3` and `++`: a property read through
+//   compound 6    `label.width_chars |= 4` and `^= 0`: a property read through
 //                 its getter and written through its setter, one receiver
 //   themed 6 document-open-recent  `new GThemedIcon({ name, use_default_fallbacks })`:
 //                 construct-only properties, given to `g_object_new` since no
@@ -337,10 +337,12 @@ function main(): void {
     const names = icon.get_names();
     console.log("themed " + String(names.length) + " " + names[0]);
     // A property read before it is written, GJS's `page.badge_number -= 1`:
-    // the getter, then the setter, on one receiver.
+    // the getter, then the setter, on one receiver. With operators whose
+    // answer is always a C `int`: `+= 3` on an `int` could overflow it, and
+    // strict refuses what it cannot prove fits.
     const counted = new GtkLabel({ width_chars: 2 });
-    counted.width_chars += 3;
-    counted.width_chars++;
+    counted.width_chars |= 4;
+    counted.width_chars ^= 0;
     console.log("compound " + String(counted.width_chars));
     // A `gpointer` result the caller owns that is a GObject
     // (`Owned<Erased<GObject>>`): adopted rather than referenced again, and

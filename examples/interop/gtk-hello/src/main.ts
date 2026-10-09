@@ -24,7 +24,7 @@ import type { c_int, c_uint } from "c:types";
 // Inside a function because a module-scope variable cannot hold a native
 // pointer (NTS1001).
 function main(): void {
-  let clicks = 0;
+  let clicks: c_int = 0 as c_int;
   // G_APPLICATION_NON_UNIQUE: two runs of this program, the check and its
   // control, must not find each other on the session bus.
   const app = gtk_application_new("dev.nts.GtkHello", 0x20 as c_uint);
@@ -33,7 +33,8 @@ function main(): void {
     const button = gtk_button_new();
     gtk_window_set_child(hello_as_window(window), button);
     hello_connect(button, "clicked", () => {
-      clicks++;
+      // A C `int` counter, wrapping as C's does.
+      clicks = ((clicks + 1) | 0) as c_int;
     });
     gtk_window_present(hello_as_window(window));
     hello_click(button);
@@ -42,7 +43,7 @@ function main(): void {
   });
   const status = g_application_run(app, 0 as c_int, null);
   hello_unref(app);
-  hello_report(clicks as c_int, status);
+  hello_report(clicks, status);
 }
 
 main();

@@ -11,12 +11,14 @@ import {
   GtkSingleSelection,
   GtkSortListModel,
   Ordering,
+  type GtkOrdering,
   GtkListItem,
 } from "c:Gtk-4.0";
+import type { CEnum, c_int } from "c:types";
 import { GListStore } from "c:Gio-2.0";
 import { Entry } from "./model.ts";
 
-function compare<T>(x: T, y: T): Ordering {
+function compare<T>(x: T, y: T): CEnum<GtkOrdering, c_int> {
   return x < y ? Ordering.SMALLER : x > y ? Ordering.LARGER : Ordering.EQUAL;
 }
 

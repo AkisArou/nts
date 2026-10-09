@@ -16,8 +16,9 @@ function demo(workbench: Workbench): void {
   const increase = (): void => {
     const current_size = clamp.get_maximum_size();
     const current_threshold = clamp.get_tightening_threshold();
-    clamp.maximum_size = current_size + 300;
-    clamp.tightening_threshold = current_threshold + 200;
+    // Sizes are C `int`s: a step past the largest stays the largest.
+    clamp.maximum_size = Math.min(current_size + 300, 2147483647);
+    clamp.tightening_threshold = Math.min(current_threshold + 200, 2147483647);
 
     if (clamp.tightening_threshold === 1000) {
       console.log("Maximum size reached");
@@ -27,8 +28,8 @@ function demo(workbench: Workbench): void {
   const decrease = (): void => {
     const current_size = clamp.get_maximum_size();
     const current_threshold = clamp.get_tightening_threshold();
-    clamp.maximum_size = current_size - 300;
-    clamp.tightening_threshold = current_threshold - 200;
+    clamp.maximum_size = Math.max(current_size - 300, -2147483648);
+    clamp.tightening_threshold = Math.max(current_threshold - 200, -2147483648);
 
     if (clamp.tightening_threshold === 0) {
       console.log("Minimum size reached");

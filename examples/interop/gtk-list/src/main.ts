@@ -122,7 +122,7 @@ function spliced(): string {
 
 // A model the program writes: `count` rows of `GtkStringObject`, none held.
 class Range extends GObject<{}, GListModelImplementation> {
-  count = 1_000_000;
+  count: CNumber<"uint"> = 1_000_000;
   vfunc_get_n_items(): CNumber<"uint"> {
     return this.count;
   }

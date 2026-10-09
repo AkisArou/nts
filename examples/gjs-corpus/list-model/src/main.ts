@@ -114,7 +114,9 @@ function demo(workbench: Workbench): void {
   remove.connect("clicked", () => {
     const selectedRow = list_box_editable.get_selected_row();
     if (selectedRow === null) return;
+    // -1 for a row in no list, which C would read as row 4294967295.
     const index = selectedRow.get_index();
+    if (index < 0) return;
     model.remove(index);
   });
 

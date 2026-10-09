@@ -66,7 +66,8 @@ class Canvas extends GtkWidget {
     const color = new GdkRGBA();
     color.parse("tomato");
     const bounds = new graphene_rect_t();
-    bounds.init(0, 0, this.get_width(), this.get_height());
+    // Graphene's are `float`s; a widget's `int` size, said as one.
+    bounds.init(0, 0, Math.fround(this.get_width()), Math.fround(this.get_height()));
     snapshot.append_color(color, bounds);
     this.drawn++;
     this.width = this.get_width();

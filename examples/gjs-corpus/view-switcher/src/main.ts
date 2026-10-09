@@ -31,7 +31,10 @@ function demo(workbench: Workbench): void {
     });
 
     button.connect("clicked", () => {
-      notifications_page.badge_number -= 1;
+      // Never below zero: the badge is an unsigned count, and C would read
+      // -1 as 4294967295.
+      const badges = notifications_page.badge_number;
+      if (badges > 0) notifications_page.badge_number = badges - 1;
       notification_list.remove(notification_row);
 
       if (notifications_page.badge_number === 0) {
