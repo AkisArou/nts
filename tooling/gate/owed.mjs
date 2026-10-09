@@ -889,7 +889,7 @@ function selfTest() {
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.slice(0, 6).join(" ") !== "build clippy tests llvm llvm-rc assembles" || !order.includes("corpus") || !order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  if (order.slice(0, 7).join(" ") !== "build clippy tests rustfmt llvm llvm-rc assembles" || !order.includes("corpus") || !order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;
