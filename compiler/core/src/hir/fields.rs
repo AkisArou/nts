@@ -871,7 +871,8 @@ pub fn closures(program: &Program) -> FieldClosures {
 /// receiver's static type is the *signature* layout, so this is that same cast.
 /// One call this pass will rewrite: where it is, what it should name, the erased
 /// value its receiver was read from, the class that value can only hold, whether
-/// the site used the uniform entry, and that entry's arity and result.
+/// the site used the uniform entry, and that entry's arity, result, and whether
+/// it takes the call's `this` (`Program::receiving`).
 ///
 /// Collected before anything is rewritten, because the rewrite needs `&mut` and
 /// the lookup needs `&`.
@@ -882,7 +883,7 @@ type Rewrite = (
     super::ValueId,
     super::TypeId,
     bool,
-    (usize, HirType),
+    (usize, HirType, bool),
 );
 
 /// Every erased or slot dispatch this pass can turn into a direct call.
@@ -940,11 +941,20 @@ fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex)
             }) else {
                 continue;
             };
-            let Some(name) = layouts
-                .of_class(class)
-                .and_then(|layout| program.layouts[layout].methods.get(read as usize))
-                .and_then(Option::as_ref)
-            else {
+            // A closure that reads its own `this` is named by its body, which
+            // takes the call's; its written `#call` passes `undefined` and would
+            // drop it (`Program::receiving`). Asked of the class rather than of
+            // the table, whose `#call` entry reachability has already emptied
+            // where nothing in the program calls the wrapper.
+            let receiving = (uniform && super::is_closure_type(class))
+                .then(|| program.receiving.get(&super::lower::closure_method(class)))
+                .flatten();
+            let Some(name) = receiving.or_else(|| {
+                layouts
+                    .of_class(class)
+                    .and_then(|layout| program.layouts[layout].methods.get(read as usize))
+                    .and_then(Option::as_ref)
+            }) else {
                 continue;
             };
             // A closure whose body was refused is not in `funcs`, and a call to
@@ -960,7 +970,11 @@ fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex)
             let Some(written) = program.funcs.iter().find(|known| &known.name == name) else {
                 continue;
             };
-            let shape = (written.params.len(), written.return_type.clone());
+            let shape = (
+                written.params.len(),
+                written.return_type.clone(),
+                receiving.is_some(),
+            );
             rewrites.push((at, index, name.clone(), erased, class, uniform, shape));
         }
     }
@@ -991,7 +1005,7 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
     // Four errors, in a C file no unit test reads. The example caught it and the
     // three tests over the HIR did not, because the shape they check was right.
     let mut count = 0;
-    for (func, index, name, erased, class, uniform, (arity, returns)) in rewrites {
+    for (func, index, name, erased, class, uniform, (arity, returns, takes_this)) in rewrites {
         let origin = program.funcs[func].values[index].origin.clone();
         let result_absent = super::erased_entry_absent(program, class);
         // The receiver read back at the class, which is the cast this pass is
@@ -1009,6 +1023,7 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
                 arity,
                 returns: &returns,
                 result_absent,
+                takes_this,
             },
             uniform,
             Some(receiver),

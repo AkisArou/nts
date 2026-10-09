@@ -2804,6 +2804,13 @@ pub struct Program {
     /// the class. Its parameters are laid out by [`UNIFORM_THIS`] and
     /// [`UNIFORM_ARGUMENTS`].
     pub erased_call_slot: Option<u32>,
+    /// A closure's written `#call` that wraps a body taking the call's `this`,
+    /// to that body. A `function` expression that reads its own `this` is
+    /// lowered as a body taking it after the closure, as [`UNIFORM_THIS`] lays
+    /// out, and its `#call` passes `undefined` for the callers that have none.
+    /// So a pass that makes a uniform call direct ([`call_directly`]) names the
+    /// body, with the call's `this`, and not the wrapper, which would drop it.
+    pub receiving: std::collections::BTreeMap<String, String>,
     /// See [`Program::erased_call_slot`]. The entry that **records an uncaught
     /// `throw` and returns** rather than ending the program, which a call inside a
     /// `try` takes when it knows the signature and not the class.
@@ -4190,13 +4197,16 @@ pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> 
 /// `false` when the op is not a call or its block cannot be found, which cannot
 /// happen for a site a caller resolved and is not worth a panic.
 /// The written entry a uniform-slot call is pointed at by [`call_directly`]:
-/// its name and arity, what it returns, and what a null result means
-/// ([`erased_entry_absent`]).
+/// its name and arity, what it returns, what a null result means
+/// ([`erased_entry_absent`]), and whether it takes the call's `this` after the
+/// closure, as the body of a closure that reads its own does
+/// ([`Program::receiving`]).
 pub(super) struct Written<'a> {
     pub name: String,
     pub arity: usize,
     pub returns: &'a HirType,
     pub result_absent: Absent,
+    pub takes_this: bool,
 }
 
 pub(super) fn call_directly(
@@ -4211,6 +4221,7 @@ pub(super) fn call_directly(
         arity,
         returns,
         result_absent,
+        takes_this,
     } = written;
     let id = |at: usize| ValueId(u32::try_from(at).unwrap_or(u32::MAX));
     let OpKind::Call { args, .. } = &func.values[index].kind else {
@@ -4218,19 +4229,24 @@ pub(super) fn call_directly(
     };
     let mut args: Vec<ValueId> = if uniform {
         // The receiver keeps its place; a caller's `receiver` op replaces it
-        // below. A written `#call` has no `this`, so it is dropped with the
-        // padding. An argument the site left erased -- because the parameter
-        // was erased already -- has no `Erase` to undo.
+        // below. The `this` is kept, erased as the body takes it, where the
+        // entry takes one, and dropped with the padding where it does not. An
+        // argument the site left erased -- because the parameter was erased
+        // already -- has no `Erase` to undo.
+        let leading = if takes_this { UNIFORM_ARGUMENTS } else { 1 };
         let written = args.get(UNIFORM_ARGUMENTS..).unwrap_or_default();
         args.iter()
-            .take(1)
+            .take(leading)
             .copied()
-            .chain(written.iter().take(arity.saturating_sub(1)).map(|arg| {
-                match func.values[arg.0 as usize].kind {
-                    OpKind::Erase { value, .. } => value,
-                    _ => *arg,
-                }
-            }))
+            .chain(
+                written
+                    .iter()
+                    .take(arity.saturating_sub(leading))
+                    .map(|arg| match func.values[arg.0 as usize].kind {
+                        OpKind::Erase { value, .. } => value,
+                        _ => *arg,
+                    }),
+            )
             .collect()
     } else {
         args.clone()

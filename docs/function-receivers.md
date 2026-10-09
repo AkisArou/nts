@@ -1,6 +1,7 @@
 # Function values that carry `this`: the plan
 
-**Status: A, refined (below). Step 1 built 2026-10-09; step 2 next.**
+**Status: A, refined (below). Steps 1 and 2 built 2026-10-09; `.bind`, function
+declarations and method values next.**
 
 ## The problem
 
@@ -112,11 +113,12 @@ it is:
    is proven like any narrowing, never trusted:
    - `this: unknown`, `this: any`, or no annotation: `this` stays erased. React's
      `ReactChildren.ts:254` only passes it on.
-   - `this: C` for a class `C`: an `instanceof C` test at entry, and a
-     `TypeError` where it fails. React's `ReactFiberThrow.ts:127` is
+   - `this: C` for an object type with a layout (a class, an interface, an
+     object literal's type): an `instanceof` test at entry, against its layout
+     and the classes under it. React's `ReactFiberThrow.ts:127` is
      `this: ErrorBoundaryInstance`, which is the class `ClassComponentInstance`,
      and it passes `this` on at that type.
-   - Any other annotation (an interface, a union) has no test yet and is refused
+   - Any other annotation (a union, a primitive) has no test yet and is refused
      by name.
 3. **`.bind(r, ...)`** makes a closure that holds `r` and the bound arguments and
    calls through the uniform entry with them. It is unsupported today.
@@ -155,6 +157,52 @@ Measured on eight rows that call through function values (`closures`,
 every nts column (C, LLVM, JVM, f64) is within the two baselines' own spread.
 `optional-chain` on C is 33.42 us in all three, and `closures` 1.12, 1.12 and
 1.13 us.
+
+**Step 2, as built (2026-10-09).** A `function` expression whose body reads
+`this` (`ClosureInfo::reads_this`) is a closure like an arrow. Its body is
+`ClosureN#call_this(closure, this, params…)`. Its `#call` is a wrapper passing
+`undefined` (`passing_undefined`), which the runtime, the bridges and Java call
+unchanged; reachability removes it where nothing needs it. Its uniform entries
+pass their `this` on (`erased_call(…, takes_this)`). A call where the closure is
+known names the body with the `this` (`ClosureEntry::Receiving`).
+`Program::receiving` maps a wrapper to its body, and both devirtualizers resolve
+the entry from the closure class through it, not from the table slot the
+wrapper's removal empties.
+
+A failed `this` test **stops by name** (`nts_refused`), not with a `TypeError`.
+TypeScript's object types are structural: `bump.call({ count: 0 }, 1)`
+type-checks and runs in node, so a `TypeError` would be a JavaScript error
+JavaScript does not raise. What the compiler cannot do is read an object at a
+layout it is not.
+
+Found and fixed on the way:
+- `captures_of` would have recorded such a function's own `this` as a capture
+  of the enclosing one. It was unreachable while the function was refused.
+- `map.forEach(function () { this… })`, a `NodeList` `forEach` and an
+  `Array.from` mapper inlined a `function` callback's body, so its `this` read
+  the enclosing one where JavaScript passes `undefined`. That was wrong before
+  this work, silently. `inlines_as_a_callback` keeps such a callback out of
+  inlining.
+- A named `function` expression could not call itself by its name
+  (`bind_own_name` bound only declarations).
+
+Not yet, and refused rather than wrong:
+- `o.f?.()` and an ObjC field call read `o.f` as a value and hold no `o` to
+  pass. In a program where some `function` reads its own `this`, they are
+  refused (`check_this_is_passed`). Before step 2 such a program did not compile
+  at all.
+- A generator `function` that reads `this`: its body runs at the first
+  `next()`, and a frame has no place for the `this` yet.
+- `function` declarations and method values reading `this`:
+  `blockers/a-call-with-a-receiver-that-is-read`.
+
+`examples/a-function-that-reads-its-own-this` agrees with node on C, LLVM, the
+JVM and C under reference counting, 290 cases. Each control fails:
+- dropping every `this` stops at the test, by name;
+- `call_directly` dropping the `this` is invalid HIR;
+- on main the example compiles nothing.
+
+Over all 471 examples, step 1 against step 2: 470 unchanged, 1 fixed.
 
 Verified by:
 - React's two sites, and its demos' `main`;

@@ -8,12 +8,11 @@
 // `handler.callback(...)` would make the private `ListenerRecord` the receiver
 // and leak an implementation detail as `this`.
 //
-// The receiver is **dropped**, and this fixture is what says that is a
-// substitution rather than a narrowing. A body that could observe `this` does
-// not compile -- a `function` reading its own `this` is refused, a method
-// cannot be taken as a value, and an arrow has no `this` of its own -- so no
-// value reaching here has a receiver to observe.
-// `blockers/a-call-with-a-receiver-that-is-read` holds those three.
+// The receiver is passed as the call's `this` (`docs/function-receivers.md`).
+// None of the functions here reads it, so this fixture is about the arguments:
+// a receiver written at `.call` must not shift them, and its expression is still
+// evaluated. `examples/a-function-that-reads-its-own-this` is the one whose
+// functions read it.
 //
 // `f.call()` with no argument at all is absent deliberately: under
 // `strictBindCallApply` it is `TS2555 Expected at least 1 arguments, but got 0`,
@@ -55,11 +54,11 @@ export function receiverOnly(n: number): number {
 }
 
 /**
- * **The receiver is evaluated even though it is dropped.**
+ * **The receiver is evaluated, whatever reads it.**
  *
- * `f.call(g(), x)` calls `g`. Discarding the value is not discarding its
- * effects, and a lowering that skipped the expression would lose the write to
- * `order` with nothing to show for it.
+ * `f.call(g(), x)` calls `g`, before the arguments, whether or not the
+ * function reads its `this`. A lowering that skipped the expression would lose
+ * the write to `order` with nothing to show for it.
  */
 export function receiverIsEvaluated(n: number): string {
   // Everything local. A module-scope accumulator would still be holding its
@@ -89,9 +88,9 @@ function sumParts(...parts: number[]): number {
 /**
  * `f.apply(receiver, list)` -- the arguments as one array.
  *
- * The receiver is dropped for the same reason and by the same argument. What
- * differs is the arguments, which is why this is a separate lowering and not
- * the same one under another name.
+ * The receiver is passed as `call` passes it. What differs is the arguments,
+ * which is why this is a separate lowering and not the same one under another
+ * name.
  *
  * **The array is copied, not passed through.** A rest parameter is fresh on
  * every call, so handing the caller's array to the callee would alias it.

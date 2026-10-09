@@ -2346,6 +2346,12 @@ struct ClosureInfo {
     /// The captured symbols a variant re-types, at the copy's types. Empty
     /// for the closure as written.
     retyped_captures: std::collections::BTreeMap<u32, HirType>,
+    /// Whether the body reads its own `this`: a `function` expression that
+    /// does ([`FuncBuilder::binds_this`]). Its body takes the call's `this`
+    /// after the closure, as a uniform entry does ([`super::UNIFORM_THIS`]),
+    /// and its written `#call` is a wrapper passing `undefined`, for the
+    /// callers that have no `this` to give (`docs/function-receivers.md`).
+    reads_this: bool,
 }
 
 /// Where a closure came from, which decides what its body is.
@@ -3034,6 +3040,7 @@ impl ClosureInfo {
             within: None,
             within_copy: None,
             retyped_captures: std::collections::BTreeMap::new(),
+            reads_this: false,
         }
     }
 }
@@ -3747,6 +3754,115 @@ fn closure_names(index: usize) -> (String, String) {
     (class, method)
 }
 
+/// The name of the body of a closure that reads its own `this`
+/// (`ClosureInfo::reads_this`). It takes the call's `this` after the closure,
+/// and the closure's `#call` is a wrapper passing `undefined` to it, for the
+/// callers that have no `this` to give: the C runtime, the native bridges, the
+/// JVM's callback interfaces.
+fn receiving_call_name(index: usize) -> String {
+    format!("Closure{index}#call_this")
+}
+
+/// Which entry of a closure a call through a function value reaches, which
+/// decides the arguments it takes. [`FuncBuilder::closure_callee`] answers it,
+/// and [`FuncBuilder::call_a_closure_entry`] makes the call it names.
+#[derive(Clone, Debug)]
+enum ClosureEntry {
+    /// A known closure's written `#call`: the closure, then the arguments.
+    Written(String),
+    /// A known closure's body that reads its own `this`
+    /// ([`receiving_call_name`]): the closure, the call's `this`, then the
+    /// arguments.
+    Receiving(String),
+    /// A uniform entry, by slot, which every closure of the signature answers:
+    /// the closure, the call's `this`, then the arguments erased and padded
+    /// ([`super::UNIFORM_THIS`]).
+    Uniform(u32),
+}
+
+/// A `this`-reading closure's written `#call`: its body, called with
+/// `undefined`, the `this` JavaScript gives a plain call.
+///
+/// For the callers that reach a closure by its written slot and have no `this`
+/// to give -- the C runtime's timers and reactions, the native callback
+/// bridges, the JVM's callback interfaces -- so none of them changes shape for
+/// a closure that reads one (`docs/function-receivers.md`). A call from the
+/// program itself names the body, with its `this`.
+fn passing_undefined(name: String, body: &Func) -> Func {
+    let origin = Origin::generated(
+        body.origin.location,
+        nts_semantic_schema::GeneratedReason::ClosureLowering,
+    );
+    let params: Vec<Param> = body
+        .params
+        .iter()
+        .enumerate()
+        .filter(|(at, _)| *at != super::UNIFORM_THIS)
+        .map(|(_, param)| param.clone())
+        .collect();
+    let mut values: Vec<Op> = (0..params.len())
+        .map(|at| Op {
+            kind: OpKind::Param(u32::try_from(at).unwrap_or(u32::MAX)),
+            ty: params[at].ty.clone(),
+            origin: origin.clone(),
+        })
+        .collect();
+    let id = |at: usize| ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+    let undefined = id(values.len());
+    values.push(Op {
+        kind: OpKind::ConstUndefined,
+        ty: HirType::Erased,
+        origin: origin.clone(),
+    });
+    let mut args: Vec<ValueId> = (0..params.len()).map(id).collect();
+    args.insert(super::UNIFORM_THIS, undefined);
+    let answered = id(values.len());
+    values.push(Op {
+        kind: OpKind::Call {
+            callee: Callee::Direct(body.name.clone()),
+            args,
+            frame: None,
+        },
+        ty: body.return_type.clone(),
+        origin: origin.clone(),
+    });
+    let terminator = match body.return_type {
+        HirType::Void => Terminator::Return(None),
+        HirType::Never => Terminator::Unreachable,
+        _ => Terminator::Return(Some(answered)),
+    };
+    Func {
+        name,
+        params,
+        return_type: body.return_type.clone(),
+        values,
+        blocks: vec![Block {
+            params: Vec::new(),
+            ops: (0..=answered.0).map(ValueId).collect(),
+            terminator,
+        }],
+        origin,
+        exported: false,
+        initializes_receiver: false,
+        abstract_declaration: false,
+        async_result: None,
+        frame: None,
+        obligations: Vec::new(),
+        written_return: body.written_return,
+        written_return_elements: body.written_return_elements.clone(),
+    }
+}
+
+/// The name of the function a closure's body is lowered as: its written
+/// `#call`, or, for one that reads its own `this`, the body taking it.
+fn closure_body_name(index: usize, reads_this: bool) -> String {
+    if reads_this {
+        receiving_call_name(index)
+    } else {
+        closure_names(index).1
+    }
+}
+
 /// The name of a closure's erased entry. See [`Hierarchy::erased_call_slot`].
 fn erased_call_name(index: usize) -> String {
     format!("Closure{index}#erased_call")
@@ -4012,11 +4128,19 @@ fn captures_of(
     //
     // `mentions_this` already knew how to ask: it stops at anything that
     // rebinds `this` and descends through arrows, which is the rule.
-    if let Some(at) = probe
-        .node(id)
-        .children
-        .iter()
-        .find_map(|child| probe.first_this(*child))
+    //
+    // **And the closure itself may be one.** A `function` expression that reads
+    // `this` reads the call's (`ClosureInfo::reads_this`), so the walk below
+    // would find its own `this` and capture the enclosing one in its place: the
+    // wrong object, silently. It was unreachable while such a function was
+    // refused rather than collected.
+    let binds_its_own = probe.kind_of(id).is_some_and(binds_its_own_this);
+    if !binds_its_own
+        && let Some(at) = probe
+            .node(id)
+            .children
+            .iter()
+            .find_map(|child| probe.first_this(*child))
     {
         info.captures.push(Capture {
             symbol: THIS_CAPTURE,
@@ -4196,8 +4320,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         // entry is never asked for. One that mentions `this` binds its own,
         // the way a `function` does, and stays a table method with a receiver.
         let is_closure = match node.kind {
-            NodeKind::Syntax(syntax::ARROW_FUNCTION) => true,
-            NodeKind::Syntax(syntax::FUNCTION_EXPRESSION) => !probe.binds_this(id),
+            NodeKind::Syntax(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => true,
             NodeKind::Syntax(syntax::FUNCTION_DECLARATION) => probe.is_nested_closure(id),
             NodeKind::Syntax(syntax::METHOD_DECLARATION) => {
                 probe.is_a_literal_method(id) && !probe.binds_this(id)
@@ -4207,7 +4330,9 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         if !is_closure {
             continue;
         }
-        let info = captures_of(&probe, snapshot, id, &settlers, &assigned, &nested);
+        let mut info = captures_of(&probe, snapshot, id, &settlers, &assigned, &nested);
+        info.reads_this =
+            node.kind == NodeKind::Syntax(syntax::FUNCTION_EXPRESSION) && probe.binds_this(id);
         closures.push(info);
     }
 
@@ -14223,6 +14348,7 @@ fn lower_wanted_closures(
                     shared.hierarchy.erased_call_arity,
                     None,
                     closure_result_absent(snapshot, closures[index].node, &func.return_type),
+                    closures[index].reads_this,
                 ) {
                     lowered.program.funcs.push(adapter);
                 }
@@ -14262,6 +14388,20 @@ fn lower_wanted_closures(
                 // (17 test262 `...-elision-step-err` cases) aborted uncaught.
                 let body = lowered.program.funcs.pop().expect("the body just pushed");
                 lowered.program.funcs.extend(raising);
+                // A body that takes the call's `this` is not the written
+                // `#call`, which every caller with no `this` to give reaches by
+                // its slot. That one passes `undefined`.
+                if closures[index].reads_this {
+                    let (_, written) = closure_names(index);
+                    lowered
+                        .program
+                        .receiving
+                        .insert(written.clone(), body.name.clone());
+                    lowered
+                        .program
+                        .funcs
+                        .push(passing_undefined(written, &body));
+                }
                 lowered.program.funcs.push(body);
             }
             // **A refused closure had no line of its own.** `uncompiled` is keyed
@@ -14370,6 +14510,14 @@ fn raising_closure(
         return (Vec::new(), Vec::new());
     }
     let (raising_body, raising_entry) = raising_closure_names(index);
+    // Only the raising entry calls this body, so one that takes the call's
+    // `this` keeps it, under its own name, and needs no wrapper.
+    let takes_this = closures[index].reads_this;
+    let raising_body = if takes_this {
+        format!("{}{RAISING_SUFFIX}", receiving_call_name(index))
+    } else {
+        raising_body
+    };
     let arity = shared.hierarchy.erased_call_arity;
     let abort = |because: String| {
         erased_call(
@@ -14378,6 +14526,7 @@ fn raising_closure(
             arity,
             Some(&because),
             Absent::Impossible,
+            takes_this,
         )
         .into_iter()
         .collect::<Vec<Func>>()
@@ -14404,9 +14553,16 @@ fn raising_closure(
             raising.name = raising_body;
             let result_absent =
                 closure_result_absent(snapshot, closures[index].node, &raising.return_type);
-            let mut produced = erased_call(raising_entry, &raising, arity, None, result_absent)
-                .into_iter()
-                .collect::<Vec<Func>>();
+            let mut produced = erased_call(
+                raising_entry,
+                &raising,
+                arity,
+                None,
+                result_absent,
+                takes_this,
+            )
+            .into_iter()
+            .collect::<Vec<Func>>();
             produced.push(raising);
             (produced, std::mem::take(&mut second.layouts))
         }
@@ -15752,12 +15908,16 @@ fn result_crosses(returns: &HirType) -> bool {
 /// correct, and `erased-fn-arity-only` agrees on both arms. Reading "arity is free"
 /// as "parameters are free" is the mistake this function exists downstream of.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+/// `takes_this` is whether `call` is the body of a closure that reads its own
+/// `this` (`ClosureInfo::reads_this`), which takes the call's `this` after the
+/// closure, as this entry does; the entry passes its own on.
 fn erased_call(
     name: String,
     call: &Func,
     width: usize,
     refusing: Option<&str>,
     result_absent: Absent,
+    takes_this: bool,
 ) -> Option<Func> {
     let origin = Origin::generated(
         call.origin.location,
@@ -15766,7 +15926,16 @@ fn erased_call(
     // A closure's `#call` always has its receiver; this is the only shape that
     // could not be built, and no caller can produce it.
     let receiver = call.params.first()?.clone();
-    let written = call.params.get(1..)?.to_vec();
+    let written = call
+        .params
+        .get(
+            if takes_this {
+                super::UNIFORM_ARGUMENTS
+            } else {
+                1
+            }..,
+        )?
+        .to_vec();
     // **Every parameter and the result have to cross the erasure boundary, and
     // `erasable` is the one predicate that says so.** Not a second list: its own
     // doc records that it and the backends' `erased_tag` are "one decision
@@ -15839,8 +16008,12 @@ fn erased_call(
         );
         return Some(refuses_to_cross(name, params, values, &origin, &because));
     }
-    // The `this` is not passed on: a written `#call` takes none.
+    // The `this` is passed on only to a body that takes one; a written `#call`
+    // takes none.
     let mut args = vec![ValueId(0)];
+    if takes_this {
+        args.push(ValueId(u32::try_from(super::UNIFORM_THIS).ok()?));
+    }
     for (at, param) in written.iter().enumerate() {
         let from = ValueId(u32::try_from(at + super::UNIFORM_ARGUMENTS).ok()?);
         // A parameter the body already reads erased needs nothing: unerasing
@@ -19066,7 +19239,7 @@ struct SetProperty {
 struct Comparator {
     node: NodeId,
     function: ValueId,
-    callee: Callee,
+    callee: ClosureEntry,
     parameters: Vec<HirType>,
 }
 
@@ -24908,35 +25081,6 @@ impl<'a> FuncBuilder<'a> {
         self.refuse_when(id, always, "ReferenceError", UNBOUND_THIS)
     }
 
-    /// Whether a `function` expression could have been an arrow, and why not.
-    ///
-    /// The refusal is the same either way -- neither lowers -- but which one it
-    /// is decides whether the suggestion is safe, and that is a question the
-    /// compiler can answer rather than one a reader should have to. `function`
-    /// and `=>` differ in `this`: `util.deprecate` wraps a method by writing
-    /// `function (this: unknown, ...args)` and forwarding the caller's receiver
-    /// into `Reflect.apply`, and an arrow there would silently rebind `this` to
-    /// the module scope. A deprecated method quietly operating on the wrong
-    /// object is worse than a refusal by a wide margin, so a diagnostic that
-    /// suggested the rewrite unconditionally would be actively harmful.
-    ///
-    /// An explicit `this` parameter or any `this` in the body settles it. The
-    /// walk descends into nested *arrows*, which inherit `this` from here, and
-    /// stops at anything that binds its own -- a nested `function`, a method,
-    /// an accessor, a class.
-    fn why_not_arrow(&self, id: NodeId) -> String {
-        if self.binds_this(id) {
-            return "a `function` expression that uses its own `this`, which an arrow function \
-                    does not have"
-                .to_owned();
-        }
-        // Unreachable from the statement dispatch, which lowers this case now.
-        // Kept because the collector and the dispatch ask `binds_this`
-        // separately, and a disagreement between them should say something
-        // rather than reach `lower_arrow` and fail to find a closure.
-        "a `function` expression the closure collector did not see".to_owned()
-    }
-
     /// Whether a literal's member named `name` is **storage** on its type:
     /// a field the type declares -- `write?: Callback` -- or a method the
     /// type's literals made one (`Hierarchy::stored`). Either way the layout
@@ -25013,10 +25157,10 @@ impl<'a> FuncBuilder<'a> {
         // that does not.
         //
         // **What the old test was protecting is kept, and it is the real
-        // hazard.** `why_not_arrow` records it: a wrapper that forwards the
-        // caller's receiver -- `util`'s `promisified` and `callbackified` are
-        // the live ones -- becomes silently wrong as an arrow, which rebinds
-        // `this` to module scope. Both read `this` in their bodies (`this,`
+        // hazard:** a wrapper that forwards the caller's receiver -- `util`'s
+        // `promisified` and `callbackified` are the live ones -- becomes silently
+        // wrong as an arrow, which rebinds `this` to module scope. Such a body
+        // takes the call's `this` now (`ClosureInfo::reads_this`). Both read `this` in their bodies (`this,`
         // into `Reflect.apply`, and `maybeCb.bind(this)`), so the body walk
         // still catches them. Checked against those two rather than argued
         // from the example in the doc.
@@ -28674,6 +28818,7 @@ impl<'a> FuncBuilder<'a> {
         receiver_ty: HirType,
         origin: &Origin,
         binds: ParameterNames,
+        takes_this: bool,
     ) -> Result<(Vec<Param>, Vec<ValueId>), Diagnostic> {
         let mut params = vec![Param {
             name: "this".to_owned(),
@@ -28683,6 +28828,18 @@ impl<'a> FuncBuilder<'a> {
             known: Facts::TOP,
             written: None,
         }];
+        // The call's `this`, where a uniform entry takes it, so the written
+        // parameters are numbered after it (`ClosureInfo::reads_this`).
+        if takes_this {
+            params.push(Param {
+                name: "this_argument".to_owned(),
+                shape: ParamShape::Ordinary,
+                ty: HirType::Erased,
+                origin: origin.clone(),
+                known: Facts::TOP,
+                written: None,
+            });
+        }
         let mut forwarded = Vec::new();
         for child in self.children(id) {
             if self.kind_of(child) != Some(syntax::PARAMETER) {
@@ -28737,11 +28894,15 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(info.node, reason));
         }
         let id = info.node;
-        let (_, name) = closure_names(index);
+        let name = closure_body_name(index, info.reads_this);
         let receiver_ty = HirType::Managed(ManagedType::Object(closure_type(index)));
         let origin = self.origin(id);
 
         let receiver = self.push(OpKind::Param(0), receiver_ty.clone(), origin.clone());
+        let this_argument = info.reads_this.then(|| {
+            let at = u32::try_from(super::UNIFORM_THIS).unwrap_or(u32::MAX);
+            self.push(OpKind::Param(at), HirType::Erased, origin.clone())
+        });
         self.this = Some(receiver);
         self.bind_own_name(id, receiver);
         self.in_closure = true;
@@ -28764,6 +28925,7 @@ impl<'a> FuncBuilder<'a> {
             } else {
                 ParameterNames::Forwarded
             },
+            info.reads_this,
         )?;
 
         // The captures, read back and bound to the names the body writes. A
@@ -28872,6 +29034,11 @@ impl<'a> FuncBuilder<'a> {
         // into the function around it.
         let asynchronous = self.begin_async(id, &return_type)?;
 
+        // **The body's `this` is the call's**, proven at the declared type.
+        if let Some(this_argument) = this_argument {
+            self.this = Some(self.receive_this(id, this_argument, generated.is_some())?);
+        }
+
         // A wrapper has no body of its own. It forwards to the function it
         // stands for, which keeps that function's one definition the only one:
         // re-lowering the declaration's body here would compile it twice and
@@ -28972,6 +29139,105 @@ impl<'a> FuncBuilder<'a> {
     /// `lower_param` binds by symbol, which is what a body wants and what a
     /// forwarding wrapper cannot use -- it has no body and no mention of the
     /// name. An index is unique within a function, so this is unambiguous.
+    /// The `this` a `function` expression's body reads, from the erased value
+    /// the call passed (`ClosureInfo::reads_this`), at the type the body was
+    /// checked against: the checker's type for a `this` in it, which is the
+    /// declared `this:` parameter, or `any` where there is none.
+    ///
+    /// **Proven, never trusted.** An `Unerase` is unchecked, and a `this:`
+    /// annotation is not checked at a call through a cast: React calls
+    /// `(callback as (this: unknown) => unknown).call(context)`. So:
+    /// - `unknown` or `any`: the erased value itself, which the body reads as
+    ///   it reads any erased value;
+    /// - an object type -- a class, an interface, an object literal's type -- an
+    ///   `instanceof` test against its layout and the classes under it, and the
+    ///   body reads it at that layout, as it reads every object. Where the test
+    ///   fails the program **stops, by name**, rather than throwing a
+    ///   `TypeError` JavaScript would not: TypeScript's object types are
+    ///   structural, so `bump.call({ count: 0 }, 1)` type-checks and runs in
+    ///   node, and this compiler cannot read an object at a layout it is not;
+    /// - anything else (a union, a primitive) has no such test, and is refused
+    ///   by name.
+    ///
+    /// A generator's body runs at its first `next()`, not at the call, and a
+    /// frame has no place for the `this` yet, so that one is refused rather
+    /// than proven early.
+    fn receive_this(
+        &mut self,
+        id: NodeId,
+        this: ValueId,
+        generator: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        if generator {
+            return Err(self.unsupported(id, "a generator `function` that reads its own `this`"));
+        }
+        let read = self
+            .node(id)
+            .children
+            .iter()
+            .find_map(|child| self.first_this(*child));
+        let Some(declared) = read.and_then(|node| self.snapshot.node_types.get(&node).copied())
+        else {
+            return Ok(this);
+        };
+        let ty = self.represent(declared);
+        let class = match ty {
+            Some(HirType::Erased) => return Ok(this),
+            Some(HirType::Managed(ManagedType::Object(class)))
+                if self.layout_of(id, class).is_ok() =>
+            {
+                class
+            }
+            _ => {
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "a `function` whose `this` is declared as `{}`, which has no test this \
+                         compiler can make at the call",
+                        describe(self.snapshot, declared)
+                    ),
+                ));
+            }
+        };
+        let origin = self.origin(id);
+        let classes = self.classes_under(class);
+        let is = self.push(
+            OpKind::InstanceOf {
+                value: this,
+                classes,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let named = describe(self.snapshot, declared);
+        let refused = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: is,
+            then_target: carry_on,
+            then_args: Vec::new(),
+            else_target: refused,
+            else_args: Vec::new(),
+        });
+        self.switch_to(refused);
+        let what = self.push(
+            OpKind::ConstString(format!(
+                "a `function` called with a `this` that is not a `{named}`, which its body is \
+                 read at"
+            )),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        self.runtime_call("nts_refused", vec![what], HirType::Void, origin.clone());
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(carry_on);
+        Ok(self.push(
+            OpKind::Unerase { value: this },
+            HirType::Managed(ManagedType::Object(class)),
+            origin,
+        ))
+    }
+
     fn param_value(&self, index: u32) -> Option<ValueId> {
         self.values
             .iter()
@@ -29800,7 +30066,7 @@ impl<'a> FuncBuilder<'a> {
             );
         };
         let args = std::iter::once(handler).chain(argument).collect();
-        let callee = Callee::Closure { slot };
+        let callee = ClosureEntry::Uniform(slot);
         let answered = if catches {
             let entry = self.bindings.clone();
             self.exits.push(Exit::Handler(Handler {
@@ -47520,7 +47786,9 @@ impl<'a> FuncBuilder<'a> {
                     },
                 },
             },
-            Some(syntax::ARROW_FUNCTION) => self.lower_arrow(id),
+            // A `function` expression is a closure like an arrow's, and one that
+            // reads its own `this` takes the call's (`ClosureInfo::reads_this`).
+            Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => self.lower_arrow(id),
             Some(syntax::NULL_KEYWORD) => self.lower_absent(id),
             // `this` is parameter zero of a method. Outside one there is no
             // receiver to name.
@@ -47563,24 +47831,6 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::DELETE_EXPRESSION) => self.lower_delete(id),
             Some(syntax::TYPE_OF_EXPRESSION) => self.lower_typeof(id),
             Some(syntax::VOID_EXPRESSION) => self.lower_void(id),
-            // Named rather than left to the fallthrough below, for the reason
-            // `yield` is: an unlabelled refusal cannot be grouped, ranked or
-            // counted, so a construct that lands there is invisible to anyone
-            // deciding what to implement next.
-            //
-            // The suggestion is a real one and is checked: an arrow function
-            // with the same body lowers today. It is not a rewrite rule -- the
-            // two differ in `this` and `arguments`, and
-            // `internal/deprecate.ts` is a case that genuinely needs the
-            // first -- which is why this says "when" rather than "so".
-            // One that binds its own `this` is still refused, and says so.
-            Some(syntax::FUNCTION_EXPRESSION) => {
-                if self.binds_this(id) {
-                    Err(self.unsupported(id, &self.why_not_arrow(id)))
-                } else {
-                    self.lower_arrow(id)
-                }
-            }
             Some(syntax::REGULAR_EXPRESSION_LITERAL) => Err(self.unsupported(
                 id,
                 "a regular expression literal, which needs a regular expression engine",
@@ -51430,8 +51680,23 @@ impl<'a> FuncBuilder<'a> {
     /// same value and no field is needed for it. An arrow has no name to bind
     /// and a function expression's name is optional, which is why this sits
     /// here rather than beside the captures.
+    ///
+    /// **A named `function` expression is the same**: `function walk(k) {
+    /// return walk(k - 1) }` names itself, and only inside its own body. It was
+    /// refused as "a function used as a value" until a `function` that reads its
+    /// own `this` became a closure and recursed through `walk.call(this, …)`.
+    /// Its name is optional, and an unnamed one's first child is a parameter,
+    /// which has a symbol too, so the child has to be the name.
     fn bind_own_name(&mut self, id: NodeId, receiver: ValueId) {
-        if self.kind_of(id) == Some(syntax::FUNCTION_DECLARATION)
+        let names_itself = match self.kind_of(id) {
+            Some(syntax::FUNCTION_DECLARATION) => true,
+            Some(syntax::FUNCTION_EXPRESSION) => self
+                .children(id)
+                .first()
+                .is_some_and(|name| self.kind_of(*name) == Some(syntax::IDENTIFIER)),
+            _ => false,
+        };
+        if names_itself
             && let Some(name) = self.children(id).first()
             && let Some(symbol) = self.node(*name).symbol
         {
@@ -55446,6 +55711,9 @@ impl<'a> FuncBuilder<'a> {
         };
         if let Some(result) = self.optional_method_call(id, callee_node)? {
             return Ok(result);
+        }
+        if self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            self.check_this_is_passed(id)?;
         }
         let callee = self.lower_expression(callee_node)?;
         let Some(absent) = self.absence_of(callee_node, callee) else {
@@ -60333,10 +60601,7 @@ impl<'a> FuncBuilder<'a> {
         // `length` and `item`: lib.dom's `NodeListOf<T>.forEach`.
         if self.literal_name(member).as_deref() == Some("forEach")
             && let [callback] = arguments
-            && matches!(
-                self.kind_of(*callback),
-                Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
-            )
+            && self.inlines_as_a_callback(*callback)
             && self.delegated_collection(receiver_node).is_some()
         {
             return self
@@ -60398,6 +60663,7 @@ impl<'a> FuncBuilder<'a> {
         let ty = self
             .type_of(callee)
             .ok_or_else(|| self.unrepresentable(callee, "a field holding a function"))?;
+        self.check_this_is_passed(id)?;
         let origin = self.origin(id);
         let closure = self.push(OpKind::FieldGet { object, field }, ty, origin);
         self.call_through_closure(id, callee, closure, None, arguments)
@@ -70327,7 +70593,8 @@ impl<'a> FuncBuilder<'a> {
         self.coerce(this, &HirType::Erased, given)
     }
 
-    /// Which body a call of a function value reaches.
+    /// Which body a call of a function value reaches, and so which arguments it
+    /// takes.
     ///
     /// Split out because `apply` needs the same answer and supplies its
     /// arguments differently.
@@ -70336,7 +70603,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         callee_node: NodeId,
         receiver: ValueId,
-    ) -> Result<Callee, Diagnostic> {
+    ) -> Result<ClosureEntry, Diagnostic> {
         let HirType::Managed(ManagedType::Object(receiver_ty)) =
             self.values[receiver.0 as usize].ty
         else {
@@ -70381,7 +70648,14 @@ impl<'a> FuncBuilder<'a> {
                 .is_some_and(|info| generic_values::is_canonical(self.snapshot, info));
         let callee =
             if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR && !raising && !canonical_generic {
-                Callee::Direct(closure_names(closure_index(receiver_ty)).1)
+                // A body that reads its own `this` is named directly, with the
+                // call's: its `#call` is the wrapper that passes `undefined`.
+                let index = closure_index(receiver_ty);
+                if self.closures.get(index).is_some_and(|info| info.reads_this) {
+                    ClosureEntry::Receiving(receiving_call_name(index))
+                } else {
+                    ClosureEntry::Written(closure_names(index).1)
+                }
             } else if let Some(slot) = if raising {
                 self.hierarchy.raising_call_slot
             } else {
@@ -70396,7 +70670,7 @@ impl<'a> FuncBuilder<'a> {
                 // `closure_slot`'s own doc claims two closures at one index "cannot
                 // be confused for each other" *because* the call spells the
                 // signature.
-                Callee::Closure { slot }
+                ClosureEntry::Uniform(slot)
             } else {
                 return Err(self.unsupported(
                     id,
@@ -70719,7 +70993,7 @@ impl<'a> FuncBuilder<'a> {
         // the type's parameter kinds are what a call must fit -- which every
         // function of the type writes too (Q1). A direct call is obliged by
         // its callee's own parameters (`obligations`).
-        if matches!(callee, Callee::Closure { .. }) {
+        if matches!(callee, ClosureEntry::Uniform(_)) {
             for (position, (ty, _, rest)) in self.effective_parameters(id).into_iter().enumerate() {
                 if rest {
                     break;
@@ -70753,7 +71027,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         receiver: ValueId,
         this: Option<ValueId>,
-        callee: Callee,
+        callee: ClosureEntry,
         args: Vec<ValueId>,
     ) -> Result<ValueId, Diagnostic> {
         // The callee's return where it has one. See `returned_by`: for `f?.(x)`
@@ -70795,12 +71069,13 @@ impl<'a> FuncBuilder<'a> {
     /// the node it hangs off is the `sort` call, whose type is the array.
     ///
     /// `args` is the closure and then the written arguments; `this` is the call's
-    /// `this`, `None` for `undefined`. Only a uniform entry takes it
-    /// ([`super::UNIFORM_THIS`]); a written `#call` has none.
+    /// `this`, `None` for `undefined`. A uniform entry and a body that reads its
+    /// own `this` take it, after the closure ([`super::UNIFORM_THIS`]); a
+    /// written `#call` has none.
     fn call_a_closure_entry(
         &mut self,
         id: NodeId,
-        callee: Callee,
+        callee: ClosureEntry,
         this: Option<ValueId>,
         args: Vec<ValueId>,
         ty: &HirType,
@@ -70823,31 +71098,39 @@ impl<'a> FuncBuilder<'a> {
         // reading a concrete result where it returns `erased` -- which the probe
         // showed as `call.closure[2] %0(%0) : f64` against an entry returning
         // `erased`, and C would have compiled.
-        let erased_entry = matches!(
-            callee,
-            Callee::Closure { slot }
-                if Some(slot) == self.hierarchy.erased_call_slot
-                    || Some(slot) == self.hierarchy.raising_call_slot
-        );
-        if !erased_entry {
-            return Ok(self.push(
-                OpKind::Call {
-                    callee,
-                    args,
-                    frame: None,
-                },
-                ty,
-                origin,
-            ));
-        }
+        let slot = match callee {
+            ClosureEntry::Written(name) => {
+                return Ok(self.push(
+                    OpKind::Call {
+                        callee: Callee::Direct(name),
+                        args,
+                        frame: None,
+                    },
+                    ty,
+                    origin,
+                ));
+            }
+            ClosureEntry::Receiving(name) => {
+                let mut args = args;
+                let this = self.erased_this(this, id)?;
+                args.insert(super::UNIFORM_THIS, this);
+                return Ok(self.push(
+                    OpKind::Call {
+                        callee: Callee::Direct(name),
+                        args,
+                        frame: None,
+                    },
+                    ty,
+                    origin,
+                ));
+            }
+            ClosureEntry::Uniform(slot) => slot,
+        };
         let width = self.hierarchy.erased_call_arity;
         let mut erased = Vec::with_capacity(width + super::UNIFORM_ARGUMENTS);
         let mut args = args.into_iter();
         erased.extend(args.next());
-        let this = match this {
-            Some(this) => self.coerce(this, &HirType::Erased, id)?,
-            None => self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone()),
-        };
+        let this = self.erased_this(this, id)?;
         erased.push(this);
         // More arguments than any closure in this program reads are dropped,
         // as JavaScript drops them; see [`Hierarchy::erased_call_arity`].
@@ -70863,7 +71146,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let answered = self.push(
             OpKind::Call {
-                callee,
+                callee: Callee::Closure { slot },
                 args: erased,
                 frame: None,
             },
@@ -70895,6 +71178,52 @@ impl<'a> FuncBuilder<'a> {
             HirType::Erased | HirType::Void | HirType::Never => answered,
             _ => self.push(OpKind::Unerase { value: answered }, ty, origin),
         })
+    }
+
+    /// Refused where a call through a member holds no object to pass as its
+    /// `this` -- `o.f?.()` reads `o.f` as a value, and an `ObjC` field call reads
+    /// the field -- and some `function` in the program reads its own `this`,
+    /// which `undefined` would then silently replace. A program with no such
+    /// function cannot observe the difference, and before
+    /// `docs/function-receivers.md` step 2 a program with one did not compile
+    /// at all, so this narrows nothing that compiled. Handing these the object
+    /// is the remaining half of that step.
+    fn check_this_is_passed(&self, id: NodeId) -> Result<(), Diagnostic> {
+        if self.closures.iter().any(|info| info.reads_this) {
+            return Err(self.unsupported(
+                id,
+                "a call through a member that does not yet pass the object as `this` \
+                 (`o.f?.()`, or an ObjC field), in a program where a `function` reads its own \
+                 `this`",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Whether a callback written at the call may have its body lowered in
+    /// place, as `forEach` and `map` lower an arrow's, rather than called.
+    ///
+    /// **Not a `function` that reads its own `this`.** Lowered in place, its
+    /// `this` read the enclosing one -- a method's object, where JavaScript
+    /// passes `undefined` to a callback given no `thisArg` -- silently, and it
+    /// did so before such a function compiled anywhere else, because this path
+    /// never asked. Called, it gets the `this` the call passes.
+    fn inlines_as_a_callback(&self, callback: NodeId) -> bool {
+        match self.kind_of(callback) {
+            Some(syntax::ARROW_FUNCTION) => true,
+            Some(syntax::FUNCTION_EXPRESSION) => !self.binds_this(callback),
+            _ => false,
+        }
+    }
+
+    /// A call's `this` as an entry that takes one takes it: erased, and
+    /// `undefined` where the call has none.
+    fn erased_this(&mut self, this: Option<ValueId>, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if let Some(this) = this {
+            return self.coerce(this, &HirType::Erased, id);
+        }
+        let origin = self.origin(id);
+        Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin))
     }
 
     /// The `Math` or `Number` member a callee names, if it names one.
@@ -73697,10 +74026,7 @@ impl<'a> FuncBuilder<'a> {
 
         if name == "forEach"
             && let [callback] = arguments
-            && matches!(
-                self.kind_of(*callback),
-                Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
-            )
+            && self.inlines_as_a_callback(*callback)
         {
             return self.lower_table_for_each(id, receiver, table, *callback);
         }
@@ -74064,6 +74390,14 @@ impl<'a> FuncBuilder<'a> {
             method,
         } = walked;
         let backwards = direction == Direction::Backward;
+        if !self.inlines_as_a_callback(callback) {
+            return Err(self.unsupported(
+                callback,
+                &format!(
+                    "a `{method}` callback that reads its own `this`, whose body is not inlined"
+                ),
+            ));
+        }
         let (parameters, body) = self.callback_shape(callback, kind, method)?;
         let names = parameters.as_slice();
         // Where the element is, which is not "the last one" once an index may

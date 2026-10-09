@@ -85,11 +85,21 @@ pub fn monomorphize(program: &mut Program) -> usize {
         // not verify.
         //
         // Recorded as serving itself, so the same request is not found again.
-        if super::is_closure_type(request.concrete)
-            && !program
-                .funcs
-                .iter()
-                .any(|func| func.name == super::lower::closure_method(request.concrete))
+        //
+        // **The entry the clone names**, asked once: a closure's written
+        // `#call`, or, for one that reads its own `this`, the body taking it
+        // (`Program::receiving`). Asking for the `#call` there refused every
+        // such clone, because nothing calls that wrapper but the runtime, so
+        // reachability had removed it.
+        let entry = super::is_closure_type(request.concrete).then(|| {
+            let written = super::lower::closure_method(request.concrete);
+            match program.receiving.get(&written) {
+                Some(body) => (body.clone(), true),
+                None => (written, false),
+            }
+        });
+        if let Some((target, _)) = &entry
+            && !program.funcs.iter().any(|func| &func.name == target)
         {
             let original = program.funcs[request.callee].name.clone();
             clones.insert((original.clone(), request.slot, request.concrete), original);
@@ -110,12 +120,20 @@ pub fn monomorphize(program: &mut Program) -> usize {
         // check is what keeps a clone from naming a function reachability
         // removed -- so this only fails for a `concrete` that is not a closure
         // type at all, where there is nothing to make direct.
-        let target = super::lower::closure_method(request.concrete);
-        let written = program
-            .funcs
-            .iter()
-            .find(|func| func.name == target)
-            .map(|func| (target, func.params.len(), func.return_type.clone()));
+        let written = entry.and_then(|(target, takes_this)| {
+            program
+                .funcs
+                .iter()
+                .find(|func| func.name == target)
+                .map(|func| {
+                    (
+                        target,
+                        func.params.len(),
+                        func.return_type.clone(),
+                        takes_this,
+                    )
+                })
+        });
         let result_absent = super::erased_entry_absent(program, request.concrete);
         if let Some(written) = written {
             retype_parameter(
@@ -258,7 +276,7 @@ fn retype_parameter(
     slot: u32,
     concrete: TypeId,
     erased_slot: Option<u32>,
-    written: (String, usize, HirType),
+    written: (String, usize, HirType, bool),
     result_absent: super::Absent,
 ) {
     let Some(param) = clone
@@ -284,7 +302,7 @@ fn retype_parameter(
     // surgery, shared with `fields::devirtualize` because both arrive at the same
     // question from different evidence. The receiver needs no re-typing here: the
     // parameter *is* the class, which is what this pass just decided.
-    let (name, arity, returns) = written;
+    let (name, arity, returns, takes_this) = written;
     let sites: Vec<(usize, bool)> = clone
         .values
         .iter()
@@ -315,6 +333,7 @@ fn retype_parameter(
             arity,
             returns: &returns,
             result_absent,
+            takes_this,
         };
         super::call_directly(clone, index, written, uniform, None);
     }
