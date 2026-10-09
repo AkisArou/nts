@@ -1,0 +1,6 @@
+{
+  "//": "Node's types, as runtime/react/tsconfig.native.json asks for them: the condition this blocker is about.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "compilerOptions": { "lib": ["ESNext", "DOM"], "types": ["node"] },
+  "include": ["src"]
+}
