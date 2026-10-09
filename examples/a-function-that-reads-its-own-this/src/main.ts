@@ -157,3 +157,28 @@ export function throughAParameterGivenOne(n: number): number {
   };
   return callOnce(twice, new Counter(n & 7), 2);
 }
+
+class Optional {
+  count: number;
+  read?: (this: Optional, plus: number) => number;
+  constructor(count: number, reads: boolean) {
+    this.count = count;
+    if (reads) {
+      this.read = function (this: Optional, plus: number): number {
+        return this.count + plus;
+      };
+    }
+  }
+}
+
+/**
+ * `o.f?.(x)` passes `o` as `o.f(x)` does, from the object the read of `o.f`
+ * was made on -- with the function there, without it, and through an
+ * `o?.` that may itself be absent.
+ */
+export function throughAnOptionalCall(n: number): number {
+  const with_ = new Optional(n & 7, true);
+  const without = new Optional(1, false);
+  const maybe: Optional | null = (n & 1) === 0 ? with_ : null;
+  return (with_.read?.(2) ?? -1) * 100 + (without.read?.(2) ?? -1) * 10 + (maybe?.read?.(1) ?? -2);
+}

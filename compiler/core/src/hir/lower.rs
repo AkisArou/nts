@@ -19838,6 +19838,10 @@ struct FuncBuilder<'a> {
     /// been tested and found present, each with that receiver
     /// ([`Self::lower_chain`]): lowered as the plain link it is in that arm.
     chain_present: rustc_hash::FxHashMap<NodeId, ValueId>,
+    /// The object each member read was made on, by the read's node
+    /// ([`Self::member_of`]): the `this` a call of what it read passes, which
+    /// `o.f?.()` needs after lowering `o.f` as a value.
+    read_from: rustc_hash::FxHashMap<NodeId, ValueId>,
     /// While a `super.m()` to an Objective-C superclass is lowered, the
     /// program's class it is written in: the message it builds goes to the
     /// superclass's implementation (`native::Send::super_of`).
@@ -20134,6 +20138,7 @@ impl<'a> FuncBuilder<'a> {
             unboxed: rustc_hash::FxHashMap::default(),
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
+            read_from: rustc_hash::FxHashMap::default(),
             super_send: None,
             forced_slot: None,
         }
@@ -29216,7 +29221,7 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(
                     id,
                     &format!(
-                        "a `function` whose `this` is declared as `{}`, which has no test this \
+                        "a `function` whose `this` is declared as {}, which has no test this \
                          compiler can make at the call",
                         describe(self.snapshot, declared)
                     ),
@@ -29246,7 +29251,7 @@ impl<'a> FuncBuilder<'a> {
         self.switch_to(refused);
         let what = self.push(
             OpKind::ConstString(format!(
-                "a `function` called with a `this` that is not a `{named}`, which its body is \
+                "a `function` called with a `this` that is not {named}, which its body is \
                  read at"
             )),
             HirType::Managed(ManagedType::String),
@@ -55758,16 +55763,19 @@ impl<'a> FuncBuilder<'a> {
         if let Some(result) = self.optional_method_call(id, callee_node)? {
             return Ok(result);
         }
-        if self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+        let callee = self.lower_expression(callee_node)?;
+        // `o.f?.()` passes `o`, as `o.f()` does: the object the read of `o.f`
+        // was made on, lowered before anything here branches.
+        let this = self.read_from.get(&callee_node).copied();
+        if this.is_none() && self.kind_of(callee_node) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             self.check_this_is_passed(id)?;
         }
-        let callee = self.lower_expression(callee_node)?;
         let Some(absent) = self.absence_of(callee_node, callee) else {
             // A callee with no room for an absence is always there, so this is
             // an ordinary call. TypeScript permits the shape and reports it as
             // unnecessary.
             let arguments = self.arguments_of(id);
-            return self.call_through_closure(id, callee_node, callee, None, &arguments);
+            return self.call_through_closure(id, callee_node, callee, this, &arguments);
         };
         let present = self.present_of(callee_node, callee);
         self.lower_branching_value(
@@ -56395,6 +56403,7 @@ impl<'a> FuncBuilder<'a> {
         value: ValueId,
         member_name: &str,
     ) -> Result<ValueId, Diagnostic> {
+        self.read_from.insert(id, value);
         // The other half of the iterator-result decision, and the half that
         // makes the first one honest. See `refuse_unguarded_iterator_value`.
         self.refuse_unguarded_iterator_value(id, value, member_name)?;
@@ -56844,7 +56853,8 @@ impl<'a> FuncBuilder<'a> {
                     None => callee,
                 };
                 let arguments = self.arguments_of(id);
-                self.call_through_closure(id, callee_node, callee, None, &arguments)
+                let this = self.read_from.get(&callee_node).copied();
+                self.call_through_closure(id, callee_node, callee, this, &arguments)
             }
             Branch::MethodOn(receiver, receiver_node, member, present) => {
                 // Here and not before the branch, for the reason above.
@@ -71227,13 +71237,13 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// Refused where a call through a member holds no object to pass as its
-    /// `this` -- `o.f?.()` reads `o.f` as a value, and an `ObjC` field call reads
-    /// the field -- and some `function` in the program reads its own `this`,
-    /// which `undefined` would then silently replace. A program with no such
+    /// `this` -- an `o.f?.()` whose read of `o.f` recorded none
+    /// ([`Self::read_from`]: a static, a namespace member), and an `ObjC` field
+    /// call -- and some `function` in the program reads its own `this`, which
+    /// `undefined` would then silently replace. A program with no such
     /// function cannot observe the difference, and before
     /// `docs/function-receivers.md` step 2 a program with one did not compile
-    /// at all, so this narrows nothing that compiled. Handing these the object
-    /// is the remaining half of that step.
+    /// at all, so this narrows nothing that compiled.
     fn check_this_is_passed(&self, id: NodeId) -> Result<(), Diagnostic> {
         if self.closures.iter().any(|info| info.reads_this) {
             return Err(self.unsupported(

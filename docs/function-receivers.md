@@ -144,8 +144,8 @@ otherwise; it is corrected in step 2.
   its effects and dropped; it is now lowered expecting an erased value, as an
   argument to an `unknown` parameter is.
 
-`o.f?.(x)` and an ObjC field call do not hold `o` at the call yet; they pass
-`undefined` until step 2 gives them the object. `call_directly`, the one
+As built in step 1, `o.f?.(x)` and an ObjC field call passed `undefined`;
+`o.f?.(x)` passes its object since (below). `call_directly`, the one
 place a uniform call becomes a direct one, drops the `this` with the padding.
 On the JVM, the typed face passes `undefined` and the lambda adapter skips it.
 `core/tests/function_value_this.rs` asserts what each kind of call passes,
@@ -186,11 +186,16 @@ Found and fixed on the way:
 - A named `function` expression could not call itself by its name
   (`bind_own_name` bound only declarations).
 
+`o.f?.()` passes `o` too (2026-10-09): `member_of` records the object each
+member read was made on (`read_from`), and the optional call reads it back for
+the member it called. The object is lowered before the call branches, so it
+dominates the call.
+
 Not yet, and refused rather than wrong:
-- `o.f?.()` and an ObjC field call read `o.f` as a value and hold no `o` to
-  pass. In a program where some `function` reads its own `this`, they are
-  refused (`check_this_is_passed`). Before step 2 such a program did not compile
-  at all.
+- an `o.f?.()` whose read of `o.f` recorded no object (a static, a namespace
+  member), and an ObjC field call. In a program where some `function` reads its
+  own `this`, they are refused (`check_this_is_passed`). Before step 2 such a
+  program did not compile at all.
 - A generator `function` that reads `this`: its body runs at the first
   `next()`, and a frame has no place for the `this` yet.
 - `function` declarations and method values reading `this`:
