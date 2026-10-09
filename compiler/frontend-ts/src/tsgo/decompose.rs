@@ -1571,7 +1571,7 @@ impl<'a> Decomposer<'a> {
                 name: if symbol.name.is_empty() {
                     format!("arg{index}")
                 } else {
-                    symbol.name.clone()
+                    written_name(&symbol.name).to_owned()
                 },
                 ty,
                 // Neither `SymbolFlagsOptional` nor `CheckFlagsOptionalParameter`
@@ -1808,7 +1808,20 @@ fn to_constant(value: &serde_json::Value) -> Option<ConstantValue> {
 /// of that refusal and the largest single blocker in it. It also made `own`
 /// false for every private member, because that is decided by comparing
 /// against the *declaration's* name, which is never mangled.
+///
+/// **And a name the program begins with `__` is escaped**: the checker interns
+/// it with one more `_` (`escapeLeadingUnderscores`), so its own names --
+/// `__function`, `__call`, `__type`, the private mangling above -- can never
+/// collide with one a program writes. Three leading underscores are therefore
+/// always an escaped program name, and two never are. Carried through, a field
+/// `__snapshot` was `___snapshot` in its layout while every access said
+/// `__snapshot`, and was refused as a member its own class does not declare --
+/// React's `__reactInternalSnapshotBeforeUpdate`
+/// (`examples/a-field-whose-name-starts-with-two-underscores`).
 pub(super) fn written_name(interned: &str) -> &str {
+    if interned.starts_with("___") {
+        return &interned[1..];
+    }
     let Some(rest) = interned.strip_prefix("__#") else {
         return interned;
     };

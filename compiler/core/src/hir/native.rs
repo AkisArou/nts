@@ -760,9 +760,8 @@ pub(crate) fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(
         return None;
     }
     // Not a marker: `Opaque<T>`, `Class<...>`, a closure's or a brand's are
-    // anonymous object types too, made of readonly `__`-named properties (the
-    // checker escapes the name to `___`), and each is already a type of its
-    // own here. A label is an ordinary name.
+    // anonymous object types too, made of readonly `__`-named properties, and
+    // each is already a type of its own here. A label is an ordinary name.
     if properties
         .iter()
         .any(|p| p.readonly || p.name.starts_with("__"))
@@ -1519,7 +1518,7 @@ pub fn handle_box(family: Family) -> Option<(super::TypeId, Pointee, &'static st
             }),
             "HandleBoxObjc",
         )),
-        // `interface` is `GObjectInterface`'s mark (`___c_interface`), not
+        // `interface` is `GObjectInterface`'s mark (`__c_interface`), not
         // "a COM interface": every Windows Runtime handle is one of those.
         Family::Com => Some((
             super::TypeId(super::HANDLE_BOX_COM),
@@ -3149,7 +3148,7 @@ pub(crate) fn event_slots(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(St
         let TypeKind::Object { properties } = kind_of(*part)? else {
             return None;
         };
-        let event = properties.iter().find(|p| p.name == "___c_event")?;
+        let event = properties.iter().find(|p| p.name == "__c_event")?;
         let defined = match kind_of(event.ty)? {
             TypeKind::Union(members) => members
                 .iter()
@@ -3205,7 +3204,7 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
         match kind_of(*part)? {
             TypeKind::Function(_) => function = Some(*part),
             TypeKind::Object { properties } => {
-                let closure = properties.iter().find(|p| p.name == "___c_closure")?;
+                let closure = properties.iter().find(|p| p.name == "__c_closure")?;
                 let TypeKind::Literal(LiteralValue::String(kind)) = kind_of(defined(closure.ty)?)?
                 else {
                     return None;
@@ -3213,11 +3212,11 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
                 marker = Some(kind.clone());
                 notify = properties
                     .iter()
-                    .find(|p| p.name == "___c_notify")
+                    .find(|p| p.name == "__c_notify")
                     .and_then(|p| defined(p.ty));
                 iid = properties
                     .iter()
-                    .find(|p| p.name == "___c_iid")
+                    .find(|p| p.name == "__c_iid")
                     .and_then(|p| defined(p.ty))
                     .and_then(|id| match kind_of(id)? {
                         TypeKind::Literal(LiteralValue::String(iid)) => {
@@ -3344,7 +3343,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         let markers = match kind_of(*part)? {
             TypeKind::Object { properties }
                 if !properties.is_empty()
-                    && properties.iter().all(|p| p.name.starts_with("___c_")) =>
+                    && properties.iter().all(|p| p.name.starts_with("__c_")) =>
             {
                 properties
             }
@@ -3357,15 +3356,15 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         };
         for property in markers {
             match property.name.as_str() {
-                "___c_strings" => strings = Some(text(property.ty)?),
-                "___c_bytes" => bytes = Some(text(property.ty)?),
-                "___c_elements" => elements = Some(text(property.ty)?),
-                "___c_handles" => handles = Some(text(property.ty)?),
-                "___c_records" => records = Some(defined(property.ty)?),
-                "___c_filled" => filled = true,
-                "___c_booleans" => booleans = Some(text(property.ty)?),
-                "___c_count" => count = Some(defined(property.ty)?),
-                "___c_count_at" => after = text(property.ty)? == "after",
+                "__c_strings" => strings = Some(text(property.ty)?),
+                "__c_bytes" => bytes = Some(text(property.ty)?),
+                "__c_elements" => elements = Some(text(property.ty)?),
+                "__c_handles" => handles = Some(text(property.ty)?),
+                "__c_records" => records = Some(defined(property.ty)?),
+                "__c_filled" => filled = true,
+                "__c_booleans" => booleans = Some(text(property.ty)?),
+                "__c_count" => count = Some(defined(property.ty)?),
+                "__c_count_at" => after = text(property.ty)? == "after",
                 _ => return None,
             }
         }
@@ -3588,7 +3587,7 @@ fn booleans_array(
 }
 
 /// An array the callee fills (`FilledHandles`, `FilledStrings`,
-/// `FilledArray` in `winrt:types`): the one marker beside `___c_filled`
+/// `FilledArray` in `winrt:types`): the one marker beside `__c_filled`
 /// says of what. C's parameter is what the unfilled marker's is -- a block
 /// of handles, of `HSTRING`s, of the struct -- written instead of read.
 fn filled_array(
@@ -4254,7 +4253,7 @@ fn consumed(
     parameter: &nts_semantic_schema::ParameterRecord,
     ty: &Type,
 ) -> Result<bool, String> {
-    if !branded(snapshot, parameter.ty, "___c_consumed") {
+    if !branded(snapshot, parameter.ty, "__c_consumed") {
         return Ok(false);
     }
     if !matches!(ty, Type::Pointer(pointee) if pointee.counting().is_some()) {
@@ -4274,7 +4273,7 @@ fn consumed(
 /// `Owned` on a handle the program does not count: a reference handed over
 /// that nothing would ever drop.
 fn owned_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<bool, String> {
-    let owned = branded(snapshot, ty, "___c_owned");
+    let owned = branded(snapshot, ty, "__c_owned");
     // `Owned<Erased<GObject>>`, a `gpointer` the caller owns: C's type is
     // `void *`, and the value is read back as the handle, so the handle's
     // family is what counts it.
@@ -4324,7 +4323,7 @@ fn declared_result(
     let declared = parts.iter().find_map(|part| match kind(*part) {
         Some(TypeKind::Object { properties }) => match properties.as_slice() {
             [property]
-                if property.name == "___c_declared" && property.optional && property.readonly =>
+                if property.name == "__c_declared" && property.optional && property.readonly =>
             {
                 Some(property.ty)
             }
@@ -4789,7 +4788,7 @@ pub(crate) fn is_branded_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
                 |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
             let brand = |id: TypeId| {
                 matches!(kind(id), Some(TypeKind::Object { properties })
-                    if matches!(properties.as_slice(), [p] if p.name == "___c_bool" && p.optional && p.readonly
+                    if matches!(properties.as_slice(), [p] if p.name == "__c_bool" && p.optional && p.readonly
                         && declared_in(snapshot, p, TYPES_MODULE)))
             };
             (literal(*a) && brand(*b)) || (literal(*b) && brand(*a))
@@ -4837,26 +4836,24 @@ pub(crate) fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option
             };
             match properties.as_slice() {
                 [property]
-                    if property.name == "___c_utf16" && property.optional && property.readonly =>
+                    if property.name == "__c_utf16" && property.optional && property.readonly =>
                 {
                     Some(Encoding::Utf16)
                 }
                 [property]
-                    if property.name == "___c_hstring"
-                        && property.optional
-                        && property.readonly =>
+                    if property.name == "__c_hstring" && property.optional && property.readonly =>
                 {
                     Some(Encoding::HString)
                 }
                 [property]
-                    if property.name == "___c_view" && property.optional && property.readonly =>
+                    if property.name == "__c_view" && property.optional && property.readonly =>
                 {
                     Some(Encoding::View)
                 }
                 // `CString`: UTF-8 said out loud, where a plain `string` would
                 // be an `NSString` -- in an Objective-C message.
                 [property]
-                    if property.name == "___c_utf8" && property.optional && property.readonly =>
+                    if property.name == "__c_utf8" && property.optional && property.readonly =>
                 {
                     Some(Encoding::Utf8)
                 }
@@ -4864,7 +4861,7 @@ pub(crate) fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option
                 // the call bridges (`bridge_strings`); read here as the text
                 // it is.
                 [property]
-                    if property.name == "___objc_nsstring"
+                    if property.name == "__objc_nsstring"
                         && property.optional
                         && property.readonly =>
                 {
@@ -5527,7 +5524,7 @@ fn slot_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
                 let [property] = properties.as_slice() else {
                     return None;
                 };
-                if property.name != "___c_of" || !property.readonly || !property.optional {
+                if property.name != "__c_of" || !property.readonly || !property.optional {
                     return None;
                 }
                 of = Some(present_scalar(snapshot, property.ty)?);
@@ -5566,7 +5563,7 @@ fn labelled(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
                 {
                     continue;
                 }
-                let found = match property.name.strip_prefix('_')? {
+                let found = match property.name.as_str() {
                     // `AsNumber<C>`: a C kind wider than a number holds exactly,
                     // carried as one.
                     "__AsNumber" => {
@@ -5683,7 +5680,7 @@ fn enum_members_scalar(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Optio
         snapshot,
         members,
         |literal| matches!(literal, LiteralValue::Number(_)),
-        "___c_enum",
+        "__c_enum",
     )
 }
 
@@ -5705,7 +5702,7 @@ fn int_bool_members(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Option<S
         snapshot,
         members,
         |literal| matches!(literal, LiteralValue::Boolean(_)),
-        "___c_bool",
+        "__c_bool",
     )
 }
 

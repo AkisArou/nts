@@ -39,11 +39,11 @@ fn marker(snapshot: &SemanticSnapshot, ty: TypeId, name: &str) -> Option<TypeId>
 }
 
 /// `GObjectInterface`'s own tag, from its marker's key: the optional
-/// `__c_interface{Tag}` (escaped `___c_interface{Tag}` in the snapshot).
+/// `__c_interface{Tag}`.
 fn interface_tag(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Object { properties } => properties.iter().find_map(|p| {
-            let tag = p.name.strip_prefix("___c_interface")?;
+            let tag = p.name.strip_prefix("__c_interface")?;
             (!tag.is_empty() && p.readonly && p.optional && p.kind == MemberKind::Field)
                 .then(|| tag.to_owned())
         }),
@@ -84,7 +84,7 @@ pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
 /// changes. Any other type is itself.
 pub(crate) fn stored(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
     let fields = |part: TypeId| {
-        property(snapshot, part, "___c_fields").is_some_and(|p| p.readonly && p.optional)
+        property(snapshot, part, "__c_fields").is_some_and(|p| p.readonly && p.optional)
     };
     match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
         Some(TypeKind::Union(parts)) => match parts.as_slice() {
@@ -98,14 +98,14 @@ pub(crate) fn stored(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
 
 /// An opaque pointee: `Opaque<Tag>`, or `Class<Tag, Parent>` with its chain.
 fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
-    if let Some(tag) = marker(snapshot, ty, "___c_opaque") {
+    if let Some(tag) = marker(snapshot, ty, "__c_opaque") {
         return Some(Pointee::Opaque(text(snapshot, tag)?.into()));
     }
     // `Class<Tag, Parent>` -- an opaque pointee with a hierarchy. The chain is
     // a tuple of string literals, root first, ending in a `...string[]` rest,
     // which the snapshot flattens to one trailing `string` element: the tags
     // are the literal prefix and the last of them is this handle's own.
-    let chain = marker(snapshot, ty, "___c_chain")?;
+    let chain = marker(snapshot, ty, "__c_chain")?;
     let TypeKind::Tuple(elements) = &snapshot.types.get(chain.0 as usize)?.kind else {
         return None;
     };
@@ -125,13 +125,13 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     };
     // `ObjcClass<Tag, Parent>` is `Class<Tag, Parent>` with this brand beside
     // it: the same chain, an object the program counts. `GObjectClass` the same.
-    let family = if marker(snapshot, ty, "___objc").is_some() {
+    let family = if marker(snapshot, ty, "__objc").is_some() {
         super::Family::Objc
-    } else if marker(snapshot, ty, "___gobject").is_some() {
+    } else if marker(snapshot, ty, "__gobject").is_some() {
         super::Family::GObject
-    } else if marker(snapshot, ty, "___com").is_some() {
+    } else if marker(snapshot, ty, "__com").is_some() {
         super::Family::Com
-    } else if let Some(pair) = marker(snapshot, ty, "___c_host") {
+    } else if let Some(pair) = marker(snapshot, ty, "__c_host") {
         // `HostClass`: the pair is two string literals. Anything else -- a
         // subclass of a parent that named none -- has no family to give, and
         // a handle taken for a plain C pointer would be held uncounted where
@@ -168,7 +168,7 @@ pub(crate) fn erased_handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<P
         },
         _ => ty,
     };
-    property(snapshot, ty, "___c_erased").filter(|p| p.optional && p.readonly)?;
+    property(snapshot, ty, "__c_erased").filter(|p| p.optional && p.readonly)?;
     handle(snapshot, ty)
 }
 
@@ -191,9 +191,9 @@ pub(crate) fn boxed(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<BoxedReco
         },
         _ => ty,
     };
-    let get_type = property(snapshot, ty, "___c_boxed").filter(|p| p.optional && p.readonly)?;
+    let get_type = property(snapshot, ty, "__c_boxed").filter(|p| p.optional && p.readonly)?;
     let get_type = optional_text(snapshot, get_type.ty)?.to_owned();
-    let size = property(snapshot, ty, "___c_size")
+    let size = property(snapshot, ty, "__c_size")
         .filter(|p| p.optional && p.readonly)
         .and_then(|p| optional_number(snapshot, p.ty))
         .unwrap_or(0);
@@ -225,7 +225,7 @@ fn optional_number(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<u64> {
 #[must_use]
 pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::sync::Arc<Record>> {
     let ty = stored(snapshot, ty);
-    let brand = property(snapshot, ty, "___c_by_value")?;
+    let brand = property(snapshot, ty, "__c_by_value")?;
     if !(brand.readonly && brand.optional && brand.kind == MemberKind::Field) {
         return None;
     }
@@ -243,7 +243,7 @@ pub(crate) fn by_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::s
 /// optional, so any object of the fields' shape is one.
 #[must_use]
 pub(crate) fn copied(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::sync::Arc<Record>> {
-    let marker = property(snapshot, ty, "___c_copied")?;
+    let marker = property(snapshot, ty, "__c_copied")?;
     if !(marker.readonly && marker.optional && marker.kind == MemberKind::Field) {
         return None;
     }
@@ -271,7 +271,7 @@ pub(crate) fn copied_struct(
 /// where that struct holds a Windows Runtime string: no native type at all,
 /// since no storage could own the string. What a refusal of one says.
 pub(crate) fn string_struct_as_storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
-    let element = marker(snapshot, stored(snapshot, ty), "___c_pointer")?;
+    let element = marker(snapshot, stored(snapshot, ty), "__c_pointer")?;
     if structure(snapshot, element, &mut Vec::new(), false, false).is_some() {
         return None;
     }
@@ -638,7 +638,7 @@ fn syntax_children(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
 /// `ObjcMeta<Tag>`: the name of the Objective-C class whose class object a
 /// value of this type is.
 pub(crate) fn objc_meta(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
-    marker(snapshot, ty, "___objc_meta")
+    marker(snapshot, ty, "__objc_meta")
         .and_then(|tag| text(snapshot, tag))
         .map(str::to_owned)
 }
@@ -647,7 +647,7 @@ pub(crate) fn objc_meta(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Strin
 /// managed JS object is not constructing that storage.
 #[must_use]
 pub fn is_layout(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    marker(snapshot, ty, "___c_struct").is_some() || marker(snapshot, ty, "___c_union").is_some()
+    marker(snapshot, ty, "__c_struct").is_some() || marker(snapshot, ty, "__c_union").is_some()
 }
 
 fn pointer_within(
@@ -703,12 +703,11 @@ fn pointer_body(
         // `const GtkBitset *`. The marker is optional, so a plain handle is
         // assignable to it, which is C's own qualification conversion.
         let constant =
-            property(snapshot, ty, "___c_const").is_some_and(|p| p.optional && p.readonly);
+            property(snapshot, ty, "__c_const").is_some_and(|p| p.optional && p.readonly);
         // `Erased<H>` -- the same handle, spelled `void *` where C erases it,
         // and `const void *` as `Const<Erased<H>>`: a `GCompareDataFunc`'s
         // `gconstpointer` item.
-        let erased =
-            property(snapshot, ty, "___c_erased").is_some_and(|p| p.optional && p.readonly);
+        let erased = property(snapshot, ty, "__c_erased").is_some_and(|p| p.optional && p.readonly);
         if erased {
             return Some(if constant {
                 Pointee::Const(Box::new(Pointee::Void))
@@ -725,7 +724,7 @@ fn pointer_body(
     // `Flexible<T>` -- `T name[]`, storage with no extent. Read before the
     // pointer cases for the reason the others are: it is the thing a pointer to
     // it would point at, not a pointer.
-    if let Some(element) = marker(snapshot, ty, "___c_flexible") {
+    if let Some(element) = marker(snapshot, ty, "__c_flexible") {
         return Some(super::Pointee::Flexible(Box::new(storage(
             snapshot, element,
         )?)));
@@ -734,14 +733,14 @@ fn pointer_body(
     // for the reason `CArray` is: it is not a pointer, and not a thing anything
     // may point at.
     //
-    // The marker is spelled with **three** leading underscores here and two in
-    // `libc.d.ts`. That is not a typo on either side: TypeScript escapes a
-    // property name beginning with `__` by prefixing another one, so `__c_bits`
-    // is `___c_bits` by the time it reaches a snapshot. Every native marker in
-    // this file has the same shape, and getting it wrong is silent -- the
-    // lookup simply never matches and the type falls through to "not native".
-    if let Some(unit) = marker(snapshot, ty, "___c_bits")
-        && let Some(width) = marker(snapshot, ty, "___c_width")
+    // The marker is spelled as `libc.d.ts` writes it. TypeScript escapes a
+    // name beginning with `__` by prefixing another `_`, and every marker here
+    // was spelled with three until the frontend gave every name back as the
+    // program wrote it (`written_name`); getting the spelling wrong is silent --
+    // the lookup simply never matches and the type falls through to "not
+    // native".
+    if let Some(unit) = marker(snapshot, ty, "__c_bits")
+        && let Some(width) = marker(snapshot, ty, "__c_width")
     {
         let TypeKind::Literal(LiteralValue::Number(width)) =
             &snapshot.types.get(width.0 as usize)?.kind
@@ -778,8 +777,8 @@ fn pointer_body(
     // `CArray<T, N>` -- storage of N elements inline. Read before the pointer
     // cases because it is not a pointer: it is the thing a pointer to it would
     // point at, and the length is part of the layout rather than of a value.
-    if let Some(element) = marker(snapshot, ty, "___c_array")
-        && let Some(count) = marker(snapshot, ty, "___c_length")
+    if let Some(element) = marker(snapshot, ty, "__c_array")
+        && let Some(count) = marker(snapshot, ty, "__c_length")
     {
         let TypeKind::Literal(LiteralValue::Number(length)) =
             &snapshot.types.get(count.0 as usize)?.kind
@@ -820,13 +819,13 @@ fn pointer_body(
             length,
         });
     }
-    let element = marker(snapshot, ty, "___c_pointer")?;
+    let element = marker(snapshot, ty, "__c_pointer")?;
     // `ConstPtr<T>` is `Ptr<T>` without the writable marker. The marker sits on
     // the *mutable* type on purpose: the const one is then the smaller of the
     // two, so a `Ptr<T>` satisfies a `ConstPtr<T>` and not the reverse, which is
     // exactly the one direction C converts. A marker on the const type would
     // invert that and make every call site convert explicitly.
-    let writable = marker(snapshot, ty, "___c_writable").is_some();
+    let writable = marker(snapshot, ty, "__c_writable").is_some();
     let qualify = |pointee: Pointee| {
         if writable {
             pointee
@@ -884,13 +883,13 @@ fn structure(
 ) -> Option<Record> {
     // `Struct<F, Tag>` and `Union<F, Tag>` differ in one marker and nothing
     // else: the same member list, read the same way, laid out differently.
-    let (shape, kind) = match marker(snapshot, ty, "___c_struct") {
+    let (shape, kind) = match marker(snapshot, ty, "__c_struct") {
         Some(shape) => (shape, RecordKind::Struct),
-        None => (marker(snapshot, ty, "___c_union")?, RecordKind::Union),
+        None => (marker(snapshot, ty, "__c_union")?, RecordKind::Union),
     };
     // `Packed<T>` intersects a marker in, so this reads through to the `T`.
-    let packed = marker(snapshot, ty, "___c_packed").is_some();
-    let tag = text(snapshot, marker(snapshot, ty, "___c_tag")?)?;
+    let packed = marker(snapshot, ty, "__c_packed").is_some();
+    let tag = text(snapshot, marker(snapshot, ty, "__c_tag")?)?;
     let TypeKind::Object { properties } = &snapshot.types.get(shape.0 as usize)?.kind else {
         return None;
     };
@@ -918,7 +917,7 @@ fn structure(
     // `Typedef<...>` says the name is a typedef rather than a tag, which
     // changes only how C spells the type. Read before the tagged case, which it
     // is otherwise identical to.
-    let naming = if foreign && marker(snapshot, ty, "___c_typedef").is_some() {
+    let naming = if foreign && marker(snapshot, ty, "__c_typedef").is_some() {
         super::Naming::Typedef { from_header }
     } else if foreign {
         super::Naming::Tagged { from_header }
@@ -1012,10 +1011,10 @@ fn structure(
         } else {
             Pointee::Pointer(Box::new(pointer_within(snapshot, property.ty, visiting)?))
         };
-        let name = property
-            .name
-            .strip_prefix("___")
-            .map_or_else(|| property.name.clone(), |rest| format!("__{rest}"));
+        // The name as the header wrote it: a C member `__pad` arrives as
+        // `__pad`, which the frontend unescapes for every name (`written_name`),
+        // so the local unescaping that stood here is gone.
+        let name = property.name.clone();
         fields.push(Field { name, ty });
     }
     let name = if foreign {

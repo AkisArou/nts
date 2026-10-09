@@ -934,13 +934,8 @@ fn implemented_member(probe: &FuncBuilder, node: NodeId) -> bool {
 /// defines, and the linker reports it a compilation stage away from the choice
 /// that caused it.
 fn nominal_or_stand_in(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
-    snapshot
-        .types
-        .get(ty.0 as usize)
-        .and_then(|record| record.symbol)
-        .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
-        .map(|symbol| symbol.name.as_str())
-        .filter(|name| !is_anonymous_shape(name))
+    named(snapshot, ty)
+        .filter(|_| !is_anonymous_shape(snapshot, ty))
         .map_or_else(|| format!("Type{}", ty.0), ToOwned::to_owned)
 }
 
@@ -973,8 +968,37 @@ fn declares_a_class(kind: u16) -> bool {
     matches!(kind, syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION)
 }
 
-fn is_anonymous_shape(name: &str) -> bool {
-    matches!(name, "__object" | "__type" | "__class")
+/// Whether a type is a shape the checker named for itself -- an object
+/// literal's (`__object`), a type literal's (`__type`), an unnamed class
+/// expression's (`__class`) -- rather than one the program named.
+///
+/// **By what declares it, not by the name alone.** The checker spells a
+/// program's own `__object` as `___object`, so the two cannot meet in its
+/// tables, and the frontend gives every program name back as written
+/// (`written_name`) -- so a `class __object {}` now carries the checker's
+/// spelling. Its declaration is a class declaration, never a literal.
+fn is_anonymous_shape(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    let Some(symbol) = snapshot
+        .types
+        .get(ty.0 as usize)
+        .and_then(|record| record.symbol)
+        .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+    else {
+        return false;
+    };
+    matches!(symbol.name.as_str(), "__object" | "__type" | "__class")
+        && symbol.declarations.iter().all(|node| {
+            snapshot.nodes.get(node.0 as usize).is_some_and(|node| {
+                matches!(
+                    node.kind,
+                    NodeKind::Syntax(
+                        syntax::OBJECT_LITERAL_EXPRESSION
+                            | syntax::TYPE_LITERAL
+                            | syntax::CLASS_EXPRESSION
+                    )
+                )
+            })
+        })
 }
 
 /// Why `new SharedArrayBuffer` refuses while the *type* lowers.
@@ -1018,7 +1042,7 @@ fn collect_anonymous_objects(
         // names an object type with a member `__object`, so the simpler test is
         // true of `{}` and false of `{ v, twice() {} }` -- which is how the
         // first version of this walked past every type it was written for.
-        if named(snapshot, ty).is_some_and(|name| !is_anonymous_shape(name)) {
+        if named(snapshot, ty).is_some() && !is_anonymous_shape(snapshot, ty) {
             continue;
         }
         let mut declared = Vec::new();
@@ -1230,7 +1254,7 @@ fn declares_a_method_alone(
     else {
         return false;
     };
-    let anonymous = named(snapshot, ty).is_none_or(is_anonymous_shape);
+    let anonymous = named(snapshot, ty).is_none() || is_anonymous_shape(snapshot, ty);
     let declared_here = |owner: NodeId| {
         snapshot
             .node_types
@@ -2924,7 +2948,7 @@ fn class_thenable(
 ) -> Thenable {
     // Each refusal says which gap it is, because they are cleared by different
     // work, and a reader clearing one must not take the sentence for another.
-    if named(snapshot, class).is_none_or(is_anonymous_shape) {
+    if named(snapshot, class).is_none() || is_anonymous_shape(snapshot, class) {
         // Literals of one shape share a layout, and `instanceof` is a test of
         // the layout -- so it could not say whose `then` to call.
         return Thenable::Refused(
@@ -11113,7 +11137,7 @@ fn gobject_interfaces(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<String>
     let Some(instance) = instance_type_of(snapshot, class) else {
         return Vec::new();
     };
-    let Some(declared) = super::native::schema::property(snapshot, instance, "___c_ifaces") else {
+    let Some(declared) = super::native::schema::property(snapshot, instance, "__c_ifaces") else {
         return Vec::new();
     };
     // Optional, so `"A" | "B" | undefined`.
@@ -11328,7 +11352,7 @@ fn property_fields(
         snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
     };
     let marked = |ty: nts_semantic_schema::TypeId| {
-        super::native::schema::property(snapshot, ty, "___c_property").is_some()
+        super::native::schema::property(snapshot, ty, "__c_property").is_some()
     };
     let Some(TypeKind::Object { properties }) = kind(instance) else {
         return Ok(Vec::new());
@@ -11565,7 +11589,7 @@ fn signals_of_type(
             _ => break,
         }
     }
-    let Some(declared) = super::native::schema::property(snapshot, instance, "___c_signals") else {
+    let Some(declared) = super::native::schema::property(snapshot, instance, "__c_signals") else {
         return Ok(Vec::new());
     };
     // Optional, so `Sig | undefined`.
@@ -17970,8 +17994,8 @@ fn declares_storage(properties: &[nts_semantic_schema::PropertyRecord]) -> bool 
 fn property_branded(snapshot: &SemanticSnapshot, parts: &[TypeId]) -> Option<TypeId> {
     let brand = |id: &TypeId| {
         matches!(snapshot.types.get(id.0 as usize).map(|record| &record.kind), Some(TypeKind::Object { properties })
-            if properties.iter().any(|p| p.name == "___c_property")
-                && properties.iter().all(|p| matches!(p.name.as_str(), "___c_property" | "___c_required") && p.optional && p.readonly))
+            if properties.iter().any(|p| p.name == "__c_property")
+                && properties.iter().all(|p| matches!(p.name.as_str(), "__c_property" | "__c_required") && p.optional && p.readonly))
     };
     let [a, b] = parts else { return None };
     match (brand(a), brand(b)) {
@@ -42516,7 +42540,7 @@ impl<'a> FuncBuilder<'a> {
     /// same type two ways is the reader's problem, not a tidiness one.
     fn type_in_a_message(&self, ty: TypeId) -> String {
         named(self.snapshot, ty)
-            .filter(|name| !is_anonymous_shape(name))
+            .filter(|_| !is_anonymous_shape(self.snapshot, ty))
             .map_or_else(|| self.shaped_like(ty), |name| format!("`{name}`"))
     }
 
@@ -43630,10 +43654,11 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(props);
         let mut written = Vec::new();
         // The phantom members a binding marks its types with are not
-        // properties: `__c_props`, which the checker spells `___c_props`.
-        for property in properties.iter().filter(|property| {
-            !property.name.starts_with("___c_") && !property.name.starts_with("__c_")
-        }) {
+        // properties: `__c_props`.
+        for property in properties
+            .iter()
+            .filter(|property| !property.name.starts_with("__c_"))
+        {
             let field = layout.index_of(&property.name).ok_or_else(|| {
                 self.unsupported(
                     props,
@@ -50858,7 +50883,7 @@ impl<'a> FuncBuilder<'a> {
             // and from, for the checker and a native call to read. It holds
             // nothing, so it has no field, and the object is laid out as the
             // plain object of its fields is.
-            if property.name == "___c_copied" && property.optional && property.readonly {
+            if property.name == "__c_copied" && property.optional && property.readonly {
                 continue;
             }
             let held = if self.holds_only_absences(property.ty) {
@@ -79935,7 +79960,7 @@ fn bridge_strings(
     let branded = |id: TypeId| {
         match kind(id) {
         Some(TypeKind::Intersection(parts)) => parts.iter().any(|part| {
-            matches!(kind(*part), Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.name == "___objc_nsstring"))
+            matches!(kind(*part), Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.name == "__objc_nsstring"))
         }),
         _ => false,
     }

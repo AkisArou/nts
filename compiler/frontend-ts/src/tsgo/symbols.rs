@@ -313,7 +313,7 @@ fn exports_of(
             };
             let target = declaring.as_ref().unwrap_or(export);
             let id = intern(snapshot, interned, deferred, target, ctx);
-            (export.name.clone(), id)
+            (super::decompose::written_name(&export.name).to_owned(), id)
         })
         .collect())
 }
@@ -491,6 +491,12 @@ mod tests {
         // with underscores or carries a number that is not the counter.
         assert_eq!(normalize_name("encoding", root), "encoding");
         assert_eq!(normalize_name("__proto__", root), "__proto__");
+        // An escaped program name, which the checker interns with one more `_`,
+        // and the checker's own names, which it does not.
+        assert_eq!(normalize_name("___proto__", root), "__proto__");
+        assert_eq!(normalize_name("___snapshot", root), "__snapshot");
+        assert_eq!(normalize_name("____three", root), "___three");
+        assert_eq!(normalize_name("__function", root), "__function");
         assert_eq!(normalize_name("__#notanumber@#x", root), "__#notanumber@#x");
     }
 
