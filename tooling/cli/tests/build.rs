@@ -2056,6 +2056,80 @@ export default defineConfig({
     }
 }
 
+/// A product's targets reach the strict check. C's `long` is 64 bits on Linux
+/// and 32 on Windows, so a program built for both may store into one only what
+/// fits in 32 bits -- and the Linux build says so, because each target's build
+/// checks the same program. The control differs in the target list alone: for
+/// Linux by itself the same store (2^40, a literal, so nothing but the width
+/// decides) fits, and the build goes on.
+#[test]
+fn a_store_must_fit_every_target_of_the_product() {
+    let frontend =
+        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
+    if !frontend {
+        skip("the tsgo frontend");
+        return;
+    }
+    let libc = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/native/libc.d.ts");
+    let libc = libc.canonicalize().expect("runtime/native/libc.d.ts");
+    for (name, targets, fits) in [
+        (
+            "build-long-both",
+            r#"[target.linux({ backend: "c" }), target.windows()]"#,
+            false,
+        ),
+        (
+            "build-long-linux",
+            r#"[target.linux({ backend: "c" })]"#,
+            true,
+        ),
+    ] {
+        let project = fixture(
+            name,
+            &format!(
+                r#"
+import {{ defineConfig, library, target }} from "@nts/config";
+export default defineConfig({{
+  products: {{
+    lib: library.native({{ targets: {targets}, entry: "./src/main.ts" }}),
+  }},
+}});
+"#
+            ),
+        );
+        std::fs::write(
+            project.join("tsconfig.json"),
+            format!(
+                r#"{{"compilerOptions":{{"target":"ESNext","module":"ESNext","moduleResolution":"bundler","strict":true,"noEmit":false}},"include":["src/**/*"],"files":[{:?}]}}"#,
+                libc.display().to_string()
+            ),
+        )
+        .expect("tsconfig");
+        std::fs::write(
+            project.join("src/main.ts"),
+            "import type { c_long } from '@nts/scalars';\n\
+             function keep(n: c_long): bigint { return n; }\n\
+             export function wide(): bigint { return keep(1099511627776n); }\n",
+        )
+        .expect("entry");
+
+        let run = build(&project, &["--os", "linux"]);
+        let refused = run.stderr.contains("NTS5001");
+        assert_eq!(
+            refused,
+            !fits,
+            "{name}: NTS5001 {} expected:\n{}",
+            if fits { "not" } else { "" },
+            run.stderr
+        );
+        if fits {
+            assert!(run.ok, "{name}: the build failed:\n{}", run.stderr);
+        } else {
+            assert!(!run.ok, "{name}: it built anyway:\n{}", run.stdout);
+        }
+    }
+}
+
 const WINDOWS_LIB: &str = r#"
 import { defineConfig, library, target } from "@nts/config";
 export default defineConfig({
