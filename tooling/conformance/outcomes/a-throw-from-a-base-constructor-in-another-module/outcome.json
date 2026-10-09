@@ -1,8 +1,0 @@
-{
-  "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Error: no type",
-  "node": "exit 1; nts: uncaught Observed: made=group caught;",
-  "measured_with": "9cc7d7a5d7e35cca",
-  "source": "measured"
-}

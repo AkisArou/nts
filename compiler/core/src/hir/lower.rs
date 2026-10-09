@@ -5135,7 +5135,17 @@ fn declared_base_class(
                 pending.extend(probe.children(at));
             }
             Some(syntax::IDENTIFIER) => {
-                if let Some(symbol) = probe.node(at).symbol
+                // Through an import: `extends Base` with `Base` imported names the
+                // import's own symbol, declared by its specifier and not by a
+                // class, and asking that one dropped the base. The throw from a
+                // base constructor in another module then reached nothing, its
+                // derived class's construction was not a raiser, and a `try`
+                // around it was compiled with no handler edge -- the throw ended
+                // the program (`outcomes/a-throw-from-a-base-constructor-in-another-module`).
+                if let Some(symbol) = probe
+                    .node(at)
+                    .symbol
+                    .map(|symbol| probe.denoted_symbol(symbol))
                     && snapshot
                         .symbols
                         .get(symbol.0 as usize)
@@ -14232,7 +14242,7 @@ fn lower_wanted_closures(
                 // abort shells and thousands of `@raises` bodies across the corpora
                 // for a slot no call reaches. See `what_holds_the_gate_off`.
                 lowered.program.funcs.push(func);
-                let raising = raising_closure(
+                let (raising, layouts) = raising_closure(
                     snapshot,
                     foreign,
                     shared,
@@ -14241,6 +14251,7 @@ fn lower_wanted_closures(
                     &lowered.program.funcs,
                     copy_for(true),
                 );
+                collect_layouts(&mut lowered.program, layouts);
                 // **Pushed before the ordinary body, as they always were.** The
                 // raising entry is built with the body last in `kernels`, and
                 // then they go in front of it: a generator closure's two copies
@@ -14347,7 +14358,7 @@ fn raising_closure(
     index: usize,
     kernels: &[Func],
     copy: Copy,
-) -> Vec<Func> {
+) -> (Vec<Func>, Vec<Layout>) {
     // The ordinary closure was just appended; all its source kernels precede it.
     let func = kernels
         .last()
@@ -14356,7 +14367,7 @@ fn raising_closure(
         || shared.hierarchy.raising_call_slot.is_none()
         || closures[index].source.only_the_runtime_calls()
     {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
     let (raising_body, raising_entry) = raising_closure_names(index);
     let arity = shared.hierarchy.erased_call_arity;
@@ -14382,7 +14393,13 @@ fn raising_closure(
     )
     .or_else(|| second.lower_made_closure(index, &closures[index]));
     match made.unwrap_or_else(|| second.lower_closure(index, &closures[index])) {
-        Ok(raising) if the_same_program(func, &raising) => Vec::new(),
+        Ok(raising) if the_same_program(func, &raising) => (Vec::new(), Vec::new()),
+        // **With the layouts its builder made**, which are not the ordinary
+        // body's: a non-null assertion throws a `TypeError` here where the
+        // ordinary body calls `nts_assertion_failed`, so the error's layout
+        // exists only in this builder. Dropped with it, the raising body
+        // allocated a type with no layout -- the LLVM backend declined it and the
+        // C backend reported it (`examples/an-element-assertion-in-a-raising-closure`).
         Ok(mut raising) => {
             raising.name = raising_body;
             let result_absent =
@@ -14391,7 +14408,7 @@ fn raising_closure(
                 .into_iter()
                 .collect::<Vec<Func>>();
             produced.push(raising);
-            produced
+            (produced, std::mem::take(&mut second.layouts))
         }
         // **Refused where the ordinary body was not**, which reading the raising arm
         // says cannot happen: it is tested *before* every fallible arm of
@@ -14400,11 +14417,14 @@ fn raising_closure(
         // runtime modules, which is the same sentence from the other side. Its own
         // diagnostics are dropped: they are the ordinary body's cascade a second
         // time, under a name no source wrote.
-        Err(_) => abort(format!(
-            "calling `{}` from inside a `try`, whose raising copy this compiler could \
-             not build",
-            func.name
-        )),
+        Err(_) => (
+            abort(format!(
+                "calling `{}` from inside a `try`, whose raising copy this compiler could \
+                 not build",
+                func.name
+            )),
+            Vec::new(),
+        ),
     }
 }
 
