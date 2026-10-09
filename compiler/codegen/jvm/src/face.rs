@@ -165,6 +165,15 @@ pub(crate) fn typed_call(
     let slots: u16 = locals.iter().map(VType::slots).sum();
     let mut code = Code::new(locals, slots);
     code.load(origin, Kind::Ref, 0);
+    // The call's `this` (`hir::UNIFORM_THIS`): a Java caller has none to give,
+    // so `undefined`, as a plain JavaScript call passes.
+    code.get_static(
+        origin,
+        pool,
+        types::VALUE,
+        "UNDEFINED_VALUE",
+        types::VALUE_DESCRIPTOR,
+    );
     let mut at: u16 = 1;
     for ty in &face.params {
         let (vtype, kind) = slot_of(ty);
@@ -172,8 +181,9 @@ pub(crate) fn typed_call(
         boxed(&mut code, pool, origin, ty);
         at += vtype.slots();
     }
+    // The erased entry's descriptor names the `this` and then the arguments.
     let width = nts_jvm_emitter::descriptor::parameters(&face.erased).map_or(0, |list| list.len());
-    for _ in face.params.len()..width {
+    for _ in face.params.len() + 1..width {
         code.get_static(
             origin,
             pool,

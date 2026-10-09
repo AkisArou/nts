@@ -1,6 +1,6 @@
 # Function values that carry `this`: the plan
 
-**Status: proposed (2026-10-09); parked by the user until scalar step 2 is finished. A is recommended.**
+**Status: A, refined (below). Step 1 built 2026-10-09; step 2 next.**
 
 ## The problem
 
@@ -72,16 +72,89 @@ closure fills that entry with a small shim that drops the receiver.
     for ordinary calls, which this codebase has learned to distrust.
   - Method values stay out of reach.
 
-## Plan, if A
+## Plan, if A (refined 2026-10-09, after mapping the calling convention)
 
-1. **The calling convention.** Every closure entry takes a receiver, and every
-   call passes `undefined`. No behaviour changes: the gate and the benchmark table
-   must be unchanged.
-2. **Receivers at call sites.** `obj.f()` for function-valued properties,
-   `.call`, `.apply` and `.bind`. `function` expressions and declarations that read
-   `this` compile. The blocker above becomes an example, since its three refusals
-   stop being load-bearing.
-3. **Later:** methods as values.
+**Where a closure is called from.** A closure has two kinds of entry:
+- its written `#call(env, params...)`, which is called directly once the closure
+  is known, and called by the C runtime (timers, promise reactions, 33 sites in
+  `runtime/node`), by the native callback bridges, and through the JVM's callback
+  interfaces (`NtsCallback.call()` and friends);
+- its uniform `#erased_call(env, erased...)` and raising entries, which are called
+  only from HIR, through a dispatch slot, when a call goes through a function
+  value whose closure is not known.
+
+So the receiver can live where only HIR reaches, and every outside ABI stays as
+it is:
+1. **The uniform entries take a receiver.** `#erased_call(env, receiver,
+   erased...)`, and its raising twin. Every call through a function value passes
+   one: `undefined` for `f()`, `o` for `o.f()` through a field, `r` for
+   `f.call(r, ...)` and `f.apply(r, args)`. A closure that does not read `this`
+   ignores it. Devirtualization, which turns a uniform call into a direct
+   `#call`, drops it for those. No behaviour changes in this step: the gate and
+   the benchmark table must be unchanged.
+2. **A closure that reads `this` gets the receiver.** Its body is lowered as
+   `#call_this(env, receiver, params...)`. Its `#call` is a thin wrapper
+   passing `undefined`, so the runtime, the bridges and Java call it unchanged,
+   and receive JavaScript's strict-mode `this` for a plain call. Its uniform
+   entries forward the receiver. Devirtualizing a call to it names
+   `#call_this` with the receiver. The refusals go:
+   - "a `function` expression that uses its own `this`";
+   - "`this` outside a method", for a `function` declaration used as a value;
+   - `RECEIVER_IS_NOT_BOUND`.
+
+   `blockers/a-call-with-a-receiver-that-is-read` becomes an example.
+
+   **What `this` is inside the body.** It arrives erased. An `Unerase` is
+   unchecked: it trusts that the lowering typed the value. For a written
+   parameter the checker typed the call, but a `this:` annotation is not checked
+   at a call through a cast: React's site is
+   `(callback as (this: unknown) => unknown).call(context)`. So the annotation
+   is proven like any narrowing, never trusted:
+   - `this: unknown`, `this: any`, or no annotation: `this` stays erased. React's
+     `ReactChildren.ts:254` only passes it on.
+   - `this: C` for a class `C`: an `instanceof C` test at entry, and a
+     `TypeError` where it fails. React's `ReactFiberThrow.ts:127` is
+     `this: ErrorBoundaryInstance`, which is the class `ClassComponentInstance`,
+     and it passes `this` on at that type.
+   - Any other annotation (an interface, a union) has no test yet and is refused
+     by name.
+3. **`.bind(r, ...)`** makes a closure that holds `r` and the bound arguments and
+   calls through the uniform entry with them. It is unsupported today.
+
+**What it touches.** About 14 HIR call sites, all funnelled into
+`call_a_closure_entry`, plus `erased_call`, `uniform_params` and the
+`declare_*_entries` functions. Then about 13 passes that assume argument 0 is
+the environment and the parameters follow it (`fields::devirtualize`,
+`monomorphize`, `call_directly`, flow, escape, ownership...). No runtime, bridge
+or Java-interface change.
+
+**Methods as values already work**, bound to their receiver (`bound_method`). So
+the blocker's third load-bearing refusal is gone already, and its comment says
+otherwise; it is corrected in step 2.
+
+**Step 1, as built (2026-10-09).** `hir::UNIFORM_THIS` and
+`hir::UNIFORM_ARGUMENTS` say where an entry takes its `this` and its arguments.
+`uniform_params` builds every uniform entry from them, and
+`call_a_closure_entry` is the one place a call fills them:
+- `f(x)`, `f?.(x)`, a sort comparator and a promise reaction pass `undefined`;
+- `o.f(x)` through a field or a getter passes `o`;
+- `f.call(r, ...)` and `f.apply(r, list)` pass `r`. `r` used to be lowered for
+  its effects and dropped; it is now lowered expecting an erased value, as an
+  argument to an `unknown` parameter is.
+
+`o.f?.(x)` and an ObjC field call do not hold `o` at the call yet; they pass
+`undefined` until step 2 gives them the object. `call_directly`, the one
+place a uniform call becomes a direct one, drops the `this` with the padding.
+On the JVM, the typed face passes `undefined` and the lambda adapter skips it.
+`core/tests/function_value_this.rs` asserts what each kind of call passes,
+with a control that drops every receiver.
+
+Measured on eight rows that call through function values (`closures`,
+`closure-merge`, `module-closures`, `optional-chain`, `event-state`,
+`pipeline`, `array-methods`, `dispatch`), baseline, step 1, baseline again:
+every nts column (C, LLVM, JVM, f64) is within the two baselines' own spread.
+`optional-chain` on C is 33.42 us in all three, and `closures` 1.12, 1.12 and
+1.13 us.
 
 Verified by:
 - React's two sites, and its demos' `main`;

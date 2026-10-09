@@ -11,23 +11,23 @@ Compiled from "nts"
 public final class nts.gen.Closure0 extends nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback {
   nts.gen.Cell0 total;
   public void call(double);
-  public nts.rt.NtsValue erased_call(nts.rt.NtsValue);
+  public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
   public nts.gen.Closure0();
 }
 Compiled from "nts"
 public abstract class nts.gen.erased.Callable {
-  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue);
+  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
   public nts.gen.erased.Callable();
 }
 Compiled from "nts"
 public final class nts.gen.Fn3__41$Lambda extends nts.gen.Fn3__41 {
   nts.rt.NtsNumberCallback it;
   public nts.gen.Fn3__41$Lambda(nts.rt.NtsNumberCallback);
-  public nts.rt.NtsValue erased_call(nts.rt.NtsValue);
+  public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
 }
 Compiled from "nts"
 public abstract class nts.gen.Fn3__41 extends nts.gen.erased.Callable implements nts.rt.NtsNumberCallback {
-  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue);
+  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
   public void call(double);
   public nts.gen.Fn3__41();
 }
@@ -45,7 +45,7 @@ public final class nts.gen.Program {
   public static nts.rt.NtsSet<java.lang.String> labels();
   public static void eachUpTo(double, nts.gen.erased.Callable);
   public static double triangle(double);
-  public static nts.rt.NtsValue Closure0$erased_call(nts.gen.Closure0, nts.rt.NtsValue);
+  public static nts.rt.NtsValue Closure0$erased_call(nts.gen.Closure0, nts.rt.NtsValue, nts.rt.NtsValue);
   public static void Closure0$call(nts.gen.Closure0, double);
   public static void eachUpTo$Closure0(double, nts.gen.Closure0);
   public static void eachUpTo$whole(int, nts.gen.erased.Callable);

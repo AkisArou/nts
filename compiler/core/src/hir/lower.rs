@@ -15839,9 +15839,10 @@ fn erased_call(
         );
         return Some(refuses_to_cross(name, params, values, &origin, &because));
     }
+    // The `this` is not passed on: a written `#call` takes none.
     let mut args = vec![ValueId(0)];
     for (at, param) in written.iter().enumerate() {
-        let from = ValueId(u32::try_from(at + 1).ok()?);
+        let from = ValueId(u32::try_from(at + super::UNIFORM_ARGUMENTS).ok()?);
         // A parameter the body already reads erased needs nothing: unerasing
         // `Erased` to `Erased` is a no-op the backend rightly refuses, since
         // `erased_tag` has no tag to give for it -- "a value of type Erased
@@ -15938,9 +15939,10 @@ fn erased_call(
     })
 }
 
-/// The uniform signature every closure's erased entry has: the receiver, then
-/// `width` erased parameters -- see [`Hierarchy::erased_call_arity`] -- and the
-/// `Param` op for each.
+/// The uniform signature every closure's erased entry has: the receiver (the
+/// closure), the call's `this`, then `width` erased parameters -- see
+/// [`Hierarchy::erased_call_arity`] -- and the `Param` op for each. Laid out by
+/// [`super::UNIFORM_THIS`] and [`super::UNIFORM_ARGUMENTS`].
 ///
 /// Fixed width rather than the closure's own, because the point of the entry is
 /// that a call site which knows only the signature can make it. A site padding
@@ -15956,14 +15958,29 @@ fn uniform_params(
     origin: &Origin,
     width: usize,
 ) -> Option<(Vec<Param>, Vec<Op>)> {
-    let mut params = vec![receiver.clone()];
-    let mut values = vec![Op {
-        kind: OpKind::Param(0),
-        ty: receiver.ty.clone(),
+    let this = Param {
+        name: "this_argument".to_owned(),
+        ty: HirType::Erased,
         origin: origin.clone(),
-    }];
+        shape: ParamShape::Ordinary,
+        known: Facts::TOP,
+        written: None,
+    };
+    let mut params = vec![receiver.clone(), this];
+    let mut values = vec![
+        Op {
+            kind: OpKind::Param(0),
+            ty: receiver.ty.clone(),
+            origin: origin.clone(),
+        },
+        Op {
+            kind: OpKind::Param(u32::try_from(super::UNIFORM_THIS).ok()?),
+            ty: HirType::Erased,
+            origin: origin.clone(),
+        },
+    ];
     for at in 0..width {
-        let index = u32::try_from(at + 1).ok()?;
+        let index = u32::try_from(at + super::UNIFORM_ARGUMENTS).ok()?;
         // Everything but the type from the original where there is one -- the name
         // a reader sees, and whatever `shape` and `known` said, because that is
         // the *same* parameter in a different representation. Past the written
@@ -29791,7 +29808,7 @@ impl<'a> FuncBuilder<'a> {
                 edges: Vec::new(),
                 rejections: Vec::new(),
             }));
-            let answered = self.call_a_closure_entry(site, callee, args, &HirType::Erased);
+            let answered = self.call_a_closure_entry(site, callee, None, args, &HirType::Erased);
             if answered.is_ok() {
                 self.emit_the_raise_test(&origin);
             }
@@ -29812,7 +29829,7 @@ impl<'a> FuncBuilder<'a> {
             }
             answered
         } else {
-            self.call_a_closure_entry(site, callee, args, &HirType::Erased)?
+            self.call_a_closure_entry(site, callee, None, args, &HirType::Erased)?
         };
         // Read back at what the handler's signature returns, after the test: the
         // inverse of the erased ABI this call asked for, as `call_a_closure_entry`
@@ -55436,7 +55453,7 @@ impl<'a> FuncBuilder<'a> {
             // an ordinary call. TypeScript permits the shape and reports it as
             // unnecessary.
             let arguments = self.arguments_of(id);
-            return self.call_through_closure(id, callee_node, callee, &arguments);
+            return self.call_through_closure(id, callee_node, callee, None, &arguments);
         };
         let present = self.present_of(callee_node, callee);
         self.lower_branching_value(
@@ -56513,7 +56530,7 @@ impl<'a> FuncBuilder<'a> {
                     None => callee,
                 };
                 let arguments = self.arguments_of(id);
-                self.call_through_closure(id, callee_node, callee, &arguments)
+                self.call_through_closure(id, callee_node, callee, None, &arguments)
             }
             Branch::MethodOn(receiver, receiver_node, member, present) => {
                 // Here and not before the branch, for the reason above.
@@ -60383,7 +60400,7 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| self.unrepresentable(callee, "a field holding a function"))?;
         let origin = self.origin(id);
         let closure = self.push(OpKind::FieldGet { object, field }, ty, origin);
-        self.call_through_closure(id, callee, closure, arguments)
+        self.call_through_closure(id, callee, closure, None, arguments)
             .map(Some)
     }
 
@@ -70194,15 +70211,9 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let receiver = self.lower_expression(callee_node)?;
-        self.call_through_closure(id, callee_node, receiver, arguments)
+        self.call_through_closure(id, callee_node, receiver, None, arguments)
     }
 
-    /// The call itself, given the closure value already in hand.
-    ///
-    /// Separate because there are two ways to come by one. `f(x)` lowers the
-    /// name; `o.f(x)` where `f` is a *field* has already lowered `o` and loaded
-    /// the field out of it, and lowering the property access again would
-    /// evaluate the receiver twice.
     /// Whether an expression can be skipped when only its effects are wanted.
     ///
     /// Deliberately a short list of forms that *cannot* run anything rather
@@ -70259,27 +70270,24 @@ impl<'a> FuncBuilder<'a> {
     /// as `this`. It refused as ``a method `call` with no declaration in the
     /// hierarchy``, and under it sat `http.createServer` and every stream.
     ///
-    /// # The receiver is dropped, and that is sound rather than convenient
+    /// # The receiver is passed, and nothing reads it yet
     ///
-    /// Not because listeners tend not to use `this`, which would be a guess
-    /// about a program. **A body that could observe `this` does not compile**,
-    /// so no value reaching here has one:
+    /// A call through a function value hands it to the uniform entry, as every
+    /// such call hands its `this` ([`super::UNIFORM_THIS`]). **No body can
+    /// observe it yet**, so passing it changes nothing a program can see:
     ///
     /// - a `function` expression or declaration whose body reads `this` is
     ///   refused -- ``a `function` expression that uses its own `this` `` and
     ///   ``\`this\` outside a method``;
     /// - an arrow has no `this` of its own by the language's rule, and the
     ///   enclosing one is captured at the arrow rather than passed at the call;
-    /// - a *method*, whose `this` is a real parameter, cannot be taken as a
-    ///   value at all -- ``declared by `C` with a type that has no
-    ///   representation (a function type)``.
+    /// - a *method* taken as a value is bound to the object it was read from
+    ///   (`bound_method`), and refused where its body reads `this`
+    ///   ([`RECEIVER_IS_NOT_BOUND`]), since JavaScript would not bind it.
     ///
-    /// Those three refusals are what makes dropping the receiver a
-    /// *substitution* rather than a narrowing: the alternative is unreachable.
-    /// Each is load-bearing here, so any of them becoming implemented is the
-    /// day this needs the receiver passed instead, and
+    /// Letting a body read it is step 2 of `docs/function-receivers.md`, and
     /// `blockers/a-call-with-a-receiver-that-is-read` is the fixture that says
-    /// so.
+    /// when it is done.
     ///
     /// # What it is not
     ///
@@ -70295,31 +70303,28 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let Some((given, rest)) = arguments.split_first() else {
-            // `f.call()` -- no receiver written and nothing to evaluate.
-            return self.call_through_closure(id, member, function, &[]);
+            // `f.call()` -- no receiver written, so `undefined`.
+            return self.call_through_closure(id, member, function, None, &[]);
         };
-        // **Evaluated and discarded, not skipped.** `f.call(g(), x)` calls `g`,
-        // and a receiver expression is an ordinary expression: dropping the
-        // value is not dropping its effects.
-        //
-        // Except where it provably has none, and that exception is not an
-        // optimisation. The receiver written at these sites is `this` or
-        // `undefined`, and `undefined` has **no representation** here -- lowering
-        // it for its effects refused the whole call with ``null` or `undefined`
-        // where what it stands in for is not a reference``, which is a true
-        // sentence about a value nobody wanted. A name or a literal cannot run
-        // anything, so there is nothing to preserve; everything else is lowered
-        // and may refuse, which is the honest direction for this list to be
-        // wrong in.
-        if !self.cannot_have_effects(*given) {
-            self.lower_expression(*given)?;
-        }
+        let this = self.lower_this_argument(*given)?;
         // Set after the receiver is lowered and restored after the call, so it
         // covers exactly this call's argument list.
         let outer = self.callee_signature.replace((id, function_ty));
-        let called = self.call_through_closure(id, member, function, rest);
+        let called = self.call_through_closure(id, member, function, Some(this), rest);
         self.callee_signature = outer;
         called
+    }
+
+    /// The `this` written at `f.call(this, ...)` or `f.apply(this, list)`, as the
+    /// erased value a uniform closure entry takes ([`super::UNIFORM_THIS`]).
+    ///
+    /// Lowered expecting an erased value, as an argument to an `unknown`
+    /// parameter is, so `undefined` and `null` are values here: lowered for
+    /// their effects alone, they refused the call as ``null` or `undefined`
+    /// where what it stands in for is not a reference``.
+    fn lower_this_argument(&mut self, given: NodeId) -> Result<ValueId, Diagnostic> {
+        let this = self.lower_expecting(given, &HirType::Erased)?;
+        self.coerce(this, &HirType::Erased, given)
     }
 
     /// Which body a call of a function value reaches.
@@ -70403,8 +70408,8 @@ impl<'a> FuncBuilder<'a> {
 
     /// `f.apply(receiver, list)` -- the arguments as one array.
     ///
-    /// The receiver is dropped for the reason [`Self::lower_call_with_receiver`]
-    /// gives, which is the half these two share. What they do not share is the
+    /// The receiver is passed as [`Self::lower_call_with_receiver`] passes it,
+    /// which is the half these two share. What they do not share is the
     /// arguments: `call` takes them positionally and `apply` takes them as an
     /// array, so this is a different lowering rather than the same one under
     /// another name.
@@ -70433,13 +70438,11 @@ impl<'a> FuncBuilder<'a> {
         let [given, list] = arguments else {
             return Err(self.unsupported(id, "an `apply` that is not a receiver and a list"));
         };
-        if !self.cannot_have_effects(*given) {
-            self.lower_expression(*given)?;
-        }
+        let this = self.lower_this_argument(*given)?;
         // The callee's signature, not `Function.prototype.apply`'s. See
         // `Self::callee_signature`.
         let outer = self.callee_signature.replace((id, function_ty));
-        let built = self.apply_through_closure(id, member, function, *list);
+        let built = self.apply_through_closure(id, member, function, this, *list);
         self.callee_signature = outer;
         built
     }
@@ -70449,6 +70452,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         member: NodeId,
         function: ValueId,
+        this: ValueId,
         list: NodeId,
     ) -> Result<ValueId, Diagnostic> {
         let shapes = self.parameter_shapes(id);
@@ -70464,7 +70468,7 @@ impl<'a> FuncBuilder<'a> {
             // longer a rest by the time `parameter_shapes` is asked, so
             // `fn.apply(thisArg, args)` with `fn: (...args: [number]) => T`
             // arrives here now. Both readings want the same code.
-            return self.apply_positionally(id, member, function, list, shapes.len());
+            return self.apply_positionally(id, member, function, this, list, shapes.len());
         };
         if at != 0 {
             return Err(self.unsupported(
@@ -70494,7 +70498,7 @@ impl<'a> FuncBuilder<'a> {
             origin,
         );
         let gathered = self.concat_onto(id, &element, &ty, empty, &[list])?;
-        self.finish_closure_call(id, function, callee, vec![function, gathered])
+        self.finish_closure_call(id, function, Some(this), callee, vec![function, gathered])
     }
 
     /// `f.apply(receiver, list)` onto a callee that takes its arguments
@@ -70515,6 +70519,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         member: NodeId,
         function: ValueId,
+        this: ValueId,
         list: NodeId,
         wanted: usize,
     ) -> Result<ValueId, Diagnostic> {
@@ -70578,7 +70583,7 @@ impl<'a> FuncBuilder<'a> {
                 args.push(self.coerce_to_parameter(id, at, value, list)?);
             }
         }
-        self.finish_closure_call(id, function, callee, args)
+        self.finish_closure_call(id, function, Some(this), callee, args)
     }
 
     /// One position of an array being read out to fill a positional argument.
@@ -70691,11 +70696,20 @@ impl<'a> FuncBuilder<'a> {
         Ok(read)
     }
 
+    /// The call itself, given the closure value already in hand.
+    ///
+    /// Separate because there are two ways to come by one. `f(x)` lowers the
+    /// name; `o.f(x)` where `f` is a *field* has already lowered `o` and loaded
+    /// the field out of it, and lowering the property access again would
+    /// evaluate the receiver twice.
+    ///
+    /// `this` is the call's: `o` there, and `None`, for `undefined`, in `f(x)`.
     fn call_through_closure(
         &mut self,
         id: NodeId,
         callee_node: NodeId,
         receiver: ValueId,
+        this: Option<ValueId>,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let callee = self.closure_callee(id, callee_node, receiver)?;
@@ -70723,7 +70737,7 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
         }
-        self.finish_closure_call(id, receiver, callee, args)
+        self.finish_closure_call(id, receiver, this, callee, args)
     }
 
     /// The tail every call of a function value shares, once its arguments are
@@ -70738,6 +70752,7 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         id: NodeId,
         receiver: ValueId,
+        this: Option<ValueId>,
         callee: Callee,
         args: Vec<ValueId>,
     ) -> Result<ValueId, Diagnostic> {
@@ -70760,7 +70775,7 @@ impl<'a> FuncBuilder<'a> {
         // nothing until the call needed the returned signature to have a
         // class.
         self.materialize(id, &ty)?;
-        self.call_a_closure_entry(id, callee, args, &ty)
+        self.call_a_closure_entry(id, callee, this, args, &ty)
     }
 
     /// Emit a call to a closure entry at `ty`, honouring the **uniform ABI** where the
@@ -70778,10 +70793,15 @@ impl<'a> FuncBuilder<'a> {
     /// `ty` is passed rather than read from the node, which is the only reason this is
     /// not simply `finish_closure_call`: a comparator's result is its own `number` and
     /// the node it hangs off is the `sort` call, whose type is the array.
+    ///
+    /// `args` is the closure and then the written arguments; `this` is the call's
+    /// `this`, `None` for `undefined`. Only a uniform entry takes it
+    /// ([`super::UNIFORM_THIS`]); a written `#call` has none.
     fn call_a_closure_entry(
         &mut self,
         id: NodeId,
         callee: Callee,
+        this: Option<ValueId>,
         args: Vec<ValueId>,
         ty: &HirType,
     ) -> Result<ValueId, Diagnostic> {
@@ -70821,25 +70841,24 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         let width = self.hierarchy.erased_call_arity;
-        let mut erased = Vec::with_capacity(width + 1);
-        for (at, arg) in args.into_iter().enumerate() {
-            if at > width {
-                // More arguments than any closure in this program reads.
-                // JavaScript drops them and so does this; see
-                // [`Hierarchy::erased_call_arity`].
-                break;
-            }
-            erased.push(if at == 0 {
-                arg
-            } else {
-                self.coerce(arg, &HirType::Erased, id)?
-            });
+        let mut erased = Vec::with_capacity(width + super::UNIFORM_ARGUMENTS);
+        let mut args = args.into_iter();
+        erased.extend(args.next());
+        let this = match this {
+            Some(this) => self.coerce(this, &HirType::Erased, id)?,
+            None => self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone()),
+        };
+        erased.push(this);
+        // More arguments than any closure in this program reads are dropped,
+        // as JavaScript drops them; see [`Hierarchy::erased_call_arity`].
+        for arg in args.take(width) {
+            erased.push(self.coerce(arg, &HirType::Erased, id)?);
         }
         // Up to the entry's fixed arity, because this site does not know the
         // closure and so cannot know how many it declares. `undefined` is what
         // JavaScript hands an argument nobody passed, and it is what the entry
         // unerases for a parameter the caller left out.
-        while erased.len() < width + 1 {
+        while erased.len() < width + super::UNIFORM_ARGUMENTS {
             erased.push(self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone()));
         }
         let answered = self.push(
@@ -72977,7 +72996,7 @@ impl<'a> FuncBuilder<'a> {
         // slot for and the node `call_within` records, so the slot, the flag test and
         // the handler edge are one answer about one node.
         let answer =
-            self.call_a_closure_entry(id, comparator.callee.clone(), args, &HirType::NUMBER)?;
+            self.call_a_closure_entry(id, comparator.callee.clone(), None, args, &HirType::NUMBER)?;
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let right_first = binary(self, BinOp::Gt, answer, zero, HirType::Bool);
         // One block per answer rather than both arms into `merged`: an edge is
@@ -74886,7 +74905,7 @@ impl<'a> FuncBuilder<'a> {
                 field_ty,
                 origin,
             );
-            return self.call_through_closure(id, member, held, arguments);
+            return self.call_through_closure(id, member, held, Some(receiver), arguments);
         }
 
         // **A getter returning a function, called where it is read.**
@@ -74926,7 +74945,7 @@ impl<'a> FuncBuilder<'a> {
             // verification instead of refusing.
             let held_ty = self.values[held.0 as usize].ty.clone();
             self.materialize(member, &held_ty)?;
-            return self.call_through_closure(id, member, held, arguments);
+            return self.call_through_closure(id, member, held, Some(receiver), arguments);
         }
 
         // **An optional property holding a function**, which is not the same
@@ -74988,7 +75007,7 @@ impl<'a> FuncBuilder<'a> {
                 origin.clone(),
             );
             let held = self.push(OpKind::Unerase { value: held }, narrowed, origin);
-            return self.call_through_closure(id, member, held, arguments);
+            return self.call_through_closure(id, member, held, Some(receiver), arguments);
         }
 
         // `f.call(receiver, ...rest)`, which is how this profile invokes a

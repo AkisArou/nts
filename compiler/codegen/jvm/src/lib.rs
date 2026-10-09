@@ -1126,6 +1126,8 @@ fn reaction_resume(
     let class = types::class_name(package, layout);
     let mut code = Code::new(vec![VType::Object(class.clone())], 1);
     code.load(origin, Kind::Ref, 0);
+    // A reaction is called with no `this` and no argument, so the erased
+    // entry's every parameter is `undefined`, its `this` among them.
     for _ in 0..padding {
         code.get_static(
             origin,
@@ -2296,8 +2298,12 @@ fn lambda_adapter(
         let mut code = Code::new(locals, slots);
         code.load(origin, Kind::Ref, 0);
         code.get_field(origin, &mut pool, &name, "it", &held);
+        // Local `n` is the entry's parameter `n`, every one a reference: the
+        // closure, the call's `this`, which a Java lambda has no use for, and
+        // then the arguments.
         for (at, ty) in face.params.iter().enumerate() {
-            code.load(origin, Kind::Ref, u16::try_from(at + 1).unwrap_or(u16::MAX));
+            let local = at + nts_core::hir::UNIFORM_ARGUMENTS;
+            code.load(origin, Kind::Ref, u16::try_from(local).unwrap_or(u16::MAX));
             face::unboxed(&mut code, &mut pool, origin, ty);
         }
         code.invoke_interface(origin, &mut pool, interface, "call", call);

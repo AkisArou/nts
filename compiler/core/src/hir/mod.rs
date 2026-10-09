@@ -2801,7 +2801,8 @@ pub struct Program {
     pub closure_slot: Option<u32>,
     /// See [`Program::closure_slot`]. The entry whose parameters and result are
     /// all erased, which a call site takes when it knows the *signature* and not
-    /// the class.
+    /// the class. Its parameters are laid out by [`UNIFORM_THIS`] and
+    /// [`UNIFORM_ARGUMENTS`].
     pub erased_call_slot: Option<u32>,
     /// See [`Program::erased_call_slot`]. The entry that **records an uncaught
     /// `throw` and returns** rather than ending the program, which a call inside a
@@ -4111,6 +4112,21 @@ pub fn arrays_can_grow(program: &Program) -> bool {
     })
 }
 
+/// Where a uniform closure entry ([`Program::erased_call_slot`] and its raising
+/// twin) takes the call's `this`: after the closure, before the arguments, which
+/// is JavaScript's own order for a call.
+///
+/// **Only the uniform entries take one.** A closure's written `#call` is what
+/// the C runtime, the native callback bridges and the JVM's callback interfaces
+/// call, and none of them has a `this` to give, so its shape stays as it is
+/// (`docs/function-receivers.md`). A uniform entry is reached only from a call
+/// through a function value, which always knows its `this`: `undefined` for
+/// `f()`, `o` for `o.f()`, `r` for `f.call(r)`.
+pub const UNIFORM_THIS: usize = 1;
+
+/// Where a uniform closure entry's arguments begin; see [`UNIFORM_THIS`].
+pub const UNIFORM_ARGUMENTS: usize = UNIFORM_THIS + 1;
+
 /// Slot published to C hosts that invoke managed closures. Every closure uses
 /// the same call method slot; the synthesized layouts are its authority.
 #[must_use]
@@ -4159,7 +4175,8 @@ pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> 
 /// the other side (`optional-chain` 87.98 us to 35.17 us). So the surgery is one
 /// operation here rather than a copy in each caller.
 ///
-/// `args` drops the padding and takes each `Erase`'s operand. The result is the
+/// `args` drops the `this` and the padding, and takes each `Erase`'s operand.
+/// The result is the
 /// fiddly half: the site pushed `Unerase { value: call }` as an op of its own,
 /// and with the written entry the call already answers concretely -- so that op
 /// is what the direct call *becomes*, and the original is dropped from the block
@@ -4200,16 +4217,20 @@ pub(super) fn call_directly(
         return false;
     };
     let mut args: Vec<ValueId> = if uniform {
+        // The receiver keeps its place; a caller's `receiver` op replaces it
+        // below. A written `#call` has no `this`, so it is dropped with the
+        // padding. An argument the site left erased -- because the parameter
+        // was erased already -- has no `Erase` to undo.
+        let written = args.get(UNIFORM_ARGUMENTS..).unwrap_or_default();
         args.iter()
-            .take(arity)
-            .enumerate()
-            .map(|(position, arg)| match func.values[arg.0 as usize].kind {
-                // The receiver keeps its place; a caller's `receiver` op replaces
-                // it below. An argument the site left erased -- because the
-                // parameter was erased already -- has no `Erase` to undo.
-                OpKind::Erase { value, .. } if position > 0 => value,
-                _ => *arg,
-            })
+            .take(1)
+            .copied()
+            .chain(written.iter().take(arity.saturating_sub(1)).map(|arg| {
+                match func.values[arg.0 as usize].kind {
+                    OpKind::Erase { value, .. } => value,
+                    _ => *arg,
+                }
+            }))
             .collect()
     } else {
         args.clone()
