@@ -1100,7 +1100,11 @@ fn view_write(element: &HirType) -> Option<(&'static str, &'static str)> {
     })
 }
 
-fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static str, String)> {
+/// The typed-array helper `name` on a view of `class`, its subject's or, for
+/// `nts_view_new`, its result's. Public as `array_external` is, for the test
+/// that holds every runtime name this lane renders against the jar.
+#[must_use]
+pub fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static str, String)> {
     Some(match name {
         "nts_view_new" => (
             leak(class.to_owned()),

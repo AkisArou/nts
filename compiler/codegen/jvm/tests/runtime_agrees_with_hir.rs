@@ -116,6 +116,16 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
                 found.push((format!("{owner}.{method}:{descriptor}"), format!("array/{holds}")));
             }
         }
+        // A view's helpers are told its class as an array's are told what it
+        // holds. Not trying them counted every one as refused -- `length` and
+        // `byteLength` among them, which this lane renders on every typed
+        // array.
+        let float64 = nts_core::hir::HirType::Float { bits: 64 };
+        if let Some(class) = nts_codegen_jvm::types::view_class(&float64)
+            && let Some((owner, method, descriptor)) = nts_codegen_jvm::ops::view_external(name, class)
+        {
+            found.push((format!("{owner}.{method}:{descriptor}"), "view".to_owned()));
+        }
         found
     };
 
