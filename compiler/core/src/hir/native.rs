@@ -2898,6 +2898,12 @@ pub(crate) fn lends_handles(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     native_array(snapshot, ty).is_some_and(|array| array.role == Role::Handles)
 }
 
+/// Whether a parameter type is an array the callee fills with records
+/// (`FilledArray<T>`).
+pub(crate) fn fills_records(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    native_array(snapshot, ty).is_some_and(|array| matches!(array.role, Role::FilledRecords(_)))
+}
+
 /// Read a `CStrings`, `CBytes` or `CHandles` parameter type, or `None` for
 /// any other.
 ///

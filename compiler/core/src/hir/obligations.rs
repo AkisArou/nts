@@ -255,6 +255,17 @@ pub fn census(program: &Program, targets: &[NativeAbi]) -> Vec<Judged> {
         .collect()
 }
 
+/// [`check`] on the program the lowering produced, which then empties each
+/// function's record: the passes after it renumber the values the record
+/// names, so none of them may read it.
+pub fn take_checked(program: &mut Program, arrivals: &[super::lower::Arrival], targets: &[NativeAbi]) -> Vec<Diagnostic> {
+    let rejected = check(program, arrivals, targets);
+    for func in &mut program.funcs {
+        func.obligations = Vec::new();
+    }
+    rejected
+}
+
 /// The strict check (`docs/scalar-numbers.md`, D1, D2, Q1): every store into
 /// a written kind proven by local facts, and no function let in where a call
 /// could hand it a kind it relies on and was never obliged to fit. Each

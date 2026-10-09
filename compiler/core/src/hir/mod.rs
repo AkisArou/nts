@@ -6360,7 +6360,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
     // On the program the lowering produced, before any pass renumbers a value
     // the lowering recorded an obligation about.
-    let rejected = obligations::check(&lowered.program, &lowered.arrivals.at_signature, options.targets);
+    let rejected = obligations::take_checked(&mut lowered.program, &lowered.arrivals.at_signature, options.targets);
     // Before `settle`, whose callback check reads it.
     lowered.program.callbacks_checkpoint = options.callbacks_checkpoint;
     // Re-keyed by the foreign key as lowering finishes: same rows, indexed for

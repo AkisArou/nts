@@ -14411,30 +14411,40 @@ fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
             ));
             continue;
         };
-        let mut shell = body.clone();
-        shell.name.clone_from(&declared);
-        if let Some(receiver) = shell.params.first_mut() {
-            receiver.ty = HirType::Managed(ManagedType::Object(*root));
-        }
-        // A declaration is its signature. The parameters keep their value ops
-        // because those *are* the signature in this IR; everything the body
-        // computed goes, and the single block says so.
-        shell.values.truncate(shell.params.len());
-        shell.blocks = vec![Block {
-            params: Vec::new(),
-            ops: Vec::new(),
-            terminator: Terminator::Unreachable,
-        }];
-        shell.exported = false;
-        shell.initializes_receiver = false;
-        shell.async_result = None;
-        shell.abstract_declaration = true;
-        declare.push(shell);
+        declare.push(declaration_shell(body, &declared, HirType::Managed(ManagedType::Object(*root))));
     }
     // Sorted, so one compiler on one input emits them in one order.
     declare.sort_by(|a, b| a.name.cmp(&b.name));
     program.funcs.extend(declare);
     record_unimplemented_interfaces(hierarchy, program);
+}
+
+/// A method's declaration made from one of its bodies: its signature, named
+/// `name`, taking a receiver of type `receiver`.
+///
+/// A declaration is its signature. The parameters keep their value ops
+/// because those *are* the signature in this IR; everything the body computed
+/// goes -- with the obligations the lowering recorded about those values,
+/// which would name values the shell no longer has -- and the single block
+/// says so.
+fn declaration_shell(body: &Func, name: &str, receiver: HirType) -> Func {
+    let mut shell = body.clone();
+    name.clone_into(&mut shell.name);
+    if let Some(parameter) = shell.params.first_mut() {
+        parameter.ty = receiver;
+    }
+    shell.values.truncate(shell.params.len());
+    shell.blocks = vec![Block {
+        params: Vec::new(),
+        ops: Vec::new(),
+        terminator: Terminator::Unreachable,
+    }];
+    shell.obligations = Vec::new();
+    shell.exported = false;
+    shell.initializes_receiver = false;
+    shell.async_result = None;
+    shell.abstract_declaration = true;
+    shell
 }
 
 /// Say why an interface's method has no function, for the members that never
@@ -15479,25 +15489,7 @@ fn relate_closures_to_signatures(
                 .get(slot)
                 .is_none_or(Option::is_none)
         {
-            let mut shell = call.clone();
-            shell.name.clone_from(&declared);
-            if let Some(receiver) = shell.params.first_mut() {
-                receiver.ty = HirType::Managed(ManagedType::Object(base));
-            }
-            // A declaration is its signature. The parameters keep their value
-            // ops because those *are* the signature in this IR; everything the
-            // body computed goes, and the single block says so.
-            shell.values.truncate(shell.params.len());
-            shell.blocks = vec![Block {
-                params: Vec::new(),
-                ops: Vec::new(),
-                terminator: Terminator::Unreachable,
-            }];
-            shell.exported = false;
-            shell.initializes_receiver = false;
-            shell.async_result = None;
-            shell.abstract_declaration = true;
-            declare.push((signature, shell));
+            declare.push((signature, declaration_shell(call, &declared, HirType::Managed(ManagedType::Object(base)))));
         }
         relate.push((at, base, declared));
     }
@@ -24223,14 +24215,8 @@ impl<'a> FuncBuilder<'a> {
                 && from != to
                 && !self.the_same_element(id, from, to)
             {
-                return Err(self.unsupported(
-                    id,
-                    &format!(
-                        "an array of {from:?} where an array of {to:?} is wanted -- the two \
-                         hold different widths, so a pointer to one is not a pointer to the \
-                         other"
-                    ),
-                ));
+                let why = self.not_the_same_element(id, from, to);
+                return Err(self.unsupported(id, &why));
             }
             if let (
                 HirType::Managed(ManagedType::Object(from)),
@@ -24579,6 +24565,9 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(value);
         }
+        if self.fills_records(call, at) {
+            return Ok(value);
+        }
         self.coerce(value, &want, argument)
     }
 
@@ -24605,6 +24594,17 @@ impl<'a> FuncBuilder<'a> {
     /// Whether the call's `at`th parameter is `CHandles`.
     fn lends_handles(&self, call: NodeId, at: usize) -> bool {
         self.parameter_type_id(call, at).is_some_and(|ty| super::native::lends_handles(self.snapshot, ty))
+    }
+
+    /// Whether the call's `at`th parameter is an array the callee fills with
+    /// records (`FilledArray<T>`). Each struct C writes is copied into a new
+    /// object of the array's *own* element type (`copy_filled`), and C writes
+    /// while only the program reads: so the array crosses as the program holds
+    /// it, with the kinds its own type wrote or none. Converted to the
+    /// declared `Copied<T>[]` instead, an inferred `[{ x: 0, y: 0 }]` was
+    /// refused for holding records whose fields were not written as C's.
+    fn fills_records(&self, call: NodeId, at: usize) -> bool {
+        self.parameter_type_id(call, at).is_some_and(|ty| super::native::fills_records(self.snapshot, ty))
     }
 
     /// How a call's `at`th parameter is represented, from the resolved
@@ -28282,10 +28282,11 @@ impl<'a> FuncBuilder<'a> {
             // asked one question wider.
             // Except an array of handles lent to C (`CHandles`), which crosses
             // as whatever array of handles the program holds: see
-            // `coerce_to_parameter`. `Role::Handles` checks what it is.
+            // `coerce_to_parameter`. `Role::Handles` checks what it is. And
+            // an array the callee fills with records (`fills_records`).
             let want = match (tail, tail_from) {
                 (Some(element), Some(from)) if args.len() >= from => Some((*element).clone()),
-                _ if self.lends_handles(call, args.len()) => None,
+                _ if self.lends_handles(call, args.len()) || self.fills_records(call, args.len()) => None,
                 // A `Copied<T>` literal, which is the struct's storage.
                 _ if self.copied_pending.contains_key(&argument.node) => None,
                 _ => self.parameter_representation(call, args.len()),
@@ -46874,6 +46875,23 @@ impl<'a> FuncBuilder<'a> {
     /// eight bytes against sixteen and has no layout to compare — and
     /// `laid_out_as_a_prefix` answers `true` for a target it cannot lay out,
     /// which is right for its own question and exactly wrong for this one.
+    /// Why an array of `from` is not an array of `to`: the records' own
+    /// reason where both hold records -- two that differ only in the kinds
+    /// their fields were written as have the same widths -- and the widths
+    /// where they do not.
+    fn not_the_same_element(&mut self, id: NodeId, from: &HirType, to: &HirType) -> String {
+        if let (HirType::Managed(ManagedType::Object(held)), HirType::Managed(ManagedType::Object(wanted))) = (from, to)
+            && let Some(why) = self.not_a_prefix(id, *held, *wanted)
+        {
+            let (held, wanted) = (self.type_in_a_message(*held), self.type_in_a_message(*wanted));
+            return format!("as an array's elements, {}", why.spell(&held, &wanted));
+        }
+        format!(
+            "an array of {from:?} where an array of {to:?} is wanted -- the two hold different widths, so a \
+             pointer to one is not a pointer to the other"
+        )
+    }
+
     fn the_same_element(&mut self, id: NodeId, from: &HirType, to: &HirType) -> bool {
         let (
             HirType::Managed(ManagedType::Object(from)),
