@@ -211,7 +211,7 @@ pub(crate) fn constants(request: &Request) -> Result<String> {
             );
         }
     }
-    let dir = tempdir()?;
+    let dir = Scratch::new()?;
     let probe = dir.join("nts-bind-constants.c");
     let mut text = preamble(request);
     text.push_str("enum nts_bind_constants {\n");
@@ -311,7 +311,7 @@ pub(crate) fn run(request: &Request) -> Result<String> {
     if request.headers.is_empty() {
         bail!("a binding needs at least one header to describe");
     }
-    let dir = tempdir()?;
+    let dir = Scratch::new()?;
 
     // First pass: the headers alone. This learns what each tag *is* -- a
     // struct or a union -- which the second pass needs in order to name it.
@@ -517,11 +517,33 @@ fn clang(probe: &std::path::Path, extra: &[String], cc1: &[&str]) -> Result<Stri
     }
 }
 
-fn tempdir() -> Result<std::path::PathBuf> {
-    let base = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_owned());
-    let dir = std::path::Path::new(&base).join("nts-bind");
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    Ok(dir)
+/// A directory for this run's probe files, removed when it is dropped.
+///
+/// **This run's own.** It was `$TMPDIR/nts-bind`, shared, with fixed file
+/// names, and the gate runs four `bind.sh` at once: one run wrote its probe over
+/// another's between that one's write and clang's read, so clang read the other
+/// header and `rusage` was not in it -- "clang laid out no `rusage`", red in the
+/// gate of 018953d7c (2026-10-09) and green alone three times out of three. Run
+/// together, the four failed in most rounds. A process id is unique among the
+/// processes running, which is the set that can collide.
+struct Scratch(std::path::PathBuf);
+
+impl Scratch {
+    fn new() -> Result<Self> {
+        let dir = std::env::temp_dir().join(format!("nts-bind-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+        Ok(Self(dir))
+    }
+
+    fn join(&self, name: &str) -> std::path::PathBuf {
+        self.0.join(name)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 #[derive(Default)]
