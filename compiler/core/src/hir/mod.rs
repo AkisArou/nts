@@ -52,6 +52,7 @@ pub mod unerase;
 pub mod written_roots;
 
 mod bridges;
+pub mod cse;
 mod dispatch;
 pub mod floating;
 mod initialized;

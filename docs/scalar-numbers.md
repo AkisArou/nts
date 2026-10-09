@@ -605,6 +605,40 @@ It lands in three pieces:
    declare one or the generators naming them through `c:types` aliases. That is
    a hardening item of its own, not part of the numbers.
 
+**2e, as built (2026-10-09): Q1's holes, measured rather than assumed.** Each
+of the seven ways TypeScript lets a plain number into a written kind was
+written as a program and given to the strict check:
+- `number[]` passed as `Uint8[]`;
+- `{ x: number }` passed as `{ x: Uint8 }`;
+- a function taking `Uint8` used as one taking `number`;
+- `any`;
+- a type parameter asserted as `Uint8`;
+- `as Uint8[]`;
+- a function returning `number` called as one returning `Uint8`.
+
+Every one was already closed by step 1:
+- an array element and a field read through a structural type carry no kind
+  yet, so a value read from one must still be proven;
+- a function type's parameters must be written alike (NTS5002), and its result
+  is not trusted;
+- an `as` must be proven;
+- an `any` is a store like any other.
+
+The test `the_holes_typescript_leaves_into_a_kind_are_closed` holds all seven,
+each beside a control the check accepts.
+
+The controls found the one real gap. An `any` *guarded* in full
+(`typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 255`) could
+still not be passed on, because the lowering reads an erased value afresh at
+every mention: the guards narrowed three reads and the call passed a fourth.
+`hir::cse` now reads an erased value once wherever an identical read dominates
+it, so a guard and the use it guards are one value. That is also one
+conversion instead of four in the emitted code.
+
+Arrays' invariance moves into 2f: an array element has no kind until 2f gives a
+written array its element kind, and that is when `number[]` as `Uint8[]` must
+become an error rather than an unproven read.
+
 **3. The operations** (F):
 - as compiler operations, with the node package and the oracle;
 - **the convert group first.** nts's own runtime writes it by hand today:
@@ -877,6 +911,49 @@ are recommendations.
 
   Then "nts and node compute the same values" holds without exceptions.
   This replaces the playground's U28 and its `-0` rule.
+
+**Q3 elaborated, before 2f (2026-10-09).** 2f stores a written kind at its real
+width: a `Uint8` field becomes one byte, an `Int32` local a 32-bit integer. A
+slot that *is* an integer cannot hold `-0`. So 2f rests on Q3's answer, and
+this spells out what that answer costs.
+
+- **What `-0` is.** JavaScript numbers have two zeros, `0` and `-0`. They are
+  equal (`0 === -0`), print the same (`String(-0)` is `"0"`), and add the same.
+  Only a few things tell them apart: `1 / x` (`Infinity` against `-Infinity`),
+  `Object.is`, and `Math.atan2` and friends.
+- **Where it comes from.** Only a handful of operations make one:
+  - negation of zero (`-x` with `x` zero);
+  - a zero times a negative (`0 * -5`);
+  - a negative divided towards zero (`-1 / Infinity`);
+  - rounding a small negative (`Math.round(-0.4)`, `Math.ceil(-0.5)`);
+  - `-0` written, or parsed (`parseInt("-0")`).
+
+  Counters, indices, lengths, sums of integers, bitwise results (`x | 0` is
+  never `-0`) and anything read from C never are, and the analysis already
+  proves so.
+- **The rule decided (Q3), as step 1 built it.** A value going into one of the
+  program's own integer slots must be proven not `-0`, or it is a compile
+  error that says how to prove it (`x + 0` turns `-0` into `0`). A value going
+  to C, Java or the web needs no such proof: those languages have no `-0` in
+  an integer, and node would hand them `0` too.
+- **What it has cost so far: nothing measurable.** In step 1's census of all
+  1,248 projects, 1,016 strict errors needed fixing, and **none** was about
+  `-0`. The rule is there for parity; in real code it almost never fires.
+- **The alternatives, and why not:**
+  - *Turn `-0` into `0` silently at the slot.* Fast and invisible, but nts
+    would then compute a different value from node for a program that later
+    tells the zeros apart: a silent difference. That is the one thing this
+    plan rules out everywhere else.
+  - *Keep a slot that may hold `-0` as a double.* Correct, but the slot loses
+    its width exactly where the program asked for one, and when it does would
+    depend on the analysis: the same source could change layout between
+    compiler versions.
+  - *Track `-0` in the slot (an extra bit).* Doubles the representation for
+    something that, measured, never happens.
+- **Recommendation: keep Q3 as decided.** 2f can store every written kind at
+  its width with no exception, and nts still computes exactly node's values.
+  The cost is a compile error, with its fix in the message, in a case the
+  census has not found once.
 
 **Q4. Values coming *from* native code.**
 - **The problem:**

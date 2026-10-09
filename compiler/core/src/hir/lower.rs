@@ -14736,6 +14736,11 @@ pub fn lower_with(
     // afterwards. Filled earlier it was the checker's answer to a question the
     // program had not finished answering.
     lowered.program.record_parents = record_parents(snapshot, &hierarchy, &lowered.program);
+    // An erased value read as its representation once per dominating read, so a
+    // guard and the use it guards read one value (`hir::cse`).
+    for func in &mut lowered.program.funcs {
+        super::cse::unerase_once(func);
+    }
     lowered
 }
 

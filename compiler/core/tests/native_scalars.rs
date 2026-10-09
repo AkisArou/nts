@@ -1505,6 +1505,105 @@ fn refusals(name: &str, source: &str) -> Option<Vec<(String, String)>> {
     })
 }
 
+/// TypeScript's own holes into a written kind (`docs/scalar-numbers.md`, Q1),
+/// each closed: a number that reaches a `Uint8` through one of them is never
+/// taken as fitting. Each beside a control that differs in one thing -- a
+/// guard that proves it fits, or the type written alike -- and is accepted,
+/// so the refusal is the hole's and not something else in the program. A
+/// program's own `Uint8` parameter may be held at an integer width, so a value
+/// passed to one must also not be -0 (Q3); a C argument need not.
+///
+/// Arrays and `as` on an array are closed because an element read carries no
+/// kind at all yet; when 2f gives a written array its element kind, it must
+/// bring the arrays' invariance with it.
+#[test]
+fn the_holes_typescript_leaves_into_a_kind_are_closed() {
+    let take = "declare function take(v: Uint8): void;\n";
+    let fits = "Number.isInteger(x) && x >= 0 && x <= 255";
+    let cases: [(&str, String, String); 7] = [
+        (
+            "an array of numbers read as Uint8[]",
+            "function via(a: Uint8[]): void { take(a[0]); }\n\
+             export function f(n: number): number { via([n]); return 0; }\n"
+                .to_owned(),
+            format!(
+                "function via(a: Uint8[]): void {{ const x = a[0]; if ({fits}) take(x); }}\n\
+                 export function f(n: number): number {{ via([n]); return 0; }}\n"
+            ),
+        ),
+        (
+            "an object of numbers read as { x: Uint8 }",
+            "type Small = { x: Uint8 };\n\
+             function via(o: Small): void { take(o.x); }\n\
+             export function f(n: number): number { const wide = { x: n }; via(wide); return 0; }\n"
+                .to_owned(),
+            format!(
+                "type Small = {{ x: Uint8 }};\n\
+                 function via(o: Small): void {{ const x = o.x; if ({fits}) take(x); }}\n\
+                 export function f(n: number): number {{ const wide = {{ x: n }}; via(wide); return 0; }}\n"
+            ),
+        ),
+        (
+            "a function taking Uint8 passed as one taking number",
+            "function narrow(v: Uint8): void { take(v); }\n\
+             export function f(n: number): number { const g: (v: number) => void = narrow; g(n); return 0; }\n"
+                .to_owned(),
+            format!(
+                "function narrow(v: Uint8): void {{ take(v); }}\n\
+                 export function f(x: number): number {{ const g: (v: Uint8) => void = narrow; if ({fits}) g(x + 0); return 0; }}\n"
+            ),
+        ),
+        (
+            "an `any`",
+            "export function f(n: number): number { const v: any = n; take(v); return 0; }\n".to_owned(),
+            format!(
+                "export function f(n: number): number {{ const x: any = n; if (typeof x === \"number\" && {fits}) take(x); return 0; }}\n"
+            ),
+        ),
+        (
+            "a type parameter asserted as Uint8",
+            "function generic<T>(v: T): void { take(v as unknown as Uint8); }\n\
+             export function f(n: number): number { generic(n); return 0; }\n"
+                .to_owned(),
+            format!(
+                "function generic<T>(v: T): void {{ const x = v as unknown as number; if ({fits}) take(x as Uint8); }}\n\
+                 export function f(n: number): number {{ generic(n); return 0; }}\n"
+            ),
+        ),
+        (
+            "an array asserted as Uint8[]",
+            "export function f(n: number): number { const a = [n] as Uint8[]; take(a[0]); return 0; }\n".to_owned(),
+            format!(
+                "export function f(n: number): number {{ const a = [n] as Uint8[]; const x = a[0]; if ({fits}) take(x); return 0; }}\n"
+            ),
+        ),
+        (
+            "a function returning number called as one returning Uint8",
+            "function wide(): number { return 300; }\n\
+             export function f(n: number): number { const g = wide as () => Uint8; take(g()); return n; }\n"
+                .to_owned(),
+            format!(
+                "function wide(): number {{ return 300; }}\n\
+                 export function f(n: number): number {{ const g = wide as () => Uint8; const x = g(); if ({fits}) take(x); return n; }}\n"
+            ),
+        ),
+    ];
+    for (at, (hole, open, control)) in cases.iter().enumerate() {
+        let Some(refused) = refusals(&format!("q1-hole-{at}"), &format!("{take}{open}")) else {
+            return;
+        };
+        assert!(!refused.is_empty(), "{hole}: taken as fitting");
+        let Some(accepted) = refusals(&format!("q1-control-{at}"), &format!("{take}{control}"))
+        else {
+            return;
+        };
+        assert!(
+            accepted.is_empty(),
+            "{hole}: the control is refused too: {accepted:?}"
+        );
+    }
+}
+
 /// Each way a value is proven to fit its C slot, beside a control that
 /// differs from it in one thing and is refused: the proof is what the
 /// difference took away.
