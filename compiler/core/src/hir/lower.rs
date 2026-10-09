@@ -57417,7 +57417,13 @@ impl<'a> FuncBuilder<'a> {
         //
         // `left` is still lowered. `f() && b` where `f` returns `false` decides
         // the operator and still makes the call.
-        if let Some(known) = self.statically_decided(left) {
+        // An operand that is an object whatever runs decides it too: `obj &&
+        // flag` is `flag`, and the other arm would be the object read as the
+        // boolean the expression is typed (`blockers/an-object-and-a-boolean-as-a-value`).
+        if let Some(known) = self
+            .statically_decided(left)
+            .or_else(|| self.never_falsy(left).then_some(true))
+        {
             let short_circuits = if and { !known } else { known };
             // `false && b` is `false` and `true || b` is `true`: the answer is
             // the operand already lowered.
@@ -57441,6 +57447,78 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A value as a condition, by JavaScript's rules.
+    /// Whether an expression is an object whatever runs, so never falsy: its
+    /// type an object, an array, a tuple, a function or a symbol.
+    ///
+    /// **Read off the declared type where the expression reads a binding or a
+    /// property**, never the narrowed one at the read: a `Foo | null` the checker
+    /// narrowed to `Foo` is stale where a closure assigns the binding, which is
+    /// the hazard [`Self::reads_a_binding_that_can_change`] records. Any other
+    /// expression -- a call, a `new`, a literal -- is not a narrowing of
+    /// anything, and its own type is the answer.
+    fn never_falsy(&self, node: NodeId) -> bool {
+        let declared = match self.kind_of(node) {
+            Some(syntax::PARENTHESIZED_EXPRESSION) => {
+                return self
+                    .children(node)
+                    .first()
+                    .is_some_and(|inner| self.never_falsy(*inner));
+            }
+            Some(syntax::IDENTIFIER) => self
+                .node(node)
+                .symbol
+                .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+                .and_then(|record| record.ty),
+            // The property as its object's type declares it.
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => {
+                let parts = self.children(node);
+                let (Some(object), Some(member)) = (parts.first(), parts.last()) else {
+                    return false;
+                };
+                let name = self.literal_name(*member);
+                self.snapshot
+                    .node_types
+                    .get(object)
+                    .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+                    .and_then(|record| match &record.kind {
+                        TypeKind::Object { properties } => properties
+                            .iter()
+                            .find(|property| Some(&property.name) == name.as_ref())
+                            .map(|property| property.ty),
+                        _ => None,
+                    })
+            }
+            _ => self.snapshot.node_types.get(&node).copied(),
+        };
+        let Some(declared) = declared else {
+            return false;
+        };
+        let always = |ty: TypeId| {
+            matches!(
+                self.snapshot
+                    .types
+                    .get(ty.0 as usize)
+                    .map(|record| &record.kind),
+                Some(
+                    TypeKind::Object { .. }
+                        | TypeKind::Array(_)
+                        | TypeKind::Tuple(_)
+                        | TypeKind::Function(_)
+                        | TypeKind::Symbol
+                )
+            )
+        };
+        match self
+            .snapshot
+            .types
+            .get(declared.0 as usize)
+            .map(|record| &record.kind)
+        {
+            Some(TypeKind::Union(members)) => members.iter().all(|member| always(*member)),
+            _ => always(declared),
+        }
+    }
+
     fn truthy(&mut self, id: NodeId, value: ValueId) -> ValueId {
         // A bool is already its own condition; anything else needs the rule.
         if matches!(self.values[value.0 as usize].ty, HirType::Bool) {
