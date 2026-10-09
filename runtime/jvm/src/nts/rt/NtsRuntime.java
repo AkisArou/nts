@@ -145,6 +145,16 @@ public final class NtsRuntime {
         if (right == 0L) { throw new NtsRefusal("an integer remainder by zero"); }
         return (left | right) >= 0L ? left % right : Long.remainderUnsigned(left, right);
     }
+    // A `u64` is held in a `long` raw, so `l2d` and `l2f` read its top bit as a
+    // sign: 2^64 - 1 became -1. Above 2^63 it is halved, keeping the low bit so
+    // the rounding is still to nearest (the bit that would be shifted out is
+    // "sticky"), and doubled back, which is exact.
+    public static double u64ToDouble(long value) {
+        return value >= 0L ? (double) value : (double) ((value >>> 1) | (value & 1L)) * 2.0;
+    }
+    public static float u64ToFloat(long value) {
+        return value >= 0L ? (float) value : (float) ((value >>> 1) | (value & 1L)) * 2.0f;
+    }
     public static long ldiv(long left, long right) {
         if (right == 0L) { throw new NtsRefusal("an integer division by zero"); }
         return left / right;

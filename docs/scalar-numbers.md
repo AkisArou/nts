@@ -639,6 +639,34 @@ Arrays' invariance moves into 2f: an array element has no kind until 2f gives a
 written array its element kind, and that is when `number[]` as `Uint8[]` must
 become an error rather than an unproven read.
 
+**2g, as built (2026-10-09): the JVM's unsigned integers.** The JVM has no
+unsigned type, so a `u32` is held raw in an `int` and a `u64` in a `long`. Their
+top bit is a value bit, and every signed instruction read it as a sign:
+- an ordering comparison: `if_icmp` and `lcmp` made `3000000000 > 1` false;
+- `l2d` and `l2f`: 2^64 - 1 became -1;
+- an `Erase`: a `u32` of 3000000000 read as -1294967296.
+
+Division and remainder were already right. The C and LLVM backends emit
+`icmp ugt` and `uitofp` and never had the problem.
+
+- An ordering comparison of unsigned operands calls `Integer.compareUnsigned` or
+  `Long.compareUnsigned`, in the branch and the value form alike; equality needs
+  nothing.
+- One function decides the unsigned widening (`unsigned_to`) for every crossing
+  that knows the value's type: `Convert`, `Erase`, and an operand pushed at
+  another kind. Before, only a `Convert` of a `u32` had it. What an instruction
+  produces (`arraylength`, a Java `long`) is signed and keeps the plain table.
+- A `u64` becomes a `double` or a `float` through two runtime helpers that halve
+  it with the low bit kept, so the rounding is still to nearest. They round
+  straight to `float`, not through `double`, which would round twice.
+- `Math.min` and `Math.max` on unsigned integers would be signed. Nothing
+  produces them, so they are refused by name rather than left to answer wrong.
+
+Plain TypeScript doesn't hold a `u32` in a register until 2f, so the test
+(`jvm/tests/unsigned.rs`) is hand-built HIR at values just past 2^31 and 2^63.
+The previous backend gets every unsigned case in it wrong. The JVM lane reviewed
+the plan and pointed at the `Erase` and the shared conversion table.
+
 **3. The operations** (F):
 - as compiler operations, with the node package and the oracle;
 - **the convert group first.** nts's own runtime writes it by hand today:

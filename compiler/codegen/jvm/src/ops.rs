@@ -3502,6 +3502,9 @@ impl Emitter<'_> {
             HirType::Int { .. } | HirType::Float { .. } => {
                 let source = types::kind(&from)
                     .ok_or_else(|| refuse(self.func, "erasing an unrepresentable value"))?;
+                // A `u32` of 3000000000 erased read as -1294967296 until this.
+                let source = Self::unsigned_to(code, pool, origin, (source, &from), Kind::Double)
+                    .unwrap_or(source);
                 if source != Kind::Double {
                     let opcode = match source {
                         Kind::Long => insn::L2D,
@@ -4161,12 +4164,66 @@ impl Emitter<'_> {
     ) -> Result<(), Diagnostic> {
         self.load(code, pool, value)?;
         let have = self.kind_of(value)?;
+        let have =
+            Self::unsigned_to(code, pool, origin, (have, self.ty(value)), wanted).unwrap_or(have);
         convert_kind(code, origin, have, wanted).ok_or_else(|| {
             refuse(
                 self.func,
                 &format!("a {have:?} where a {wanted:?} is needed"),
             )
         })
+    }
+
+    /// The step that reads an unsigned integer as one on its way to `to`,
+    /// emitted, and the kind it leaves on the stack; `None` where the value on
+    /// the stack (`have`, of type `from`) needs no such step.
+    ///
+    /// **Decided here, for every crossing that knows the type.** The JVM has no
+    /// unsigned type, so a `u32` held raw in an `int` and a `u64` in a `long`
+    /// have a top bit that is a value bit, and every signed widening reads it
+    /// as a sign: `i2l`, `i2d`, `l2d`, `l2f`. A `Convert` got this right for a
+    /// `u32` and nothing else did -- an `Erase` and an operand pushed at another
+    /// kind went through the plain table. The narrower unsigned widths are
+    /// zero-extended inside their `int` and need nothing. What an instruction
+    /// *produces* (`arraylength`, a Java `long`) is signed, so
+    /// [`Self::adapt_to`] keeps the table.
+    fn unsigned_to(
+        code: &mut Code,
+        pool: &mut Pool,
+        origin: &nts_semantic_schema::Origin,
+        (have, from): (Kind, &HirType),
+        to: Kind,
+    ) -> Option<Kind> {
+        match (from, have, to) {
+            (
+                HirType::Int {
+                    bits: 32,
+                    signed: false,
+                },
+                Kind::Int,
+                Kind::Long | Kind::Float | Kind::Double,
+            ) => {
+                code.invoke_static(origin, pool, "java/lang/Integer", "toUnsignedLong", "(I)J");
+                Some(Kind::Long)
+            }
+            (
+                HirType::Int {
+                    bits: 64,
+                    signed: false,
+                },
+                Kind::Long,
+                Kind::Float | Kind::Double,
+            ) => {
+                let (name, signature) = if to == Kind::Double {
+                    ("u64ToDouble", "(J)D")
+                } else {
+                    ("u64ToFloat", "(J)F")
+                };
+                code.invoke_static(origin, pool, RUNTIME, name, signature);
+                Some(to)
+            }
+            _ => None,
+        }
     }
 
     /// Adapt what an instruction *produced* to the representation the middle
@@ -5208,6 +5265,17 @@ impl Emitter<'_> {
             // `Math.min` and `Math.max` on doubles are JavaScript's, exactly:
             // NaN propagates and `-0.0` is less than `0.0`. C's `fmin`/`fmax`
             // are wrong on both, which is why the native runtime has its own.
+            // `Math.min` on two `int`s is signed, so an unsigned operand would
+            // answer wrong above 2^31. Nothing makes one today; refused by name
+            // rather than emitted, should something start to.
+            BinOp::Min | BinOp::Max
+                if matches!(self.ty(value), HirType::Int { signed: false, .. }) =>
+            {
+                return Err(refuse(
+                    self.func,
+                    "the smaller or larger of two unsigned integers",
+                ));
+            }
             BinOp::Min | BinOp::Max => {
                 let name = if op == BinOp::Min { "min" } else { "max" };
                 let descriptor = kind.descriptor();
@@ -5270,23 +5338,7 @@ impl Emitter<'_> {
         // runtime compared addresses here for as long as both backends existed,
         // which is the failure that made ordering-on-references a refusal in
         // this backend rather than an `if_acmp`.
-        if *self.ty(lhs) == HirType::Erased || *self.ty(rhs) == HirType::Erased {
-            return self.branch_on_erased(code, pool, test, target, &origin);
-        }
-        if matches!(self.ty(lhs), HirType::BigInt) {
-            self.load(code, pool, lhs)?;
-            self.load(code, pool, rhs)?;
-            code.invoke_static(
-                &origin,
-                pool,
-                types::BIGINT,
-                "compare",
-                "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)I",
-            );
-            let test = if negate { compare.inverted() } else { compare };
-            code.branch_zero(&origin, test, target);
-            return Ok(());
-        }
+        //
         // Both strings, for the reason `reference_binary`'s string arm gives: a
         // string against another reference is identity below, or a refusal.
         if matches!(self.ty(lhs), HirType::Managed(ManagedType::String))
@@ -5311,8 +5363,29 @@ impl Emitter<'_> {
         // inverting the test are the same thing there. Floats are not, which is
         // why only this arm may do it.
         let test = if negate { compare.inverted() } else { compare };
+        // **An unsigned integer orders as one.** The JVM has no unsigned type,
+        // so a `u32` or `u64` is held raw and its top bit is a value bit, which
+        // `if_icmp` and `lcmp` read as a sign: `3000000000 > 1` answered false.
+        // `compareUnsigned` is the JVM's own spelling of `icmp ugt` (the JIT
+        // makes it the sign-flipped signed compare), and equality needs none.
+        let unsigned = matches!(self.ty(lhs), HirType::Int { signed: false, .. })
+            && !matches!(test, Compare::Eq | Compare::Ne);
         match kind {
+            Kind::Int if unsigned => {
+                code.invoke_static(
+                    &origin,
+                    pool,
+                    "java/lang/Integer",
+                    "compareUnsigned",
+                    "(II)I",
+                );
+                code.branch_zero(&origin, test, target);
+            }
             Kind::Int => code.branch_int(&origin, test, target),
+            Kind::Long if unsigned => {
+                code.invoke_static(&origin, pool, "java/lang/Long", "compareUnsigned", "(JJ)I");
+                code.branch_zero(&origin, test, target);
+            }
             // No `if_lcmp`: a `long` comparison is `lcmp` and then a test
             // against zero, which is what `branch_zero` reads.
             Kind::Long => {
@@ -5706,30 +5779,14 @@ impl Emitter<'_> {
             .ok_or_else(|| refuse(self.func, "a conversion to an unrepresentable type"))?;
         // A `uint32` fills its slot, so its top bit is a value bit and `i2d`
         // would read it as a sign: `storeU32` answered -2147483648 where node
-        // said 2147483648, and -1 where node said 4294967294. The narrower
-        // unsigned widths do not have this problem, because the mask below
-        // leaves them zero-extended inside an `int` that is wider than they
-        // are -- only a `uint32` has no room left to be zero-extended into.
-        //
-        // `Integer.toUnsignedLong` is the JVM's spelling of `zext`, and it is
-        // the same route `ToUint32` already takes a few hundred lines up. This
-        // is a case where the JVM's lack of unsigned types is a *correctness*
-        // problem rather than the performance one the plan predicted: `Kind`
-        // is the stack representation and has no signedness, so a table keyed
-        // on it cannot see the difference and answers plausibly.
-        let source = if matches!(
-            from,
-            HirType::Int {
-                bits: 32,
-                signed: false
-            }
-        ) && matches!(target, Kind::Long | Kind::Float | Kind::Double)
-        {
-            code.invoke_static(origin, pool, "java/lang/Integer", "toUnsignedLong", "(I)J");
-            Kind::Long
-        } else {
-            source
-        };
+        // said 2147483648, and -1 where node said 4294967294. A `uint64` the
+        // same, with no wider slot at all. The JVM's lack of unsigned types is
+        // a *correctness* problem here, not the performance one the plan
+        // predicted: `Kind` is the stack representation and has no signedness,
+        // so a table keyed on it cannot see the difference and answers
+        // plausibly. See [`Self::unsigned_to`].
+        let source =
+            Self::unsigned_to(code, pool, origin, (source, from), target).unwrap_or(source);
         // **A managed value becoming a boolean is truthiness, not an opcode.**
         // The table below is keyed on `Kind`, which has no arm for a reference,
         // so this refused -- `a conversion this backend has no opcode for: an
@@ -6097,6 +6154,7 @@ impl Emitter<'_> {
                 "I" | "S" | "B" | "C" | "Z" => {
                     code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
                 }
+                // Java's `long` is signed, so the signed widening is the right one.
                 "J" => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
                 "F" => code.convert(origin, insn::F2D, Kind::Float, Kind::Double),
                 other => {
@@ -6234,6 +6292,7 @@ impl Emitter<'_> {
                 "I" | "S" | "B" | "C" | "Z" => {
                     code.convert(origin, insn::I2D, Kind::Int, Kind::Double);
                 }
+                // Java's `long` is signed, so the signed widening is the right one.
                 "J" => code.convert(origin, insn::L2D, Kind::Long, Kind::Double),
                 "F" => code.convert(origin, insn::F2D, Kind::Float, Kind::Double),
                 _ => {}
