@@ -1824,6 +1824,52 @@ fn provided_error_identities(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashM
     identities
 }
 
+/// Whether the program can hold a function value, and so carries the closure
+/// slots: anything in it is a closure, or a class of it declares `then` (see
+/// `Hierarchy::declares_a_then`), or it receives a function value it did not
+/// make ([`receives_a_function_value`]). A program with none carries no table
+/// at all, which is what it should carry.
+fn needs_closure_slots(
+    snapshot: &SemanticSnapshot,
+    closures: &[ClosureInfo],
+    hierarchy: &Hierarchy,
+) -> bool {
+    closures.iter().any(|closure| closure.refusal.is_none())
+        || hierarchy.declares_a_then()
+        || receives_a_function_value(snapshot)
+}
+
+/// Whether the program declares a parameter or a field of a function type, so
+/// a function value can arrive from outside it -- a Java lambda, a JavaScript
+/// callback, a native one -- with no closure of the program's own.
+///
+/// Such a value is called, and handed back out, through the uniform entries,
+/// so the program needs their slots although it makes no closure: without them
+/// `f("x", "y")` on a `Pair` parameter was refused as "a call of a function
+/// value in a program with no closures", and on the JVM the signature
+/// published no face, so a Java caller could not pass a lambda at all
+/// (`blockers/a-call-through-a-function-type-with-no-closure-in-the-program`).
+/// A program with neither keeps carrying no table.
+///
+/// A declaration file's parameters are not counted: they describe a native or
+/// library function, which receives the value, rather than the program.
+fn receives_a_function_value(snapshot: &SemanticSnapshot) -> bool {
+    snapshot.nodes.iter().enumerate().any(|(index, node)| {
+        matches!(
+            node.kind,
+            NodeKind::Syntax(syntax::PARAMETER | syntax::PROPERTY_DECLARATION)
+        ) && snapshot
+            .node_types
+            .get(&NodeId(u32::try_from(index).unwrap_or(u32::MAX)))
+            .and_then(|ty| snapshot.types.get(ty.0 as usize))
+            .is_some_and(|record| matches!(record.kind, TypeKind::Function(_)))
+            && snapshot
+                .sources
+                .get(node.origin.location.file.0 as usize)
+                .is_some_and(|source| !is_a_declaration_path(&source.uri))
+    })
+}
+
 fn collect_hierarchy(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -1965,10 +2011,9 @@ fn collect_hierarchy(
             .slots
             .insert(key, u32::try_from(at).unwrap_or(u32::MAX));
     }
-    // One more slot on the end, if anything in the program is a closure. A
-    // program with none carries no table at all, which is what it should carry.
-    // Or one whose class declares `then`: see `Hierarchy::declares_a_then`.
-    if closures.iter().any(|closure| closure.refusal.is_none()) || hierarchy.declares_a_then() {
+    // One more slot on the end, if anything in the program can be a function
+    // value: see [`needs_closure_slots`].
+    if needs_closure_slots(snapshot, closures, &hierarchy) {
         hierarchy.closure_slot = Some(u32::try_from(hierarchy.slots.len()).unwrap_or(u32::MAX));
         // And the erased entry beside it, on exactly the same terms: a program
         // with no closures carries neither.
@@ -12352,12 +12397,14 @@ fn is_declaration_file(
     snapshot
         .sources
         .get(module.file.0 as usize)
-        .is_some_and(|source| {
-            let path = source.uri.as_str();
-            [".d.ts", ".d.mts", ".d.cts"]
-                .iter()
-                .any(|suffix| path.ends_with(suffix))
-        })
+        .is_some_and(|source| is_a_declaration_path(&source.uri))
+}
+
+/// Whether a source path is a declaration file's: `.d.ts`, `.d.mts`, `.d.cts`.
+fn is_a_declaration_path(path: &str) -> bool {
+    [".d.ts", ".d.mts", ".d.cts"]
+        .iter()
+        .any(|suffix| path.ends_with(suffix))
 }
 
 /// The eager modules' statements in evaluation order, for `module#init`; and

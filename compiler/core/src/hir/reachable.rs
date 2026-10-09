@@ -431,6 +431,92 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
     names
 }
 
+/// The function types a root's parameters or result carry anywhere within
+/// them: directly, as an array's element, or as a field of a record they carry,
+/// each layout walked once. A signature with an erased face, or a closure class
+/// itself.
+fn surface_functions(program: &Program, roots: &[&str]) -> FxHashSet<super::TypeId> {
+    fn walk(
+        program: &Program,
+        ty: &super::HirType,
+        seen: &mut FxHashSet<super::TypeId>,
+        found: &mut FxHashSet<super::TypeId>,
+    ) {
+        match ty {
+            super::HirType::Managed(super::ManagedType::Array(element)) => {
+                walk(program, element, seen, found);
+            }
+            super::HirType::Managed(super::ManagedType::Object(id)) => {
+                if program.signature_faces.contains_key(id) || super::has_a_closure_body(*id) {
+                    found.insert(*id);
+                    return;
+                }
+                if !seen.insert(*id) {
+                    return;
+                }
+                for field in program
+                    .layouts
+                    .iter()
+                    .filter(|layout| layout.types.contains(id))
+                    .flat_map(|layout| layout.fields.iter())
+                {
+                    walk(program, &field.ty, seen, found);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut seen = FxHashSet::default();
+    let mut found = FxHashSet::default();
+    for func in program
+        .funcs
+        .iter()
+        .filter(|func| roots.contains(&func.name.as_str()))
+    {
+        for ty in func
+            .params
+            .iter()
+            .map(|param| &param.ty)
+            .chain(std::iter::once(&func.return_type))
+        {
+            walk(program, ty, &mut seen, &mut found);
+        }
+    }
+    found
+}
+
+/// The written `#call` and uniform entry of every closure a caller outside the
+/// program can be handed through one of `surface`'s function types -- one that
+/// was admitted into it (its `base`), or that is one -- where the entry exists:
+/// a refused closure's entry names nothing, and keeping the name would leave a
+/// table pointing at an undefined function.
+fn closure_entries_from_outside<'p>(
+    program: &'p Program,
+    surface: &FxHashSet<super::TypeId>,
+    by_name: &FxHashMap<&str, usize>,
+) -> Vec<&'p str> {
+    let slots: Vec<usize> = [program.closure_slot, program.erased_call_slot]
+        .into_iter()
+        .flatten()
+        .map(|slot| slot as usize)
+        .collect();
+    program
+        .layouts
+        .iter()
+        .filter(|layout| layout.types.iter().any(|ty| super::has_a_closure_body(*ty)))
+        .filter(|layout| {
+            layout.base.is_some_and(|base| surface.contains(&base))
+                || layout.types.iter().any(|ty| surface.contains(ty))
+        })
+        .flat_map(|layout| {
+            slots
+                .iter()
+                .filter_map(|slot| layout.methods.get(*slot).and_then(Option::as_deref))
+        })
+        .filter(|name| by_name.contains_key(name))
+        .collect()
+}
+
 /// Remove every function the roots cannot reach, and report how many.
 pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     // Both indexes read the program once for questions this walk asks per
@@ -446,6 +532,24 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     let hierarchy = Hierarchy::build(program);
     let mut reached: FxHashSet<&str> = FxHashSet::default();
     let mut pending: Vec<&str> = root_names(program, roots);
+    // **And what the outside calls through a function it is handed.** A
+    // library whose surface carries a function type gives a caller this
+    // program cannot see a value to call, or a slot to fill, and that caller
+    // calls it as any site that does not know the closure would: through its
+    // written `#call` (a JVM callback interface binds to it) or its uniform
+    // entry. A closure that leaves only through an exported return used to
+    // keep neither, and Java received an object it could not call
+    // (`blockers/a-closure-returned-to-java-with-no-typescript-caller-is-an-empty-shell`).
+    // The closures admitted into a function type the surface carries, rather
+    // than every closure: keeping every closure's entries in a library made
+    // whatever they call reachable too, and with it refusals nothing could
+    // reach before. An executable has no outside.
+    if !matches!(roots, Roots::Entry(_)) {
+        let surface = surface_functions(program, &pending);
+        if !surface.is_empty() {
+            pending.extend(closure_entries_from_outside(program, &surface, &by_name));
+        }
+    }
     reached.extend(pending.iter().copied());
 
     while let Some(name) = pending.pop() {

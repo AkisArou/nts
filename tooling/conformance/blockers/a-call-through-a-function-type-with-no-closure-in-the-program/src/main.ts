@@ -1,4 +1,14 @@
-// expect: a call of a function value in a program with no closures
+// expect: lowers
+//
+// **FIXED 2026-10-09, kept as a guard** (MainClaude). The program declares a
+// parameter of a function type, so a function value can arrive from outside it
+// with no closure of its own, and the hierarchy now gives such a program the
+// uniform slots (`receives_a_function_value`). `f("x", "y")` lowers through the
+// erased entry, and on the JVM `Pair` publishes its face, so `keep` gets its
+// `NtsTextPairCallback` overload. The record of the defect follows, with its
+// expectation as it was:
+//
+//   expect: a call of a function value in a program with no closures
 //
 // A value of a function type called from TypeScript, in a program that
 // creates no closure of its own: every `Pair` arrives from outside, as a Java

@@ -1,4 +1,12 @@
-// expect: emit-jvm -> lacks-interface nts.gen.Closure0 nts.rt.NtsTextPairCallback
+// expect: emit-jvm -> implements-interface nts.gen.Closure0 nts.rt.NtsTextPairCallback
+//
+// **FIXED 2026-10-09, kept as a guard** (MainClaude). Reachability now counts
+// the outside as a caller of every closure's written and uniform entries when a
+// library's surface carries a function type (`surface_carries_a_function`), so
+// `Closure0` keeps the typed `call` its face binds. The record of the defect
+// follows, with its expectation as it was:
+//
+//   expect: emit-jvm -> lacks-interface nts.gen.Closure0 nts.rt.NtsTextPairCallback
 //
 // A closure that leaves the program only through an exported return: `joiner`
 // hands a `Pair` to its caller, and nothing in TypeScript calls a `Pair`.

@@ -299,6 +299,13 @@ for (const name of names) {
   // say it. Read through javap; see `emittedInterfaces` for why a missing class
   // or a missing javap is a report, never "lacks".
   const lacksInterface = viaJvm ? /^lacks-interface\s+(\S+)\s+(\S+)$/.exec(wanted) : null;
+  // And its guard form, for the fixed state: the class declares the interface.
+  // The same javap read, so the same rule -- a missing class or a missing javap
+  // is a report, never a pass. Controlled on the day it was written: pointed at
+  // an interface the class does not declare, it reported REGRESSED.
+  const implementsInterface = viaJvm
+    ? /^implements-interface\s+(\S+)\s+(\S+)$/.exec(wanted)
+    : null;
   const emitsC = /^emits-c\s+(.+)$/.exec(wanted);
   // And a fourth: a blocker visible only in the *wrapper*. `emits-addon` reads
   // addon.c, where a defect can be that two exports each got their own
@@ -403,7 +410,8 @@ for (const name of names) {
     console.log(`                evaluated either way. Expected: ${expected}`);
     continue;
   }
-  const declared = lacksInterface === null ? null : emittedInterfaces(output, lacksInterface[1]);
+  const interfaceForm = lacksInterface ?? implementsInterface;
+  const declared = interfaceForm === null ? null : emittedInterfaces(output, interfaceForm[1]);
   if (typeof declared === "string") {
     unexpected++;
     console.log(`  NO OUTPUT   ${name}: ${declared}, so the expectation could not be evaluated`);
@@ -592,6 +600,8 @@ for (const name of names) {
     ? program.length > 0 && !program.includes(lacksC[1])
     : lacksInterface !== null
     ? !declared.includes(lacksInterface[2])
+    : implementsInterface !== null
+    ? declared.includes(implementsInterface[2])
     : emitsC !== null
     ? program.includes(emitsC[1])
     : emitsAddon !== null
@@ -740,6 +750,8 @@ for (const name of names) {
     console.log(`  ${verdict}  ${name}: the backend now emits it. Expected absence of:`);
   } else if (lacksInterface !== null) {
     console.log(`  ${verdict}  ${name}: ${lacksInterface[1]} declares it now. Expected absence of:`);
+  } else if (implementsInterface !== null) {
+    console.log(`  ${verdict}  ${name}: ${implementsInterface[1]} does not declare it now. Expected:`);
   } else if (lacksAddon !== null) {
     console.log(`  ${verdict}  ${name}: the wrapper names it now. Expected absence of:`);
   } else if (addonCompiles) {
