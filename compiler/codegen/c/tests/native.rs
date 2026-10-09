@@ -1076,7 +1076,14 @@ declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
     assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
+    // A root's written parameter is its kind in C too: a caller outside the
+    // program converts to it, as for any C function, and was never obliged
+    // to prove anything (`written_roots`). A `number` stays a `double`.
+    let text = emitted.writer.text();
+    for prototype in ["double i32(int32_t v0)", "double u16(double v0)", "void store(int * v0, int32_t v1)"] {
+        assert!(text.contains(prototype), "no `{prototype}` in:\n{text}");
+    }
+    std::fs::write(dir.join("program.c"), text).unwrap();
     for file in emitted.support_files() {
         file.write(dir.as_std_path()).unwrap();
     }

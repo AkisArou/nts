@@ -28,6 +28,7 @@ pub mod bounds;
 pub mod builtin;
 mod boxing;
 pub mod obligations;
+pub mod written_roots;
 pub mod dce;
 pub mod elements;
 pub mod escape;
@@ -6355,6 +6356,70 @@ fn provide(program: &mut Program, provider: Provider) -> rc::Report {
     }
 }
 
+/// Numbers proven into integers across the whole program: folding, bounds,
+/// storage, signatures and then bodies, each on a fresh analysis. Answers how
+/// many values were specialized, conversions inserted and checks removed.
+fn specialize_numbers_of(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, usize, usize) {
+    let (mut specialized, mut conversions, mut checks_removed) = (0, 0, 0);
+    // Analyzed as a program rather than a function at a time: a parameter is
+    // written by callers and a call's result by the callee, and neither is
+    // visible from inside.
+    let analyses = interprocedural::analyze_program(program, roots);
+    for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
+        // Folding first, because a folded constant is a smaller thing to
+        // specialize and because a coercion of a known value should never
+        // reach the backend as a call.
+        fold::fold(func, analysis);
+    }
+
+    // Re-analyzed, since folding changed what the operations are — and a
+    // folded return value is a sharper fact for every caller.
+    let analyses = interprocedural::analyze_program(program, roots);
+
+    // Bounds first, because proving an access safe *sharpens the facts*
+    // rather than merely removing a test. A `charCodeAt` that might be out
+    // of range might be NaN, and a NaN cannot be an integer -- so a scan by
+    // code unit stayed floating point until this ran, and running it after
+    // specialization was too late to matter. It runs again at the end, for
+    // what specialization itself sharpens.
+    let field_lengths = fields::lengths(program, &analyses);
+    for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
+        checks_removed += bounds::eliminate_checks(func, analysis, &field_lengths);
+    }
+
+    let analyses = interprocedural::analyze_program(program, roots);
+    narrow_storage(program, &analyses, roots);
+
+    // Signatures before bodies. A parameter narrowed to an integer changes
+    // what its body can prove about everything derived from it, and every
+    // caller converts to the narrower type rather than widening back.
+    let outward: rustc_hash::FxHashSet<String> = reachable::root_names(program, roots)
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    // A root's arguments are unknowable, but almost every one of them is a
+    // whole number. One test at the boundary makes that a fact the analysis
+    // below can use, at the cost of a copy of the body.
+    guards::install(program, &outward);
+
+    let analyses = interprocedural::analyze_program(program, roots);
+    signatures::specialize(program, &analyses, &outward);
+    // A test that bought nothing is a test and a copy for nothing. Whether
+    // it bought anything is only knowable now.
+    if guards::retract(program) > 0 {
+        reachable::prune(program, roots);
+    }
+    let expected = signatures::expected(program);
+
+    let analyses = interprocedural::analyze_program(program, roots);
+    for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
+        let report = specialize::specialize(func, analysis, &expected);
+        specialized += report.specialized;
+        conversions += report.conversions;
+    }
+    (specialized, conversions, checks_removed)
+}
+
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
     let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
@@ -6384,67 +6449,10 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
     let pruned = pruned + dropped;
     let unions_split = split_unions(&mut program);
+    written_roots::narrow(&mut program, options.roots, options.targets);
 
-    let (mut specialized, mut conversions, mut checks_removed) = (0, 0, 0);
-
-    if specialize_numbers {
-        // Analyzed as a program rather than a function at a time: a parameter is
-        // written by callers and a call's result by the callee, and neither is
-        // visible from inside.
-        let analyses = interprocedural::analyze_program(&program, options.roots);
-        for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
-            // Folding first, because a folded constant is a smaller thing to
-            // specialize and because a coercion of a known value should never
-            // reach the backend as a call.
-            fold::fold(func, analysis);
-        }
-
-        // Re-analyzed, since folding changed what the operations are — and a
-        // folded return value is a sharper fact for every caller.
-        let analyses = interprocedural::analyze_program(&program, options.roots);
-
-        // Bounds first, because proving an access safe *sharpens the facts*
-        // rather than merely removing a test. A `charCodeAt` that might be out
-        // of range might be NaN, and a NaN cannot be an integer -- so a scan by
-        // code unit stayed floating point until this ran, and running it after
-        // specialization was too late to matter. It runs again at the end, for
-        // what specialization itself sharpens.
-        let field_lengths = fields::lengths(&program, &analyses);
-        for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
-            checks_removed += bounds::eliminate_checks(func, analysis, &field_lengths);
-        }
-
-        let analyses = interprocedural::analyze_program(&program, options.roots);
-        narrow_storage(&mut program, &analyses, options.roots);
-
-        // Signatures before bodies. A parameter narrowed to an integer changes
-        // what its body can prove about everything derived from it, and every
-        // caller converts to the narrower type rather than widening back.
-        let outward: rustc_hash::FxHashSet<String> = reachable::root_names(&program, options.roots)
-            .into_iter()
-            .map(str::to_owned)
-            .collect();
-        // A root's arguments are unknowable, but almost every one of them is a
-        // whole number. One test at the boundary makes that a fact the analysis
-        // below can use, at the cost of a copy of the body.
-        guards::install(&mut program, &outward);
-
-        let analyses = interprocedural::analyze_program(&program, options.roots);
-        signatures::specialize(&mut program, &analyses, &outward);
-        // A test that bought nothing is a test and a copy for nothing. Whether
-        // it bought anything is only knowable now.
-        if guards::retract(&mut program) > 0 {
-            reachable::prune(&mut program, options.roots);
-        }
-        let expected = signatures::expected(&program);
-
-        let analyses = interprocedural::analyze_program(&program, options.roots);
-        for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
-            let report = specialize::specialize(func, analysis, &expected);
-            specialized += report.specialized;
-            conversions += report.conversions;
-        }
-    }
+    let (specialized, mut conversions, mut checks_removed) =
+        if specialize_numbers { specialize_numbers_of(&mut program, options.roots) } else { (0, 0, 0) };
 
 
     // Identities become visible only once specialization has decided

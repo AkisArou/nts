@@ -20,8 +20,11 @@ shipped `runtime/native/libc.d.ts`; no `paths` mapping is needed. `Counter` is
 `Opaque<"Counter">` from `c:types`, naming the C struct tag. It has no TypeScript
 fields and no managed header. `Counter | null` represents a nullable pointer.
 
-`clamped(3.75)` converts its C argument to `int`, then adds `0.25` to the result
-using ordinary TypeScript arithmetic. `roundTrip` creates a counter, changes it,
+`clamped(n: c_int)` takes C's `int`: the generated header declares it
+`double clamped(int32_t)`, so a C caller converts its argument as C converts
+any (`clamped((int32_t)3.75)` is `clamped(3)`), and the TypeScript body reads a
+whole number in `int`'s range. It passes `n` to C and adds `0.25` to the
+result using ordinary TypeScript arithmetic. `roundTrip` creates a counter, changes it,
 reads it, and destroys it. A negative initial value exercises the null branch.
 The C caller checks the library's live-handle count after both calls. The build
 compiles the C library separately and checks generated prototypes against its

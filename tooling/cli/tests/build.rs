@@ -681,6 +681,66 @@ export default defineConfig({
     assert_eq!(String::from_utf8_lossy(&loaded.stdout), "9");
 }
 
+/// An exported function's written parameter is checked where JavaScript
+/// calls it: the body reads `n: c_int` as a whole number in `int`'s range, so
+/// a number outside it is refused at the addon's edge with node's
+/// `ERR_OUT_OF_RANGE` rather than reaching a body that trusts it -- where it
+/// was converted to C's `int`, undefined for `2 ** 31`.
+#[test]
+fn a_written_parameter_is_checked_where_javascript_calls_it() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
+    if !headers.join("node_api.h").exists() {
+        eprintln!("skipping: no node_api.h to build an addon against");
+        return;
+    }
+    let project = fixture(
+        "build-addon-written",
+        r#"
+import { defineConfig, library } from "@nts/config";
+export default defineConfig({
+  products: { thing: library.node({ entry: "./src/main.ts", apiVersion: 8 }) },
+});
+"#,
+    );
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import type { c_int } from \"c:types\";\nexport function half(n: c_int): number { return n / 2; }\n",
+    )
+    .expect("entry");
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("the repository root");
+    std::fs::write(
+        project.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":{:?},"compilerOptions":{{"noEmit":false}},"include":["src",{:?}]}}"#,
+            repo.join("tsconfig.fixtures.json").to_string_lossy(),
+            repo.join("runtime/native/libc.d.ts").to_string_lossy(),
+        ),
+    )
+    .expect("tsconfig");
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("build")
+        .arg(project.join("tsconfig.json"))
+        .env("NTS_NAPI_INCLUDE", &headers)
+        .output()
+        .expect("running nts build");
+    assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let artifact = project.join(".nts/build/thing/node-api-8-x86_64/thing.node");
+    let script = format!(
+        "const a = require({:?}); const out = [a.half(7)];\n\
+         for (const v of [3.5, 2 ** 31, -0, NaN]) {{ try {{ out.push('accepted ' + a.half(v)); }} catch (e) {{ out.push(e.name + ' ' + e.code); }} }}\n\
+         process.stdout.write(out.join('|'));",
+        artifact.to_string_lossy(),
+    );
+    let ran = Command::new("node").arg("-e").arg(script).output().expect("running node");
+    assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+    let refused = "RangeError ERR_OUT_OF_RANGE";
+    assert_eq!(String::from_utf8_lossy(&ran.stdout), format!("3.5|{refused}|{refused}|{refused}|{refused}"));
+}
+
 /// A jar is packaged, runs, and lands in the package its config names.
 ///
 /// **Two artifacts and not one.** `apps/java-desktop-brownfield` states the
@@ -923,7 +983,7 @@ fn native_fixture(name: &str) -> PathBuf {
     .expect("the body");
     std::fs::write(
         project.join("src/main.ts"),
-        "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: number): number {\n  return digest_step(2166136261 as c_uint32, value as c_uint32);\n}\n",
+        "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: c_uint32): number {\n  return digest_step(2166136261 as c_uint32, value);\n}\n",
     )
     .expect("the program");
     std::fs::write(
@@ -979,7 +1039,7 @@ fn a_c_import_is_bound_and_the_package_c_is_linked_in() {
     let project = native_fixture("build-binding");
     std::fs::write(
         project.join("src/main.ts"),
-        "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: number): number {\n  return digest_step(2166136261 as c_uint32, value as c_uint32);\n}\n",
+        "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: c_uint32): number {\n  return digest_step(2166136261 as c_uint32, value);\n}\n",
     )
     .expect("the program");
     std::fs::write(
