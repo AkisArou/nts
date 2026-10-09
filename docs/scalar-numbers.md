@@ -442,6 +442,29 @@ design above became in the code, and the choices made on the way:
 
 
 
+**Step 1 results (2026-10-09).** The strict check itself (`nts facts
+--strict`, the compile errors a build now stops on), over the same 648
+projects, by a release build of the step-1 branch:
+
+- **644 measured, 0 errors.** The last two were the Chromium lane's page
+  script (`clearTimeout(state.pending)`, `clearInterval(<a number from an
+  attribute>)`): WebIDL converts a timer id with ToInt32, so that lane's
+  binding takes a `double` and converts it as Blink does, as `setTimeout`'s
+  timeout already was (5b3dec787).
+- The 4 not measured fail to typecheck on main too: `examples/invalid` on
+  purpose, two GJS examples alone, and a workspace package whose platform
+  modules a workspace build generates. The other workspace apps and
+  `examples/library` are measured, with `@nts/config` linked as the gate links
+  it.
+- Step 0's 589 unproven crossings went three ways. Most were cleared by facts:
+  written and binding types (the generated GTK wrappers' 452 among them),
+  native results, `&&`/`||`/early-return guards, `Number.isInteger`, rounding,
+  guarded string reads. The real edges were fixed where the program is: the
+  two underflows step 0 named, a badge count below zero, sizes stepped past
+  `int`, gettext's count, and values from outside guarded or converted in
+  so many words (`>>> 0`, `| 0`, `Math.fround`). The rest were the program
+  writing the kind it already meant (`let watch: c_int`, `Promise<Int>`).
+
 **2. Written scalar types** (B, D, E, G):
 - the library replaces `libc.d.ts`, which is deleted; the binding generators
   emit the new names, every checked-in binding is regenerated, and every
