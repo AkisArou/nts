@@ -552,23 +552,42 @@ It lands in three pieces:
    its product's targets, all of them, so every target's build checks the
    same program. `nts facts` and `nts hir` check against every target their
    config declares.
-2. **The data model is a table.** `DataModel` states, per (os, arch), what C
-   makes of its own types: `char`'s signedness, `long`'s width and the
-   pointer's width. Each kind is decided from it in one of three ways:
-   - **A store is checked against the intersection** of the product's
-     targets' ranges. A `c_char` written for both x86-64 and arm64 Linux takes
-     0..127.
-   - **HIR holds the union** of every supported target's values, so its
-     representation is the same on every target, as S6 asks. That is already
-     true of `long` (i64) and `size_t` (u64). `char` becomes i16, the narrowest
-     type holding both -128 and 255. A value C hands in carries the union's
-     facts.
-   - **A backend crosses at its target's exact type**, `Scalar::abi(model)`:
-     `char` is i8 signed or unsigned, and `long` is i32 or i64.
+2. **The ABI is a table** (built). `NativeAbi` is a row of data instead of
+   two variants: the calling convention (`PlatformConvention`, which also
+   decides the bit-field rules), and what C makes of its own types, `char`'s
+   signedness and `long`'s width. Three rows cover today's targets:
+   - LP64 with signed `char`: x86-64 Linux, and macOS and iOS;
+   - LP64 with unsigned `char`: arm64 Linux and Android;
+   - LLP64: Windows.
 
-   `NativeAbi` keeps what it is besides: the calling convention and the
-   bit-field rules. `NativeAbi::BOUND`, the upper bound lowering sizes storage
-   with, becomes the model's.
+   `NativeAbi::of(os, arch)` picks the row. Each kind is decided from the rows
+   in one of three ways:
+   - **A store is checked against the intersection** of the product's
+     targets' ranges (`Scalar::range_on`). A `c_char` written for both x86-64
+     and arm64 Linux takes 0..127.
+   - **A read is the union over the product's targets** (`Scalar::reach_on`),
+     what C may hand in on any of them. For one target the two agree, so a
+     `char` C answers can be handed straight back. The first version used the
+     union over every row, and refused exactly that round trip on a plain
+     x86-64 build.
+   - **HIR holds the union over every row**, so its representation is the
+     same on every target, as S6 asks. That was already true of `long` (i64)
+     and `size_t` (u64). `char` becomes i16, the narrowest type holding both
+     -128 and 255.
+   - **A backend crosses at its target's exact type** (`Scalar::abi(row)`):
+     `char` is i8 signed or unsigned, and `long` is i32 or i64. LLVM extends a
+     loaded or promoted `char` by the row's sign.
+
+   The product's rows live on the program as `Targets`, a set of rows whose
+   default is every row. That is the sound assumption where no build has named
+   its own; a set that defaulted to empty would have no range at all, which
+   reads as nothing to check. `prepare` sets them before the check. The check,
+   `written_roots` and the flow analysis's reads of written kinds all take
+   them from there. Emitted C asserts the row against the real compiler,
+   `char`'s signedness included. A test emulates arm64 Linux's `char` with
+   clang's `-funsigned-char`: a `char` of 200 from C reaches the program as 200
+   and goes back to C as 200 on both backends. The signed row's `program.c`
+   refuses to compile under that flag, and ignoring the row reads -56 on LLVM.
 3. **`CBool` and `CEnum` join `@nts/scalars`**, recognised by the library's
    label as the numbers are.
 

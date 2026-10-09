@@ -33,7 +33,7 @@ fn record(fields: &[(&str, Pointee)]) -> Record {
 
 /// Each row is `(byte, lo, width)` as clang prints `byte:lo-hi`.
 fn placed(record: &Record) -> (Vec<(u32, Option<BitPlace>)>, u32, u32) {
-    let place = native_place(record, nts_core::hir::native::NativeAbi::SysV)
+    let place = native_place(record, nts_core::hir::native::NativeAbi::LP64)
         .expect("a record of bit-fields has a layout");
     let rows = place
         .offsets

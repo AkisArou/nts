@@ -32,7 +32,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::native::NativeAbi;
+use super::native::Targets;
 use super::reachable::Roots;
 use super::simplify::{substitute, substitute_terminator};
 use super::{Callee, Func, HirType, Op, OpKind, Param, Program, ValueId};
@@ -41,9 +41,10 @@ use super::{Callee, Func, HirType, Op, OpKind, Param, Program, ValueId};
 /// parameter crosses as it is.
 type Widths = FxHashMap<String, Vec<Option<HirType>>>;
 
-/// Narrow every root's written parameters to their kinds, returning how many
-/// roots changed.
-pub fn narrow(program: &mut Program, roots: Roots<'_>, targets: &[NativeAbi]) -> usize {
+/// Narrow every root's written parameters to their kinds on every target the
+/// program is built for, returning how many roots changed.
+pub fn narrow(program: &mut Program, roots: Roots<'_>) -> usize {
+    let targets = program.targets;
     let roots: FxHashSet<String> = super::reachable::root_names(program, roots)
         .into_iter()
         .map(str::to_owned)
@@ -84,8 +85,8 @@ pub fn narrow(program: &mut Program, roots: Roots<'_>, targets: &[NativeAbi]) ->
 
 /// The width a parameter crosses at: its written kind's, where that is
 /// narrower than the `number` it holds.
-fn width(param: &Param, targets: &[NativeAbi]) -> Option<HirType> {
-    let width = param.written?.on(targets).representation();
+fn width(param: &Param, targets: Targets) -> Option<HirType> {
+    let width = param.written?.width_on(targets);
     (param.ty == HirType::NUMBER && width != HirType::NUMBER).then_some(width)
 }
 

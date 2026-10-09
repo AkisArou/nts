@@ -49,7 +49,7 @@ use rustc_hash::FxHashMap;
 
 use super::facts::Facts;
 use super::flow::{Analysis, Context, Whole, Written};
-use super::native::{NativeAbi, Pointee, Scalar};
+use super::native::{Pointee, Scalar, Targets};
 use super::{
     BinOp, BlockId, Callee, Func, Global, HirType, Layout, ManagedType, OpKind, Program,
     Terminator, TypeId, UnOp, ValueId,
@@ -68,20 +68,56 @@ pub struct Obligation {
     pub bits: Option<u32>,
     pub into: Into,
     pub location: Location,
+    /// The integers the slot holds on every target the program is built for
+    /// (`docs/scalar-numbers.md`, S6), or `None` for a float kind. Lowering,
+    /// which does not know the targets, records every target's; the check
+    /// restates it for the build's ([`Self::on`]).
+    range: Option<(i128, i128)>,
 }
 
 impl Obligation {
+    /// `value` stored into `kind` -- a `bits`-wide bit-field of it, for one --
+    /// at `into`, which must fit on every target nts supports until the
+    /// check says which the program is built for.
+    #[must_use]
+    pub fn new(
+        value: ValueId,
+        block: BlockId,
+        (kind, bits): (Scalar, Option<u32>),
+        into: Into,
+        location: Location,
+    ) -> Self {
+        Self {
+            value,
+            block,
+            kind,
+            bits,
+            into,
+            location,
+            range: range_of(kind, bits, Targets::ALL),
+        }
+    }
+
+    /// The same store, held to what fits on every one of `targets`.
+    #[must_use]
+    pub fn on(self, targets: Targets) -> Self {
+        Self {
+            range: range_of(self.kind, self.bits, targets),
+            ..self
+        }
+    }
+
     /// The integers the slot holds, or `None` for a float kind.
     #[must_use]
     pub fn range(&self) -> Option<(i128, i128)> {
-        range_of(self.kind, self.bits)
+        self.range
     }
 }
 
-/// The integers `kind` holds -- `bits` of them, for a bit-field -- or `None`
-/// for a float kind.
-fn range_of(kind: Scalar, bits: Option<u32>) -> Option<(i128, i128)> {
-    let (lo, hi) = kind.integer_range()?;
+/// The integers `kind` holds on every one of `targets` -- `bits` of them, for
+/// a bit-field -- or `None` for a float kind.
+fn range_of(kind: Scalar, bits: Option<u32>, targets: Targets) -> Option<(i128, i128)> {
+    let (lo, hi) = kind.range_on(targets)?;
     Some(match bits {
         Some(bits) if lo < 0 => (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1),
         Some(bits) => (0, (1i128 << bits) - 1),
@@ -242,14 +278,15 @@ impl Judged {
 }
 
 /// Every obligation in `program`, each judged by [`local_analysis`], against
-/// its kind as every one of `targets` holds it ([`Scalar::on`]).
+/// what fits its kind on every target the program is built for
+/// ([`Program::targets`], [`Scalar::range_on`]).
 ///
 /// Meaningful on the program the lowering produced: the obligations it
 /// recorded name its values, and a pass that renumbers them, or makes a
 /// speculative copy, would leave them stale.
 #[must_use]
-pub fn census(program: &Program, targets: &[NativeAbi]) -> Vec<Judged> {
-    let slots = Slots::of(program, targets);
+pub fn census(program: &Program) -> Vec<Judged> {
+    let slots = Slots::of(program);
     let written = Written::of(program);
     program
         .funcs
@@ -273,12 +310,8 @@ pub fn census(program: &Program, targets: &[NativeAbi]) -> Vec<Judged> {
 /// [`check`] on the program the lowering produced, which then empties each
 /// function's record: the passes after it renumber the values the record
 /// names, so none of them may read it.
-pub fn take_checked(
-    program: &mut Program,
-    arrivals: &[super::lower::Arrival],
-    targets: &[NativeAbi],
-) -> Vec<Diagnostic> {
-    let rejected = check(program, arrivals, targets);
+pub fn take_checked(program: &mut Program, arrivals: &[super::lower::Arrival]) -> Vec<Diagnostic> {
+    let rejected = check(program, arrivals);
     for func in &mut program.funcs {
         func.obligations = Vec::new();
     }
@@ -294,13 +327,9 @@ pub fn take_checked(
 /// An `as` and the slot it feeds are one claim about one value, reported once
 /// and at the `as`, where the program made it.
 #[must_use]
-pub fn check(
-    program: &Program,
-    arrivals: &[super::lower::Arrival],
-    targets: &[NativeAbi],
-) -> Vec<Diagnostic> {
-    let slots = Slots::of(program, targets);
-    let mut unproven: Vec<Judged> = census(program, targets)
+pub fn check(program: &Program, arrivals: &[super::lower::Arrival]) -> Vec<Diagnostic> {
+    let slots = Slots::of(program);
+    let mut unproven: Vec<Judged> = census(program)
         .into_iter()
         .filter(|judged| !judged.proven())
         .collect();
@@ -342,11 +371,11 @@ pub fn check(
 }
 
 /// A kind as a message names it: its C spelling, a bit-field's width, and
-/// the range.
-fn spelled(kind: Scalar, bits: Option<u32>) -> String {
+/// `range`, the values it holds where the message is about.
+fn spelled(kind: Scalar, bits: Option<u32>, range: Option<(i128, i128)>) -> String {
     let name = super::native::Type::Scalar(kind).c_type().into_owned();
     let width = bits.map_or_else(String::new, |bits| format!(" : {bits}"));
-    match range_of(kind, bits) {
+    match range {
         Some((lo, hi)) => format!("`{name}{width}` ({lo}..{hi})"),
         None => format!("`{name}`"),
     }
@@ -367,7 +396,10 @@ fn within(inner: Option<Scalar>, outer: Option<Scalar>) -> bool {
 
 /// A slot's kind or its absence, as a message names it.
 fn kind_or_number(kind: Option<Scalar>) -> String {
-    kind.map_or_else(|| "a plain `number`".to_owned(), |kind| spelled(kind, None))
+    kind.map_or_else(
+        || "a plain `number`".to_owned(),
+        |kind| spelled(kind, None, kind.integer_range()),
+    )
 }
 
 /// The program's slots, as a store's operation names them.
@@ -378,13 +410,12 @@ struct Slots<'a> {
     /// The C result type of each function a native callback bridges to, by
     /// the function's name, and the callback type's.
     bridged: FxHashMap<&'a str, (Scalar, &'a str)>,
-    /// The C ABIs the build targets: an obligation's kind is the one every
-    /// target holds.
-    targets: &'a [NativeAbi],
+    /// The C ABIs the build targets: an obligation holds on every one.
+    targets: Targets,
 }
 
 impl<'a> Slots<'a> {
-    fn of(program: &'a Program, targets: &'a [NativeAbi]) -> Self {
+    fn of(program: &'a Program) -> Self {
         let by_name: FxHashMap<&str, &Func> = program
             .funcs
             .iter()
@@ -421,7 +452,7 @@ impl<'a> Slots<'a> {
             layouts,
             globals: &program.globals,
             bridged,
-            targets,
+            targets: program.targets,
         }
     }
 
@@ -433,17 +464,18 @@ impl<'a> Slots<'a> {
         for (index, block) in func.blocks.iter().enumerate() {
             let block_id = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
             let mut oblige =
-                |at: ValueId, value: ValueId, (kind, bits): (Scalar, Option<u32>), into: Into| {
+                |at: ValueId, value: ValueId, written: (Scalar, Option<u32>), into: Into| {
                     let location = func.value(at).origin.location;
-                    let kind = kind.on(self.targets);
-                    found.push(Obligation {
-                        value: before_conversion(func, value),
-                        block: block_id,
-                        kind,
-                        bits,
-                        into,
-                        location,
-                    });
+                    found.push(
+                        Obligation::new(
+                            before_conversion(func, value),
+                            block_id,
+                            written,
+                            into,
+                            location,
+                        )
+                        .on(self.targets),
+                    );
                 };
             for &op in &block.ops {
                 match &func.value(op).kind {
@@ -585,10 +617,12 @@ impl<'a> Slots<'a> {
                 }
             }
         }
-        found.extend(func.obligations.iter().map(|obligation| Obligation {
-            value: before_conversion(func, obligation.value),
-            kind: obligation.kind.on(self.targets),
-            ..obligation.clone()
+        found.extend(func.obligations.iter().map(|obligation| {
+            Obligation {
+                value: before_conversion(func, obligation.value),
+                ..obligation.clone()
+            }
+            .on(self.targets)
         }));
         found
     }
@@ -597,7 +631,7 @@ impl<'a> Slots<'a> {
     /// the value goes into, why it may not fit, and how to prove it.
     fn unproven(&self, judged: &Judged) -> Diagnostic {
         let obligation = &judged.obligation;
-        let kind = spelled(obligation.kind, obligation.bits);
+        let kind = spelled(obligation.kind, obligation.bits, obligation.range());
         let argument = |position: usize| format!("argument {}", position + 1);
         let (into, label) = match &obligation.into {
             Into::Parameter { function, position } => {
@@ -715,9 +749,9 @@ impl<'a> Slots<'a> {
                      passed as takes {} -- a call through the type is obliged to fit only that, and \
                      the function reads {}; write them alike",
                     param.name,
-                    spelled(relied, None),
+                    spelled(relied, None, relied.integer_range()),
                     kind_or_number(obliged),
-                    spelled(relied, None),
+                    spelled(relied, None, relied.integer_range()),
                 );
                 errors.push(
                     Diagnostic::error("NTS5002", message, arrival.origin.location)
@@ -1694,17 +1728,16 @@ mod tests {
     use crate::hir::{BlockId, ValueId};
 
     fn into(kind: Scalar, bits: Option<u32>) -> Obligation {
-        Obligation {
-            value: ValueId(0),
-            block: BlockId(0),
-            kind,
-            bits,
-            into: Into::NativeStore,
-            location: nts_diagnostics::Location {
+        Obligation::new(
+            ValueId(0),
+            BlockId(0),
+            (kind, bits),
+            Into::NativeStore,
+            nts_diagnostics::Location {
                 file: nts_diagnostics::SourceId(0),
                 span: nts_diagnostics::Span::new(0, 0),
             },
-        }
+        )
     }
 
     #[test]

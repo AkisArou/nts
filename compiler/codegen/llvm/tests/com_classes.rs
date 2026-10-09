@@ -132,7 +132,7 @@ fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let adapter = text
@@ -348,7 +348,7 @@ fn a_forwarded_record_is_passed_as_win64_passes_it() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -422,7 +422,7 @@ fn an_override_answers_through_the_result_pointer() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let measure = text
@@ -496,7 +496,7 @@ fn a_composed_class_keeps_its_fields_in_its_outer_object() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -556,7 +556,7 @@ fn a_string_argument_is_the_text_of_the_lent_hstring() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let adapter = text
@@ -614,7 +614,7 @@ fn a_composed_class_constructor_runs_after_its_composition() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let start = text
@@ -679,7 +679,7 @@ fn an_override_answers_an_object_the_caller_owns() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let adapter = text
@@ -737,7 +737,7 @@ fn an_override_answers_a_string_as_an_hstring_of_its_own() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let adapter = text
@@ -794,7 +794,7 @@ fn a_composed_class_has_methods_of_its_own() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -850,7 +850,7 @@ fn a_surface_member_is_called_through_its_interface() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let body = |name: &str| {
@@ -946,7 +946,7 @@ fn a_bindings_composable_class_is_made_by_its_factory() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -979,7 +979,7 @@ fn super_in_an_override_calls_the_base_through_its_slot() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let start = text
@@ -1100,7 +1100,7 @@ fn a_slot_the_class_leaves_is_forwarded_to_its_base() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let forward = text
@@ -1240,7 +1240,7 @@ fn a_handle_passed_as_its_base_is_asked_for_the_base_interface() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     // The IID's first word, `Data1 | Data2 << 32 | Data3 << 48`.
@@ -1299,7 +1299,7 @@ fn an_event_listener_is_added_and_removed_by_the_runtime() {
         "{:?}",
         prepared.diagnostics
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -1414,7 +1414,7 @@ fn a_generic_interfaces_surface_is_called_on_its_own_table() {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -1448,7 +1448,7 @@ fn a_vector_is_walked_by_count_through_its_own_table() {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -1498,7 +1498,7 @@ fn a_static_property_is_called_on_its_factory() {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -1564,7 +1564,7 @@ fn a_primitive_where_an_object_is_taken_is_boxed() {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert_eq!(
@@ -1605,7 +1605,7 @@ fn an_object_read_back_is_unboxed() {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
@@ -1680,7 +1680,7 @@ fn an_instanceof_narrows_a_com_value_to_its_interface() {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let first = 0x0C0C_0C0C_u64 | (0x1111 << 32) | (0x2222 << 48);

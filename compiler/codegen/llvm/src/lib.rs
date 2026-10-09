@@ -88,12 +88,12 @@ pub enum Arch {
 impl Platform {
     /// `x86_64` System V: Linux and the other ELF targets.
     pub const SYSV_X86_64: Self = Self {
-        abi: NativeAbi::SysV,
+        abi: NativeAbi::LP64,
         arch: Arch::X86_64,
     };
     /// `x86_64` Windows, mingw and MSVC alike.
     pub const WIN64_X86_64: Self = Self {
-        abi: NativeAbi::Win64,
+        abi: NativeAbi::LLP64,
         arch: Arch::X86_64,
     };
 }

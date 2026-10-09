@@ -8,7 +8,7 @@
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::{Family, PROGRAM_GTYPE, Scalar, Type};
+use nts_core::hir::native::{Family, PROGRAM_GTYPE, Type};
 use nts_core::hir::{
     Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program, TemplateText,
 };
@@ -684,7 +684,8 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
         let mut body = String::new();
         let mut passed = Vec::new();
         for (at, ty) in types.iter().enumerate().skip(1) {
-            passed.push(promoted(&mut body, at, ty, &target.parameters[at]));
+            let slot = target.parameters[at].abi(platform.abi);
+            passed.push(promoted(&mut body, at, ty, &slot));
         }
         let mut rest = String::new();
         for arg in &passed {
@@ -721,14 +722,13 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     Ok(out)
 }
 
-/// Argument `at` (`%a{at}`, of LLVM type `ty`) as C passes it through `...`:
-/// a `bool` or narrow integer widened to `int` -- signed as its C type is --
-/// and a `float` to `double`, which is what the callee's `va_arg` reads.
-fn promoted(body: &mut String, at: usize, ty: &str, native: &Type) -> String {
-    let signed = matches!(
-        native,
-        Type::Scalar(Scalar::Int8 | Scalar::Int16 | Scalar::Char)
-    );
+/// Argument `at` (`%a{at}`, of LLVM type `ty`, the target's `slot` for it)
+/// as C passes it through `...`: a `bool` or narrow integer widened to `int`
+/// -- signed as the target holds it, so a `char` is extended by its row's
+/// sign -- and a `float` to `double`, which is what the callee's `va_arg`
+/// reads.
+fn promoted(body: &mut String, at: usize, ty: &str, slot: &HirType) -> String {
+    let signed = matches!(slot, HirType::Int { signed: true, .. });
     match ty {
         "i1" | "i8" | "i16" => {
             let widen = if signed { "sext" } else { "zext" };
@@ -796,9 +796,10 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
                 &format!("{thunk}.name"),
                 &property.replace('_', "-"),
             );
-            let value = ty_of(&target.parameters[1].abi(platform.abi), func)?.to_owned();
+            let slot = target.parameters[1].abi(platform.abi);
+            let value = ty_of(&slot, func)?.to_owned();
             let mut body = String::new();
-            let passed = promoted(&mut body, 1, &value, &target.parameters[1]);
+            let passed = promoted(&mut body, 1, &value, &slot);
             let _ = writeln!(
                 out,
                 "define void @{thunk}(ptr %a0, {value} %a1) nounwind {{\nentry:\n{body}\x20 call void (ptr, ptr, ...) @{callee}(ptr %a0, ptr @{thunk}.name, {passed}, ptr null)\n  ret void\n}}"

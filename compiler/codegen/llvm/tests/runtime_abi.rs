@@ -203,7 +203,7 @@ fn arm64_passes_an_erased_value_as_two_words() {
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::SysV,
+        abi: nts_core::hir::native::NativeAbi::LP64,
         arch: nts_codegen_llvm::Arch::Aarch64,
     };
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
@@ -357,7 +357,7 @@ fn arm64_exports_an_erased_value_through_a_c_entry() {
         prepared.diagnostics
     );
     let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::SysV,
+        abi: nts_core::hir::native::NativeAbi::LP64,
         arch: nts_codegen_llvm::Arch::Aarch64,
     };
     let emitted = nts_codegen_llvm::emit(&prepared.program, arm64);

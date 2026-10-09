@@ -16,7 +16,6 @@
 //! so. Slots no call touches are deleted by the
 //! optimizer; at `-O0` they are three allocas a function.
 
-use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{Func, HirType};
 
 use crate::Platform;
@@ -28,7 +27,7 @@ pub const SLOTS: usize = 2;
 
 /// Whether calls into the C runtime pass sixteen-byte values through memory.
 pub(crate) fn applies(platform: Platform) -> bool {
-    platform.abi == NativeAbi::Win64
+    platform.abi.convention == nts_core::hir::native::PlatformConvention::Win64
 }
 
 /// The entry-block slots of a function emitted for `platform`.

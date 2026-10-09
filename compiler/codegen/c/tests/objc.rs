@@ -98,7 +98,7 @@ fn a_message_is_a_typed_cast_of_objc_msg_send() {
     assert!(program.objc, "a program that sends a message links libobjc");
     assert_eq!(program.native_frameworks, ["Foundation"]);
 
-    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The class method: the class object, the selector, and the C string, in
@@ -319,7 +319,7 @@ export function run(): number {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
@@ -398,7 +398,7 @@ fn a_class_is_a_value_and_a_class_method_a_message_to_it() {
     let program = &prepared.program;
     assert!(program.objc, "a program that names a class links libobjc");
     assert_eq!(program.native_frameworks, ["AppKit"]);
-    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::LP64);
     let text = emitted.writer.text();
     assert!(
         text.contains("objc_getRequiredClass(\"NSWindow\")"),
@@ -489,7 +489,7 @@ fn a_property_reads_and_writes_by_message() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     let text = emitted.writer.text();
     for selector in [
         "\"title\"",
@@ -546,7 +546,7 @@ fn an_objective_c_class_is_a_typescript_class() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let line = |needle: &str| {
@@ -614,7 +614,7 @@ declare module "objc:Foundation" {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let body = text
@@ -685,7 +685,7 @@ declare module "objc:Foundation" {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let body = text
@@ -744,7 +744,7 @@ fn swift_numbers_take_plain_numbers_and_cross_as_c_types() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert!(
@@ -782,7 +782,7 @@ fn a_string_crosses_a_message_as_an_nsstring() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The constructor's `CString` is a UTF-8 C string.
@@ -833,7 +833,7 @@ fn a_class_extending_an_objective_c_class_is_registered_with_the_runtime() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
@@ -905,7 +905,7 @@ fn an_override_takes_the_selector_it_replaces_and_a_record_by_value() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
@@ -948,7 +948,7 @@ fn a_handle_with_both_absences_is_one_null() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let strict = "import { NSObject } from \"objc:Foundation\";\n\
                   export function which(o: NSObject | null): boolean { return o?.next === null; }\n";
@@ -989,7 +989,7 @@ fn a_closure_in_an_objective_c_subclass_field_is_called() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in ["= nts_objc_state(", "->header.descriptor->methods["] {
@@ -1030,7 +1030,7 @@ fn a_selector_is_the_one_its_method_was_registered_under() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
@@ -1073,7 +1073,7 @@ fn the_fields_of_an_objective_c_subclass_live_in_its_state() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
@@ -1168,7 +1168,7 @@ fn a_constant_is_the_extern_variable_read() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for name in [
@@ -1228,7 +1228,7 @@ declare module "objc:Foundation" {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
@@ -1283,7 +1283,7 @@ declare module "objc:Foundation" {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [

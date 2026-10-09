@@ -52,7 +52,7 @@
 use crate::{Arch, Platform};
 use nts_core::hir::HirType;
 use nts_core::hir::layout::{native_place, native_shape};
-use nts_core::hir::native::{NativeAbi, Pointee, Record, RecordKind, Scalar, Type};
+use nts_core::hir::native::{Pointee, Record, RecordKind, Scalar, Type};
 
 /// How one record crosses a call.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,11 +206,13 @@ enum Convention {
 
 /// `None` on arm64 Windows, whose convention this backend does not implement.
 fn convention(platform: Platform) -> Option<Convention> {
-    match (platform.abi, platform.arch) {
-        (NativeAbi::SysV, Arch::X86_64) => Some(Convention::SysV),
-        (NativeAbi::Win64, Arch::X86_64) => Some(Convention::Win64),
-        (NativeAbi::SysV, Arch::Aarch64) => Some(Convention::Aapcs64),
-        (NativeAbi::Win64, Arch::Aarch64) => None,
+    match (platform.abi.convention, platform.arch) {
+        (nts_core::hir::native::PlatformConvention::SysV, Arch::X86_64) => Some(Convention::SysV),
+        (nts_core::hir::native::PlatformConvention::Win64, Arch::X86_64) => Some(Convention::Win64),
+        (nts_core::hir::native::PlatformConvention::SysV, Arch::Aarch64) => {
+            Some(Convention::Aapcs64)
+        }
+        (nts_core::hir::native::PlatformConvention::Win64, Arch::Aarch64) => None,
     }
 }
 

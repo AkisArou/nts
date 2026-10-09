@@ -1477,7 +1477,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     // nothing consumes, which is the failure this file exists to avoid.
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
-        targets: &targets,
+        targets,
         ..hir::Options::default()
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
@@ -1604,7 +1604,7 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     }
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
-        targets: &targets,
+        targets,
         ..hir::Options::default()
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
@@ -1636,10 +1636,9 @@ fn dump_strict(tsconfig: &Utf8Path) -> Result<()> {
     let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
-    let lowered = hir::lower::lower(&snapshot);
-    let targets = configured_abis(tsconfig)?;
-    let errors =
-        hir::obligations::check(&lowered.program, &lowered.arrivals.at_signature, &targets);
+    let mut lowered = hir::lower::lower(&snapshot);
+    lowered.program.targets = configured_abis(tsconfig)?;
+    let errors = hir::obligations::check(&lowered.program, &lowered.arrivals.at_signature);
     for error in &errors {
         println!(
             "{}",
@@ -1668,9 +1667,9 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
-    let program = hir::lower::lower(&snapshot).program;
-    let targets = configured_abis(tsconfig)?;
-    let judged = hir::obligations::census(&program, &targets);
+    let mut program = hir::lower::lower(&snapshot).program;
+    program.targets = configured_abis(tsconfig)?;
+    let judged = hir::obligations::census(&program);
 
     let reasons = |why: &[Why]| -> String {
         why.iter()
@@ -2623,7 +2622,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
             provider: selected_provider(),
             foreign: &foreign,
             entry_files: &entry_files,
-            targets: &targets,
+            targets,
             // Through `selected_roots`, so this prints the program a backend
             // receives rather than a neighbouring one. It did not: the old
             // parser here never appended module initialization, so
@@ -3575,7 +3574,7 @@ fn build(rest: &[String]) -> Result<()> {
             product: Some((name, product)),
             linking: true,
             host: nts_codegen_c::LoopHost::Libuv,
-            abi: native_abi(host_os()),
+            abi: native_abi(host_os(), host_arch()),
             llvm: None,
         };
         for target in targets_for(name, product, only_os.as_deref())? {
@@ -4362,7 +4361,7 @@ fn build_c(
         Some(out),
         Emission {
             host,
-            abi: native_abi(&target.os),
+            abi: native_abi(&target.os, target.arch.as_deref().unwrap_or(host_arch())),
             ..emission
         },
     )?;
@@ -6829,64 +6828,57 @@ impl ObjectFormat {
 
 /// The C ABI a target's native code is laid out and called by. One answer per
 /// OS, beside `ObjectFormat::of`, and the only place the CLI decides it.
-/// The C data models of `product`'s targets, each once; the host's for a
-/// product that names none.
-fn product_abis(product: &nts_build::config::Product) -> Vec<nts_core::hir::native::NativeAbi> {
-    let mut abis = Vec::new();
-    for target in &product.targets {
-        let abi = native_abi(&target.os);
-        if !abis.contains(&abi) {
-            abis.push(abi);
-        }
-    }
+/// The C ABIs of `product`'s targets; the host's for a product that names
+/// none.
+fn product_abis(product: &nts_build::config::Product) -> nts_core::hir::native::Targets {
+    let abis: Vec<_> = product
+        .targets
+        .iter()
+        .map(|target| native_abi(&target.os, target.arch.as_deref().unwrap_or(host_arch())))
+        .collect();
     if abis.is_empty() {
-        abis.extend_from_slice(nts_core::hir::HOST);
+        nts_core::hir::native::Targets::only(nts_core::hir::HOST)
+    } else {
+        nts_core::hir::native::Targets::of(&abis)
     }
-    abis
 }
 
 /// The C data models a command that builds no product checks a program
 /// against (`nts facts`, `nts hir`): every target of every product the config
 /// beside `tsconfig` declares, since any of them may be built from it; the
 /// host's where there is no config.
-fn configured_abis(tsconfig: &Utf8Path) -> Result<Vec<nts_core::hir::native::NativeAbi>> {
+fn configured_abis(tsconfig: &Utf8Path) -> Result<nts_core::hir::native::Targets> {
+    let host = nts_core::hir::native::Targets::only(nts_core::hir::HOST);
     let Some(path) = nts_build::config::beside(tsconfig) else {
-        return Ok(nts_core::hir::HOST.to_vec());
+        return Ok(host);
     };
     let resolved = nts_build::config::resolve(&path)?;
-    let mut abis = Vec::new();
-    for product in resolved.products.values() {
-        for abi in product_abis(product) {
-            if !abis.contains(&abi) {
-                abis.push(abi);
-            }
-        }
-    }
-    if abis.is_empty() {
-        abis.extend_from_slice(nts_core::hir::HOST);
-    }
-    Ok(abis)
+    let abis: Vec<_> = resolved
+        .products
+        .values()
+        .flat_map(|product| product_abis(product).rows())
+        .collect();
+    Ok(if abis.is_empty() {
+        host
+    } else {
+        nts_core::hir::native::Targets::of(&abis)
+    })
 }
 
-fn native_abi(os: &str) -> nts_core::hir::native::NativeAbi {
-    match os {
-        "windows" => nts_core::hir::native::NativeAbi::Win64,
-        _ => nts_core::hir::native::NativeAbi::SysV,
-    }
+fn native_abi(os: &str, arch: &str) -> nts_core::hir::native::NativeAbi {
+    nts_core::hir::native::NativeAbi::of(os, arch)
 }
 
 /// The LLVM backend's target: the data model `native_abi` gives, and the arch,
 /// which with it decides how a record crosses a call.
 fn llvm_platform(os: &str, arch: &str) -> nts_codegen_llvm::Platform {
+    let abi = native_abi(os, arch);
     let arch = if arch == "aarch64" {
         nts_codegen_llvm::Arch::Aarch64
     } else {
         nts_codegen_llvm::Arch::X86_64
     };
-    nts_codegen_llvm::Platform {
-        abi: native_abi(os),
-        arch,
-    }
+    nts_codegen_llvm::Platform { abi, arch }
 }
 
 /// The system libraries a static libuv needs on Windows: its `CMakeLists.txt`
@@ -8164,10 +8156,10 @@ impl Emission<'_> {
     /// S6). The product's targets, all of them -- each target's build checks
     /// the same program, so one that fits Linux's `long` and not Windows'
     /// fails for both -- or, with no product, the one this emits for.
-    fn scalar_targets(&self) -> Vec<nts_core::hir::native::NativeAbi> {
+    fn scalar_targets(&self) -> nts_core::hir::native::Targets {
         match self.product {
             Some((_, product)) => product_abis(product),
-            None => vec![self.abi],
+            None => nts_core::hir::native::Targets::only(self.abi),
         }
     }
 
@@ -8183,7 +8175,7 @@ impl Emission<'_> {
                 nts_codegen_c::LoopHost::Libuv
             },
             // No target was named, so the program is for this machine.
-            abi: native_abi(host_os()),
+            abi: native_abi(host_os(), host_arch()),
             llvm: None,
         }
     }
@@ -8395,7 +8387,7 @@ fn emit_options<'a>(
     foreign: &'a hir::runtime::ForeignTable,
     configured: Option<hir::reachable::Roots<'a>>,
     callbacks_checkpoint: bool,
-    targets: &'a [nts_core::hir::native::NativeAbi],
+    targets: nts_core::hir::native::Targets,
 ) -> hir::Options<'a> {
     // **`!entry.is_empty()` was never false.** This read the flags itself and
     // asked `entry.is_empty()`, and the entry list always held at least
@@ -8454,7 +8446,7 @@ fn emit_llvm(
             &foreign_tables(&snapshot),
             configured,
             emission.host.checkpoints_after_callbacks(),
-            &targets,
+            targets,
         ),
     ) {
         Ok(prepared) => prepared,
@@ -8515,7 +8507,7 @@ fn emit_jvm(
             &foreign_tables(&snapshot),
             configured,
             false,
-            &targets,
+            targets,
         ),
     ) {
         Ok(prepared) => prepared,
@@ -8711,7 +8703,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
             &foreign_tables(&snapshot),
             configured,
             emission.host.checkpoints_after_callbacks(),
-            &targets,
+            targets,
         ),
     ) {
         Ok(prepared) => prepared,

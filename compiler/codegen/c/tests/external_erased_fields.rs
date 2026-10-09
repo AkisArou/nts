@@ -105,7 +105,7 @@ fn a_recovered_external_field_survives_folding_and_reads_the_callers_value() {
         hir::dce::eliminate(func);
     }
     assert!(hir::verify::verify(&program).is_ok());
-    let emitted = nts_codegen_c::emit(&program, hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&program, hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let dir = std::env::temp_dir().join(format!("nts-external-fields-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

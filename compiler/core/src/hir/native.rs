@@ -5014,54 +5014,148 @@ impl Type {
     }
 }
 
-/// The C ABI a native target lays storage out and passes scalars by.
+/// The C ABI a native target lays storage out and passes scalars by, as a
+/// row of data (`docs/scalar-numbers.md`, 2c): the calling convention, and
+/// what the target's C makes of its own types.
 ///
 /// **A backend fact, not a lowering one.** HIR is shared by every target a
-/// program is built for, so lowering never asks which of these it is: a
-/// `c_long` is an exact `i64` value in HIR everywhere, and only the slot C
-/// reads it from is narrower on Windows. Each backend is handed its target's
-/// ABI and resolves sizes, offsets and the boundary conversions from it.
+/// program is built for, so lowering never asks which row it is: a `c_long`
+/// is an exact `i64` value in HIR everywhere, and only the slot C reads it
+/// from is narrower on Windows ([`Scalar::abi`]). Each backend is handed its
+/// target's row and resolves sizes, offsets and the boundary conversions from
+/// it; the strict check is handed every row the product is built for.
 ///
 /// There is no default, and that is the point: every function taking one
 /// takes it as a required argument, so a caller cannot get the wrong ABI by
 /// forgetting to pass it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum NativeAbi {
-    /// LP64 System V (Linux, macOS): `long` is 64 bits, and bit-fields use
-    /// the System V placement rules.
+pub struct NativeAbi {
+    /// How values cross a call, and how bit-fields are placed.
+    pub convention: PlatformConvention,
+    /// Whether plain `char` is signed: it is on x86-64 everywhere and on
+    /// Apple's arm64, and is not on Linux's and Android's arm64 (AAPCS64).
+    pub char_signed: bool,
+    /// `long`'s width in bits: 64 under LP64, 32 under Windows' LLP64.
+    /// `long long`, pointers, `size_t` and `ptrdiff_t` are 64 on every row.
+    pub long_bits: u8,
+}
+
+/// How a target's C passes values and places bit-fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PlatformConvention {
+    /// System V's placement rules: Linux, Android, macOS, iOS.
     SysV,
     /// Windows on `x86_64` and arm64, mingw and MSVC alike.
     ///
-    /// **What this names is the data model, plus the MS x64 conventions this
-    /// compiler implements, and no more.** The data model is LLP64 on both
-    /// arches: `long` is 32 bits, while `long long`, pointers, `size_t` and
-    /// `ptrdiff_t` stay 64. Bit-fields use the MS placement rules, which this
-    /// compiler does not implement, so a record holding one has no layout.
+    /// **What this names is the MS conventions this compiler implements, and
+    /// no more.** Bit-fields use the MS placement rules, which this compiler
+    /// does not implement, so a record holding one has no layout.
     ///
     /// **Argument classification and aggregate passing are not in it**, and
     /// they differ between the two arches: AAPCS64 on arm64 Windows, the MS
     /// x64 convention on `x86_64`. Nothing here passes an aggregate by value
-    /// yet. The first rule that does must split this variant by arch, not take
-    /// `x86_64`'s answer for arm64 by reaching for `Win64`.
+    /// on arm64 Windows yet. The first rule that does must split this by
+    /// arch, not take `x86_64`'s answer for arm64 by reaching for `Win64`.
     Win64,
 }
 
 impl NativeAbi {
+    /// LP64 with a signed `char`: x86-64 Linux and Android, and macOS and
+    /// iOS on both arches.
+    pub const LP64: Self = Self {
+        convention: PlatformConvention::SysV,
+        char_signed: true,
+        long_bits: 64,
+    };
+    /// LP64 with an unsigned `char`: arm64 Linux and Android.
+    pub const LP64_UNSIGNED_CHAR: Self = Self {
+        convention: PlatformConvention::SysV,
+        char_signed: false,
+        long_bits: 64,
+    };
+    /// LLP64: Windows. `long` is 32 bits.
+    pub const LLP64: Self = Self {
+        convention: PlatformConvention::Win64,
+        char_signed: true,
+        long_bits: 32,
+    };
+    /// Every row: what C may hand a program in, wherever it runs.
+    pub const ALL: &[Self] = &[Self::LP64, Self::LP64_UNSIGNED_CHAR, Self::LLP64];
+
     /// **The ABI a target-independent stage bounds sizes with.** Lowering
     /// refuses stack storage over a limit before it knows the target.
     ///
-    /// `SysV` is an upper bound on every supported target's layout. Win64
+    /// LP64 is an upper bound on every supported target's layout. Windows
     /// narrows `long` from 8 bytes to 4 and relaxes its alignment from 8 to 4
     /// at the same time, and narrowing a member together with its alignment
     /// cannot enlarge the record holding it: `{char; long}` goes from size 16
-    /// and align 8 to size 8 and align 4. `long` is the only scalar that
-    /// differs between the two, and it only shrinks.
+    /// and align 8 to size 8 and align 4. `long` is the only scalar whose size
+    /// differs between the rows, and it only shrinks; `char`'s signedness
+    /// changes no size.
     ///
     /// **So the imprecision falls one way.** A limit checked at this ABI can
     /// refuse a program that would have fit on Windows. It can never accept
     /// one that does not. A surprising refusal on Windows near a limit is this
     /// documented cost, not a bug.
-    pub const BOUND: Self = Self::SysV;
+    pub const BOUND: Self = Self::LP64;
+
+    /// The row of `os` on `arch` (the config's names: `linux`, `android`,
+    /// `macos`, `ios`, `windows`; `x86_64`, `aarch64`).
+    #[must_use]
+    pub fn of(os: &str, arch: &str) -> Self {
+        match (os, arch) {
+            ("windows", _) => Self::LLP64,
+            ("linux" | "android", "aarch64" | "arm64") => Self::LP64_UNSIGNED_CHAR,
+            _ => Self::LP64,
+        }
+    }
+}
+
+/// The rows a program is built for: a set of [`NativeAbi::ALL`]'s.
+///
+/// **Every row unless a build names its own.** That is the sound assumption
+/// where nothing has: a store must fit on every row and a read is what any
+/// row's C may hand in. A set that defaulted to empty would make every range
+/// vanish, and an absent range reads as "nothing to check".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Targets(u8);
+
+impl Default for Targets {
+    fn default() -> Self {
+        Self::ALL
+    }
+}
+
+impl Targets {
+    /// Every row nts supports.
+    #[allow(clippy::cast_possible_truncation)]
+    pub const ALL: Self = Self(((1u32 << NativeAbi::ALL.len()) - 1) as u8);
+
+    /// The set of `abis`; every row for none, since a build always has a
+    /// target and a caller naming none has not said.
+    #[must_use]
+    pub fn of(abis: &[NativeAbi]) -> Self {
+        let bits = abis
+            .iter()
+            .filter_map(|abi| NativeAbi::ALL.iter().position(|row| row == abi))
+            .fold(0u8, |bits, at| bits | (1 << at));
+        if bits == 0 { Self::ALL } else { Self(bits) }
+    }
+
+    /// One row.
+    #[must_use]
+    pub fn only(abi: NativeAbi) -> Self {
+        Self::of(&[abi])
+    }
+
+    /// The rows, in [`NativeAbi::ALL`]'s order.
+    pub fn rows(self) -> impl Iterator<Item = NativeAbi> {
+        NativeAbi::ALL
+            .iter()
+            .enumerate()
+            .filter(move |(at, _)| self.0 & (1 << at) != 0)
+            .map(|(_, abi)| *abi)
+    }
 }
 
 /// C scalars whose widths are fixed on the native targets supported by nts.
@@ -5188,45 +5282,78 @@ impl Scalar {
         })
     }
 
-    /// The least and greatest value of an integer kind, from its
-    /// representation's width (so the two can't disagree); `None` for a
-    /// floating-point kind and a boolean.
+    /// Every value an integer kind has on any row nts supports: what a read
+    /// of it is where nothing names the build's targets, and the range two
+    /// kinds are compared by. `None` for a floating-point kind and a boolean.
     #[must_use]
     pub fn integer_range(self) -> Option<(i128, i128)> {
-        match self.representation() {
-            HirType::Int { bits, signed: true } => {
-                let half = 1i128 << (bits - 1);
-                Some((-half, half - 1))
-            }
-            HirType::Int {
-                bits,
-                signed: false,
-            } => Some((0, (1i128 << bits) - 1)),
-            _ => None,
-        }
+        self.reach_on(Targets::ALL)
     }
 
-    /// What every value of the kind is, as the range analysis states it: an
-    /// integer kind's range, whole, never NaN and never `-0`; anything for a
-    /// float kind, which holds infinities, NaN and `-0` too.
+    /// Every value the kind has on some one of `targets`: what C may hand the
+    /// program there, and so what a read of the kind is. From the rows' own
+    /// types ([`Self::abi`]), so the two can't disagree: a `char` built for
+    /// x86-64 and arm64 Linux is -128..255.
+    #[must_use]
+    pub fn reach_on(self, targets: Targets) -> Option<(i128, i128)> {
+        targets
+            .rows()
+            .map(|abi| int_range(&self.abi(abi)))
+            .reduce(|a, b| Some((a?.0.min(b?.0), a?.1.max(b?.1))))?
+    }
+
+    /// The values that fit the kind on every one of `targets`: what a store
+    /// into it must be proven within (`docs/scalar-numbers.md`, S6). A `long`
+    /// for Linux and Windows takes what 32 bits do, a `char` for x86-64 and
+    /// arm64 Linux 0..127. `None` for a floating-point kind and a boolean.
+    #[must_use]
+    pub fn range_on(self, targets: Targets) -> Option<(i128, i128)> {
+        targets
+            .rows()
+            .map(|abi| int_range(&self.abi(abi)))
+            .reduce(|a, b| Some((a?.0.max(b?.0), a?.1.min(b?.1))))?
+    }
+
+    /// The narrowest integer holding the kind's values on every one of
+    /// `targets` ([`Self::range_on`]), the same on each: the width a root's
+    /// parameter crosses at. A floating-point kind's own type.
+    #[must_use]
+    pub fn width_on(self, targets: Targets) -> HirType {
+        let Some((lo, hi)) = self.range_on(targets) else {
+            return self.representation();
+        };
+        let signed = lo < 0;
+        [8, 16, 32, 64]
+            .into_iter()
+            .map(|bits| HirType::Int { bits, signed })
+            .find(|ty| int_range(ty).is_some_and(|(least, most)| least <= lo && hi <= most))
+            .unwrap_or_else(|| self.representation())
+    }
+
+    /// What every value of the kind is on `targets`, as the range analysis
+    /// states it: an integer kind's reach ([`Self::reach_on`]), whole, never
+    /// NaN and never `-0`; anything for a float kind, which holds infinities,
+    /// NaN and `-0` too.
     ///
     /// A fact only where every store into the slot was proven to fit
     /// (`docs/scalar-numbers.md`, Q1), or where C made the value.
     #[must_use]
-    pub fn facts(self) -> super::facts::Facts {
+    pub fn facts_on(self, targets: Targets) -> super::facts::Facts {
         #[allow(clippy::cast_precision_loss)]
-        self.integer_range()
+        self.reach_on(targets)
             .map_or(super::facts::Facts::TOP, |(lo, hi)| {
                 super::facts::Facts::new(lo as f64, hi as f64, true, false, false)
             })
     }
 
+    /// The kind's type in HIR: one holding every value any target's C gives
+    /// it ([`NativeAbi::ALL`]), so it is the same on every target (S6). A
+    /// `long` is `i64` though Windows' is 32 bits, and a `char` is `i16`,
+    /// the narrowest type holding both -128 and 255. A backend crosses at
+    /// its own target's type, [`Self::abi`].
     #[must_use]
     pub const fn representation(self) -> HirType {
         match self {
-            // Signed here because it is signed on this target. The *type* is
-            // distinct from `signed char` regardless; the representation is
-            // what the target says, and LP64 Linux says signed.
             Self::Int | Self::Int32 | Self::Long32 => HirType::Int {
                 bits: 32,
                 signed: true,
@@ -5235,7 +5362,7 @@ impl Scalar {
                 bits: 32,
                 signed: false,
             },
-            Self::Char | Self::Int8 => HirType::Int {
+            Self::Int8 => HirType::Int {
                 bits: 8,
                 signed: true,
             },
@@ -5243,7 +5370,8 @@ impl Scalar {
                 bits: 8,
                 signed: false,
             },
-            Self::Int16 => HirType::Int {
+            // A `char` as `i16`: the narrowest type holding both -128 and 255.
+            Self::Char | Self::Int16 => HirType::Int {
                 bits: 16,
                 signed: true,
             },
@@ -5294,33 +5422,28 @@ impl Scalar {
 /// alias somebody happened to intern elsewhere. An arbitrary primitive/object
 /// intersection does not acquire a representation through this function.
 impl Scalar {
-    /// The slot C reads this scalar from, on `abi`.
+    /// The slot C reads this scalar from, on `abi`: the storage and register
+    /// type, read off the row.
     ///
     /// `representation` is the value's type in HIR, which is the same on every
-    /// target. This is the storage and register type, and it differs from the
-    /// representation only for `long` and `unsigned long` under Win64.
+    /// target. This differs from it only for C's own types whose width or
+    /// signedness the row decides: `char`, `long` and `unsigned long`.
     #[must_use]
     pub const fn abi(self, abi: NativeAbi) -> HirType {
-        self.on(&[abi]).representation()
-    }
-
-    /// The kind as every one of `targets` holds it: the narrowest of what
-    /// each target's C makes of it. C's `long` is 64 bits on System V and 32
-    /// on Windows (LLP64), so for a build that includes Windows it is
-    /// [`Self::Long32`]. What a value stored into the kind must fit on all of
-    /// them (`docs/scalar-numbers.md`, S6).
-    #[must_use]
-    pub const fn on(self, targets: &[NativeAbi]) -> Self {
-        let mut windows = false;
-        let mut at = 0;
-        while at < targets.len() {
-            windows |= matches!(targets[at], NativeAbi::Win64);
-            at += 1;
-        }
         match self {
-            Self::Long if windows => Self::Long32,
-            Self::ULong if windows => Self::ULong32,
-            other => other,
+            Self::Char => HirType::Int {
+                bits: 8,
+                signed: abi.char_signed,
+            },
+            Self::Long => HirType::Int {
+                bits: abi.long_bits,
+                signed: true,
+            },
+            Self::ULong => HirType::Int {
+                bits: abi.long_bits,
+                signed: false,
+            },
+            other => other.representation(),
         }
     }
 
@@ -5341,6 +5464,21 @@ impl Scalar {
             self,
             Self::Int64 | Self::UInt64 | Self::Long | Self::ULong | Self::Size | Self::Ptrdiff
         )
+    }
+}
+
+/// The least and greatest value of an integer type; `None` for any other.
+fn int_range(ty: &HirType) -> Option<(i128, i128)> {
+    match ty {
+        HirType::Int { bits, signed: true } => {
+            let half = 1i128 << (bits - 1);
+            Some((-half, half - 1))
+        }
+        HirType::Int {
+            bits,
+            signed: false,
+        } => Some((0, (1i128 << bits) - 1)),
+        _ => None,
     }
 }
 
@@ -5987,5 +6125,78 @@ mod iid_tests {
             Some((0x4C6A_B12D_AF86_E2E0, 0x901E_1065_AAD7_5A9C))
         );
         assert_eq!(super::iid_words("AF86E2E0"), None);
+    }
+}
+
+#[cfg(test)]
+mod data_model {
+    use super::{HirType, NativeAbi, Scalar, Targets};
+
+    fn int(bits: u8, signed: bool) -> HirType {
+        HirType::Int { bits, signed }
+    }
+
+    /// Each row's C, read off the row: `char`'s sign and `long`'s width are
+    /// the only scalars that differ, and HIR holds both rows' values.
+    #[test]
+    fn each_row_says_what_its_c_makes_of_char_and_long() {
+        assert_eq!(Scalar::Char.abi(NativeAbi::LP64), int(8, true));
+        assert_eq!(
+            Scalar::Char.abi(NativeAbi::LP64_UNSIGNED_CHAR),
+            int(8, false)
+        );
+        assert_eq!(Scalar::Char.abi(NativeAbi::LLP64), int(8, true));
+        assert_eq!(Scalar::Long.abi(NativeAbi::LP64), int(64, true));
+        assert_eq!(Scalar::ULong.abi(NativeAbi::LLP64), int(32, false));
+        assert_eq!(Scalar::Int.abi(NativeAbi::LLP64), int(32, true));
+        assert_eq!(Scalar::Char.representation(), int(16, true));
+        assert_eq!(
+            NativeAbi::of("linux", "aarch64"),
+            NativeAbi::LP64_UNSIGNED_CHAR
+        );
+        assert_eq!(
+            NativeAbi::of("android", "aarch64"),
+            NativeAbi::LP64_UNSIGNED_CHAR
+        );
+        assert_eq!(NativeAbi::of("macos", "aarch64"), NativeAbi::LP64);
+        assert_eq!(NativeAbi::of("linux", "x86_64"), NativeAbi::LP64);
+        assert_eq!(NativeAbi::of("windows", "aarch64"), NativeAbi::LLP64);
+    }
+
+    /// A store fits every target (the intersection); a read is what any
+    /// target's C may hand in (the union); a root crosses at the narrowest
+    /// type holding the first.
+    #[test]
+    fn a_store_fits_every_row_and_a_read_is_any_rows() {
+        let x86 = Targets::only(NativeAbi::LP64);
+        let arm = Targets::only(NativeAbi::LP64_UNSIGNED_CHAR);
+        let both = Targets::of(&[NativeAbi::LP64, NativeAbi::LP64_UNSIGNED_CHAR]);
+        assert_eq!(Scalar::Char.range_on(x86), Some((-128, 127)));
+        assert_eq!(Scalar::Char.range_on(arm), Some((0, 255)));
+        assert_eq!(Scalar::Char.range_on(both), Some((0, 127)));
+        assert_eq!(Scalar::Char.reach_on(both), Some((-128, 255)));
+        assert_eq!(Scalar::Char.reach_on(x86), Scalar::Char.range_on(x86));
+        assert_eq!(Scalar::Char.width_on(both), int(8, false));
+        let linux_and_windows = Targets::of(&[NativeAbi::LP64, NativeAbi::LLP64]);
+        assert_eq!(
+            Scalar::Long.range_on(linux_and_windows),
+            Some((-(1 << 31), (1 << 31) - 1))
+        );
+        assert_eq!(Scalar::Long.width_on(linux_and_windows), int(32, true));
+        assert_eq!(
+            Scalar::Long.reach_on(linux_and_windows),
+            Some((-(1 << 63), (1 << 63) - 1))
+        );
+        assert_eq!(Scalar::Double.range_on(both), None);
+    }
+
+    /// Every row unless something names the build's: a set that defaulted to
+    /// empty would have no range at all, which reads as nothing to check.
+    #[test]
+    fn no_named_target_is_every_row() {
+        assert_eq!(Targets::default(), Targets::ALL);
+        assert_eq!(Targets::of(&[]), Targets::ALL);
+        assert_eq!(Targets::ALL.rows().count(), NativeAbi::ALL.len());
+        assert_eq!(Scalar::Char.range_on(Targets::ALL), Some((0, 127)));
     }
 }

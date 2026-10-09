@@ -2252,7 +2252,7 @@ fn emit(
         }
         return Ok(emitted.text);
     }
-    let emitted = nts_codegen_c::emit(&program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&program, nts_core::hir::native::NativeAbi::LP64);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }
@@ -2315,7 +2315,7 @@ fn prepared_program(
             // A benchmark is a standalone program on libuv's loop, which no
             // callback returns to.
             callbacks_checkpoint: false,
-            targets: hir::HOST,
+            targets: nts_core::hir::native::Targets::only(hir::HOST),
         },
     ) {
         Ok(prepared) => prepared,

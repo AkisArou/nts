@@ -197,7 +197,7 @@ fn encoding(ty: &Type) -> (String, usize) {
         // `{CGRect={CGPoint=dd}{CGSize=dd}}`, as clang writes a struct by
         // value, and its size, as Apple's LP64 lays it out.
         let size =
-            nts_core::hir::layout::native_place(record, nts_core::hir::native::NativeAbi::SysV)
+            nts_core::hir::layout::native_place(record, nts_core::hir::native::NativeAbi::LP64)
                 .map_or(0, |placed| placed.size);
         return (record_encoding(record), usize::try_from(size).unwrap_or(0));
     }

@@ -2996,6 +2996,10 @@ pub struct Program {
     /// question the provider does not answer. Without this field the backend
     /// could not tell the two cases apart.
     pub provider: Provider,
+    /// The C ABIs the program is built for ([`Options::targets`]): a store
+    /// into a written scalar kind must fit on every one, and a read of one is
+    /// what C may hand in on any. Every row until `prepare` names the build's.
+    pub targets: native::Targets,
     /// [`Options::callbacks_checkpoint`], for the passes that read it.
     pub callbacks_checkpoint: bool,
     /// The program's public surface: `(emitted name, name it is published as)`.
@@ -4788,9 +4792,9 @@ pub struct Options<'a> {
     /// driver from the `.bind` file `nts bind` writes beside each `.d.ts`.
     pub foreign: &'a runtime::ForeignTable,
     /// The C ABIs the native code is built for. A value stored into a written
-    /// scalar kind must fit it on every one ([`native::Scalar::on`]): C's
-    /// `long` is 32 bits on Windows and 64 elsewhere.
-    pub targets: &'a [native::NativeAbi],
+    /// scalar kind must fit it on every one ([`native::Scalar::range_on`]):
+    /// C's `long` is 32 bits on Windows and 64 elsewhere.
+    pub targets: native::Targets,
 }
 
 impl Default for Options<'_> {
@@ -4815,17 +4819,22 @@ impl Default for Options<'_> {
                 EMPTY.get_or_init(rustc_hash::FxHashMap::default)
             },
             // The host, until a build names its targets.
-            targets: HOST,
+            targets: native::Targets::only(HOST),
         }
     }
 }
 
 /// The C ABI of the machine the compiler runs on: what a build targets unless
 /// it names its targets.
-pub const HOST: &[native::NativeAbi] = if cfg!(windows) {
-    &[native::NativeAbi::Win64]
+pub const HOST: native::NativeAbi = if cfg!(windows) {
+    native::NativeAbi::LLP64
+} else if cfg!(all(
+    target_arch = "aarch64",
+    any(target_os = "linux", target_os = "android")
+)) {
+    native::NativeAbi::LP64_UNSIGNED_CHAR
 } else {
-    &[native::NativeAbi::SysV]
+    native::NativeAbi::LP64
 };
 
 /// As [`prepare`], with specialization optional.
@@ -6614,13 +6623,11 @@ fn specialize_numbers_of(
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
     let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
+    // Before the check, and every analysis after it, reads them.
+    lowered.program.targets = options.targets;
     // On the program the lowering produced, before any pass renumbers a value
     // the lowering recorded an obligation about.
-    let rejected = obligations::take_checked(
-        &mut lowered.program,
-        &lowered.arrivals.at_signature,
-        options.targets,
-    );
+    let rejected = obligations::take_checked(&mut lowered.program, &lowered.arrivals.at_signature);
     // Before `settle`, whose callback check reads it.
     lowered.program.callbacks_checkpoint = options.callbacks_checkpoint;
     // Re-keyed by the foreign key as lowering finishes: same rows, indexed for
@@ -6644,7 +6651,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
     let pruned = pruned + dropped;
     let unions_split = split_unions(&mut program);
-    written_roots::narrow(&mut program, options.roots, options.targets);
+    written_roots::narrow(&mut program, options.roots);
 
     let (specialized, mut conversions, mut checks_removed) = if specialize_numbers {
         specialize_numbers_of(&mut program, options.roots)

@@ -32753,14 +32753,13 @@ impl<'a> FuncBuilder<'a> {
         at: NodeId,
     ) {
         let location = self.location(at);
-        self.obligations.push(super::obligations::Obligation {
+        self.obligations.push(super::obligations::Obligation::new(
             value,
-            block: self.current,
-            kind,
-            bits: None,
+            self.current,
+            (kind, None),
             into,
             location,
-        });
+        ));
     }
 
     /// The kind each position of a tuple a function's return type was

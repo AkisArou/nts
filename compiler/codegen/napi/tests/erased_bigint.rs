@@ -208,7 +208,7 @@ fn headers() -> Option<PathBuf> {
 fn emit_client(program: &hir::Program, headers: &Path, dir: &Path) -> PathBuf {
     let mut emitted_program = program.clone();
     hir::rc::insert(&mut emitted_program);
-    let emitted = nts_codegen_c::emit(&emitted_program, hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&emitted_program, hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let addon = nts_codegen_napi::emit(program);
     assert!(addon.skipped.is_empty(), "{:?}", addon.skipped);

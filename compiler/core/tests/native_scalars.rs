@@ -521,7 +521,7 @@ fn sizes_of_two_structs_in_one_function_are_not_merged() {
         .flat_map(|block| &block.ops)
         .filter_map(|value| match &run.values[value.0 as usize].kind {
             hir::OpKind::NativeSizeOf(storage) => {
-                hir::layout::native_shape(storage, hir::native::NativeAbi::SysV).map(|s| s.size)
+                hir::layout::native_shape(storage, hir::native::NativeAbi::LP64).map(|s| s.size)
             }
             _ => None,
         })

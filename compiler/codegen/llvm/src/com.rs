@@ -486,7 +486,7 @@ fn win64_register(
     record: &nts_core::hir::native::Record,
     platform: Platform,
 ) -> Result<Option<u32>, String> {
-    if platform.abi != nts_core::hir::native::NativeAbi::Win64 {
+    if platform.abi.convention != nts_core::hir::native::PlatformConvention::Win64 {
         return Err("a record by value in a Windows Runtime slot off Win64, where the Windows Runtime is not".to_owned());
     }
     match super::aggregate::extent_of(record, platform) {

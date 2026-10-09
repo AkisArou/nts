@@ -21,7 +21,7 @@ pub(super) fn plan(
 ) -> Result<Plan, Diagnostic> {
     // Win64 returns sixteen bytes through a hidden pointer, where System V
     // uses two registers; this backend spells only the second.
-    if platform.abi == nts_core::hir::native::NativeAbi::Win64
+    if platform.abi.convention == nts_core::hir::native::PlatformConvention::Win64
         && target.result.representation() == HirType::Erased
     {
         return Err(refuse(

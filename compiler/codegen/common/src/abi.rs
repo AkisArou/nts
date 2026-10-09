@@ -118,7 +118,8 @@ fn constant(func: &Func, value: ValueId) -> Option<i128> {
 /// would call through a type C does not have: refused, naming the function.
 #[must_use]
 pub fn unavailable_scalars(program: &Program, abi: NativeAbi) -> Vec<Diagnostic> {
-    if abi == NativeAbi::Win64 {
+    // Where `long` is 32 bits, `c_long32` is `long`.
+    if abi.long_bits == 32 {
         return Vec::new();
     }
     let mut refusals = Vec::new();

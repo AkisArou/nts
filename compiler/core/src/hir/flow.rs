@@ -305,21 +305,25 @@ pub struct Written {
     pub fields: super::fields::FieldFacts,
     /// By global, as [`Whole::global_facts`] is keyed.
     pub globals: super::globals::GlobalFacts,
+    /// The C ABIs the program is built for: a read of a written kind is what
+    /// C may hand in on any of them. Every row where nothing names them.
+    pub targets: super::native::Targets,
 }
 
 impl Written {
     #[must_use]
     pub fn of(program: &super::Program) -> Self {
+        let targets = program.targets;
         let returns = program
             .funcs
             .iter()
-            .filter_map(|func| Some((func.name.clone(), func.call_kind()?.facts())))
+            .filter_map(|func| Some((func.name.clone(), func.call_kind()?.facts_on(targets))))
             .collect();
         let awaited = program
             .funcs
             .iter()
             .filter(|func| func.async_result.is_some())
-            .filter_map(|func| Some((func.name.clone(), func.written_return?.facts())))
+            .filter_map(|func| Some((func.name.clone(), func.written_return?.facts_on(targets))))
             .collect();
         let return_elements = program
             .funcs
@@ -329,7 +333,7 @@ impl Written {
                 let facts = func
                     .written_return_elements
                     .iter()
-                    .map(|kind| kind.map_or(Facts::TOP, super::native::Scalar::facts));
+                    .map(|kind| kind.map_or(Facts::TOP, |kind| kind.facts_on(targets)));
                 (func.name.clone(), facts.collect())
             })
             .collect();
@@ -339,7 +343,12 @@ impl Written {
                 let (Some(kind), Ok(index)) = (field.written, u32::try_from(index)) else {
                     continue;
                 };
-                fields.extend(layout.types.iter().map(|ty| ((*ty, index), kind.facts())));
+                fields.extend(
+                    layout
+                        .types
+                        .iter()
+                        .map(|ty| ((*ty, index), kind.facts_on(targets))),
+                );
             }
         }
         // A `const` set before anything runs is its initial value, whatever
@@ -352,7 +361,7 @@ impl Written {
                 let facts = if global.constant && !global.deferred && global.ty.is_scalar() {
                     Facts::constant(global.initial)
                 } else {
-                    global.written?.facts()
+                    global.written?.facts_on(targets)
                 };
                 Some((u32::try_from(index).ok()?, facts))
             })
@@ -363,6 +372,7 @@ impl Written {
             return_elements,
             fields,
             globals,
+            targets,
         }
     }
 }
@@ -585,9 +595,9 @@ fn merge(slot: &mut Option<Relations>, arriving: Relations) {
 /// proven to fit (`super::obligations`).
 fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
     let declared = func.params.get(slot as usize).map_or(Facts::TOP, |param| {
-        param
-            .written
-            .map_or(param.known, |kind| param.known.narrow(kind.facts()))
+        param.written.map_or(param.known, |kind| {
+            param.known.narrow(kind.facts_on(context.written.targets))
+        })
     });
     context
         .params
@@ -639,7 +649,7 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
         // What C returns is its declared type's: an `unsigned int` result is
         // 0..2^32-1, whole, as `foreign_result` reads a JVM descriptor.
         Callee::Native(target) => match target.result {
-            super::native::Type::Scalar(kind) => kind.facts(),
+            super::native::Type::Scalar(kind) => kind.facts_on(context.written.targets),
             _ => Facts::TOP,
         },
     }
@@ -992,7 +1002,7 @@ fn local_tuple_read(
 /// What native memory of a scalar type holds: that type's values. C wrote
 /// them as its type, and a store of the program's was proven to fit
 /// (`super::obligations`). A bit-field holds its width's.
-fn native_load_facts(func: &Func, kind: &OpKind) -> Facts {
+fn native_load_facts(func: &Func, kind: &OpKind, targets: super::native::Targets) -> Facts {
     use super::native::Pointee;
     let (OpKind::NativeLoad { pointer, .. } | OpKind::NativeBitLoad { pointer, .. }) = kind else {
         return Facts::TOP;
@@ -1001,14 +1011,14 @@ fn native_load_facts(func: &Func, kind: &OpKind) -> Facts {
         return Facts::TOP;
     };
     match (kind, pointee.viewed()) {
-        (OpKind::NativeLoad { .. }, Pointee::Scalar(scalar)) => scalar.facts(),
+        (OpKind::NativeLoad { .. }, Pointee::Scalar(scalar)) => scalar.facts_on(targets),
         (OpKind::NativeBitLoad { field, .. }, Pointee::Record(record)) => {
             match record
                 .fields
                 .get(*field as usize)
                 .map(|member| member.ty.viewed())
             {
-                Some(Pointee::Bits { unit, width }) => bit_field_facts(*unit, *width),
+                Some(Pointee::Bits { unit, width }) => bit_field_facts(*unit, *width, targets),
                 _ => Facts::TOP,
             }
         }
@@ -1016,18 +1026,30 @@ fn native_load_facts(func: &Func, kind: &OpKind) -> Facts {
     }
 }
 
-/// What a bit-field of `width` bits of a `unit` holds.
-fn bit_field_facts(unit: super::native::Scalar, width: u32) -> Facts {
+/// What a bit-field of `width` bits of a `unit` holds on some one of
+/// `targets`: signed where the unit is signed on a row, unsigned where it is
+/// not on one -- a `char` unit is both, for x86-64 and arm64 Linux.
+fn bit_field_facts(
+    unit: super::native::Scalar,
+    width: u32,
+    targets: super::native::Targets,
+) -> Facts {
     if width == 0 || width > 52 {
-        return unit.facts();
+        return unit.facts_on(targets);
     }
     let span = f64::from(1u32 << width.min(31)) * f64::from(1u32 << width.saturating_sub(31));
-    let signed = unit.integer_range().is_some_and(|(lo, _)| lo < 0);
-    if signed {
-        Facts::new(-span / 2.0, span / 2.0 - 1.0, true, false, false)
+    let signed = |abi| matches!(unit.abi(abi), super::HirType::Int { signed: true, .. });
+    let least = if targets.rows().any(signed) {
+        -span / 2.0
     } else {
-        Facts::new(0.0, span - 1.0, true, false, false)
-    }
+        0.0
+    };
+    let greatest = if targets.rows().any(|abi| !signed(abi)) {
+        span - 1.0
+    } else {
+        span / 2.0 - 1.0
+    };
+    Facts::new(least, greatest, true, false, false)
 }
 
 /// What a field of an object of this type can hold.
@@ -1237,7 +1259,7 @@ fn transfer_op(
             _ => Facts::TOP,
         },
         OpKind::NativeLoad { .. } | OpKind::NativeBitLoad { .. } => {
-            native_load_facts(func, &op.kind)
+            native_load_facts(func, &op.kind, context.written.targets)
         }
         OpKind::Await { promise, .. } => awaited(func, context, *promise),
         // What an erased value holds, as the type the checker narrowed it to.

@@ -226,7 +226,7 @@ pub fn native_place(layout: &crate::hir::native::Record, abi: NativeAbi) -> Opti
         // MS bit-field placement (a new unit whenever the declared type
         // changes, among other rules) is not `place_bit_fields`, which is
         // System V's. No layout, rather than System V's answer on Windows.
-        if abi == NativeAbi::Win64 {
+        if abi.convention == crate::hir::native::PlatformConvention::Win64 {
             return None;
         }
         return place_bit_fields(layout, &shapes);

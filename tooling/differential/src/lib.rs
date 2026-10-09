@@ -1116,7 +1116,7 @@ impl std::fmt::Display for NotC {
 }
 
 pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
-    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::LP64);
     if !emitted.diagnostics.is_empty() {
         return Err(NotC::Refused(
             emitted
@@ -1544,7 +1544,7 @@ fn run_native(
     // wrong lane -- a quiet trap with two backends and a certainty with three,
     // since `llvm` and `jvm` differ by one character.
     let backend = Backend::from_environment()?;
-    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::LP64);
     // The backend's own refusals, which used to be dropped on the floor here.
     // A function the emitter cannot write is *absent* from the C, and the
     // driver below still calls it -- so the run died at the linker with an

@@ -2592,12 +2592,12 @@ pub fn signature_on(name: &str, platform: crate::Platform) -> Option<&'static Si
 /// The table clang generated for `platform`: its data model and its arch.
 #[must_use]
 pub fn table(platform: crate::Platform) -> &'static [Signature] {
-    match (platform.abi, platform.arch) {
+    match (platform.abi.convention, platform.arch) {
         (_, crate::Arch::Aarch64) => super::signatures_arm64::SIGNATURES_ARM64,
-        (nts_core::hir::native::NativeAbi::Win64, crate::Arch::X86_64) => {
+        (nts_core::hir::native::PlatformConvention::Win64, crate::Arch::X86_64) => {
             super::signatures_win64::SIGNATURES_WIN64
         }
-        (nts_core::hir::native::NativeAbi::SysV, crate::Arch::X86_64) => SIGNATURES,
+        (nts_core::hir::native::PlatformConvention::SysV, crate::Arch::X86_64) => SIGNATURES,
     }
 }
 

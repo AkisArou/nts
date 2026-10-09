@@ -73,7 +73,7 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     std::fs::write(dir.join("program.ll"), &llvm.text).expect("write the IR");
 
     // C.
-    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(c.diagnostics.is_empty(), "the C backend declined");
     std::fs::write(dir.join("program.c"), c.writer.text()).expect("write the C");
     // Through `support_files` rather than by naming the header and the source:

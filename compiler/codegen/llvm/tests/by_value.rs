@@ -110,7 +110,7 @@ fn a_record_crosses_by_value_in_c() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
 
@@ -180,7 +180,7 @@ export function run(): bigint {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     let text = emitted.writer.text();
     assert!(
         !text.contains("stret") && !text.contains("NTS_OBJC_SEND_FOR"),
@@ -477,7 +477,7 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
         prepared.diagnostics
     );
     let windows_arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::Win64,
+        abi: nts_core::hir::native::NativeAbi::LLP64,
         arch: nts_codegen_llvm::Arch::Aarch64,
     };
     let llvm = nts_codegen_llvm::emit(&prepared.program, windows_arm64);
@@ -491,7 +491,7 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
     // Apple's and Linux's arm64 place the same rectangle: four doubles, in
     // `d0`-`d3` both ways, and a send that returns one needs no `_stret`.
     let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::SysV,
+        abi: nts_core::hir::native::NativeAbi::LP64,
         arch: nts_codegen_llvm::Arch::Aarch64,
     };
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
@@ -632,7 +632,7 @@ fn the_llvm_declarations_are_clangs_on_arm64() {
         prepared.diagnostics
     );
     let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::SysV,
+        abi: nts_core::hir::native::NativeAbi::LP64,
         arch: nts_codegen_llvm::Arch::Aarch64,
     };
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
@@ -743,7 +743,7 @@ declare module "objc:Foundation" {
         prepared.diagnostics
     );
     let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::SysV,
+        abi: nts_core::hir::native::NativeAbi::LP64,
         arch: nts_codegen_llvm::Arch::Aarch64,
     };
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);

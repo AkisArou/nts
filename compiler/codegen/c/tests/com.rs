@@ -95,7 +95,7 @@ fn a_com_method_is_a_call_through_its_table() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for (slot, what) in [(6, "Parse"), (7, "Stringify"), (9, "GetNumber")] {
@@ -320,7 +320,7 @@ export function run(): string {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The receiver, the string, then the two slots: four arguments.
@@ -419,7 +419,7 @@ fn a_struct_holding_a_string_is_copied_at_the_call() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert!(
@@ -501,7 +501,7 @@ export function run(set: IJsonValue): string {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The receiver, the name, and the two slots: the struct's and the flag's.
@@ -544,7 +544,7 @@ export function run(): number {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let call = text
@@ -633,7 +633,7 @@ export function run(): number {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert_eq!(
@@ -704,7 +704,7 @@ export function run(): string {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert_eq!(
@@ -779,7 +779,7 @@ export function run(): number {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert_eq!(
@@ -865,7 +865,7 @@ export function run(): number {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert_eq!(
@@ -952,7 +952,7 @@ export function run(): number {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert_eq!(
@@ -1017,7 +1017,7 @@ export function run(): boolean {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let arguments = |slot: &str| {
@@ -1093,7 +1093,7 @@ export function run(): number {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let run = &text[text.find("run(").expect("no run")..];
@@ -1149,7 +1149,7 @@ export function run(flag: boolean | null): void {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let run = &text[text.find("run(").expect("no run")..];
@@ -1227,7 +1227,7 @@ export function run(message: number): boolean {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert!(
@@ -1313,7 +1313,7 @@ export function run(): string {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert_eq!(
@@ -1414,7 +1414,7 @@ fn a_static_taking_bytes_passes_the_count_before_them() {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The factory, the count, the bytes, the result slot.
@@ -1457,7 +1457,7 @@ fn a_handle_at_module_scope_is_a_global() {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert!(
@@ -1527,7 +1527,7 @@ fn a_static_in_a_namespace_is_called_on_its_factory() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert!(
@@ -1583,7 +1583,7 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
         "{:?}",
         prepared.diagnostics
     );
-    let text = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64)
+    let text = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64)
         .writer
         .text()
         .to_owned();
@@ -1674,7 +1674,7 @@ fn a_delegate_is_an_object_whose_invoke_calls_the_closure() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LLP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let adapter = text

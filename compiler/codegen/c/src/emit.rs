@@ -1368,15 +1368,20 @@ pub fn leaves_the_program_inconsistent(diagnostic: &Diagnostic) -> bool {
 /// compiler can check it: the first line of every program that calls native
 /// code. If the emitter and the compiler's target ever disagree about `long`,
 /// the build fails here rather than truncating at run time.
-fn data_model_assertion(abi: NativeAbi) -> &'static str {
-    match abi {
-        NativeAbi::SysV => {
-            "_Static_assert(sizeof(int) == 4 && sizeof(long) == 8 && sizeof(size_t) == 8 && sizeof(ptrdiff_t) == 8, \"native calls require the LP64 ABI\");"
-        }
-        NativeAbi::Win64 => {
-            "_Static_assert(sizeof(int) == 4 && sizeof(long) == 4 && sizeof(size_t) == 8 && sizeof(ptrdiff_t) == 8, \"native calls require the LLP64 (Win64) ABI\");"
-        }
-    }
+/// The row's facts, asserted against the compiler that builds `program.c`:
+/// a table that disagrees with the real C stops the build rather than
+/// misreading a value -- a `char` of 200 read as -56, a `long` cut in half.
+fn data_model_assertion(abi: NativeAbi) -> String {
+    let (char_sign, signedness) = if abi.char_signed {
+        ("(char)-1 < 0", "a signed")
+    } else {
+        ("(char)-1 > 0", "an unsigned")
+    };
+    let model = if abi.long_bits == 64 { "LP64" } else { "LLP64" };
+    format!(
+        "_Static_assert(sizeof(int) == 4 && sizeof(long) == {} && sizeof(size_t) == 8 && sizeof(ptrdiff_t) == 8 && {char_sign}, \"native calls require the {model} ABI with {signedness} char\");",
+        abi.long_bits / 8
+    )
 }
 
 fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
@@ -1474,7 +1479,7 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
     refusals.extend(nts_codegen_common::abi::unavailable_scalars(program, abi));
     prototypes.sort();
     if !seen.is_empty() {
-        prototypes.insert(0, data_model_assertion(abi).to_owned());
+        prototypes.insert(0, data_model_assertion(abi));
     }
     if refusals.is_empty() {
         Ok(prototypes)
@@ -6240,7 +6245,7 @@ mod tests {
                 .collect(),
             ..Program::default()
         };
-        let emitted = emit(&program, NativeAbi::SysV);
+        let emitted = emit(&program, NativeAbi::LP64);
         let text = emitted.writer.text();
 
         for gone in ["refused", "caller", "outer"] {

@@ -224,7 +224,7 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let c = emitted.writer.text();
     assert!(c.contains("double take_0(int);"));
@@ -384,7 +384,7 @@ fn conflicting_authored_abis_and_runtime_symbol_collisions_are_errors() {
             prepared.diagnostics
         );
         let emitted =
-            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
         assert!(!emitted.is_complete(), "{name}: {}", emitted.writer.text());
         assert!(
             emitted
@@ -456,9 +456,9 @@ fn unrelated_declarations_cannot_supply_a_calls_abi() {
                 // question is whether an unrelated declaration can change the
                 // call, which Win64 asks as well as SysV does.
                 let abi = if WINDOWS_ONLY.contains(&brand) {
-                    nts_core::hir::native::NativeAbi::Win64
+                    nts_core::hir::native::NativeAbi::LLP64
                 } else {
-                    nts_core::hir::native::NativeAbi::SysV
+                    nts_core::hir::native::NativeAbi::LP64
                 };
                 let emitted = nts_codegen_c::emit(&prepared.program, abi);
                 assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
@@ -507,7 +507,7 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let declarations = include_str!(concat!(
@@ -593,7 +593,7 @@ fn type_headers_preserve_brands_and_boolean_abi() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     assert!(
         emitted
@@ -665,7 +665,7 @@ fn a_gobject_a_call_hands_a_never_free_program_brings_the_support_file() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(
         emitted.writer.text().contains("nts_gobject_made("),
         "a never-free program keeps nothing it is handed"
@@ -738,7 +738,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         "{:?}",
         agreeing.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&agreeing.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&agreeing.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(
         emitted.diagnostics.is_empty(),
         "two declarations that agree are one ABI: {:?}",
@@ -756,7 +756,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         "{:?}",
         conflicting.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&conflicting.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&conflicting.program, nts_core::hir::native::NativeAbi::LP64);
     let refusal = emitted
         .diagnostics
         .iter()
@@ -786,7 +786,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         "a conflicting ABI leaves a call declared wrongly: {}",
         refusal.message
     );
-    let declines = nts_codegen_c::emit(&agreeing.program, nts_core::hir::native::NativeAbi::SysV);
+    let declines = nts_codegen_c::emit(&agreeing.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(
         declines
             .diagnostics
@@ -858,7 +858,7 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
     let witness_of = |name: &str, field: &str, count: &str| -> Option<(Utf8PathBuf, String)> {
         let (dir, prepared) = prepare_with_binding(name, &binding(field, count), PROGRAM)?;
         let emitted =
-            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
         assert!(
             emitted.diagnostics.is_empty(),
             "{name}: {:?}",
@@ -994,7 +994,7 @@ fn a_witnessed_function_is_called_through_its_header_only_where_the_header_is_in
             prepared.diagnostics
         );
         let emitted =
-            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
         assert!(emitted.is_complete(), "{name}: {:?}", emitted.diagnostics);
         let text = emitted.writer.text();
         let includes = text
@@ -1055,7 +1055,7 @@ export function run(x: c_int): number {{
             prepared.diagnostics
         );
         let emitted =
-            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
         assert!(
             emitted.diagnostics.is_empty(),
             "{name}: {:?}",
@@ -1102,7 +1102,7 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
             prepared.diagnostics
         );
     }
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
     for file in emitted.support_files() {
@@ -1180,7 +1180,7 @@ declare function seen_u16(v: Uint16): Float64;
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     // A root's written parameter is its kind in C too: a caller outside the
     // program converts to it, as for any C function, and was never obliged
@@ -1312,7 +1312,7 @@ export function counted(n: Int32): number {
             prepared.diagnostics
         );
         let emitted =
-            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
         assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
         std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
         for file in emitted.support_files() {
@@ -1430,7 +1430,7 @@ export function discarded(): number {
         "{:?}",
         dropped.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&dropped.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&dropped.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     assert!(
         !emitted.writer.text().contains("nts_refused("),
@@ -1455,7 +1455,7 @@ export function reads(): number { return read(() => node_at(1 as c_int)); }
         "a signature reading the handle as the closure answers it was refused: {:?}",
         read.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&read.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&read.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     assert!(
         !emitted.writer.text().contains("nts_refused("),
@@ -1483,7 +1483,7 @@ export function reads(): number { return read(() => leaf_at(1 as c_int)); }
         "{:?}",
         adapted.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&adapted.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&adapted.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     assert!(
         !emitted.writer.text().contains("nts_refused("),
@@ -1568,7 +1568,7 @@ void handler_clear(void) {
             prepared.diagnostics
         );
         let emitted =
-            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
         assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
         std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
         for file in emitted.support_files() {
@@ -1712,7 +1712,7 @@ export function handedOn(n: number): number {
             prepared.diagnostics
         );
         let emitted =
-            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
         assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
         std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
         for file in emitted.support_files() {

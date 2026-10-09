@@ -48,7 +48,7 @@ fn counted(name: &str, source: &str) -> Option<String> {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     Some(emitted.writer.text().to_owned())
 }

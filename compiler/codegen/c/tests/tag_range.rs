@@ -95,7 +95,7 @@ fn folded_object_tests_answer_for_exactly_the_object_band() {
         ..hir::Program::default()
     };
     assert!(hir::verify::verify(&program).is_ok());
-    let emitted = nts_codegen_c::emit(&program, hir::native::NativeAbi::SysV);
+    let emitted = nts_codegen_c::emit(&program, hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     // Allocation-free after the fold; the runtime's definition is a separate
     // translation unit and does not count as a surviving generated call.
