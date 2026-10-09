@@ -138,6 +138,10 @@ export function ntsChromiumDomProgram(): number {
   cancelAnimationFrame(requestAnimationFrame((): void => {
     label.setAttribute("data-cancelled", "ran");
   }));
+  // The handle is converted as WebIDL's long (ToInt32): 2^32 above it cancels.
+  cancelAnimationFrame(requestAnimationFrame((): void => {
+    label.setAttribute("data-cancelled", "wrapped-ran");
+  }) + 4294967296);
   return 0;
 }
 

@@ -13,7 +13,7 @@ declare module "nts:dom" {
    */
   export function requestAnimationFrame(callback: Closure<(time: Float64) => void>): Int32;
   /** @ntsSymbol nts_dom_cancel_animation_frame */
-  export function cancelAnimationFrame(id: Int32): void;
+  export function cancelAnimationFrame(handle: Float64): void;
   /**
    * `requestIdleCallback(callback, { timeout })`: once, in an idle period or
    * once the timeout (ms) passes, with the deadline. Answers the id
@@ -27,7 +27,7 @@ declare module "nts:dom" {
    */
   export function requestIdleCallback(callback: Closure<(deadline: IdleDeadline) => void>): Int32;
   /** @ntsSymbol nts_dom_cancel_idle_callback */
-  export function cancelIdleCallback(id: Int32): void;
+  export function cancelIdleCallback(handle: Float64): void;
   /**
    * `setTimeout(handler, timeout)`: once, after the timeout, as HTML's timer
    * steps schedule it. Answers the id clearTimeout takes.

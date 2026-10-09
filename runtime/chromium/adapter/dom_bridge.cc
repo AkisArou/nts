@@ -1079,11 +1079,8 @@ int32_t NtsDomContext::SetTimer(NtsDomTimerCallback callback, void *closure,
                                 NtsDomDestroy destroy, double timeout,
                                 bool repeat) {
   CHECK(invoke);
-  // WebIDL's `long timeout`: ToInt32, as page script's binding converts it.
-  blink::DummyExceptionStateForTesting conversion;
-  int32_t milliseconds = blink::NativeValueTraits<blink::IDLLong>::NativeValue(
-      v8_isolate.get(), v8::Number::New(v8_isolate.get(), timeout),
-      conversion);
+  // WebIDL's `long timeout`.
+  int32_t milliseconds = IdlLong(timeout);
   // HTML's timer initialization steps, in DOMTimer's order: a negative
   // timeout is 0; the nesting level grows before it is read; past level 5 a
   // timeout under 4 ms is 4 ms.
@@ -1129,11 +1126,15 @@ int32_t NtsDomContext::SetTimer(NtsDomTimerCallback callback, void *closure,
   return id;
 }
 
-void NtsDomContext::ClearTimer(double id) {
-  // WebIDL's `long id`: ToInt32, as page script's binding converts it.
+int32_t NtsDomContext::IdlLong(double value) {
   blink::DummyExceptionStateForTesting conversion;
-  const int32_t timer_id = blink::NativeValueTraits<blink::IDLLong>::NativeValue(
-      v8_isolate.get(), v8::Number::New(v8_isolate.get(), id), conversion);
+  return blink::NativeValueTraits<blink::IDLLong>::NativeValue(
+      v8_isolate.get(), v8::Number::New(v8_isolate.get(), value), conversion);
+}
+
+void NtsDomContext::ClearTimer(double id) {
+  // WebIDL's `long id`.
+  const int32_t timer_id = IdlLong(id);
   // Ids start at 1: 0 and below name no timer, and are the map's reserved
   // keys (NaN and an omitted id convert to 0).
   if (timer_id <= 0)
@@ -1865,8 +1866,10 @@ int32_t nts_dom_request_idle_callback_default(NtsDomIdleCallback callback,
                                               NtsDomDestroy destroy) {
   return nts_dom_request_idle_callback(callback, closure, destroy, 0);
 }
-void nts_dom_cancel_idle_callback(int32_t id) {
+void nts_dom_cancel_idle_callback(double handle) {
   NtsDomContext &context = nts_dom::Current();
+  // WebIDL's `long handle`.
+  const int32_t id = context.IdlLong(handle);
   for (auto &task : context.listeners->idle) {
     if (task->id() != id)
       continue;
@@ -1882,8 +1885,10 @@ void nts_dom_cancel_idle_callback(int32_t id) {
   }
 }
 
-void nts_dom_cancel_animation_frame(int32_t id) {
+void nts_dom_cancel_animation_frame(double handle) {
   NtsDomContext &context = nts_dom::Current();
+  // WebIDL's `long handle`.
+  const int32_t id = context.IdlLong(handle);
   for (auto &frame : context.listeners->frames) {
     if (frame->Id() != id)
       continue;

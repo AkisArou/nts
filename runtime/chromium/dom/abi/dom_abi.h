@@ -129,7 +129,8 @@ int32_t nts_dom_request_animation_frame(void (*callback)(double time,
                                                          void* closure),
                                         void* closure,
                                         void (*destroy)(void* closure));
-void nts_dom_cancel_animation_frame(int32_t id);
+/* The handle is any number, converted as WebIDL's `long` (ToInt32). */
+void nts_dom_cancel_animation_frame(double handle);
 
 /* `new MutationObserver(callback)` for a compiled closure: Blink's own
  * observer, delivering to the closure with the records and the observer.
@@ -203,7 +204,8 @@ int32_t nts_dom_request_idle_callback_default(
     void (*callback)(NtsDomIdleDeadline* deadline, void* closure),
     void* closure,
     void (*destroy)(void* closure));
-void nts_dom_cancel_idle_callback(int32_t id);
+/* The handle is any number, converted as WebIDL's `long` (ToInt32). */
+void nts_dom_cancel_idle_callback(double handle);
 
 /* `canvas.getContext("2d")`: the canvas's 2D context, made on first use;
  * null for another id, or if the canvas has a context of another kind. Throws

@@ -151,6 +151,8 @@ function observeResize(): void {
 // Whether it ran by the timeout depends on the machine, so it is not logged.
 function observeIdle(): void {
   cancelIdleCallback(requestIdleCallback((): void => { note("data-idle", "cancelled-ran"); }));
+  // The handle is converted as WebIDL's long (ToInt32): 2^32 above it cancels.
+  cancelIdleCallback(requestIdleCallback((): void => { note("data-idle", "wrapped-ran"); }) + 4294967296);
   requestIdleCallback((deadline: IdleDeadline): void => {
     const remaining = deadline.timeRemaining();
     note("data-idle", remaining >= 0 && remaining <= 50 ? "deadline" : "deadline-out-of-range");

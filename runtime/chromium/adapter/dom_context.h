@@ -251,6 +251,9 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // `clearTimeout`/`clearInterval`: the timer stops and its closure goes
   // back -- after its own run, when it is the one running.
   void ClearTimer(double id);
+  // A number as WebIDL's `long` takes it: ToInt32, as page script's binding
+  // converts it (a timeout, a timer's or a callback's id).
+  int32_t IdlLong(double value);
   // A timer's run: its own entry, like a frame callback's.
   void RunTimer(nts_dom::NtsTimer *timer);
   // A native callback into the program -- an observer's delivery -- as its
