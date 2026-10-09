@@ -50449,6 +50449,17 @@ impl<'a> FuncBuilder<'a> {
         if ty == text && absences.is_empty() {
             return Ok(value);
         }
+        // **An erased message is spelled by `nts_value_to_string`, which
+        // answers only the tags [`Self::spells_itself`] admits** -- the gate
+        // `as_string` puts on every other conversion to a string, and the
+        // same sentence. Without it, `new Error(x)` with `x: any` holding an
+        // object compiled and stopped at run time, the runtime saying the
+        // lowering should have refused it.
+        let source = self.through_assertions(argument);
+        if ty == HirType::Erased && !self.spells_itself(source) {
+            let named = self.describe_node(source);
+            return Err(self.unsupported(argument, &format!("a conversion to string from {named}")));
+        }
         // Which absence a null pointer is, from the checker: a string and its
         // `undefined` share a representation with its `null`, and `coerce`
         // would erase every null pointer as `null` -- "null" where the message
