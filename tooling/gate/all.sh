@@ -193,11 +193,10 @@ lint() {
 # admit to it, and it was found three hours later by someone reading `git
 # status` rather than by anything that runs.
 #
-# This makes no claim about what the formatting *should* be, which is the whole
-# reason it is affordable. Adopting `cargo fmt --check` means deciding what the
-# formatting is, which costs one deliberate run rewriting every file nobody is
-# working in -- the harm the rule exists to prevent, paid up front. This only
-# refuses to let an unattributed reformat through unnoticed.
+# This makes no claim about what the formatting *should* be. For Rust that is
+# now `rustfmt`'s step: the one deliberate run rewriting every file was paid on
+# 2026-10-09, announced to every lane, and that step keeps it. This one still
+# refuses to let an unattributed reformat of anything else through unnoticed.
 #
 # Compared with every whitespace character removed, so a *reflow* is caught and
 # not merely a re-indent. Moving tokens between lines is exactly what rustfmt
@@ -230,6 +229,19 @@ reformatted() {
   echo "$bad" | sed 's/^/    /'
   echo "  commit it deliberately or revert it -- a reformat nobody claims"
   echo "  buries three sessions' real diffs"
+  return 1
+}
+
+# The Rust tree as `cargo fmt` writes it (`rustfmt.toml`: edition 2024, the
+# default width). One deliberate run formatted all of it on 2026-10-09; this
+# keeps it so, so a diff is never a reformat in disguise. A function the run
+# pushed past clippy's 100 lines carries `#[expect(clippy::too_many_lines)]`,
+# which goes unfulfilled -- and so red -- the day it is split.
+rust_formatted() {
+  out=$(cargo fmt --all --check 2>&1) && return 0
+  echo "  not formatted:"
+  echo "$out" | sed -n -E "s#^Diff in $PWD/(.*):[0-9]+:\$#    \\1#p" | sort -u
+  echo "  run: cargo fmt --all"
   return 1
 }
 
@@ -2393,6 +2405,7 @@ interop() {
 }
 
 step "format"  format
+step "rustfmt" rust_formatted
 step "reformat" reformatted
 step "records" records
 step "test262" test262

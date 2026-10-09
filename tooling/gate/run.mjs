@@ -108,6 +108,7 @@ const STEPS = [
   // `build` and `tests` on cargo's build-directory lock.
   { name: "clippy", slots: 6, min: 4, mem: 6, lock: "clippy", doc: "lint clean" },
   { name: "format", slots: 1, mem: 0.2, doc: "runtime/c is clang-formatted" },
+  { name: "rustfmt", slots: 1, mem: 0.2, doc: "the Rust tree is cargo-fmt formatted" },
   { name: "reformat", slots: 1, mem: 0.1, doc: "no whitespace-only diffs" },
   { name: "records", slots: 1, mem: 0.1, doc: "record numbers unique" },
   { name: "test262", slots: 1, mem: 2, after: ["build"], doc: "test262 pin, inventory, features audit" },

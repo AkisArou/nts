@@ -101,6 +101,7 @@ export const ASKS = {
   clippy: ["hygiene", "does it lint clean"],
   tests: ["answers", "do the unit tests pass, including the runtime tables"],
   format: ["hygiene", "is runtime/c formatted"],
+  rustfmt: ["hygiene", "is the Rust tree formatted"],
   examples: ["answers", "does every example answer as node does, on C"],
   llvm: ["answers", "the same on LLVM"],
   "llvm-rc": ["answers", "the same on LLVM with reference counting"],
@@ -434,7 +435,7 @@ export const RULES = [
 ];
 
 /** Every change, whatever it touched: the gate's first two steps. */
-const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests"], arms: [] };
+const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt"], arms: [] };
 
 /**
  * `{ path, added, deleted }` for the change asked about. A rename or copy is
