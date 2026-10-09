@@ -298,7 +298,8 @@ written through two methods (`@ntsGet`/`@ntsSet`). A program writes
 `el.setAttribute("class", c)`, `tr.firstChild`, `text.nodeValue = label`,
 `d.createElement("tr")` -- page script's code, with `asElement(node)` where
 page script would just use the node. Text is a `StringView` both ways,
-numbers are `CNumber`s (plain numbers converted at the call), a union with
+numbers are `@nts/scalars` types (`Float64`, converted by the adapter as the
+IDL type says; an `Int32` result is an integer the program can use as one), a union with
 one string member takes the string, and `asX` narrows with Blink's
 `DynamicTo`. A variadic string tail (`classList.add(...tokens)`) binds at one to three
 arguments. An IDL enum is its literal union, matched against Blink's

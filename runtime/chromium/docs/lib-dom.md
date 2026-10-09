@@ -22,7 +22,7 @@ module `nts:dom`.
    lib.dom member a program uses to its bound declaration.
 2. Signatures are checked, not coerced. A bound member must agree with
    lib.dom's under an explicit table of equivalences: `string` and
-   `StringView`; `number` and `CNumber<"double">`; a lib.dom handle and
+   `StringView`; `number` and `Float64` (`@nts/scalars`); a lib.dom handle and
    its bound handle along the chain. Drift is a named diagnostic at the use.
 3. The target injects the overlay (`target.chromium()`), so the program's
    tsconfig is the browser's.
@@ -221,9 +221,10 @@ never replaces page script's.
 
 - Bind numbers as WebIDL does. A `number` crosses as a `double`, and the
   adapter applies the IDL type's conversion: `long` is ToInt32;
-  `[EnforceRange]` throws a TypeError; `[Clamp]` clamps. Today a
-  `CNumber<"int32">` parameter leaves that to a C conversion, which is not
-  WebIDL's for NaN or out-of-range values.
+  `[EnforceRange]` throws a TypeError; `[Clamp]` clamps. Every generated
+  numeric parameter does, and the hand-written timer entry points too
+  (`clearTimeout(Float64)`, converted as `long`): an integer slot would
+  refuse a plain `number` the compiler cannot prove fits (NTS5001).
 - `is<X>` checks through `GetWrapperTypeInfo()`, for every interface.
 - `addEventListener`/`removeEventListener` with closure identity, beside
   `listen`.
