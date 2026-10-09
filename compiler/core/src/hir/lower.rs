@@ -30185,9 +30185,19 @@ impl<'a> FuncBuilder<'a> {
                 if self.declaration_kind(declaration) != nts_semantic_schema::VariableKind::Const {
                     return None;
                 }
-                self.children(declaration)
-                    .into_iter()
-                    .find(|child| self.kind_of(*child) == Some(syntax::ARROW_FUNCTION))?
+                // Either way a closure is written: `closure_typed_global` asks
+                // the same of a module-scope `const`. Asking for an arrow alone
+                // typed a `function` expression's field at the checker's
+                // function type while the closure object was stored in it, and
+                // `stored_capture` refused the pair, as "a parameter this copy
+                // re-typed" where no copy was involved
+                // (`blockers/a-function-expression-captured-by-another`).
+                self.children(declaration).into_iter().find(|child| {
+                    matches!(
+                        self.kind_of(*child),
+                        Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
+                    )
+                })?
             }
         };
         // A refused closure has no layout to name, so this answers `None` and
