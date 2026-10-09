@@ -132,6 +132,43 @@ function readEmitted(output, file = "addon.c") {
   return existsSync(emitted) ? readFileSync(emitted, "utf8") : "";
 }
 
+/**
+ * `javap`, from `JAVA_HOME` or the PATH, or `null`. The JVM-artefact forms
+ * need it, and a missing one is reported per fixture rather than read as an
+ * answer.
+ */
+function findJavap() {
+  const home = process.env.JAVA_HOME;
+  if (home && existsSync(join(home, "bin", "javap"))) return join(home, "bin", "javap");
+  const found = spawnSync("sh", ["-c", "command -v javap"], { encoding: "utf8" });
+  const path = (found.stdout ?? "").trim();
+  return found.status === 0 && path.length > 0 ? path : null;
+}
+const javap = findJavap();
+
+/**
+ * The interfaces a class the last `emit-jvm` wrote declares, from javap's
+ * header line -- or a string saying why it could not be read. Never an empty
+ * list for a class that is not there: absence of the *class* is not absence of
+ * the *interface*, and reading it so is the instrument answering emptily.
+ */
+function emittedInterfaces(output, className) {
+  if (javap === null) return "no javap on PATH or under JAVA_HOME";
+  const m = /wrote .* to (\S+)/.exec(output);
+  if (m === null) return "emit-jvm wrote no classes";
+  const file = join(m[1], ...className.split(".")) + ".class";
+  if (!existsSync(file)) return `emit-jvm wrote no ${className}`;
+  const listed = spawnSync(javap, ["-cp", m[1], className], { encoding: "utf8" });
+  const header = (listed.stdout ?? "")
+    .split("\n")
+    .find((line) => /\b(class|interface)\s/.test(line) && line.includes(className));
+  if (listed.status !== 0 || header === undefined) {
+    return `javap could not read ${className}: ${(listed.stderr ?? "").trim().split("\n")[0] ?? ""}`;
+  }
+  const implemented = /\bimplements\s+([^{]+)/.exec(header);
+  return implemented === null ? [] : implemented[1].split(",").map((it) => it.trim()).filter(Boolean);
+}
+
 function run(args) {
   const result = spawnSync(compiler, args, {
     encoding: "utf8",
@@ -255,6 +292,13 @@ for (const name of names) {
   const failsToCompile = /^fails-to-compile(?:\s+(.+))?$/.exec(wanted);
   const duplicatesC = /^duplicates-c\s+(.+)$/.exec(wanted);
   const lacksC = /^lacks-c\s+(.+)$/.exec(wanted);
+  // The JVM twin of `lacks-c`: an interface a generated class does not declare.
+  // A defect in the *published Java face* -- a closure that implements a
+  // written signature but carries no typed callback interface -- refuses
+  // nothing and answers nothing wrong in TypeScript, so only the class file can
+  // say it. Read through javap; see `emittedInterfaces` for why a missing class
+  // or a missing javap is a report, never "lacks".
+  const lacksInterface = viaJvm ? /^lacks-interface\s+(\S+)\s+(\S+)$/.exec(wanted) : null;
   const emitsC = /^emits-c\s+(.+)$/.exec(wanted);
   // And a fourth: a blocker visible only in the *wrapper*. `emits-addon` reads
   // addon.c, where a defect can be that two exports each got their own
@@ -357,6 +401,13 @@ for (const name of names) {
     unexpected++;
     console.log(`  NO OUTPUT   ${name}: emit-c wrote no program.c, so the expectation could not be`);
     console.log(`                evaluated either way. Expected: ${expected}`);
+    continue;
+  }
+  const declared = lacksInterface === null ? null : emittedInterfaces(output, lacksInterface[1]);
+  if (typeof declared === "string") {
+    unexpected++;
+    console.log(`  NO OUTPUT   ${name}: ${declared}, so the expectation could not be evaluated`);
+    console.log(`                either way. Expected: ${expected}`);
     continue;
   }
   const occurrences = (haystack, needle) => haystack.split(needle).length - 1;
@@ -539,6 +590,8 @@ for (const name of names) {
     ? occurrences(program, duplicatesC[1]) > 1
     : lacksC !== null
     ? program.length > 0 && !program.includes(lacksC[1])
+    : lacksInterface !== null
+    ? !declared.includes(lacksInterface[2])
     : emitsC !== null
     ? program.includes(emitsC[1])
     : emitsAddon !== null
@@ -685,6 +738,8 @@ for (const name of names) {
     console.log(`  ${verdict}  ${name}: emitted once now, not twice. Expected duplicates of:`);
   } else if (lacksC !== null) {
     console.log(`  ${verdict}  ${name}: the backend now emits it. Expected absence of:`);
+  } else if (lacksInterface !== null) {
+    console.log(`  ${verdict}  ${name}: ${lacksInterface[1]} declares it now. Expected absence of:`);
   } else if (lacksAddon !== null) {
     console.log(`  ${verdict}  ${name}: the wrapper names it now. Expected absence of:`);
   } else if (addonCompiles) {
