@@ -6,9 +6,7 @@
       "ESNext",
       "DOM"
     ],
-    "types": [
-      "node"
-    ],
+    "types": [],
     "skipLibCheck": true,
     "paths": {
       "react-reconciler/ReactFiberConfig.ts": [
