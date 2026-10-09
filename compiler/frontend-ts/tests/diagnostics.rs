@@ -98,10 +98,18 @@ fn a_clean_program_reports_no_errors() {
 /// missing.
 #[test]
 fn a_type_error_in_any_of_the_programs_files_is_reported() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-diagnostics-own-{}", std::process::id()));
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+        .unwrap()
+        .join(format!("nts-diagnostics-own-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("main.ts"), "import { twice } from \"./other\";\nexport const named: string = twice(2);\n").unwrap();
+    std::fs::write(
+        dir.join("main.ts"),
+        "import { twice } from \"./other\";\nexport const named: string = twice(2);\n",
+    )
+    .unwrap();
     std::fs::write(dir.join("other.ts"), "export function twice(value: number): number {\n  const wrong: boolean = value;\n  return value * 2;\n}\n").unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -109,16 +117,27 @@ fn a_type_error_in_any_of_the_programs_files_is_reported() {
     )
     .unwrap();
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
-    let snapshot = TsgoApi::new(tsgo).snapshot(&tsconfig).expect("a snapshot is produced even for a broken program");
+    let snapshot = TsgoApi::new(tsgo)
+        .snapshot(&tsconfig)
+        .expect("a snapshot is produced even for a broken program");
     let errors: Vec<(&str, &str)> = snapshot
         .diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.severity == Severity::Error)
-        .map(|diagnostic| (diagnostic.code.as_str(), snapshot.sources[diagnostic.primary.file.0 as usize].uri.as_str()))
+        .map(|diagnostic| {
+            (
+                diagnostic.code.as_str(),
+                snapshot.sources[diagnostic.primary.file.0 as usize]
+                    .uri
+                    .as_str(),
+            )
+        })
         .collect();
     for file in ["main.ts", "other.ts"] {
         assert!(
-            errors.iter().any(|(code, uri)| *code == "TS2322" && uri.ends_with(file)),
+            errors
+                .iter()
+                .any(|(code, uri)| *code == "TS2322" && uri.ends_with(file)),
             "the type error in {file} was not reported: {errors:?}"
         );
     }
@@ -166,15 +185,26 @@ fn a_plain_javascript_early_error_is_reported() {
         r#"{ "compilerOptions": { "allowJs": true, "module": "esnext", "target": "es2022", "noEmit": true }, "include": ["src"] }"#,
     )
     .unwrap();
-    std::fs::write(dir.join("src/main.js"), "function f() { return 1; }\nf() = 1;\n").unwrap();
+    std::fs::write(
+        dir.join("src/main.js"),
+        "function f() { return 1; }\nf() = 1;\n",
+    )
+    .unwrap();
     let snapshot = TsgoApi::new(tsgo)
         .snapshot(&dir.join("tsconfig.json"))
         .expect("a snapshot is produced even for a broken program");
     assert!(
-        snapshot.diagnostics.iter().any(|d| d.code == "TS2364" && d.severity == Severity::Error),
+        snapshot
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "TS2364" && d.severity == Severity::Error),
         "TS2364 is not reported for a plain-JS file: target/tsgo lacks the carried \
          patch (run `sh tooling/bootstrap/bootstrap.sh`), or `EARLY_ERRORS` lost it. \
          Got: {:?}",
-        snapshot.diagnostics.iter().map(|d| d.code.as_str()).collect::<Vec<_>>()
+        snapshot
+            .diagnostics
+            .iter()
+            .map(|d| d.code.as_str())
+            .collect::<Vec<_>>()
     );
 }

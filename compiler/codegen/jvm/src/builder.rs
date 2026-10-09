@@ -66,8 +66,7 @@
 
 use nts_codegen_common::destruct::outgoing;
 use nts_core::hir::{
-    Callee,
-    BinOp, Func, HirType, ManagedType, OpKind, Terminator, ValueId, operands_of,
+    BinOp, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId, operands_of,
 };
 use rustc_hash::FxHashSet;
 
@@ -78,7 +77,9 @@ struct Classes {
 
 impl Classes {
     fn new(count: usize) -> Self {
-        Self { parent: (0..u32::try_from(count).unwrap_or(u32::MAX)).collect() }
+        Self {
+            parent: (0..u32::try_from(count).unwrap_or(u32::MAX)).collect(),
+        }
     }
 
     fn find(&mut self, at: u32) -> u32 {
@@ -147,7 +148,12 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
 
     // `out = out + piece` is one location written twice.
     for (at, op) in func.values.iter().enumerate() {
-        if let OpKind::Binary { op: BinOp::Concat, lhs, .. } = &op.kind {
+        if let OpKind::Binary {
+            op: BinOp::Concat,
+            lhs,
+            ..
+        } = &op.kind
+        {
             classes.union(u32::try_from(at).unwrap_or(0), lhs.0);
         }
     }
@@ -168,7 +174,11 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
             continue;
         }
         match &op.kind {
-            OpKind::Binary { op: BinOp::Concat, lhs, .. } if classes.find(lhs.0) == root => {
+            OpKind::Binary {
+                op: BinOp::Concat,
+                lhs,
+                ..
+            } if classes.find(lhs.0) == root => {
                 accumulating.insert(root);
             }
             // A block parameter arrives on an edge and its arguments carry
@@ -189,7 +199,11 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
         match &op.kind {
             // The left operand is the accumulator itself and is not a read of
             // it; the right operand is appended and is an ordinary use.
-            OpKind::Binary { op: BinOp::Concat, lhs, rhs } => {
+            OpKind::Binary {
+                op: BinOp::Concat,
+                lhs,
+                rhs,
+            } => {
                 if string(*rhs) {
                     refused.insert(classes.find(rhs.0));
                 }
@@ -272,12 +286,25 @@ pub(crate) fn char_code_appends(
 ) -> FxHashSet<ValueId> {
     let mut fused = FxHashSet::default();
     for op in &func.values {
-        let OpKind::Binary { op: BinOp::Concat, lhs, rhs } = &op.kind else { continue };
+        let OpKind::Binary {
+            op: BinOp::Concat,
+            lhs,
+            rhs,
+        } = &op.kind
+        else {
+            continue;
+        };
         if !accumulated.contains(lhs) || uses.get(rhs.0 as usize).copied() != Some(1) {
             continue;
         }
-        let Some(source) = func.values.get(rhs.0 as usize) else { continue };
-        if let OpKind::Call { callee: Callee::External(name), args, .. } = &source.kind
+        let Some(source) = func.values.get(rhs.0 as usize) else {
+            continue;
+        };
+        if let OpKind::Call {
+            callee: Callee::External(name),
+            args,
+            ..
+        } = &source.kind
             && name == "nts_string_from_char_code"
             && args.len() == 1
         {

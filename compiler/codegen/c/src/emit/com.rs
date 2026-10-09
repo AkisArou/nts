@@ -1,7 +1,7 @@
 //! A COM method call: a cast of the receiver's table slot, which is how C
 //! calls through a vtable and what a `lpVtbl->Method(...)` macro expands to.
 
-use super::{c_identifier, c_type_of, CodeWriter, Diagnostic, Origin, Program};
+use super::{CodeWriter, Diagnostic, Origin, Program, c_identifier, c_type_of};
 use nts_codegen_common::com::{delegate_hop_symbol, delegate_invoke_symbol, delegate_signatures};
 use nts_codegen_common::objc::{Carried, hop_arguments};
 use nts_core::hir::native::{FnPointer, Function, Type, Vtable};
@@ -22,7 +22,11 @@ fn spelled(ty: &Type) -> String {
 /// `((R (*)(void *, A...))(*(void ***)r)[slot])(r, a...)`: the function in
 /// slot `slot` of the table the receiver's first word points at, called with
 /// the receiver and the rest.
-pub(super) fn vtable_expression(target: &Function, vtable: &Vtable, arguments: &[String]) -> String {
+pub(super) fn vtable_expression(
+    target: &Function,
+    vtable: &Vtable,
+    arguments: &[String],
+) -> String {
     let receiver = arguments.first().cloned().unwrap_or_else(|| "0".to_owned());
     let types: Vec<String> = target.parameters.iter().map(spelled).collect();
     format!(
@@ -46,11 +50,16 @@ pub(super) fn vtable_expression(target: &Function, vtable: &Vtable, arguments: &
 pub(super) fn delegates(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
     for signature in delegate_signatures(program) {
         let bridge_type = {
-            let mut types: Vec<String> = signature.parameters.iter().map(|ty| ty.c_type().into_owned()).collect();
+            let mut types: Vec<String> = signature
+                .parameters
+                .iter()
+                .map(|ty| ty.c_type().into_owned())
+                .collect();
             types.push("void *".to_owned());
             format!("void (*)({})", types.join(", "))
         };
-        let hop = hop_arguments(signature).map(|carried| hop(writer, origin, signature, &carried, &bridge_type));
+        let hop = hop_arguments(signature)
+            .map(|carried| hop(writer, origin, signature, &carried, &bridge_type));
         let mut parameters = vec!["void *self".to_owned()];
         let mut bridge = Vec::new();
         let mut arguments = Vec::new();
@@ -78,7 +87,13 @@ pub(super) fn delegates(writer: &mut CodeWriter, origin: &Origin, program: &Prog
 /// A signature's carried call: the arguments' type, the offsets of the
 /// objects in it, and `run`, which unpacks them on the owning thread into the
 /// bridge. Returns the test the `Invoke` adapter starts with.
-fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried: &[Carried], bridge_type: &str) -> String {
+fn hop(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    signature: &FnPointer,
+    carried: &[Carried],
+    bridge_type: &str,
+) -> String {
     let hop = delegate_hop_symbol(signature);
     let mut fields = Vec::new();
     let mut packed = Vec::new();
@@ -108,7 +123,13 @@ fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried:
     let table = if objects.is_empty() {
         "0".to_owned()
     } else {
-        writer.line(origin, format!("static const uint32_t {hop}_objects[] = {{ {} }};", objects.join(", ")));
+        writer.line(
+            origin,
+            format!(
+                "static const uint32_t {hop}_objects[] = {{ {} }};",
+                objects.join(", ")
+            ),
+        );
         format!("{hop}_objects")
     };
     format!(
@@ -124,25 +145,48 @@ fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried:
 /// calls the compiled method with it; a table per interface, slots 0 to 5
 /// the outer object's; the class's descriptor; and one constructor
 /// registering them all before `main`, as Objective-C classes are.
-pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
-    use nts_codegen_common::com::{adapter_symbol, class_symbol, forward_symbol, interfaces, interfaces_symbol, table_symbol, Answer, OUTER_SLOTS};
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn classes(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+) -> Result<(), Diagnostic> {
+    use nts_codegen_common::com::{
+        Answer, OUTER_SLOTS, adapter_symbol, class_symbol, forward_symbol, interfaces,
+        interfaces_symbol, table_symbol,
+    };
     let classes = nts_codegen_common::com::classes(program);
     if classes.is_empty() {
         return Ok(());
     }
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
-    writer.line(origin, "/* Classes written over composable Windows Runtime classes: see `emit/com.rs`. */");
+    writer.line(
+        origin,
+        "/* Classes written over composable Windows Runtime classes: see `emit/com.rs`. */",
+    );
     for class in &classes {
         for (at, method) in class.methods.iter().enumerate() {
             let compiled = program
                 .funcs
                 .iter()
                 .find(|func| func.name == method.function)
-                .ok_or_else(|| refuse("an override whose compiled function this program does not define"))?;
-            adapter(writer, origin, program, &adapter_symbol(&class.name, at), method, compiled).map_err(|why| refuse(&why))?;
+                .ok_or_else(|| {
+                    refuse("an override whose compiled function this program does not define")
+                })?;
+            adapter(
+                writer,
+                origin,
+                program,
+                &adapter_symbol(&class.name, at),
+                method,
+                compiled,
+            )
+            .map_err(|why| refuse(&why))?;
         }
         let Some(composition) = &class.composition else {
-            return Err(refuse("a class written over a composable class with no factory"));
+            return Err(refuse(
+                "a class written over a composable class with no factory",
+            ));
         };
         for (at, forward) in composition.forwarded.iter().enumerate() {
             forwarder(writer, origin, &forward_symbol(&class.name, at), forward);
@@ -150,10 +194,15 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         let answered = interfaces(class);
         let mut rows = Vec::new();
         for (index, interface) in answered.iter().enumerate() {
-            let mut slots: Vec<String> = OUTER_SLOTS.iter().map(|slot| format!("(const void *){slot}")).collect();
+            let mut slots: Vec<String> = OUTER_SLOTS
+                .iter()
+                .map(|slot| format!("(const void *){slot}"))
+                .collect();
             for (slot, answer) in &interface.slots {
                 if *slot as usize != slots.len() {
-                    return Err(refuse("an override table with a gap, which lowering refuses"));
+                    return Err(refuse(
+                        "an override table with a gap, which lowering refuses",
+                    ));
                 }
                 let symbol = match answer {
                     Answer::Override(at) => adapter_symbol(&class.name, *at),
@@ -162,17 +211,39 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 slots.push(format!("(const void *){symbol}"));
             }
             let table = table_symbol(&class.name, index);
-            writer.line(origin, format!("static const void *const {table}[] = {{ {} }};", slots.join(", ")));
-            rows.push(format!("{{ {}ull, {}ull, {table} }}", interface.low, interface.high));
+            writer.line(
+                origin,
+                format!(
+                    "static const void *const {table}[] = {{ {} }};",
+                    slots.join(", ")
+                ),
+            );
+            rows.push(format!(
+                "{{ {}ull, {}ull, {table} }}",
+                interface.low, interface.high
+            ));
         }
-        let (low, high) = nts_core::hir::native::iid_words(&composition.factory).unwrap_or_default();
+        let (low, high) =
+            nts_core::hir::native::iid_words(&composition.factory).unwrap_or_default();
         let interfaces_array = interfaces_symbol(&class.name);
-        writer.line(origin, format!("static const NtsComInterface {interfaces_array}[] = {{ {} }};", rows.join(", ")));
+        writer.line(
+            origin,
+            format!(
+                "static const NtsComInterface {interfaces_array}[] = {{ {} }};",
+                rows.join(", ")
+            ),
+        );
         // The fields' maker, entered as an entry point is: the runtime calls
         // it from whatever stack is composing the instance.
         let maker = match &class.state {
             Some(state) => {
-                let compiled = program.funcs.iter().find(|func| func.name == *state).ok_or_else(|| refuse("a class whose fields' maker this program does not define"))?;
+                let compiled = program
+                    .funcs
+                    .iter()
+                    .find(|func| func.name == *state)
+                    .ok_or_else(|| {
+                        refuse("a class whose fields' maker this program does not define")
+                    })?;
                 let maker = format!("nts_com_state_{}", class.name);
                 writer.line(
                     origin,
@@ -195,9 +266,15 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             ),
         );
     }
-    writer.line(origin, "__attribute__((constructor)) static void nts_com_register_classes(void) {");
+    writer.line(
+        origin,
+        "__attribute__((constructor)) static void nts_com_register_classes(void) {",
+    );
     for class in &classes {
-        writer.line(origin, format!("    nts_com_register(&{});", class_symbol(&class.name)));
+        writer.line(
+            origin,
+            format!("    nts_com_register(&{});", class_symbol(&class.name)),
+        );
     }
     writer.line(origin, "}");
     Ok(())
@@ -206,7 +283,12 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 /// A slot the class leaves to its base: the same slot of the base's own
 /// implementation, called with the same arguments and answering its HRESULT.
 /// No TypeScript runs, so there is no callback to enter.
-fn forwarder(writer: &mut CodeWriter, origin: &Origin, name: &str, forward: &nts_core::hir::native::Forwarded) {
+fn forwarder(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    name: &str,
+    forward: &nts_core::hir::native::Forwarded,
+) {
     let types: Vec<String> = forward
         .signature
         .parameters
@@ -216,8 +298,14 @@ fn forwarder(writer: &mut CodeWriter, origin: &Origin, name: &str, forward: &nts
             other => other.c_type().into_owned(),
         })
         .collect();
-    let parameters: Vec<String> = types.iter().enumerate().map(|(at, ty)| format!("{ty} a{at}")).collect();
-    let arguments: Vec<String> = std::iter::once("base".to_owned()).chain((1..types.len()).map(|at| format!("a{at}"))).collect();
+    let parameters: Vec<String> = types
+        .iter()
+        .enumerate()
+        .map(|(at, ty)| format!("{ty} a{at}"))
+        .collect();
+    let arguments: Vec<String> = std::iter::once("base".to_owned())
+        .chain((1..types.len()).map(|at| format!("a{at}")))
+        .collect();
     writer.line(
         origin,
         format!(
@@ -252,14 +340,25 @@ fn adapter(
     if declared > method.signature.parameters.len() {
         return Err("an override taking more parameters than its slot is called with".to_owned());
     }
-    let cast = |at: usize| c_type_of(program, &compiled.params[at].ty, &compiled.params[at].origin).map_err(|d| d.message);
+    let cast = |at: usize| {
+        c_type_of(
+            program,
+            &compiled.params[at].ty,
+            &compiled.params[at].origin,
+        )
+        .map_err(|d| d.message)
+    };
     let mut parameters = Vec::new();
     let mut arguments = Vec::new();
     for (slot, ty) in method.signature.parameters.iter().enumerate() {
         // An interface pointer as `void *`: a struct the compiled method never
         // names would be declared by nothing, and each argument passed on is
         // cast to what the method takes.
-        let spelled = if matches!(ty, Type::Pointer(_)) { std::borrow::Cow::Borrowed("void *") } else { ty.c_type() };
+        let spelled = if matches!(ty, Type::Pointer(_)) {
+            std::borrow::Cow::Borrowed("void *")
+        } else {
+            ty.c_type()
+        };
         parameters.push(format!("{spelled} a{slot}"));
         if slot >= declared {
             continue;
@@ -271,13 +370,18 @@ fn adapter(
         };
         arguments.push(format!("({}){value}", cast(slot)?));
     }
-    let call = |arguments: &[String]| format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+    let call = |arguments: &[String]| {
+        format!("{}({})", c_identifier(&compiled.name), arguments.join(", "))
+    };
     let body = match result {
         Type::Void => format!("{};", call(&arguments)),
         // A string: an `HSTRING` of its own, which the caller owns.
         Type::Managed(nts_core::hir::ManagedType::String) => {
             parameters.push("void **out".to_owned());
-            format!("*out = nts_com_answer_string((NtsString *){});", call(&arguments))
+            format!(
+                "*out = nts_com_answer_string((NtsString *){});",
+                call(&arguments)
+            )
         }
         // An object: a reference the caller owns, whichever the provider.
         Type::Pointer(_) => {

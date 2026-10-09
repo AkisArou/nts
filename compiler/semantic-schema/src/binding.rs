@@ -18,7 +18,8 @@ pub fn parse(binding: &str) -> Option<(&str, &str)> {
     let rest = binding.trim().strip_prefix('"')?;
     let (module, name) = rest.split_once('"')?;
     let name = name.trim();
-    (!module.is_empty() && !name.is_empty() && !name.contains(char::is_whitespace)).then_some((module, name))
+    (!module.is_empty() && !name.is_empty() && !name.contains(char::is_whitespace))
+        .then_some((module, name))
 }
 
 /// The name of the nearest `declare module "..."` around a node.
@@ -31,7 +32,11 @@ pub fn enclosing_module(snapshot: &SemanticSnapshot, mut at: NodeId) -> Option<&
         if node.kind == NodeKind::Syntax(syntax::MODULE_DECLARATION) {
             return node.children.iter().find_map(|child| {
                 let child = snapshot.nodes.get(child.0 as usize)?;
-                if child.kind == NodeKind::Syntax(syntax::STRING_LITERAL) { child.text.as_deref() } else { None }
+                if child.kind == NodeKind::Syntax(syntax::STRING_LITERAL) {
+                    child.text.as_deref()
+                } else {
+                    None
+                }
             });
         }
     }
@@ -41,16 +46,30 @@ pub fn enclosing_module(snapshot: &SemanticSnapshot, mut at: NodeId) -> Option<&
 /// A declaration's name: its first identifier child.
 #[must_use]
 pub fn declared_name(snapshot: &SemanticSnapshot, at: NodeId) -> Option<&str> {
-    snapshot.nodes.get(at.0 as usize)?.children.iter().find_map(|child| {
-        let child = snapshot.nodes.get(child.0 as usize)?;
-        if child.kind == NodeKind::Syntax(syntax::IDENTIFIER) { child.text.as_deref() } else { None }
-    })
+    snapshot
+        .nodes
+        .get(at.0 as usize)?
+        .children
+        .iter()
+        .find_map(|child| {
+            let child = snapshot.nodes.get(child.0 as usize)?;
+            if child.kind == NodeKind::Syntax(syntax::IDENTIFIER) {
+                child.text.as_deref()
+            } else {
+                None
+            }
+        })
 }
 
 /// The declaration of kind `kind` named `name` in the ambient module `module`,
 /// where there is one.
 #[must_use]
-pub fn declared_in(snapshot: &SemanticSnapshot, module: &str, name: &str, kind: u16) -> Option<NodeId> {
+pub fn declared_in(
+    snapshot: &SemanticSnapshot,
+    module: &str,
+    name: &str,
+    kind: u16,
+) -> Option<NodeId> {
     snapshot.nodes.iter().enumerate().find_map(|(at, node)| {
         let at = NodeId(u32::try_from(at).ok()?);
         (node.kind == NodeKind::Syntax(kind)
@@ -67,14 +86,19 @@ pub fn declared_in(snapshot: &SemanticSnapshot, module: &str, name: &str, kind: 
 pub fn module_declarations(snapshot: &SemanticSnapshot) -> FxHashMap<(&str, &str, u16), NodeId> {
     let mut declared = FxHashMap::default();
     for (at, node) in snapshot.nodes.iter().enumerate() {
-        let NodeKind::Syntax(kind @ (syntax::TYPE_ALIAS_DECLARATION | syntax::INTERFACE_DECLARATION | syntax::FUNCTION_DECLARATION)) =
-            node.kind
+        let NodeKind::Syntax(
+            kind @ (syntax::TYPE_ALIAS_DECLARATION
+            | syntax::INTERFACE_DECLARATION
+            | syntax::FUNCTION_DECLARATION),
+        ) = node.kind
         else {
             continue;
         };
         let Ok(at) = u32::try_from(at) else { continue };
         let at = NodeId(at);
-        if let (Some(module), Some(name)) = (enclosing_module(snapshot, at), declared_name(snapshot, at)) {
+        if let (Some(module), Some(name)) =
+            (enclosing_module(snapshot, at), declared_name(snapshot, at))
+        {
             declared.entry((module, name, kind)).or_insert(at);
         }
     }

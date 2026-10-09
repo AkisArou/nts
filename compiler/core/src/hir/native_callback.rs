@@ -32,8 +32,8 @@
 //! creating the bridge: `register(async () => ...)` may itself be a perfectly
 //! ordinary synchronous function, and an `async` caller handing a synchronous
 //! callback to C is fine.
-use rustc_hash::FxHashMap;
 use super::{OpKind, Program, TypeId, ValueId};
+use rustc_hash::FxHashMap;
 
 /// Bridges whose closure body suspends, as `(function, value, why)` triples in
 /// the shape [`super::native_storage::check`] uses.
@@ -48,7 +48,9 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
     for (at, func) in program.funcs.iter().enumerate() {
         for block in &func.blocks {
             for &value in &block.ops {
-                let OpKind::NativeBridge { closure, .. } = func.value(value).kind else { continue };
+                let OpKind::NativeBridge { closure, .. } = func.value(value).kind else {
+                    continue;
+                };
                 let bodies = bodies.get_or_insert_with(|| closure_bodies(program));
                 // No method means the bridge publishes no function at all,
                 // which the emitter refuses with a better message than this
@@ -58,9 +60,19 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
                 else {
                     continue;
                 };
-                let Some(body) = bodies.get(&id) else { continue };
-                if program.funcs.iter().any(|f| f.name == *body && super::native_storage::suspends(f)) {
-                    problems.push((at, value, "an `async` callback cannot be bridged to C; a bridge runs to completion"));
+                let Some(body) = bodies.get(&id) else {
+                    continue;
+                };
+                if program
+                    .funcs
+                    .iter()
+                    .any(|f| f.name == *body && super::native_storage::suspends(f))
+                {
+                    problems.push((
+                        at,
+                        value,
+                        "an `async` callback cannot be bridged to C; a bridge runs to completion",
+                    ));
                 }
             }
         }
@@ -72,7 +84,9 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, &'static str)> {
 fn closure_bodies(program: &Program) -> FxHashMap<TypeId, &str> {
     let mut bodies = FxHashMap::default();
     for layout in &program.layouts {
-        let Some(body) = layout.closure_call() else { continue };
+        let Some(body) = layout.closure_call() else {
+            continue;
+        };
         for ty in &layout.types {
             bodies.insert(*ty, body);
         }

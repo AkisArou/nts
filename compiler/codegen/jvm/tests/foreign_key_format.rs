@@ -17,7 +17,11 @@ fn a_key_built_upstream_splits_downstream() {
     let cases = [
         ("com/example/Catalog", "find", "(I)I"),
         // A descriptor full of the separators a naive split would trip on.
-        ("java/util/HashMap", "get", "(Ljava/lang/Object;)Ljava/lang/Object;"),
+        (
+            "java/util/HashMap",
+            "get",
+            "(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         ("com/example/Catalog", "<init>", "(Ljava/lang/String;)V"),
         ("com/example/Catalog$Cursor", "next", "()Z"),
         ("Demo", "run", "()V"),
@@ -57,7 +61,10 @@ fn the_two_guards_accept_the_same_keys() {
     // Java member and emitted as an invoke against a class that does not exist.
     for helper in ["nts_array_set_length", "nts_string_concat", "nts_map_next"] {
         assert!(!nts_core::hir::runtime::is_foreign_key(helper), "{helper}");
-        assert!(nts_jvm_emitter::bind::split_key(helper).is_none(), "{helper}");
+        assert!(
+            nts_jvm_emitter::bind::split_key(helper).is_none(),
+            "{helper}"
+        );
     }
 }
 
@@ -77,7 +84,10 @@ fn the_two_guards_accept_the_same_keys() {
 fn a_source_form_owner_keeps_its_member() {
     let (owner, member, descriptor) =
         nts_jvm_emitter::bind::split_key("com.example.Catalog.find:(I)I").expect("splits");
-    assert_eq!(member, "find", "the member must survive a source-form owner");
+    assert_eq!(
+        member, "find",
+        "the member must survive a source-form owner"
+    );
     assert_eq!(owner, "com.example.Catalog");
     assert_eq!(descriptor, "(I)I");
 }
@@ -105,7 +115,10 @@ fn the_escape_table_builds_the_same_key() {
     let bytes = std::fs::read(ui.join("com/example/ui/Widget.class")).expect("Widget");
     let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
     let rows = nts_jvm_emitter::escapes::table(&class);
-    assert!(!rows.is_empty(), "the fixture must produce escape rows, or this asserts nothing");
+    assert!(
+        !rows.is_empty(),
+        "the fixture must produce escape rows, or this asserts nothing"
+    );
 
     for (key, _) in &rows {
         let (owner, member, descriptor) = nts_jvm_emitter::bind::split_key(key)
@@ -116,7 +129,10 @@ fn the_escape_table_builds_the_same_key() {
             nts_core::hir::runtime::foreign_key(owner, member, descriptor),
             "the escape table and `foreign_key` disagree"
         );
-        assert!(nts_core::hir::runtime::is_foreign_key(key), "`{key}` is not recognised");
+        assert!(
+            nts_core::hir::runtime::is_foreign_key(key),
+            "`{key}` is not recognised"
+        );
     }
 }
 

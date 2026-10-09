@@ -17,12 +17,22 @@ pub(crate) enum CType {
     Void,
     /// A scalar by its canonical C spelling: `unsigned long`, `long long`.
     Scalar(String),
-    Pointer { to: Box<CType>, constant: bool },
+    Pointer {
+        to: Box<CType>,
+        constant: bool,
+    },
     /// `struct tag` or `union tag`; `tag` is what `struct` names.
-    Record { union: bool, tag: String },
+    Record {
+        union: bool,
+        tag: String,
+    },
     Enum(String),
     Array(Box<CType>, u64),
-    Function { result: Box<CType>, parameters: Vec<CType>, variadic: bool },
+    Function {
+        result: Box<CType>,
+        parameters: Vec<CType>,
+        variadic: bool,
+    },
 }
 
 impl CType {
@@ -33,16 +43,38 @@ impl CType {
             Self::Void => "void".to_owned(),
             Self::Scalar(name) => name.clone(),
             Self::Pointer { to, constant } => match &**to {
-                Self::Function { result, parameters, variadic } => {
-                    format!("{} (*)({})", result.spelled(), parameter_list(parameters, *variadic))
+                Self::Function {
+                    result,
+                    parameters,
+                    variadic,
+                } => {
+                    format!(
+                        "{} (*)({})",
+                        result.spelled(),
+                        parameter_list(parameters, *variadic)
+                    )
                 }
-                inner => format!("{}{} *", if *constant { "const " } else { "" }, inner.spelled()),
+                inner => format!(
+                    "{}{} *",
+                    if *constant { "const " } else { "" },
+                    inner.spelled()
+                ),
             },
-            Self::Record { union, tag } => format!("{} {tag}", if *union { "union" } else { "struct" }),
+            Self::Record { union, tag } => {
+                format!("{} {tag}", if *union { "union" } else { "struct" })
+            }
             Self::Enum(tag) => format!("enum {tag}"),
             Self::Array(inner, _) => format!("{} *", inner.spelled()),
-            Self::Function { result, parameters, variadic } => {
-                format!("{} ({})", result.spelled(), parameter_list(parameters, *variadic))
+            Self::Function {
+                result,
+                parameters,
+                variadic,
+            } => {
+                format!(
+                    "{} ({})",
+                    result.spelled(),
+                    parameter_list(parameters, *variadic)
+                )
             }
         }
     }
@@ -53,7 +85,11 @@ pub(crate) fn parameter_list(parameters: &[CType], variadic: bool) -> String {
     if variadic {
         list.push("...".to_owned());
     }
-    if list.is_empty() { "void".to_owned() } else { list.join(", ") }
+    if list.is_empty() {
+        "void".to_owned()
+    } else {
+        list.join(", ")
+    }
 }
 
 /// The C scalar spellings clang prints, canonicalised: `short` and
@@ -70,9 +106,10 @@ fn scalar(words: &str) -> Option<&'static str> {
         "long" | "long int" | "signed long" => "long",
         "unsigned long" | "unsigned long int" | "long unsigned int" => "unsigned long",
         "long long" | "long long int" | "signed long long" | "__int64" => "long long",
-        "unsigned long long" | "unsigned long long int" | "long long unsigned int" | "unsigned __int64" => {
-            "unsigned long long"
-        }
+        "unsigned long long"
+        | "unsigned long long int"
+        | "long long unsigned int"
+        | "unsigned __int64" => "unsigned long long",
         "float" => "float",
         "double" => "double",
         "_Bool" | "bool" => "_Bool",
@@ -105,7 +142,9 @@ fn strip_attributes(spelling: &str) -> String {
         rest = &after[end..];
     }
     out.push_str(rest);
-    out.replace("__unaligned", " ").replace("restrict", " ").replace("volatile", " ")
+    out.replace("__unaligned", " ")
+        .replace("restrict", " ")
+        .replace("volatile", " ")
 }
 
 /// Split a parameter list on its top-level commas.
@@ -187,19 +226,38 @@ fn parse_depth(spelling: &str, typedefs: &BTreeMap<String, String>, depth: u32) 
                 parameters,
                 variadic,
             };
-            return Ok(if pointer { CType::Pointer { to: Box::new(function), constant: false } } else { function });
+            return Ok(if pointer {
+                CType::Pointer {
+                    to: Box::new(function),
+                    constant: false,
+                }
+            } else {
+                function
+            });
         }
     }
     // `T [N]`.
     if let Some(inner) = spelling.strip_suffix(']')
         && let Some((element, count)) = inner.rsplit_once('[')
     {
-        let count: u64 = count.trim().parse().map_err(|_| anyhow::anyhow!("`{spelling}` has no constant length"))?;
-        return Ok(CType::Array(Box::new(parse_depth(element, typedefs, depth)?), count));
+        let count: u64 = count
+            .trim()
+            .parse()
+            .map_err(|_| anyhow::anyhow!("`{spelling}` has no constant length"))?;
+        return Ok(CType::Array(
+            Box::new(parse_depth(element, typedefs, depth)?),
+            count,
+        ));
     }
     // `T *` and `T *const`: a const on the pointer itself changes nothing here.
-    let unqualified_pointer = spelling.strip_suffix("const").map(str::trim).filter(|s| s.ends_with('*'));
-    if let Some(inner) = unqualified_pointer.or(Some(spelling)).and_then(|s| s.strip_suffix('*')) {
+    let unqualified_pointer = spelling
+        .strip_suffix("const")
+        .map(str::trim)
+        .filter(|s| s.ends_with('*'));
+    if let Some(inner) = unqualified_pointer
+        .or(Some(spelling))
+        .and_then(|s| s.strip_suffix('*'))
+    {
         let inner = inner.trim();
         let (inner, constant) = match inner.strip_prefix("const ") {
             Some(rest) => (rest.trim(), true),
@@ -208,7 +266,10 @@ fn parse_depth(spelling: &str, typedefs: &BTreeMap<String, String>, depth: u32) 
                 None => (inner, false),
             },
         };
-        return Ok(CType::Pointer { to: Box::new(parse_depth(inner, typedefs, depth)?), constant });
+        return Ok(CType::Pointer {
+            to: Box::new(parse_depth(inner, typedefs, depth)?),
+            constant,
+        });
     }
     let bare = spelling.strip_prefix("const ").unwrap_or(spelling).trim();
     let bare = bare.strip_suffix(" const").unwrap_or(bare).trim();
@@ -217,7 +278,10 @@ fn parse_depth(spelling: &str, typedefs: &BTreeMap<String, String>, depth: u32) 
     }
     for (keyword, union) in [("struct ", false), ("union ", true)] {
         if let Some(tag) = bare.strip_prefix(keyword) {
-            return Ok(CType::Record { union, tag: tag.trim().to_owned() });
+            return Ok(CType::Record {
+                union,
+                tag: tag.trim().to_owned(),
+            });
         }
     }
     if let Some(tag) = bare.strip_prefix("enum ") {
@@ -237,16 +301,39 @@ fn parse_depth(spelling: &str, typedefs: &BTreeMap<String, String>, depth: u32) 
 /// the typedef names it still needs.
 pub(crate) fn typedef_names(spelling: &str) -> Vec<String> {
     const WORDS: &[&str] = &[
-        "const", "volatile", "restrict", "struct", "union", "enum", "void", "char", "short", "int", "long",
-        "signed", "unsigned", "float", "double", "_Bool", "bool", "__int64", "__unaligned",
+        "const",
+        "volatile",
+        "restrict",
+        "struct",
+        "union",
+        "enum",
+        "void",
+        "char",
+        "short",
+        "int",
+        "long",
+        "signed",
+        "unsigned",
+        "float",
+        "double",
+        "_Bool",
+        "bool",
+        "__int64",
+        "__unaligned",
     ];
     let text = strip_attributes(spelling);
     let mut names = Vec::new();
     let mut previous_keyword = "";
-    for word in text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|w| !w.is_empty()) {
+    for word in text
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .filter(|w| !w.is_empty())
+    {
         let is_tag = matches!(previous_keyword, "struct" | "union" | "enum");
         previous_keyword = word;
-        if is_tag || WORDS.contains(&word) || word.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        if is_tag
+            || WORDS.contains(&word)
+            || word.chars().next().is_some_and(|c| c.is_ascii_digit())
+        {
             continue;
         }
         names.push(word.to_owned());

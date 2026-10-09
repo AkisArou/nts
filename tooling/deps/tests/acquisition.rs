@@ -23,8 +23,14 @@ fn fixture(name: &str) -> Utf8PathBuf {
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
 
-    write(&root.join("pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
-    write(&root.join("package.json"), r#"{"name":"ws","private":true}"#);
+    write(
+        &root.join("pnpm-workspace.yaml"),
+        "packages:\n  - packages/*\n",
+    );
+    write(
+        &root.join("package.json"),
+        r#"{"name":"ws","private":true}"#,
+    );
 
     // The developer's own sibling package.
     write(
@@ -43,8 +49,14 @@ fn fixture(name: &str) -> Utf8PathBuf {
              "@ws/lib":"workspace:*","shipped":"1.0.0","mapped":"1.0.0",
              "opaque":"1.0.0","legacy":"1.0.0"}}"#,
     );
-    write(&root.join("packages/app/tsconfig.json"), r#"{"include":["src"]}"#);
-    write(&root.join("packages/app/src/main.ts"), "export const x = 1;\n");
+    write(
+        &root.join("packages/app/tsconfig.json"),
+        r#"{"include":["src"]}"#,
+    );
+    write(
+        &root.join("packages/app/src/main.ts"),
+        "export const x = 1;\n",
+    );
 
     let modules = root.join("packages/app/node_modules");
     std::fs::create_dir_all(modules.join("@ws")).unwrap();
@@ -64,8 +76,14 @@ fn fixture(name: &str) -> Utf8PathBuf {
         "export const helper = 1;\n",
     );
     // Not imported from the entry, so it must not be copied.
-    write(&modules.join("shipped/src/unused.ts"), "export const nope = 1;\n");
-    write(&modules.join("shipped/dist/index.js"), "export const x = 1;\n");
+    write(
+        &modules.join("shipped/src/unused.ts"),
+        "export const nope = 1;\n",
+    );
+    write(
+        &modules.join("shipped/dist/index.js"),
+        "export const x = 1;\n",
+    );
 
     // Ships generated JavaScript with its original source embedded.
     write(
@@ -112,7 +130,10 @@ fn acquire(root: &Utf8Path) -> nts_deps::Acquisition {
         .expect("acquisition succeeds")
 }
 
-fn route_of<'a>(acquisition: &'a nts_deps::Acquisition, name: &str) -> &'a nts_deps::recover::Route {
+fn route_of<'a>(
+    acquisition: &'a nts_deps::Acquisition,
+    name: &str,
+) -> &'a nts_deps::recover::Route {
     &acquisition
         .packages
         .iter()
@@ -403,7 +424,11 @@ fn a_multi_module_package_recovers_its_whole_graph() {
             "export { helper } from \"./helper.js\";\nexport { deep } from \"./nested/deep.js\";\n",
             "export const x=1;\n",
         ),
-        ("helper", "export const helper = 1;\n", "export const h=1;\n"),
+        (
+            "helper",
+            "export const helper = 1;\n",
+            "export const h=1;\n",
+        ),
     ] {
         write(
             &modules.join(format!("split/dist/{name}.js")),
@@ -493,7 +518,10 @@ fn source_that_cannot_build_is_refused_by_name() {
         .find(|package| package.name == "aliased")
         .expect("in the closure");
 
-    assert!(!aliased.acquired(), "it cannot be built, so it is not acquired");
+    assert!(
+        !aliased.acquired(),
+        "it cannot be built, so it is not acquired"
+    );
     assert!(
         matches!(
             &aliased.route,
@@ -554,7 +582,10 @@ fn a_refusal_is_remembered_across_runs() {
     let root = fixture("memo");
     let first = acquire(&root);
     let refused_first = first.packages.iter().filter(|p| !p.acquired()).count();
-    assert!(refused_first > 0, "the fixture has packages with nothing to recover");
+    assert!(
+        refused_first > 0,
+        "the fixture has packages with nothing to recover"
+    );
 
     let second = acquire(&root);
     assert!(second.unchanged, "a settled run has nothing to do");
@@ -593,7 +624,12 @@ fn a_missing_vendor_tree_is_recovered_again() {
         vendored.join("src/index.ts").is_file(),
         "the memo must not stand in for source that is no longer there"
     );
-    assert!(after.packages.iter().any(|p| p.name == "mapped" && p.acquired()));
+    assert!(
+        after
+            .packages
+            .iter()
+            .any(|p| p.name == "mapped" && p.acquired())
+    );
 }
 
 /// A settled run asks the checker once. It used to ask four times, walking the
@@ -639,7 +675,10 @@ fn a_new_dependency_is_still_found_after_a_settled_run() {
     let after = acquire(&root);
 
     assert!(
-        after.packages.iter().any(|p| p.name == "mapped" && p.acquired()),
+        after
+            .packages
+            .iter()
+            .any(|p| p.name == "mapped" && p.acquired()),
         "a dependency added after the lock settled is still acquired"
     );
     assert!(!after.unchanged, "and the run says it did something");

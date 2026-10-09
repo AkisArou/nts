@@ -85,11 +85,15 @@ fn a_value_nothing_reads_does_not_reach_the_backend() {
     };
     let held = constants(&program);
     assert!(
-        !held.iter().any(|value| (*value - 77777.0).abs() < f64::EPSILON),
+        !held
+            .iter()
+            .any(|value| (*value - 77777.0).abs() < f64::EPSILON),
         "the multiplication by 77777 is dead and reached the backend: {held:?}"
     );
     assert!(
-        !held.iter().any(|value| (*value - 88888.0).abs() < f64::EPSILON),
+        !held
+            .iter()
+            .any(|value| (*value - 88888.0).abs() < f64::EPSILON),
         "88888 is dead through two levels and reached the backend: {held:?}"
     );
 }

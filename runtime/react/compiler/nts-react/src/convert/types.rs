@@ -12,12 +12,21 @@ use serde_json::{Value, json};
 use super::{Converter, k};
 
 impl Converter<'_> {
-    fn raw_value(&self, type_name: &str, id: NodeId, start: u32, end: u32) -> serde_json::Map<String, Value> {
+    fn raw_value(
+        &self,
+        type_name: &str,
+        id: NodeId,
+        start: u32,
+        end: u32,
+    ) -> serde_json::Map<String, Value> {
         let mut node = serde_json::Map::new();
         node.insert("type".to_owned(), json!(type_name));
         node.insert("start".to_owned(), json!(start));
         node.insert("end".to_owned(), json!(end));
-        node.insert("loc".to_owned(), serde_json::to_value(self.text.location(start, end)).unwrap_or(Value::Null));
+        node.insert(
+            "loc".to_owned(),
+            serde_json::to_value(self.text.location(start, end)).unwrap_or(Value::Null),
+        );
         node.insert("_nodeId".to_owned(), json!(id.0));
         node
     }
@@ -74,7 +83,13 @@ impl Converter<'_> {
             k::CONSTRUCTOR_TYPE => "TSConstructorType",
             k::TYPE_LITERAL => "TSTypeLiteral",
             // `null` is a literal type in tsgo and a keyword in Babel.
-            k::LITERAL_TYPE if self.child(id, "literal").is_some_and(|l| self.kind(l) == k::NULL_KEYWORD) => "TSNullKeyword",
+            k::LITERAL_TYPE
+                if self
+                    .child(id, "literal")
+                    .is_some_and(|l| self.kind(l) == k::NULL_KEYWORD) =>
+            {
+                "TSNullKeyword"
+            }
             k::LITERAL_TYPE => "TSLiteralType",
             k::TYPE_OPERATOR => "TSTypeOperator",
             k::INDEXED_ACCESS_TYPE => "TSIndexedAccessType",
@@ -101,7 +116,14 @@ impl Converter<'_> {
             }
         }
         // The members of a composite type, so a printer can find each one.
-        for property in ["type", "elementType", "types", "elements", "objectType", "indexType"] {
+        for property in [
+            "type",
+            "elementType",
+            "types",
+            "elements",
+            "objectType",
+            "indexType",
+        ] {
             let children: Vec<NodeId> = match self.child(id, property) {
                 Some(child) if self.nodes.kind(child).is_none() => self.nodes.items(child).to_vec(),
                 Some(child) => vec![child],
@@ -114,7 +136,11 @@ impl Converter<'_> {
                 other => other,
             };
             let values: Vec<Value> = children.into_iter().map(|c| self.type_value(c)).collect();
-            let value = if matches!(property, "types" | "elements") { Value::Array(values) } else { values.into_iter().next().unwrap_or(Value::Null) };
+            let value = if matches!(property, "types" | "elements") {
+                Value::Array(values)
+            } else {
+                values.into_iter().next().unwrap_or(Value::Null)
+            };
             node.insert(key.to_owned(), value);
         }
         Value::Object(node)
@@ -140,7 +166,9 @@ impl Converter<'_> {
     /// `: T`, as Babel's `TSTypeAnnotation`, which starts at the colon.
     pub(super) fn type_annotation(&self, type_id: NodeId) -> RawNode {
         let end = self.end(type_id);
-        let start = self.token_before(self.start(type_id), ':').unwrap_or_else(|| self.start(type_id));
+        let start = self
+            .token_before(self.start(type_id), ':')
+            .unwrap_or_else(|| self.start(type_id));
         let mut node = self.raw_value("TSTypeAnnotation", type_id, start, end);
         // One tsgo node, two Babel nodes: the annotation keeps no id of its own.
         node.remove("_nodeId");
@@ -152,15 +180,27 @@ impl Converter<'_> {
     pub(super) fn type_parameters(&self, id: NodeId) -> Option<RawNode> {
         let parameters = self.list(id, "typeParameters");
         let (first, last) = (*parameters.first()?, *parameters.last()?);
-        let start = self.token_before(self.start(first), '<').unwrap_or_else(|| self.start(first));
-        let end = self.token_at(self.end(last), ">").map_or_else(|| self.end(last), |at| at + 1);
+        let start = self
+            .token_before(self.start(first), '<')
+            .unwrap_or_else(|| self.start(first));
+        let end = self
+            .token_at(self.end(last), ">")
+            .map_or_else(|| self.end(last), |at| at + 1);
         let mut node = self.raw_value("TSTypeParameterDeclaration", id, start, end);
         node.remove("_nodeId");
         let params = parameters
             .into_iter()
             .map(|parameter| {
-                let mut value = self.raw_value("TSTypeParameter", parameter, self.start(parameter), self.end(parameter));
-                let name = self.child(parameter, "name").map(|n| self.text_of(n)).unwrap_or_default();
+                let mut value = self.raw_value(
+                    "TSTypeParameter",
+                    parameter,
+                    self.start(parameter),
+                    self.end(parameter),
+                );
+                let name = self
+                    .child(parameter, "name")
+                    .map(|n| self.text_of(n))
+                    .unwrap_or_default();
                 value.insert("name".to_owned(), json!(name));
                 Value::Object(value)
             })
@@ -172,16 +212,24 @@ impl Converter<'_> {
     fn type_arguments_value(&self, id: NodeId) -> Option<Value> {
         let arguments = self.list(id, "typeArguments");
         let (first, last) = (*arguments.first()?, *arguments.last()?);
-        let start = self.token_before(self.start(first), '<').unwrap_or_else(|| self.start(first));
-        let end = self.token_at(self.end(last), ">").map_or_else(|| self.end(last), |at| at + 1);
+        let start = self
+            .token_before(self.start(first), '<')
+            .unwrap_or_else(|| self.start(first));
+        let end = self
+            .token_at(self.end(last), ">")
+            .map_or_else(|| self.end(last), |at| at + 1);
         let mut node = self.raw_value("TSTypeParameterInstantiation", id, start, end);
         node.remove("_nodeId");
-        node.insert("params".to_owned(), Value::Array(arguments.into_iter().map(|a| self.type_value(a)).collect()));
+        node.insert(
+            "params".to_owned(),
+            Value::Array(arguments.into_iter().map(|a| self.type_value(a)).collect()),
+        );
         Some(Value::Object(node))
     }
 
     /// A call's or an element's `<T>`, as Babel's `TSTypeParameterInstantiation`.
     pub(super) fn type_arguments(&self, id: NodeId) -> Option<RawNode> {
-        self.type_arguments_value(id).map(|value| RawNode::from_value(&value))
+        self.type_arguments_value(id)
+            .map(|value| RawNode::from_value(&value))
     }
 }

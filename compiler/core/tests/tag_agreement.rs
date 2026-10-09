@@ -24,8 +24,8 @@ use nts_core::hir::tags;
 
 /// Every `NTS_TAG_*` the header defines, with the value it defines it as.
 fn header_tags() -> Vec<(String, u32)> {
-    let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../runtime/c/nts_runtime.h");
+    let header =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/c/nts_runtime.h");
     let text = std::fs::read_to_string(header).expect("runtime/c/nts_runtime.h is checked in");
     let start = text
         .find("typedef enum NtsTag {")
@@ -146,7 +146,8 @@ fn only_objects_null_and_handles_answer_typeof_object() {
         let an_object = name == "NTS_TAG_OBJECT"
             || name == "NTS_TAG_NULL"
             || (name.starts_with("NTS_TAG_HANDLE_")
-                && (tags::HANDLE_BLOCK..tags::HANDLE_BLOCK + tags::HANDLE_BLOCK_SIZE).contains(value));
+                && (tags::HANDLE_BLOCK..tags::HANDLE_BLOCK + tags::HANDLE_BLOCK_SIZE)
+                    .contains(value));
         assert_eq!(
             (first..end).contains(value),
             an_object,
@@ -155,5 +156,8 @@ fn only_objects_null_and_handles_answer_typeof_object() {
              object needs a tag outside it."
         );
     }
-    assert_eq!(tags::of_spelling("bigint"), Some(tags::TagTest::Is(tags::BIGINT)));
+    assert_eq!(
+        tags::of_spelling("bigint"),
+        Some(tags::TagTest::Is(tags::BIGINT))
+    );
 }

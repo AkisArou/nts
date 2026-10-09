@@ -101,9 +101,7 @@ fn is_substring(func: &Func, value: ValueId) -> bool {
     let (Callee::Direct(name) | Callee::External(name)) = callee else {
         return false;
     };
-    name.as_str() == SUBSTRING
-        && args.len() == 3
-        && op.ty == HirType::Managed(ManagedType::String)
+    name.as_str() == SUBSTRING && args.len() == 3 && op.ty == HirType::Managed(ManagedType::String)
 }
 
 /// The integer underneath a conversion, where there is one.
@@ -411,10 +409,7 @@ mod tests {
         // The length became a subtraction and the character a read of the source.
         assert!(matches!(
             it.values[4].kind,
-            OpKind::Binary {
-                op: BinOp::Sub,
-                ..
-            }
+            OpKind::Binary { op: BinOp::Sub, .. }
         ));
         assert!(matches!(
             it.values[5].kind,

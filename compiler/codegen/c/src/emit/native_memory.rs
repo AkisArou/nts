@@ -1,11 +1,15 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
+use super::{
+    CodeWriter, Diagnostic, Func, HirType, ManagedType, OpKind, Origin, Program, Spelling,
+    c_identifier, c_type_of, layout_of, native_function_type, native_prototype, return_c_type,
+    static_closure_name, value_name, virtual_signature,
+};
 use nts_codegen_common::symbols::native_member;
-use super::{CodeWriter, Diagnostic, Origin, Program, Func, OpKind, HirType, ManagedType, value_name, native_prototype, native_function_type, layout_of, c_type_of, c_identifier, return_c_type, static_closure_name, virtual_signature, Spelling};
 use std::fmt::Write as _;
 
-use nts_core::hir::Callee;
 use nts_codegen_common::symbols::bridge_name;
+use nts_core::hir::Callee;
 use nts_core::hir::native::{NativeAbi, Pointee, Type};
 
 /// Whether this program needs a type one of its bindings' headers defines.
@@ -23,7 +27,13 @@ pub(super) fn needs_headers(program: &Program) -> bool {
         .is_ok_and(|layouts| layouts.structs.values().any(|layout| layout.from_header()))
 }
 
-pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program, abi: NativeAbi) -> Result<(), Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn types(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    abi: NativeAbi,
+) -> Result<(), Diagnostic> {
     let layouts = nts_codegen_common::native::layouts(program)
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
     for (name, kind) in &layouts.tags {
@@ -86,7 +96,9 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program,
     while placed.len() < layouts.structs.len() {
         let before = placed.len();
         for layout in layouts.structs.values() {
-            if placed.contains(layout.name.as_str()) { continue; }
+            if placed.contains(layout.name.as_str()) {
+                continue;
+            }
             let ready = layout.fields.iter().all(|field| match &field.ty {
                 Pointee::Record(inner) => placed.contains(inner.name.as_str()),
                 _ => true,
@@ -105,8 +117,9 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program,
         }
     }
     for layout in ordered {
-        let shape = nts_core::hir::layout::native_place(layout, abi)
-            .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
+        let shape = nts_core::hir::layout::native_place(layout, abi).ok_or_else(|| {
+            Diagnostic::error("NTS2006", "native struct has no C layout", origin.location)
+        })?;
         // Asserted for every native struct, whether defined here or included.
         // For one of ours both sides come from a single field list and this
         // only checks the arithmetic; for a header's, the C compiler answers
@@ -122,9 +135,11 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program,
             layout_asserts(writer, origin, layout, &shape);
             continue;
         }
-        if let Some(field) = layout.fields.iter().find(|field| {
-            matches!(&field.ty, Pointee::Record(inner) if inner.untagged())
-        }) {
+        if let Some(field) = layout
+            .fields
+            .iter()
+            .find(|field| matches!(&field.ty, Pointee::Record(inner) if inner.untagged()))
+        {
             return Err(Diagnostic::error(
                 "NTS2006",
                 format!(
@@ -135,7 +150,10 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program,
                 origin.location,
             ));
         }
-        writer.line(origin, format!("{} {} {{", layout.kind.keyword(), layout.name));
+        writer.line(
+            origin,
+            format!("{} {} {{", layout.kind.keyword(), layout.name),
+        );
         for field in &layout.fields {
             // C spells an array's length in the *declarator*, after the name:
             // `uint8_t bytes[8]`, never `uint8_t[8] bytes`. A type spelling
@@ -157,14 +175,28 @@ pub(super) fn types(writer: &mut CodeWriter, origin: &Origin, program: &Program,
                 Pointee::Flexible(_) => "[]".to_owned(),
                 _ => String::new(),
             };
-            writer.line(origin, format!("    {} {}{suffix};", field.ty.c_type(), native_member(&field.name)));
+            writer.line(
+                origin,
+                format!(
+                    "    {} {}{suffix};",
+                    field.ty.c_type(),
+                    native_member(&field.name)
+                ),
+            );
         }
         // The attribute goes after the closing brace, where it applies to the
         // type being defined. `__attribute__((packed))` is not ISO C, and there
         // is no ISO spelling of this: a packed struct is a compiler extension
         // both clang and gcc have, and a binding describing one has to say so
         // or describe a different type.
-        writer.line(origin, if layout.packed { "} __attribute__((packed));" } else { "};" });
+        writer.line(
+            origin,
+            if layout.packed {
+                "} __attribute__((packed));"
+            } else {
+                "};"
+            },
+        );
         layout_asserts(writer, origin, layout, &shape);
     }
     Ok(())
@@ -182,40 +214,98 @@ fn layout_asserts(
     } else {
         format!("{} {}", layout.kind.keyword(), layout.name)
     };
-    writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"native struct size\");", shape.size));
-    writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"native struct alignment\");", shape.align));
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(sizeof({tag}) == {}u, \"native struct size\");",
+            shape.size
+        ),
+    );
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(_Alignof({tag}) == {}u, \"native struct alignment\");",
+            shape.align
+        ),
+    );
     for (field, offset) in layout.fields.iter().zip(&shape.offsets) {
         // Illegal on a bit-field, as in the witness. See `witness`.
         if matches!(field.ty, nts_core::hir::native::Pointee::Bits { .. }) {
             continue;
         }
-        writer.line(origin, format!("_Static_assert(offsetof({tag}, {}) == {offset}u, \"native field offset\");", native_member(&field.name)));
+        writer.line(
+            origin,
+            format!(
+                "_Static_assert(offsetof({tag}, {}) == {offset}u, \"native field offset\");",
+                native_member(&field.name)
+            ),
+        );
     }
 }
 
-pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str, origin: &Origin, abi: NativeAbi) -> Result<String, Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn operation(
+    func: &Func,
+    kind: &OpKind,
+    result: &HirType,
+    name: &str,
+    origin: &Origin,
+    abi: NativeAbi,
+) -> Result<String, Diagnostic> {
     Ok(match *kind {
-        OpKind::NativeLocal { .. } => format!("memset({name}_storage, 0, sizeof {name}_storage); {name} = {name}_storage;"),
+        OpKind::NativeLocal { .. } => {
+            format!("memset({name}_storage, 0, sizeof {name}_storage); {name} = {name}_storage;")
+        }
         OpKind::NativeMalloc { bytes } => {
-            let HirType::NativePointer(element) = result else { return Err(Diagnostic::error("NTS2006", "malloc needs a native layout", origin.location)); };
-            let minimum = nts_core::hir::layout::native_shape(element, abi).ok_or_else(|| Diagnostic::error("NTS2006", "malloc needs a native layout", origin.location))?.size;
+            let HirType::NativePointer(element) = result else {
+                return Err(Diagnostic::error(
+                    "NTS2006",
+                    "malloc needs a native layout",
+                    origin.location,
+                ));
+            };
+            let minimum = nts_core::hir::layout::native_shape(element, abi)
+                .ok_or_else(|| {
+                    Diagnostic::error("NTS2006", "malloc needs a native layout", origin.location)
+                })?
+                .size;
             let call = format!("nts_native_malloc({}, {minimum});", value_name(bytes));
             // Like an ordinary effectful call, an ignored allocation result
             // needs no C local. Keep the call even when its value is unused.
-            if name.is_empty() { call } else { format!("{name} = {call}") }
-        },
+            if name.is_empty() {
+                call
+            } else {
+                format!("{name} = {call}")
+            }
+        }
         OpKind::NativeFree { pointer } => format!("free({});", value_name(pointer)),
         // `*d = *s`, which is C's own aggregate assignment: the compiler picks
         // how to move the bytes and knows the type's alignment. A `memcpy` with
         // `sizeof` would be equivalent and would restate a size this file has
         // already asserted against the C compiler -- two derivations of one
         // number, which is the shape this lane keeps removing.
-        OpKind::NativeCopy { destination, source } => {
+        OpKind::NativeCopy {
+            destination,
+            source,
+        } => {
             format!("*{} = *{};", value_name(destination), value_name(source))
         }
-        OpKind::NativeLoad { pointer, index } => format!("{name} = {}[{}];", value_name(pointer), value_name(index)),
-        OpKind::NativeStore { pointer, index, value } => format!("{}[{}] = {};", value_name(pointer), value_name(index), value_name(value)),
-        OpKind::NativeIndexAddress { pointer, index } => format!("{name} = {} + {};", value_name(pointer), value_name(index)),
+        OpKind::NativeLoad { pointer, index } => {
+            format!("{name} = {}[{}];", value_name(pointer), value_name(index))
+        }
+        OpKind::NativeStore {
+            pointer,
+            index,
+            value,
+        } => format!(
+            "{}[{}] = {};",
+            value_name(pointer),
+            value_name(index),
+            value_name(value)
+        ),
+        OpKind::NativeIndexAddress { pointer, index } => {
+            format!("{name} = {} + {};", value_name(pointer), value_name(index))
+        }
         // `p->ihl`, and nothing else. C already knows where the bits are --
         // the record comes from the header this program includes -- so the
         // mask and shift are the C compiler's to write, not this emitter's.
@@ -224,7 +314,11 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
         // followed by a load.
         // `p->ihl = v`. The C compiler masks and shifts, as it does for the
         // read: the record is the header's and the bits are where it put them.
-        OpKind::NativeBitStore { pointer, field, value } => {
+        OpKind::NativeBitStore {
+            pointer,
+            field,
+            value,
+        } => {
             let member = bit_member(func, pointer, field, origin)?;
             format!("{}->{member} = {};", value_name(pointer), value_name(value))
         }
@@ -236,15 +330,24 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
             // Through a view as well: a record reached behind a packed member
             // is still a record, and its members still need addresses.
             let HirType::NativePointer(view) = &func.value(pointer).ty else {
-                return Err(Diagnostic::error("NTS2006", "field address without a native struct", origin.location));
+                return Err(Diagnostic::error(
+                    "NTS2006",
+                    "field address without a native struct",
+                    origin.location,
+                ));
             };
             let through_packing = matches!(view, Pointee::Unaligned(_));
             let Pointee::Record(layout) = view.viewed() else {
-                return Err(Diagnostic::error("NTS2006", "field address without a native struct", origin.location));
+                return Err(Diagnostic::error(
+                    "NTS2006",
+                    "field address without a native struct",
+                    origin.location,
+                ));
             };
             let field_index = field;
-            let field = layout.fields.get(field as usize)
-                .ok_or_else(|| Diagnostic::error("NTS2006", "invalid native field index", origin.location))?;
+            let field = layout.fields.get(field as usize).ok_or_else(|| {
+                Diagnostic::error("NTS2006", "invalid native field index", origin.location)
+            })?;
             // An array member is already an address: `p->name` decays to a
             // pointer to its first element, and `&p->name` is a pointer to the
             // *array*, which is a different type C will not assign across.
@@ -266,9 +369,14 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                 // taken as its own type) or an anonymous record (which has no
                 // type at all). Same expression, two reasons.
                 _ if layout.packed || through_packing || layout.untagged() => {
-                    let shape = nts_core::hir::layout::native_place(layout, abi).ok_or_else(|| {
-                        Diagnostic::error("NTS2006", "native struct has no C layout", origin.location)
-                    })?;
+                    let shape =
+                        nts_core::hir::layout::native_place(layout, abi).ok_or_else(|| {
+                            Diagnostic::error(
+                                "NTS2006",
+                                "native struct has no C layout",
+                                origin.location,
+                            )
+                        })?;
                     let offset = shape.offsets.get(field_index as usize).ok_or_else(|| {
                         Diagnostic::error("NTS2006", "invalid native field index", origin.location)
                     })?;
@@ -279,10 +387,10 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                     // anonymous record's members sit wherever the record does,
                     // which is wherever its enclosing member sits.
                     let spelled = match (&field.ty, layout.packed || through_packing) {
-                        (Pointee::Array { element, .. } | Pointee::Flexible(element), _) => element.pointer_type(),
-                        (other, true) => {
-                            Pointee::Unaligned(Box::new(other.clone())).pointer_type()
+                        (Pointee::Array { element, .. } | Pointee::Flexible(element), _) => {
+                            element.pointer_type()
                         }
+                        (other, true) => Pointee::Unaligned(Box::new(other.clone())).pointer_type(),
                         (other, false) => other.pointer_type(),
                     };
                     format!(
@@ -300,15 +408,27 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
                 // pointer to its first element, and `&p->name` is `T (*)[]`,
                 // which C will not assign to a `T *`.
                 Pointee::Array { .. } | Pointee::Flexible(_) => {
-                    format!("{name} = {}->{};", value_name(pointer), native_member(&field.name))
+                    format!(
+                        "{name} = {}->{};",
+                        value_name(pointer),
+                        native_member(&field.name)
+                    )
                 }
                 // A member whose *type* is anonymous: the member has a name,
                 // so `&p->member` is written as C writes it, and the result is
                 // held as `char *` because nothing can name what it points at.
                 Pointee::Record(inner) if inner.untagged() => {
-                    format!("{name} = (char *)&{}->{};", value_name(pointer), native_member(&field.name))
+                    format!(
+                        "{name} = (char *)&{}->{};",
+                        value_name(pointer),
+                        native_member(&field.name)
+                    )
                 }
-                _ => format!("{name} = &{}->{};", value_name(pointer), native_member(&field.name)),
+                _ => format!(
+                    "{name} = &{}->{};",
+                    value_name(pointer),
+                    native_member(&field.name)
+                ),
             }
         }
         _ => unreachable!("only native memory operations are routed here"),
@@ -316,14 +436,25 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, name: &str
 }
 
 pub(super) fn helpers(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
-    if program.funcs.iter().any(|f| f.values.iter().any(|v| matches!(v.kind, OpKind::NativeMalloc { .. }))) {
+    if program.funcs.iter().any(|f| {
+        f.values
+            .iter()
+            .any(|v| matches!(v.kind, OpKind::NativeMalloc { .. }))
+    }) {
         writer.line(origin, "extern void *malloc(size_t); ");
-        writer.line(origin, "static inline void *nts_native_malloc(double bytes, size_t minimum) {");
+        writer.line(
+            origin,
+            "static inline void *nts_native_malloc(double bytes, size_t minimum) {",
+        );
         writer.line(origin, "    if (!(bytes >= (double)minimum && bytes <= 9007199254740991.0) || trunc(bytes) != bytes) return NULL;");
         writer.line(origin, "    return malloc((size_t)bytes);");
         writer.line(origin, "}");
     }
-    if program.funcs.iter().any(|f| f.values.iter().any(|v| matches!(v.kind, OpKind::NativeFree { .. }))) {
+    if program.funcs.iter().any(|f| {
+        f.values
+            .iter()
+            .any(|v| matches!(v.kind, OpKind::NativeFree { .. }))
+    }) {
         writer.line(origin, "extern void free(void *);");
     }
 }
@@ -364,7 +495,13 @@ pub(super) fn helpers(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 ///
 /// If a native layout has no C placement. `types` reports that first for the
 /// same layouts; this cannot be the only place it is noticed.
-pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Program, abi: NativeAbi) -> Result<bool, Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn witness(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    abi: NativeAbi,
+) -> Result<bool, Diagnostic> {
     let layouts = nts_codegen_common::native::layouts(program)
         .map_err(|why| Diagnostic::error("NTS2006", why, origin.location))?;
     let mut wrote = false;
@@ -383,9 +520,12 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // program's description against a header's, and for these there is no
         // header to compare against. `program.c` still asserts their size and
         // offsets against its own definition, which is the only claim available.
-        if !layout.from_header() || layout.untagged() { continue; }
-        let placed = nts_core::hir::layout::native_place(layout, abi)
-            .ok_or_else(|| Diagnostic::error("NTS2006", "native struct has no C layout", origin.location))?;
+        if !layout.from_header() || layout.untagged() {
+            continue;
+        }
+        let placed = nts_core::hir::layout::native_place(layout, abi).ok_or_else(|| {
+            Diagnostic::error("NTS2006", "native struct has no C layout", origin.location)
+        })?;
         // `__sigset_t`, not `struct __sigset_t`: a typedef-named record has
         // no tag to write, and every assertion below names the type.
         let tag = if layout.spelled_bare() {
@@ -393,8 +533,20 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         } else {
             format!("{} {}", layout.kind.keyword(), layout.name)
         };
-        writer.line(origin, format!("_Static_assert(sizeof({tag}) == {}u, \"{} size\");", placed.size, layout.name));
-        writer.line(origin, format!("_Static_assert(_Alignof({tag}) == {}u, \"{} alignment\");", placed.align, layout.name));
+        writer.line(
+            origin,
+            format!(
+                "_Static_assert(sizeof({tag}) == {}u, \"{} size\");",
+                placed.size, layout.name
+            ),
+        );
+        writer.line(
+            origin,
+            format!(
+                "_Static_assert(_Alignof({tag}) == {}u, \"{} alignment\");",
+                placed.align, layout.name
+            ),
+        );
         for (field, offset) in layout.fields.iter().zip(placed.offsets) {
             // A bit-field can be asked **neither** question. `offsetof` on one
             // is "cannot compute offset of bit-field" and `&` on one does not
@@ -408,9 +560,15 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             if matches!(field.ty, Pointee::Bits { .. }) {
                 continue;
             }
-            writer.line(origin, format!(
-                "_Static_assert(offsetof({tag}, {}) == {offset}u, \"{}.{} offset\");",
-                native_member(&field.name), layout.name, field.name));
+            writer.line(
+                origin,
+                format!(
+                    "_Static_assert(offsetof({tag}, {}) == {offset}u, \"{}.{} offset\");",
+                    native_member(&field.name),
+                    layout.name,
+                    field.name
+                ),
+            );
             // The address of a member, spelled as its own type. An array's is
             // `T (*)[N]` -- a pointer to the array, not to an element -- and
             // writing `T *` there would assert something true of a decayed
@@ -452,14 +610,31 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         std::collections::BTreeMap::new();
     let mut opaque: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for func in &program.funcs {
-        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
-            let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|value| &func.values[value.0 as usize])
+        {
+            let OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
             // An Objective-C message has no C declaration to compare against:
             // its header is Objective-C, which a C witness cannot include.
             // Checking a selector's types against the class is the ObjC
             // witness's job (the Apple lane's A3), not this file's.
-            if !witnessable(target) { continue; }
-            for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
+            if !witnessable(target) {
+                continue;
+            }
+            for ty in target
+                .parameters
+                .iter()
+                .chain(std::iter::once(&target.result))
+            {
                 collect_opaque_tags(ty, &mut opaque);
             }
             // **Every** declarator in parentheses, `int (poll)(...);`: the
@@ -536,8 +711,10 @@ pub(super) fn witness(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // anything. `declared_at` is the same provenance the record assertions
         // filter on.
         if *names_a_header {
-            writer.line(origin, format!(
-                "_Static_assert(sizeof(&{name}) > 0, \"a named header declares {name}\");"));
+            writer.line(
+                origin,
+                format!("_Static_assert(sizeof(&{name}) > 0, \"a named header declares {name}\");"),
+            );
             // **Compared, not re-declared.** A second declaration was the
             // first form of this check -- `fsync(void)` against `fsync(int)`
             // is `conflicting types` -- and it asks the question in a way that
@@ -594,14 +771,21 @@ fn collect_opaque_tags(ty: &Type, into: &mut std::collections::BTreeSet<String>)
         // names a header; a module binding Objective-C classes beside it
         // cannot, and its `CGRect` arguments met this.
         Type::Record(layout) => declare_record(layout, into),
-        Type::Scalar(_) | Type::Bool | Type::Void | Type::Managed(_) | Type::Erased
+        Type::Scalar(_)
+        | Type::Bool
+        | Type::Void
+        | Type::Managed(_)
+        | Type::Erased
         | Type::BigInt => {}
     }
 }
 
 /// A forward declaration of a tagged record: `struct CGRect`. A record a
 /// typedef names, or none, has no tag to declare, and is left to the header.
-fn declare_record(layout: &nts_core::hir::native::Record, into: &mut std::collections::BTreeSet<String>) {
+fn declare_record(
+    layout: &nts_core::hir::native::Record,
+    into: &mut std::collections::BTreeSet<String>,
+) {
     if !layout.untagged() && !layout.spelled_bare() {
         into.insert(format!("{} {}", layout.kind.keyword(), layout.name));
     }
@@ -622,7 +806,9 @@ fn collect_opaque_pointee(pointee: &Pointee, into: &mut std::collections::BTreeS
                 collect_opaque_tags(ty, into);
             }
         }
-        Pointee::Pointer(inner) | Pointee::Const(inner) | Pointee::Unaligned(inner)
+        Pointee::Pointer(inner)
+        | Pointee::Const(inner)
+        | Pointee::Unaligned(inner)
         | Pointee::Flexible(inner) => collect_opaque_pointee(inner, into),
         Pointee::Array { element, .. } => collect_opaque_pointee(element, into),
         Pointee::Scalar(_) | Pointee::Void | Pointee::Bits { .. } => {}
@@ -634,7 +820,11 @@ fn collect_opaque_pointee(pointee: &Pointee, into: &mut std::collections::BTreeS
 fn witnessable(target: &nts_core::hir::native::Function) -> bool {
     target.send.is_none()
         && target.vtable.is_none()
-        && target.parameters.iter().chain(std::iter::once(&target.result)).all(names_only_foreign)
+        && target
+            .parameters
+            .iter()
+            .chain(std::iter::once(&target.result))
+            .all(names_only_foreign)
 }
 
 /// Whether the witness compares this function's type with a named header's
@@ -707,18 +897,44 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
 /// If a bridge's closure has no method, if the function it names is not in this
 /// program, or if the foreign signature and the compiled function disagree
 /// about arity.
-pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<bool, Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn bridges(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+) -> Result<bool, Diagnostic> {
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     // The receiver: the static closure's name, or `None` when it arrives as
     // the context parameter.
     #[allow(clippy::type_complexity)]
     let mut wanted: std::collections::BTreeMap<
         String,
-        (std::sync::Arc<nts_core::hir::native::FnPointer>, &Func, Option<String>, bool, Option<u32>, &nts_core::hir::Bridging),
+        (
+            std::sync::Arc<nts_core::hir::native::FnPointer>,
+            &Func,
+            Option<String>,
+            bool,
+            Option<u32>,
+            &nts_core::hir::Bridging,
+        ),
     > = std::collections::BTreeMap::new();
     for func in &program.funcs {
-        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| &func.values[value.0 as usize]) {
-            let OpKind::NativeBridge { closure, signature, context, once, bridging } = &op.kind else { continue };
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|value| &func.values[value.0 as usize])
+        {
+            let OpKind::NativeBridge {
+                closure,
+                signature,
+                context,
+                once,
+                bridging,
+            } = &op.kind
+            else {
+                continue;
+            };
             let layout = layout_of(program, &func.values[closure.0 as usize].ty, origin)?;
             let target = layout
                 .closure_call()
@@ -731,7 +947,9 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .funcs
                 .iter()
                 .find(|candidate| candidate.name == target)
-                .ok_or_else(|| refuse("a callback bridge naming a function this program does not define"))?;
+                .ok_or_else(|| {
+                    refuse("a callback bridge naming a function this program does not define")
+                })?;
             // The closure's call method takes the closure as its first
             // parameter -- that is how every call through one works -- so the
             // bridge supplies it and the foreign signature describes the rest.
@@ -744,15 +962,26 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             let foreign = signature.parameters.len() - usize::from(*context);
             let foreign = (0..foreign).filter_map(|at| bridging.parameter(at)).count();
             if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
-                return Err(refuse("a callback bridge whose foreign signature and compiled function disagree about arity"));
+                return Err(refuse(
+                    "a callback bridge whose foreign signature and compiled function disagree about arity",
+                ));
             }
             let dispatched = nts_core::hir::bridged_through_table(program, layout);
             if dispatched.is_some() && !*context {
-                return Err(refuse("a callback bridge with no context whose closure is not known here"));
+                return Err(refuse(
+                    "a callback bridge with no context whose closure is not known here",
+                ));
             }
             wanted.insert(
                 bridge_name(target, signature, *once, bridging),
-                (signature.clone(), compiled, (!*context).then(|| static_closure_name(layout)), *once, dispatched, bridging),
+                (
+                    signature.clone(),
+                    compiled,
+                    (!*context).then(|| static_closure_name(layout)),
+                    *once,
+                    dispatched,
+                    bridging,
+                ),
             );
         }
     }
@@ -789,13 +1018,25 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             }
             // An array's length, which its array reads; or passed by C and
             // not taken by the compiled function.
-            let Some(parameter) = bridging.parameter(at) else { continue };
+            let Some(parameter) = bridging.parameter(at) else {
+                continue;
+            };
             if parameter + 1 >= compiled.params.len() {
                 continue;
             }
-            arguments.push(bridge_argument(program, compiled, (at, parameter, ty), bridging, (&mut copies, &mut releases))?);
+            arguments.push(bridge_argument(
+                program,
+                compiled,
+                (at, parameter, ty),
+                bridging,
+                (&mut copies, &mut releases),
+            )?);
         }
-        let parameters = if parameters.is_empty() { "void".to_owned() } else { parameters.join(", ") };
+        let parameters = if parameters.is_empty() {
+            "void".to_owned()
+        } else {
+            parameters.join(", ")
+        };
         let call = match dispatched {
             Some(slot) => format!(
                 "(({})({})->header.descriptor->methods[{slot}])({})",
@@ -815,14 +1056,23 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // says nothing.
         // A once-bridge gives the closure back after its one call: C passes
         // nothing that would, and will not call it again.
-        let unlend = if *once { format!(" nts_closure_unlend_once(a{last});") } else { String::new() };
+        let unlend = if *once {
+            format!(" nts_closure_unlend_once(a{last});")
+        } else {
+            String::new()
+        };
         let body = if matches!(&*signature.result, nts_core::hir::native::Type::Void) {
             format!("nts_callback_enter();{copies} {call};{releases}{unlend} nts_callback_leave();")
         } else {
             let answer = bridge_answer(program, signature, compiled, &call)?;
-            format!("nts_callback_enter();{copies} {answer}{releases}{unlend} nts_callback_leave(); return r;")
+            format!(
+                "nts_callback_enter();{copies} {answer}{releases}{unlend} nts_callback_leave(); return r;"
+            )
         };
-        writer.line(origin, format!("static {result} {name}({parameters}) {{ {body} }}"));
+        writer.line(
+            origin,
+            format!("static {result} {name}({parameters}) {{ {body} }}"),
+        );
     }
     Ok(true)
 }
@@ -831,11 +1081,22 @@ pub(super) fn bridges(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 /// function answered, as C's type -- or, for a string C takes over
 /// (`native::owned_string`), a copy of its own, and the function's answer
 /// given back, which under counting it owns.
-fn bridge_answer(program: &Program, signature: &nts_core::hir::native::FnPointer, compiled: &Func, call: &str) -> Result<String, Diagnostic> {
+fn bridge_answer(
+    program: &Program,
+    signature: &nts_core::hir::native::FnPointer,
+    compiled: &Func,
+    call: &str,
+) -> Result<String, Diagnostic> {
     let result = signature.result.c_type();
     if nts_core::hir::native::owned_string(&signature.result, &compiled.return_type) {
-        let release = if program.provider == nts_core::hir::Provider::ReferenceCounting { " nts_release((NtsHeader *)v);" } else { "" };
-        return Ok(format!("NtsString *v = {call}; {result} r = nts_string_to_owned_cstring(v);{release}"));
+        let release = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+            " nts_release((NtsHeader *)v);"
+        } else {
+            ""
+        };
+        return Ok(format!(
+            "NtsString *v = {call}; {result} r = nts_string_to_owned_cstring(v);{release}"
+        ));
     }
     let _ = return_c_type(program, &compiled.return_type, &compiled.origin)?;
     Ok(format!("{result} r = ({result}){call};"))
@@ -882,7 +1143,11 @@ fn bridge_argument(
         return Ok(format!("q{at}"));
     }
     if let Some(boxed) = bridging.boxed(at) {
-        let _ = write!(copies, " {want} b{at} = ({want})nts_gobject_boxed_copy({slot}, {}());", boxed.get_type);
+        let _ = write!(
+            copies,
+            " {want} b{at} = ({want})nts_gobject_boxed_copy({slot}, {}());",
+            boxed.get_type
+        );
         if program.provider == nts_core::hir::Provider::ReferenceCounting {
             let _ = write!(releases, " nts_release((NtsHeader *)b{at});");
         }
@@ -894,10 +1159,18 @@ fn bridge_argument(
     // boxed copy is, for the same reason -- anything that keeps it counts it.
     if let Some(array) = bridging.array(at) {
         let HirType::Managed(ManagedType::Array(element)) = &param.ty else {
-            return Err(Diagnostic::error("NTS2006", "a callback's array of objects taken as something else", param.origin.location));
+            return Err(Diagnostic::error(
+                "NTS2006",
+                "a callback's array of objects taken as something else",
+                param.origin.location,
+            ));
         };
         let counting = nts_codegen_common::counting::counted_element(element).ok_or_else(|| {
-            Diagnostic::error("NTS2006", "a callback's array of objects whose elements are not counted", param.origin.location)
+            Diagnostic::error(
+                "NTS2006",
+                "a callback's array of objects whose elements are not counted",
+                param.origin.location,
+            )
         })?;
         let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
         let _ = write!(
@@ -912,13 +1185,19 @@ fn bridge_argument(
     }
     // A string C lends: copied in for the call, given back after it.
     if nts_core::hir::native::lent_string(ty, &param.ty) {
-        let _ = write!(copies, " NtsString *s{at} = nts_string_from_cstring({slot});");
+        let _ = write!(
+            copies,
+            " NtsString *s{at} = nts_string_from_cstring({slot});"
+        );
         let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
         return Ok(format!("s{at}"));
     }
     // An `NSString` a block is given: its text, copied in the same way.
     if nts_core::hir::native::lent_ns_string(ty, &param.ty) {
-        let _ = write!(copies, " NtsString *s{at} = nts_string_of_nsstring({slot});");
+        let _ = write!(
+            copies,
+            " NtsString *s{at} = nts_string_of_nsstring({slot});"
+        );
         let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
         return Ok(format!("s{at}"));
     }
@@ -942,20 +1221,32 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
     // C will call it with, and the call it is passed to takes a different one
     // (`GCallback`), so a walk over call types alone declared the value with a
     // name no line defined.
-    let mut seen: std::collections::BTreeMap<String, std::sync::Arc<nts_core::hir::native::FnPointer>> =
-        std::collections::BTreeMap::new();
+    let mut seen: std::collections::BTreeMap<
+        String,
+        std::sync::Arc<nts_core::hir::native::FnPointer>,
+    > = std::collections::BTreeMap::new();
     let mut note = |signature: &std::sync::Arc<nts_core::hir::native::FnPointer>| {
-        seen.entry(signature.name.clone()).or_insert_with(|| signature.clone());
+        seen.entry(signature.name.clone())
+            .or_insert_with(|| signature.clone());
     };
     for func in &program.funcs {
         for value in &func.values {
-            if let nts_core::hir::HirType::NativePointer(Pointee::FnPointer(signature)) = &value.ty {
+            if let nts_core::hir::HirType::NativePointer(Pointee::FnPointer(signature)) = &value.ty
+            {
                 note(signature);
             }
-            let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } = &value.kind else {
+            let nts_core::hir::OpKind::Call {
+                callee: nts_core::hir::Callee::Native(target),
+                ..
+            } = &value.kind
+            else {
                 continue;
             };
-            for ty in target.parameters.iter().chain(std::iter::once(&target.result)) {
+            for ty in target
+                .parameters
+                .iter()
+                .chain(std::iter::once(&target.result))
+            {
                 if let Type::FnPointer(signature) = ty {
                     note(signature);
                 }
@@ -987,7 +1278,11 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
     // tag declaration is legal, so this does not ask what else declares it.
     let mut tags = std::collections::BTreeSet::new();
     for signature in seen.values() {
-        for ty in signature.parameters.iter().chain(std::iter::once(&*signature.result)) {
+        for ty in signature
+            .parameters
+            .iter()
+            .chain(std::iter::once(&*signature.result))
+        {
             collect_opaque_tags(ty, &mut tags);
         }
     }

@@ -101,7 +101,8 @@ pub fn compile_file(
     print: &PrintOptions,
 ) -> Result<Outcome, Refused> {
     let text = SourceText::new(code);
-    let file = convert::convert_file(nodes, nts_semantic_schema::NodeId(0), &text).map_err(Refused::Unsupported)?;
+    let file = convert::convert_file(nodes, nts_semantic_schema::NodeId(0), &text)
+        .map_err(Refused::Unsupported)?;
     let scope = crate::scope::build(&file);
     // The plugin's bridge hands the compiler the file's text and name beside
     // its options; so does this.
@@ -112,18 +113,36 @@ pub fn compile_file(
     let original = file.clone();
     let result = react_compiler::entrypoint::compile_program(file, scope, options);
     let (compiled, renames, events) = match &result {
-        CompileResult::Success { ast, renames, events, .. } => (ast.as_ref(), renames.as_slice(), events.as_slice()),
+        CompileResult::Success {
+            ast,
+            renames,
+            events,
+            ..
+        } => (ast.as_ref(), renames.as_slice(), events.as_slice()),
         CompileResult::Error { events, .. } => (None, &[][..], events.as_slice()),
     };
-    let mut functions: Vec<Function> = events.iter().filter_map(|event| function_of(event, &text)).collect();
+    let mut functions: Vec<Function> = events
+        .iter()
+        .filter_map(|event| function_of(event, &text))
+        .collect();
     // The program as it is to be built: the user's text wherever the
     // compiler changed nothing. The compiler's renames apply even when it
     // compiled nothing, as the Babel plugin applies them: a function that
     // bailed out may have had a shadowing binding renamed while lowered.
     let printed = if compiled.is_some() || !renames.is_empty() || print.lower_jsx {
-        let printed = print::print_file(&text, &original, compiled.unwrap_or(&original), renames, types, print);
+        let printed = print::print_file(
+            &text,
+            &original,
+            compiled.unwrap_or(&original),
+            renames,
+            types,
+            print,
+        );
         for function in &mut functions {
-            let printed = printed.functions.iter().find(|p| p.original == function.span);
+            let printed = printed
+                .functions
+                .iter()
+                .find(|p| p.original == function.span);
             function.output = printed.map(|p| p.output);
             function.typed_cache = printed.is_some_and(|p| p.typed_cache);
         }
@@ -132,23 +151,50 @@ pub fn compile_file(
         (code.to_owned(), Vec::new())
     };
     let (printed, segments) = printed;
-    Ok(Outcome { changed: printed != code, text: printed, segments, functions, result })
+    Ok(Outcome {
+        changed: printed != code,
+        text: printed,
+        segments,
+        functions,
+        result,
+    })
 }
 
 fn function_of(event: &LoggerEvent, text: &SourceText) -> Option<Function> {
     let (location, name, state) = match event {
-        LoggerEvent::CompileSuccess { fn_loc, fn_name, .. } => (fn_loc.as_ref()?, fn_name.clone(), FunctionState::Compiled),
-        LoggerEvent::CompileSkip { fn_loc, reason, .. } => (fn_loc.as_ref()?, None, FunctionState::Skipped(reason.clone())),
-        LoggerEvent::CompileError { fn_loc, detail } => (fn_loc.as_ref()?, None, FunctionState::Failed(detail.reason.clone())),
-        LoggerEvent::CompileErrorWithLoc { fn_loc, detail } => (fn_loc, None, FunctionState::Failed(detail.reason.clone())),
-        LoggerEvent::CompileUnexpectedThrow { fn_loc, data } | LoggerEvent::PipelineError { fn_loc, data } => {
+        LoggerEvent::CompileSuccess {
+            fn_loc, fn_name, ..
+        } => (fn_loc.as_ref()?, fn_name.clone(), FunctionState::Compiled),
+        LoggerEvent::CompileSkip { fn_loc, reason, .. } => (
+            fn_loc.as_ref()?,
+            None,
+            FunctionState::Skipped(reason.clone()),
+        ),
+        LoggerEvent::CompileError { fn_loc, detail } => (
+            fn_loc.as_ref()?,
+            None,
+            FunctionState::Failed(detail.reason.clone()),
+        ),
+        LoggerEvent::CompileErrorWithLoc { fn_loc, detail } => {
+            (fn_loc, None, FunctionState::Failed(detail.reason.clone()))
+        }
+        LoggerEvent::CompileUnexpectedThrow { fn_loc, data }
+        | LoggerEvent::PipelineError { fn_loc, data } => {
             (fn_loc.as_ref()?, None, FunctionState::Failed(data.clone()))
         }
     };
-    Some(Function { name, span: span_of(location, text)?, output: None, typed_cache: false, state })
+    Some(Function {
+        name,
+        span: span_of(location, text)?,
+        output: None,
+        typed_cache: false,
+        state,
+    })
 }
 
 fn span_of(location: &LoggerSourceLocation, text: &SourceText) -> Option<(u32, u32)> {
-    let at = |p: &react_compiler::entrypoint::LoggerPosition| p.index.or_else(|| text.offset(p.line, p.column));
+    let at = |p: &react_compiler::entrypoint::LoggerPosition| {
+        p.index.or_else(|| text.offset(p.line, p.column))
+    };
     Some((at(&location.start)?, at(&location.end)?))
 }

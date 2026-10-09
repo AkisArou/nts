@@ -1,13 +1,22 @@
 //! Decode only authored native storage. An unsupported layout remains refused;
 //! it must not fall back to managed-object layout or guessed member offsets.
-use nts_semantic_schema::{LiteralValue, MemberKind, NodeId, NodeKind, PropertyRecord, SemanticSnapshot, SymbolId, TypeId, TypeKind, syntax};
 use super::{Field, Pointee, Record, RecordKind, scalar};
+use nts_semantic_schema::{
+    LiteralValue, MemberKind, NodeId, NodeKind, PropertyRecord, SemanticSnapshot, SymbolId, TypeId,
+    TypeKind, syntax,
+};
 
 /// A member of `ty` by name, through an intersection's parts.
-pub(crate) fn property<'a>(snapshot: &'a SemanticSnapshot, ty: TypeId, name: &str) -> Option<&'a PropertyRecord> {
+pub(crate) fn property<'a>(
+    snapshot: &'a SemanticSnapshot,
+    ty: TypeId,
+    name: &str,
+) -> Option<&'a PropertyRecord> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Object { properties } => properties.iter().find(|p| p.name == name),
-        TypeKind::Intersection(parts) => parts.iter().find_map(|part| property(snapshot, *part, name)),
+        TypeKind::Intersection(parts) => parts
+            .iter()
+            .find_map(|part| property(snapshot, *part, name)),
         _ => None,
     }
 }
@@ -16,7 +25,10 @@ pub(crate) fn property<'a>(snapshot: &'a SemanticSnapshot, ty: TypeId, name: &st
 pub(crate) fn properties(snapshot: &SemanticSnapshot, ty: TypeId) -> Vec<&PropertyRecord> {
     match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
         Some(TypeKind::Object { properties }) => properties.iter().collect(),
-        Some(TypeKind::Intersection(parts)) => parts.iter().flat_map(|part| properties(snapshot, *part)).collect(),
+        Some(TypeKind::Intersection(parts)) => parts
+            .iter()
+            .flat_map(|part| properties(snapshot, *part))
+            .collect(),
         _ => Vec::new(),
     }
 }
@@ -32,9 +44,12 @@ fn interface_tag(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Object { properties } => properties.iter().find_map(|p| {
             let tag = p.name.strip_prefix("___c_interface")?;
-            (!tag.is_empty() && p.readonly && p.optional && p.kind == MemberKind::Field).then(|| tag.to_owned())
+            (!tag.is_empty() && p.readonly && p.optional && p.kind == MemberKind::Field)
+                .then(|| tag.to_owned())
         }),
-        TypeKind::Intersection(parts) => parts.iter().find_map(|part| interface_tag(snapshot, *part)),
+        TypeKind::Intersection(parts) => {
+            parts.iter().find_map(|part| interface_tag(snapshot, *part))
+        }
         _ => None,
     }
 }
@@ -68,7 +83,9 @@ pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
 /// (`native_record_literal`), so no other question about the parameter
 /// changes. Any other type is itself.
 pub(crate) fn stored(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
-    let fields = |part: TypeId| property(snapshot, part, "___c_fields").is_some_and(|p| p.readonly && p.optional);
+    let fields = |part: TypeId| {
+        property(snapshot, part, "___c_fields").is_some_and(|p| p.readonly && p.optional)
+    };
     match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
         Some(TypeKind::Union(parts)) => match parts.as_slice() {
             [a, b] if fields(*b) && !fields(*a) => *a,
@@ -92,8 +109,10 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     let TypeKind::Tuple(elements) = &snapshot.types.get(chain.0 as usize)?.kind else {
         return None;
     };
-    let mut tags: Vec<String> =
-        elements.iter().map_while(|element| text(snapshot, *element).map(str::to_owned)).collect();
+    let mut tags: Vec<String> = elements
+        .iter()
+        .map_while(|element| text(snapshot, *element).map(str::to_owned))
+        .collect();
     // `GObjectInterface<Tag, Prerequisite>`: the chain is the prerequisite's,
     // whole, and the handle is the interface's own tag, which is how C
     // declares a parameter of one (`GtkEditable *`). The tag is the marker's
@@ -117,13 +136,25 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         // subclass of a parent that named none -- has no family to give, and
         // a handle taken for a plain C pointer would be held uncounted where
         // the host frees it: so it has no native type at all, and is refused.
-        let TypeKind::Tuple(names) = &snapshot.types.get(pair.0 as usize)?.kind else { return None };
-        let [retain, release] = names.as_slice() else { return None };
-        super::Family::Host(super::HostFamily::of(text(snapshot, *retain)?, text(snapshot, *release)?))
+        let TypeKind::Tuple(names) = &snapshot.types.get(pair.0 as usize)?.kind else {
+            return None;
+        };
+        let [retain, release] = names.as_slice() else {
+            return None;
+        };
+        super::Family::Host(super::HostFamily::of(
+            text(snapshot, *retain)?,
+            text(snapshot, *release)?,
+        ))
     } else {
         super::Family::C
     };
-    Some(Pointee::Opaque(super::Handle { tag, ancestors: tags, family, interface: interface.is_some() }))
+    Some(Pointee::Opaque(super::Handle {
+        tag,
+        ancestors: tags,
+        family,
+        interface: interface.is_some(),
+    }))
 }
 
 /// The handle behind `Erased<H>` (or `Erased<H> | null`): what the program
@@ -173,7 +204,8 @@ pub(crate) fn boxed(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<BoxedReco
 /// optionality adds.
 fn optional_number(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<u64> {
     let number = |id: TypeId| match &snapshot.types.get(id.0 as usize)?.kind {
-        TypeKind::Literal(LiteralValue::Number(value)) if *value >= 0.0 && value.fract() == 0.0 => {
+        TypeKind::Literal(LiteralValue::Number(value)) if *value >= 0.0 && value.fract() == 0.0 =>
+        {
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             Some(*value as u64)
         }
@@ -217,7 +249,10 @@ pub(crate) fn copied(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::syn
     }
     // The optional marker's type, through the `undefined` optionality adds.
     let record = match &snapshot.types.get(marker.ty.0 as usize)?.kind {
-        TypeKind::Union(parts) => parts.iter().copied().find(|part| is_layout(snapshot, *part))?,
+        TypeKind::Union(parts) => parts
+            .iter()
+            .copied()
+            .find(|part| is_layout(snapshot, *part))?,
         _ => marker.ty,
     };
     structure(snapshot, record, &mut Vec::new(), false, true).map(std::sync::Arc::new)
@@ -225,7 +260,10 @@ pub(crate) fn copied(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::syn
 
 /// The struct `ty` is, read as `Copied<T>` reads it: a `CopiedArray<T>`'s
 /// element struct.
-pub(crate) fn copied_struct(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::sync::Arc<Record>> {
+pub(crate) fn copied_struct(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+) -> Option<std::sync::Arc<Record>> {
     structure(snapshot, ty, &mut Vec::new(), false, true).map(std::sync::Arc::new)
 }
 
@@ -266,7 +304,12 @@ fn objc_class(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         at = base_class(snapshot, base);
     }
     ancestors.reverse();
-    Some(Pointee::Opaque(super::Handle { tag, ancestors, family: super::Family::Objc, interface: false }))
+    Some(Pointee::Opaque(super::Handle {
+        tag,
+        ancestors,
+        family: super::Family::Objc,
+        interface: false,
+    }))
 }
 
 /// An Objective-C protocol a binding declares (`@ntsProtocol
@@ -286,9 +329,15 @@ fn objc_protocol(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     }
     let tag = symbol.declarations.iter().find_map(|declaration| {
         let node = snapshot.nodes.get(declaration.0 as usize)?;
-        matches!(node.kind, NodeKind::Syntax(syntax::INTERFACE_DECLARATION)).then(|| node.native.as_ref()?.protocol.clone())?
+        matches!(node.kind, NodeKind::Syntax(syntax::INTERFACE_DECLARATION))
+            .then(|| node.native.as_ref()?.protocol.clone())?
     })?;
-    Some(Pointee::Opaque(super::Handle { tag, ancestors: vec!["NSObject".to_owned()], family: super::Family::Objc, interface: true }))
+    Some(Pointee::Opaque(super::Handle {
+        tag,
+        ancestors: vec!["NSObject".to_owned()],
+        family: super::Family::Objc,
+        interface: true,
+    }))
 }
 
 /// Whether a class declaration has an Objective-C class among its ancestors
@@ -374,19 +423,35 @@ pub(crate) fn gtype_function(snapshot: &SemanticSnapshot, symbol: SymbolId) -> O
     // A class the program wrote over one, `class Derived extends Base`: the
     // `GType` function the backends define for it, which registers `Base`
     // before `Derived` asks for it as its parent.
-    if let Some(class) = record.declarations.iter().copied().find(|d| is(*d, syntax::CLASS_DECLARATION)) {
+    if let Some(class) = record
+        .declarations
+        .iter()
+        .copied()
+        .find(|d| is(*d, syntax::CLASS_DECLARATION))
+    {
         gobject_parent(snapshot, class)?;
-        let name = syntax_children(snapshot, class).into_iter().find_map(|child| {
-            let node = node(child)?;
-            matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER)).then(|| node.text.clone()).flatten()
-        })?;
+        let name = syntax_children(snapshot, class)
+            .into_iter()
+            .find_map(|child| {
+                let node = node(child)?;
+                matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER))
+                    .then(|| node.text.clone())
+                    .flatten()
+            })?;
         return Some(format!("{PROGRAM_GTYPE}{name}"));
     }
-    let value = record.declarations.iter().copied().find(|d| is(*d, syntax::VARIABLE_DECLARATION))?;
+    let value = record
+        .declarations
+        .iter()
+        .copied()
+        .find(|d| is(*d, syntax::VARIABLE_DECLARATION))?;
     // The tag is on a member of the value's type literal, a few levels down.
     let mut pending = vec![value];
     while let Some(at) = pending.pop() {
-        if let Some(gtype) = node(at).and_then(|n| n.native.as_ref()).and_then(|n| n.gtype.clone()) {
+        if let Some(gtype) = node(at)
+            .and_then(|n| n.native.as_ref())
+            .and_then(|n| n.gtype.clone())
+        {
             return Some(gtype);
         }
         pending.extend(syntax_children(snapshot, at));
@@ -408,10 +473,14 @@ pub(crate) fn objc_name(snapshot: &SemanticSnapshot, declaration: NodeId) -> Opt
     if !extends_objc(snapshot, declaration) {
         return None;
     }
-    syntax_children(snapshot, declaration).into_iter().find_map(|child| {
-        let node = snapshot.nodes.get(child.0 as usize)?;
-        matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER)).then(|| node.text.clone()).flatten()
-    })
+    syntax_children(snapshot, declaration)
+        .into_iter()
+        .find_map(|child| {
+            let node = snapshot.nodes.get(child.0 as usize)?;
+            matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER))
+                .then(|| node.text.clone())
+                .flatten()
+        })
 }
 
 /// The class a class declaration extends, where it is one this program's
@@ -428,7 +497,11 @@ pub(crate) fn superclass(snapshot: &SemanticSnapshot, declaration: NodeId) -> Op
 /// ([`composable_base`]).
 pub(crate) fn is_com_class(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
     composable_tag(snapshot, declaration).is_some()
-        || snapshot.nodes.get(declaration.0 as usize).and_then(|node| node.native.as_ref()).is_some_and(|native| native.runtime_class.is_some())
+        || snapshot
+            .nodes
+            .get(declaration.0 as usize)
+            .and_then(|node| node.native.as_ref())
+            .is_some_and(|native| native.runtime_class.is_some())
 }
 
 /// Whether a class the program writes extends a composable Windows Runtime
@@ -440,7 +513,10 @@ pub(crate) fn extends_com(snapshot: &SemanticSnapshot, declaration: NodeId) -> b
 /// The composable class a class the program writes extends, nearest first,
 /// as its binding's `@ntsComposable` says. `None` for a binding's own class,
 /// and for a class written over nothing composable.
-pub(crate) fn composable_base(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<super::Composable> {
+pub(crate) fn composable_base(
+    snapshot: &SemanticSnapshot,
+    declaration: NodeId,
+) -> Option<super::Composable> {
     if is_com_class(snapshot, declaration) {
         return None;
     }
@@ -465,11 +541,23 @@ pub(crate) fn composable_base(snapshot: &SemanticSnapshot, declaration: NodeId) 
 }
 
 fn composable_tag(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<&str> {
-    snapshot.nodes.get(declaration.0 as usize)?.native.as_ref()?.composable.as_deref()
+    snapshot
+        .nodes
+        .get(declaration.0 as usize)?
+        .native
+        .as_ref()?
+        .composable
+        .as_deref()
 }
 
 fn objc_tag(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<&str> {
-    snapshot.nodes.get(declaration.0 as usize)?.native.as_ref()?.class.as_deref()
+    snapshot
+        .nodes
+        .get(declaration.0 as usize)?
+        .native
+        .as_ref()?
+        .class
+        .as_deref()
 }
 
 /// The class declaration a symbol names, through an import.
@@ -479,7 +567,10 @@ pub(crate) fn class_declaration(snapshot: &SemanticSnapshot, symbol: SymbolId) -
         record = snapshot.symbols.get(aliased.0 as usize)?;
     }
     record.declarations.iter().copied().find(|declaration| {
-        matches!(snapshot.nodes.get(declaration.0 as usize).map(|n| &n.kind), Some(NodeKind::Syntax(syntax::CLASS_DECLARATION)))
+        matches!(
+            snapshot.nodes.get(declaration.0 as usize).map(|n| &n.kind),
+            Some(NodeKind::Syntax(syntax::CLASS_DECLARATION))
+        )
     })
 }
 
@@ -513,7 +604,11 @@ pub(crate) fn implemented(snapshot: &SemanticSnapshot, declaration: NodeId) -> V
             while let Some(aliased) = record.aliased {
                 record = snapshot.symbols.get(aliased.0 as usize)?;
             }
-            record.declarations.iter().copied().find(|declaration| is(*declaration, syntax::INTERFACE_DECLARATION))
+            record
+                .declarations
+                .iter()
+                .copied()
+                .find(|declaration| is(*declaration, syntax::INTERFACE_DECLARATION))
         })
         .collect()
 }
@@ -522,8 +617,16 @@ pub(crate) fn implemented(snapshot: &SemanticSnapshot, declaration: NodeId) -> V
 /// heritage clauses, and a clause's types, sit in list nodes of no syntax kind.
 fn syntax_children(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
     let mut out = Vec::new();
-    for &child in snapshot.nodes.get(id.0 as usize).map(|n| n.children.as_slice()).unwrap_or_default() {
-        if matches!(snapshot.nodes.get(child.0 as usize).map(|n| &n.kind), Some(NodeKind::Syntax(_))) {
+    for &child in snapshot
+        .nodes
+        .get(id.0 as usize)
+        .map(|n| n.children.as_slice())
+        .unwrap_or_default()
+    {
+        if matches!(
+            snapshot.nodes.get(child.0 as usize).map(|n| &n.kind),
+            Some(NodeKind::Syntax(_))
+        ) {
             out.push(child);
         } else {
             out.extend(syntax_children(snapshot, child));
@@ -535,7 +638,9 @@ fn syntax_children(snapshot: &SemanticSnapshot, id: NodeId) -> Vec<NodeId> {
 /// `ObjcMeta<Tag>`: the name of the Objective-C class whose class object a
 /// value of this type is.
 pub(crate) fn objc_meta(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
-    marker(snapshot, ty, "___objc_meta").and_then(|tag| text(snapshot, tag)).map(str::to_owned)
+    marker(snapshot, ty, "___objc_meta")
+        .and_then(|tag| text(snapshot, tag))
+        .map(str::to_owned)
 }
 
 /// A `Struct<...>` describes native storage; constructing its phantom marker as a
@@ -545,19 +650,38 @@ pub fn is_layout(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     marker(snapshot, ty, "___c_struct").is_some() || marker(snapshot, ty, "___c_union").is_some()
 }
 
-fn pointer_within(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>) -> Option<Pointee> {
-    if visiting.contains(&ty) { return None; }
+fn pointer_within(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    visiting: &mut Vec<TypeId>,
+) -> Option<Pointee> {
+    if visiting.contains(&ty) {
+        return None;
+    }
     visiting.push(ty);
     let answer = pointer_body(snapshot, ty, visiting);
     visiting.pop();
     answer
 }
 
-fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<TypeId>) -> Option<Pointee> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+fn pointer_body(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    visiting: &mut Vec<TypeId>,
+) -> Option<Pointee> {
     if let TypeKind::Union(parts) = &snapshot.types.get(ty.0 as usize)?.kind {
-        let [a, b] = parts.as_slice() else { return None; };
+        let [a, b] = parts.as_slice() else {
+            return None;
+        };
         let is_null = |id: TypeId| matches!(snapshot.types[id.0 as usize].kind, TypeKind::Null);
-        let payload = if is_null(*a) { *b } else if is_null(*b) { *a } else { return None; };
+        let payload = if is_null(*a) {
+            *b
+        } else if is_null(*b) {
+            *a
+        } else {
+            return None;
+        };
         return pointer_within(snapshot, payload, visiting);
     }
     // **A type the program uses and does not own is its binding's handle**:
@@ -578,21 +702,33 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         // `Const<H>` -- the same handle, read-only through this view: C's
         // `const GtkBitset *`. The marker is optional, so a plain handle is
         // assignable to it, which is C's own qualification conversion.
-        let constant = property(snapshot, ty, "___c_const").is_some_and(|p| p.optional && p.readonly);
+        let constant =
+            property(snapshot, ty, "___c_const").is_some_and(|p| p.optional && p.readonly);
         // `Erased<H>` -- the same handle, spelled `void *` where C erases it,
         // and `const void *` as `Const<Erased<H>>`: a `GCompareDataFunc`'s
         // `gconstpointer` item.
-        let erased = property(snapshot, ty, "___c_erased").is_some_and(|p| p.optional && p.readonly);
+        let erased =
+            property(snapshot, ty, "___c_erased").is_some_and(|p| p.optional && p.readonly);
         if erased {
-            return Some(if constant { Pointee::Const(Box::new(Pointee::Void)) } else { Pointee::Void });
+            return Some(if constant {
+                Pointee::Const(Box::new(Pointee::Void))
+            } else {
+                Pointee::Void
+            });
         }
-        return Some(if constant { Pointee::Const(Box::new(handle)) } else { handle });
+        return Some(if constant {
+            Pointee::Const(Box::new(handle))
+        } else {
+            handle
+        });
     }
     // `Flexible<T>` -- `T name[]`, storage with no extent. Read before the
     // pointer cases for the reason the others are: it is the thing a pointer to
     // it would point at, not a pointer.
     if let Some(element) = marker(snapshot, ty, "___c_flexible") {
-        return Some(super::Pointee::Flexible(Box::new(storage(snapshot, element)?)));
+        return Some(super::Pointee::Flexible(Box::new(storage(
+            snapshot, element,
+        )?)));
     }
     // `Bits<T, N>` -- N bits of a T-sized unit. Read before the pointer cases
     // for the reason `CArray` is: it is not a pointer, and not a thing anything
@@ -618,7 +754,11 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         // bit-field may not be wider than its unit -- C says so, and a wider
         // one would make the recomputed layout disagree with the header's in a
         // way that reads as a packing bug rather than as a bad declaration.
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::float_cmp)]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::float_cmp
+        )]
         let width = {
             let written = *width;
             if !(1.0..=64.0).contains(&written) {
@@ -641,7 +781,8 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     if let Some(element) = marker(snapshot, ty, "___c_array")
         && let Some(count) = marker(snapshot, ty, "___c_length")
     {
-        let TypeKind::Literal(LiteralValue::Number(length)) = &snapshot.types.get(count.0 as usize)?.kind
+        let TypeKind::Literal(LiteralValue::Number(length)) =
+            &snapshot.types.get(count.0 as usize)?.kind
         else {
             return None;
         };
@@ -674,7 +815,10 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
         } else {
             pointer_within(snapshot, element, visiting)?
         };
-        return Some(Pointee::Array { element: Box::new(inner), length });
+        return Some(Pointee::Array {
+            element: Box::new(inner),
+            length,
+        });
     }
     let element = marker(snapshot, ty, "___c_pointer")?;
     // `ConstPtr<T>` is `Ptr<T>` without the writable marker. The marker sits on
@@ -684,7 +828,11 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     // invert that and make every call site convert explicitly.
     let writable = marker(snapshot, ty, "___c_writable").is_some();
     let qualify = |pointee: Pointee| {
-        if writable { pointee } else { Pointee::Const(Box::new(pointee)) }
+        if writable {
+            pointee
+        } else {
+            Pointee::Const(Box::new(pointee))
+        }
     };
     // `Ptr<unknown>` is C's `void *`. Only `unknown`: `Ptr<any>` stays refused,
     // because `any` is what a program ends up with by accident and `unknown` is
@@ -696,11 +844,18 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
     // `Ptr<void>` is the same pointer, spelled the way C and every generated
     // binding spell it (`LPVOID`, `void *`). Like `unknown`, `void` reaches
     // here only by being written: nothing infers it as a pointee.
-    if matches!(snapshot.types.get(element.0 as usize)?.kind, TypeKind::Unknown | TypeKind::Void) {
+    if matches!(
+        snapshot.types.get(element.0 as usize)?.kind,
+        TypeKind::Unknown | TypeKind::Void
+    ) {
         return Some(qualify(Pointee::Void));
     }
-    if let Some(scalar) = scalar(snapshot, element) { return Some(qualify(Pointee::Scalar(scalar))); }
-    if let Some(layout) = structure(snapshot, element, visiting, false, false) { return Some(qualify(Pointee::Record(layout.into()))); }
+    if let Some(scalar) = scalar(snapshot, element) {
+        return Some(qualify(Pointee::Scalar(scalar)));
+    }
+    if let Some(layout) = structure(snapshot, element, visiting, false, false) {
+        return Some(qualify(Pointee::Record(layout.into())));
+    }
     pointer_within(snapshot, element, visiting).map(|p| qualify(Pointee::Pointer(Box::new(p))))
 }
 
@@ -719,6 +874,7 @@ fn pointer_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut Vec<Type
 /// record may hold a Windows Runtime string: storage holding an `HSTRING`
 /// would be storage nobody owns the string in, so for any other reader such
 /// a record is no record at all, and nothing can hold one.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn structure(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
@@ -735,16 +891,30 @@ fn structure(
     // `Packed<T>` intersects a marker in, so this reads through to the `T`.
     let packed = marker(snapshot, ty, "___c_packed").is_some();
     let tag = text(snapshot, marker(snapshot, ty, "___c_tag")?)?;
-    let TypeKind::Object { properties } = &snapshot.types.get(shape.0 as usize)?.kind else { return None; };
-    if properties.is_empty() { return None; }
-    let declarations = properties.iter().map(|p| p.declaration).collect::<Option<Vec<_>>>()?;
+    let TypeKind::Object { properties } = &snapshot.types.get(shape.0 as usize)?.kind else {
+        return None;
+    };
+    if properties.is_empty() {
+        return None;
+    }
+    let declarations = properties
+        .iter()
+        .map(|p| p.declaration)
+        .collect::<Option<Vec<_>>>()?;
     let parent = snapshot.nodes[declarations[0].0 as usize].parent?;
-    if declarations.iter().any(|id| snapshot.nodes[id.0 as usize].parent != Some(parent)) { return None; }
+    if declarations
+        .iter()
+        .any(|id| snapshot.nodes[id.0 as usize].parent != Some(parent))
+    {
+        return None;
+    }
     // Decided before the members are read, because a member's own answer
     // depends on it: a record this header defines makes its untagged members
     // the header's too, however deep.
     let foreign = !tag.is_empty();
-    let from_header = foreign.then(|| declaring_module(snapshot, parent)).flatten();
+    let from_header = foreign
+        .then(|| declaring_module(snapshot, parent))
+        .flatten();
     // `Typedef<...>` says the name is a typedef rather than a tag, which
     // changes only how C spells the type. Read before the tagged case, which it
     // is otherwise identical to.
@@ -759,12 +929,21 @@ fn structure(
     };
     let members_are_the_header_s = from_header.is_some() || within_header;
     let mut ordered: Vec<_> = properties.iter().collect();
-    ordered.sort_by_key(|p| snapshot.nodes[p.declaration.map_or(0, |id| id.0) as usize].origin.location.span.start);
+    ordered.sort_by_key(|p| {
+        snapshot.nodes[p.declaration.map_or(0, |id| id.0) as usize]
+            .origin
+            .location
+            .span
+            .start
+    });
     let mut fields = Vec::new();
     for property in ordered {
         // Inheritance, optional fields, methods and synthesized members do not
         // define a C declaration order. Refuse until their contract is explicit.
-        if property.optional || property.kind != MemberKind::Field || property.declaration.is_none() { return None; }
+        if property.optional || property.kind != MemberKind::Field || property.declaration.is_none()
+        {
+            return None;
+        }
         // A struct-typed member is stored *inline*, the way C stores it: the
         // nested layout's bytes sit in this one, and `native_shape` already
         // knew how to size and align that. It is tried before the pointer case
@@ -786,8 +965,7 @@ fn structure(
             Pointee::Scalar(super::Scalar::Bool8)
         } else if let Some(
             inline @ (Pointee::Array { .. } | Pointee::Bits { .. } | Pointee::Flexible(_)),
-        ) =
-            pointer_body(snapshot, property.ty, visiting)
+        ) = pointer_body(snapshot, property.ty, visiting)
         {
             // Two member types that are neither a scalar nor a pointer, and
             // both resolved by the helper that reads the surface's markers. A
@@ -800,7 +978,13 @@ fn structure(
         } else if !visiting.contains(&property.ty)
             && let Some(inner) = {
                 visiting.push(property.ty);
-                let inner = structure(snapshot, property.ty, visiting, members_are_the_header_s, copied);
+                let inner = structure(
+                    snapshot,
+                    property.ty,
+                    visiting,
+                    members_are_the_header_s,
+                    copied,
+                );
                 visiting.pop();
                 inner
             }
@@ -814,7 +998,9 @@ fn structure(
             // A `StringView` member: the string itself, lent, as a parameter
             // of that type is. Written only where a call is made with the
             // record (`write_native_field`), which lends it for that call.
-            Pointee::Pointer(Box::new(Pointee::Const(Box::new(Pointee::Opaque(super::Handle::borrowed_string())))))
+            Pointee::Pointer(Box::new(Pointee::Const(Box::new(Pointee::Opaque(
+                super::Handle::borrowed_string(),
+            )))))
         } else if let Some(signature) = super::fn_pointer(snapshot, property.ty) {
             // A member written as an ordinary TypeScript function type, which
             // at a C boundary can mean one thing -- `struct sigaction` and
@@ -826,10 +1012,17 @@ fn structure(
         } else {
             Pointee::Pointer(Box::new(pointer_within(snapshot, property.ty, visiting)?))
         };
-        let name = property.name.strip_prefix("___").map_or_else(|| property.name.clone(), |rest| format!("__{rest}"));
+        let name = property
+            .name
+            .strip_prefix("___")
+            .map_or_else(|| property.name.clone(), |rest| format!("__{rest}"));
         fields.push(Field { name, ty });
     }
-    let name = if foreign { tag.to_owned() } else { format!("NtsNative_Type{}", shape.0) };
+    let name = if foreign {
+        tag.to_owned()
+    } else {
+        format!("NtsNative_Type{}", shape.0)
+    };
     // An anonymous record is the header's, so nothing about it is this
     // program's to define -- but it has no tag either, so `foreign` cannot
     // carry that. The two facts are separate and both are recorded.
@@ -864,7 +1057,10 @@ pub(crate) fn declaring_module(
     while let Some(id) = at {
         let node = snapshot.nodes.get(id.0 as usize)?;
         if node.native.as_ref().is_some_and(|native| {
-            native.headers.as_ref().is_some_and(|headers| !headers.is_empty())
+            native
+                .headers
+                .as_ref()
+                .is_some_and(|headers| !headers.is_empty())
         }) {
             return Some(id);
         }
@@ -876,7 +1072,11 @@ pub(crate) fn declaring_module(
 /// Storage named by a native type argument; pointer types occupy one word.
 #[must_use]
 pub fn storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
-    if let Some(scalar) = scalar(snapshot, ty) { return Some(Pointee::Scalar(scalar)); }
-    if let Some(layout) = structure(snapshot, ty, &mut Vec::new(), false, false) { return Some(Pointee::Record(layout.into())); }
+    if let Some(scalar) = scalar(snapshot, ty) {
+        return Some(Pointee::Scalar(scalar));
+    }
+    if let Some(layout) = structure(snapshot, ty, &mut Vec::new(), false, false) {
+        return Some(Pointee::Record(layout.into()));
+    }
     pointer(snapshot, ty).map(|p| Pointee::Pointer(Box::new(p)))
 }

@@ -88,10 +88,12 @@ pub struct Keeps {
 impl Keeps {
     /// The pessimistic answer: everything escapes, nothing was analysed.
     fn unknown(count: usize) -> Self {
-        Self { escaping: (0..count).collect(), analysed: false }
+        Self {
+            escaping: (0..count).collect(),
+            analysed: false,
+        }
     }
 }
-
 
 /// The local slot each declared parameter occupies, in order.
 ///
@@ -109,7 +111,11 @@ fn parameter_slots(descriptor: &str, is_static: bool) -> Option<Vec<u16>> {
         // A `long` or a `double` takes **two** slots -- the same rule the
         // constant pool has for `Long` and `Double`, wrong in the same
         // invisible way: a method taking `(JI)V` has its `int` at slot 3.
-        slot += if matches!(part.as_bytes().first(), Some(b'J' | b'D')) { 2 } else { 1 };
+        slot += if matches!(part.as_bytes().first(), Some(b'J' | b'D')) {
+            2
+        } else {
+            1
+        };
     }
     Some(slots)
 }
@@ -124,14 +130,30 @@ fn width(code: &[u8], at: usize) -> Option<usize> {
     Some(match op {
         // No operands: the constants, loads/stores by index, stack ops,
         // arithmetic, conversions, array element access, returns, throw.
-        0x00..=0x0f | 0x1a..=0x35 | 0x3b..=0x83 | 0x85..=0x98 | 0xac..=0xb1 | 0xbe | 0xbf
+        0x00..=0x0f
+        | 0x1a..=0x35
+        | 0x3b..=0x83
+        | 0x85..=0x98
+        | 0xac..=0xb1
+        | 0xbe
+        | 0xbf
         | 0xca => 1,
         // bipush, ldc, the by-index loads/stores, and newarray.
         0x10 | 0x12 | 0x15..=0x19 | 0x36..=0x3a | 0xbc => 2,
         // sipush, ldc_w, ldc2_w, the field and method refs, new, anewarray,
         // checkcast, instanceof, the 16-bit branches, iinc, newarray is 2.
-        0x11 | 0x13 | 0x14 | 0x84 | 0x99..=0xa8 | 0xb2..=0xb8 | 0xbb | 0xbd | 0xc0 | 0xc1
-        | 0xc6 | 0xc7 => 3,
+        0x11
+        | 0x13
+        | 0x14
+        | 0x84
+        | 0x99..=0xa8
+        | 0xb2..=0xb8
+        | 0xbb
+        | 0xbd
+        | 0xc0
+        | 0xc1
+        | 0xc6
+        | 0xc7 => 3,
         // multianewarray.
         0xc5 => 4,
         // invokeinterface, invokedynamic, goto_w, jsr_w.
@@ -180,7 +202,6 @@ fn width(code: &[u8], at: usize) -> Option<usize> {
     })
 }
 
-
 /// Whether the instruction walk lands **exactly** on the end of the code.
 ///
 /// # Why this is the only available check on the width table
@@ -200,7 +221,9 @@ fn width(code: &[u8], at: usize) -> Option<usize> {
 fn walks_cleanly(code: &[u8]) -> bool {
     let mut at = 0usize;
     while at < code.len() {
-        let Some(step) = width(code, at) else { return false };
+        let Some(step) = width(code, at) else {
+            return false;
+        };
         if step == 0 {
             return false;
         }
@@ -241,11 +264,15 @@ pub fn of(method: &Member) -> Keeps {
     let mut targets = Vec::new();
     let mut at = 0usize;
     while at < code.bytes.len() {
-        let Some(step) = width(&code.bytes, at) else { return Keeps::unknown(slots.len()) };
+        let Some(step) = width(&code.bytes, at) else {
+            return Keeps::unknown(slots.len());
+        };
         let op = code.bytes[at];
         if (0x99..=0xa8).contains(&op) || op == 0xc6 || op == 0xc7 {
             let offset = i32::from(i16::from_be_bytes([code.bytes[at + 1], code.bytes[at + 2]]));
-            if let Ok(target) = usize::try_from(i64::try_from(at).unwrap_or(i64::MAX) + i64::from(offset)) {
+            if let Ok(target) =
+                usize::try_from(i64::try_from(at).unwrap_or(i64::MAX) + i64::from(offset))
+            {
                 targets.push(target);
             }
         }
@@ -258,7 +285,9 @@ pub fn of(method: &Member) -> Keeps {
     let mut returns = false;
     let mut at = 0usize;
     while at < code.bytes.len() {
-        let Some(step) = width(&code.bytes, at) else { return Keeps::unknown(slots.len()) };
+        let Some(step) = width(&code.bytes, at) else {
+            return Keeps::unknown(slots.len());
+        };
         if (0xac..=0xb1).contains(&code.bytes[at]) {
             returns = true;
             break;
@@ -286,7 +315,9 @@ pub fn of(method: &Member) -> Keeps {
         if targets.contains(&at) {
             stack.clear();
         }
-        let Some(step) = width(&code.bytes, at) else { return Keeps::unknown(slots.len()) };
+        let Some(step) = width(&code.bytes, at) else {
+            return Keeps::unknown(slots.len());
+        };
         let op = code.bytes[at];
         match op {
             // aload_0 .. aload_3, and aload <index>.
@@ -379,7 +410,10 @@ pub fn table(class: &crate::read::ClassFile) -> Vec<(String, Vec<usize>)> {
             continue;
         }
         rows.push((
-            format!("{}.{}:{}", class.binary_name, method.name, method.descriptor),
+            format!(
+                "{}.{}:{}",
+                class.binary_name, method.name, method.descriptor
+            ),
             kept.escaping,
         ));
     }

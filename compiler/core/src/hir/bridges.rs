@@ -24,14 +24,31 @@ use super::{Func, HirType, ManagedType, OpKind, Program, ValueId};
 /// Bridges whose closure takes a handle the binding cannot be passing, as
 /// `(function, value, why)`.
 pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, String)> {
-    let by_name: FxHashMap<&str, &Func> = program.funcs.iter().map(|func| (func.name.as_str(), func)).collect();
+    let by_name: FxHashMap<&str, &Func> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func))
+        .collect();
     let mut problems = Vec::new();
     for (at, func) in program.funcs.iter().enumerate() {
         for block in &func.blocks {
             for &value in &block.ops {
-                let OpKind::NativeBridge { closure, signature, bridging, .. } = &func.value(value).kind else { continue };
-                let HirType::Managed(ManagedType::Object(ty)) = func.value(*closure).ty else { continue };
-                let Some(body) = program.layout(ty).and_then(super::Layout::closure_call).and_then(|call| by_name.get(call))
+                let OpKind::NativeBridge {
+                    closure,
+                    signature,
+                    bridging,
+                    ..
+                } = &func.value(value).kind
+                else {
+                    continue;
+                };
+                let HirType::Managed(ManagedType::Object(ty)) = func.value(*closure).ty else {
+                    continue;
+                };
+                let Some(body) = program
+                    .layout(ty)
+                    .and_then(super::Layout::closure_call)
+                    .and_then(|call| by_name.get(call))
                 else {
                     continue;
                 };
@@ -40,7 +57,9 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, String)> {
                 // array -- except what the bridge itself converts: an array of
                 // handles, a boxed record.
                 for (c_at, foreign) in signature.parameters.iter().enumerate() {
-                    let Type::Pointer(Pointee::Opaque(passed)) = foreign else { continue };
+                    let Type::Pointer(Pointee::Opaque(passed)) = foreign else {
+                        continue;
+                    };
                     if bridging.array(c_at).is_some() || bridging.boxed(c_at).is_some() {
                         continue;
                     }
@@ -52,16 +71,25 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, String)> {
                         }
                         continue;
                     }
-                    let Some(taken) = bridging.parameter(c_at).and_then(|parameter| body.params.get(parameter + 1)) else { continue };
+                    let Some(taken) = bridging
+                        .parameter(c_at)
+                        .and_then(|parameter| body.params.get(parameter + 1))
+                    else {
+                        continue;
+                    };
                     // And a string the bridge copies in: an `NSString` a block
                     // is given, as the program's string -- asked of the
                     // predicate the backends' bridges ask, so the check and the
                     // conversion are one rule.
-                    if super::native::lent_string(foreign, &taken.ty) || super::native::lent_ns_string(foreign, &taken.ty) {
+                    if super::native::lent_string(foreign, &taken.ty)
+                        || super::native::lent_ns_string(foreign, &taken.ty)
+                    {
                         continue;
                     }
                     let why = match &taken.ty {
-                        HirType::NativePointer(Pointee::Opaque(taken)) if admits(passed, taken) => continue,
+                        HirType::NativePointer(Pointee::Opaque(taken)) if admits(passed, taken) => {
+                            continue;
+                        }
                         HirType::NativePointer(Pointee::Opaque(taken)) => format!(
                             "a callback taking a `{}` where its binding passes a `{}`, which is not one of its kinds",
                             taken.tag, passed.tag
@@ -121,11 +149,30 @@ mod tests {
     #[test]
     fn a_callback_takes_its_handle_a_base_or_a_kind_and_nothing_else() {
         let event = handle(&["NtsDomEventTarget", "NtsDomEvent"]);
-        let mouse = handle(&["NtsDomEventTarget", "NtsDomEvent", "NtsDomUIEvent", "NtsDomMouseEvent"]);
-        let text = handle(&["NtsDomEventTarget", "NtsDomNode", "NtsDomCharacterData", "NtsDomText"]);
+        let mouse = handle(&[
+            "NtsDomEventTarget",
+            "NtsDomEvent",
+            "NtsDomUIEvent",
+            "NtsDomMouseEvent",
+        ]);
+        let text = handle(&[
+            "NtsDomEventTarget",
+            "NtsDomNode",
+            "NtsDomCharacterData",
+            "NtsDomText",
+        ]);
         assert!(admits(&event, &event), "the same handle");
-        assert!(admits(&mouse, &event), "an upcast: the callback takes a base");
-        assert!(admits(&event, &mouse), "the trusted downcast: an event map's kind");
-        assert!(!admits(&event, &text), "another chain is no kind of an event");
+        assert!(
+            admits(&mouse, &event),
+            "an upcast: the callback takes a base"
+        );
+        assert!(
+            admits(&event, &mouse),
+            "the trusted downcast: an event map's kind"
+        );
+        assert!(
+            !admits(&event, &text),
+            "another chain is no kind of an event"
+        );
     }
 }

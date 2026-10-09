@@ -19,13 +19,13 @@
 //! and not required to be: every send runs on the program's owner thread, as
 //! every other call does.
 
-use std::fmt::Write as _;
-use super::{c_identifier, c_type_of, CodeWriter, Diagnostic, Origin, Program};
+use super::{CodeWriter, Diagnostic, Origin, Program, c_identifier, c_type_of};
 use nts_codegen_common::objc::{
-    block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol, lookups,
-    selector_symbol,
+    block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol,
+    lookups, selector_symbol,
 };
 use nts_core::hir::native::{FnPointer, Function, Send, Type};
+use std::fmt::Write as _;
 
 /// The runtime declarations and the lookup functions, when the program sends
 /// anything. Written before the function bodies, which call them.
@@ -34,21 +34,36 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
         return;
     }
     let found = lookups(program);
-    writer.line(origin, "/* The Objective-C runtime, declared rather than included: see `emit/objc.rs`. */");
+    writer.line(
+        origin,
+        "/* The Objective-C runtime, declared rather than included: see `emit/objc.rs`. */",
+    );
     writer.line(origin, "struct objc_selector;");
     writer.line(origin, "struct objc_class;");
-    writer.line(origin, "extern struct objc_selector *sel_registerName(const char *name);");
+    writer.line(
+        origin,
+        "extern struct objc_selector *sel_registerName(const char *name);",
+    );
     // `objc_getClass` answers nil for a class that is not loaded, and a message
     // to nil answers zero: the program would carry on with a null handle it was
     // promised was an object. The required form ends the process, naming it.
-    writer.line(origin, "extern struct objc_class *objc_getRequiredClass(const char *name);");
+    writer.line(
+        origin,
+        "extern struct objc_class *objc_getRequiredClass(const char *name);",
+    );
     writer.line(origin, "extern void objc_msgSend(void);");
     if found.supers {
         // `[super m]`: the receiver, and the class whose implementation the
         // runtime starts looking from, `struct objc_super`'s two words.
-        writer.line(origin, "struct nts_objc_super { const void *receiver; struct objc_class *super_class; };");
+        writer.line(
+            origin,
+            "struct nts_objc_super { const void *receiver; struct objc_class *super_class; };",
+        );
         writer.line(origin, "extern void objc_msgSendSuper(void);");
-        writer.line(origin, "extern struct objc_class *class_getSuperclass(struct objc_class *cls);");
+        writer.line(
+            origin,
+            "extern struct objc_class *class_getSuperclass(struct objc_class *cls);",
+        );
     }
     if found.returns_records {
         // x86_64 returns a record in memory -- larger than 16 bytes, since
@@ -60,7 +75,10 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
         writer.line(origin, "#if defined(__x86_64__)");
         writer.line(origin, "extern void objc_msgSend_stret(void);");
         writer.line(origin, "extern void objc_msgSendSuper_stret(void);");
-        writer.line(origin, "#define NTS_OBJC_SEND_FOR(size) ((size) > 16 ? objc_msgSend_stret : objc_msgSend)");
+        writer.line(
+            origin,
+            "#define NTS_OBJC_SEND_FOR(size) ((size) > 16 ? objc_msgSend_stret : objc_msgSend)",
+        );
         writer.line(origin, "#define NTS_OBJC_SUPER_FOR(size) ((size) > 16 ? objc_msgSendSuper_stret : objc_msgSendSuper)");
         writer.line(origin, "#else");
         writer.line(origin, "#define NTS_OBJC_SEND_FOR(size) objc_msgSend");
@@ -69,9 +87,15 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
     }
     for selector in found.selectors {
         let name = selector_symbol(selector);
-        writer.line(origin, format!("static struct objc_selector *{name}(void) {{"));
+        writer.line(
+            origin,
+            format!("static struct objc_selector *{name}(void) {{"),
+        );
         writer.line(origin, "    static struct objc_selector *cached;");
-        writer.line(origin, format!("    if (!cached) cached = sel_registerName(\"{selector}\");"));
+        writer.line(
+            origin,
+            format!("    if (!cached) cached = sel_registerName(\"{selector}\");"),
+        );
         writer.line(origin, "    return cached;");
         writer.line(origin, "}");
     }
@@ -79,7 +103,10 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
         let name = class_symbol(class);
         writer.line(origin, format!("static struct objc_class *{name}(void) {{"));
         writer.line(origin, "    static struct objc_class *cached;");
-        writer.line(origin, format!("    if (!cached) cached = objc_getRequiredClass(\"{class}\");"));
+        writer.line(
+            origin,
+            format!("    if (!cached) cached = objc_getRequiredClass(\"{class}\");"),
+        );
         writer.line(origin, "    return cached;");
         writer.line(origin, "}");
     }
@@ -101,7 +128,9 @@ fn entry_point(
     // passes the compiled method last.
     let record_out = matches!(*method.signature.result, Type::Record(_));
     if compiled.params.len() + 1 != method.signature.parameters.len() + usize::from(record_out) {
-        return Err(refuse("an Objective-C method whose entry point and compiled function disagree about arity"));
+        return Err(refuse(
+            "an Objective-C method whose entry point and compiled function disagree about arity",
+        ));
     }
     let mut parameters = Vec::new();
     let mut arguments = Vec::new();
@@ -117,15 +146,25 @@ fn entry_point(
         // string: copied in for the call and given back after it, as
         // a callback bridge does a C string's.
         if nts_core::hir::native::lent_ns_string(ty, &want.ty) {
-            let _ = write!(copies, " NtsString *s{slot} = nts_string_of_nsstring(a{slot});");
+            let _ = write!(
+                copies,
+                " NtsString *s{slot} = nts_string_of_nsstring(a{slot});"
+            );
             let _ = write!(releases, " nts_release((NtsHeader *)s{slot});");
             arguments.push(format!("s{slot}"));
             continue;
         }
         // A record arrives by value and the compiled method reads it
         // through its address, as every `ByValue<T>` is carried.
-        let by_value = if matches!(ty, Type::Record(_)) { "&" } else { "" };
-        arguments.push(format!("({}){by_value}a{slot}", c_type_of(program, &want.ty, &want.origin)?));
+        let by_value = if matches!(ty, Type::Record(_)) {
+            "&"
+        } else {
+            ""
+        };
+        arguments.push(format!(
+            "({}){by_value}a{slot}",
+            c_type_of(program, &want.ty, &want.origin)?
+        ));
     }
     if record_out {
         arguments.push("&r".to_owned());
@@ -133,14 +172,23 @@ fn entry_point(
     let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
     let result = method.signature.result.c_type();
     let body = if record_out {
-        format!("{result} r; nts_callback_enter();{copies} {call};{releases} nts_callback_leave(); return r;")
+        format!(
+            "{result} r; nts_callback_enter();{copies} {call};{releases} nts_callback_leave(); return r;"
+        )
     } else if matches!(*method.signature.result, Type::Void) {
         format!("nts_callback_enter();{copies} {call};{releases} nts_callback_leave();")
-    } else if nts_core::hir::native::answered_ns_string(&method.signature.result, &compiled.return_type) {
+    } else if nts_core::hir::native::answered_ns_string(
+        &method.signature.result,
+        &compiled.return_type,
+    ) {
         // A string answered as the `NSString` Swift's `String` result
         // is: made of the method's, which is given back, and answered
         // at +0 where the program counts, as an object is.
-        let answer = if counted { "objc_autoreleaseReturnValue((void *)made)" } else { "made" };
+        let answer = if counted {
+            "objc_autoreleaseReturnValue((void *)made)"
+        } else {
+            "made"
+        };
         format!(
             "nts_callback_enter();{copies} NtsString *t = {call};{releases} {result} made = ({result})nts_nsstring_of(t); nts_release((NtsHeader *)t); nts_callback_leave(); return ({result}){answer};"
         )
@@ -153,9 +201,14 @@ fn entry_point(
             "nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return ({result})objc_autoreleaseReturnValue((void *)r);"
         )
     } else {
-        format!("nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return r;")
+        format!(
+            "nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return r;"
+        )
     };
-    Ok(format!("static {result} {symbol}({}) {{ {body} }}", parameters.join(", ")))
+    Ok(format!(
+        "static {result} {symbol}({}) {{ {body} }}",
+        parameters.join(", ")
+    ))
 }
 
 /// What every block in the program shares: the layout, the two helpers the
@@ -179,18 +232,34 @@ fn entry_point(
 /// arguments, converted to what the compiled method takes as a callback
 /// bridge converts them -- and a table per class, registered before `main` by
 /// one constructor, base class first.
-pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn classes(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+) -> Result<(), Diagnostic> {
     let classes = nts_codegen_common::objc::classes_in_order(program);
     if classes.is_empty() {
         return Ok(());
     }
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
-    writer.line(origin, "/* Objective-C classes the program declares: see `emit/objc.rs`. */");
+    writer.line(
+        origin,
+        "/* Objective-C classes the program declares: see `emit/objc.rs`. */",
+    );
     let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
     // `returns_object` holds for an `NSString` result too, which is what a
     // `string` one answers as.
-    if counted && classes.iter().flat_map(|class| &class.methods).any(|method| returns_object(&method.signature.result)) {
-        writer.line(origin, "extern void *objc_autoreleaseReturnValue(void *value);");
+    if counted
+        && classes
+            .iter()
+            .flat_map(|class| &class.methods)
+            .any(|method| returns_object(&method.signature.result))
+    {
+        writer.line(
+            origin,
+            "extern void *objc_autoreleaseReturnValue(void *value);",
+        );
     }
     for class in &classes {
         let mut rows = Vec::new();
@@ -201,7 +270,10 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .find(|func| func.name == method.function)
                 .ok_or_else(|| refuse("an Objective-C method whose compiled function this program does not define"))?;
             let symbol = nts_codegen_common::objc::imp_symbol(&class.name, at);
-            writer.line(origin, entry_point(program, (method, compiled), &symbol, counted, &refuse)?);
+            writer.line(
+                origin,
+                entry_point(program, (method, compiled), &symbol, counted, &refuse)?,
+            );
             rows.push(format!(
                 "{{ \"{}\", (void (*)(void)){symbol}, \"{}\" }}",
                 method.selector(),
@@ -216,7 +288,9 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .funcs
                 .iter()
                 .find(|func| &func.name == state)
-                .ok_or_else(|| refuse("an Objective-C class whose fields' maker this program does not define"))?;
+                .ok_or_else(|| {
+                    refuse("an Objective-C class whose fields' maker this program does not define")
+                })?;
             writer.line(
                 origin,
                 format!(
@@ -228,12 +302,24 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         }
         let table = nts_codegen_common::objc::methods_symbol(&class.name);
         if rows.is_empty() {
-            writer.line(origin, format!("static const NtsObjcMethod *const {table} = 0;"));
+            writer.line(
+                origin,
+                format!("static const NtsObjcMethod *const {table} = 0;"),
+            );
         } else {
-            writer.line(origin, format!("static const NtsObjcMethod {table}[] = {{ {} }};", rows.join(", ")));
+            writer.line(
+                origin,
+                format!(
+                    "static const NtsObjcMethod {table}[] = {{ {} }};",
+                    rows.join(", ")
+                ),
+            );
         }
     }
-    writer.line(origin, "__attribute__((constructor)) static void nts_objc_register_classes(void) {");
+    writer.line(
+        origin,
+        "__attribute__((constructor)) static void nts_objc_register_classes(void) {",
+    );
     for class in &classes {
         writer.line(
             origin,
@@ -243,17 +329,24 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 class.superclass,
                 nts_codegen_common::objc::methods_symbol(&class.name),
                 class.methods.len(),
-                class.state.as_ref().map_or_else(|| "0".to_owned(), |_| nts_codegen_common::objc::state_symbol(&class.name))
+                class.state.as_ref().map_or_else(
+                    || "0".to_owned(),
+                    |_| nts_codegen_common::objc::state_symbol(&class.name)
+                )
             ),
         );
         for protocol in &class.protocols {
-            writer.line(origin, format!("    nts_objc_adopt(\"{}\", \"{protocol}\");", class.name));
+            writer.line(
+                origin,
+                format!("    nts_objc_adopt(\"{}\", \"{protocol}\");", class.name),
+            );
         }
     }
     writer.line(origin, "}");
     Ok(())
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
     let signatures = block_signatures(program);
     if signatures.is_empty() {
@@ -273,14 +366,23 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
     // expects (`objc_retainAutoreleasedReturnValue`): the closure's own count
     // of it, which reference counting makes it return, goes to the pool.
     // Without counting the closure owns nothing to give.
-    writer.line(origin, "extern void *objc_autoreleaseReturnValue(void *value);");
+    writer.line(
+        origin,
+        "extern void *objc_autoreleaseReturnValue(void *value);",
+    );
     writer.line(origin, "#if defined(NTS_PROVIDER_RC)");
-    writer.line(origin, "#define NTS_BLOCK_RETURNED(value) objc_autoreleaseReturnValue((void *)(value))");
+    writer.line(
+        origin,
+        "#define NTS_BLOCK_RETURNED(value) objc_autoreleaseReturnValue((void *)(value))",
+    );
     writer.line(origin, "#else");
     writer.line(origin, "#define NTS_BLOCK_RETURNED(value) (value)");
     writer.line(origin, "#endif");
     writer.line(origin, "extern void abort(void);");
-    writer.line(origin, "extern int dprintf(int descriptor, const char *format, ...);");
+    writer.line(
+        origin,
+        "extern int dprintf(int descriptor, const char *format, ...);",
+    );
     writer.line(origin, "static void nts_block_on_owner(const char *what) {");
     writer.line(origin, "    if (nts_is_owner_thread()) return;");
     writer.line(
@@ -289,16 +391,28 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
     );
     writer.line(origin, "    abort();");
     writer.line(origin, "}");
-    writer.line(origin, "static void nts_block_copy(void *copy, const void *block) {");
+    writer.line(
+        origin,
+        "static void nts_block_copy(void *copy, const void *block) {",
+    );
     writer.line(origin, "    (void)copy;");
     writer.line(origin, "    nts_block_on_owner(\"copied\");");
-    writer.line(origin, "    (void)nts_closure_lend((NtsHeader *)((const struct nts_block *)block)->context);");
+    writer.line(
+        origin,
+        "    (void)nts_closure_lend((NtsHeader *)((const struct nts_block *)block)->context);",
+    );
     writer.line(origin, "}");
     // A platform releases a handler on whatever thread called it, and the
     // closure's count is the owning thread's: the release is carried there.
     writer.line(origin, "static void nts_block_dispose(const void *block) {");
-    writer.line(origin, "    void *context = ((const struct nts_block *)block)->context;");
-    writer.line(origin, "    if (!nts_is_owner_thread()) { nts_block_unlend(context); return; }");
+    writer.line(
+        origin,
+        "    void *context = ((const struct nts_block *)block)->context;",
+    );
+    writer.line(
+        origin,
+        "    if (!nts_is_owner_thread()) { nts_block_unlend(context); return; }",
+    );
     writer.line(origin, "    nts_closure_unlend(context);");
     writer.line(origin, "}");
     for signature in signatures {
@@ -313,11 +427,20 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
         }
         bridge_types.push("void *".to_owned());
         arguments.push("b->context".to_owned());
-        let give = if matches!(*signature.result, Type::Void) { "" } else { "return " };
+        let give = if matches!(*signature.result, Type::Void) {
+            ""
+        } else {
+            "return "
+        };
         let bridge = format!("(({result} (*)({}))b->bridge)", bridge_types.join(", "));
-        let hop = nts_codegen_common::objc::hop_arguments(signature).map(|carried| hop(writer, origin, signature, &carried, &bridge));
+        let hop = nts_codegen_common::objc::hop_arguments(signature)
+            .map(|carried| hop(writer, origin, signature, &carried, &bridge));
         let call = format!("{bridge}({})", arguments.join(", "));
-        let call = if returns_object(&signature.result) { format!("({result})NTS_BLOCK_RETURNED({call})") } else { call };
+        let call = if returns_object(&signature.result) {
+            format!("({result})NTS_BLOCK_RETURNED({call})")
+        } else {
+            call
+        };
         writer.line(
             origin,
             format!(
@@ -342,7 +465,13 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
 /// host (`nts_block_carry`): its arguments packed here, the objects' offsets
 /// named, and `run` unpacking them on the owning thread into the bridge.
 /// Returns the test the invoke adapter starts with.
-fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried: &[nts_codegen_common::objc::Carried], bridge: &str) -> String {
+fn hop(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    signature: &FnPointer,
+    carried: &[nts_codegen_common::objc::Carried],
+    bridge: &str,
+) -> String {
     use nts_codegen_common::objc::Carried;
     let hop = nts_codegen_common::objc::block_hop_symbol(signature);
     let mut fields = Vec::new();
@@ -373,7 +502,13 @@ fn hop(writer: &mut CodeWriter, origin: &Origin, signature: &FnPointer, carried:
     let objects_table = if objects.is_empty() {
         "0".to_owned()
     } else {
-        writer.line(origin, format!("static const uint32_t {hop}_objects[] = {{ {} }};", objects.join(", ")));
+        writer.line(
+            origin,
+            format!(
+                "static const uint32_t {hop}_objects[] = {{ {} }};",
+                objects.join(", ")
+            ),
+        );
         format!("{hop}_objects")
     };
     format!(
@@ -390,7 +525,12 @@ fn returns_object(result: &Type) -> bool {
 }
 
 /// The statements that fill a `NativeBlock`'s frame slot and take its address.
-pub(super) fn block_expression(name: &str, invoke: &str, context: &str, signature: &FnPointer) -> String {
+pub(super) fn block_expression(
+    name: &str,
+    invoke: &str,
+    context: &str,
+    signature: &FnPointer,
+) -> String {
     // `BLOCK_HAS_COPY_DISPOSE` and `BLOCK_HAS_SIGNATURE`; a stack block's
     // reference count bits are zero.
     format!(
@@ -424,7 +564,11 @@ fn result(ty: &Type) -> String {
 /// `((R (*)(const void *, struct objc_selector *, A...))objc_msgSend)(r, sel, a...)`.
 pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[String]) -> String {
     let (receiver, rest, receiver_type) = match &send.class {
-        Some(class) => (format!("{}()", class_symbol(class)), arguments, "struct objc_class *".to_owned()),
+        Some(class) => (
+            format!("{}()", class_symbol(class)),
+            arguments,
+            "struct objc_class *".to_owned(),
+        ),
         None => (
             arguments.first().cloned().unwrap_or_else(|| "0".to_owned()),
             arguments.get(1..).unwrap_or(&[]),
@@ -437,10 +581,16 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
     // unchanged -- and a record returned in memory on x86_64 through
     // `objc_msgSendSuper_stret`, as `objc_msgSend_stret` is for any receiver.
     if let Some(class) = &send.super_of {
-        let mut types = vec!["struct nts_objc_super *".to_owned(), "struct objc_selector *".to_owned()];
+        let mut types = vec![
+            "struct nts_objc_super *".to_owned(),
+            "struct objc_selector *".to_owned(),
+        ];
         types.extend(target.parameters.iter().skip(skip).map(parameter));
         let mut values = vec![
-            format!("&(struct nts_objc_super){{ {receiver}, class_getSuperclass({}()) }}", class_symbol(class)),
+            format!(
+                "&(struct nts_objc_super){{ {receiver}, class_getSuperclass({}()) }}",
+                class_symbol(class)
+            ),
             format!("{}()", selector_symbol(&send.selector)),
         ];
         values.extend(rest.iter().cloned());
@@ -448,7 +598,11 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
             Type::Record(_) => format!("(NTS_OBJC_SUPER_FOR(sizeof({result})))"),
             _ => "objc_msgSendSuper".to_owned(),
         };
-        return format!("(({result} (*)({})){entry})({})", types.join(", "), values.join(", "));
+        return format!(
+            "(({result} (*)({})){entry})({})",
+            types.join(", "),
+            values.join(", ")
+        );
     }
     let mut types = vec![receiver_type, "struct objc_selector *".to_owned()];
     types.extend(target.parameters.iter().skip(skip).map(parameter));
@@ -458,5 +612,9 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
         Type::Record(_) => format!("(NTS_OBJC_SEND_FOR(sizeof({result})))"),
         _ => "objc_msgSend".to_owned(),
     };
-    format!("(({result} (*)({})){entry})({})", types.join(", "), values.join(", "))
+    format!(
+        "(({result} (*)({})){entry})({})",
+        types.join(", "),
+        values.join(", ")
+    )
 }

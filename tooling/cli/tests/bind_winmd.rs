@@ -25,26 +25,44 @@ fn winmd() -> Option<PathBuf> {
 
 #[test]
 fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
-    let zig = Command::new("zig").arg("version").output().is_ok_and(|o| o.status.success());
+    let zig = Command::new("zig")
+        .arg("version")
+        .output()
+        .is_ok_and(|o| o.status.success());
     let Some(winmd) = winmd().filter(|_| zig) else {
-        eprintln!("skipping: needs zig and the Win32 metadata (tooling/windows/fetch-win32metadata.sh)");
+        eprintln!(
+            "skipping: needs zig and the Win32 metadata (tooling/windows/fetch-win32metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winmd-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.Win32.UI.WindowsAndMessaging", "Windows.Win32.System.LibraryLoader", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.Win32.UI.WindowsAndMessaging",
+            "Windows.Win32.System.LibraryLoader",
+            "--out",
+        ])
         .arg(&out)
         .arg("--winmd")
         .arg(&winmd)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let read = |name: &str| std::fs::read_to_string(out.join(name)).unwrap();
     let messaging = read("Windows.Win32.UI.WindowsAndMessaging.d.ts");
     let foundation = read("Windows.Win32.Foundation.d.ts");
     // Constants are declarations of the module, with no values file beside.
-    assert!(!out.join("Windows.Win32.UI.WindowsAndMessaging.values.ts").exists(), "a values file was written");
+    assert!(
+        !out.join("Windows.Win32.UI.WindowsAndMessaging.values.ts")
+            .exists(),
+        "a values file was written"
+    );
     let refused = read("Windows.Win32.UI.WindowsAndMessaging.refused.txt");
 
     // Meaning from the metadata: optional is `| null`, a read-only `PWSTR`
@@ -73,14 +91,21 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     // itself, which is `void *` there, is erased but kept distinct.
     // Each handle is a `Class`, and the metadata's `[AlsoUsableFor]` is its
     // parent: an `HWND` passes where a `HANDLE` is taken, with no cast.
-    assert!(foundation.contains("export type HWND = Class<\"HWND__\", HANDLE>;"), "{foundation}");
-    assert!(foundation.contains("export type HANDLE = Erased<Class<\"HANDLE\">>;"), "{foundation}");
+    assert!(
+        foundation.contains("export type HWND = Class<\"HWND__\", HANDLE>;"),
+        "{foundation}"
+    );
+    assert!(
+        foundation.contains("export type HANDLE = Erased<Class<\"HANDLE\">>;"),
+        "{foundation}"
+    );
     // Where the header makes a handle and its parent one C type, the
     // binding does too: `wc.hInstance = GetModuleHandleW(null)` typechecks.
     // Which of the two is spelled as the alias follows the order they are
     // reached in, and either is the same type.
     assert!(
-        foundation.contains("export type HINSTANCE = HMODULE;") || foundation.contains("export type HMODULE = HINSTANCE;"),
+        foundation.contains("export type HINSTANCE = HMODULE;")
+            || foundation.contains("export type HMODULE = HINSTANCE;"),
         "{foundation}"
     );
     // A record a function takes by value is `ByValue<T>`, as bind-c writes it.
@@ -91,8 +116,14 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     // The DLL, as the import library a program links when it calls this.
     let create = messaging.find("export function CreateWindowExW(").unwrap();
     let doc = &messaging[messaging[..create].rfind("/**").unwrap()..create];
-    assert!(doc.contains("@ntsLibrary user32"), "CreateWindowExW does not name user32: {doc}");
-    assert!(messaging.contains("  /** @ntsConstant 275 */\n  export const WM_TIMER: c_uint;\n"), "no WM_TIMER");
+    assert!(
+        doc.contains("@ntsLibrary user32"),
+        "CreateWindowExW does not name user32: {doc}"
+    );
+    assert!(
+        messaging.contains("  /** @ntsConstant 275 */\n  export const WM_TIMER: c_uint;\n"),
+        "no WM_TIMER"
+    );
     // `PWSTR` that is not read-only is a buffer the caller owns, not a lent
     // string: `LoadStringW` writes into it.
     assert!(
@@ -102,13 +133,21 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     // The check is real: `SM_CMETRICS` counts the system metrics, and the
     // metadata (a newer SDK) and mingw's header disagree about how many. It is
     // refused rather than written with either number.
-    assert!(!messaging.contains("export const SM_CMETRICS:"), "SM_CMETRICS was written despite disagreeing with the header");
     assert!(
-        refused.lines().any(|line| line == "SM_CMETRICS\tits value disagrees with the header"),
+        !messaging.contains("export const SM_CMETRICS:"),
+        "SM_CMETRICS was written despite disagreeing with the header"
+    );
+    assert!(
+        refused
+            .lines()
+            .any(|line| line == "SM_CMETRICS\tits value disagrees with the header"),
         "SM_CMETRICS's refusal is not reported"
     );
     let functions = messaging.matches("export function ").count();
-    assert!(functions >= 250, "only {functions} functions bound from WindowsAndMessaging");
+    assert!(
+        functions >= 250,
+        "only {functions} functions bound from WindowsAndMessaging"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -126,7 +165,10 @@ fn winrt_metadata() -> Option<PathBuf> {
         .ok()?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .find(|path| path.join("Windows.Foundation.UniversalApiContract.winmd").is_file())
+        .find(|path| {
+            path.join("Windows.Foundation.UniversalApiContract.winmd")
+                .is_file()
+        })
 }
 
 /// A Windows Runtime namespace, read off the contract metadata alone: each
@@ -140,9 +182,12 @@ fn winrt_metadata() -> Option<PathBuf> {
 /// makes, and the ones a hand-written oracle made first. A binder that
 /// numbered from 0, or skipped a refused method's slot, fails here.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn winrt_bindings_are_the_metadata_slot_for_slot() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-test-{}", std::process::id()));
@@ -153,23 +198,53 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let module = std::fs::read_to_string(out.join("Windows.Data.Json.d.ts")).unwrap();
     let refused = std::fs::read_to_string(out.join("Windows.Data.Json.refused.txt")).unwrap();
     // Within `scope`, the first declaration after `@ntsVtable <slot> <name>`.
     let declared_in = |scope: &str, slot: u32, name: &str, rest: &str| {
-        let within = &module[module.find(scope).unwrap_or_else(|| panic!("no `{scope}`:\n{module}"))..];
+        let within = &module[module
+            .find(scope)
+            .unwrap_or_else(|| panic!("no `{scope}`:\n{module}"))..];
         let tag = format!("@ntsVtable {slot} {name}\n");
-        let at = within.find(&tag).unwrap_or_else(|| panic!("no `{tag}` in `{scope}`:\n{module}"));
+        let at = within
+            .find(&tag)
+            .unwrap_or_else(|| panic!("no `{tag}` in `{scope}`:\n{module}"));
         let after = &within[at..];
-        let line = after.lines().find(|line| line.trim_start().starts_with(name) || line.contains(&format!("function {name}("))).unwrap();
+        let line = after
+            .lines()
+            .find(|line| {
+                line.trim_start().starts_with(name) || line.contains(&format!("function {name}("))
+            })
+            .unwrap();
         assert!(line.contains(rest), "{name} at slot {slot}: {line}");
     };
-    declared_in("export interface IJsonValueMethods", 7, "Stringify", "Stringify(this: IJsonValue): HString;");
-    declared_in("export interface IJsonValueMethods", 9, "GetNumber", "GetNumber(this: IJsonValue): CNumber<\"double\">;");
-    declared_in("export namespace JsonValue", 6, "Parse", "function Parse(input: HString): JsonValue;");
+    declared_in(
+        "export interface IJsonValueMethods",
+        7,
+        "Stringify",
+        "Stringify(this: IJsonValue): HString;",
+    );
+    declared_in(
+        "export interface IJsonValueMethods",
+        9,
+        "GetNumber",
+        "GetNumber(this: IJsonValue): CNumber<\"double\">;",
+    );
+    declared_in(
+        "export namespace JsonValue",
+        6,
+        "Parse",
+        "function Parse(input: HString): JsonValue;",
+    );
     assert!(
-        module.contains("@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C"),
+        module.contains(
+            "@ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C"
+        ),
         "JsonValue's statics are not on its factory as IJsonValueStatics:\n{module}"
     );
     // A class is a TypeScript class of its constructors -- none, for one
@@ -183,7 +258,10 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
     assert!(module.contains("export namespace JsonValue {"), "{module}");
     // Every Windows Runtime interface is an `IInspectable`, the root of its
     // chain, so any object goes where any object is taken.
-    assert!(module.contains("ComClass<\"Windows_Data_Json_IJsonValue\", IInspectable>"), "{module}");
+    assert!(
+        module.contains("ComClass<\"Windows_Data_Json_IJsonValue\", IInspectable>"),
+        "{module}"
+    );
     // A class's other interface, by the IID the Windows Runtime computes for
     // the instantiation: the value Windows answered `QueryInterface` for, in
     // `examples/interop/windows-winrt`.
@@ -192,7 +270,12 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         "JsonArray is not queried for IVector<IJsonValue> by its computed IID:\n{module}"
     );
     assert!(module.contains("export interface JsonArray extends IJsonArray, JsonArrayInterfaces, JsonArrayMembers {}"), "{module}");
-    declared_in("export interface IJsonValueMethods", 10, "GetBoolean", "GetBoolean(this: IJsonValue): boolean;");
+    declared_in(
+        "export interface IJsonValueMethods",
+        10,
+        "GetBoolean",
+        "GetBoolean(this: IJsonValue): boolean;",
+    );
     // `[out]` parameters are the result's fields beside `returnValue`, as
     // the Windows Runtime's JavaScript projection returned them; an object
     // written there may be null.
@@ -204,28 +287,40 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
     );
     // A generic interface's idiomatic surface is its own, on its own table:
     // `list.size`, `list.getAt(0)`, `list.append(v)`, for any `T`.
-    let collections = std::fs::read_to_string(out.join("Windows.Foundation.Collections.d.ts")).unwrap();
+    let collections =
+        std::fs::read_to_string(out.join("Windows.Foundation.Collections.d.ts")).unwrap();
     assert!(
         collections.contains("export type IVector<T> = ComClass<\"Windows_Foundation_Collections_IVector\", IInspectable> & IVectorMethods<T> & IVectorMembers<T>;"),
         "IVector<T> does not carry its surface"
     );
-    assert!(collections.contains("     * @ntsGet 7 get_Size\n     */\n    readonly size: CNumber<\"uint32\">;"), "IVector<T> has no `size`");
+    assert!(
+        collections.contains(
+            "     * @ntsGet 7 get_Size\n     */\n    readonly size: CNumber<\"uint32\">;"
+        ),
+        "IVector<T> has no `size`"
+    );
     assert!(
         collections.contains("     * @ntsVtable 13 Append\n     * @ntsHresult\n     */\n    append(this: IVector<T>, value: T): void;"),
         "IVector<T> has no `append`"
     );
     // And it is walked by count, `for (const x of list)`.
     assert!(
-        collections.contains("     * @ntsIterate get_Size GetAt\n     */\n    [Symbol.iterator](): Iterator<T>;"),
+        collections.contains(
+            "     * @ntsIterate get_Size GetAt\n     */\n    [Symbol.iterator](): Iterator<T>;"
+        ),
         "a vector is not iterable"
     );
     // Any other iterable by the iterator its `First` makes -- `IIterable<T>`
     // itself, which a `JsonObject`'s pairs are.
     assert!(
-        collections.contains("     * @ntsIterate First\n     */\n    [Symbol.iterator](): Iterator<T>;"),
+        collections
+            .contains("     * @ntsIterate First\n     */\n    [Symbol.iterator](): Iterator<T>;"),
         "an iterable is not iterable"
     );
-    assert!(refused.is_empty(), "Windows.Data.Json refused something:\n{refused}");
+    assert!(
+        refused.is_empty(),
+        "Windows.Data.Json refused something:\n{refused}"
+    );
 }
 
 /// An event: `add_Closed` takes its handler as a `Delegate` whose function is
@@ -239,7 +334,9 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
 #[test]
 fn winrt_events_take_delegates_by_their_computed_iid() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-events-{}", std::process::id()));
@@ -250,14 +347,23 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let module = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
     let refused = std::fs::read_to_string(out.join("Windows.Foundation.refused.txt")).unwrap();
     assert!(
         module.contains("add_Closed(this: IMemoryBufferReference, handler: Delegate<(sender: IMemoryBufferReference, args: IInspectable) => void, \"F4637D4A-0760-5431-BFC0-24EB1D4F6C4F\">): EventRegistrationToken;"),
         "{module}"
     );
-    assert!(module.contains("remove_Closed(this: IMemoryBufferReference, cookie: EventRegistrationToken): void;"), "{module}");
+    assert!(
+        module.contains(
+            "remove_Closed(this: IMemoryBufferReference, cookie: EventRegistrationToken): void;"
+        ),
+        "{module}"
+    );
     assert!(
         module.contains("@ntsQuery 30D5A829-7FA4-4026-83BB-D75BAE4EA99E\n     */\n    as_IClosable(this: IMemoryBufferReference): IClosable;"),
         "{module}"
@@ -269,10 +375,18 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         module.contains("export type AsyncActionCompletedHandler = Delegate<(asyncInfo: IAsyncAction, asyncStatus: CEnum<AsyncStatus, c_int32>) => void, \"A4ED5C81-76C9-40BD-8BE6-B1D90FB20AE7\">;"),
         "{module}"
     );
-    assert!(refused.contains("AsyncOperationCompletedHandler`1\ta generic delegate"), "{refused}");
+    assert!(
+        refused.contains("AsyncOperationCompletedHandler`1\ta generic delegate"),
+        "{refused}"
+    );
     // An array of objects the callee allocated is an array of the
     // program's, each element perhaps `null`.
-    assert!(module.contains("GetInspectableArray(this: IPropertyValue): { value: (IInspectable | null)[] };"), "{module}");
+    assert!(
+        module.contains(
+            "GetInspectableArray(this: IPropertyValue): { value: (IInspectable | null)[] };"
+        ),
+        "{module}"
+    );
     // A sealed class's constructors are its activation factory's methods,
     // overloads the checker chooses between: `new Uri(text)`, `new
     // Uri(base, relative)`.
@@ -283,13 +397,19 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         "{module}"
     );
     // Strings both ways: `HSTRING`s lent for the call, and copied back out.
-    assert!(module.contains("GetStringArray(this: IPropertyValue): { value: string[] };"), "{module}");
+    assert!(
+        module.contains("GetStringArray(this: IPropertyValue): { value: string[] };"),
+        "{module}"
+    );
     assert!(
         module.contains("CreateStringArray(this: IPropertyValueStatics, value: Counted<HStrings, CNumber<\"uint32\">, \"before\">): Inspectable;"),
         "{module}"
     );
     // Structs both ways, as plain objects copied in and out.
-    assert!(module.contains("GetPointArray(this: IPropertyValue): { value: Copied<Point>[] };"), "{module}");
+    assert!(
+        module.contains("GetPointArray(this: IPropertyValue): { value: Copied<Point>[] };"),
+        "{module}"
+    );
     assert!(
         module.contains("CreatePointArray(this: IPropertyValueStatics, value: Counted<CopiedArray<Point>, CNumber<\"uint32\">, \"before\">): Inspectable;"),
         "{module}"
@@ -318,38 +438,64 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
 #[test]
 fn winrt_structs_cross_by_value() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-structs-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.Graphics.Imaging", "Windows.Globalization", "Windows.Foundation", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.Graphics.Imaging",
+            "Windows.Globalization",
+            "Windows.Foundation",
+            "--out",
+        ])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let imaging = std::fs::read_to_string(out.join("Windows.Graphics.Imaging.d.ts")).unwrap();
     let foundation = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
     let globalization = std::fs::read_to_string(out.join("Windows.Globalization.d.ts")).unwrap();
-    let refused = std::fs::read_to_string(out.join("Windows.Graphics.Imaging.refused.txt")).unwrap();
+    let refused =
+        std::fs::read_to_string(out.join("Windows.Graphics.Imaging.refused.txt")).unwrap();
     assert!(
         imaging.contains("export type BitmapBounds = Struct<{ x: c_uint32; y: c_uint32; width: c_uint32; height: c_uint32 }, \"Windows_Graphics_Imaging_BitmapBounds\">;"),
         "{imaging}"
     );
     assert!(imaging.contains("put_Bounds(this: IBitmapTransform, value: ByValue<BitmapBounds> | Fields<BitmapBounds>): void;"), "{imaging}");
-    assert!(imaging.contains("get_Bounds(this: IBitmapTransform): ByValue<BitmapBounds>;"), "{imaging}");
+    assert!(
+        imaging.contains("get_Bounds(this: IBitmapTransform): ByValue<BitmapBounds>;"),
+        "{imaging}"
+    );
     assert!(foundation.contains("export type DateTime = Struct<{ universalTime: c_int64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
     // `System.Guid`, which no `.winmd` defines, is `winrt:types`' struct; a
     // `ref const` struct is a `ConstPtr` to the caller's storage, lent.
-    assert!(foundation.contains("function CreateNewGuid(): ByValue<Guid>;"), "{foundation}");
     assert!(
-        foundation.contains("@ntsVtable 8 Equals\n     * @ntsNoEscape target\n     * @ntsNoEscape value\n")
-            && foundation.contains("function Equals(target: ConstPtr<Guid>, value: ConstPtr<Guid>): boolean;"),
+        foundation.contains("function CreateNewGuid(): ByValue<Guid>;"),
         "{foundation}"
     );
-    assert!(globalization.contains("SetDateTime(this: ICalendar, value: ByValue<DateTime> | Fields<DateTime>): void;"), "{globalization}");
+    assert!(
+        foundation.contains(
+            "@ntsVtable 8 Equals\n     * @ntsNoEscape target\n     * @ntsNoEscape value\n"
+        ) && foundation
+            .contains("function Equals(target: ConstPtr<Guid>, value: ConstPtr<Guid>): boolean;"),
+        "{foundation}"
+    );
+    assert!(
+        globalization.contains(
+            "SetDateTime(this: ICalendar, value: ByValue<DateTime> | Fields<DateTime>): void;"
+        ),
+        "{globalization}"
+    );
     // A class's static property: a variable of its namespace, `let` where it
     // is written as it is read, `const` where it is only read.
     assert!(
@@ -366,7 +512,10 @@ fn winrt_structs_cross_by_value() {
         imaging.contains("export interface BitmapPropertySet extends IMap<HString, BitmapTypedValue>, BitmapPropertySetInterfaces, BitmapPropertySetMembers {}"),
         "{imaging}"
     );
-    assert!(imaging.contains("): IAsyncOperationOfBitmapPropertySet;"), "{imaging}");
+    assert!(
+        imaging.contains("): IAsyncOperationOfBitmapPropertySet;"),
+        "{imaging}"
+    );
     assert!(!refused.contains("BitmapPropertySet"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
@@ -377,27 +526,42 @@ fn winrt_structs_cross_by_value() {
 #[test]
 fn a_struct_holding_a_string_is_copied() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-copied-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.UI.Xaml.Controls", "Windows.UI.Xaml.Interop", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.UI.Xaml.Controls",
+            "Windows.UI.Xaml.Interop",
+            "--out",
+        ])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let interop = std::fs::read_to_string(out.join("Windows.UI.Xaml.Interop.d.ts")).unwrap();
     let controls = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.d.ts")).unwrap();
-    let refused = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
+    let refused =
+        std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
     assert!(
         interop.contains("export type TypeName = Struct<{ name: HString; kind: CEnum<TypeKind, c_int32> }, \"Windows_UI_Xaml_Interop_TypeName\">;"),
         "{interop}"
     );
     assert!(controls.contains("Navigate(this: IFrame, sourcePageType: Copied<TypeName>, parameter: Inspectable | null): boolean;"), "{controls}");
-    assert!(controls.contains("sourcePageType: Copied<TypeName>;"), "{controls}");
+    assert!(
+        controls.contains("sourcePageType: Copied<TypeName>;"),
+        "{controls}"
+    );
     assert!(!refused.contains("TypeName"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
 }
@@ -408,7 +572,9 @@ fn a_struct_holding_a_string_is_copied() {
 #[test]
 fn a_boolean_struct_field_is_a_one_byte_boolean() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-bool-{}", std::process::id()));
@@ -419,7 +585,11 @@ fn a_boolean_struct_field_is_a_one_byte_boolean() {
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let module = std::fs::read_to_string(out.join("Windows.UI.Core.d.ts")).unwrap();
     assert!(
         module.contains("export type CorePhysicalKeyStatus = Struct<{ repeatCount: c_uint32; scanCode: c_uint32; isExtendedKey: CBool<c_uint8>; isMenuKeyDown: CBool<c_uint8>; wasKeyDown: CBool<c_uint8>; isKeyReleased: CBool<c_uint8> }, \"Windows_UI_Core_CorePhysicalKeyStatus\">;"),
@@ -435,7 +605,9 @@ fn a_boolean_struct_field_is_a_one_byte_boolean() {
 #[test]
 fn a_struct_holding_objects_is_declared_so_http_binds() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-http-{}", std::process::id()));
@@ -446,10 +618,17 @@ fn a_struct_holding_objects_is_declared_so_http_binds() {
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let module = std::fs::read_to_string(out.join("Windows.Web.Http.d.ts")).unwrap();
     let refused = std::fs::read_to_string(out.join("Windows.Web.Http.refused.txt")).unwrap();
-    assert!(module.contains("totalBytesToSend: IReference<c_uint64> | null;"), "{module}");
+    assert!(
+        module.contains("totalBytesToSend: IReference<c_uint64> | null;"),
+        "{module}"
+    );
     assert!(module.contains("getStringAsync(uri: IUriRuntimeClass | null): IAsyncOperationWithProgressOfStringHttpProgress;"), "{module}");
     assert!(!refused.contains("HttpProgress"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
@@ -466,21 +645,33 @@ fn a_struct_holding_objects_is_declared_so_http_binds() {
 #[test]
 fn winrt_byte_arrays_are_lent_in_place() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-bytes-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.Storage.Streams", "Windows.Security.Cryptography", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.Storage.Streams",
+            "Windows.Security.Cryptography",
+            "--out",
+        ])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let streams = std::fs::read_to_string(out.join("Windows.Storage.Streams.d.ts")).unwrap();
     let crypto = std::fs::read_to_string(out.join("Windows.Security.Cryptography.d.ts")).unwrap();
-    let refused = std::fs::read_to_string(out.join("Windows.Security.Cryptography.refused.txt")).unwrap();
+    let refused =
+        std::fs::read_to_string(out.join("Windows.Security.Cryptography.refused.txt")).unwrap();
     assert!(
         streams.contains("@ntsNoEscape value\n     * @ntsHresult\n     */\n    WriteBytes(this: IDataWriter, value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): void;"),
         "{streams}"
@@ -492,7 +683,10 @@ fn winrt_byte_arrays_are_lent_in_place() {
     assert!(crypto.contains("function CreateFromByteArray(value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): IBuffer;"), "{crypto}");
     // `CopyToByteArray`'s array is the callee's, which this refused until it
     // was bound as a `Uint8Array`: `a_received_array_is_a_typed_array`.
-    assert!(!refused.contains("CryptographicBuffer.CopyToByteArray"), "{refused}");
+    assert!(
+        !refused.contains("CryptographicBuffer.CopyToByteArray"),
+        "{refused}"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -505,10 +699,13 @@ fn winrt_byte_arrays_are_lent_in_place() {
 #[test]
 fn an_instantiation_declares_the_members_its_arguments_decide() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-specialized-{}", std::process::id()));
+    let out =
+        std::env::temp_dir().join(format!("nts-bind-winrt-specialized-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.Storage", "--out"])
@@ -516,7 +713,11 @@ fn an_instantiation_declares_the_members_its_arguments_decide() {
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let storage = std::fs::read_to_string(out.join("Windows.Storage.d.ts")).unwrap();
     assert!(storage.contains("GetFolderFromPathAsync(this: IStorageFolderStatics, path: HString): IAsyncOperationOfStorageFolder;"), "{storage}");
     assert!(
@@ -540,20 +741,34 @@ fn an_instantiation_declares_the_members_its_arguments_decide() {
 #[test]
 fn an_async_operation_is_awaitable_as_itself() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-then-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.Storage", "Windows.Foundation", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.Storage",
+            "Windows.Foundation",
+            "--out",
+        ])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let storage = std::fs::read_to_string(out.join("Windows.Storage.d.ts")).unwrap();
-    assert!(storage.contains("@ntsCall nts_then_IAsyncOperationOfStorageFolder"), "{storage}");
+    assert!(
+        storage.contains("@ntsCall nts_then_IAsyncOperationOfStorageFolder"),
+        "{storage}"
+    );
     assert!(
         storage.contains(
             "then(this: IAsyncOperationOfStorageFolder, onFulfilled: (value: StorageFolder) => unknown, onRejected: (reason: unknown) => unknown): void;"
@@ -561,7 +776,10 @@ fn an_async_operation_is_awaitable_as_itself() {
         "{storage}"
     );
     let values = std::fs::read_to_string(out.join("Windows.Storage.values.ts")).unwrap();
-    assert!(values.contains("export function nts_then_IAsyncOperationOfStorageFolder("), "{values}");
+    assert!(
+        values.contains("export function nts_then_IAsyncOperationOfStorageFolder("),
+        "{values}"
+    );
     for arm in [
         "if (status === AsyncStatus.Completed) {",
         "onFulfilled(completed.GetResults());",
@@ -571,9 +789,15 @@ fn an_async_operation_is_awaitable_as_itself() {
     ] {
         assert!(values.contains(arm), "{arm}\n{values}");
     }
-    assert!(values.contains("import { AsyncStatus } from \"winrt:Windows.Foundation\";"), "{values}");
+    assert!(
+        values.contains("import { AsyncStatus } from \"winrt:Windows.Foundation\";"),
+        "{values}"
+    );
     let foundation = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
-    assert!(foundation.contains("as_IAsyncInfo(this: IAsyncOperation<TResult>): IAsyncInfo;"), "{foundation}");
+    assert!(
+        foundation.contains("as_IAsyncInfo(this: IAsyncOperation<TResult>): IAsyncInfo;"),
+        "{foundation}"
+    );
     // An action completes with nothing: its callback takes `void`, which is
     // what `await` on one is, and its function fulfils with `undefined`.
     assert!(
@@ -582,9 +806,16 @@ fn an_async_operation_is_awaitable_as_itself() {
         ),
         "{foundation}"
     );
-    let foundation_values = std::fs::read_to_string(out.join("Windows.Foundation.values.ts")).unwrap();
-    assert!(foundation_values.contains("export function nts_then_IAsyncAction("), "{foundation_values}");
-    assert!(foundation_values.contains("onFulfilled(undefined);"), "{foundation_values}");
+    let foundation_values =
+        std::fs::read_to_string(out.join("Windows.Foundation.values.ts")).unwrap();
+    assert!(
+        foundation_values.contains("export function nts_then_IAsyncAction("),
+        "{foundation_values}"
+    );
+    assert!(
+        foundation_values.contains("onFulfilled(undefined);"),
+        "{foundation_values}"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -595,10 +826,13 @@ fn an_async_operation_is_awaitable_as_itself() {
 #[test]
 fn a_struct_result_is_fulfilled_as_a_plain_object() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-struct-then-{}", std::process::id()));
+    let out =
+        std::env::temp_dir().join(format!("nts-bind-winrt-struct-then-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.UI.Xaml.Data", "--out"])
@@ -606,7 +840,11 @@ fn a_struct_result_is_fulfilled_as_a_plain_object() {
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let data = std::fs::read_to_string(out.join("Windows.UI.Xaml.Data.d.ts")).unwrap();
     assert!(
         data.contains(
@@ -616,10 +854,15 @@ fn a_struct_result_is_fulfilled_as_a_plain_object() {
     );
     let values = std::fs::read_to_string(out.join("Windows.UI.Xaml.Data.values.ts")).unwrap();
     assert!(
-        values.contains("const result = completed.GetResults();\n        onFulfilled({ count: result.count });"),
+        values.contains(
+            "const result = completed.GetResults();\n        onFulfilled({ count: result.count });"
+        ),
         "{values}"
     );
-    assert!(values.contains("import type { Copied } from \"winrt:types\";"), "{values}");
+    assert!(
+        values.contains("import type { Copied } from \"winrt:types\";"),
+        "{values}"
+    );
     let refused = std::fs::read_to_string(out.join("Windows.UI.Xaml.Data.refused.txt")).unwrap();
     assert!(!refused.contains(".then"), "{refused}");
     let _ = std::fs::remove_dir_all(&out);
@@ -631,25 +874,40 @@ fn a_struct_result_is_fulfilled_as_a_plain_object() {
 #[test]
 fn an_enum_array_is_its_integer_typed_array() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-enum-array-{}", std::process::id()));
+    let out =
+        std::env::temp_dir().join(format!("nts-bind-winrt-enum-array-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.UI.ViewManagement", "Windows.Media.Devices", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.UI.ViewManagement",
+            "Windows.Media.Devices",
+            "--out",
+        ])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let view = std::fs::read_to_string(out.join("Windows.UI.ViewManagement.d.ts")).unwrap();
     assert!(
         view.contains("getPreferredInteractionMode(supportedModes: Counted<CElements<Int32Array, \"const int32_t\">, CNumber<\"uint32\">, \"before\">): CEnum<UserInteractionMode, c_int32>;"),
         "{view}"
     );
     let devices = std::fs::read_to_string(out.join("Windows.Media.Devices.d.ts")).unwrap();
-    assert!(devices.contains("get_SupportedModes(this: IDigitalWindowControl): Int32Array;"), "{devices}");
+    assert!(
+        devices.contains("get_SupportedModes(this: IDigitalWindowControl): Int32Array;"),
+        "{devices}"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -661,18 +919,30 @@ fn an_enum_array_is_its_integer_typed_array() {
 #[test]
 fn an_array_the_callee_fills_is_the_programs() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-filled-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.Data.Json", "Windows.Media.Devices.Core", "Windows.Globalization", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.Data.Json",
+            "Windows.Media.Devices.Core",
+            "Windows.Globalization",
+            "--out",
+        ])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let json = std::fs::read_to_string(out.join("Windows.Data.Json.d.ts")).unwrap();
     assert!(
         json.contains("GetMany(this: IVectorOfIJsonValue, startIndex: CNumber<\"uint32\">, items: Counted<FilledHandles<IJsonValue>, CNumber<\"uint32\">, \"before\">): CNumber<\"uint32\">;"),
@@ -692,15 +962,28 @@ fn an_array_the_callee_fills_is_the_programs() {
     // Booleans, whose `boolean[]` elements are the Windows Runtime's bytes:
     // lent in place, to read or to fill.
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.Gaming.Input", "Windows.Foundation.Diagnostics", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.Gaming.Input",
+            "Windows.Foundation.Diagnostics",
+            "--out",
+        ])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let gaming = std::fs::read_to_string(out.join("Windows.Gaming.Input.d.ts")).unwrap();
-    assert!(gaming.contains("buttonArray: Counted<FilledBooleans, CNumber<\"uint32\">, \"before\">"), "{gaming}");
-    let diagnostics = std::fs::read_to_string(out.join("Windows.Foundation.Diagnostics.d.ts")).unwrap();
+    assert!(
+        gaming.contains("buttonArray: Counted<FilledBooleans, CNumber<\"uint32\">, \"before\">"),
+        "{gaming}"
+    );
+    let diagnostics =
+        std::fs::read_to_string(out.join("Windows.Foundation.Diagnostics.d.ts")).unwrap();
     assert!(diagnostics.contains("addBooleanArray(name: HString, value: Counted<Booleans, CNumber<\"uint32\">, \"before\">): void;"), "{diagnostics}");
     let _ = std::fs::remove_dir_all(&out);
 }
@@ -712,22 +995,39 @@ fn an_array_the_callee_fills_is_the_programs() {
 #[test]
 fn a_received_array_is_a_typed_array() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winrt-received-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["bind-winmd", "Windows.Security.Cryptography", "Windows.Foundation", "--out"])
+        .args([
+            "bind-winmd",
+            "Windows.Security.Cryptography",
+            "Windows.Foundation",
+            "--out",
+        ])
         .arg(&out)
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let crypto = std::fs::read_to_string(out.join("Windows.Security.Cryptography.d.ts")).unwrap();
-    assert!(crypto.contains("function CopyToByteArray(buffer: IBuffer | null): { value: Uint8Array };"), "{crypto}");
+    assert!(
+        crypto.contains("function CopyToByteArray(buffer: IBuffer | null): { value: Uint8Array };"),
+        "{crypto}"
+    );
     let foundation = std::fs::read_to_string(out.join("Windows.Foundation.d.ts")).unwrap();
-    assert!(foundation.contains("GetInt32Array(this: IPropertyValue): { value: Int32Array };"), "{foundation}");
+    assert!(
+        foundation.contains("GetInt32Array(this: IPropertyValue): { value: Int32Array };"),
+        "{foundation}"
+    );
     // The way in: a numeric array other than bytes is a typed array whose
     // elements are borrowed in place, spelled as C spells its element.
     assert!(
@@ -739,9 +1039,20 @@ fn a_received_array_is_a_typed_array() {
     let refused = std::fs::read_to_string(out.join("Windows.Foundation.refused.txt")).unwrap();
     // Booleans are copied into a `boolean[]`; characters, UTF-16 code units
     // as a single one crosses, into a `Uint16Array`. A `Guid` is refused.
-    assert!(foundation.contains("GetBooleanArray(this: IPropertyValue): { value: boolean[] };"), "{foundation}");
-    assert!(foundation.contains("GetChar16Array(this: IPropertyValue): { value: Uint16Array };"), "{foundation}");
-    assert!(refused.contains("IPropertyValue.GetGuidArray\tan array of `System.Guid`, which no typed array holds"), "{refused}");
+    assert!(
+        foundation.contains("GetBooleanArray(this: IPropertyValue): { value: boolean[] };"),
+        "{foundation}"
+    );
+    assert!(
+        foundation.contains("GetChar16Array(this: IPropertyValue): { value: Uint16Array };"),
+        "{foundation}"
+    );
+    assert!(
+        refused.contains(
+            "IPropertyValue.GetGuidArray\tan array of `System.Guid`, which no typed array holds"
+        ),
+        "{refused}"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -769,7 +1080,9 @@ fn overloads_are_declared(module: &str) {
     // And across a class and its base: `MenuFlyout`'s own `showAt(target,
     // point)` beside `FlyoutBase`'s two, declared again on `MenuFlyout`,
     // since `extends` needs a base's signatures among the class's.
-    let menu = &module[module.find("export interface MenuFlyoutMembers").expect("no MenuFlyoutMembers")..];
+    let menu = &module[module
+        .find("export interface MenuFlyoutMembers")
+        .expect("no MenuFlyoutMembers")..];
     let menu = &menu[..menu.find("\n  }").unwrap()];
     for overload in [
         "showAt(targetElement: IUIElement | null, point: ByValue<Point> | Fields<Point>): void;",
@@ -780,12 +1093,16 @@ fn overloads_are_declared(module: &str) {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn composable_classes_are_constructed_as_themselves() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
-    let out = std::env::temp_dir().join(format!("nts-bind-winrt-composable-{}", std::process::id()));
+    let out =
+        std::env::temp_dir().join(format!("nts-bind-winrt-composable-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Windows.UI.Xaml.Controls", "--out"])
@@ -793,7 +1110,11 @@ fn composable_classes_are_constructed_as_themselves() {
         .env("NTS_WINRT_METADATA", &metadata)
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let module = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.d.ts")).unwrap();
     overloads_are_declared(&module);
     // An `IReference<T>` -- C#'s `T?` -- is read as `T | null`, a struct as
@@ -805,11 +1126,18 @@ fn composable_classes_are_constructed_as_themselves() {
         ),
         "no reference tag on date"
     );
-    assert!(module.contains("    date: Copied<DateTime> | null;"), "no nullable date");
-    let button = &module[module.find("export namespace Button {").expect("no Button namespace")..];
+    assert!(
+        module.contains("    date: Copied<DateTime> | null;"),
+        "no nullable date"
+    );
+    let button = &module[module
+        .find("export namespace Button {")
+        .expect("no Button namespace")..];
     let button = &button[..button.find("\n  }").unwrap()];
     assert!(
-        button.contains("@ntsHresult composable\n     * @ntsFactory Windows.UI.Xaml.Controls.Button ") && button.contains("function CreateInstance(): Button;"),
+        button.contains(
+            "@ntsHresult composable\n     * @ntsFactory Windows.UI.Xaml.Controls.Button "
+        ) && button.contains("function CreateInstance(): Button;"),
         "{button}"
     );
     // The factory interface's own method is that constructor, not a method
@@ -825,28 +1153,51 @@ fn composable_classes_are_constructed_as_themselves() {
         module.lines().filter(|line| line.contains("UIElementCollection")).collect::<Vec<_>>().join("\n")
     );
     class_arguments_are_classes(&module);
-    let refused = std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
+    let refused =
+        std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
     assert!(
         refused.contains("IButtonFactory.CreateInstance\ta composable factory method, called as its class's constructor"),
         "{refused}"
     );
     // A class answers every interface of the classes it derives from, and a
     // parameter taking a class takes its default interface.
-    let queries = &module[module.find("export interface ButtonInterfaces {").expect("no ButtonInterfaces")..];
+    let queries = &module[module
+        .find("export interface ButtonInterfaces {")
+        .expect("no ButtonInterfaces")..];
     let queries = &queries[..queries.find("\n  }").unwrap()];
-    for base in ["as_IButtonBase(this: Button)", "as_IContentControl(this: Button)", "as_IUIElement(this: Button)"] {
+    for base in [
+        "as_IButtonBase(this: Button)",
+        "as_IContentControl(this: Button)",
+        "as_IUIElement(this: Button)",
+    ] {
         assert!(queries.contains(base), "no {base}:\n{queries}");
     }
-    assert!(!queries.contains("Overrides"), "an overridable interface is queried:\n{queries}");
+    assert!(
+        !queries.contains("Overrides"),
+        "an overridable interface is queried:\n{queries}"
+    );
     // `Control`'s factory is protected: a control is only ever a subclass.
-    let control = &module[module.find("export namespace Control {").expect("no Control namespace")..];
-    assert!(!control.split("\n  }").next().unwrap_or("").contains("CreateInstance"), "a protected factory was bound");
+    let control = &module[module
+        .find("export namespace Control {")
+        .expect("no Control namespace")..];
+    assert!(
+        !control
+            .split("\n  }")
+            .next()
+            .unwrap_or("")
+            .contains("CreateInstance"),
+        "a protected factory was bound"
+    );
     // A composable class is also a class to extend, as C# extends it: its
     // factory and `CreateInstance`'s slot, a constructor as visible as the
     // factory, and an overridable method per slot of each overridable
     // interface -- its own, and those of the classes it derives from.
     let class = |name: &str| {
-        let at = module.find(&format!("   * @ntsComposable Windows.UI.Xaml.Controls.{name} ")).unwrap_or_else(|| panic!("no @ntsComposable {name}"));
+        let at = module
+            .find(&format!(
+                "   * @ntsComposable Windows.UI.Xaml.Controls.{name} "
+            ))
+            .unwrap_or_else(|| panic!("no @ntsComposable {name}"));
         let form = &module[at..];
         form[..form.find("\n  }").unwrap()].to_owned()
     };
@@ -862,15 +1213,34 @@ fn composable_classes_are_constructed_as_themselves() {
         "{button}"
     );
     let control = class("Control");
-    assert!(control.contains("     */\n    protected constructor();"), "{control}");
-    assert!(control.contains("@ntsOverride A09691DF-9824-41FE-B530-B0D8990E64C1 6 OnPointerEntered"), "{control}");
-    assert!(module.contains("export interface Button extends IButton, ButtonInterfaces, ButtonMembers {}"), "the class form does not carry its instances' methods");
+    assert!(
+        control.contains("     */\n    protected constructor();"),
+        "{control}"
+    );
+    assert!(
+        control.contains("@ntsOverride A09691DF-9824-41FE-B530-B0D8990E64C1 6 OnPointerEntered"),
+        "{control}"
+    );
+    assert!(
+        module.contains(
+            "export interface Button extends IButton, ButtonInterfaces, ButtonMembers {}"
+        ),
+        "the class form does not carry its instances' methods"
+    );
     // A record a call takes by value may be written as its fields; an
     // override's stays the record, since its adapter reads the ABI type from
     // the declaration.
     let xaml = std::fs::read_to_string(out.join("Windows.UI.Xaml.d.ts")).unwrap();
-    assert!(xaml.contains("    Measure(this: IUIElement, availableSize: ByValue<Size> | Fields<Size>): void;"), "Measure does not take its fields");
-    assert!(module.contains("    measureOverride(availableSize: ByValue<Size>): ByValue<Size>;"), "an override's record is spelled with its fields");
+    assert!(
+        xaml.contains(
+            "    Measure(this: IUIElement, availableSize: ByValue<Size> | Fields<Size>): void;"
+        ),
+        "Measure does not take its fields"
+    );
+    assert!(
+        module.contains("    measureOverride(availableSize: ByValue<Size>): ByValue<Size>;"),
+        "an override's record is spelled with its fields"
+    );
     // A property of any object takes and answers a string, number or
     // boolean too (`Inspectable`): boxed for the setter, unboxed from the
     // getter.
@@ -880,22 +1250,39 @@ fn composable_classes_are_constructed_as_themselves() {
     // each member called through its interface, and the default interface's
     // naming its class, whose own handle needs no asking.
     let surface = |name: &str| {
-        let at = module.find(&format!("  export interface {name}Members")).unwrap_or_else(|| panic!("no {name}Members"));
+        let at = module
+            .find(&format!("  export interface {name}Members"))
+            .unwrap_or_else(|| panic!("no {name}Members"));
         let form = &module[at..];
         form[..form.find("\n  }").unwrap()].to_owned()
     };
     let content_control = surface("ContentControl");
-    assert!(content_control.starts_with("  export interface ContentControlMembers extends ControlMembers {"), "{content_control}");
+    assert!(
+        content_control
+            .starts_with("  export interface ContentControlMembers extends ControlMembers {"),
+        "{content_control}"
+    );
     assert!(
         content_control.contains("     * @ntsGet 6 get_Content\n     * @ntsVia A26DD1DC-CD44-435C-BE94-01D6241C231C Windows_UI_Xaml_Controls_IContentControl\n     */\n    get content(): Inspectable;")
             && content_control.contains("     * @ntsSet 7 put_Content\n     * @ntsVia A26DD1DC-CD44-435C-BE94-01D6241C231C Windows_UI_Xaml_Controls_IContentControl\n     */\n    set content(value: Inspectable | null);"),
         "{content_control}"
     );
     let button_surface = surface("Button");
-    assert!(button_surface.starts_with("  export interface ButtonMembers extends ButtonBaseMembers {"), "{button_surface}");
+    assert!(
+        button_surface.starts_with("  export interface ButtonMembers extends ButtonBaseMembers {"),
+        "{button_surface}"
+    );
     assert!(button_surface.contains("     * @ntsVia 09108F87-DF6C-4180-9B3A-E60845825811\n     */\n    get flyout(): FlyoutBase;"), "{button_surface}");
-    assert!(!button_surface.contains("content"), "a base's member is repeated on the class:\n{button_surface}");
-    assert!(module.contains("export interface Button extends IButton, ButtonInterfaces, ButtonMembers {}"), "the class does not carry its surface");
+    assert!(
+        !button_surface.contains("content"),
+        "a base's member is repeated on the class:\n{button_surface}"
+    );
+    assert!(
+        module.contains(
+            "export interface Button extends IButton, ButtonInterfaces, ButtonMembers {}"
+        ),
+        "the class does not carry its surface"
+    );
     // A default interface is its class's base's in the chain, so a button
     // goes where a content control is taken, and carries the base classes'
     // methods as one flat list, not their types.
@@ -907,7 +1294,10 @@ fn composable_classes_are_constructed_as_themselves() {
     // listener naming its interface and `add_`/`remove_` slots; the map
     // inherited along the class chain, and `addEventListener` declared where
     // a class raises events of its own.
-    assert!(module.contains("export interface ButtonEventMap extends ButtonBaseEventMap {"), "the event map is not inherited");
+    assert!(
+        module.contains("export interface ButtonEventMap extends ButtonBaseEventMap {"),
+        "the event map is not inherited"
+    );
     assert!(
         module.contains("    isenabledchanged: Event<(sender: IInspectable, e: DependencyPropertyChangedEventArgs) => void, \"09223E5A-75BE-4499-8180-1DDC005421C0\", \"A8912263-2951-4F58-A9C5-5A134EAA7F07 43 44\">;"),
         "IsEnabledChanged is not an event of IControl's slots 43 and 44"
@@ -928,7 +1318,9 @@ fn composable_classes_are_constructed_as_themselves() {
 #[test]
 fn a_name_two_namespaces_declare_is_imported_under_its_path() {
     let Some(metadata) = winrt_metadata() else {
-        eprintln!("skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)");
+        eprintln!(
+            "skipping: needs the Windows Runtime metadata (tooling/windows/fetch-winrt-metadata.sh)"
+        );
         return;
     };
     // The release `winrt.rs` pins, read as `fetch-winappsdk.sh` reads it, so a
@@ -938,7 +1330,9 @@ fn a_name_two_namespaces_declare_is_imported_under_its_path() {
         .find_map(|line| line.split("WINAPPSDK_VERSION: &str = \"").nth(1))
         .and_then(|rest| rest.split('"').next())
         .expect("WINAPPSDK_VERSION");
-    let sdk = metadata.parent().map(|root| root.join(format!("winappsdk-{pinned}")));
+    let sdk = metadata
+        .parent()
+        .map(|root| root.join(format!("winappsdk-{pinned}")));
     let Some(sdk) = sdk.filter(|sdk| sdk.join("Microsoft.UI.Xaml.winmd").is_file()) else {
         eprintln!("skipping: needs the Windows App SDK (tooling/windows/fetch-winappsdk.sh)");
         return;
@@ -948,12 +1342,22 @@ fn a_name_two_namespaces_declare_is_imported_under_its_path() {
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["bind-winmd", "Microsoft.UI.Xaml", "--out"])
         .arg(&out)
-        .env("NTS_WINRT_METADATA", std::env::join_paths([&metadata, &sdk]).unwrap())
+        .env(
+            "NTS_WINRT_METADATA",
+            std::env::join_paths([&metadata, &sdk]).unwrap(),
+        )
         .output()
         .unwrap();
-    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let module = std::fs::read_to_string(out.join("Microsoft.UI.Xaml.d.ts")).unwrap();
-    assert!(module.contains("export class LaunchActivatedEventArgs {"), "the local one is not declared");
+    assert!(
+        module.contains("export class LaunchActivatedEventArgs {"),
+        "the local one is not declared"
+    );
     assert!(
         module.contains("LaunchActivatedEventArgs as Windows_ApplicationModel_Activation_LaunchActivatedEventArgs"),
         "the other is not imported under its path"
@@ -978,6 +1382,17 @@ fn the_runtime_bootstraps_the_release_bound() {
         .lines()
         .find_map(|line| line.strip_prefix("#define NTS_WINAPPSDK_MAJOR_MINOR "))
         .expect("NTS_WINAPPSDK_MAJOR_MINOR");
-    let value = u32::from_str_radix(defined.trim().trim_start_matches("0x").trim_end_matches('u'), 16).unwrap();
-    assert_eq!(value, (major << 16) | minor, "the runtime bootstraps {value:#010x}, the bindings are {pinned}");
+    let value = u32::from_str_radix(
+        defined
+            .trim()
+            .trim_start_matches("0x")
+            .trim_end_matches('u'),
+        16,
+    )
+    .unwrap();
+    assert_eq!(
+        value,
+        (major << 16) | minor,
+        "the runtime bootstraps {value:#010x}, the bindings are {pinned}"
+    );
 }

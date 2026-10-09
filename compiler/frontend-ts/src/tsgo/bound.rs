@@ -23,7 +23,12 @@ pub(crate) fn bound_types(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, Type
         if node.kind != NodeKind::Syntax(syntax::INTERFACE_DECLARATION) {
             continue;
         }
-        let Some(binding) = node.native.as_ref().and_then(|native| native.bound_by.as_deref()).and_then(parse) else {
+        let Some(binding) = node
+            .native
+            .as_ref()
+            .and_then(|native| native.bound_by.as_deref())
+            .and_then(parse)
+        else {
             continue;
         };
         let Ok(at) = u32::try_from(at) else { continue };
@@ -49,8 +54,13 @@ pub(crate) fn bound_types(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, Type
 /// the handle's, and refused where it is read.
 fn intersections(snapshot: &SemanticSnapshot, bound: &mut FxHashMap<TypeId, TypeId>) {
     for (at, record) in snapshot.types.iter().enumerate() {
-        let (TypeKind::Intersection(parts), Ok(at)) = (&record.kind, u32::try_from(at)) else { continue };
-        let targets: Vec<TypeId> = parts.iter().filter_map(|part| bound.get(part).copied()).collect();
+        let (TypeKind::Intersection(parts), Ok(at)) = (&record.kind, u32::try_from(at)) else {
+            continue;
+        };
+        let targets: Vec<TypeId> = parts
+            .iter()
+            .filter_map(|part| bound.get(part).copied())
+            .collect();
         if let [target] = targets[..] {
             bound.entry(TypeId(at)).or_insert(target);
         }
@@ -69,7 +79,9 @@ fn instantiations(snapshot: &SemanticSnapshot, bound: &mut FxHashMap<TypeId, Typ
         .filter_map(|(used, target)| Some((snapshot.types.get(used.0 as usize)?.symbol?, *target)))
         .collect();
     for (at, record) in snapshot.types.iter().enumerate() {
-        let (Some(symbol), Ok(at)) = (record.symbol, u32::try_from(at)) else { continue };
+        let (Some(symbol), Ok(at)) = (record.symbol, u32::try_from(at)) else {
+            continue;
+        };
         if let Some(target) = by_symbol.get(&symbol)
             && TypeId(at) != *target
         {

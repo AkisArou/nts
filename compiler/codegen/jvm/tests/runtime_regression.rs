@@ -49,10 +49,16 @@ fn repository() -> PathBuf {
 fn runtime_jar() -> PathBuf {
     static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
+            || repository().join("runtime/jvm/nts-runtime.jar"),
+            PathBuf::from,
+        );
         let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+        if std::fs::copy(&source, &mine).is_ok() {
+            mine
+        } else {
+            source
+        }
     })
     .clone()
 }
@@ -64,7 +70,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -87,7 +97,12 @@ fn the_runtime_passes_its_own_tests() {
     std::fs::create_dir_all(&dir).unwrap();
 
     let mut compile = Command::new(&javac);
-    compile.arg("-nowarn").arg("-cp").arg(&jar).arg("-d").arg(&dir);
+    compile
+        .arg("-nowarn")
+        .arg("-cp")
+        .arg(&jar)
+        .arg("-d")
+        .arg(&dir);
     for entry in std::fs::read_dir(&sources).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().is_some_and(|it| it == "java") {
@@ -95,7 +110,11 @@ fn the_runtime_passes_its_own_tests() {
         }
     }
     let built = compile.output().unwrap();
-    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+    assert!(
+        built.status.success(),
+        "javac: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
 
     let ran = Command::new(&java)
         // Assertions on: the suite says it runs either way, and a `-ea` run is
@@ -108,7 +127,13 @@ fn the_runtime_passes_its_own_tests() {
         .unwrap();
     let out = String::from_utf8_lossy(&ran.stdout);
     let err = String::from_utf8_lossy(&ran.stderr);
-    assert!(ran.status.success(), "the runtime's own tests failed:\n{out}\n{err}");
-    assert!(out.contains("PASS "), "no PASS line; the suite did not reach its end:\n{out}");
+    assert!(
+        ran.status.success(),
+        "the runtime's own tests failed:\n{out}\n{err}"
+    );
+    assert!(
+        out.contains("PASS "),
+        "no PASS line; the suite did not reach its end:\n{out}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

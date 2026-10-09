@@ -124,13 +124,18 @@ fn a_direct_call_names_the_function_it_reaches() {
 fn tagged_templates_resolve_through_the_same_call_target_table() {
     use nts_semantic_schema::{NodeKind::Syntax, syntax};
 
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/a-tagged-template/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
-    let sites: Vec<_> = snapshot.nodes.iter().enumerate()
+    let sites: Vec<_> = snapshot
+        .nodes
+        .iter()
+        .enumerate()
         .filter(|(_, node)| node.kind == Syntax(syntax::TAGGED_TEMPLATE_EXPRESSION))
         .map(|(at, _)| NodeId(u32::try_from(at).unwrap()))
         .collect();
@@ -138,9 +143,15 @@ fn tagged_templates_resolve_through_the_same_call_target_table() {
     for site in sites {
         let target = snapshot.call_targets.get(&site).expect("a tag resolves");
         let declaration = target.callee.expect("tag declaration is decoded");
-        assert_eq!(snapshot.nodes[declaration.0 as usize].kind,
-            Syntax(syntax::FUNCTION_DECLARATION));
-        assert!(!snapshot.signatures[target.signature.0 as usize].parameters.is_empty());
+        assert_eq!(
+            snapshot.nodes[declaration.0 as usize].kind,
+            Syntax(syntax::FUNCTION_DECLARATION)
+        );
+        assert!(
+            !snapshot.signatures[target.signature.0 as usize]
+                .parameters
+                .is_empty()
+        );
     }
 }
 
@@ -173,7 +184,9 @@ fn dynamic_import_calls_the_import_keyword() {
     use nts_frontend_ts::tsgo::types::syntax;
     use nts_semantic_schema::NodeKind::Syntax;
 
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/a-dynamic-import/tsconfig.json")
         .canonicalize_utf8()
@@ -193,20 +206,38 @@ fn dynamic_import_calls_the_import_keyword() {
             snapshot.nodes[id.0 as usize]
                 .children
                 .first()
-                .is_some_and(|callee| snapshot.nodes[callee.0 as usize].kind == Syntax(syntax::IMPORT_KEYWORD))
+                .is_some_and(|callee| {
+                    snapshot.nodes[callee.0 as usize].kind == Syntax(syntax::IMPORT_KEYWORD)
+                })
         })
         .collect();
-    assert!(calls.len() >= 6, "the fixture writes at least six `import(...)` calls, found {}", calls.len());
+    assert!(
+        calls.len() >= 6,
+        "the fixture writes at least six `import(...)` calls, found {}",
+        calls.len()
+    );
 
     let lazy = snapshot
         .modules
         .iter()
-        .find(|module| snapshot.sources[module.file.0 as usize].uri.ends_with("/lazy.ts"))
+        .find(|module| {
+            snapshot.sources[module.file.0 as usize]
+                .uri
+                .ends_with("/lazy.ts")
+        })
         .expect("the fixture has a `lazy` module");
-    let lazy_symbol = snapshot.nodes[lazy.root.0 as usize].symbol.expect("a module's root carries its symbol");
+    let lazy_symbol = snapshot.nodes[lazy.root.0 as usize]
+        .symbol
+        .expect("a module's root carries its symbol");
     let reaches_lazy = calls.iter().any(|call| {
-        let Some(promise) = snapshot.node_types.get(call) else { return false };
-        let Some(namespace) = snapshot.type_arguments.get(promise).and_then(|args| args.first()) else {
+        let Some(promise) = snapshot.node_types.get(call) else {
+            return false;
+        };
+        let Some(namespace) = snapshot
+            .type_arguments
+            .get(promise)
+            .and_then(|args| args.first())
+        else {
             return false;
         };
         snapshot.types[namespace.0 as usize].symbol == Some(lazy_symbol)
@@ -218,9 +249,15 @@ fn dynamic_import_calls_the_import_keyword() {
             eprintln!(
                 "call {call:?}: type {promise:?} {:?} args {args:?} -> {:?}; lazy root symbol {lazy_symbol:?}",
                 promise.map(|p| &snapshot.types[p.0 as usize]),
-                args.and_then(|a| a.first()).map(|t| (&snapshot.types[t.0 as usize].symbol, &snapshot.types[t.0 as usize].kind)),
+                args.and_then(|a| a.first()).map(|t| (
+                    &snapshot.types[t.0 as usize].symbol,
+                    &snapshot.types[t.0 as usize].kind
+                )),
             );
         }
     }
-    assert!(reaches_lazy, "an `import(\"./lazy.ts\")` is typed Promise<namespace of `lazy`>");
+    assert!(
+        reaches_lazy,
+        "an `import(\"./lazy.ts\")` is typed Promise<namespace of `lazy`>"
+    );
 }

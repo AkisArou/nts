@@ -48,7 +48,9 @@ struct Classes {
 
 impl Classes {
     fn new(count: usize) -> Self {
-        Self { parent: (0..u32::try_from(count).unwrap_or(u32::MAX)).collect() }
+        Self {
+            parent: (0..u32::try_from(count).unwrap_or(u32::MAX)).collect(),
+        }
     }
 
     fn find(&mut self, at: u32) -> u32 {
@@ -79,7 +81,10 @@ impl Classes {
 /// decision belongs here, and a second place that knew about it would be a
 /// second place that could disagree.
 #[must_use]
-pub(crate) fn held_as(unboxed: &FxHashSet<ValueId>, value: ValueId) -> Option<nts_jvm_emitter::VType> {
+pub(crate) fn held_as(
+    unboxed: &FxHashSet<ValueId>,
+    value: ValueId,
+) -> Option<nts_jvm_emitter::VType> {
     unboxed
         .contains(&value)
         .then(|| nts_jvm_emitter::VType::Object("java/lang/Object".to_owned()))
@@ -107,7 +112,10 @@ pub(crate) fn unboxable(func: &Func) -> FxHashSet<ValueId> {
     // an object, and every use is one a bare reference can serve.
     let mut refused: FxHashSet<u32> = FxHashSet::default();
     let erased = |value: ValueId| {
-        matches!(func.values.get(value.0 as usize).map(|it| &it.ty), Some(HirType::Erased))
+        matches!(
+            func.values.get(value.0 as usize).map(|it| &it.ty),
+            Some(HirType::Erased)
+        )
     };
 
     for (at, op) in func.values.iter().enumerate() {

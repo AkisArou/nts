@@ -48,7 +48,11 @@ fn prepare_with_binding(
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
+    Some((
+        dir,
+        hir::prepare(&snapshot)
+            .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
+    ))
 }
 
 fn prepare_with_types(
@@ -57,7 +61,11 @@ fn prepare_with_types(
     include_types: bool,
 ) -> Option<(Utf8PathBuf, hir::Prepared)> {
     let (dir, snapshot) = snapshot_with_types(name, source, include_types)?;
-    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
+    Some((
+        dir,
+        hir::prepare(&snapshot)
+            .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
+    ))
 }
 
 fn snapshot_with_types(
@@ -120,8 +128,12 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
         .collect();
     // Both families together: a brand belongs to exactly one, and a brand in
     // neither is a shipped scalar nothing checks against C.
-    let covered: std::collections::BTreeSet<_> =
-        CASES.iter().chain(WIDE_CASES).map(|case| case.0).chain(WINDOWS_ONLY.iter().copied()).collect();
+    let covered: std::collections::BTreeSet<_> = CASES
+        .iter()
+        .chain(WIDE_CASES)
+        .map(|case| case.0)
+        .chain(WINDOWS_ONLY.iter().copied())
+        .collect();
     assert_eq!(
         published, covered,
         "each shipped scalar needs an independent C ABI case"
@@ -373,7 +385,8 @@ fn conflicting_authored_abis_and_runtime_symbol_collisions_are_errors() {
             "{:?}",
             prepared.diagnostics
         );
-        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(!emitted.is_complete(), "{name}: {}", emitted.writer.text());
         assert!(
             emitted
@@ -509,9 +522,15 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
     // lowering defines (`@ntsIntrinsic gobject.property`).
     let mut intrinsic = false;
     for line in declarations.lines().map(str::trim) {
-        if line.contains("@ntsAbi intrinsic") || line.contains("@ntsIntrinsic ") { intrinsic = true; }
-        let Some(function) = line.strip_prefix("export function ") else { continue; };
-        if std::mem::take(&mut intrinsic) { continue; }
+        if line.contains("@ntsAbi intrinsic") || line.contains("@ntsIntrinsic ") {
+            intrinsic = true;
+        }
+        let Some(function) = line.strip_prefix("export function ") else {
+            continue;
+        };
+        if std::mem::take(&mut intrinsic) {
+            continue;
+        }
         let function = function.split('(').next().unwrap();
         // A function answering nothing is called as a statement.
         assert!(
@@ -643,10 +662,21 @@ fn a_gobject_a_call_hands_a_never_free_program_brings_the_support_file() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
-    assert!(emitted.writer.text().contains("nts_gobject_made("), "a never-free program keeps nothing it is handed");
-    let files: Vec<&str> = emitted.support_files().iter().map(|file| file.name).collect();
+    assert!(
+        emitted.writer.text().contains("nts_gobject_made("),
+        "a never-free program keeps nothing it is handed"
+    );
+    let files: Vec<&str> = emitted
+        .support_files()
+        .iter()
+        .map(|file| file.name)
+        .collect();
     assert!(
         files.contains(&nts_codegen_c::GOBJECT_SOURCE_NAME),
         "the program calls `nts_gobject_made` and does not link its definition: {files:?}"
@@ -669,7 +699,9 @@ fn a_gobject_a_call_hands_a_never_free_program_brings_the_support_file() {
 /// pass on a compiler that refused every native call.
 #[test]
 fn two_declarations_of_one_symbol_that_disagree_are_refused() {
-    let program = |cast: &str| format!("import {{ collide as viaOne }} from \"c:a\";\n\
+    let program = |cast: &str| {
+        format!(
+            "import {{ collide as viaOne }} from \"c:a\";\n\
          import {{ collide as viaTwo }} from \"c:b\";\n\
          import type {{ Ptr, c_int, c_size_t }} from \"c:types\";\n\
          export function one(fd: c_int, buf: Ptr<c_int>): number {{\n\
@@ -677,7 +709,9 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
          }}\n\
          export function two(fd: c_int, buf: Ptr<c_int>): number {{\n\
          return Number(viaTwo(fd, buf, {cast}));\n\
-         }}\n");
+         }}\n"
+        )
+    };
     // The arms differ in one thing: `b`'s third parameter. Both are pointers a
     // caller passes in, so neither call is an escape of local storage -- which
     // is what the first version of this measured instead, both arms having been
@@ -701,7 +735,11 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(agreeing.diagnostics.is_empty(), "{:?}", agreeing.diagnostics);
+    assert!(
+        agreeing.diagnostics.is_empty(),
+        "{:?}",
+        agreeing.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&agreeing.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(
         emitted.diagnostics.is_empty(),
@@ -709,10 +747,17 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         emitted.diagnostics
     );
 
-    let (_, conflicting) =
-        prepare_with_binding("abi-conflict", &binding("c_size_t"), &program("4n as c_size_t"))
-            .unwrap();
-    assert!(conflicting.diagnostics.is_empty(), "{:?}", conflicting.diagnostics);
+    let (_, conflicting) = prepare_with_binding(
+        "abi-conflict",
+        &binding("c_size_t"),
+        &program("4n as c_size_t"),
+    )
+    .unwrap();
+    assert!(
+        conflicting.diagnostics.is_empty(),
+        "{:?}",
+        conflicting.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&conflicting.program, nts_core::hir::native::NativeAbi::SysV);
     let refusal = emitted
         .diagnostics
@@ -756,7 +801,10 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
     // What it emitted is a program, not a fragment. Both functions are in it,
     // and one of them calls through the other's prototype.
     let text = emitted.writer.text();
-    assert!(text.contains("double one("), "the first function is emitted:\n{text}");
+    assert!(
+        text.contains("double one("),
+        "the first function is emitted:\n{text}"
+    );
     assert!(
         text.contains("double two("),
         "and so is the one whose declaration lost, which is the whole problem:\n{text}"
@@ -810,7 +858,8 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
     // while never executing a line of what it exists to check.
     let witness_of = |name: &str, field: &str, count: &str| -> Option<(Utf8PathBuf, String)> {
         let (dir, prepared) = prepare_with_binding(name, &binding(field, count), PROGRAM)?;
-        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(
             emitted.diagnostics.is_empty(),
             "{name}: {:?}",
@@ -843,7 +892,10 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
         ),
         "the function's type is not compared with the header's:\n{signed}"
     );
-    assert!(!signed.contains("extern int (poll)"), "a named header's function was re-declared:\n{signed}");
+    assert!(
+        !signed.contains("extern int (poll)"),
+        "a named header's function was re-declared:\n{signed}"
+    );
 
     let layout_only = |witness: &str| {
         witness
@@ -937,16 +989,29 @@ fn a_witnessed_function_is_called_through_its_header_only_where_the_header_is_in
             eprintln!("skipped: no tsgo");
             return;
         };
-        assert!(prepared.diagnostics.is_empty(), "{name}: {:?}", prepared.diagnostics);
-        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(emitted.is_complete(), "{name}: {:?}", emitted.diagnostics);
         let text = emitted.writer.text();
-        let includes = text.lines().any(|line| line.starts_with("#include <") && !line.contains("std"));
+        let includes = text
+            .lines()
+            .any(|line| line.starts_with("#include <") && !line.contains("std"));
         let declares = text.lines().any(|line| line.starts_with(prototype));
         if name == "through-header" {
-            assert!(includes && !declares, "{name}: expected the header and no prototype of our own:\n{text}");
+            assert!(
+                includes && !declares,
+                "{name}: expected the header and no prototype of our own:\n{text}"
+            );
         } else {
-            assert!(!includes && declares, "{name}: expected our own prototype, since no header is included:\n{text}");
+            assert!(
+                !includes && declares,
+                "{name}: expected our own prototype, since no header is included:\n{text}"
+            );
         }
     }
 }
@@ -985,10 +1050,22 @@ export function run(x: c_int): number {{
             eprintln!("skipped: no tsgo");
             return;
         };
-        assert!(prepared.diagnostics.is_empty(), "{name}: {:?}", prepared.diagnostics);
-        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
-        assert!(emitted.diagnostics.is_empty(), "{name}: {:?}", emitted.diagnostics);
-        assert!(emitted.writer.text().contains("addOne"), "{name}: the bridge calls `addOne`");
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(
+            emitted.diagnostics.is_empty(),
+            "{name}: {:?}",
+            emitted.diagnostics
+        );
+        assert!(
+            emitted.writer.text().contains("addOne"),
+            "{name}: the bridge calls `addOne`"
+        );
     }
 }
 
@@ -1013,11 +1090,17 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
         return;
     };
     // A host handle needs the counting provider; a never-free program refuses it.
-    let options = hir::Options { provider: hir::Provider::ReferenceCounting, ..hir::Options::default() };
+    let options = hir::Options {
+        provider: hir::Provider::ReferenceCounting,
+        ..hir::Options::default()
+    };
     let prepared = hir::prepare_with(&snapshot, &options).unwrap();
     for name in ["related", "unrelatedOrder", "sameType"] {
-        assert!(prepared.program.funcs.iter().any(|func| func.name == name),
-            "{name} must reach the C it is compiled to: {:?}", prepared.diagnostics);
+        assert!(
+            prepared.program.funcs.iter().any(|func| func.name == name),
+            "{name} must reach the C it is compiled to: {:?}",
+            prepared.diagnostics
+        );
     }
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
@@ -1026,7 +1109,12 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
         file.write(dir.as_std_path()).unwrap();
     }
     let compiled = Command::new("clang")
-        .args(["-std=c11", "-fsyntax-only", "-Werror=compare-distinct-pointer-types", "-I"])
+        .args([
+            "-std=c11",
+            "-fsyntax-only",
+            "-Werror=compare-distinct-pointer-types",
+            "-I",
+        ])
         .arg(dir.as_std_path())
         .arg(dir.join("program.c").as_std_path())
         .output()
@@ -1046,6 +1134,7 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
 /// `2^32 + 5` to 5 and sent C a value the program never computed, and before
 /// that `(int32_t)v0`, which C leaves undefined out of range.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_number_reaches_a_c_integer_only_where_it_is_proven_to_fit() {
     let declarations = r#"
 import type { CNumber, Ptr, c_int } from "c:types";
@@ -1063,9 +1152,19 @@ declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
         panic!("an unproven number into a C integer must be refused");
     };
     let said: Vec<&str> = errors.iter().map(|error| error.message.as_str()).collect();
-    assert!(said.iter().any(|message| message.contains("seen_i32")), "{said:?}");
-    assert!(said.iter().any(|message| message.contains("store into a C `int`")), "{said:?}");
-    assert!(errors.iter().all(|error| error.code == "NTS5001"), "{errors:?}");
+    assert!(
+        said.iter().any(|message| message.contains("seen_i32")),
+        "{said:?}"
+    );
+    assert!(
+        said.iter()
+            .any(|message| message.contains("store into a C `int`")),
+        "{said:?}"
+    );
+    assert!(
+        errors.iter().all(|error| error.code == "NTS5001"),
+        "{errors:?}"
+    );
 
     let proven = format!(
         "{declarations}export function i32(x: c_int): number {{ return seen_i32(x); }}\n\
@@ -1075,14 +1174,22 @@ declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
     let Some((dir, prepared)) = prepare_with_types("proven-integer", &proven, false) else {
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     // A root's written parameter is its kind in C too: a caller outside the
     // program converts to it, as for any C function, and was never obliged
     // to prove anything (`written_roots`). A `number` stays a `double`.
     let text = emitted.writer.text();
-    for prototype in ["double i32(int32_t v0)", "double u16(double v0)", "void store(int * v0, int32_t v1)"] {
+    for prototype in [
+        "double i32(int32_t v0)",
+        "double u16(double v0)",
+        "void store(int * v0, int32_t v1)",
+    ] {
         assert!(text.contains(prototype), "no `{prototype}` in:\n{text}");
     }
     std::fs::write(dir.join("program.c"), text).unwrap();
@@ -1118,12 +1225,34 @@ declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
     .unwrap();
     let result = Command::new("clang")
         .current_dir(&dir)
-        .args(["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-I", ".", "native.c", "program.c", "caller.c", "-lm", "-o", "caller"])
+        .args([
+            "-std=c11",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            ".",
+            "native.c",
+            "program.c",
+            "caller.c",
+            "-lm",
+            "-o",
+            "caller",
+        ])
         .output()
         .unwrap();
-    assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
     let ran = Command::new(dir.join("caller")).output().unwrap();
-    assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stdout));
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stdout)
+    );
 }
 
 /// A count C takes narrower than an array can be long is bounded before the
@@ -1131,6 +1260,7 @@ declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
 /// for a `uint16_t` throws a `RangeError` and C is never called; one that fits
 /// passes its exact length.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_count_narrower_than_an_array_is_bounded_before_the_call() {
     let source = r#"
 import type { CBytes, CNumber, Counted } from "c:types";
@@ -1162,12 +1292,26 @@ export function counted(n: CNumber<"int32">): number {
            return failed;\n\
          }\n";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, snapshot)) = snapshot_with_types(&format!("bounded-count-{provider:?}"), source, false) else {
+        let Some((dir, snapshot)) =
+            snapshot_with_types(&format!("bounded-count-{provider:?}"), source, false)
+        else {
             return;
         };
-        let prepared = hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).expect("valid HIR");
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        let prepared = hir::prepare_with(
+            &snapshot,
+            &hir::Options {
+                provider,
+                ..hir::Options::default()
+            },
+        )
+        .expect("valid HIR");
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
         std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
         for file in emitted.support_files() {
@@ -1178,18 +1322,50 @@ export function counted(n: CNumber<"int32">): number {
         let mut objects = Vec::new();
         for source in ["program.c", "nts_runtime.c", "native.c", "caller.c"] {
             let object = format!("{source}.o");
-            let mut args = vec!["-std=gnu11", "-D_GNU_SOURCE", "-O2", "-w", "-I", ".", "-c", source, "-o", &object];
+            let mut args = vec![
+                "-std=gnu11",
+                "-D_GNU_SOURCE",
+                "-O2",
+                "-w",
+                "-I",
+                ".",
+                "-c",
+                source,
+                "-o",
+                &object,
+            ];
             if provider == hir::Provider::ReferenceCounting {
                 args.push("-DNTS_PROVIDER_RC");
             }
-            let result = Command::new("clang").current_dir(&dir).args(&args).output().unwrap();
-            assert!(result.status.success(), "{provider:?} {source}: {}", String::from_utf8_lossy(&result.stderr));
+            let result = Command::new("clang")
+                .current_dir(&dir)
+                .args(&args)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{provider:?} {source}: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
             objects.push(object);
         }
-        let result = Command::new("clang").current_dir(&dir).args(&objects).args(["-lm", "-lpthread", "-o", "caller"]).output().unwrap();
-        assert!(result.status.success(), "{provider:?}: {}", String::from_utf8_lossy(&result.stderr));
+        let result = Command::new("clang")
+            .current_dir(&dir)
+            .args(&objects)
+            .args(["-lm", "-lpthread", "-o", "caller"])
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{provider:?}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
         let ran = Command::new(dir.join("caller")).output().unwrap();
-        assert!(ran.status.success(), "{provider:?}: {}", String::from_utf8_lossy(&ran.stdout));
+        assert!(
+            ran.status.success(),
+            "{provider:?}: {}",
+            String::from_utf8_lossy(&ran.stdout)
+        );
     }
 }
 
@@ -1216,10 +1392,15 @@ declare function node_value(n: Node): c_int;
 "#;
     let prepare_rc = |name: &str, body: &str| {
         let (_, snapshot) = snapshot_with_types(name, &format!("{prelude}{body}"), false)?;
-        let options = hir::Options { provider: hir::Provider::ReferenceCounting, ..hir::Options::default() };
+        let options = hir::Options {
+            provider: hir::Provider::ReferenceCounting,
+            ..hir::Options::default()
+        };
         Some(hir::prepare_with(&snapshot, &options))
     };
-    let Some(dropped) = prepare_rc("handle-result-dropped", r"
+    let Some(dropped) = prepare_rc(
+        "handle-result-dropped",
+        r"
 let calls = 0;
 function invoke(f: () => void): void { f(); calls += 1; }
 export function discarded(): number {
@@ -1227,11 +1408,20 @@ export function discarded(): number {
   invoke(() => node_at(2 as c_int));
   return calls;
 }
-") else {
+",
+    ) else {
         return;
     };
     let dropped = dropped.unwrap();
-    assert!(dropped.program.funcs.iter().any(|func| func.name == "discarded"), "{:?}", dropped.diagnostics);
+    assert!(
+        dropped
+            .program
+            .funcs
+            .iter()
+            .any(|func| func.name == "discarded"),
+        "{:?}",
+        dropped.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&dropped.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     assert!(
@@ -1239,26 +1429,38 @@ export function discarded(): number {
         "a void-typed call reached an entry that refuses the handle result"
     );
 
-    let Some(read) = prepare_rc("handle-result-read", r"
+    let Some(read) = prepare_rc(
+        "handle-result-read",
+        r"
 function read(f: () => Node): number { return node_value(f()); }
 export function reads(): number { return read(() => node_at(1 as c_int)); }
-") else {
+",
+    ) else {
         return;
     };
     let read = read.unwrap();
     assert!(
-        !read.diagnostics.iter().any(|d| d.message.contains("no erased form")),
+        !read
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("no erased form")),
         "a signature reading the handle as the closure answers it was refused: {:?}",
         read.diagnostics
     );
     let emitted = nts_codegen_c::emit(&read.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    assert!(!emitted.writer.text().contains("nts_refused("), "a reading call reached a refusing entry");
+    assert!(
+        !emitted.writer.text().contains("nts_refused("),
+        "a reading call reached a refusing entry"
+    );
 
-    let Some(adapted) = prepare_rc("handle-result-read-as-a-base", r"
+    let Some(adapted) = prepare_rc(
+        "handle-result-read-as-a-base",
+        r"
 function read(f: () => Node): number { return node_value(f()); }
 export function reads(): number { return read(() => leaf_at(1 as c_int)); }
-") else {
+",
+    ) else {
         return;
     };
     // **Since `NTS_TAG_HANDLE_HOST` a host handle has an erased form**, so the
@@ -1266,13 +1468,19 @@ export function reads(): number { return read(() => leaf_at(1 as c_int)); }
     // reads its result"), and the program it makes runs no refusing entry.
     let adapted = adapted.expect("valid HIR");
     assert!(
-        !adapted.diagnostics.iter().any(|d| d.message.contains("no erased form")),
+        !adapted
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("no erased form")),
         "{:?}",
         adapted.diagnostics
     );
     let emitted = nts_codegen_c::emit(&adapted.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    assert!(!emitted.writer.text().contains("nts_refused("), "a base reading reached a refusing entry");
+    assert!(
+        !emitted.writer.text().contains("nts_refused("),
+        "a base reading reached a refusing entry"
+    );
 }
 
 /// A foreign function answering a `Closure<F>` the program lent it (the
@@ -1284,6 +1492,7 @@ export function reads(): number { return read(() => leaf_at(1 as c_int)); }
 /// providers, since reference counting is where a result's reference is
 /// either the program's or a double release.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_closure_lent_to_c_comes_back_as_the_same_callable_closure() {
     let source = r#"
 import type { Closure, c_double } from "c:types";
@@ -1339,10 +1548,18 @@ void handler_clear(void) {
         let Some((dir, snapshot)) = snapshot_with_types(&name, source, false) else {
             return;
         };
-        let options = hir::Options { provider, ..hir::Options::default() };
+        let options = hir::Options {
+            provider,
+            ..hir::Options::default()
+        };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
-        assert!(prepared.diagnostics.is_empty(), "{provider:?}: {:?}", prepared.diagnostics);
-        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{provider:?}: {:?}",
+            prepared.diagnostics
+        );
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
         std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
         for file in emitted.support_files() {
@@ -1353,12 +1570,31 @@ void handler_clear(void) {
         let mut objects = Vec::new();
         for source in ["program.c", "nts_runtime.c", "host.c", "caller.c"] {
             let object = format!("{source}.o");
-            let mut args = vec!["-std=gnu11", "-D_GNU_SOURCE", "-O2", "-w", "-I", ".", "-c", source, "-o", &object];
+            let mut args = vec![
+                "-std=gnu11",
+                "-D_GNU_SOURCE",
+                "-O2",
+                "-w",
+                "-I",
+                ".",
+                "-c",
+                source,
+                "-o",
+                &object,
+            ];
             if provider == hir::Provider::ReferenceCounting {
                 args.push("-DNTS_PROVIDER_RC");
             }
-            let result = Command::new("clang").current_dir(&dir).args(&args).output().unwrap();
-            assert!(result.status.success(), "{provider:?} {source}: {}", String::from_utf8_lossy(&result.stderr));
+            let result = Command::new("clang")
+                .current_dir(&dir)
+                .args(&args)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{provider:?} {source}: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
             objects.push(object);
         }
         let result = Command::new("clang")
@@ -1367,9 +1603,16 @@ void handler_clear(void) {
             .args(["-lm", "-lpthread", "-o", "caller"])
             .output()
             .unwrap();
-        assert!(result.status.success(), "{provider:?}: {}", String::from_utf8_lossy(&result.stderr));
+        assert!(
+            result.status.success(),
+            "{provider:?}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
         let status = Command::new(dir.join("caller")).status().unwrap();
-        assert!(status.success(), "{provider:?}: the caller answered {status}");
+        assert!(
+            status.success(),
+            "{provider:?}: the caller answered {status}"
+        );
     }
 }
 
@@ -1382,6 +1625,7 @@ void handler_clear(void) {
 /// exactly once; heap strings, so a miscount is a use-after-free or a double
 /// free and not a quiet no-op on an immortal constant.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_held_record_lends_its_string_member_for_the_call() {
     let binding = r#"
 declare module "x:ev" {
@@ -1424,9 +1668,17 @@ export function handedOn(n: number): number {
                   \x20 }\n\
                   \x20 return 0;\n}\n";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
-        let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
-        let dir = root.join(format!("target/native-c-tests/{}-held-record-{provider:?}", std::process::id()));
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
+        let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .canonicalize_utf8()
+            .unwrap();
+        let dir = root.join(format!(
+            "target/native-c-tests/{}-held-record-{provider:?}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("tsconfig.json"),
@@ -1435,12 +1687,22 @@ export function handedOn(n: number): number {
         .unwrap();
         std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
         std::fs::write(dir.join("main.ts"), source).unwrap();
-        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+        let snapshot = TsgoApi::for_compilation(tsgo)
+            .snapshot(&dir.join("tsconfig.json"))
+            .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-        let options = hir::Options { provider, ..hir::Options::default() };
+        let options = hir::Options {
+            provider,
+            ..hir::Options::default()
+        };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
-        assert!(prepared.diagnostics.is_empty(), "{provider:?}: {:?}", prepared.diagnostics);
-        let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{provider:?}: {:?}",
+            prepared.diagnostics
+        );
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
         std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
         for file in emitted.support_files() {
@@ -1451,12 +1713,33 @@ export function handedOn(n: number): number {
         let mut objects = Vec::new();
         for source in ["program.c", "nts_runtime.c", "host.c", "caller.c"] {
             let object = format!("{source}.o");
-            let mut args = vec!["-std=gnu11", "-D_GNU_SOURCE", "-O1", "-g0", "-w", "-fsanitize=address", "-I", ".", "-c", source, "-o", &object];
+            let mut args = vec![
+                "-std=gnu11",
+                "-D_GNU_SOURCE",
+                "-O1",
+                "-g0",
+                "-w",
+                "-fsanitize=address",
+                "-I",
+                ".",
+                "-c",
+                source,
+                "-o",
+                &object,
+            ];
             if provider == hir::Provider::ReferenceCounting {
                 args.push("-DNTS_PROVIDER_RC");
             }
-            let result = Command::new("clang").current_dir(&dir).args(&args).output().unwrap();
-            assert!(result.status.success(), "{provider:?} {source}: {}", String::from_utf8_lossy(&result.stderr));
+            let result = Command::new("clang")
+                .current_dir(&dir)
+                .args(&args)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{provider:?} {source}: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
             objects.push(object);
         }
         let result = Command::new("clang")
@@ -1465,8 +1748,20 @@ export function handedOn(n: number): number {
             .args(["-fsanitize=address", "-lm", "-lpthread", "-o", "caller"])
             .output()
             .unwrap();
-        assert!(result.status.success(), "{provider:?}: {}", String::from_utf8_lossy(&result.stderr));
-        let run = Command::new(dir.join("caller")).env("ASAN_OPTIONS", "detect_leaks=0").output().unwrap();
-        assert!(run.status.success(), "{provider:?}: {}\n{}", run.status, String::from_utf8_lossy(&run.stderr));
+        assert!(
+            result.status.success(),
+            "{provider:?}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let run = Command::new(dir.join("caller"))
+            .env("ASAN_OPTIONS", "detect_leaks=0")
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "{provider:?}: {}\n{}",
+            run.status,
+            String::from_utf8_lossy(&run.stderr)
+        );
     }
 }

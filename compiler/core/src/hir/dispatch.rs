@@ -86,17 +86,23 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, String)> {
     // answer: the same slot entered through a different declared signature is
     // a different question.
     let mut asked: FxHashMap<(u32, &str), Option<String>> = FxHashMap::default();
-    let by_name: FxHashMap<&str, &Func> =
-        program.funcs.iter().map(|func| (func.name.as_str(), func)).collect();
+    let by_name: FxHashMap<&str, &Func> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func))
+        .collect();
     for (at, func) in program.funcs.iter().enumerate() {
         for block in &func.blocks {
             for &value in &block.ops {
-                let OpKind::Call { callee: Callee::Virtual { slot, declared }, .. } =
-                    &func.value(value).kind
+                let OpKind::Call {
+                    callee: Callee::Virtual { slot, declared },
+                    ..
+                } = &func.value(value).kind
                 else {
                     continue;
                 };
-                let layouts = layouts.get_or_insert_with(|| super::fields::LayoutIndex::build(program));
+                let layouts =
+                    layouts.get_or_insert_with(|| super::fields::LayoutIndex::build(program));
                 let why = asked
                     .entry((*slot, declared.as_str()))
                     .or_insert_with(|| disagreement(program, layouts, &by_name, *slot, declared));
@@ -123,11 +129,15 @@ fn disagreement(
 ) -> Option<String> {
     let through = by_name.get(declared)?;
     for layout in &program.layouts {
-        let Some(Some(name)) = layout.methods.get(slot as usize) else { continue };
+        let Some(Some(name)) = layout.methods.get(slot as usize) else {
+            continue;
+        };
         if name == declared {
             continue;
         }
-        let Some(implementation) = by_name.get(name.as_str()) else { continue };
+        let Some(implementation) = by_name.get(name.as_str()) else {
+            continue;
+        };
         // The receiver is exempt, so the walk starts at 1. A shorter
         // implementation is compared over what it has: C ignores an argument a
         // callee does not declare, as JavaScript does.
@@ -247,15 +257,20 @@ fn keeps_the_declared_prefix(
     else {
         return false;
     };
-    let (Some(declared), Some(arriving)) = (layouts.of_class(*declared), layouts.of_class(*arriving))
+    let (Some(declared), Some(arriving)) =
+        (layouts.of_class(*declared), layouts.of_class(*arriving))
     else {
         return false;
     };
     let (declared, arriving) = (&program.layouts[declared], &program.layouts[arriving]);
     declared.fields.len() <= arriving.fields.len()
-        && declared.fields.iter().zip(&arriving.fields).all(|(want, have)| {
-            want.name == have.name && one_representation(layouts, &want.ty, &have.ty)
-        })
+        && declared
+            .fields
+            .iter()
+            .zip(&arriving.fields)
+            .all(|(want, have)| {
+                want.name == have.name && one_representation(layouts, &want.ty, &have.ty)
+            })
 }
 
 /// What to call a representation in this rule's sentences.
@@ -303,7 +318,9 @@ fn both_are_records(layouts: &super::fields::LayoutIndex, a: &HirType, b: &HirTy
 /// closure whatever signature its `#call` was written at, and the mismatch that
 /// matters there is one only an adapter can fix. See the comment at the call.
 fn is_a_function(program: &Program, layouts: &super::fields::LayoutIndex, ty: &HirType) -> bool {
-    let HirType::Managed(ManagedType::Object(id)) = ty else { return false };
+    let HirType::Managed(ManagedType::Object(id)) = ty else {
+        return false;
+    };
     // A *synthetic* closure class, and a **signature layout**, which is the one
     // the corpus actually produces: `Readable#on`'s listener parameter is
     // `Fn8783__97`, whose id is an ordinary type id, so the synthetic test alone

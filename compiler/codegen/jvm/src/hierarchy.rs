@@ -45,8 +45,13 @@ pub fn jvm_base(program: &Program, layout: &Layout) -> Option<usize> {
     }
     let mut parent: Option<usize> = None;
     for id in &layout.types {
-        let Some(declared) = program.record_parents.get(id) else { continue };
-        let at = program.layouts.iter().position(|candidate| candidate.types.contains(declared))?;
+        let Some(declared) = program.record_parents.get(id) else {
+            continue;
+        };
+        let at = program
+            .layouts
+            .iter()
+            .position(|candidate| candidate.types.contains(declared))?;
         if parent.is_some_and(|seen| seen != at) {
             return None;
         }
@@ -56,9 +61,14 @@ pub fn jvm_base(program: &Program, layout: &Layout) -> Option<usize> {
     let base = program.layouts.get(at)?;
     let prefix = !base.fields.is_empty()
         && base.fields.len() < layout.fields.len()
-        && base.fields.iter().zip(&layout.fields).all(|(theirs, mine)| theirs.name == mine.name && theirs.ty == mine.ty);
+        && base
+            .fields
+            .iter()
+            .zip(&layout.fields)
+            .all(|(theirs, mine)| theirs.name == mine.name && theirs.ty == mine.ty);
     let dispatches = |l: &Layout| l.methods.iter().any(Option::is_some);
-    (prefix && !dispatches(base) && !dispatches(layout) && !std::ptr::eq(base, layout)).then_some(at)
+    (prefix && !dispatches(base) && !dispatches(layout) && !std::ptr::eq(base, layout))
+        .then_some(at)
 }
 
 /// Every layout from `layout` up to the root, `layout` first.
@@ -70,8 +80,12 @@ pub fn ancestry<'a>(program: &'a Program, layout: &'a Layout) -> Vec<&'a Layout>
     // hang the compiler rather than refuse. `verify` rejects one upstream; this
     // is the cheap belt for a fact this module cannot check for itself.
     for _ in 0..program.layouts.len() {
-        let Some(at) = jvm_base(program, current) else { break };
-        let Some(next) = program.layouts.get(at) else { break };
+        let Some(at) = jvm_base(program, current) else {
+            break;
+        };
+        let Some(next) = program.layouts.get(at) else {
+            break;
+        };
         chain.push(next);
         current = next;
     }
@@ -115,7 +129,10 @@ pub fn field_name(program: &Program, owner: &Layout, at: usize) -> String {
     };
     let spelled = crate::body::method_name(&field.name);
     let from = inherited(program, owner).min(at);
-    if owner.fields[from..at].iter().any(|before| crate::body::method_name(&before.name) == spelled) {
+    if owner.fields[from..at]
+        .iter()
+        .any(|before| crate::body::method_name(&before.name) == spelled)
+    {
         format!("{spelled}_{at}")
     } else {
         spelled
@@ -126,7 +143,9 @@ pub fn field_name(program: &Program, owner: &Layout, at: usize) -> String {
 #[must_use]
 pub fn declared_names(program: &Program, layout: &Layout) -> Vec<String> {
     let from = inherited(program, layout).min(layout.fields.len());
-    (from..layout.fields.len()).map(|at| field_name(program, layout, at)).collect()
+    (from..layout.fields.len())
+        .map(|at| field_name(program, layout, at))
+        .collect()
 }
 
 /// The fields a class declares itself.
@@ -163,8 +182,11 @@ pub fn declared<'a>(program: &Program, layout: &'a Layout) -> &'a [Field] {
 /// is the class name a `Fieldref` needs.
 #[must_use]
 pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize) -> &'a Layout {
-    if let Some(by) =
-        layout.fields.get(field).and_then(|at| at.declared_by).and_then(|id| program.layout(id))
+    if let Some(by) = layout
+        .fields
+        .get(field)
+        .and_then(|at| at.declared_by)
+        .and_then(|id| program.layout(id))
     {
         return by;
     }
@@ -220,20 +242,29 @@ pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize
 /// Empty when one class owns the layout, which is nearly always: five groups
 /// and twelve classes across the twenty-two `runtime/node` modules.
 #[must_use]
-pub fn identities<'a>(program: &'a Program, layout: &Layout) -> Vec<&'a nts_core::hir::ClassIdentity> {
+pub fn identities<'a>(
+    program: &'a Program,
+    layout: &Layout,
+) -> Vec<&'a nts_core::hir::ClassIdentity> {
     let sharing: Vec<&nts_core::hir::ClassIdentity> = program
         .classes
         .iter()
         .filter(|class| class.types.iter().any(|at| layout.types.contains(at)))
         .collect();
-    if sharing.len() < 2 { Vec::new() } else { sharing }
+    if sharing.len() < 2 {
+        Vec::new()
+    } else {
+        sharing
+    }
 }
 
 /// The class a type id names, when its layout is shared by more than one.
 #[must_use]
 pub fn identity_of(program: &Program, id: TypeId) -> Option<&nts_core::hir::ClassIdentity> {
     let layout = program.layout(id)?;
-    identities(program, layout).into_iter().find(|class| class.types.contains(&id))
+    identities(program, layout)
+        .into_iter()
+        .find(|class| class.types.contains(&id))
 }
 
 /// Whether anything extends this layout, which is the whole of what decides
@@ -310,7 +341,9 @@ pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Optio
     if let Some(uniform) = uniform_member(program, slot) {
         return Some(uniform);
     }
-    if let Some(declared) = declaring_interface(program, layout, slot).and_then(|i| i.methods.get(slot)?.as_ref()) {
+    if let Some(declared) =
+        declaring_interface(program, layout, slot).and_then(|i| i.methods.get(slot)?.as_ref())
+    {
         return Some(member_name(declared));
     }
     // Up the chain while a base also declares this slot: the first declaration
@@ -364,17 +397,23 @@ pub fn holds_presence(package: &str, program: &Program, layout: &Layout) -> bool
             let nts_core::hir::OpKind::Call { callee, args, .. } = &op.kind else {
                 continue;
             };
-            let nts_core::hir::Callee::External(name) = callee else { continue };
+            let nts_core::hir::Callee::External(name) = callee else {
+                continue;
+            };
             if !name.starts_with("nts_presence_") {
                 continue;
             }
-            let Some(&receiver) = args.first() else { continue };
+            let Some(&receiver) = args.first() else {
+                continue;
+            };
             let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
                 func.values[receiver.0 as usize].ty
             else {
                 continue;
             };
-            if program.layout(id).map(|held| crate::types::class_name(package, root(program, held)))
+            if program
+                .layout(id)
+                .map(|held| crate::types::class_name(package, root(program, held)))
                 == Some(wanted.clone())
             {
                 return true;
@@ -438,7 +477,9 @@ pub fn claimed_without_extending(program: &Program, layout: &Layout) -> bool {
     }
     program.layouts.iter().any(|other| {
         other.interfaces.iter().any(|id| layout.types.contains(id))
-            && !ancestry(program, other).iter().any(|at| std::ptr::eq(*at, layout))
+            && !ancestry(program, other)
+                .iter()
+                .any(|at| std::ptr::eq(*at, layout))
     })
 }
 
@@ -489,7 +530,12 @@ pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
     // callable fills only the raising one, from that body's name less its
     // suffix: the two are one member and its raising variant.
     let ordinary = || {
-        let filled = |slot: usize| program.layouts.iter().find_map(|layout| layout.methods.get(slot)?.as_ref());
+        let filled = |slot: usize| {
+            program
+                .layouts
+                .iter()
+                .find_map(|layout| layout.methods.get(slot)?.as_ref())
+        };
         filled(erased).map(|name| member_name(name)).or_else(|| {
             let name = filled(raising_slot?)?;
             Some(member_name(name.strip_suffix("@raises").unwrap_or(name)))
@@ -498,18 +544,28 @@ pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
     if slot == erased {
         return ordinary();
     }
-    if program.raising_call_slot.is_some_and(|raising| raising as usize == slot) {
+    if program
+        .raising_call_slot
+        .is_some_and(|raising| raising as usize == slot)
+    {
         // Only where some callable fills it with a raising body. A program
         // whose every raising entry is the ordinary one makes no raising call,
         // and naming the slot anyway published `erased_call$raises` on every
         // closure and on the root -- a Java-visible API change in
         // interop/ts-from-java for an entry nothing can reach (c58629073). The
         // slot then collapses into the ordinary method, as before.
-        let raises = program
-            .layouts
-            .iter()
-            .any(|layout| layout.methods.get(slot).and_then(Option::as_ref).is_some_and(|name| name.ends_with("@raises")));
-        return if raises { ordinary().map(|name| format!("{name}$raises")) } else { None };
+        let raises = program.layouts.iter().any(|layout| {
+            layout
+                .methods
+                .get(slot)
+                .and_then(Option::as_ref)
+                .is_some_and(|name| name.ends_with("@raises"))
+        });
+        return if raises {
+            ordinary().map(|name| format!("{name}$raises"))
+        } else {
+            None
+        };
     }
     None
 }
@@ -518,11 +574,18 @@ pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
 /// implements and that declares `slot` -- the base a forwarder at that slot
 /// overrides when no superclass declares it.
 #[must_use]
-pub fn declaring_interface<'a>(program: &'a Program, layout: &Layout, slot: usize) -> Option<&'a Layout> {
+pub fn declaring_interface<'a>(
+    program: &'a Program,
+    layout: &Layout,
+    slot: usize,
+) -> Option<&'a Layout> {
     program.layouts.iter().find(|interface| {
         !std::ptr::eq(*interface, layout)
             && interface.methods.get(slot).is_some_and(Option::is_some)
-            && interface.types.iter().any(|id| implements(program, layout, *id))
+            && interface
+                .types
+                .iter()
+                .any(|id| implements(program, layout, *id))
     })
 }
 
@@ -558,6 +621,10 @@ pub fn implements(program: &Program, layout: &Layout, id: TypeId) -> bool {
     //
     // The edge test is first because it is a `contains` and `is_interface`
     // scans every layout.
-    ancestry(program, layout).iter().any(|at| at.interfaces.contains(&id))
-        && program.layout(id).is_some_and(|target| is_interface(program, target))
+    ancestry(program, layout)
+        .iter()
+        .any(|at| at.interfaces.contains(&id))
+        && program
+            .layout(id)
+            .is_some_and(|target| is_interface(program, target))
 }

@@ -84,7 +84,11 @@ impl Budget {
     #[must_use]
     pub const fn allowance(self, seeds: usize) -> usize {
         let scaled = seeds.saturating_mul(self.per_seed);
-        if scaled > Self::FLOOR { scaled } else { Self::FLOOR }
+        if scaled > Self::FLOOR {
+            scaled
+        } else {
+            Self::FLOOR
+        }
     }
 }
 
@@ -334,7 +338,8 @@ impl<'a> Decomposer<'a> {
                 // is 126,656: the pass stopped on its own arithmetic with
                 // seven eighths of the allowance unspent, and the graph was
                 // declared partial.
-                let allowance = allowance.max(stats.decomposed as usize + budget.allowance(level.len()));
+                let allowance =
+                    allowance.max(stats.decomposed as usize + budget.allowance(level.len()));
                 self.walk(snapshot, &mut level, &seeded, &mut stats, allowance)?;
                 if stats.exhausted {
                     break;
@@ -469,12 +474,18 @@ impl<'a> Decomposer<'a> {
         if response.flags & (symbol_flags::TYPE_LITERAL | symbol_flags::OBJECT_LITERAL) != 0 {
             return Ok(());
         }
-        let declarations = response.declarations.iter()
+        let declarations = response
+            .declarations
+            .iter()
             .filter_map(|handle| declaration_node(handle, &self.file_bases))
             .filter(|node| (node.0 as usize) < snapshot.nodes.len())
             .collect();
         let symbol = super::symbols::intern_declared(
-            snapshot, &mut self.symbols, &response, &self.root, declarations,
+            snapshot,
+            &mut self.symbols,
+            &response,
+            &self.root,
+            declarations,
         );
         snapshot.types[slot.0 as usize].symbol = Some(symbol);
         Ok(())
@@ -704,11 +715,19 @@ impl<'a> Decomposer<'a> {
 
     /// Whether a signature's declaration is a foreign function's: one a
     /// binding tags with its native symbol (`@ntsSymbol`).
-    fn declared_foreign(&self, snapshot: &SemanticSnapshot, declaration: Option<&NodeHandle>) -> bool {
+    fn declared_foreign(
+        &self,
+        snapshot: &SemanticSnapshot,
+        declaration: Option<&NodeHandle>,
+    ) -> bool {
         declaration
             .and_then(|handle| declaration_node(handle, &self.file_bases))
             .and_then(|node| snapshot.nodes.get(node.0 as usize))
-            .is_some_and(|node| node.native.as_ref().is_some_and(|native| native.symbol.is_some()))
+            .is_some_and(|node| {
+                node.native
+                    .as_ref()
+                    .is_some_and(|native| native.symbol.is_some())
+            })
     }
 
     /// The members and index signatures of a record-like object type.
@@ -781,7 +800,9 @@ impl<'a> Decomposer<'a> {
                 .any(|argument| mentions_a_type_parameter(snapshot, *argument, 0))
             {
                 let ours = self.declares_a_form_here(snapshot, ty)
-                    && ids.iter().all(|argument| is_a_type_parameter(snapshot, *argument));
+                    && ids
+                        .iter()
+                        .all(|argument| is_a_type_parameter(snapshot, *argument));
                 if !ours || !self.decomposing_forms {
                     if ours {
                         self.forms.push(ty);
@@ -846,7 +867,10 @@ impl<'a> Decomposer<'a> {
         // graph: see `members_unfollowed`. Their types are given ids and left
         // for the program to reach.
         let ids = if self.members_unfollowed(snapshot, ty) {
-            types.iter().map(|response| self.intern_shallow(snapshot, response)).collect()
+            types
+                .iter()
+                .map(|response| self.intern_shallow(snapshot, response))
+                .collect()
         } else {
             self.intern_all(snapshot, &types, walk)
         };
@@ -973,7 +997,10 @@ impl<'a> Decomposer<'a> {
         let Some(slot) = self.interned.get(ty) else {
             return false;
         };
-        let Some(symbol) = snapshot.types.get(slot.0 as usize).and_then(|record| record.symbol)
+        let Some(symbol) = snapshot
+            .types
+            .get(slot.0 as usize)
+            .and_then(|record| record.symbol)
         else {
             return false;
         };
@@ -1127,7 +1154,9 @@ impl<'a> Decomposer<'a> {
                         }
                         let a_member = parameter.modifiers.contains(DeclarationModifiers::PUBLIC)
                             || parameter.modifiers.contains(DeclarationModifiers::PRIVATE)
-                            || parameter.modifiers.contains(DeclarationModifiers::PROTECTED)
+                            || parameter
+                                .modifiers
+                                .contains(DeclarationModifiers::PROTECTED)
                             || parameter.modifiers.contains(DeclarationModifiers::READONLY);
                         if !a_member {
                             continue;
@@ -1159,10 +1188,7 @@ impl<'a> Decomposer<'a> {
                 // static `byteLength` and inherits an instance `byteLength`
                 // from `Uint8Array`; marking the second `own` because of the
                 // first made the class look as though it declared storage.
-                if member_node
-                    .modifiers
-                    .contains(DeclarationModifiers::STATIC)
-                {
+                if member_node.modifiers.contains(DeclarationModifiers::STATIC) {
                     continue;
                 }
                 if let Some(name) = member_node
@@ -1383,10 +1409,14 @@ impl<'a> Decomposer<'a> {
                 .and_then(|node| node.native.as_deref())
                 .is_some_and(|native| native.class.is_some() || native.protocol.is_some())
         });
-        let declared_module = declared.flags.contains(nts_semantic_schema::SymbolFlags::MODULE)
+        let declared_module = declared
+            .flags
+            .contains(nts_semantic_schema::SymbolFlags::MODULE)
             && !declared.declarations.is_empty()
             && declared.declarations.iter().all(|declaration| {
-                file_of(&self.file_bases, declaration.0).is_some_and(|(path, _)| nts_semantic_schema::reachability::is_declaration_file(path))
+                file_of(&self.file_bases, declaration.0).is_some_and(|(path, _)| {
+                    nts_semantic_schema::reachability::is_declaration_file(path)
+                })
             });
         foreign_class || declared_module
     }
@@ -1587,9 +1617,15 @@ impl<'a> Decomposer<'a> {
         // for only where the signature says it has one, so a program that
         // declares none pays no round trip for it.
         let this_type = match signature.this_parameter {
-            Some(_) => match self.client.this_parameter_of_signature(self.handle, &self.project, signature.id)? {
+            Some(_) => match self.client.this_parameter_of_signature(
+                self.handle,
+                &self.project,
+                signature.id,
+            )? {
                 Some(this) => {
-                    let types = self.client.types_of_symbols(self.handle, &self.project, vec![this.id])?;
+                    let types =
+                        self.client
+                            .types_of_symbols(self.handle, &self.project, vec![this.id])?;
                     self.intern_all(snapshot, &types, walk).first().copied()
                 }
                 None => None,
@@ -1669,7 +1705,11 @@ impl<'a> Decomposer<'a> {
     /// A reference whose arguments tsgo cannot encode -- the tuple holding an
     /// empty tuple `resolve_object` describes -- is counted unanswered and
     /// read as having none, as it was before.
-    fn arguments_of(&mut self, ty: u32, walk: &mut Walk<'_>) -> Result<Vec<TypeResponse>, TsgoError> {
+    fn arguments_of(
+        &mut self,
+        ty: u32,
+        walk: &mut Walk<'_>,
+    ) -> Result<Vec<TypeResponse>, TsgoError> {
         if !self.interned.is_reference(ty) {
             return Ok(Vec::new());
         }
@@ -1773,9 +1813,7 @@ pub(super) fn written_name(interned: &str) -> &str {
         return interned;
     };
     match rest.split_once('@') {
-        Some((id, written))
-            if !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) =>
-        {
+        Some((id, written)) if !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) => {
             written
         }
         _ => interned,
@@ -1809,7 +1847,10 @@ fn file_of(file_bases: &[(String, u32)], arena: u32) -> Option<(&str, u32)> {
 /// Returns `None` for a declaration outside the decoded set — an imported or
 /// ambient function. Mapping it onto whatever node sits at that index in another
 /// file would be a wrong answer that looks exactly like a right one.
-pub(super) fn declaration_node(handle: &NodeHandle, file_bases: &[(String, u32)]) -> Option<NodeId> {
+pub(super) fn declaration_node(
+    handle: &NodeHandle,
+    file_bases: &[(String, u32)],
+) -> Option<NodeId> {
     let (index, path) = {
         let rest = handle.0.split_once('.')?;
         let (index, tail) = rest;
@@ -1853,7 +1894,6 @@ fn is_a_type_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
         Some(TypeKind::TypeParameter { .. })
     )
 }
-
 
 #[cfg(test)]
 mod tests {

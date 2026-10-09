@@ -47,7 +47,9 @@ impl std::fmt::Display for Error {
 }
 
 fn fail<T>(message: impl Into<String>) -> Result<T, Error> {
-    Err(Error { message: message.into() })
+    Err(Error {
+        message: message.into(),
+    })
 }
 
 /// A field or a method. The two differ only in what the descriptor means.
@@ -187,7 +189,6 @@ struct Pool {
     /// printed `0` where Java says `512` -- no diagnostic, no crash, a
     /// different number.
     constant: Vec<Option<String>>,
-
 }
 
 impl Pool {
@@ -216,7 +217,10 @@ impl Pool {
 fn literal(value: f64) -> String {
     if value.is_finite() && value.fract() == 0.0 && value.abs() < 9.007_199_254_740_992e15 {
         // Exact by the guard: a finite whole `f64` under 2^53 is an `i64`.
-        #[expect(clippy::cast_possible_truncation, reason = "the guard above is the proof")]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the guard above is the proof"
+        )]
         let whole = value as i64;
         format!("{whole}")
     } else {
@@ -248,7 +252,10 @@ fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
             tag::INTEGER => {
                 // JVMS 4.4.4: an Integer entry *is* a signed 32-bit value, so
                 // this is a reinterpretation and not a narrowing.
-                #[expect(clippy::cast_possible_wrap, reason = "the pool entry is already signed")]
+                #[expect(
+                    clippy::cast_possible_wrap,
+                    reason = "the pool entry is already signed"
+                )]
                 let value = reader.u4()? as i32;
                 constant[index] = Some(value.to_string());
             }
@@ -265,7 +272,10 @@ fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
                 // A `long` is a `bigint` here, so its literal carries the `n`.
                 let hi = u64::from(reader.u4()?);
                 let lo = u64::from(reader.u4()?);
-                #[expect(clippy::cast_possible_wrap, reason = "JVMS 4.4.5: a Long entry is signed")]
+                #[expect(
+                    clippy::cast_possible_wrap,
+                    reason = "JVMS 4.4.5: a Long entry is signed"
+                )]
                 let value = ((hi << 32) | lo) as i64;
                 constant[index] = Some(format!("{value}n"));
                 index += 1;
@@ -281,7 +291,11 @@ fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
                 // somewhere much later.
                 index += 1;
             }
-            other => return fail(format!("unknown constant pool tag {other} at index {index}")),
+            other => {
+                return fail(format!(
+                    "unknown constant pool tag {other} at index {index}"
+                ));
+            }
         }
         index += 1;
     }
@@ -294,7 +308,11 @@ fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
             constant[index] = Some(format!("{text:?}"));
         }
     }
-    Ok(Pool { utf8, class, constant })
+    Ok(Pool {
+        utf8,
+        class,
+        constant,
+    })
 }
 
 /// Everything a member or a class can carry that this slice reads.
@@ -366,7 +384,11 @@ fn attributes(reader: &mut Reader, pool: &Pool) -> Result<Attributes, Error> {
                 // The exception table and the nested attributes are stepped
                 // over by the outer `reader.at = end`, which every attribute
                 // arm relies on.
-                found.code = Some(Code { max_stack, max_locals, bytes });
+                found.code = Some(Code {
+                    max_stack,
+                    max_locals,
+                    bytes,
+                });
             }
             "InnerClasses" => {
                 let n = reader.u2()?;
@@ -392,7 +414,9 @@ fn attributes(reader: &mut Reader, pool: &Pool) -> Result<Attributes, Error> {
         // over, and stepping by the declared length is the only way that stays
         // true for attributes written after this code.
         if end > reader.bytes.len() {
-            return fail(format!("attribute `{name}` runs past the end of the class file"));
+            return fail(format!(
+                "attribute `{name}` runs past the end of the class file"
+            ));
         }
         reader.at = end;
     }
@@ -412,7 +436,10 @@ fn annotation(reader: &mut Reader, pool: &Pool) -> Result<String, Error> {
         element_value(reader, pool)?;
     }
     // `Lcom/example/Nullable;` -> `com/example/Nullable`
-    Ok(descriptor.trim_start_matches('L').trim_end_matches(';').to_owned())
+    Ok(descriptor
+        .trim_start_matches('L')
+        .trim_end_matches(';')
+        .to_owned())
 }
 
 fn element_value(reader: &mut Reader, pool: &Pool) -> Result<(), Error> {
@@ -476,7 +503,11 @@ pub fn class_file(bytes: &[u8]) -> Result<ClassFile, Error> {
     let binary_name = pool.class_name(reader.u2()?)?;
     let super_index = reader.u2()?;
     // Zero exactly once in any program: `java/lang/Object` has no superclass.
-    let super_name = if super_index == 0 { None } else { Some(pool.class_name(super_index)?) };
+    let super_name = if super_index == 0 {
+        None
+    } else {
+        Some(pool.class_name(super_index)?)
+    };
 
     let interface_count = reader.u2()?;
     let mut interfaces = Vec::with_capacity(interface_count as usize);

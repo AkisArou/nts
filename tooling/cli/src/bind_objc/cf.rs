@@ -46,17 +46,29 @@ pub(super) struct CfClass {
 /// The classes among `names` that are Core Foundation types -- Swift imports
 /// `{name}Ref` as a class -- by the C pointer type their `Ref` names, which
 /// is how a signature spells one: `struct CGContext *`.
-pub(super) fn requested(swift: &super::Swift, typedefs: &BTreeMap<String, String>, names: &[String]) -> BTreeMap<String, String> {
+pub(super) fn requested(
+    swift: &super::Swift,
+    typedefs: &BTreeMap<String, String>,
+    names: &[String],
+) -> BTreeMap<String, String> {
     names
         .iter()
-        .filter(|name| swift.get(&format!("c:@T@{name}Ref")).is_some_and(|symbol| symbol.kind.identifier == "swift.class"))
+        .filter(|name| {
+            swift
+                .get(&format!("c:@T@{name}Ref"))
+                .is_some_and(|symbol| symbol.kind.identifier == "swift.class")
+        })
         .filter_map(|name| Some((typedefs.get(&format!("{name}Ref"))?.clone(), name.clone())))
         .collect()
 }
 
 /// The C functions Swift makes members of `classes`, and the free functions
 /// named in `functions`: what the second pass keeps the declarations of.
-pub(super) fn functions(swift: &super::Swift, classes: &BTreeMap<String, String>, functions: &[String]) -> BTreeSet<String> {
+pub(super) fn functions(
+    swift: &super::Swift,
+    classes: &BTreeMap<String, String>,
+    functions: &[String],
+) -> BTreeSet<String> {
     let members: BTreeSet<&str> = classes.values().map(String::as_str).collect();
     swift
         .by_usr
@@ -64,7 +76,9 @@ pub(super) fn functions(swift: &super::Swift, classes: &BTreeMap<String, String>
         .filter_map(|(usr, symbol)| {
             let name = usr.strip_prefix("c:@F@")?;
             let owner = symbol.path.first().map(String::as_str)?;
-            (members.contains(owner) && symbol.path.len() == 2 || functions.iter().any(|f| f == name)).then(|| name.to_owned())
+            (members.contains(owner) && symbol.path.len() == 2
+                || functions.iter().any(|f| f == name))
+            .then(|| name.to_owned())
         })
         .collect()
 }
@@ -81,11 +95,19 @@ fn declared<'v>(decl: &'v Value, typedefs: &BTreeMap<String, String>) -> Option<
     let parameters = decl
         .get("inner")
         .and_then(Value::as_array)
-        .map(|inner| inner.iter().filter(|p| p.get("kind").and_then(Value::as_str) == Some("ParmVarDecl")).collect())
+        .map(|inner| {
+            inner
+                .iter()
+                .filter(|p| p.get("kind").and_then(Value::as_str) == Some("ParmVarDecl"))
+                .collect()
+        })
         .unwrap_or_default();
     // `void (CGContextRef _Nullable, CGRect)`: the result is what comes before
     // the parameter list, which is the last parenthesised group.
-    let function = decl.get("type").and_then(|ty| ty.get("qualType")).and_then(Value::as_str)?;
+    let function = decl
+        .get("type")
+        .and_then(|ty| ty.get("qualType"))
+        .and_then(Value::as_str)?;
     let mut depth = 0usize;
     let mut open = None;
     for (at, c) in function.char_indices().rev() {
@@ -105,7 +127,10 @@ fn declared<'v>(decl: &'v Value, typedefs: &BTreeMap<String, String>) -> Option<
     let words = |also: &[&str]| {
         result
             .split_whitespace()
-            .filter(|word| !matches!(*word, "_Nullable" | "_Nonnull" | "_Null_unspecified") && !also.contains(word))
+            .filter(|word| {
+                !matches!(*word, "_Nullable" | "_Nonnull" | "_Null_unspecified")
+                    && !also.contains(word)
+            })
             .collect::<Vec<_>>()
             .join(" ")
     };
@@ -114,7 +139,10 @@ fn declared<'v>(decl: &'v Value, typedefs: &BTreeMap<String, String>) -> Option<
     // keeps it: `const CGFloat *` is a read-only buffer.
     let bare = words(&["const"]);
     let desugared = typedefs.get(&bare).cloned().unwrap_or_else(|| words(&[]));
-    Some(Declared { parameters, result: serde_json::json!({ "qualType": result, "desugaredQualType": desugared }) })
+    Some(Declared {
+        parameters,
+        result: serde_json::json!({ "qualType": result, "desugaredQualType": desugared }),
+    })
 }
 
 /// Whether a C function hands over a reference to what it returns: Core
@@ -127,15 +155,32 @@ impl Model<'_> {
     /// Each requested Core Foundation class, and the free functions asked
     /// for, from the functions the second pass kept.
     pub(super) fn read_cf(&mut self, functions: &BTreeMap<String, Value>, wanted: &[String]) {
-        let classes: Vec<(String, String)> = self.cf_types.iter().map(|(pointer, name)| (pointer.clone(), name.clone())).collect();
+        let classes: Vec<(String, String)> = self
+            .cf_types
+            .iter()
+            .map(|(pointer, name)| (pointer.clone(), name.clone()))
+            .collect();
         for (pointer, name) in classes {
-            let tag = pointer.trim_start_matches("const ").trim_start_matches("struct ").trim_end_matches(" *").trim().to_owned();
-            let mut class = CfClass { swift: name.clone(), tag, members: Vec::new(), inits: Vec::new(), statics: Vec::new(), skipped: Vec::new() };
+            let tag = pointer
+                .trim_start_matches("const ")
+                .trim_start_matches("struct ")
+                .trim_end_matches(" *")
+                .trim()
+                .to_owned();
+            let mut class = CfClass {
+                swift: name.clone(),
+                tag,
+                members: Vec::new(),
+                inits: Vec::new(),
+                statics: Vec::new(),
+                skipped: Vec::new(),
+            };
             let mut symbols: Vec<(&String, &Value, &Symbol)> = functions
                 .iter()
                 .filter_map(|(function, decl)| {
                     let symbol = self.swift.get(&format!("c:@F@{function}"))?;
-                    (symbol.path.first() == Some(&name) && symbol.path.len() == 2).then_some((function, decl, symbol))
+                    (symbol.path.first() == Some(&name) && symbol.path.len() == 2)
+                        .then_some((function, decl, symbol))
                 })
                 .collect();
             symbols.sort_by(|a, b| a.2.names.title.cmp(&b.2.names.title));
@@ -167,7 +212,9 @@ impl Model<'_> {
                 .and_then(|decl| self.cf_function(function, decl));
             match text {
                 Ok(text) => self.functions.push(text),
-                Err(why) => self.functions.push(format!("  // Not bound: {function}: {why}")),
+                Err(why) => self
+                    .functions
+                    .push(format!("  // Not bound: {function}: {why}")),
             }
         }
     }
@@ -193,16 +240,35 @@ impl Model<'_> {
     /// `self` must come first: a `this:` method's receiver is the C
     /// function's first argument, so any other would pass the arguments out
     /// of order.
-    fn without_self<'v>(parameters: &[&'v Value], pointer: &str, symbol: &Symbol) -> std::result::Result<Vec<&'v Value>, String> {
-        let is_self = |parameter: &Value| parameter.get("type").and_then(super::desugared).is_some_and(|ty| ty == pointer);
-        let candidates: Vec<usize> = (0..parameters.len()).filter(|&at| is_self(parameters[at])).collect();
+    fn without_self<'v>(
+        parameters: &[&'v Value],
+        pointer: &str,
+        symbol: &Symbol,
+    ) -> std::result::Result<Vec<&'v Value>, String> {
+        let is_self = |parameter: &Value| {
+            parameter
+                .get("type")
+                .and_then(super::desugared)
+                .is_some_and(|ty| ty == pointer)
+        };
+        let candidates: Vec<usize> = (0..parameters.len())
+            .filter(|&at| is_self(parameters[at]))
+            .collect();
         let at = match candidates.as_slice() {
             [] => return Err("no parameter of the class's type to be `self`".to_owned()),
             [one] => *one,
             several => {
                 let kept = symbol.parameter_names();
-                let unkept: Vec<usize> =
-                    several.iter().copied().filter(|&at| parameters[at].get("name").and_then(Value::as_str).is_some_and(|name| !kept.contains(&name))).collect();
+                let unkept: Vec<usize> = several
+                    .iter()
+                    .copied()
+                    .filter(|&at| {
+                        parameters[at]
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .is_some_and(|name| !kept.contains(&name))
+                    })
+                    .collect();
                 match unkept.as_slice() {
                     [one] => *one,
                     _ => return Err("more than one parameter of the class's type, and no way to tell which is `self`".to_owned()),
@@ -210,7 +276,10 @@ impl Model<'_> {
             }
         };
         if at != 0 {
-            return Err("`self` is not the first parameter, and a method's receiver is passed first".to_owned());
+            return Err(
+                "`self` is not the first parameter, and a method's receiver is passed first"
+                    .to_owned(),
+            );
         }
         Ok(parameters[1..].to_vec())
     }
@@ -229,114 +298,241 @@ impl Model<'_> {
     }
 
     /// The result, as a member or a function returns it.
-    fn cf_result(&mut self, class: &Class, function: &str, result: &Value, symbol: Option<&Symbol>) -> std::result::Result<String, String> {
+    fn cf_result(
+        &mut self,
+        class: &Class,
+        function: &str,
+        result: &Value,
+        symbol: Option<&Symbol>,
+    ) -> std::result::Result<String, String> {
         // A toll-free object the create rule hands over is a +1 reference,
         // and a Foundation object's result is read as borrowed: copied into
         // the program's string or held as the object, never released.
         if creates(function)
-            && let Some(pointee) = super::desugared(result).as_deref().and_then(|text| text.strip_suffix(" *").map(str::to_owned))
+            && let Some(pointee) = super::desugared(result)
+                .as_deref()
+                .and_then(|text| text.strip_suffix(" *").map(str::to_owned))
             && let Some(object) = super::toll_free(&pointee)
         {
-            return Err(format!("a `{object}` the create rule hands over, which a borrowed result would never release"));
+            return Err(format!(
+                "a `{object}` the create rule hands over, which a borrowed result would never release"
+            ));
         }
         let spelled = self.in_c_function(|model| model.spell(class, result, Position::Result))?;
         // Swift's word on whether it is optional, where there is one: the
         // SDK's API notes give Swift nullability the header leaves loose, as
         // `CGColorSpaceCreateDeviceRGB`'s `_Nullable` result is `CGColorSpace`.
-        let value = spelled.strip_suffix(" | null").map_or_else(|| spelled.clone(), str::to_owned);
+        let value = spelled
+            .strip_suffix(" | null")
+            .map_or_else(|| spelled.clone(), str::to_owned);
         let null = match symbol {
             Some(symbol) => symbol.optionality() == super::Optionality::Optional,
             None => spelled.ends_with(" | null") || written(result).contains("_Nullable"),
         };
-        let class_valued = self.cf_types.iter().any(|(pointer, name)| value == name.as_str() || pointer.starts_with("const ") && value == format!("Const<{name}>"));
+        let class_valued = self.cf_types.iter().any(|(pointer, name)| {
+            value == name.as_str()
+                || pointer.starts_with("const ") && value == format!("Const<{name}>")
+        });
         let owned = if creates(function) && class_valued {
             self.import("c:types", "Owned");
             format!("Owned<{value}>")
         } else {
             value
         };
-        Ok(if null { format!("{owned} | null") } else { owned })
+        Ok(if null {
+            format!("{owned} | null")
+        } else {
+            owned
+        })
     }
 
     /// `fill(this: CGContext, rect: ...): void`, tagged with its function.
-    fn cf_method(&mut self, class: &CfClass, pointer: &str, function: &str, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
-        let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
+    fn cf_method(
+        &mut self,
+        class: &CfClass,
+        pointer: &str,
+        function: &str,
+        decl: &Value,
+        symbol: &Symbol,
+    ) -> std::result::Result<String, String> {
+        let declared =
+            declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
         let parameters = Self::without_self(&declared.parameters, pointer, symbol)?;
         let (base, labels) = swift_name(&symbol.names.title);
         let spelling = Self::cf_spelling_class(class);
         let arguments = self.cf_arguments(&spelling, &symbol.names.title, &parameters, &labels)?;
         let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
         let receiver = self.cf_handle(pointer, class.swift.clone());
-        let this = if arguments.is_empty() { format!("this: {receiver}") } else { format!("this: {receiver}, {arguments}") };
-        Ok(format!("    /** @ntsSymbol {function} */\n    {}({this}): {result};", quoted_key(&base)))
+        let this = if arguments.is_empty() {
+            format!("this: {receiver}")
+        } else {
+            format!("this: {receiver}, {arguments}")
+        };
+        Ok(format!(
+            "    /** @ntsSymbol {function} */\n    {}({this}): {result};",
+            quoted_key(&base)
+        ))
     }
 
     /// `export function CGColor(labels: { red: CGFloat; ... }): Owned<CGColor>`:
     /// Swift's `CGColor(red:green:blue:alpha:)`, as TypeScript calls it.
     /// A `static func` Swift gives the class: the C function it is, as a
     /// function of the class's namespace, every parameter an argument.
-    fn cf_static(&mut self, class: &CfClass, function: &str, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
-        let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
+    fn cf_static(
+        &mut self,
+        class: &CfClass,
+        function: &str,
+        decl: &Value,
+        symbol: &Symbol,
+    ) -> std::result::Result<String, String> {
+        let declared =
+            declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
         let (name, labels) = swift_name(&symbol.names.title);
         let spelling = Self::cf_spelling_class(class);
-        let arguments = self.cf_arguments(&spelling, &symbol.names.title, &declared.parameters, &labels)?;
+        let arguments = self.cf_arguments(
+            &spelling,
+            &symbol.names.title,
+            &declared.parameters,
+            &labels,
+        )?;
         let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
-        Ok(format!("    /** @ntsSymbol {function} */\n    export function {name}({arguments}): {result};"))
+        Ok(format!(
+            "    /** @ntsSymbol {function} */\n    export function {name}({arguments}): {result};"
+        ))
     }
 
-    fn cf_init(&mut self, class: &CfClass, function: &str, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
-        let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
+    fn cf_init(
+        &mut self,
+        class: &CfClass,
+        function: &str,
+        decl: &Value,
+        symbol: &Symbol,
+    ) -> std::result::Result<String, String> {
+        let declared =
+            declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
         let (_, labels) = swift_name(&symbol.names.title);
         let spelling = Self::cf_spelling_class(class);
-        let arguments = self.cf_arguments(&spelling, &symbol.names.title, &declared.parameters, &labels)?;
+        let arguments = self.cf_arguments(
+            &spelling,
+            &symbol.names.title,
+            &declared.parameters,
+            &labels,
+        )?;
         let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
         // `init?(...)`: Swift's failable initializer, which answers nil.
-        let failable = symbol.fragments.iter().any(|f| f.spelling.contains("init?"));
-        let result = if failable && !result.ends_with(" | null") { format!("{result} | null") } else { result };
+        let failable = symbol
+            .fragments
+            .iter()
+            .any(|f| f.spelling.contains("init?"));
+        let result = if failable && !result.ends_with(" | null") {
+            format!("{result} | null")
+        } else {
+            result
+        };
         // The class itself, handed over and perhaps `const`: `Owned<Const<CGPath>>`.
-        let unwrap = |text: &'_ str, brand: &str| text.strip_prefix(brand).and_then(|inner| inner.strip_suffix('>')).map_or_else(|| text.to_owned(), str::to_owned);
-        if unwrap(&unwrap(result.trim_end_matches(" | null"), "Owned<"), "Const<") != class.swift {
-            return Err(format!("an initializer answering a `{result}`, not a `{}`", class.swift));
+        let unwrap = |text: &'_ str, brand: &str| {
+            text.strip_prefix(brand)
+                .and_then(|inner| inner.strip_suffix('>'))
+                .map_or_else(|| text.to_owned(), str::to_owned)
+        };
+        if unwrap(
+            &unwrap(result.trim_end_matches(" | null"), "Owned<"),
+            "Const<",
+        ) != class.swift
+        {
+            return Err(format!(
+                "an initializer answering a `{result}`, not a `{}`",
+                class.swift
+            ));
         }
-        Ok(format!("  /** @ntsSymbol {function} */\n  export function {}({arguments}): {result};", class.swift))
+        Ok(format!(
+            "  /** @ntsSymbol {function} */\n  export function {}({arguments}): {result};",
+            class.swift
+        ))
     }
 
     /// `readonly alpha: CGFloat`: a property Swift reads through a function
     /// of the instance, which is declared beside it under its C name for the
     /// property's `@ntsGet` to name.
-    fn cf_property(&mut self, class: &CfClass, pointer: &str, function: &str, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
-        let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
+    fn cf_property(
+        &mut self,
+        class: &CfClass,
+        pointer: &str,
+        function: &str,
+        decl: &Value,
+        symbol: &Symbol,
+    ) -> std::result::Result<String, String> {
+        let declared =
+            declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
         if !Self::without_self(&declared.parameters, pointer, symbol)?.is_empty() {
-            return Err("a property read through a function taking more than the instance".to_owned());
+            return Err(
+                "a property read through a function taking more than the instance".to_owned(),
+            );
         }
         let spelling = Self::cf_spelling_class(class);
         let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
         let name = quoted_key(&symbol.names.title);
         let receiver = self.cf_handle(pointer, class.swift.clone());
-        Ok(format!("    /** @ntsSymbol {function} */\n    {function}(this: {receiver}): {result};\n    /** @ntsGet {function} */\n    readonly {name}: {result};"))
+        Ok(format!(
+            "    /** @ntsSymbol {function} */\n    {function}(this: {receiver}): {result};\n    /** @ntsGet {function} */\n    readonly {name}: {result};"
+        ))
     }
 
     /// A free function Swift imports as one: `CGColorSpaceCreateDeviceRGB()`.
     fn cf_function(&mut self, function: &str, decl: &Value) -> std::result::Result<String, String> {
-        let symbol = self.swift.get(&format!("c:@F@{function}")).ok_or("no Swift import of it")?;
+        let symbol = self
+            .swift
+            .get(&format!("c:@F@{function}"))
+            .ok_or("no Swift import of it")?;
         if symbol.kind.identifier != "swift.func" {
-            return Err(format!("Swift imports it as a `{}`, not a function", symbol.kind.identifier));
+            return Err(format!(
+                "Swift imports it as a `{}`, not a function",
+                symbol.kind.identifier
+            ));
         }
         self.available(symbol)?;
-        let declared = declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
+        let declared =
+            declared(decl, &self.typedefs).ok_or("a function type this does not read")?;
         let (base, labels) = swift_name(&symbol.names.title);
-        let spelling = Class { objc: String::new(), swift: String::new(), parent: None, members: Vec::new(), extensions: Vec::new(), skipped: Vec::new(), sent: Vec::new() };
-        let arguments = self.cf_arguments(&spelling, &symbol.names.title, &declared.parameters, &labels)?;
+        let spelling = Class {
+            objc: String::new(),
+            swift: String::new(),
+            parent: None,
+            members: Vec::new(),
+            extensions: Vec::new(),
+            skipped: Vec::new(),
+            sent: Vec::new(),
+        };
+        let arguments = self.cf_arguments(
+            &spelling,
+            &symbol.names.title,
+            &declared.parameters,
+            &labels,
+        )?;
         let result = self.cf_result(&spelling, function, &declared.result, Some(symbol))?;
-        Ok(format!("  /** @ntsSymbol {function} */\n  export function {base}({arguments}): {result};"))
+        Ok(format!(
+            "  /** @ntsSymbol {function} */\n  export function {base}({arguments}): {result};"
+        ))
     }
 
     /// The arguments as Swift labels them, one label per C parameter.
-    fn cf_arguments(&mut self, class: &Class, title: &str, parameters: &[&Value], labels: &[String]) -> std::result::Result<String, String> {
+    fn cf_arguments(
+        &mut self,
+        class: &Class,
+        title: &str,
+        parameters: &[&Value],
+        labels: &[String],
+    ) -> std::result::Result<String, String> {
         if labels.len() != parameters.len() {
-            return Err(format!("Swift's `{title}` labels {} argument(s) where C takes {}", labels.len(), parameters.len()));
+            return Err(format!(
+                "Swift's `{title}` labels {} argument(s) where C takes {}",
+                labels.len(),
+                parameters.len()
+            ));
         }
-        Ok(self.in_c_function(|model| model.arguments(class, parameters, labels))?.0)
+        Ok(self
+            .in_c_function(|model| model.arguments(class, parameters, labels))?
+            .0)
     }
 }
 
@@ -353,7 +549,11 @@ pub(super) fn render(out: &mut String, class: &CfClass) {
         }
     }
     let _ = writeln!(out, "  }}");
-    let _ = writeln!(out, "  export type {0} = ObjcClass<\"{1}\"> & {0}OwnMethods;", class.swift, class.tag);
+    let _ = writeln!(
+        out,
+        "  export type {0} = ObjcClass<\"{1}\"> & {0}OwnMethods;",
+        class.swift, class.tag
+    );
     for line in &class.inits {
         let _ = writeln!(out, "{line}");
     }

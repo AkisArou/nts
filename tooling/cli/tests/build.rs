@@ -73,9 +73,15 @@ fn available() -> bool {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let tool = |name: &str, arg: &str| {
-        Command::new(name).arg(arg).output().is_ok_and(|o| o.status.success())
+        Command::new(name)
+            .arg(arg)
+            .output()
+            .is_ok_and(|o| o.status.success())
     };
-    let node = tool(&std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned()), "--version");
+    let node = tool(
+        &std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned()),
+        "--version",
+    );
     frontend && node && tool("clang", "--version") && tool("nm", "--version")
 }
 
@@ -197,7 +203,10 @@ fn a_shared_library_publishes_its_entry_and_nothing_else() {
     let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
     assert!(artifact.exists(), "no artifact at {}", artifact.display());
     let symbols = exported(&artifact);
-    assert!(symbols.contains("published"), "the entry's export is missing: {symbols:?}");
+    assert!(
+        symbols.contains("published"),
+        "the entry's export is missing: {symbols:?}"
+    );
     assert!(
         !symbols.contains("notPublished") && !symbols.contains("helper"),
         "a name the entry does not export crossed the ABI: {symbols:?}",
@@ -250,15 +259,31 @@ export default defineConfig({
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let built = project.join(".nts/build/viaLlvm/linux-gnu-x86_64");
-    assert!(built.join("program.ll.o").is_file(), "the llvm product did not compile program.ll:\n{}", run.stdout);
-    assert!(!built.join("program.c.o").exists(), "the llvm product compiled program.c too");
+    assert!(
+        built.join("program.ll.o").is_file(),
+        "the llvm product did not compile program.ll:\n{}",
+        run.stdout
+    );
+    assert!(
+        !built.join("program.c.o").exists(),
+        "the llvm product compiled program.c too"
+    );
     let answer = |product: &str| {
         let exe = project.join(format!(".nts/build/{product}/linux-gnu-x86_64/{product}"));
-        let output = Command::new(&exe).output().unwrap_or_else(|e| panic!("running {}: {e}", exe.display()));
-        (output.status.code(), String::from_utf8_lossy(&output.stderr).into_owned())
+        let output = Command::new(&exe)
+            .output()
+            .unwrap_or_else(|e| panic!("running {}: {e}", exe.display()));
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
     };
     let (via_c, via_llvm) = (answer("viaC"), answer("viaLlvm"));
-    assert_ne!(via_c.0, Some(0), "the C build did not evaluate the module: {via_c:?}");
+    assert_ne!(
+        via_c.0,
+        Some(0),
+        "the C build did not evaluate the module: {via_c:?}"
+    );
     assert!(via_c.1.contains("evaluated 1"), "{via_c:?}");
     assert_eq!(via_llvm, via_c, "the llvm build disagrees with the C build");
 }
@@ -297,14 +322,34 @@ export default defineConfig({
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let consumer = project.join("caller.c");
-    std::fs::write(&consumer, "double total(void);\nint main(void) { return (int)total(); }\n").expect("consumer");
+    std::fs::write(
+        &consumer,
+        "double total(void);\nint main(void) { return (int)total(); }\n",
+    )
+    .expect("consumer");
     for product in ["viaC", "viaLlvm"] {
-        let archive = project.join(format!(".nts/build/{product}/linux-gnu-x86_64/lib{product}.a"));
+        let archive = project.join(format!(
+            ".nts/build/{product}/linux-gnu-x86_64/lib{product}.a"
+        ));
         let exe = project.join(format!("caller-{product}"));
-        let linked = Command::new("clang").arg(&consumer).arg(&archive).args(["-lm", "-o"]).arg(&exe).output().expect("clang");
-        assert!(linked.status.success(), "{product}: {}", String::from_utf8_lossy(&linked.stderr));
+        let linked = Command::new("clang")
+            .arg(&consumer)
+            .arg(&archive)
+            .args(["-lm", "-o"])
+            .arg(&exe)
+            .output()
+            .expect("clang");
+        assert!(
+            linked.status.success(),
+            "{product}: {}",
+            String::from_utf8_lossy(&linked.stderr)
+        );
         let status = Command::new(&exe).status().expect("running the consumer");
-        assert_eq!(status.code(), Some(12), "{product}: module evaluation did not run when the library loaded");
+        assert_eq!(
+            status.code(),
+            Some(12),
+            "{product}: module evaluation did not run when the library loaded"
+        );
     }
 }
 
@@ -318,9 +363,15 @@ fn every_product_is_built_unless_one_is_named() {
     let project = fixture("build-two", TWO_PRODUCTS);
     let all = build(&project, &[]);
     assert!(all.ok, "{}{}", all.stdout, all.stderr);
-    assert!(project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so").exists());
     assert!(
-        project.join(".nts/build/acmeStatic/linux-gnu-x86_64/libacmeStatic.a").exists(),
+        project
+            .join(".nts/build/acme/linux-gnu-x86_64/libacme.so")
+            .exists()
+    );
+    assert!(
+        project
+            .join(".nts/build/acmeStatic/linux-gnu-x86_64/libacmeStatic.a")
+            .exists(),
         "the static archive was not built:\n{}",
         all.stdout,
     );
@@ -332,9 +383,15 @@ fn every_product_is_built_unless_one_is_named() {
     let project = fixture("build-one", TWO_PRODUCTS);
     let one = build(&project, &["--product", "acme"]);
     assert!(one.ok, "{}{}", one.stdout, one.stderr);
-    assert!(project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so").exists());
     assert!(
-        !project.join(".nts/build/acmeStatic/linux-gnu-x86_64/libacmeStatic.a").exists(),
+        project
+            .join(".nts/build/acme/linux-gnu-x86_64/libacme.so")
+            .exists()
+    );
+    assert!(
+        !project
+            .join(".nts/build/acmeStatic/linux-gnu-x86_64/libacmeStatic.a")
+            .exists(),
         "`--product acme` built the other product too:\n{}",
         one.stdout
     );
@@ -401,7 +458,9 @@ int main(void) { printf("%s\n", label ? "initialised" : "NULL"); return label ? 
         "the consumer did not link: {}",
         String::from_utf8_lossy(&compiled.stderr),
     );
-    let ran = Command::new(&binary).output().expect("running the consumer");
+    let ran = Command::new(&binary)
+        .output()
+        .expect("running the consumer");
     assert!(
         ran.status.success(),
         "the library loaded without evaluating its module: `label` is null.\nstdout: {}",
@@ -501,7 +560,8 @@ export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.t
     assert!(
         !run.stderr.contains("declined") && !run.stdout.contains("declined"),
         "the build declined top-level code:\n{}{}",
-        run.stdout, run.stderr,
+        run.stdout,
+        run.stderr,
     );
 }
 
@@ -587,7 +647,8 @@ fn a_published_class_is_named_as_crossing_no_symbol() {
     let run = build(&project, &[]);
     assert!(run.ok, "{}{}", run.stdout, run.stderr);
     assert!(
-        run.stdout.contains("`Counter` is exported but crosses no C symbol"),
+        run.stdout
+            .contains("`Counter` is exported but crosses no C symbol"),
         "the build published a class silently:\n{}",
         run.stdout,
     );
@@ -711,7 +772,10 @@ export default defineConfig({
         "import type { c_int } from \"c:types\";\nexport function half(n: c_int): number { return n / 2; }\n",
     )
     .expect("entry");
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("the repository root");
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the repository root");
     std::fs::write(
         project.join("tsconfig.json"),
         format!(
@@ -727,7 +791,12 @@ export default defineConfig({
         .env("NTS_NAPI_INCLUDE", &headers)
         .output()
         .expect("running nts build");
-    assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     let artifact = project.join(".nts/build/thing/node-api-8-x86_64/thing.node");
     let script = format!(
         "const a = require({:?}); const out = [a.half(7)];\n\
@@ -735,10 +804,21 @@ export default defineConfig({
          process.stdout.write(out.join('|'));",
         artifact.to_string_lossy(),
     );
-    let ran = Command::new("node").arg("-e").arg(script).output().expect("running node");
-    assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+    let ran = Command::new("node")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .expect("running node");
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
     let refused = "RangeError ERR_OUT_OF_RANGE";
-    assert_eq!(String::from_utf8_lossy(&ran.stdout), format!("3.5|{refused}|{refused}|{refused}|{refused}"));
+    assert_eq!(
+        String::from_utf8_lossy(&ran.stdout),
+        format!("3.5|{refused}|{refused}|{refused}|{refused}")
+    );
 }
 
 /// A jar is packaged, runs, and lands in the package its config names.
@@ -761,7 +841,10 @@ fn a_jar_is_packaged_in_the_package_its_config_names() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
     }
-    let jdk = Command::new("jar").arg("--version").output().is_ok_and(|o| o.status.success());
+    let jdk = Command::new("jar")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
     if !jdk {
         eprintln!("skipping: no `jar` on PATH");
         return;
@@ -784,14 +867,27 @@ export default defineConfig({{
     )
     .expect("writing the program");
     let run = build(&project, &[]);
-    assert!(run.ok, "the declared package was not built:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        run.ok,
+        "the declared package was not built:\n{}{}",
+        run.stdout, run.stderr
+    );
     // **The archive exists, as its own statement.** `unzip` on a missing file
     // prints nothing and every `contains` below is then false -- so "the classes
     // are not where the config said" would be the message for "there is no jar",
     // which is the pair a check must never merge.
     let named = project.join(".nts/build/calc/java-8/calc.jar");
-    assert!(named.is_file(), "no jar at {}:\n{}", named.display(), run.stdout);
-    let placed = Command::new("unzip").arg("-l").arg(&named).output().expect("unzip");
+    assert!(
+        named.is_file(),
+        "no jar at {}:\n{}",
+        named.display(),
+        run.stdout
+    );
+    let placed = Command::new("unzip")
+        .arg("-l")
+        .arg(&named)
+        .output()
+        .expect("unzip");
     let placed = String::from_utf8_lossy(&placed.stdout);
     assert!(
         placed.contains("com/acme/sdk/") && !placed.contains("nts/gen/"),
@@ -806,7 +902,10 @@ export default defineConfig({{
     let jar = project.join(".nts/build/calc/java-8/calc.jar");
     let runtime = project.join(".nts/build/calc/java-8/nts-runtime.jar");
     assert!(jar.exists(), "no jar at {}", jar.display());
-    assert!(runtime.exists(), "the runtime a consumer needs was not reported beside it");
+    assert!(
+        runtime.exists(),
+        "the runtime a consumer needs was not reported beside it"
+    );
 
     // **`-Xverify:all`**, because a class file that loads is the assertion and a
     // verifier rejection is the characteristic failure of a bytecode emitter.
@@ -860,7 +959,11 @@ export default defineConfig({
 "#,
     );
     let run = build(&project, &[]);
-    assert!(!run.ok, "a kind with no packaging should stop the build:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "a kind with no packaging should stop the build:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("xcodebuild"),
         "the refusal did not say what the container needs:\n{}",
@@ -905,7 +1008,10 @@ fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
     drop(std::fs::remove_dir_all(&project));
     std::fs::create_dir_all(project.join("src")).expect("creating the fixture");
     std::fs::create_dir_all(project.join("types")).expect("creating types");
-    for (from, to) in [("src/main.ts", "src/main.ts"), ("types/utsname.d.ts", "types/utsname.d.ts")] {
+    for (from, to) in [
+        ("src/main.ts", "src/main.ts"),
+        ("types/utsname.d.ts", "types/utsname.d.ts"),
+    ] {
         std::fs::copy(source.join(from), project.join(to)).expect("copying the fixture");
     }
     // Top-level use, so the binding is reachable: with `--main` a module's
@@ -939,15 +1045,25 @@ fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
     .expect("config");
 
     let good = build(&project, &[]);
-    assert!(good.ok, "the unmodified binding should build:\n{}{}", good.stdout, good.stderr);
+    assert!(
+        good.ok,
+        "the unmodified binding should build:\n{}{}",
+        good.stdout, good.stderr
+    );
 
     // 65 is what `<sys/utsname.h>` says. One less moves every later offset.
     let binding = project.join("types/utsname.d.ts");
     let text = std::fs::read_to_string(&binding).expect("the binding");
-    std::fs::write(&binding, text.replacen("CArray<c_char, 65>", "CArray<c_char, 64>", 1))
-        .expect("corrupting the binding");
+    std::fs::write(
+        &binding,
+        text.replacen("CArray<c_char, 65>", "CArray<c_char, 64>", 1),
+    )
+    .expect("corrupting the binding");
     let bad = build(&project, &[]);
-    assert!(!bad.ok, "a binding that disagrees with the headers should stop the build");
+    assert!(
+        !bad.ok,
+        "a binding that disagrees with the headers should stop the build"
+    );
     assert!(
         bad.stderr.contains("does not match the headers"),
         "the refusal did not say what disagreed:\n{}",
@@ -1105,8 +1221,13 @@ int main(void) { return (uint32_t)digestOf(7) == expected(7) ? 0 : 1; }
         "the consumer did not link -- the package's C is probably not in the artifact: {}",
         String::from_utf8_lossy(&compiled.stderr),
     );
-    let ran = Command::new(&binary).output().expect("running the consumer");
-    assert!(ran.status.success(), "the artifact answered something other than the C does");
+    let ran = Command::new(&binary)
+        .output()
+        .expect("running the consumer");
+    assert!(
+        ran.status.success(),
+        "the artifact answered something other than the C does"
+    );
 }
 
 /// An AAR carries its classes, its manifest fragment and its R8 rules.
@@ -1125,7 +1246,11 @@ fn an_aar_carries_its_manifest_and_rules() {
         eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
         return;
     }
-    if !Command::new("jar").arg("--version").output().is_ok_and(|o| o.status.success()) {
+    if !Command::new("jar")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
         eprintln!("skipping: no `jar` on PATH");
         return;
     }
@@ -1150,18 +1275,29 @@ export default defineConfig({
         "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n  <uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\" />\n</manifest>\n",
     )
     .expect("the fragment");
-    std::fs::write(project.join("proguard-rules.pro"), "-keep class nts.gen.** { *; }\n")
-        .expect("the rules");
+    std::fs::write(
+        project.join("proguard-rules.pro"),
+        "-keep class nts.gen.** { *; }\n",
+    )
+    .expect("the rules");
 
     let run = build(&project, &[]);
     assert!(run.ok, "{}{}", run.stdout, run.stderr);
     let aar = project.join(".nts/build/sdk/android-29-aarch64/sdk.aar");
     assert!(aar.exists(), "no AAR at {}", aar.display());
 
-    let listed = Command::new("jar").arg("--list").arg("--file").arg(&aar).output().expect("jar -t");
+    let listed = Command::new("jar")
+        .arg("--list")
+        .arg("--file")
+        .arg(&aar)
+        .output()
+        .expect("jar -t");
     let entries = String::from_utf8_lossy(&listed.stdout);
     for required in ["classes.jar", "AndroidManifest.xml", "proguard.txt"] {
-        assert!(entries.contains(required), "the AAR has no {required}:\n{entries}");
+        assert!(
+            entries.contains(required),
+            "the AAR has no {required}:\n{entries}"
+        );
     }
 
     // The manifest is the package's fragment, not a generated stand-in: a
@@ -1213,7 +1349,10 @@ fn objects_are_reused_but_never_when_a_header_changed() {
             .filter(|item| item.path().extension().is_some_and(|it| it == "o"))
             .count()
     };
-    assert!(objects() > 0, "nothing was cached; the default is supposed to be on");
+    assert!(
+        objects() > 0,
+        "nothing was cached; the default is supposed to be on"
+    );
 
     // Reusing must not change the artifact.
     let before = std::fs::read(&artifact).expect("the artifact");
@@ -1250,7 +1389,11 @@ fn objects_are_reused_but_never_when_a_header_changed() {
         "the second build recompiled {} object(s), so nothing was reused: {rebuilt:?}",
         rebuilt.len()
     );
-    assert_eq!(std::fs::read(&artifact).expect("the artifact"), before, "a reused build differs");
+    assert_eq!(
+        std::fs::read(&artifact).expect("the artifact"),
+        before,
+        "a reused build differs"
+    );
 
     // **The direction that matters.** A header the object was compiled against
     // has changed, so the object is wrong and must not be handed back.
@@ -1298,10 +1441,11 @@ fn android_sdk() -> Option<(PathBuf, PathBuf)> {
         .filter_map(|entry| Some(entry.ok()?.path()))
         .collect();
     versions.sort();
-    let tools = versions
-        .into_iter()
-        .rev()
-        .find(|dir| ["aapt2", "d8", "apksigner", "zipalign"].iter().all(|t| dir.join(t).is_file()))?;
+    let tools = versions.into_iter().rev().find(|dir| {
+        ["aapt2", "d8", "apksigner", "zipalign"]
+            .iter()
+            .all(|t| dir.join(t).is_file())
+    })?;
     let platform = root.join("platforms/android-36/android.jar");
     platform.is_file().then_some((tools, platform))
 }
@@ -1347,7 +1491,12 @@ fn an_android_application_is_a_signed_installable_apk() {
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
 
     let artifact = project.join(".nts/build/demo/android-36-aarch64/demo.apk");
-    assert!(artifact.is_file(), "no APK at {}:\n{}", artifact.display(), run.stdout);
+    assert!(
+        artifact.is_file(),
+        "no APK at {}:\n{}",
+        artifact.display(),
+        run.stdout
+    );
 
     // The signature, which is what makes it installable rather than merely
     // well formed. `apksigner verify` exits non-zero on an unsigned APK.
@@ -1364,9 +1513,16 @@ fn an_android_application_is_a_signed_installable_apk() {
 
     // The dex, because an APK without one installs and then dies at launch --
     // and every step before `d8` would have succeeded regardless.
-    let listing = Command::new("unzip").arg("-l").arg(&artifact).output().expect("running unzip");
+    let listing = Command::new("unzip")
+        .arg("-l")
+        .arg(&artifact)
+        .output()
+        .expect("running unzip");
     let listing = String::from_utf8_lossy(&listing.stdout);
-    assert!(listing.contains("classes.dex"), "no dex in the APK:\n{listing}");
+    assert!(
+        listing.contains("classes.dex"),
+        "no dex in the APK:\n{listing}"
+    );
 
     // The manifest, read back through `aapt2` rather than as the XML we wrote:
     // the generated file is compiled to binary and a package name that failed
@@ -1377,13 +1533,22 @@ fn an_android_application_is_a_signed_installable_apk() {
         .output()
         .expect("running aapt2");
     let badging = String::from_utf8_lossy(&badging.stdout);
-    assert!(badging.contains("name='dev.nts.buildtest'"), "wrong package name:\n{badging}");
-    assert!(badging.contains("minSdkVersion:'29'"), "the declared minSdk was lost:\n{badging}");
+    assert!(
+        badging.contains("name='dev.nts.buildtest'"),
+        "wrong package name:\n{badging}"
+    );
+    assert!(
+        badging.contains("minSdkVersion:'29'"),
+        "the declared minSdk was lost:\n{badging}"
+    );
 
     // `compileSdk` and `minSdk` are two numbers and the fixture makes them
     // differ, because a build that used one for both would agree with a test
     // that set them equal.
-    assert!(badging.contains("compileSdkVersion='36'"), "wrong compileSdk:\n{badging}");
+    assert!(
+        badging.contains("compileSdkVersion='36'"),
+        "wrong compileSdk:\n{badging}"
+    );
 
     // Named in the output, so nobody ships an APK believing it is release-signed.
     assert!(
@@ -1418,7 +1583,11 @@ export default defineConfig({
 "#,
     );
     let run = build(&project, &[]);
-    assert!(!run.ok, "a product with no id built anyway:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "a product with no id built anyway:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("`id`") && run.stderr.contains("side by side"),
         "the refusal does not name the field:\n{}",
@@ -1516,7 +1685,10 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let tool = |name: &str| {
-        Command::new(name).arg("-version").output().is_ok_and(|o| o.status.success())
+        Command::new(name)
+            .arg("-version")
+            .output()
+            .is_ok_and(|o| o.status.success())
     };
     if !frontend || !tool("javac") || !tool("java") {
         skip("the tsgo frontend and a JDK");
@@ -1532,15 +1704,27 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
          export function unused(): number { return answer; }\n",
     )
     .expect("entry");
-    std::fs::write(project.join("src/internal.ts"), "export function helper(n: number): number { return n; }\n")
-        .expect("sibling");
+    std::fs::write(
+        project.join("src/internal.ts"),
+        "export function helper(n: number): number { return n; }\n",
+    )
+    .expect("sibling");
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
 
     let artifact = project.join(".nts/build/tool/java-17/tool.jar");
-    assert!(artifact.is_file(), "no jar at {}:\n{}", artifact.display(), run.stdout);
+    assert!(
+        artifact.is_file(),
+        "no jar at {}:\n{}",
+        artifact.display(),
+        run.stdout
+    );
 
-    let ran = Command::new("java").arg("-jar").arg(&artifact).output().expect("running java");
+    let ran = Command::new("java")
+        .arg("-jar")
+        .arg(&artifact)
+        .output()
+        .expect("running java");
     let stderr = String::from_utf8_lossy(&ran.stderr);
     assert!(
         stderr.contains("nts: uncaught") && stderr.contains("evaluated"),
@@ -1560,12 +1744,19 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
         "export function twice(n: number): number { return n * 2; }\n",
     )
     .expect("entry");
-    std::fs::write(quiet.join("src/internal.ts"), "export function helper(n: number): number { return n; }\n")
-        .expect("sibling");
+    std::fs::write(
+        quiet.join("src/internal.ts"),
+        "export function helper(n: number): number { return n; }\n",
+    )
+    .expect("sibling");
     let run = build(&quiet, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let empty = quiet.join(".nts/build/tool/java-17/tool.jar");
-    let ran = Command::new("java").arg("-jar").arg(&empty).output().expect("running java");
+    let ran = Command::new("java")
+        .arg("-jar")
+        .arg(&empty)
+        .output()
+        .expect("running java");
     assert!(
         ran.status.success(),
         "a program with nothing to evaluate did not exit cleanly:\n{}",
@@ -1584,7 +1775,10 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
 fn java_a_package_contributes_is_compiled_into_the_jar() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    let javac = Command::new("javac").arg("-version").output().is_ok_and(|o| o.status.success());
+    let javac = Command::new("javac")
+        .arg("-version")
+        .output()
+        .is_ok_and(|o| o.status.success());
     if !frontend || !javac {
         skip("the tsgo frontend and javac");
         return;
@@ -1611,11 +1805,24 @@ export default defineConfig({
 
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
-    assert!(run.stdout.contains("compiled 1 Java package"), "not reported:\n{}", run.stdout);
+    assert!(
+        run.stdout.contains("compiled 1 Java package"),
+        "not reported:\n{}",
+        run.stdout
+    );
 
     let artifact = project.join(".nts/build/api/java-8/api.jar");
-    assert!(artifact.is_file(), "no jar at {}:\n{}", artifact.display(), run.stdout);
-    let listing = Command::new("unzip").arg("-l").arg(&artifact).output().expect("unzip");
+    assert!(
+        artifact.is_file(),
+        "no jar at {}:\n{}",
+        artifact.display(),
+        run.stdout
+    );
+    let listing = Command::new("unzip")
+        .arg("-l")
+        .arg(&artifact)
+        .output()
+        .expect("unzip");
     let listing = String::from_utf8_lossy(&listing.stdout);
     assert!(
         listing.contains("com/example/Helper.class"),
@@ -1623,7 +1830,10 @@ export default defineConfig({
     );
     // And the emitted classes are still there, because naming two roots is
     // where one of them gets dropped.
-    assert!(listing.contains("nts/gen/"), "the emitted classes went missing:\n{listing}");
+    assert!(
+        listing.contains("nts/gen/"),
+        "the emitted classes went missing:\n{listing}"
+    );
 }
 
 /// A root declared for a JVM target that holds no Java is refused by name.
@@ -1687,8 +1897,11 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
     // is what puts it in scope -- the same mechanism `examples/workspace` uses.
     let pkg = project.join("pkg");
     std::fs::create_dir_all(pkg.join("manifests")).expect("package dir");
-    std::fs::write(pkg.join("lib.ts"), "export function two(): number { return 2; }\n")
-        .expect("package source");
+    std::fs::write(
+        pkg.join("lib.ts"),
+        "export function two(): number { return 2; }\n",
+    )
+    .expect("package source");
     std::fs::write(
         pkg.join("manifests/android.xml"),
         "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n\
@@ -1712,7 +1925,11 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
     .expect("entry");
 
     let run = build(&project, &[]);
-    assert!(!run.ok, "the fragment was silently dropped:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "the fragment was silently dropped:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("manifest") && run.stderr.contains("android.xml"),
         "the refusal does not name the fragment:\n{}",
@@ -1748,7 +1965,11 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
     .expect("config with manifest");
 
     let run = build(&project, &[]);
-    assert!(run.ok, "an app that owns its manifest was refused:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        run.ok,
+        "an app that owns its manifest was refused:\n{}{}",
+        run.stdout, run.stderr
+    );
     // The permission is the app's, read back through the platform rather than
     // off the file we wrote.
     let (tools, _) = android_sdk().expect("checked above");
@@ -1843,7 +2064,10 @@ export default defineConfig({
 fn a_windows_target_produces_a_windows_dll() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    let zig = Command::new("zig").arg("version").output().is_ok_and(|o| o.status.success());
+    let zig = Command::new("zig")
+        .arg("version")
+        .output()
+        .is_ok_and(|o| o.status.success());
     // On a Windows host this is not a cross build and the toolchain question is
     // a different one; the assertions below are about the cross path.
     if !frontend || !zig || cfg!(target_os = "windows") {
@@ -1855,13 +2079,24 @@ fn a_windows_target_produces_a_windows_dll() {
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
 
     let dll = project.join(".nts/build/sdk/windows-x86_64/sdk.dll");
-    assert!(dll.is_file(), "no DLL at {}:\n{}", dll.display(), run.stdout);
     assert!(
-        !project.join(".nts/build/sdk/windows-x86_64/libsdk.so").exists(),
+        dll.is_file(),
+        "no DLL at {}:\n{}",
+        dll.display(),
+        run.stdout
+    );
+    assert!(
+        !project
+            .join(".nts/build/sdk/windows-x86_64/libsdk.so")
+            .exists(),
         "a host-shaped artifact was written beside it"
     );
 
-    let kind = Command::new("file").arg("-b").arg(&dll).output().expect("running file");
+    let kind = Command::new("file")
+        .arg("-b")
+        .arg(&dll)
+        .output()
+        .expect("running file");
     let kind = String::from_utf8_lossy(&kind.stdout);
     assert!(
         kind.contains("PE32+") && kind.contains("DLL"),
@@ -1872,9 +2107,15 @@ fn a_windows_target_produces_a_windows_dll() {
     // Unnamed, the linker calls it after the first object -- `program.c.lib`,
     // beside `sdk.dll`, under a name nobody could guess.
     let implib = project.join(".nts/build/sdk/windows-x86_64/sdk.lib");
-    assert!(implib.is_file(), "no import library at {}", implib.display());
     assert!(
-        !project.join(".nts/build/sdk/windows-x86_64/program.c.lib").exists(),
+        implib.is_file(),
+        "no import library at {}",
+        implib.display()
+    );
+    assert!(
+        !project
+            .join(".nts/build/sdk/windows-x86_64/program.c.lib")
+            .exists(),
         "the import library is still named after an object"
     );
 }
@@ -1904,25 +2145,39 @@ fn a_windows_dll_publishes_its_entry_and_nothing_else() {
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
 
     let dll = project.join(".nts/build/sdk/windows-x86_64/sdk.dll");
-    let listed = Command::new("llvm-objdump").arg("-p").arg(&dll).output().expect("llvm-objdump");
+    let listed = Command::new("llvm-objdump")
+        .arg("-p")
+        .arg(&dll)
+        .output()
+        .expect("llvm-objdump");
     let text = String::from_utf8_lossy(&listed.stdout);
     // The rows under the `Ordinal  RVA  Name` header are `<ordinal> <rva>
     // <name>`. Matched as the whole header: `Ordinal base: 1` comes first.
     let exports: Vec<&str> = text
         .lines()
-        .skip_while(|line| line.split_whitespace().collect::<Vec<_>>() != ["Ordinal", "RVA", "Name"])
+        .skip_while(|line| {
+            line.split_whitespace().collect::<Vec<_>>() != ["Ordinal", "RVA", "Name"]
+        })
         .skip(1)
         .map_while(|line| {
             let fields: Vec<&str> = line.split_whitespace().collect();
             (fields.len() == 3).then(|| fields[2])
         })
         .collect();
-    assert!(exports.contains(&"published"), "the entry's export is missing: {exports:?}");
     assert!(
-        !exports.iter().any(|name| ["helper", "notPublished", "_CRT_INIT", "atexit"].contains(name)),
+        exports.contains(&"published"),
+        "the entry's export is missing: {exports:?}"
+    );
+    assert!(
+        !exports
+            .iter()
+            .any(|name| ["helper", "notPublished", "_CRT_INIT", "atexit"].contains(name)),
         "a name the entry does not export crossed the ABI: {exports:?}",
     );
-    assert!(exports.len() < 5, "the runtime's internals are public: {exports:?}");
+    assert!(
+        exports.len() < 5,
+        "the runtime's internals are public: {exports:?}"
+    );
 }
 
 /// An iOS device is refused by name, and not with the macOS reason: its
@@ -1960,7 +2215,9 @@ export default defineConfig({
     // An iOS device -- the default arch -- needs a signed binary, which is what
     // is missing; the simulator (`arch: "x86_64"`) builds, in `ios-hello`.
     assert!(
-        run.stderr.contains("iOS device") && run.stderr.contains("signed") && run.stderr.contains("ios-17"),
+        run.stderr.contains("iOS device")
+            && run.stderr.contains("signed")
+            && run.stderr.contains("ios-17"),
         "the refusal names neither the target nor what is missing:\n{}",
         run.stderr
     );
@@ -2008,7 +2265,10 @@ fn build_for_apple(project: &Path, root: &Path) -> Run {
 #[test]
 fn a_macos_target_produces_a_mach_o_dylib() {
     let tool = |name: &str, arg: &str| {
-        Command::new(name).arg(arg).output().is_ok_and(|o| o.status.success())
+        Command::new(name)
+            .arg(arg)
+            .output()
+            .is_ok_and(|o| o.status.success())
     };
     let root = std::env::var_os("NTS_APPLE_ROOT")
         .map(PathBuf::from)
@@ -2025,26 +2285,52 @@ fn a_macos_target_produces_a_mach_o_dylib() {
     }
     let project = fixture("build-macos-dylib", MACOS_DYLIB);
     let run = build_for_apple(&project, &root);
-    assert!(run.ok, "the macOS build failed:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        run.ok,
+        "the macOS build failed:\n{}{}",
+        run.stdout, run.stderr
+    );
 
     let dylib = project.join(".nts/build/mac/macos-13-aarch64/libmac.dylib");
-    assert!(dylib.is_file(), "no dylib at {}:\n{}", dylib.display(), run.stdout);
-    let kind = Command::new("file").arg("-b").arg(&dylib).output().expect("running file");
+    assert!(
+        dylib.is_file(),
+        "no dylib at {}:\n{}",
+        dylib.display(),
+        run.stdout
+    );
+    let kind = Command::new("file")
+        .arg("-b")
+        .arg(&dylib)
+        .output()
+        .expect("running file");
     let kind = String::from_utf8_lossy(&kind.stdout);
     assert!(
-        kind.contains("Mach-O") && kind.contains("arm64") && kind.contains("dynamically linked shared library"),
+        kind.contains("Mach-O")
+            && kind.contains("arm64")
+            && kind.contains("dynamically linked shared library"),
         "not an arm64 Mach-O dylib -- `file` says: {kind}"
     );
 
-    let symbols = Command::new("llvm-nm").args(["-gU"]).arg(&dylib).output().expect("llvm-nm");
+    let symbols = Command::new("llvm-nm")
+        .args(["-gU"])
+        .arg(&dylib)
+        .output()
+        .expect("llvm-nm");
     let symbols = String::from_utf8_lossy(&symbols.stdout);
-    assert!(symbols.contains(" _published"), "the export is missing:\n{symbols}");
+    assert!(
+        symbols.contains(" _published"),
+        "the export is missing:\n{symbols}"
+    );
     assert!(
         !symbols.contains("notPublished") && !symbols.contains("nts_string_from_utf8"),
         "symbols outside the export surface leaked:\n{symbols}"
     );
 
-    let install = Command::new("llvm-otool").arg("-D").arg(&dylib).output().expect("llvm-otool");
+    let install = Command::new("llvm-otool")
+        .arg("-D")
+        .arg(&dylib)
+        .output()
+        .expect("llvm-otool");
     let install = String::from_utf8_lossy(&install.stdout);
     assert!(
         install.contains("@rpath/libmac.dylib"),
@@ -2063,7 +2349,11 @@ fn a_macos_target_without_a_sysroot_names_the_script() {
     let empty = Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-apple-root");
     std::fs::create_dir_all(&empty).expect("creating an empty root");
     let run = build_for_apple(&project, &empty);
-    assert!(!run.ok, "it built for macOS with no sysroot:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "it built for macOS with no sysroot:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("tooling/apple/zig-sdk.sh") && run.stderr.contains("macos-13"),
         "the refusal names neither the target nor the fix:\n{}",
@@ -2092,13 +2382,20 @@ export default defineConfig({
     let empty = Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-apple-root-app");
     std::fs::create_dir_all(&empty).expect("creating an empty root");
     let run = build_for_apple(&project, &empty);
-    assert!(!run.ok, "a macOS application built with no identifier:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "a macOS application built with no identifier:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("CFBundleIdentifier") && run.stderr.contains("com.example.viewer"),
         "the refusal names neither the key nor the fix:\n{}",
         run.stderr
     );
-    assert!(!project.join(".nts").exists(), "it wrote an output directory for a product it refused");
+    assert!(
+        !project.join(".nts").exists(),
+        "it wrote an output directory for a product it refused"
+    );
 }
 
 /// Naming the config means naming the project it describes.
@@ -2132,7 +2429,11 @@ fn a_project_can_be_named_by_directory_config_or_tsconfig() {
             .expect("running nts build");
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(output.status.success(), "`{}` failed:\n{stdout}{stderr}", spelling.display());
+        assert!(
+            output.status.success(),
+            "`{}` failed:\n{stdout}{stderr}",
+            spelling.display()
+        );
         assert!(
             artifact.is_file(),
             "`{}` built no artifact:\n{stdout}",
@@ -2190,7 +2491,10 @@ fn the_cmake_hook_builds_a_consumer_and_declares_its_inputs() {
         skip("node, the tsgo frontend, clang and nm");
         return;
     }
-    let cmake = Command::new("cmake").arg("--version").output().is_ok_and(|o| o.status.success());
+    let cmake = Command::new("cmake")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
     if !cmake {
         skip("cmake");
         return;
@@ -2223,13 +2527,25 @@ export default defineConfig({
     };
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let hook = project.join(".nts/build/nts.cmake");
-    assert!(hook.is_file(), "no hook at {}:\n{}", hook.display(), run.stdout);
-    assert!(run.stdout.contains("hook:"), "the hook was not reported:\n{}", run.stdout);
+    assert!(
+        hook.is_file(),
+        "no hook at {}:\n{}",
+        hook.display(),
+        run.stdout
+    );
+    assert!(
+        run.stdout.contains("hook:"),
+        "the hook was not reported:\n{}",
+        run.stdout
+    );
 
     // Every path in it must be absolute, because `CMake` reads it from its own
     // build directory. This is the assertion the relative version passed.
     let text = std::fs::read_to_string(&hook).expect("reading the hook");
-    for line in text.lines().filter(|l| l.contains("DEPENDS ") || l.contains("OUTPUT ")) {
+    for line in text
+        .lines()
+        .filter(|l| l.contains("DEPENDS ") || l.contains("OUTPUT "))
+    {
         let path = line.split_whitespace().last().unwrap_or("");
         assert!(path.starts_with('/'), "a relative path in the hook: {line}");
     }
@@ -2237,7 +2553,9 @@ export default defineConfig({
     let consumer = a_cmake_consumer(&project, &hook);
 
     // Delete the artifact so the custom command has to run.
-    drop(std::fs::remove_file(project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so")));
+    drop(std::fs::remove_file(
+        project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so"),
+    ));
     let built = Command::new("cmake")
         .args(["--build", "build"])
         .current_dir(&consumer)
@@ -2249,7 +2567,10 @@ export default defineConfig({
         String::from_utf8_lossy(&built.stdout),
         String::from_utf8_lossy(&built.stderr)
     );
-    assert!(consumer.join("build/consumer").is_file(), "no consumer executable");
+    assert!(
+        consumer.join("build/consumer").is_file(),
+        "no consumer executable"
+    );
 
     // **The inputs and outputs, both directions.** "Nothing changed, nothing
     // re-runs" is also what a rule with *no* inputs does -- dropping `DEPENDS`
@@ -2303,7 +2624,11 @@ export default defineConfig({
 "#,
     );
     let run = build(&project, &[]);
-    assert!(!run.ok, "it emitted an adapter it cannot run:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "it emitted an adapter it cannot run:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("gradle") && run.stderr.contains("not written"),
         "the refusal does not name the hook:\n{}",
@@ -2339,7 +2664,12 @@ export default defineConfig({
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let hook = project.join(".nts/build/nts-prepare.mjs");
-    assert!(hook.is_file(), "no hook at {}:\n{}", hook.display(), run.stdout);
+    assert!(
+        hook.is_file(),
+        "no hook at {}:\n{}",
+        hook.display(),
+        run.stdout
+    );
 
     let text = std::fs::read_to_string(&hook).expect("reading the hook");
     assert!(
@@ -2347,7 +2677,10 @@ export default defineConfig({
         "the hook does not resolve the installing machine:\n{text}"
     );
     // npm's names translated here and nowhere else.
-    assert!(text.contains("darwin") && text.contains("macos"), "no vocabulary bridge:\n{text}");
+    assert!(
+        text.contains("darwin") && text.contains("macos"),
+        "no vocabulary bridge:\n{text}"
+    );
 
     // Delete the artifact and let the script rebuild it, which is the whole
     // claim: this file is an adapter that runs, not a file that looks like one.
@@ -2365,7 +2698,11 @@ export default defineConfig({
         String::from_utf8_lossy(&ran.stdout),
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(artifact.is_file(), "the hook ran and built nothing at {}", artifact.display());
+    assert!(
+        artifact.is_file(),
+        "the hook ran and built nothing at {}",
+        artifact.display()
+    );
 }
 
 /// The workspace fixture builds, which nothing in the tree checked.
@@ -2396,7 +2733,12 @@ fn the_workspace_fixture_still_builds() {
 
     let build_app = |app: &str, extra: &[&str], env: &[(&str, String)]| -> Run {
         let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));
-        command.arg("build").arg(apps.join(app)).arg("--out").arg(out.join(app)).args(extra);
+        command
+            .arg("build")
+            .arg(apps.join(app))
+            .arg("--out")
+            .arg(out.join(app))
+            .args(extra);
         for (key, value) in env {
             command.env(key, value);
         }
@@ -2484,10 +2826,16 @@ fn the_workspace_fixture_still_builds() {
 /// from a stale `invokestatic`. Listing the archive says nothing about the
 /// names inside the bytecode.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_java_package_moves_the_classes_and_they_still_link() {
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    let tool = |n: &str| Command::new(n).arg("-version").output().is_ok_and(|o| o.status.success());
+    let tool = |n: &str| {
+        Command::new(n)
+            .arg("-version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    };
     if !frontend || !tool("javac") || !tool("java") {
         skip("the tsgo frontend and a JDK");
         return;
@@ -2515,21 +2863,46 @@ export default defineConfig({
          export function drive(c: Counter): number { return c.bump(); }\n",
     )
     .expect("entry");
-    std::fs::write(project.join("src/internal.ts"), "export function helper(n: number): number { return n; }\n")
-        .expect("sibling");
+    std::fs::write(
+        project.join("src/internal.ts"),
+        "export function helper(n: number): number { return n; }\n",
+    )
+    .expect("sibling");
 
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
 
     let jar = project.join(".nts/build/sdk/java-8/sdk.jar");
     let runtime = project.join(".nts/build/sdk/java-8/nts-runtime.jar");
-    assert!(jar.is_file(), "no jar at {}:\n{}", jar.display(), run.stdout);
-    assert!(runtime.is_file(), "no runtime jar beside it:\n{}", run.stdout);
-    let listing = Command::new("unzip").arg("-l").arg(&jar).output().expect("unzip");
+    assert!(
+        jar.is_file(),
+        "no jar at {}:\n{}",
+        jar.display(),
+        run.stdout
+    );
+    assert!(
+        runtime.is_file(),
+        "no runtime jar beside it:\n{}",
+        run.stdout
+    );
+    let listing = Command::new("unzip")
+        .arg("-l")
+        .arg(&jar)
+        .output()
+        .expect("unzip");
     let listing = String::from_utf8_lossy(&listing.stdout);
-    assert!(listing.contains("com/acme/sdk/Program.class"), "no program class:\n{listing}");
-    assert!(listing.contains("com/acme/sdk/Counter.class"), "no layout class:\n{listing}");
-    assert!(!listing.contains("nts/gen/"), "classes left in the default package:\n{listing}");
+    assert!(
+        listing.contains("com/acme/sdk/Program.class"),
+        "no program class:\n{listing}"
+    );
+    assert!(
+        listing.contains("com/acme/sdk/Counter.class"),
+        "no layout class:\n{listing}"
+    );
+    assert!(
+        !listing.contains("nts/gen/"),
+        "classes left in the default package:\n{listing}"
+    );
 
     // The consumer, which is what says the *bytecode* agrees with the paths.
     let consumer = project.join("Use.java");
@@ -2560,7 +2933,12 @@ export default defineConfig({
     let ran = Command::new("java")
         .arg("-Xverify:all")
         .arg("-cp")
-        .arg(format!("{}:{}:{}", classes.display(), jar.display(), runtime.display()))
+        .arg(format!(
+            "{}:{}:{}",
+            classes.display(),
+            jar.display(),
+            runtime.display()
+        ))
         .arg("Use")
         .output()
         .expect("running java");
@@ -2609,11 +2987,17 @@ export default defineConfig({
 "#,
     );
     // Two packages: one that claims Android only, one that claims Linux too.
-    for (dir, claims) in [("mobile", r#""android-29""#), ("portable", r#""android-29", "linux-gnu""#)] {
+    for (dir, claims) in [
+        ("mobile", r#""android-29""#),
+        ("portable", r#""android-29", "linux-gnu""#),
+    ] {
         let pkg = project.join(dir);
         std::fs::create_dir_all(&pkg).expect("package dir");
-        std::fs::write(pkg.join("lib.ts"), format!("export function {dir}(): number {{ return 1; }}\n"))
-            .expect("package source");
+        std::fs::write(
+            pkg.join("lib.ts"),
+            format!("export function {dir}(): number {{ return 1; }}\n"),
+        )
+        .expect("package source");
         std::fs::write(
             pkg.join("nts.config.ts"),
             format!("import {{ defineConfig }} from \"@nts/config\";\nexport default defineConfig({{ targets: [{claims}] }});\n"),
@@ -2629,7 +3013,11 @@ export default defineConfig({
     .expect("entry");
 
     let run = build(&project, &[]);
-    assert!(!run.ok, "a claim that excludes the target did not stop it:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "a claim that excludes the target did not stop it:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("mobile") && run.stderr.contains("android-29"),
         "the refusal names neither the package nor its claim:\n{}",
@@ -2650,7 +3038,11 @@ export default defineConfig({
     )
     .expect("widened claim");
     let run = build(&project, &[]);
-    assert!(run.ok, "widening the claim did not let it build:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        run.ok,
+        "widening the claim did not let it build:\n{}{}",
+        run.stdout, run.stderr
+    );
 }
 
 /// `Config.tsconfig` names the program, and a named file still wins over it.
@@ -2686,12 +3078,21 @@ export default defineConfig({
     // The program the config names, and a *different* one beside it. Neither is
     // `tsconfig.json`: the default must not be what makes this pass.
     let options = r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","moduleResolution":"bundler","strict":true,"noEmit":false}"#;
-    std::fs::write(project.join("program.json"), format!("{options},\"include\":[\"src/**/*\"]}}"))
-        .expect("program.json");
-    std::fs::write(project.join("other.json"), format!("{options},\"files\":[\"src/only.ts\"]}}"))
-        .expect("other.json");
-    std::fs::write(project.join("src/only.ts"), "export function onlyOne(): number { return 1; }\n")
-        .expect("only.ts");
+    std::fs::write(
+        project.join("program.json"),
+        format!("{options},\"include\":[\"src/**/*\"]}}"),
+    )
+    .expect("program.json");
+    std::fs::write(
+        project.join("other.json"),
+        format!("{options},\"files\":[\"src/only.ts\"]}}"),
+    )
+    .expect("other.json");
+    std::fs::write(
+        project.join("src/only.ts"),
+        "export function onlyOne(): number { return 1; }\n",
+    )
+    .expect("only.ts");
     drop(std::fs::remove_file(project.join("tsconfig.json")));
 
     let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
@@ -2714,20 +3115,32 @@ export default defineConfig({
     // 1. the config file names the project it describes
     drop(std::fs::remove_file(&artifact));
     let run = named(&project.join("nts.config.ts"));
-    assert!(run.ok, "naming the config ignored its `tsconfig`:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        run.ok,
+        "naming the config ignored its `tsconfig`:\n{}{}",
+        run.stdout, run.stderr
+    );
     assert!(artifact.is_file(), "no artifact:\n{}", run.stdout);
 
     // 2. so does the directory
     drop(std::fs::remove_file(&artifact));
     let run = named(&project);
-    assert!(run.ok, "the directory ignored the config's `tsconfig`:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        run.ok,
+        "the directory ignored the config's `tsconfig`:\n{}{}",
+        run.stdout, run.stderr
+    );
     assert!(artifact.is_file(), "no artifact:\n{}", run.stdout);
 
     // 3. **a named file wins.** `other.json` holds only `src/only.ts`, so the
     // product's entry is not in that program and the build says exactly that --
     // which is the proof the field did *not* override what was asked for.
     let run = named(&project.join("other.json"));
-    assert!(!run.ok, "the config's `tsconfig` overrode a file the caller named:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "the config's `tsconfig` overrode a file the caller named:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("./src/main.ts") && run.stderr.contains("no source in this program"),
         "the mismatch is not what was reported:\n{}",
@@ -2769,7 +3182,11 @@ fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
         return;
     }
     let needed = |artifact: &Path| {
-        let shown = Command::new("readelf").arg("-d").arg(artifact).output().expect("readelf");
+        let shown = Command::new("readelf")
+            .arg("-d")
+            .arg(artifact)
+            .output()
+            .expect("readelf");
         String::from_utf8_lossy(&shown.stdout).contains("libz.so")
     };
 
@@ -2778,12 +3195,20 @@ fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
     assert!(artifact.is_file(), "no library at {}", artifact.display());
-    assert!(needed(&artifact), "the claim did not reach the link:\n{}", run.stdout);
+    assert!(
+        needed(&artifact),
+        "the claim did not reach the link:\n{}",
+        run.stdout
+    );
 
     // --- the same program, without the claim ---------------------------------
     let bare = fixture("build-pkgconfig-bare", SHARED);
     let run = build(&bare, &[]);
-    assert!(run.ok, "the control build failed:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        run.ok,
+        "the control build failed:\n{}{}",
+        run.stdout, run.stderr
+    );
     let artifact = bare.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
     assert!(
         !needed(&artifact),
@@ -2816,7 +3241,11 @@ fn an_unresolvable_package_refuses_by_name_before_the_build_starts() {
     }
     let project = fixture("build-pkgconfig-missing", MISSING_PACKAGE);
     let run = build(&project, &[]);
-    assert!(!run.ok, "an unsatisfiable claim built anyway:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "an unsatisfiable claim built anyway:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("a-library-nobody-has"),
         "the refusal does not name the package:\n{}",
@@ -2862,7 +3291,11 @@ fn a_resolver_this_build_cannot_read_refuses_and_names_it() {
     let project = fixture("build-unreadable-resolver", UNREADABLE_DEPENDENCY);
     let run = build(&project, &[]);
     assert!(!run.ok, "an unread resolver built anyway:\n{}", run.stdout);
-    assert!(run.stderr.contains("vcpkg"), "does not name the resolver:\n{}", run.stderr);
+    assert!(
+        run.stderr.contains("vcpkg"),
+        "does not name the resolver:\n{}",
+        run.stderr
+    );
     assert!(
         run.stderr.contains("./deps/vcpkg.json"),
         "does not name the file it would read:\n{}",
@@ -2898,8 +3331,11 @@ fn vendored_jar(project: &Path, digest: &str) -> bool {
     std::fs::create_dir_all(project.join("deps")).expect("the deps directory");
     std::fs::create_dir_all(project.join("lib/META-INF")).expect("dependency metadata");
     std::fs::write(lib.join("locale.dat"), b"pinned locale resource\n").expect("dependency data");
-    std::fs::write(project.join("lib/META-INF/LICENSE.txt"), b"dependency redistribution notice\n")
-        .expect("dependency license");
+    std::fs::write(
+        project.join("lib/META-INF/LICENSE.txt"),
+        b"dependency redistribution notice\n",
+    )
+    .expect("dependency license");
     std::fs::write(
         lib.join("Greeter.java"),
         "package com.example;\npublic final class Greeter {\n  \
@@ -2927,7 +3363,11 @@ fn vendored_jar(project: &Path, digest: &str) -> bool {
         return false;
     }
     let bytes = std::fs::read(project.join("deps/greeter-1.0.0.jar")).expect("the built jar");
-    let pinned = if digest == "real" { nts_build::dependencies::digest(&bytes) } else { digest.to_owned() };
+    let pinned = if digest == "real" {
+        nts_build::dependencies::digest(&bytes)
+    } else {
+        digest.to_owned()
+    };
     std::fs::write(
         project.join("deps/maven.tsv"),
         format!(
@@ -2941,7 +3381,10 @@ fn vendored_jar(project: &Path, digest: &str) -> bool {
 
 fn jdk() -> bool {
     let tool = |name: &str, arg: &str| {
-        Command::new(name).arg(arg).output().is_ok_and(|o| o.status.success())
+        Command::new(name)
+            .arg(arg)
+            .output()
+            .is_ok_and(|o| o.status.success())
     };
     let frontend =
         std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
@@ -2969,7 +3412,12 @@ fn a_pinned_jar_ships_inside_the_executable() {
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
 
     let artifact = project.join(".nts/build/tool/java-17/tool.jar");
-    assert!(artifact.is_file(), "no jar at {}:\n{}", artifact.display(), run.stdout);
+    assert!(
+        artifact.is_file(),
+        "no jar at {}:\n{}",
+        artifact.display(),
+        run.stdout
+    );
     let listed = Command::new("jar")
         .arg("--list")
         .arg("--file")
@@ -2981,13 +3429,23 @@ fn a_pinned_jar_ships_inside_the_executable() {
         inside.contains("com/example/Greeter.class"),
         "the pinned jar was resolved and not packaged:\n{inside}"
     );
-    assert!(inside.contains("com/example/locale.dat"), "dependency data was lost:\n{inside}");
-    assert!(inside.contains("META-INF/LICENSE.txt"), "dependency notice was lost:\n{inside}");
+    assert!(
+        inside.contains("com/example/locale.dat"),
+        "dependency data was lost:\n{inside}"
+    );
+    assert!(
+        inside.contains("META-INF/LICENSE.txt"),
+        "dependency notice was lost:\n{inside}"
+    );
 
     // --- the same program with no claim --------------------------------------
     let bare = fixture("build-jar-none", JVM_EXECUTABLE);
     let run = build(&bare, &[]);
-    assert!(run.ok, "the control build failed:\n{}{}", run.stdout, run.stderr);
+    assert!(
+        run.ok,
+        "the control build failed:\n{}{}",
+        run.stdout, run.stderr
+    );
     let listed = Command::new("jar")
         .arg("--list")
         .arg("--file")
@@ -3018,7 +3476,11 @@ fn a_jar_that_does_not_hash_to_its_pin_is_refused() {
         return;
     }
     let run = build(&project, &[]);
-    assert!(!run.ok, "a substituted artifact built anyway:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "a substituted artifact built anyway:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("does not hash to the digest"),
         "the refusal is not about the digest:\n{}",
@@ -3089,7 +3551,10 @@ export default defineConfig({
 /// from "this refuses Windows".
 #[test]
 fn a_cross_build_that_needs_libuv_names_it_rather_than_failing_in_the_compiler() {
-    let zig = Command::new("zig").arg("version").output().is_ok_and(|o| o.status.success());
+    let zig = Command::new("zig")
+        .arg("version")
+        .output()
+        .is_ok_and(|o| o.status.success());
     if !available() || !zig {
         skip("the tsgo frontend, clang and zig");
         return;
@@ -3155,10 +3620,21 @@ fn a_windows_executable_links_the_lane_libuv_and_only_system_dlls() {
     let run = build_for_windows(&project, &root);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let exe = project.join(".nts/build/tool/windows-x86_64/tool.exe");
-    let kind = Command::new("file").arg("-b").arg(&exe).output().expect("running file");
+    let kind = Command::new("file")
+        .arg("-b")
+        .arg(&exe)
+        .output()
+        .expect("running file");
     let kind = String::from_utf8_lossy(&kind.stdout);
-    assert!(kind.contains("PE32+") && kind.contains("console"), "not a console .exe: {kind}");
-    let listed = Command::new("llvm-objdump").arg("-p").arg(&exe).output().expect("llvm-objdump");
+    assert!(
+        kind.contains("PE32+") && kind.contains("console"),
+        "not a console .exe: {kind}"
+    );
+    let listed = Command::new("llvm-objdump")
+        .arg("-p")
+        .arg(&exe)
+        .output()
+        .expect("llvm-objdump");
     let text = String::from_utf8_lossy(&listed.stdout);
     let foreign: Vec<&str> = text
         .lines()
@@ -3167,13 +3643,24 @@ fn a_windows_executable_links_the_lane_libuv_and_only_system_dlls() {
             let dll = dll.to_ascii_lowercase();
             !dll.starts_with("api-ms-win-")
                 && ![
-                    "kernel32.dll", "advapi32.dll", "user32.dll", "ws2_32.dll", "iphlpapi.dll",
-                    "userenv.dll", "dbghelp.dll", "ole32.dll", "shell32.dll", "psapi.dll",
+                    "kernel32.dll",
+                    "advapi32.dll",
+                    "user32.dll",
+                    "ws2_32.dll",
+                    "iphlpapi.dll",
+                    "userenv.dll",
+                    "dbghelp.dll",
+                    "ole32.dll",
+                    "shell32.dll",
+                    "psapi.dll",
                 ]
                 .contains(&dll.as_str())
         })
         .collect();
-    assert!(foreign.is_empty(), "the .exe loads DLLs a stock Windows does not have: {foreign:?}");
+    assert!(
+        foreign.is_empty(),
+        "the .exe loads DLLs a stock Windows does not have: {foreign:?}"
+    );
 }
 
 const RELATIVE_LIB: &str = r#"
@@ -3245,7 +3732,10 @@ fn two_projects_built_from_their_own_directories_do_not_share_a_snapshot() {
 
     let emitted = beta.join(".nts/build/lib/linux-gnu-x86_64/program.c");
     let text = std::fs::read_to_string(&emitted).expect("the second project's C");
-    assert!(text.contains("betaOnly"), "the second project's own function is absent");
+    assert!(
+        text.contains("betaOnly"),
+        "the second project's own function is absent"
+    );
     assert!(
         !text.contains("alphaOnly"),
         "the second project was compiled from the first's sources"
@@ -3282,7 +3772,11 @@ fn a_missing_toolchain_is_reported_before_a_dependency_it_would_never_reach() {
     }
     let project = fixture("build-apple-before-deps", APPLE_WITH_UNREADABLE_DEPENDENCY);
     let run = build(&project, &[]);
-    assert!(!run.ok, "an Apple target built on this machine:\n{}", run.stdout);
+    assert!(
+        !run.ok,
+        "an Apple target built on this machine:\n{}",
+        run.stdout
+    );
     assert!(
         run.stderr.contains("iOS device"),
         "the toolchain is not what it reported:\n{}",
@@ -3319,7 +3813,10 @@ fn host_is_apple() -> bool {
 /// the build succeeds, but that it no longer stops *here*.
 #[test]
 fn the_libuv_probe_sees_a_header_that_only_a_dependency_claim_names() {
-    let zig = Command::new("zig").arg("version").output().is_ok_and(|o| o.status.success());
+    let zig = Command::new("zig")
+        .arg("version")
+        .output()
+        .is_ok_and(|o| o.status.success());
     if !available() || !zig {
         skip("the tsgo frontend, clang and zig");
         return;
@@ -3327,8 +3824,11 @@ fn the_libuv_probe_sees_a_header_that_only_a_dependency_claim_names() {
     let project = fixture("build-libuv-reachable", WINDOWS_EXECUTABLE_WITH_UV);
     let include = project.join("fakeuv/include");
     std::fs::create_dir_all(&include).expect("the include directory");
-    std::fs::write(include.join("uv.h"), "#ifndef FAKE_UV_H\n#define FAKE_UV_H\n#endif\n")
-        .expect("the stub header");
+    std::fs::write(
+        include.join("uv.h"),
+        "#ifndef FAKE_UV_H\n#define FAKE_UV_H\n#endif\n",
+    )
+    .expect("the stub header");
     let pc = project.join("pc");
     std::fs::create_dir_all(&pc).expect("the pkg-config directory");
     std::fs::write(
@@ -3416,10 +3916,16 @@ fn a_pin_is_found_in_a_gradle_cache_and_not_only_beside_the_lockfile() {
     let staged =
         project.join("gradle-home/caches/modules-2/files-2.1/com.example/greeter/1.0.0/abc123");
     std::fs::create_dir_all(&staged).expect("the gradle cache layout");
-    std::fs::rename(project.join("deps/greeter-1.0.0.jar"), staged.join("greeter-1.0.0.jar"))
-        .expect("staging the jar into the cache");
-    std::fs::rename(project.join("deps/maven.tsv"), project.join("deps/gradle.tsv"))
-        .expect("the lockfile this config names");
+    std::fs::rename(
+        project.join("deps/greeter-1.0.0.jar"),
+        staged.join("greeter-1.0.0.jar"),
+    )
+    .expect("staging the jar into the cache");
+    std::fs::rename(
+        project.join("deps/maven.tsv"),
+        project.join("deps/gradle.tsv"),
+    )
+    .expect("the lockfile this config names");
 
     let run = Command::new(env!("CARGO_BIN_EXE_nts"))
         .arg("build")
@@ -3465,26 +3971,31 @@ fn a_pin_is_found_in_a_gradle_cache_and_not_only_beside_the_lockfile() {
 /// hardcoded list here would be a *third* copy.
 #[test]
 fn the_usage_names_every_command_and_no_others() {
-    let source = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs"),
-    )
-    .expect("reading main.rs");
+    let source = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs"))
+        .expect("reading main.rs");
     let dispatch = source
         .split_once("fn main() -> Result<()> {")
         .expect("main's dispatch")
         .1;
-    let body = dispatch.split_once("\n}\n").map_or(dispatch, |(body, _)| body);
+    let body = dispatch
+        .split_once("\n}\n")
+        .map_or(dispatch, |(body, _)| body);
 
     let mut dispatched: BTreeSet<String> = BTreeSet::new();
     for at in body.match_indices("Some(\"") {
         let rest = &body[at.0 + "Some(\"".len()..];
-        let Some(name) = rest.split('"').next() else { continue };
+        let Some(name) = rest.split('"').next() else {
+            continue;
+        };
         // `--help` and `-h` are spellings of `help`, not commands of their own.
         if !name.is_empty() && !name.starts_with('-') {
             dispatched.insert(name.to_owned());
         }
     }
-    assert!(dispatched.len() > 5, "the dispatch was not found: {dispatched:?}");
+    assert!(
+        dispatched.len() > 5,
+        "the dispatch was not found: {dispatched:?}"
+    );
 
     let shown = Command::new(env!("CARGO_BIN_EXE_nts"))
         .arg("help")
@@ -3501,16 +4012,24 @@ fn the_usage_names_every_command_and_no_others() {
             let rest = line.strip_prefix("  ")?;
             let (name, described) = rest.split_once("  ")?;
             let name = name.trim();
-            (!name.is_empty() && !name.contains(' ') && !name.starts_with('-')
+            (!name.is_empty()
+                && !name.contains(' ')
+                && !name.starts_with('-')
                 && !described.trim().is_empty())
             .then(|| name.to_owned())
         })
         .collect();
 
     let missing: Vec<&String> = dispatched.difference(&listed).collect();
-    assert!(missing.is_empty(), "dispatched and not in `nts help`: {missing:?}");
+    assert!(
+        missing.is_empty(),
+        "dispatched and not in `nts help`: {missing:?}"
+    );
     let invented: Vec<&String> = listed.difference(&dispatched).collect();
-    assert!(invented.is_empty(), "named by `nts help` and not dispatched: {invented:?}");
+    assert!(
+        invented.is_empty(),
+        "named by `nts help` and not dispatched: {invented:?}"
+    );
 }
 
 /// `nts` with no argument says what it is, and `--help` is not an error.
@@ -3537,7 +4056,10 @@ fn the_bare_command_and_the_usual_help_spellings_all_print_usage() {
             .expect("running nts");
         let text = String::from_utf8_lossy(&shown.stdout);
         assert!(shown.status.success(), "`nts {arguments:?}` failed");
-        assert!(text.contains("USAGE"), "`nts {arguments:?}` printed no usage:\n{text}");
+        assert!(
+            text.contains("USAGE"),
+            "`nts {arguments:?}` printed no usage:\n{text}"
+        );
         assert!(
             text.contains("build"),
             "`nts {arguments:?}` does not mention the main command:\n{text}"
@@ -3608,14 +4130,25 @@ fn a_second_build_hits_the_snapshot_cache_rather_than_rewriting_it() {
     };
 
     let first = build_once();
-    assert!(first.status.success(), "{}", String::from_utf8_lossy(&first.stderr));
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
     let after_first = stamps();
-    assert!(!after_first.is_empty(), "the first build wrote no cache entry at all");
+    assert!(
+        !after_first.is_empty(),
+        "the first build wrote no cache entry at all"
+    );
 
     // A second apart, so a rewrite is visible in the timestamp.
     std::thread::sleep(std::time::Duration::from_millis(1100));
     let second = build_once();
-    assert!(second.status.success(), "{}", String::from_utf8_lossy(&second.stderr));
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
     let after_second = stamps();
 
     let rewritten: Vec<&PathBuf> = after_second
@@ -3704,7 +4237,9 @@ fn an_addon_finds_its_headers_without_being_told_where_they_are() {
         String::from_utf8_lossy(&run.stderr)
     );
     assert!(
-        project.join(".nts/build/addon/node-api-8-x86_64/addon.node").is_file(),
+        project
+            .join(".nts/build/addon/node-api-8-x86_64/addon.node")
+            .is_file(),
         "no addon:\n{}",
         String::from_utf8_lossy(&run.stdout)
     );
@@ -3744,13 +4279,21 @@ fn an_aar_carries_its_pinned_jars_in_libs() {
         skip("a JDK that can build the jar to depend on");
         return;
     }
-    std::fs::rename(project.join("deps/maven.tsv"), project.join("deps/gradle.tsv"))
-        .expect("the lockfile this config names");
+    std::fs::rename(
+        project.join("deps/maven.tsv"),
+        project.join("deps/gradle.tsv"),
+    )
+    .expect("the lockfile this config names");
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
 
     let artifact = project.join(".nts/build/sdk/android-29-aarch64/sdk.aar");
-    assert!(artifact.is_file(), "no aar at {}:\n{}", artifact.display(), run.stdout);
+    assert!(
+        artifact.is_file(),
+        "no aar at {}:\n{}",
+        artifact.display(),
+        run.stdout
+    );
     let listed = Command::new("jar")
         .arg("--list")
         .arg("--file")
@@ -3764,8 +4307,14 @@ fn an_aar_carries_its_pinned_jars_in_libs() {
     );
     // And still where it was: a dependency must not displace the AAR's own
     // classes or the manifest a consumer merges.
-    assert!(inside.contains("classes.jar"), "the AAR lost its own classes:\n{inside}");
-    assert!(inside.contains("AndroidManifest.xml"), "the AAR lost its manifest:\n{inside}");
+    assert!(
+        inside.contains("classes.jar"),
+        "the AAR lost its own classes:\n{inside}"
+    );
+    assert!(
+        inside.contains("AndroidManifest.xml"),
+        "the AAR lost its manifest:\n{inside}"
+    );
 }
 
 const APK_WITH_DEPENDENCY: &str = r#"
@@ -3810,13 +4359,21 @@ fn an_apk_dexes_its_pinned_jars_into_itself() {
         skip("a JDK that can build the jar to depend on");
         return;
     }
-    std::fs::rename(project.join("deps/maven.tsv"), project.join("deps/gradle.tsv"))
-        .expect("the lockfile this config names");
+    std::fs::rename(
+        project.join("deps/maven.tsv"),
+        project.join("deps/gradle.tsv"),
+    )
+    .expect("the lockfile this config names");
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
 
     let apk = project.join(".nts/build/demo/android-36-aarch64/demo.apk");
-    assert!(apk.is_file(), "no apk at {}:\n{}", apk.display(), run.stdout);
+    assert!(
+        apk.is_file(),
+        "no apk at {}:\n{}",
+        apk.display(),
+        run.stdout
+    );
     let out = project.join("dex");
     std::fs::create_dir_all(&out).expect("a directory to unpack into");
     let unpacked = Command::new("unzip")
@@ -3832,7 +4389,8 @@ fn an_apk_dexes_its_pinned_jars_into_itself() {
     }
     let dex = std::fs::read(out.join("classes.dex")).expect("the dex");
     let found = |needle: &str| {
-        dex.windows(needle.len()).any(|window| window == needle.as_bytes())
+        dex.windows(needle.len())
+            .any(|window| window == needle.as_bytes())
     };
     assert!(
         found("Lcom/example/Greeter;"),
@@ -3840,19 +4398,36 @@ fn an_apk_dexes_its_pinned_jars_into_itself() {
     );
     // The control: the program's own class is there too, so the search is not
     // matching something every dex happens to contain.
-    assert!(found("Lnts/gen/Program;"), "the program's own class is missing from the dex");
+    assert!(
+        found("Lnts/gen/Program;"),
+        "the program's own class is missing from the dex"
+    );
     let resource = Command::new("unzip")
         .arg("-p")
         .arg(&apk)
         .arg("com/example/locale.dat")
         .output()
         .expect("reading dependency resources");
-    assert!(resource.status.success(), "dependency resources were dropped from the APK");
+    assert!(
+        resource.status.success(),
+        "dependency resources were dropped from the APK"
+    );
     assert_eq!(resource.stdout, b"pinned locale resource\n");
-    let listed = Command::new("jar").arg("--list").arg("--file").arg(&apk).output().expect("listing the APK");
+    let listed = Command::new("jar")
+        .arg("--list")
+        .arg("--file")
+        .arg(&apk)
+        .output()
+        .expect("listing the APK");
     let inside = String::from_utf8_lossy(&listed.stdout);
-    assert!(inside.contains("greeter-1.0.0.jar/META-INF/LICENSE.txt"), "dependency notice was lost:\n{inside}");
-    assert!(!inside.contains("Greeter.class"), "JVM bytecode was copied as an Android resource:\n{inside}");
+    assert!(
+        inside.contains("greeter-1.0.0.jar/META-INF/LICENSE.txt"),
+        "dependency notice was lost:\n{inside}"
+    );
+    assert!(
+        !inside.contains("Greeter.class"),
+        "JVM bytecode was copied as an Android resource:\n{inside}"
+    );
     let _ = tools;
 }
 
@@ -4032,7 +4607,9 @@ fn the_witness_sees_a_header_that_only_a_dependency_claim_names() {
 /// program that has no foreign loop at all.
 #[test]
 fn a_program_that_links_glib_is_driven_by_glib() {
-    let glib = Command::new("pkg-config").args(["--exists", "glib-2.0"]).status();
+    let glib = Command::new("pkg-config")
+        .args(["--exists", "glib-2.0"])
+        .status();
     if !available() || !glib.is_ok_and(|status| status.success()) {
         skip("node, the tsgo frontend, clang, nm and glib-2.0's pkg-config entry");
         return;
@@ -4054,19 +4631,31 @@ fn a_program_that_links_glib_is_driven_by_glib() {
         "build-glib-driven",
         "  dependencies: { \"linux-gnu\": { from: \"pkg-config\", packages: [\"glib-2.0\"] } },\n",
     );
-    assert!(source, "the GLib adapter was not written beside the program");
-    assert!(main.contains("nts_glib_host_attach();"), "main.c does not attach to GLib:\n{main}");
+    assert!(
+        source,
+        "the GLib adapter was not written beside the program"
+    );
+    assert!(
+        main.contains("nts_glib_host_attach();"),
+        "main.c does not attach to GLib:\n{main}"
+    );
     assert!(
         main.contains("nts_checkpoint_after_callbacks(true);"),
         "main.c does not make a callback's return a checkpoint:\n{main}"
     );
     let attach = main.find("nts_glib_host_attach").unwrap_or(usize::MAX);
     let evaluate = main.find("module__init();").unwrap_or(0);
-    assert!(attach < evaluate, "attached after module evaluation began:\n{main}");
+    assert!(
+        attach < evaluate,
+        "attached after module evaluation began:\n{main}"
+    );
 
     let (main, source) = with("build-glib-absent", "");
     assert!(!source, "a program that does not link GLib got its adapter");
-    assert!(!main.contains("glib"), "a program that does not link GLib mentions it:\n{main}");
+    assert!(
+        !main.contains("glib"),
+        "a program that does not link GLib mentions it:\n{main}"
+    );
     assert!(!main.contains("nts_checkpoint_after_callbacks"), "{main}");
 }
 
@@ -4243,19 +4832,31 @@ fn demo_gir(high: &str) -> String {
 /// the binding would otherwise supply itself, and so always agree with.
 fn gir_library(root: &Path, flag_signed: bool) {
     let include = root.join("include");
-    for dir in [&include, &root.join("gir"), &root.join("pc"), &root.join("native")] {
+    for dir in [
+        &include,
+        &root.join("gir"),
+        &root.join("pc"),
+        &root.join("native"),
+    ] {
         std::fs::create_dir_all(dir).expect("the fixture's directories");
     }
     std::fs::write(include.join("demo.h"), DEMO_HEADER).expect("the header");
     std::fs::write(root.join("native/demo.c"), DEMO_SOURCE).expect("the library");
     std::fs::write(
         root.join("pc/demo.pc"),
-        format!("Name: demo\nDescription: a fixture\nVersion: 1.0\nCflags: -I{}\nLibs:\n", include.display()),
+        format!(
+            "Name: demo\nDescription: a fixture\nVersion: 1.0\nCflags: -I{}\nLibs:\n",
+            include.display()
+        ),
     )
     .expect("the pkg-config file");
     // The flags' high member as GIR writes it: unsigned, although the header
     // made it an `int`. Which spelling is right is the compiler's answer.
-    let high = if flag_signed { "2147483648" } else { "1073741824" };
+    let high = if flag_signed {
+        "2147483648"
+    } else {
+        "1073741824"
+    };
     std::fs::write(root.join("gir/Demo-1.0.gir"), demo_gir(high)).expect("the GIR");
 }
 
@@ -4288,7 +4889,11 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         .output()
         .expect("running nts bind-gir");
     let stdout = String::from_utf8_lossy(&run.stdout);
-    assert!(run.status.success(), "{stdout}{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let binding = std::fs::read_to_string(out.join("Demo-1.0.d.ts")).expect("the binding");
     for expected in [
         "export type DemoThing = Class<\"demo_thing_impl\"> & DemoThingMethods;",
@@ -4318,7 +4923,10 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         "   * @ntsNoEscape argv\n   */\n  \
          export function demo_count_args(argv: Counted<CStrings<\"char\">, CNumber<\"int\">, \"before\"> | null): CNumber<\"int\">;",
     ] {
-        assert!(binding.contains(expected), "missing `{expected}` from:\n{binding}");
+        assert!(
+            binding.contains(expected),
+            "missing `{expected}` from:\n{binding}"
+        );
     }
     // The same out parameters returned, as GJS returns them: an overload
     // declared before the method, bodied by a wrapper in the companion
@@ -4340,7 +4948,10 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         ),
         "no values wrapper for `demo_thing_size`:\n{values}"
     );
-    assert!(!values.contains("demo_thing_count_values"), "a method with no out parameter has a values form:\n{values}");
+    assert!(
+        !values.contains("demo_thing_count_values"),
+        "a method with no out parameter has a values form:\n{values}"
+    );
     // A virtual function: its class struct's member, with no symbol, at the
     // offset clang gives (8: `wrong` is first), written as the `vfunc_` method
     // a subclass overrides -- and checked
@@ -4352,25 +4963,46 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         ),
         "no `vfunc_measure`:\n{binding}"
     );
-    assert!(!binding.contains("vfunc_wrong"), "a virtual function the header contradicts was kept:\n{binding}");
-    assert!(!binding.contains("export function DemoWidgetClass_"), "a virtual function was exported as a function:\n{binding}");
-    assert!(!binding.contains("demo_wrong"), "a declaration the header contradicts was kept:\n{binding}");
+    assert!(
+        !binding.contains("vfunc_wrong"),
+        "a virtual function the header contradicts was kept:\n{binding}"
+    );
+    assert!(
+        !binding.contains("export function DemoWidgetClass_"),
+        "a virtual function was exported as a function:\n{binding}"
+    );
+    assert!(
+        !binding.contains("demo_wrong"),
+        "a declaration the header contradicts was kept:\n{binding}"
+    );
     let refused = std::fs::read_to_string(out.join("Demo-1.0.refused.txt")).expect("the report");
     assert!(
-        refused.lines().any(|line| line.starts_with("demo_wrong\t") && line.contains("the header disagrees")),
+        refused
+            .lines()
+            .any(|line| line.starts_with("demo_wrong\t") && line.contains("the header disagrees")),
         "demo_wrong was not reported as contradicted:\n{refused}"
     );
-    assert!(!binding.contains("demo_missing"), "a function no header declares was kept:\n{binding}");
     assert!(
-        refused.lines().any(|line| line == "demo_missing\tdeclared by none of the headers GIR names"),
+        !binding.contains("demo_missing"),
+        "a function no header declares was kept:\n{binding}"
+    );
+    assert!(
+        refused
+            .lines()
+            .any(|line| line == "demo_missing\tdeclared by none of the headers GIR names"),
         "demo_missing was not reported as undeclared:\n{refused}"
     );
     assert!(
-        refused.lines().any(|line| line.starts_with("DemoWidgetClass_wrong\t") && line.contains("the header disagrees")),
+        refused
+            .lines()
+            .any(|line| line.starts_with("DemoWidgetClass_wrong\t")
+                && line.contains("the header disagrees")),
         "the contradicted virtual function was not reported as one:\n{refused}"
     );
     assert!(
-        refused.lines().any(|line| line == "demo_thing_name\ta string out parameter"),
+        refused
+            .lines()
+            .any(|line| line == "demo_thing_name\ta string out parameter"),
         "a string out parameter was not refused as one:\n{refused}"
     );
 }
@@ -4379,6 +5011,7 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
 /// store, links it into the project, reuses it while nothing it was made from
 /// changed, and binds again when the GIR does.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     let pkg_config = Command::new("pkg-config").arg("--version").output();
     if !available() || !pkg_config.is_ok_and(|o| o.status.success()) {
@@ -4404,7 +5037,10 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
          export const answer = main();\n",
     )
     .expect("the program");
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("the repository");
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the repository");
     std::fs::write(
         project.join("tsconfig.json"),
         format!(
@@ -4430,7 +5066,11 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     let build_with = |binary: &Path| {
         let output = output_of(&mut nts(binary, "build")).expect("running nts build");
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        assert!(output.status.success(), "{stdout}{}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "{stdout}{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         stdout
     };
     let build = || build_with(Path::new(env!("CARGO_BIN_EXE_nts")));
@@ -4439,11 +5079,19 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     // key rewritten.
     let entries = || -> Vec<(std::path::PathBuf, std::time::SystemTime)> {
         let mut found = Vec::new();
-        let children = |dir: &Path| std::fs::read_dir(dir).into_iter().flatten().flatten().map(|entry| entry.path());
+        let children = |dir: &Path| {
+            std::fs::read_dir(dir)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|entry| entry.path())
+        };
         for identity in children(&store) {
             for version in children(&identity) {
                 for key in children(&version) {
-                    if let Ok(modified) = std::fs::metadata(key.join("manifest.json")).and_then(|m| m.modified()) {
+                    if let Ok(modified) =
+                        std::fs::metadata(key.join("manifest.json")).and_then(|m| m.modified())
+                    {
                         found.push((key, modified));
                     }
                 }
@@ -4457,19 +5105,40 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     let old = project.join("types/gir");
     std::fs::create_dir_all(&old).expect("the old bindings' directory");
     std::fs::write(old.join(".nts-stamp"), "root Demo-1.0\n").expect("the old stamp");
-    std::fs::write(old.join("Demo-1.0.d.ts"), "declare module \"c:Demo-1.0\" {}\n").expect("the old binding");
+    std::fs::write(
+        old.join("Demo-1.0.d.ts"),
+        "declare module \"c:Demo-1.0\" {}\n",
+    )
+    .expect("the old binding");
     let _ = std::fs::remove_dir_all(&store);
     build();
-    assert!(!old.exists(), "the bindings an older nts generated into the project were left to shadow the store's");
+    assert!(
+        !old.exists(),
+        "the bindings an older nts generated into the project were left to shadow the store's"
+    );
     let first = entries();
-    assert_eq!(first.len(), 1, "the first build did not bind from GIR into one store entry: {first:?}");
-    let run = Command::new(project.join(".nts/build/tool/linux-gnu-x86_64/tool")).output().expect("running the program");
+    assert_eq!(
+        first.len(),
+        1,
+        "the first build did not bind from GIR into one store entry: {first:?}"
+    );
+    let run = Command::new(project.join(".nts/build/tool/linux-gnu-x86_64/tool"))
+        .output()
+        .expect("running the program");
     assert!(run.status.success(), "the program failed");
     // `nts frontend` reads the program the build compiled, the generated
     // binding included, and not one without it.
-    let frontend = output_of(&mut nts(Path::new(env!("CARGO_BIN_EXE_nts")), "frontend")).expect("running nts frontend");
-    let said = format!("{}{}", String::from_utf8_lossy(&frontend.stdout), String::from_utf8_lossy(&frontend.stderr));
-    assert!(!said.contains("Cannot find module"), "nts frontend read a program without its generated binding:\n{said}");
+    let frontend = output_of(&mut nts(Path::new(env!("CARGO_BIN_EXE_nts")), "frontend"))
+        .expect("running nts frontend");
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&frontend.stdout),
+        String::from_utf8_lossy(&frontend.stderr)
+    );
+    assert!(
+        !said.contains("Cannot find module"),
+        "nts frontend read a program without its generated binding:\n{said}"
+    );
     build();
     assert_eq!(entries(), first, "an unchanged GIR was bound again");
     // A different GIR -- not merely a newer one -- so that a key comparing
@@ -4477,7 +5146,10 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     gir_library(&project, false);
     build();
     let third = entries();
-    assert!(third.len() == 1 && third[0].0 != first[0].0, "a changed GIR was not bound again, or its old entry kept: {third:?}");
+    assert!(
+        third.len() == 1 && third[0].0 != first[0].0,
+        "a changed GIR was not bound again, or its old entry kept: {third:?}"
+    );
     assert!(
         std::fs::read_to_string(project.join("node_modules/@nts/gir-demo-1.0/index.d.ts"))
             .expect("the rebound binding, linked into the project")

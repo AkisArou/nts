@@ -50,7 +50,10 @@ use rustc_hash::FxHashMap;
 use super::facts::Facts;
 use super::flow::{Analysis, Context, Whole, Written};
 use super::native::{NativeAbi, Pointee, Scalar};
-use super::{BinOp, BlockId, Callee, Func, Global, HirType, Layout, ManagedType, OpKind, Program, Terminator, TypeId, UnOp, ValueId};
+use super::{
+    BinOp, BlockId, Callee, Func, Global, HirType, Layout, ManagedType, OpKind, Program,
+    Terminator, TypeId, UnOp, ValueId,
+};
 
 /// One store into a slot of a written scalar kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,7 +142,10 @@ impl Into {
             | Self::ReturnElement { .. }
             | Self::Local { .. }
             | Self::ClosureArgument { .. } => true,
-            Self::NativeArgument { .. } | Self::NativeStore | Self::CallbackReturn { .. } | Self::Assertion => false,
+            Self::NativeArgument { .. }
+            | Self::NativeStore
+            | Self::CallbackReturn { .. }
+            | Self::Assertion => false,
         }
     }
 }
@@ -150,9 +156,15 @@ impl Into {
 pub enum Source {
     Number(Facts),
     /// An integer representation already, with its range.
-    Integer { lo: i128, hi: i128 },
+    Integer {
+        lo: i128,
+        hi: i128,
+    },
     /// A `bigint`, with the exact range [`Slots::bigint_ranges`] proved.
-    BigInt { lo: i128, hi: i128 },
+    BigInt {
+        lo: i128,
+        hi: i128,
+    },
     /// A boolean, which C's integer kinds take as 0 or 1.
     Bool,
     /// `undefined` or `null` into an optional slot: an absence, which fits.
@@ -250,7 +262,10 @@ pub fn census(program: &Program, targets: &[NativeAbi]) -> Vec<Judged> {
             let analysis = local_analysis(func, &written);
             // Only a function that obliges a `bigint` pays for their ranges.
             let bigints = std::cell::OnceCell::new();
-            obligations.iter().map(|obligation| slots.judge(func, (&analysis, &bigints), obligation)).collect()
+            obligations
+                .iter()
+                .map(|obligation| slots.judge(func, (&analysis, &bigints), obligation))
+                .collect()
         })
         .collect()
 }
@@ -258,7 +273,11 @@ pub fn census(program: &Program, targets: &[NativeAbi]) -> Vec<Judged> {
 /// [`check`] on the program the lowering produced, which then empties each
 /// function's record: the passes after it renumber the values the record
 /// names, so none of them may read it.
-pub fn take_checked(program: &mut Program, arrivals: &[super::lower::Arrival], targets: &[NativeAbi]) -> Vec<Diagnostic> {
+pub fn take_checked(
+    program: &mut Program,
+    arrivals: &[super::lower::Arrival],
+    targets: &[NativeAbi],
+) -> Vec<Diagnostic> {
     let rejected = check(program, arrivals, targets);
     for func in &mut program.funcs {
         func.obligations = Vec::new();
@@ -275,9 +294,16 @@ pub fn take_checked(program: &mut Program, arrivals: &[super::lower::Arrival], t
 /// An `as` and the slot it feeds are one claim about one value, reported once
 /// and at the `as`, where the program made it.
 #[must_use]
-pub fn check(program: &Program, arrivals: &[super::lower::Arrival], targets: &[NativeAbi]) -> Vec<Diagnostic> {
+pub fn check(
+    program: &Program,
+    arrivals: &[super::lower::Arrival],
+    targets: &[NativeAbi],
+) -> Vec<Diagnostic> {
     let slots = Slots::of(program, targets);
-    let mut unproven: Vec<Judged> = census(program, targets).into_iter().filter(|judged| !judged.proven()).collect();
+    let mut unproven: Vec<Judged> = census(program, targets)
+        .into_iter()
+        .filter(|judged| !judged.proven())
+        .collect();
     // The `as` first, so it is the one kept, then what the program named --
     // a local, not the closure cell holding it.
     unproven.sort_by_key(|judged| match judged.obligation.into {
@@ -296,10 +322,19 @@ pub fn check(program: &Program, arrivals: &[super::lower::Arrival], targets: &[N
             kept.push(judged);
         }
     }
-    let mut errors: Vec<Diagnostic> = kept.into_iter().map(|judged| slots.unproven(judged)).collect();
+    let mut errors: Vec<Diagnostic> = kept
+        .into_iter()
+        .map(|judged| slots.unproven(judged))
+        .collect();
     errors.extend(slots.closures_relying_on_kinds(arrivals));
     errors.extend(slots.overrides_writing_kinds_otherwise(program));
-    errors.sort_by(|a, b| (a.primary.file.0, a.primary.span.start, &a.message).cmp(&(b.primary.file.0, b.primary.span.start, &b.message)));
+    errors.sort_by(|a, b| {
+        (a.primary.file.0, a.primary.span.start, &a.message).cmp(&(
+            b.primary.file.0,
+            b.primary.span.start,
+            &b.message,
+        ))
+    });
     // One function's copies -- its raising variant, a generic instance --
     // share its source, and so its errors: each is reported once.
     errors.dedup_by(|a, b| a.primary == b.primary && a.message == b.message);
@@ -322,8 +357,12 @@ fn spelled(kind: Scalar, bits: Option<u32>) -> String {
 /// (`double`, `float`, or none) asks nothing, and a slot without one
 /// guarantees nothing.
 fn within(inner: Option<Scalar>, outer: Option<Scalar>) -> bool {
-    let Some((lo, hi)) = outer.and_then(Scalar::integer_range) else { return true };
-    inner.and_then(Scalar::integer_range).is_some_and(|(ilo, ihi)| ilo >= lo && ihi <= hi)
+    let Some((lo, hi)) = outer.and_then(Scalar::integer_range) else {
+        return true;
+    };
+    inner
+        .and_then(Scalar::integer_range)
+        .is_some_and(|(ilo, ihi)| ilo >= lo && ihi <= hi)
 }
 
 /// A slot's kind or its absence, as a message names it.
@@ -346,35 +385,66 @@ struct Slots<'a> {
 
 impl<'a> Slots<'a> {
     fn of(program: &'a Program, targets: &'a [NativeAbi]) -> Self {
-        let by_name: FxHashMap<&str, &Func> = program.funcs.iter().map(|func| (func.name.as_str(), func)).collect();
-        let layouts: FxHashMap<TypeId, &Layout> =
-            program.layouts.iter().flat_map(|layout| layout.types.iter().map(move |ty| (*ty, layout))).collect();
+        let by_name: FxHashMap<&str, &Func> = program
+            .funcs
+            .iter()
+            .map(|func| (func.name.as_str(), func))
+            .collect();
+        let layouts: FxHashMap<TypeId, &Layout> = program
+            .layouts
+            .iter()
+            .flat_map(|layout| layout.types.iter().map(move |ty| (*ty, layout)))
+            .collect();
         let mut bridged = FxHashMap::default();
         for func in &program.funcs {
             for &op in func.blocks.iter().flat_map(|block| &block.ops) {
-                let OpKind::NativeBridge { closure, signature, .. } = &func.value(op).kind else { continue };
-                let super::native::Type::Scalar(kind) = *signature.result else { continue };
-                let HirType::Managed(ManagedType::Object(ty)) = func.value(*closure).ty else { continue };
+                let OpKind::NativeBridge {
+                    closure, signature, ..
+                } = &func.value(op).kind
+                else {
+                    continue;
+                };
+                let super::native::Type::Scalar(kind) = *signature.result else {
+                    continue;
+                };
+                let HirType::Managed(ManagedType::Object(ty)) = func.value(*closure).ty else {
+                    continue;
+                };
                 // The function the bridge calls, as `native_callback` finds it.
                 if let Some(body) = layouts.get(&ty).and_then(|layout| layout.closure_call()) {
                     bridged.insert(body, (kind, signature.name.as_str()));
                 }
             }
         }
-        Self { by_name, layouts, globals: &program.globals, bridged, targets }
+        Self {
+            by_name,
+            layouts,
+            globals: &program.globals,
+            bridged,
+            targets,
+        }
     }
 
     /// `func`'s obligations: each store into a slot of a written kind, read
     /// off its operation, then those the lowering recorded.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn obligations(&self, func: &Func) -> Vec<Obligation> {
         let mut found = Vec::new();
         for (index, block) in func.blocks.iter().enumerate() {
             let block_id = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
-            let mut oblige = |at: ValueId, value: ValueId, (kind, bits): (Scalar, Option<u32>), into: Into| {
-                let location = func.value(at).origin.location;
-                let kind = kind.on(self.targets);
-                found.push(Obligation { value: before_conversion(func, value), block: block_id, kind, bits, into, location });
-            };
+            let mut oblige =
+                |at: ValueId, value: ValueId, (kind, bits): (Scalar, Option<u32>), into: Into| {
+                    let location = func.value(at).origin.location;
+                    let kind = kind.on(self.targets);
+                    found.push(Obligation {
+                        value: before_conversion(func, value),
+                        block: block_id,
+                        kind,
+                        bits,
+                        into,
+                        location,
+                    });
+                };
             for &op in &block.ops {
                 match &func.value(op).kind {
                     OpKind::Call { callee, args, .. } => match callee {
@@ -382,10 +452,22 @@ impl<'a> Slots<'a> {
                         // override of it, which can't write its parameter
                         // narrower (Q1).
                         Callee::Direct(name) | Callee::Virtual { declared: name, .. } => {
-                            let Some(callee) = self.by_name.get(name.as_str()) else { continue };
-                            for (position, (param, &argument)) in callee.params.iter().zip(args).enumerate() {
+                            let Some(callee) = self.by_name.get(name.as_str()) else {
+                                continue;
+                            };
+                            for (position, (param, &argument)) in
+                                callee.params.iter().zip(args).enumerate()
+                            {
                                 if let Some(kind) = param.written {
-                                    oblige(op, argument, (kind, None), Into::Parameter { function: name.clone(), position });
+                                    oblige(
+                                        op,
+                                        argument,
+                                        (kind, None),
+                                        Into::Parameter {
+                                            function: name.clone(),
+                                            position,
+                                        },
+                                    );
                                 }
                             }
                         }
@@ -393,8 +475,13 @@ impl<'a> Slots<'a> {
                         // a variadic tail's included.
                         Callee::Native(target) => {
                             for (position, &argument) in args.iter().enumerate() {
-                                if let Some(super::native::Type::Scalar(kind)) = target.argument(position) {
-                                    let into = Into::NativeArgument { function: target.name.clone(), position };
+                                if let Some(super::native::Type::Scalar(kind)) =
+                                    target.argument(position)
+                                {
+                                    let into = Into::NativeArgument {
+                                        function: target.name.clone(),
+                                        position,
+                                    };
                                     oblige(op, argument, (*kind, None), into);
                                 }
                             }
@@ -411,17 +498,33 @@ impl<'a> Slots<'a> {
                             oblige(op, *value, kind, Into::NativeStore);
                         }
                     }
-                    OpKind::NativeBitStore { pointer, field, value } => {
+                    OpKind::NativeBitStore {
+                        pointer,
+                        field,
+                        value,
+                    } => {
                         if let HirType::NativePointer(pointee) = &func.value(*pointer).ty
-                            && let Some(member) = record_of(pointee).and_then(|record| record.fields.get(*field as usize))
+                            && let Some(member) = record_of(pointee)
+                                .and_then(|record| record.fields.get(*field as usize))
                             && let Some(kind) = stored_kind(&member.ty)
                         {
                             oblige(op, *value, kind, Into::NativeStore);
                         }
                     }
-                    OpKind::FieldSet { object, field, value } => {
+                    OpKind::FieldSet {
+                        object,
+                        field,
+                        value,
+                    } => {
                         if let Some((kind, name)) = self.field(&func.value(*object).ty, *field) {
-                            oblige(op, *value, (kind, None), Into::Field { field: name.to_owned() });
+                            oblige(
+                                op,
+                                *value,
+                                (kind, None),
+                                Into::Field {
+                                    field: name.to_owned(),
+                                },
+                            );
                         }
                     }
                     // Each layout that can arrive; their kinds agree (Q1),
@@ -437,14 +540,28 @@ impl<'a> Slots<'a> {
                             }
                         }
                         for (kind, name) in kinds {
-                            oblige(op, *value, (kind, None), Into::Field { field: name.to_owned() });
+                            oblige(
+                                op,
+                                *value,
+                                (kind, None),
+                                Into::Field {
+                                    field: name.to_owned(),
+                                },
+                            );
                         }
                     }
                     OpKind::GlobalSet { global, value } => {
                         if let Some(slot) = self.globals.get(*global as usize)
                             && let Some(kind) = slot.written
                         {
-                            oblige(op, *value, (kind, None), Into::Global { global: slot.name.clone() });
+                            oblige(
+                                op,
+                                *value,
+                                (kind, None),
+                                Into::Global {
+                                    global: slot.name.clone(),
+                                },
+                            );
                         }
                     }
                     _ => {}
@@ -457,7 +574,14 @@ impl<'a> Slots<'a> {
                     oblige(value, value, (kind, None), Into::Return);
                 }
                 if let Some(&(kind, callback)) = self.bridged.get(func.name.as_str()) {
-                    oblige(value, value, (kind, None), Into::CallbackReturn { callback: callback.to_owned() });
+                    oblige(
+                        value,
+                        value,
+                        (kind, None),
+                        Into::CallbackReturn {
+                            callback: callback.to_owned(),
+                        },
+                    );
                 }
             }
         }
@@ -477,24 +601,67 @@ impl<'a> Slots<'a> {
         let argument = |position: usize| format!("argument {}", position + 1);
         let (into, label) = match &obligation.into {
             Into::Parameter { function, position } => {
-                let param = self.by_name.get(function.as_str()).and_then(|callee| callee.params.get(*position));
+                let param = self
+                    .by_name
+                    .get(function.as_str())
+                    .and_then(|callee| callee.params.get(*position));
                 let named = param.map_or_else(String::new, |param| format!(" `{}`", param.name));
-                let label = param.map(|param| (param.origin.location, format!("the parameter{named} is written as {kind} here")));
-                (format!("{}, for the parameter{named} written as {kind},", argument(*position)), label)
+                let label = param.map(|param| {
+                    (
+                        param.origin.location,
+                        format!("the parameter{named} is written as {kind} here"),
+                    )
+                });
+                (
+                    format!(
+                        "{}, for the parameter{named} written as {kind},",
+                        argument(*position)
+                    ),
+                    label,
+                )
             }
-            Into::NativeArgument { function, position } => (format!("{} of `{function}`, a C {kind},", argument(*position)), None),
+            Into::NativeArgument { function, position } => (
+                format!("{} of `{function}`, a C {kind},", argument(*position)),
+                None,
+            ),
             Into::NativeStore => (format!("this store into a C {kind}"), None),
-            Into::Field { field } => (format!("this store into `{field}`, written as {kind},"), None),
-            Into::Global { global } => (format!("this store into `{global}`, written as {kind},"), None),
-            Into::Return => (format!("this result, which `{}` is written to return as {kind},", judged.func), None),
-            Into::ReturnElement { position } => {
-                (format!("element {position} of this result, which `{}` is written to return as {kind},", judged.func), None)
-            }
-            Into::CallbackReturn { callback } => (format!("this result, which C reads back from `{callback}` as {kind},"), None),
-            Into::Local { local } => (format!("this store into `{local}`, written as {kind},"), None),
-            Into::ClosureArgument { position } => {
-                (format!("{}, for a parameter the function type writes as {kind},", argument(*position)), None)
-            }
+            Into::Field { field } => (
+                format!("this store into `{field}`, written as {kind},"),
+                None,
+            ),
+            Into::Global { global } => (
+                format!("this store into `{global}`, written as {kind},"),
+                None,
+            ),
+            Into::Return => (
+                format!(
+                    "this result, which `{}` is written to return as {kind},",
+                    judged.func
+                ),
+                None,
+            ),
+            Into::ReturnElement { position } => (
+                format!(
+                    "element {position} of this result, which `{}` is written to return as {kind},",
+                    judged.func
+                ),
+                None,
+            ),
+            Into::CallbackReturn { callback } => (
+                format!("this result, which C reads back from `{callback}` as {kind},"),
+                None,
+            ),
+            Into::Local { local } => (
+                format!("this store into `{local}`, written as {kind},"),
+                None,
+            ),
+            Into::ClosureArgument { position } => (
+                format!(
+                    "{}, for a parameter the function type writes as {kind},",
+                    argument(*position)
+                ),
+                None,
+            ),
             Into::Assertion => (format!("this `as` claims {kind}, and the value"), None),
         };
         // Nothing known is one reason, not five.
@@ -502,9 +669,17 @@ impl<'a> Slots<'a> {
         let why = if anything {
             "could be any number".to_owned()
         } else {
-            judged.unproven.iter().map(|why| reason(*why)).collect::<Vec<_>>().join(", ")
+            judged
+                .unproven
+                .iter()
+                .map(|why| reason(*why))
+                .collect::<Vec<_>>()
+                .join(", ")
         };
-        let message = format!("{into} may not fit: it {why}. {}", remedy(&judged.unproven, obligation));
+        let message = format!(
+            "{into} may not fit: it {why}. {}",
+            remedy(&judged.unproven, obligation)
+        );
         let error = Diagnostic::error("NTS5001", message, obligation.location);
         match label {
             Some((location, text)) => error.with_label(location, text),
@@ -528,7 +703,9 @@ impl<'a> Slots<'a> {
             };
             // The environment is the closure's own first parameter.
             for (at, param) in func.params.iter().skip(1).enumerate() {
-                let Some(relied) = param.written else { continue };
+                let Some(relied) = param.written else {
+                    continue;
+                };
                 let obliged = arrival.kinds.get(at).copied().flatten();
                 if within(obliged, Some(relied)) {
                     continue;
@@ -566,7 +743,10 @@ impl<'a> Slots<'a> {
             .iter()
             .flat_map(|func| &func.values)
             .filter_map(|op| match &op.kind {
-                OpKind::Call { callee: Callee::Virtual { declared, .. }, .. } => Some(declared.as_str()),
+                OpKind::Call {
+                    callee: Callee::Virtual { declared, .. },
+                    ..
+                } => Some(declared.as_str()),
                 _ => None,
             })
             .collect();
@@ -576,35 +756,72 @@ impl<'a> Slots<'a> {
             // Everything `layout` is also: its bases, and the interfaces any of
             // them implements.
             let mut above: Vec<&Layout> = Vec::new();
-            let mut pending: Vec<TypeId> = layout.base.into_iter().chain(layout.interfaces.iter().copied()).collect();
+            let mut pending: Vec<TypeId> = layout
+                .base
+                .into_iter()
+                .chain(layout.interfaces.iter().copied())
+                .collect();
             while let Some(ty) = pending.pop() {
-                let Some(ancestor) = self.layouts.get(&ty).copied() else { continue };
-                if std::ptr::eq(ancestor, layout) || above.iter().any(|seen| std::ptr::eq(*seen, ancestor)) {
+                let Some(ancestor) = self.layouts.get(&ty).copied() else {
+                    continue;
+                };
+                if std::ptr::eq(ancestor, layout)
+                    || above.iter().any(|seen| std::ptr::eq(*seen, ancestor))
+                {
                     continue;
                 }
                 above.push(ancestor);
-                pending.extend(ancestor.base.into_iter().chain(ancestor.interfaces.iter().copied()));
+                pending.extend(
+                    ancestor
+                        .base
+                        .into_iter()
+                        .chain(ancestor.interfaces.iter().copied()),
+                );
             }
             for (slot, method) in layout.methods.iter().enumerate() {
-                let Some(method) = method.as_deref() else { continue };
+                let Some(method) = method.as_deref() else {
+                    continue;
+                };
                 for ancestor in &above {
-                    let Some(overridden) = ancestor.methods.get(slot).and_then(|m| m.as_deref()) else { continue };
-                    if overridden == method || !dispatched.contains(overridden) || reported.contains(&(method, overridden)) {
+                    let Some(overridden) = ancestor.methods.get(slot).and_then(|m| m.as_deref())
+                    else {
+                        continue;
+                    };
+                    if overridden == method
+                        || !dispatched.contains(overridden)
+                        || reported.contains(&(method, overridden))
+                    {
                         continue;
                     }
-                    let (Some(mine), Some(theirs)) = (self.by_name.get(method), self.by_name.get(overridden)) else {
+                    let (Some(mine), Some(theirs)) =
+                        (self.by_name.get(method), self.by_name.get(overridden))
+                    else {
                         continue;
                     };
                     // A parameter the override relies on must be obliged by the
                     // base; a result the base's callers rely on must be
                     // obliged by the override.
-                    let parameter = mine.params.iter().zip(&theirs.params).skip(1).find(|(m, t)| !within(t.written, m.written));
+                    let parameter = mine
+                        .params
+                        .iter()
+                        .zip(&theirs.params)
+                        .skip(1)
+                        .find(|(m, t)| !within(t.written, m.written));
                     let what = match parameter {
-                        Some((m, t)) => Some((format!("parameter `{}`", m.name), m.written, t.written)),
-                        None => (!within(mine.written_return, theirs.written_return))
-                            .then(|| ("result".to_owned(), mine.written_return, theirs.written_return)),
+                        Some((m, t)) => {
+                            Some((format!("parameter `{}`", m.name), m.written, t.written))
+                        }
+                        None => (!within(mine.written_return, theirs.written_return)).then(|| {
+                            (
+                                "result".to_owned(),
+                                mine.written_return,
+                                theirs.written_return,
+                            )
+                        }),
                     };
-                    let Some((what, written, base)) = what else { continue };
+                    let Some((what, written, base)) = what else {
+                        continue;
+                    };
                     reported.push((method, overridden));
                     let message = format!(
                         "`{method}` writes its {what} as {}, and the method it overrides, \
@@ -623,7 +840,9 @@ impl<'a> Slots<'a> {
     /// The kind a field of an object of type `object` was written as, and its
     /// name.
     fn field(&self, object: &HirType, field: u32) -> Option<(Scalar, &'a str)> {
-        let HirType::Managed(ManagedType::Object(ty)) = object else { return None };
+        let HirType::Managed(ManagedType::Object(ty)) = object else {
+            return None;
+        };
         let field = self.layouts.get(ty)?.fields.get(field as usize)?;
         Some((field.written?, field.name.as_str()))
     }
@@ -671,10 +890,18 @@ fn remedy(why: &[Why], obligation: &Obligation) -> String {
     if why.iter().any(|why| matches!(why, Why::NotANumber)) {
         fixes.push("test `typeof x === \"number\"` first".to_owned());
     }
-    if why.iter().any(|why| matches!(why, Why::Fraction | Why::NaN)) {
+    if why
+        .iter()
+        .any(|why| matches!(why, Why::Fraction | Why::NaN))
+    {
         fixes.push("`Number.isInteger(x)` rules out a fraction and NaN".to_owned());
     }
-    if why.iter().any(|why| matches!(why, Why::Below(_) | Why::Above(_) | Why::ExactlyBelow(_) | Why::ExactlyAbove(_))) {
+    if why.iter().any(|why| {
+        matches!(
+            why,
+            Why::Below(_) | Why::Above(_) | Why::ExactlyBelow(_) | Why::ExactlyAbove(_)
+        )
+    }) {
         fixes.push(match obligation.range() {
             Some((lo, hi)) => format!("a guard such as `x >= {lo} && x <= {hi}` bounds it"),
             None => "a guard on its range bounds it".to_owned(),
@@ -721,7 +948,16 @@ pub fn local_analysis(func: &Func, written: &Written) -> Analysis {
     let whole = Whole::default();
     let mut caps: FxHashMap<ValueId, Facts> = FxHashMap::default();
     let analyze = |caps: &FxHashMap<ValueId, Facts>| {
-        super::flow::analyze_with(func, &Context { params: &[], caps, param_lengths: &[], whole: &whole, written })
+        super::flow::analyze_with(
+            func,
+            &Context {
+                params: &[],
+                caps,
+                param_lengths: &[],
+                whole: &whole,
+                written,
+            },
+        )
     };
     let mut analysis = analyze(&caps);
     // Each round only adds caps it has proven; a loop nest is not deeper than
@@ -738,117 +974,212 @@ pub fn local_analysis(func: &Func, written: &Written) -> Analysis {
 }
 
 impl Slots<'_> {
-fn judge(
-    &self,
-    func: &Func,
-    (analysis, bigints): (&Analysis, &std::cell::OnceCell<BigRanges>),
-    obligation: &Obligation,
-) -> Judged {
-    let value = obligation.value;
-    let (source, unproven) = match func.value(value).ty {
-        HirType::Float { .. } => {
-            let facts = in_bounds_unit(func, analysis, obligation.block, value).unwrap_or_else(|| analysis.get_at(obligation.block, value));
-            let exact = obligation.kind == Scalar::Float
-                && self.exact_in_float(func, analysis, (obligation.block, value), &mut Vec::new());
-            (Source::Number(facts), number_fits(facts, obligation, exact))
-        }
-        HirType::Int { bits, signed } => {
-            let (lo, hi) = int_range(bits, signed);
-            (Source::Integer { lo, hi }, exactly_fits(Bounds { lo, hi }, obligation))
-        }
-        HirType::BigInt => {
-            let bounds = bigints.get_or_init(|| self.bigint_ranges(func, analysis)).get_at(obligation.block, value);
-            (Source::BigInt { lo: bounds.lo, hi: bounds.hi }, exactly_fits(bounds, obligation))
-        }
-        HirType::Bool => {
-            let fits = obligation.range().is_none_or(|(lo, hi)| lo <= 0 && hi >= 1);
-            (Source::Bool, if fits { Vec::new() } else { vec![Why::ExactlyAbove(1)] })
-        }
-        // An optional slot's absence (`x?: Uint8`, S4).
-        _ if matches!(func.value(value).kind, OpKind::ConstUndefined | OpKind::ConstNull) => (Source::Absent, Vec::new()),
-        _ => (Source::Other, vec![Why::NotANumber]),
-    };
-    Judged { func: func.name.clone(), obligation: obligation.clone(), source, made: made_by(func, value), unproven }
-}
-
-/// Whether `value`, at `block`, is exactly a `float`, which a `float` slot
-/// then stores unchanged (Q3).
-///
-/// Judged from how the value was made rather than tracked by the analysis:
-/// `Math.fround(x)`, the explicit narrowing; a value that was a `float`
-/// already -- C's, or read from a slot written `float`; a number a `float`
-/// holds exactly; or a join of those.
-fn exact_in_float(&self, func: &Func, analysis: &Analysis, (block, value): (BlockId, ValueId), seen: &mut Vec<ValueId>) -> bool {
-    /// Every integer up to 2^24 is a `float`.
-    const FLOAT_INTEGERS: f64 = 16_777_216.0;
-    let facts = analysis.get_at(block, value);
-    #[allow(clippy::cast_possible_truncation)]
-    let single = facts.is_singleton() && !facts.maybe_nan && f64::from(facts.lo as f32).to_bits() == facts.lo.to_bits();
-    if single || facts.integral() && facts.lo >= -FLOAT_INTEGERS && facts.hi <= FLOAT_INTEGERS {
-        return true;
-    }
-    let float = Some(Scalar::Float);
-    match &func.value(value).kind {
-        OpKind::Call { callee: Callee::External(name), .. } => name == "nts_math_fround",
-        OpKind::Call { callee: Callee::Native(target), .. } => target.result == super::native::Type::Scalar(Scalar::Float),
-        OpKind::Call { callee: Callee::Direct(name), .. } => self.by_name.get(name.as_str()).is_some_and(|callee| callee.call_kind() == float),
-        OpKind::Convert(from) => func.value(*from).ty == HirType::Float { bits: 32 },
-        // C's own `float` storage holds `float`s.
-        OpKind::NativeLoad { pointer, .. } => matches!(&func.value(*pointer).ty,
-            HirType::NativePointer(pointee) if matches!(pointee.viewed(), Pointee::Scalar(Scalar::Float))),
-        OpKind::Param(slot) => func.params.get(*slot as usize).is_some_and(|param| param.written == float),
-        OpKind::FieldGet { object, field } => self.field(&func.value(*object).ty, *field).is_some_and(|(kind, _)| kind == Scalar::Float),
-        OpKind::GlobalGet(global) => self.globals.get(*global as usize).is_some_and(|slot| slot.written == float),
-        OpKind::BlockParam(_) => {
-            if seen.contains(&value) {
-                return true;
+    fn judge(
+        &self,
+        func: &Func,
+        (analysis, bigints): (&Analysis, &std::cell::OnceCell<BigRanges>),
+        obligation: &Obligation,
+    ) -> Judged {
+        let value = obligation.value;
+        let (source, unproven) = match func.value(value).ty {
+            HirType::Float { .. } => {
+                let facts = in_bounds_unit(func, analysis, obligation.block, value)
+                    .unwrap_or_else(|| analysis.get_at(obligation.block, value));
+                let exact = obligation.kind == Scalar::Float
+                    && self.exact_in_float(
+                        func,
+                        analysis,
+                        (obligation.block, value),
+                        &mut Vec::new(),
+                    );
+                (Source::Number(facts), number_fits(facts, obligation, exact))
             }
-            seen.push(value);
-            incoming(func, value).into_iter().all(|edge| self.exact_in_float(func, analysis, edge, seen))
+            HirType::Int { bits, signed } => {
+                let (lo, hi) = int_range(bits, signed);
+                (
+                    Source::Integer { lo, hi },
+                    exactly_fits(Bounds { lo, hi }, obligation),
+                )
+            }
+            HirType::BigInt => {
+                let bounds = bigints
+                    .get_or_init(|| self.bigint_ranges(func, analysis))
+                    .get_at(obligation.block, value);
+                (
+                    Source::BigInt {
+                        lo: bounds.lo,
+                        hi: bounds.hi,
+                    },
+                    exactly_fits(bounds, obligation),
+                )
+            }
+            HirType::Bool => {
+                let fits = obligation.range().is_none_or(|(lo, hi)| lo <= 0 && hi >= 1);
+                (
+                    Source::Bool,
+                    if fits {
+                        Vec::new()
+                    } else {
+                        vec![Why::ExactlyAbove(1)]
+                    },
+                )
+            }
+            // An optional slot's absence (`x?: Uint8`, S4).
+            _ if matches!(
+                func.value(value).kind,
+                OpKind::ConstUndefined | OpKind::ConstNull
+            ) =>
+            {
+                (Source::Absent, Vec::new())
+            }
+            _ => (Source::Other, vec![Why::NotANumber]),
+        };
+        Judged {
+            func: func.name.clone(),
+            obligation: obligation.clone(),
+            source,
+            made: made_by(func, value),
+            unproven,
         }
-        // `Math.min` and `Math.max` answer one of their operands, and a
-        // negation or an absolute value only flips a sign.
-        OpKind::Binary { op: BinOp::Min | BinOp::Max, lhs, rhs } => {
-            self.exact_in_float(func, analysis, (block, *lhs), seen) && self.exact_in_float(func, analysis, (block, *rhs), seen)
-        }
-        OpKind::Unary { op: UnOp::Neg | UnOp::Abs, operand } => self.exact_in_float(func, analysis, (block, *operand), seen),
-        // An identity on its other operand, but for the sign of a zero, which
-        // a `float` holds too: `x + 0`, `x - 0`, `x * 1`, `x / -1`.
-        OpKind::Binary { op, lhs, rhs } => {
-            let constant = |value: ValueId| match func.value(value).kind {
-                OpKind::ConstFloat(constant) => Some(constant),
-                _ => None,
-            };
-            // `0.0` matches `-0.0` too, as `==` does.
-            let identity = match (op, constant(*lhs), constant(*rhs)) {
-                (BinOp::Add | BinOp::Sub, _, Some(0.0)) | (BinOp::Mul | BinOp::Div, _, Some(1.0 | -1.0)) => Some(*lhs),
-                (BinOp::Add, Some(0.0), _) | (BinOp::Mul, Some(1.0 | -1.0), _) => Some(*rhs),
-                _ => None,
-            };
-            identity.is_some_and(|operand| self.exact_in_float(func, analysis, (block, operand), seen))
-        }
-        _ => false,
     }
-}
+
+    /// Whether `value`, at `block`, is exactly a `float`, which a `float` slot
+    /// then stores unchanged (Q3).
+    ///
+    /// Judged from how the value was made rather than tracked by the analysis:
+    /// `Math.fround(x)`, the explicit narrowing; a value that was a `float`
+    /// already -- C's, or read from a slot written `float`; a number a `float`
+    /// holds exactly; or a join of those.
+    fn exact_in_float(
+        &self,
+        func: &Func,
+        analysis: &Analysis,
+        (block, value): (BlockId, ValueId),
+        seen: &mut Vec<ValueId>,
+    ) -> bool {
+        /// Every integer up to 2^24 is a `float`.
+        const FLOAT_INTEGERS: f64 = 16_777_216.0;
+        let facts = analysis.get_at(block, value);
+        #[allow(clippy::cast_possible_truncation)]
+        let single = facts.is_singleton()
+            && !facts.maybe_nan
+            && f64::from(facts.lo as f32).to_bits() == facts.lo.to_bits();
+        if single || facts.integral() && facts.lo >= -FLOAT_INTEGERS && facts.hi <= FLOAT_INTEGERS {
+            return true;
+        }
+        let float = Some(Scalar::Float);
+        match &func.value(value).kind {
+            OpKind::Call {
+                callee: Callee::External(name),
+                ..
+            } => name == "nts_math_fround",
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } => target.result == super::native::Type::Scalar(Scalar::Float),
+            OpKind::Call {
+                callee: Callee::Direct(name),
+                ..
+            } => self
+                .by_name
+                .get(name.as_str())
+                .is_some_and(|callee| callee.call_kind() == float),
+            OpKind::Convert(from) => func.value(*from).ty == HirType::Float { bits: 32 },
+            // C's own `float` storage holds `float`s.
+            OpKind::NativeLoad { pointer, .. } => matches!(&func.value(*pointer).ty,
+            HirType::NativePointer(pointee) if matches!(pointee.viewed(), Pointee::Scalar(Scalar::Float))),
+            OpKind::Param(slot) => func
+                .params
+                .get(*slot as usize)
+                .is_some_and(|param| param.written == float),
+            OpKind::FieldGet { object, field } => self
+                .field(&func.value(*object).ty, *field)
+                .is_some_and(|(kind, _)| kind == Scalar::Float),
+            OpKind::GlobalGet(global) => self
+                .globals
+                .get(*global as usize)
+                .is_some_and(|slot| slot.written == float),
+            OpKind::BlockParam(_) => {
+                if seen.contains(&value) {
+                    return true;
+                }
+                seen.push(value);
+                incoming(func, value)
+                    .into_iter()
+                    .all(|edge| self.exact_in_float(func, analysis, edge, seen))
+            }
+            // `Math.min` and `Math.max` answer one of their operands, and a
+            // negation or an absolute value only flips a sign.
+            OpKind::Binary {
+                op: BinOp::Min | BinOp::Max,
+                lhs,
+                rhs,
+            } => {
+                self.exact_in_float(func, analysis, (block, *lhs), seen)
+                    && self.exact_in_float(func, analysis, (block, *rhs), seen)
+            }
+            OpKind::Unary {
+                op: UnOp::Neg | UnOp::Abs,
+                operand,
+            } => self.exact_in_float(func, analysis, (block, *operand), seen),
+            // An identity on its other operand, but for the sign of a zero, which
+            // a `float` holds too: `x + 0`, `x - 0`, `x * 1`, `x / -1`.
+            OpKind::Binary { op, lhs, rhs } => {
+                let constant = |value: ValueId| match func.value(value).kind {
+                    OpKind::ConstFloat(constant) => Some(constant),
+                    _ => None,
+                };
+                // `0.0` matches `-0.0` too, as `==` does.
+                let identity = match (op, constant(*lhs), constant(*rhs)) {
+                    (BinOp::Add | BinOp::Sub, _, Some(0.0))
+                    | (BinOp::Mul | BinOp::Div, _, Some(1.0 | -1.0)) => Some(*lhs),
+                    (BinOp::Add, Some(0.0), _) | (BinOp::Mul, Some(1.0 | -1.0), _) => Some(*rhs),
+                    _ => None,
+                };
+                identity.is_some_and(|operand| {
+                    self.exact_in_float(func, analysis, (block, operand), seen)
+                })
+            }
+            _ => false,
+        }
+    }
 }
 
 /// A string's code unit read at an index guarded by that string's length
 /// (`i < text.length`) and not below zero: one of the units, never the NaN
 /// an out-of-range read answers. The relation the bounds pass removes the
 /// check with, asked before it runs.
-fn in_bounds_unit(func: &Func, analysis: &Analysis, block: BlockId, value: ValueId) -> Option<Facts> {
-    let OpKind::StringUnitAt { string, index, checked: true } = func.value(value).kind else { return None };
+fn in_bounds_unit(
+    func: &Func,
+    analysis: &Analysis,
+    block: BlockId,
+    value: ValueId,
+) -> Option<Facts> {
+    let OpKind::StringUnitAt {
+        string,
+        index,
+        checked: true,
+    } = func.value(value).kind
+    else {
+        return None;
+    };
     let length_of_string = |candidate: ValueId| matches!(func.value(candidate).kind, OpKind::Length(of) if of == string);
     let at = analysis.get_at(block, index);
-    (at.lo >= 0.0 && analysis.guarded_by(block, index, length_of_string))
-        .then(|| analysis.get_at(block, value).narrow(Facts::new(0.0, 65_535.0, true, false, false)))
+    (at.lo >= 0.0 && analysis.guarded_by(block, index, length_of_string)).then(|| {
+        analysis
+            .get_at(block, value)
+            .narrow(Facts::new(0.0, 65_535.0, true, false, false))
+    })
 }
 
 /// What each edge into the block that defines the block parameter `param`
 /// passes for it, with the block the edge leaves.
 fn incoming(func: &Func, param: ValueId) -> Vec<(BlockId, ValueId)> {
     let Some((target, at)) = func.blocks.iter().enumerate().find_map(|(index, block)| {
-        Some((BlockId(u32::try_from(index).ok()?), block.params.iter().position(|p| *p == param)?))
+        Some((
+            BlockId(u32::try_from(index).ok()?),
+            block.params.iter().position(|p| *p == param)?,
+        ))
     }) else {
         return Vec::new();
     };
@@ -857,12 +1188,23 @@ fn incoming(func: &Func, param: ValueId) -> Vec<(BlockId, ValueId)> {
         let from = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
         let edges: Vec<(BlockId, &Vec<ValueId>)> = match &block.terminator {
             Terminator::Jump { target, args } => vec![(*target, args)],
-            Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
+            Terminator::Branch {
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+                ..
+            } => {
                 vec![(*then_target, then_args), (*else_target, else_args)]
             }
             Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
         };
-        passed.extend(edges.into_iter().filter(|(to, _)| *to == target).filter_map(|(_, args)| Some((from, *args.get(at)?))));
+        passed.extend(
+            edges
+                .into_iter()
+                .filter(|(to, _)| *to == target)
+                .filter_map(|(_, args)| Some((from, *args.get(at)?))),
+        );
     }
     passed
 }
@@ -881,7 +1223,9 @@ const fn int_range(bits: u8, signed: bool) -> (i128, i128) {
 /// slot takes every integer a machine type or a `bigint` here can hold
 /// only approximately, which isn't this question.
 fn exactly_fits(bounds: Bounds, obligation: &Obligation) -> Vec<Why> {
-    let Some((least, greatest)) = obligation.range() else { return Vec::new() };
+    let Some((least, greatest)) = obligation.range() else {
+        return Vec::new();
+    };
     let mut why = Vec::new();
     if bounds.lo < least {
         why.push(Why::ExactlyBelow(bounds.lo));
@@ -901,12 +1245,21 @@ pub struct Bounds {
 }
 
 impl Bounds {
-    const FULL: Self = Self { lo: i128::MIN, hi: i128::MAX };
+    const FULL: Self = Self {
+        lo: i128::MIN,
+        hi: i128::MAX,
+    };
     /// No value: a block not reached yet.
-    const EMPTY: Self = Self { lo: i128::MAX, hi: i128::MIN };
+    const EMPTY: Self = Self {
+        lo: i128::MAX,
+        hi: i128::MIN,
+    };
 
     const fn exact(value: i128) -> Self {
-        Self { lo: value, hi: value }
+        Self {
+            lo: value,
+            hi: value,
+        }
     }
 
     const fn is_empty(self) -> bool {
@@ -914,7 +1267,8 @@ impl Bounds {
     }
 
     fn of(kind: Option<Scalar>) -> Self {
-        kind.and_then(Scalar::integer_range).map_or(Self::FULL, |(lo, hi)| Self { lo, hi })
+        kind.and_then(Scalar::integer_range)
+            .map_or(Self::FULL, |(lo, hi)| Self { lo, hi })
     }
 
     fn join(self, other: Self) -> Self {
@@ -923,12 +1277,18 @@ impl Bounds {
         } else if other.is_empty() {
             self
         } else {
-            Self { lo: self.lo.min(other.lo), hi: self.hi.max(other.hi) }
+            Self {
+                lo: self.lo.min(other.lo),
+                hi: self.hi.max(other.hi),
+            }
         }
     }
 
     fn meet(self, other: Self) -> Self {
-        Self { lo: self.lo.max(other.lo), hi: self.hi.min(other.hi) }
+        Self {
+            lo: self.lo.max(other.lo),
+            hi: self.hi.min(other.hi),
+        }
     }
 
     /// Every result of `apply` on the corners, or everything where one
@@ -937,8 +1297,18 @@ impl Bounds {
         if self.is_empty() || other.is_empty() {
             return Self::EMPTY;
         }
-        let corners = [(self.lo, other.lo), (self.lo, other.hi), (self.hi, other.lo), (self.hi, other.hi)];
-        corners.iter().try_fold(Self::EMPTY, |range, (a, b)| Some(range.join(Self::exact(apply(*a, *b)?)))).unwrap_or(Self::FULL)
+        let corners = [
+            (self.lo, other.lo),
+            (self.lo, other.hi),
+            (self.hi, other.lo),
+            (self.hi, other.hi),
+        ];
+        corners
+            .iter()
+            .try_fold(Self::EMPTY, |range, (a, b)| {
+                Some(range.join(Self::exact(apply(*a, *b)?)))
+            })
+            .unwrap_or(Self::FULL)
     }
 }
 
@@ -983,7 +1353,10 @@ impl Slots<'_> {
                 }
             }
         }
-        let mut ranges = BigRanges { values: vec![Bounds::EMPTY; func.values.len()], refined: vec![FxHashMap::default(); blocks] };
+        let mut ranges = BigRanges {
+            values: vec![Bounds::EMPTY; func.values.len()],
+            refined: vec![FxHashMap::default(); blocks],
+        };
         let mut rounds = vec![0u32; blocks];
         for _ in 0..(4 * blocks + 16) {
             let mut changed = false;
@@ -1040,15 +1413,28 @@ impl Slots<'_> {
 
     /// The refinements in force at `block`, entered from its one predecessor
     /// `from`: `from`'s own, and what `from`'s branch proves on this edge.
-    fn edge_refinements(func: &Func, ranges: &BigRanges, from: BlockId, block: BlockId) -> FxHashMap<ValueId, Bounds> {
+    fn edge_refinements(
+        func: &Func,
+        ranges: &BigRanges,
+        from: BlockId,
+        block: BlockId,
+    ) -> FxHashMap<ValueId, Bounds> {
         let mut refined = ranges.refined[from.0 as usize].clone();
-        let Terminator::Branch { cond, then_target, else_target, .. } = &func.blocks[from.0 as usize].terminator else {
+        let Terminator::Branch {
+            cond,
+            then_target,
+            else_target,
+            ..
+        } = &func.blocks[from.0 as usize].terminator
+        else {
             return refined;
         };
         if then_target == else_target {
             return refined;
         }
-        let OpKind::Binary { op, lhs, rhs } = &func.value(*cond).kind else { return refined };
+        let OpKind::Binary { op, lhs, rhs } = &func.value(*cond).kind else {
+            return refined;
+        };
         if func.value(*lhs).ty != HirType::BigInt || func.value(*rhs).ty != HirType::BigInt {
             return refined;
         }
@@ -1083,7 +1469,15 @@ impl Slots<'_> {
     }
 
     /// What one operation producing a `bigint` may produce.
-    fn bigint_transfer(&self, func: &Func, numbers: &Analysis, ranges: &BigRanges, block: BlockId, value: ValueId) -> Bounds {
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+    fn bigint_transfer(
+        &self,
+        func: &Func,
+        numbers: &Analysis,
+        ranges: &BigRanges,
+        block: BlockId,
+        value: ValueId,
+    ) -> Bounds {
         let get = |operand: ValueId| ranges.get_at(block, operand);
         match &func.value(value).kind {
             OpKind::ConstInt(literal) => Bounds::exact(*literal),
@@ -1101,33 +1495,65 @@ impl Slots<'_> {
                 }
                 _ => Bounds::FULL,
             },
-            OpKind::Param(slot) => Bounds::of(func.params.get(*slot as usize).and_then(|param| param.written)),
-            OpKind::FieldGet { object, field } => Bounds::of(self.field(&func.value(*object).ty, *field).map(|(kind, _)| kind)),
-            OpKind::GlobalGet(global) => Bounds::of(self.globals.get(*global as usize).and_then(|slot| slot.written)),
-            OpKind::Call { callee: Callee::Direct(name), .. } => {
-                Bounds::of(self.by_name.get(name.as_str()).and_then(|callee| callee.call_kind()))
-            }
-            OpKind::Call { callee: Callee::Native(target), .. } => match target.result {
+            OpKind::Param(slot) => Bounds::of(
+                func.params
+                    .get(*slot as usize)
+                    .and_then(|param| param.written),
+            ),
+            OpKind::FieldGet { object, field } => Bounds::of(
+                self.field(&func.value(*object).ty, *field)
+                    .map(|(kind, _)| kind),
+            ),
+            OpKind::GlobalGet(global) => Bounds::of(
+                self.globals
+                    .get(*global as usize)
+                    .and_then(|slot| slot.written),
+            ),
+            OpKind::Call {
+                callee: Callee::Direct(name),
+                ..
+            } => Bounds::of(
+                self.by_name
+                    .get(name.as_str())
+                    .and_then(|callee| callee.call_kind()),
+            ),
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } => match target.result {
                 super::native::Type::Scalar(kind) => Bounds::of(Some(kind)),
                 _ => Bounds::FULL,
             },
             // `BigInt(x)` is exactly `x`, an integer -- it throws for
             // anything else -- so it has the number's bounds.
-            OpKind::Call { callee: Callee::External(name), args, .. } if name == "nts_bigint_from_number" => {
-                let facts = args.first().map_or(Facts::TOP, |number| numbers.get_at(block, *number));
+            OpKind::Call {
+                callee: Callee::External(name),
+                args,
+                ..
+            } if name == "nts_bigint_from_number" => {
+                let facts = args
+                    .first()
+                    .map_or(Facts::TOP, |number| numbers.get_at(block, *number));
                 #[allow(clippy::cast_possible_truncation)]
                 if facts.integral() {
-                    Bounds { lo: facts.lo as i128, hi: facts.hi as i128 }
+                    Bounds {
+                        lo: facts.lo as i128,
+                        hi: facts.hi as i128,
+                    }
                 } else {
                     Bounds::FULL
                 }
             }
             // `BigInt.asIntN(w, x)` and `asUintN`: the explicit narrowing.
-            OpKind::Call { callee: Callee::External(name), args, .. }
-                if matches!(name.as_str(), "nts_bigint_as_intn" | "nts_bigint_as_uintn") =>
-            {
+            OpKind::Call {
+                callee: Callee::External(name),
+                args,
+                ..
+            } if matches!(name.as_str(), "nts_bigint_as_intn" | "nts_bigint_as_uintn") => {
                 let width = args.first().map(|width| numbers.get_at(block, *width));
-                match width.filter(|width| width.is_singleton() && width.integral() && (1.0..=127.0).contains(&width.lo)) {
+                match width.filter(|width| {
+                    width.is_singleton() && width.integral() && (1.0..=127.0).contains(&width.lo)
+                }) {
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                     Some(width) => {
                         let bits = width.lo as u8;
@@ -1145,14 +1571,25 @@ impl Slots<'_> {
                     BinOp::Mul => a.corners(b, i128::checked_mul),
                     // A mask with a non-negative side is within that side.
                     BinOp::BitAnd if a.lo >= 0 || b.lo >= 0 => {
-                        let hi = if a.lo >= 0 && b.lo >= 0 { a.hi.min(b.hi) } else if a.lo >= 0 { a.hi } else { b.hi };
+                        let hi = if a.lo >= 0 && b.lo >= 0 {
+                            a.hi.min(b.hi)
+                        } else if a.lo >= 0 {
+                            a.hi
+                        } else {
+                            b.hi
+                        };
                         Bounds { lo: 0, hi }
                     }
-                    BinOp::Shr if b.lo >= 0 && b.hi < 128 => a.corners(b, |x, n| u32::try_from(n).ok().map(|n| x >> n)),
+                    BinOp::Shr if b.lo >= 0 && b.hi < 128 => {
+                        a.corners(b, |x, n| u32::try_from(n).ok().map(|n| x >> n))
+                    }
                     _ => Bounds::FULL,
                 }
             }
-            OpKind::Unary { op: UnOp::Neg, operand } => {
+            OpKind::Unary {
+                op: UnOp::Neg,
+                operand,
+            } => {
                 let a = get(*operand);
                 Bounds::exact(0).corners(a, i128::checked_sub)
             }
@@ -1165,7 +1602,13 @@ impl Slots<'_> {
 fn edge_args(terminator: &Terminator, target: BlockId) -> Vec<&[ValueId]> {
     match terminator {
         Terminator::Jump { target: to, args } if *to == target => vec![args.as_slice()],
-        Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
+        Terminator::Branch {
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+            ..
+        } => {
             let mut edges = Vec::new();
             if *then_target == target {
                 edges.push(then_args.as_slice());
@@ -1185,7 +1628,11 @@ fn edge_args(terminator: &Terminator, target: BlockId) -> Vec<&[ValueId]> {
 fn number_fits(facts: Facts, obligation: &Obligation, exact: bool) -> Vec<Why> {
     let Some((least, greatest)) = obligation.range() else {
         // A `double` slot holds every `number`.
-        return if obligation.kind == Scalar::Double || exact { Vec::new() } else { vec![Why::FloatExactness] };
+        return if obligation.kind == Scalar::Double || exact {
+            Vec::new()
+        } else {
+            vec![Why::FloatExactness]
+        };
     };
     let mut why = Vec::new();
     if !facts.whole {
@@ -1214,9 +1661,18 @@ fn made_by(func: &Func, value: ValueId) -> Made {
     match &func.value(value).kind {
         OpKind::Param(_) => Made::Parameter,
         OpKind::BlockParam(_) => Made::Join,
-        OpKind::Call { callee: Callee::Native(_), .. } => Made::NativeResult,
-        OpKind::Call { callee: Callee::Direct(_), .. } => Made::ProgramCall,
-        OpKind::Call { callee: Callee::External(_), .. } => Made::RuntimeCall,
+        OpKind::Call {
+            callee: Callee::Native(_),
+            ..
+        } => Made::NativeResult,
+        OpKind::Call {
+            callee: Callee::Direct(_),
+            ..
+        } => Made::ProgramCall,
+        OpKind::Call {
+            callee: Callee::External(_),
+            ..
+        } => Made::RuntimeCall,
         OpKind::FieldGet { .. } => Made::Field,
         OpKind::ArrayGet { .. } => Made::Element,
         OpKind::GlobalGet(_) => Made::Global,
@@ -1232,7 +1688,7 @@ fn made_by(func: &Func, value: ValueId) -> Made {
 
 #[cfg(test)]
 mod tests {
-    use super::{exactly_fits, number_fits, Bounds, Into, Obligation, Why};
+    use super::{Bounds, Into, Obligation, Why, exactly_fits, number_fits};
     use crate::hir::facts::Facts;
     use crate::hir::native::Scalar;
     use crate::hir::{BlockId, ValueId};
@@ -1244,13 +1700,23 @@ mod tests {
             kind,
             bits,
             into: Into::NativeStore,
-            location: nts_diagnostics::Location { file: nts_diagnostics::SourceId(0), span: nts_diagnostics::Span::new(0, 0) },
+            location: nts_diagnostics::Location {
+                file: nts_diagnostics::SourceId(0),
+                span: nts_diagnostics::Span::new(0, 0),
+            },
         }
     }
 
     #[test]
     fn a_whole_number_in_range_fits() {
-        assert!(number_fits(Facts::new(0.0, 255.0, true, false, false), &into(Scalar::UInt8, None), false).is_empty());
+        assert!(
+            number_fits(
+                Facts::new(0.0, 255.0, true, false, false),
+                &into(Scalar::UInt8, None),
+                false
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -1260,7 +1726,12 @@ mod tests {
             number_fits(maybe_negative_zero, &into(Scalar::UInt8, None), false).is_empty(),
             "C stores -0 and 0 as the same integer"
         );
-        let field = Obligation { into: Into::Field { field: "size".to_owned() }, ..into(Scalar::UInt8, None) };
+        let field = Obligation {
+            into: Into::Field {
+                field: "size".to_owned(),
+            },
+            ..into(Scalar::UInt8, None)
+        };
         assert_eq!(
             number_fits(maybe_negative_zero, &field, false),
             vec![Why::NegativeZero],
@@ -1271,22 +1742,65 @@ mod tests {
     #[test]
     fn each_way_of_not_fitting_is_named() {
         let byte = into(Scalar::UInt8, None);
-        assert_eq!(number_fits(Facts::new(0.0, 256.0, true, false, false), &byte, false), vec![Why::Above(256.0)]);
-        assert_eq!(number_fits(Facts::new(-1.0, 10.0, true, false, false), &byte, false), vec![Why::Below(-1.0)]);
-        assert_eq!(number_fits(Facts::new(0.0, 10.0, false, true, false), &byte, false), vec![Why::Fraction, Why::NaN]);
+        assert_eq!(
+            number_fits(Facts::new(0.0, 256.0, true, false, false), &byte, false),
+            vec![Why::Above(256.0)]
+        );
+        assert_eq!(
+            number_fits(Facts::new(-1.0, 10.0, true, false, false), &byte, false),
+            vec![Why::Below(-1.0)]
+        );
+        assert_eq!(
+            number_fits(Facts::new(0.0, 10.0, false, true, false), &byte, false),
+            vec![Why::Fraction, Why::NaN]
+        );
         assert!(number_fits(Facts::TOP, &into(Scalar::Double, None), false).is_empty());
-        assert_eq!(number_fits(Facts::new(0.0, 1.0, true, false, false), &into(Scalar::Float, None), false), vec![Why::FloatExactness]);
-        assert!(number_fits(Facts::new(0.0, 1.0, true, false, false), &into(Scalar::Float, None), true).is_empty());
+        assert_eq!(
+            number_fits(
+                Facts::new(0.0, 1.0, true, false, false),
+                &into(Scalar::Float, None),
+                false
+            ),
+            vec![Why::FloatExactness]
+        );
+        assert!(
+            number_fits(
+                Facts::new(0.0, 1.0, true, false, false),
+                &into(Scalar::Float, None),
+                true
+            )
+            .is_empty()
+        );
     }
 
     #[test]
     fn bigint_bounds_are_exact_and_an_overflow_is_everything() {
-        let int64 = Bounds { lo: -(1i128 << 63), hi: (1i128 << 63) - 1 };
-        assert_eq!(int64.corners(Bounds::exact(1), i128::checked_add).hi, 1i128 << 63, "INT64_MAX + 1 is one past the kind");
-        assert_eq!(Bounds::FULL.corners(Bounds::exact(1), i128::checked_add), Bounds::FULL, "past 128 bits it wraps");
-        assert_eq!(exactly_fits(int64, &into(Scalar::Int64, None)), Vec::<Why>::new());
+        let int64 = Bounds {
+            lo: -(1i128 << 63),
+            hi: (1i128 << 63) - 1,
+        };
         assert_eq!(
-            exactly_fits(Bounds { lo: 0, hi: 1i128 << 63 }, &into(Scalar::Int64, None)),
+            int64.corners(Bounds::exact(1), i128::checked_add).hi,
+            1i128 << 63,
+            "INT64_MAX + 1 is one past the kind"
+        );
+        assert_eq!(
+            Bounds::FULL.corners(Bounds::exact(1), i128::checked_add),
+            Bounds::FULL,
+            "past 128 bits it wraps"
+        );
+        assert_eq!(
+            exactly_fits(int64, &into(Scalar::Int64, None)),
+            Vec::<Why>::new()
+        );
+        assert_eq!(
+            exactly_fits(
+                Bounds {
+                    lo: 0,
+                    hi: 1i128 << 63
+                },
+                &into(Scalar::Int64, None)
+            ),
             vec![Why::ExactlyAbove(1i128 << 63)],
             "a double could not tell 2^63 from 2^63 - 1; the bound must be exact"
         );
@@ -1296,6 +1810,13 @@ mod tests {
     fn a_bit_field_narrows_its_unit() {
         assert_eq!(into(Scalar::UInt32, Some(3)).range(), Some((0, 7)));
         assert_eq!(into(Scalar::Int32, Some(3)).range(), Some((-4, 3)));
-        assert_eq!(number_fits(Facts::new(0.0, 8.0, true, false, false), &into(Scalar::UInt32, Some(3)), false), vec![Why::Above(8.0)]);
+        assert_eq!(
+            number_fits(
+                Facts::new(0.0, 8.0, true, false, false),
+                &into(Scalar::UInt32, Some(3)),
+                false
+            ),
+            vec![Why::Above(8.0)]
+        );
     }
 }

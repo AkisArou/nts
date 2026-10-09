@@ -86,7 +86,12 @@ pub struct Interned {
 impl Interned {
     /// The slot `response`'s type has, giving it one if it has none.
     #[allow(clippy::implicit_hasher)]
-    pub fn intern(&mut self, snapshot: &mut SemanticSnapshot, response: &TypeResponse, symbols: &FxHashMap<u32, SymbolId>) -> TypeId {
+    pub fn intern(
+        &mut self,
+        snapshot: &mut SemanticSnapshot,
+        response: &TypeResponse,
+        symbols: &FxHashMap<u32, SymbolId>,
+    ) -> TypeId {
         if response.object_flags & object_flags::REFERENCE != 0 {
             self.references.insert(response.id);
         }
@@ -573,9 +578,12 @@ mod tests {
             .split_once("func (s *Session) handleGetSemanticDiagnostics(")
             .expect("`handleGetSemanticDiagnostics` is not in the pin any more")
             .1;
-        let handler = handler.split_once("\nfunc ").map_or(handler, |(body, _)| body);
+        let handler = handler
+            .split_once("\nfunc ")
+            .map_or(handler, |(body, _)| body);
         assert!(
-            handler.contains("params.PlainJSUnfiltered") && handler.contains("GetPlainJSDiagnosticsUnfiltered"),
+            handler.contains("params.PlainJSUnfiltered")
+                && handler.contains("GetPlainJSDiagnosticsUnfiltered"),
             "`handleGetSemanticDiagnostics` does not honour `PlainJSUnfiltered`: the \
              carried patch has been dropped, most likely by a submodule bump. \
              `sh tooling/bootstrap/bootstrap.sh` re-applies it and rebuilds target/tsgo."
@@ -587,8 +595,10 @@ mod tests {
         let source = pinned("internal/api/proto.go");
         let body = source
             .split_once("func newTypeResponse(")
-            .expect("`newTypeResponse` is not in the pin any more -- the patch's header \
-                     says what invariant to restore")
+            .expect(
+                "`newTypeResponse` is not in the pin any more -- the patch's header \
+                     says what invariant to restore",
+            )
             .1;
         let assigns = body
             .find("resp.ObjectFlags = uint32(t.ObjectFlags())")
@@ -597,10 +607,10 @@ mod tests {
                  third_party/patches/typescript-go-objectflags-on-every-type.patch \
                  (`sh tooling/bootstrap/bootstrap.sh` does it) and rebuild target/tsgo.",
             );
-        let switches = body
-            .find("switch flags := t.Flags(); {")
-            .expect("`newTypeResponse`'s switch has been restructured -- the patch's \
-                     header says what invariant to restore");
+        let switches = body.find("switch flags := t.Flags(); {").expect(
+            "`newTypeResponse`'s switch has been restructured -- the patch's \
+                     header says what invariant to restore",
+        );
         assert!(
             assigns < switches,
             "ObjectFlags is reported from inside the switch, so an *intrinsic* never \

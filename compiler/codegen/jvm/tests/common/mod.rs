@@ -33,7 +33,11 @@ pub fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -75,7 +79,10 @@ impl Ran {
     /// run that *throws* has none of these, which is a different thing from a
     /// case reporting.
     pub fn failed(&self) -> Vec<&str> {
-        self.said.lines().filter(|it| it.starts_with("FAIL")).collect()
+        self.said
+            .lines()
+            .filter(|it| it.starts_with("FAIL"))
+            .collect()
     }
 }
 
@@ -95,8 +102,11 @@ pub fn with_sabotage(
     args: &[String],
 ) -> Ran {
     let root = repository();
-    let dir = std::env::temp_dir()
-        .join(format!("nts-sabotage-{}-{:x}", std::process::id(), fingerprint(name)));
+    let dir = std::env::temp_dir().join(format!(
+        "nts-sabotage-{}-{:x}",
+        std::process::id(),
+        fingerprint(name)
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     let src = dir.join("src");
     copy_tree(&root.join("runtime/jvm/src"), &src);
@@ -105,14 +115,19 @@ pub fn with_sabotage(
     let mut text = std::fs::read_to_string(&target)
         .unwrap_or_else(|_| panic!("the sabotage `{name}` names a file that is not there: {file}"));
     for (from, to) in edits {
-        assert!(text.contains(from), "the sabotage `{name}` no longer matches `{from}`");
+        assert!(
+            text.contains(from),
+            "the sabotage `{name}` no longer matches `{from}`"
+        );
         text = text.replace(from, to);
     }
     std::fs::write(&target, text).unwrap();
 
     let classes = dir.join("classes");
     let mut compile = Command::new(javac);
-    compile.args(["--release", "8", "-Xlint:-options", "-d"]).arg(&classes);
+    compile
+        .args(["--release", "8", "-Xlint:-options", "-d"])
+        .arg(&classes);
     for entry in std::fs::read_dir(src.join("nts/rt")).unwrap().flatten() {
         compile.arg(entry.path());
     }
@@ -155,5 +170,7 @@ pub fn with_sabotage(
 /// A stable per-name suffix, so two sabotages running concurrently in one test
 /// binary do not share a directory. Not a hash anyone should rely on.
 fn fingerprint(name: &str) -> u32 {
-    name.bytes().fold(2_166_136_261u32, |at, byte| (at ^ u32::from(byte)).wrapping_mul(16_777_619))
+    name.bytes().fold(2_166_136_261u32, |at, byte| {
+        (at ^ u32::from(byte)).wrapping_mul(16_777_619)
+    })
 }

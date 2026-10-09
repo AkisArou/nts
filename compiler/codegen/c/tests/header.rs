@@ -429,7 +429,15 @@ fn defined_symbols(dir: &Utf8Path) -> Vec<String> {
     let object = dir.join("symbols.o");
     let compiled = Command::new("clang")
         .current_dir(dir)
-        .args(["-std=c11", "-O0", "-I.", "-c", "program.c", "-o", "symbols.o"])
+        .args([
+            "-std=c11",
+            "-O0",
+            "-I.",
+            "-c",
+            "program.c",
+            "-o",
+            "symbols.o",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -437,7 +445,10 @@ fn defined_symbols(dir: &Utf8Path) -> Vec<String> {
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let listed = Command::new("nm").args(["--defined-only", object.as_str()]).output().unwrap();
+    let listed = Command::new("nm")
+        .args(["--defined-only", object.as_str()])
+        .output()
+        .unwrap();
     assert!(listed.status.success(), "nm failed");
     String::from_utf8_lossy(&listed.stdout)
         .lines()
@@ -462,7 +473,12 @@ fn a_global_whose_spelling_a_function_holds_keeps_its_own_symbol() {
         "export function stdin(): number { return 7; }\nexport const stdin_: number = 11;\n",
     );
     let defined = defined_symbols(&dir);
-    assert_eq!(emitted.exported_symbols.len(), 2, "{:?}", emitted.exported_symbols);
+    assert_eq!(
+        emitted.exported_symbols.len(),
+        2,
+        "{:?}",
+        emitted.exported_symbols
+    );
     for symbol in &emitted.exported_symbols {
         assert!(
             defined.contains(symbol),
@@ -491,7 +507,10 @@ fn a_published_class_is_reported_as_crossing_no_symbol() {
     // `bump` takes `NtsObj_Counter *` and the boundary hands out no way to
     // obtain one. So there is no symbol to publish, and saying so is the whole
     // of what this backend can honestly report.
-    assert_eq!(emitted.published_without_a_symbol, vec!["Counter".to_owned()]);
+    assert_eq!(
+        emitted.published_without_a_symbol,
+        vec!["Counter".to_owned()]
+    );
     assert_eq!(emitted.exported_symbols, vec!["published".to_owned()]);
     // The control: `Counter` is not merely absent from the list, it is absent
     // from the object under that name. Were the class to grow a C entry point,
@@ -520,8 +539,17 @@ fn an_export_borrows_even_the_parameters_it_keeps() {
         "interface Box { s: string }\nexport function keep(n: number, s: string): Box { return { s }; }\nexport function size(s: string): number { return s.length; }",
     );
     let header = std::fs::read_to_string(dir.join("program.h")).unwrap();
-    let line = |name: &str| header.lines().find(|line| line.contains(&format!("Export: {name}."))).unwrap_or_default().to_owned();
-    assert!(!line("keep").is_empty() && !line("size").is_empty(), "both exports are published:\n{header}");
+    let line = |name: &str| {
+        header
+            .lines()
+            .find(|line| line.contains(&format!("Export: {name}.")))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert!(
+        !line("keep").is_empty() && !line("size").is_empty(),
+        "both exports are published:\n{header}"
+    );
     assert!(!line("keep").contains("Takes over"), "{}", line("keep"));
     assert!(!line("size").contains("Takes over"), "{}", line("size"));
 }

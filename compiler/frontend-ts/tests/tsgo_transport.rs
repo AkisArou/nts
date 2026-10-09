@@ -189,7 +189,11 @@ fn spans_point_at_the_text_they_name() {
     // own name -- spans point at the text they name -- is what it now asserts.
     let add = find_by_text(&snapshot, "add").expect("`add` is declared");
     let span = add.origin.location.span;
-    assert_eq!(span.len(), 3, "the span is `add` and not the space before it");
+    assert_eq!(
+        span.len(),
+        3,
+        "the span is `add` and not the space before it"
+    );
     assert!(span.start < span.end);
 }
 

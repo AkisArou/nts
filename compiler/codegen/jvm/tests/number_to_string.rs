@@ -58,10 +58,16 @@ fn repository() -> PathBuf {
 fn runtime_jar() -> PathBuf {
     static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
+            || repository().join("runtime/jvm/nts-runtime.jar"),
+            PathBuf::from,
+        );
         let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+        if std::fs::copy(&source, &mine).is_ok() {
+            mine
+        } else {
+            source
+        }
     })
     .clone()
 }
@@ -73,7 +79,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -81,6 +91,7 @@ fn tool(name: &str) -> Option<PathBuf> {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn every_double_prints_the_characters_node_prints() {
     let (Some(javac), Some(java), Some(node)) = (tool("javac"), tool("java"), tool("node")) else {
         return;
@@ -142,7 +153,11 @@ fn every_double_prints_the_characters_node_prints() {
         .arg(&driver)
         .output()
         .unwrap();
-    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+    assert!(
+        built.status.success(),
+        "javac: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
 
     let swept = Command::new(&java)
         .arg("-cp")
@@ -150,7 +165,11 @@ fn every_double_prints_the_characters_node_prints() {
         .arg("Sweep")
         .output()
         .unwrap();
-    assert!(swept.status.success(), "java: {}", String::from_utf8_lossy(&swept.stderr));
+    assert!(
+        swept.status.success(),
+        "java: {}",
+        String::from_utf8_lossy(&swept.stderr)
+    );
     let ours = dir.join("ours.txt");
     std::fs::write(&ours, &swept.stdout).unwrap();
 
@@ -176,8 +195,16 @@ for (const b of bad.slice(0, 10)) console.log(b);
     )
     .unwrap();
 
-    let compared = Command::new(&node).arg(&checker).arg(&ours).output().unwrap();
-    assert!(compared.status.success(), "node: {}", String::from_utf8_lossy(&compared.stderr));
+    let compared = Command::new(&node)
+        .arg(&checker)
+        .arg(&ours)
+        .output()
+        .unwrap();
+    assert!(
+        compared.status.success(),
+        "node: {}",
+        String::from_utf8_lossy(&compared.stderr)
+    );
     let report = String::from_utf8_lossy(&compared.stdout);
     let mut lines = report.lines();
     let counts = lines.next().unwrap_or("0 0");

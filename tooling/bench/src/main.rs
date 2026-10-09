@@ -141,7 +141,6 @@ const VARIANTS: &[Variant] = &[
     },
 ];
 
-
 /// Cases where the two hand-written references legitimately differ by more than
 /// the guard below tolerates, each with the reason it is real.
 ///
@@ -177,7 +176,11 @@ fn other_compilers() -> Vec<u32> {
     let mine = std::process::id();
     let mut found = Vec::new();
     for name in ["nts", "nts-bench"] {
-        let Ok(output) = std::process::Command::new("pgrep").arg("-x").arg(name).output() else {
+        let Ok(output) = std::process::Command::new("pgrep")
+            .arg("-x")
+            .arg(name)
+            .output()
+        else {
             continue;
         };
         found.extend(
@@ -366,7 +369,13 @@ fn age_of(pid: u32) -> Option<String> {
     //
     // `_SC_CLK_TCK`, which is 100 on every Linux this runs on. A wrong constant
     // here misreports an age and cannot misreport whether there is one.
-    let up: u64 = uptime.split_whitespace().next()?.split('.').next()?.parse().ok()?;
+    let up: u64 = uptime
+        .split_whitespace()
+        .next()?
+        .split('.')
+        .next()?
+        .parse()
+        .ok()?;
     let seconds = up.saturating_sub(started / 100);
     Some(match seconds {
         s if s >= 3600 => format!("{}h{:02}m", s / 3600, (s % 3600) / 60),
@@ -607,7 +616,6 @@ fn legend(root: &Utf8Path) -> String {
         produce the same checksum as everything else. Bun is skipped where it \
         is not installed.\n";
 
-
     // The commit the numbers are a function of. Benchmarks run from a worktree
     // pinned to a hash precisely so that they are quotable later; a table that
     // did not say which hash would be a measurement of a tree nobody can check
@@ -668,7 +676,11 @@ fn spreads(rows: &[Row]) -> String {
     let mut lines = String::new();
     for row in rows {
         for (label, spread) in &row.varied {
-            let _ = writeln!(lines, "| {} | {label} | {spread:.2}x | this run |", row.case);
+            let _ = writeln!(
+                lines,
+                "| {} | {label} | {spread:.2}x | this run |",
+                row.case
+            );
         }
         // **And the ones a lucky run does not see.** `varied` is what *this*
         // sitting observed, so a row that flips one time in six publishes a bare
@@ -1041,10 +1053,26 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         Err(_) => false,
     };
 
-    let emission =
-        Emission { renderable, initializes, needs_unicode, refused: refused.as_deref() };
-    let (results, jvm_absence) = variants(root, case, out, name, &tsconfig, &entry, provider, defines,
-        &specialized, &plain, &rendered, emission)?;
+    let emission = Emission {
+        renderable,
+        initializes,
+        needs_unicode,
+        refused: refused.as_deref(),
+    };
+    let (results, jvm_absence) = variants(
+        root,
+        case,
+        out,
+        name,
+        &tsconfig,
+        &entry,
+        provider,
+        defines,
+        &specialized,
+        &plain,
+        &rendered,
+        emission,
+    )?;
     finish_row(case, out, name, &shown, &results, jvm_absence, lowers)
 }
 
@@ -1260,56 +1288,59 @@ fn work_agrees(row: &Row) -> Result<()> {
     // a row and does; it cannot beat it by an order of magnitude on a numeric
     // kernel, so a gap that size means one of them is doing different work.
     for (family, lanes) in [
-    ("hand-written references", vec![("C++", row.cpp), ("Java", row.java)]),
-    (
-        "this compiler's backends",
-        vec![("nts C", row.nts), ("nts LLVM", row.llvm), ("nts JVM", row.jvm)],
-    ),
-    ("engines", vec![("node", Some(row.node)), ("bun", row.bun)]),
+        (
+            "hand-written references",
+            vec![("C++", row.cpp), ("Java", row.java)],
+        ),
+        (
+            "this compiler's backends",
+            vec![
+                ("nts C", row.nts),
+                ("nts LLVM", row.llvm),
+                ("nts JVM", row.jvm),
+            ],
+        ),
+        ("engines", vec![("node", Some(row.node)), ("bun", row.bun)]),
     ] {
-    // `NaN` marks a lane a filter excluded, not a lane that ran fast.
-    let ran: Vec<(&str, f64)> = lanes
-        .into_iter()
-        .filter_map(|(l, t)| t.filter(|t| t.is_finite()).map(|t| (l, t)))
-        .collect();
-    let Some((slow, slowest)) = ran
-        .iter()
-        .copied()
-        .max_by(|a, b| a.1.total_cmp(&b.1))
-    else {
-        continue;
-    };
-    let Some((fast, fastest)) = ran.iter().copied().min_by(|a, b| a.1.total_cmp(&b.1)) else {
-        continue;
-    };
-    if fastest * 20.0 >= slowest {
-        continue;
-    }
-    if let Some((_, why)) = WIDE_REFERENCE_GAPS
-        .iter()
-        .find(|(which, _)| *which == row.case)
-    {
-        eprintln!(
-            "note: {} -- {slow} {} against {fast} {} -- {}",
-            row.case,
-            human(slowest),
-            human(fastest),
-            why
-        );
-    } else {
-        bail!(
-            "on {}, {slow} ran in {} against {} for {} -- both are {family}, \
+        // `NaN` marks a lane a filter excluded, not a lane that ran fast.
+        let ran: Vec<(&str, f64)> = lanes
+            .into_iter()
+            .filter_map(|(l, t)| t.filter(|t| t.is_finite()).map(|t| (l, t)))
+            .collect();
+        let Some((slow, slowest)) = ran.iter().copied().max_by(|a, b| a.1.total_cmp(&b.1)) else {
+            continue;
+        };
+        let Some((fast, fastest)) = ran.iter().copied().min_by(|a, b| a.1.total_cmp(&b.1)) else {
+            continue;
+        };
+        if fastest * 20.0 >= slowest {
+            continue;
+        }
+        if let Some((_, why)) = WIDE_REFERENCE_GAPS
+            .iter()
+            .find(|(which, _)| *which == row.case)
+        {
+            eprintln!(
+                "note: {} -- {slow} {} against {fast} {} -- {}",
+                row.case,
+                human(slowest),
+                human(fastest),
+                why
+            );
+        } else {
+            bail!(
+                "on {}, {slow} ran in {} against {} for {} -- both are {family}, \
              so they compile the same work and cannot differ by that much. \
              One of them is doing a different amount of it: check the \
              problem size each states, in `case.ts`'s `seed`, `ref.cpp`'s \
              `volatile`, and `ref.java`'s.",
-            row.case,
-            human(slowest),
-            human(fastest),
-            fast
-        );
+                row.case,
+                human(slowest),
+                human(fastest),
+                fast
+            );
+        }
     }
-}
     Ok(())
 }
 
@@ -1364,8 +1395,11 @@ fn validate_lanes() -> Result<()> {
     let Some(wanted) = wanted_lanes() else {
         return Ok(());
     };
-    let unknown: Vec<&str> =
-        wanted.iter().filter(|lane| !LANES.contains(&lane.as_str())).map(String::as_str).collect();
+    let unknown: Vec<&str> = wanted
+        .iter()
+        .filter(|lane| !LANES.contains(&lane.as_str()))
+        .map(String::as_str)
+        .collect();
     if unknown.is_empty() {
         return Ok(());
     }
@@ -1450,9 +1484,11 @@ fn finish_row(
     // A row whose own passes disagree has no single number, and printing one of
     // them as though it were the answer is the failure this table exists to
     // avoid. Said out loud rather than smoothed over; see `SPREAD_WORTH_SAYING`.
-    for (label, measured) in
-        [("nts (JVM)", results.get(4)), ("Java", results.get(5)), ("nts (C)", results.get(1))]
-    {
+    for (label, measured) in [
+        ("nts (JVM)", results.get(4)),
+        ("Java", results.get(5)),
+        ("nts (C)", results.get(1)),
+    ] {
         if let Some(Some(measured)) = measured
             && measured.spread >= SPREAD_WORTH_SAYING
         {
@@ -1794,7 +1830,11 @@ fn jvm_case(
     };
 
     let supplied = case.join("driver.java");
-    let workload = if supplied.exists() { None } else { Some(workload(case)?) };
+    let workload = if supplied.exists() {
+        None
+    } else {
+        Some(workload(case)?)
+    };
     let program = prepared_program(tsconfig, entry, true, provider)?;
     let emitted = nts_codegen_jvm::emit(&program);
     if !emitted.is_complete() {
@@ -1826,8 +1866,8 @@ fn jvm_case(
     // belongs next to the case it drives, and inventing a substitution language
     // for the two cases that need one would be the larger mistake.
     let Some((callee, arguments)) = workload else {
-        let text = std::fs::read_to_string(&supplied)
-            .with_context(|| format!("reading {supplied}"))?;
+        let text =
+            std::fs::read_to_string(&supplied).with_context(|| format!("reading {supplied}"))?;
         let driver_path = dir.join("Case.java");
         std::fs::write(&driver_path, text)?;
         return run_driver(root, &dir, &jar, &driver_path);
@@ -1854,7 +1894,11 @@ fn jvm_case(
     // A static initialiser rather than the native lane's `if (!ready)`: class
     // initialisation runs once, before `main`, and outside the measured region
     // entirely.
-    if program.funcs.iter().any(|func| func.name == hir::lower::MODULE_INIT) {
+    if program
+        .funcs
+        .iter()
+        .any(|func| func.name == hir::lower::MODULE_INIT)
+    {
         let _ = writeln!(
             driver,
             "    static {{ nts.gen.Program.{}(); }}",
@@ -1863,7 +1907,10 @@ fn jvm_case(
     }
     let mut passed = Vec::new();
     for (at, value) in arguments.iter().enumerate() {
-        let _ = writeln!(driver, "    private static volatile double in{at} = {value};");
+        let _ = writeln!(
+            driver,
+            "    private static volatile double in{at} = {value};"
+        );
         passed.push(format!("in{at}"));
     }
     let _ = writeln!(driver, "    public static void main(String[] argv) {{");
@@ -2107,7 +2154,11 @@ fn java_tool(name: &str) -> Utf8PathBuf {
 /// more than its positive one -- the positive is the case you were thinking
 /// about.
 fn driver_entries(entry: &[String]) -> Vec<String> {
-    entry.iter().filter(|name| *name != hir::lower::MODULE_INIT).cloned().collect()
+    entry
+        .iter()
+        .filter(|name| *name != hir::lower::MODULE_INIT)
+        .cloned()
+        .collect()
 }
 
 /// The entry point the driver calls, if lowering did not keep it.
@@ -2427,7 +2478,11 @@ fn timed_cpus() -> Option<String> {
     // under.
     let cpus = std::fs::read_to_string("/sys/devices/cpu_core/cpus").ok()?;
     let cpus = cpus.trim();
-    if cpus.is_empty() { None } else { Some(cpus.to_owned()) }
+    if cpus.is_empty() {
+        None
+    } else {
+        Some(cpus.to_owned())
+    }
 }
 
 /// The same command, confined to `cpus`.
@@ -2479,7 +2534,11 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
         }
     }
     let mut best = best.context("a benchmark produced no measurement")?;
-    best.spread = if best.ns_per_op > 0.0 { worst / best.ns_per_op } else { 1.0 };
+    best.spread = if best.ns_per_op > 0.0 {
+        worst / best.ns_per_op
+    } else {
+        1.0
+    };
     Ok(best)
 }
 
@@ -2620,8 +2679,16 @@ fn refusal_drift(rows: &[Row]) -> Option<String> {
     if refused == expected {
         return None;
     }
-    let new: Vec<&str> = refused.iter().filter(|c| !expected.contains(c)).copied().collect();
-    let gone: Vec<&str> = expected.iter().filter(|c| !refused.contains(c)).copied().collect();
+    let new: Vec<&str> = refused
+        .iter()
+        .filter(|c| !expected.contains(c))
+        .copied()
+        .collect();
+    let gone: Vec<&str> = expected
+        .iter()
+        .filter(|c| !refused.contains(c))
+        .copied()
+        .collect();
     let mut said = String::new();
     if !new.is_empty() {
         let _ = write!(
@@ -2681,16 +2748,46 @@ const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
     // Two of the eight AWFY references now behave this way, which is worth more
     // than either entry: the bar is "at or under hand-written Java", and on
     // those rows hand-written Java is not one number.
-    ("awfy-list", "Java", 1.33, "five passes of one binary, against two earlier sittings", Basis::Bimodal),
-    ("awfy-sieve", "Java", 1.27, "a previous sitting, and a second harness", Basis::Bimodal),
-    ("awfy-sieve", "nts (JVM)", 1.28, "a control run, both harnesses", Basis::Bimodal),
+    (
+        "awfy-list",
+        "Java",
+        1.33,
+        "five passes of one binary, against two earlier sittings",
+        Basis::Bimodal,
+    ),
+    (
+        "awfy-sieve",
+        "Java",
+        1.27,
+        "a previous sitting, and a second harness",
+        Basis::Bimodal,
+    ),
+    (
+        "awfy-sieve",
+        "nts (JVM)",
+        1.28,
+        "a control run, both harnesses",
+        Basis::Bimodal,
+    ),
     // The reference got 13% and 12% faster across two sittings while our side
     // did not move — which is the `awfy-sieve` shape and smaller, and two
     // sittings are a move rather than two modes. `number-format-double` is a row
     // real effort has gone into at 1.15x and then 0.95x, and both are suspect
     // from the reference's side rather than from ours.
-    ("number-format-double", "Java", 1.13, "two sittings, reference only", Basis::Moved),
-    ("symbol-keyed-map", "Java", 1.12, "two sittings, reference only", Basis::Moved),
+    (
+        "number-format-double",
+        "Java",
+        1.13,
+        "two sittings, reference only",
+        Basis::Moved,
+    ),
+    (
+        "symbol-keyed-map",
+        "Java",
+        1.12,
+        "two sittings, reference only",
+        Basis::Moved,
+    ),
 ];
 
 fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
@@ -2713,10 +2810,10 @@ fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
     Ok(Measured {
         ns_per_op,
         checksum,
-            // Filled in by `measure`, which is the only thing that sees more
+        // Filled in by `measure`, which is the only thing that sees more
         // than one pass.
         spread: 1.0,
-})
+    })
 }
 
 /// A duration a person can compare at a glance.
@@ -2738,7 +2835,9 @@ fn human(ns: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{REFUSES_TODAY, Row, driver_entries, lost_case_decline, missing_entry, refusal_drift};
+    use super::{
+        REFUSES_TODAY, Row, driver_entries, lost_case_decline, missing_entry, refusal_drift,
+    };
     use camino::Utf8PathBuf;
 
     fn row(case: &str) -> Row {
@@ -2758,21 +2857,30 @@ mod tests {
     }
 
     fn refused_row(case: &str) -> Row {
-        Row { nts: None, unspecialized: None, ..row(case) }
+        Row {
+            nts: None,
+            unspecialized: None,
+            ..row(case)
+        }
     }
 
     /// The set that matches is the only quiet answer.
     #[test]
     fn the_expected_refusals_are_not_drift() {
-        let rows: Vec<Row> = REFUSES_TODAY.iter().map(|(case, _)| refused_row(case)).collect();
+        let rows: Vec<Row> = REFUSES_TODAY
+            .iter()
+            .map(|(case, _)| refused_row(case))
+            .collect();
         assert_eq!(refusal_drift(&rows), None);
     }
 
     /// A case that starts refusing is a regression, and is named.
     #[test]
     fn a_new_refusal_is_named_as_a_regression() {
-        let mut rows: Vec<Row> =
-            REFUSES_TODAY.iter().map(|(case, _)| refused_row(case)).collect();
+        let mut rows: Vec<Row> = REFUSES_TODAY
+            .iter()
+            .map(|(case, _)| refused_row(case))
+            .collect();
         rows.push(refused_row("awfy-bounce"));
         let said = refusal_drift(&rows).expect("a new refusal is drift");
         assert!(said.contains("awfy-bounce"), "{said}");
@@ -2793,11 +2901,10 @@ mod tests {
     /// the shape `6047805a` shipped without.
     #[test]
     fn every_case_refusing_is_drift_not_success() {
-        let rows: Vec<Row> =
-            ["absences", "accumulate", "array-from", "json-stringify-doc"]
-                .iter()
-                .map(|case| refused_row(case))
-                .collect();
+        let rows: Vec<Row> = ["absences", "accumulate", "array-from", "json-stringify-doc"]
+            .iter()
+            .map(|case| refused_row(case))
+            .collect();
         let said = refusal_drift(&rows).expect("61 of 61 refusing is not a pass");
         assert!(said.contains("absences"), "{said}");
         assert!(said.contains("accumulate"), "{said}");
@@ -2843,7 +2950,11 @@ mod tests {
         let entry = vec!["work".to_owned()];
         let defined = "#include <stdint.h>\ndouble work(double v0);\ndouble work(double v0) {\n  return v0;\n}\n";
         let declared_only = "#include <stdint.h>\ndouble work(double v0);\n";
-        assert_eq!(missing_entry(defined, &entry), None, "a body is a definition");
+        assert_eq!(
+            missing_entry(defined, &entry),
+            None,
+            "a body is a definition"
+        );
         assert_eq!(
             missing_entry(declared_only, &entry),
             Some("work".to_owned()),
@@ -2877,7 +2988,10 @@ mod tests {
     /// before anyone looked.
     #[test]
     fn the_module_init_root_is_not_a_driver_entry() {
-        let entry = vec!["work".to_owned(), nts_core::hir::lower::MODULE_INIT.to_owned()];
+        let entry = vec![
+            "work".to_owned(),
+            nts_core::hir::lower::MODULE_INIT.to_owned(),
+        ];
         assert_eq!(driver_entries(&entry), vec!["work".to_owned()]);
 
         // And the whole question, asked the way `run_case` asks it: a healthy
@@ -2896,7 +3010,11 @@ mod tests {
     fn a_pointer_return_defines_and_a_longer_name_does_not() {
         let entry = vec!["work".to_owned()];
         let pointer = "NtsString *work(double v0) {\n  return 0;\n}\n";
-        assert_eq!(missing_entry(pointer, &entry), None, "no space before the name");
+        assert_eq!(
+            missing_entry(pointer, &entry),
+            None,
+            "no space before the name"
+        );
         let lookalike = "double nts_work(double v0) {\n  return v0;\n}\n";
         assert_eq!(
             missing_entry(lookalike, &entry),

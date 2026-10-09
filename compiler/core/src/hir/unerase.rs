@@ -37,7 +37,9 @@ use std::collections::BTreeMap;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::escape::Escapes;
-use super::{Absent, Callee, Func, HirType, ManagedType, OpKind, Program, SignatureFace, TypeId, ValueId};
+use super::{
+    Absent, Callee, Func, HirType, ManagedType, OpKind, Program, SignatureFace, TypeId, ValueId,
+};
 
 /// Removing an erasure must preserve its tag as well as its payload storage.
 /// A nullable reference carries an absence that its machine type alone cannot
@@ -366,7 +368,12 @@ pub fn narrow_parameters(program: &mut Program) -> usize {
     }
 
     for ((at, position), representation) in &chosen {
-        retype_parameter(&mut program.funcs[*at], *position, representation, &program.signature_faces);
+        retype_parameter(
+            &mut program.funcs[*at],
+            *position,
+            representation,
+            &program.signature_faces,
+        );
     }
     let targets: FxHashMap<(&str, usize), HirType> = chosen
         .iter()
@@ -627,7 +634,11 @@ fn only_unwrapped(func: &Func, position: usize, representation: &HirType) -> boo
     else {
         return false;
     };
-    only_unwrapped_value(func, ValueId(u32::try_from(parameter).unwrap_or(0)), representation)
+    only_unwrapped_value(
+        func,
+        ValueId(u32::try_from(parameter).unwrap_or(0)),
+        representation,
+    )
 }
 
 /// Whether every use of one value would unwrap it anyway.
@@ -698,7 +709,11 @@ fn retype_parameter(
         }
     }
     let Some(parameter) = parameter else { return };
-    unwrap_uses(func, &FxHashMap::from_iter([(parameter, representation.clone())]), faces);
+    unwrap_uses(
+        func,
+        &FxHashMap::from_iter([(parameter, representation.clone())]),
+        faces,
+    );
 }
 
 /// Rewrite the uses of values that have stopped being erased.

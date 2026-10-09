@@ -52,7 +52,9 @@ impl SourceText {
     #[must_use]
     pub fn utf8_offset(&self, unit: u32) -> u32 {
         let end = (unit as usize).min(self.units.len());
-        let bytes: usize = char::decode_utf16(self.units[..end].iter().copied()).map(|c| c.map_or(3, char::len_utf8)).sum();
+        let bytes: usize = char::decode_utf16(self.units[..end].iter().copied())
+            .map(|c| c.map_or(3, char::len_utf8))
+            .sum();
         u32::try_from(bytes).unwrap_or(u32::MAX)
     }
 
@@ -86,7 +88,8 @@ impl SourceText {
             } else if unit == u16::from(b'/') && self.units.get(at + 1) == Some(&u16::from(b'*')) {
                 at += 2;
                 while at < self.units.len()
-                    && !(self.units[at] == u16::from(b'*') && self.units.get(at + 1) == Some(&u16::from(b'/')))
+                    && !(self.units[at] == u16::from(b'*')
+                        && self.units.get(at + 1) == Some(&u16::from(b'/')))
                 {
                     at += 1;
                 }
@@ -114,7 +117,9 @@ impl SourceText {
     /// The offset of a 1-based line and a 0-based UTF-16 column.
     #[must_use]
     pub fn offset(&self, line: u32, column: u32) -> Option<u32> {
-        let start = *self.line_starts.get(usize::try_from(line).ok()?.checked_sub(1)?)?;
+        let start = *self
+            .line_starts
+            .get(usize::try_from(line).ok()?.checked_sub(1)?)?;
         Some(start + column)
     }
 
@@ -143,7 +148,8 @@ fn is_line_break(unit: u16) -> bool {
 fn is_whitespace(unit: u16) -> bool {
     matches!(
         unit,
-        0x09 | 0x0B | 0x0C | 0x20 | 0x85 | 0xA0 | 0x1680 | 0x2000..=0x200A | 0x200B | 0x202F | 0x205F | 0x3000 | 0xFEFF
+        0x09 | 0x0B | 0x0C | 0x20 | 0x85 | 0xA0 | 0x1680 | 0x2000
+            ..=0x200A | 0x200B | 0x202F | 0x205F | 0x3000 | 0xFEFF
     )
 }
 

@@ -16,9 +16,9 @@
 //! block parameters onto phi nodes directly.
 
 pub mod backend;
-pub mod symbols;
 pub mod destruct;
 pub mod linearize;
+pub mod symbols;
 pub mod writer;
 
 pub use backend::{Backend, UnknownBackend};
@@ -26,9 +26,9 @@ pub use destruct::{Copy, edge_copies};
 pub use linearize::block_order;
 pub use writer::CodeWriter;
 
-pub mod native;
-pub mod counting;
-pub mod objc;
-pub mod com;
-pub mod gobject;
 pub mod abi;
+pub mod com;
+pub mod counting;
+pub mod gobject;
+pub mod native;
+pub mod objc;

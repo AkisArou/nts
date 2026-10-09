@@ -81,7 +81,11 @@ fn a_field_that_can_hold_a_fraction_keeps_its_double() {
         ("Halving", "value", "halves itself, so it is a fraction"),
         ("Poisoned", "value", "can divide by zero and reach NaN"),
         ("Signed", "value", "can be negative zero"),
-        ("Doubling", "value", "doubles itself past what an int32 holds"),
+        (
+            "Doubling",
+            "value",
+            "doubles itself past what an int32 holds",
+        ),
         ("Derived", "slot", "is divided through a shared prefix"),
     ] {
         let ty = width(&prepared, class, field);

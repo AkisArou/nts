@@ -29,10 +29,13 @@ pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<
     // than the one `nts build examples/app` was run in.
     let dir = &super::absolute(dir)?;
     let Some(named) = &claim.lockfile else {
-        bail!("`dependencies.{id}` resolves with CocoaPods and names no `lockfile`. `Podfile.lock` is CocoaPods' resolved output and is the claim")
+        bail!(
+            "`dependencies.{id}` resolves with CocoaPods and names no `lockfile`. `Podfile.lock` is CocoaPods' resolved output and is the claim"
+        )
     };
     let lockfile = dir.join(named.trim_start_matches("./"));
-    let text = std::fs::read_to_string(&lockfile).with_context(|| format!("reading the Podfile.lock `dependencies.{id}` names"))?;
+    let text = std::fs::read_to_string(&lockfile)
+        .with_context(|| format!("reading the Podfile.lock `dependencies.{id}` names"))?;
     let lock = parse(&text, &lockfile)?;
     let root = lockfile.parent().unwrap_or(dir);
     let pods = root.join("Pods");
@@ -51,7 +54,10 @@ pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<
     }
     let mut native = Vec::new();
     for pod in &lock.pods {
-        let sources = lock.paths.get(pod).map_or_else(|| pods.join(pod), |path| root.join(path));
+        let sources = lock
+            .paths
+            .get(pod)
+            .map_or_else(|| pods.join(pod), |path| root.join(path));
         if !sources.is_dir() {
             bail!(
                 "{lockfile} pins the pod `{pod}`, and {sources} does not exist: run `pod install` beside it, \
@@ -59,30 +65,63 @@ pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<
             )
         }
         let public = pods.join("Headers").join("Public");
-        let include = [pods.join("Headers").join("Private").join(pod), public.join(pod), public.clone()]
-            .into_iter()
-            .filter(|directory| directory.is_dir())
-            .collect();
+        let include = [
+            pods.join("Headers").join("Private").join(pod),
+            public.join(pod),
+            public.clone(),
+        ]
+        .into_iter()
+        .filter(|directory| directory.is_dir())
+        .collect();
         // The pod's own: a header CocoaPods writes for it -- the umbrella and
         // module map of a Swift pod, linked from `Target Support Files` --
         // is not its API.
         let own = std::fs::canonicalize(&sources).ok();
         let headers = headers_under(&public.join(pod))
             .into_iter()
-            .filter(|header| std::fs::canonicalize(header).ok().zip(own.as_ref()).is_some_and(|(header, own)| header.starts_with(own)))
+            .filter(|header| {
+                std::fs::canonicalize(header)
+                    .ok()
+                    .zip(own.as_ref())
+                    .is_some_and(|(header, own)| header.starts_with(own))
+            })
             .collect();
         let (files, frameworks) = if lock.paths.contains_key(pod) {
             let spec = local_podspec(&pods, pod, platform_of(id))?;
-            let files = spec.source_files.iter().flat_map(|pattern| glob(&sources, pattern, false)).collect::<BTreeSet<_>>().into_iter().collect();
-            let frameworks = spec.vendored_frameworks.iter().flat_map(|pattern| glob(&sources, pattern, true)).collect::<BTreeSet<_>>().into_iter().collect();
+            let files = spec
+                .source_files
+                .iter()
+                .flat_map(|pattern| glob(&sources, pattern, false))
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let frameworks = spec
+                .vendored_frameworks
+                .iter()
+                .flat_map(|pattern| glob(&sources, pattern, true))
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
             (Some(files), frameworks)
         } else {
             (None, frameworks_under(&sources))
         };
         let depends = lock.depends.get(pod).cloned().unwrap_or_default();
-        native.push(NativeModule { name: pod.clone(), headers, sources, files, include, frameworks, depends });
+        native.push(NativeModule {
+            name: pod.clone(),
+            headers,
+            sources,
+            files,
+            include,
+            frameworks,
+            depends,
+        });
     }
-    Ok(Resolution { libs: link_flags(&pods, &lock.pods)?, native, ..Resolution::default() })
+    Ok(Resolution {
+        libs: link_flags(&pods, &lock.pods)?,
+        native,
+        ..Resolution::default()
+    })
 }
 
 /// What `CocoaPods` links each Podfile target with, `OTHER_LDFLAGS` in
@@ -97,7 +136,10 @@ fn link_flags(pods: &Utf8Path, pinned: &[String]) -> Result<Vec<String>> {
         .flatten()
         .flatten()
         .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.path()).ok())
-        .filter(|dir| dir.file_name().is_some_and(|name| name.starts_with("Pods-")))
+        .filter(|dir| {
+            dir.file_name()
+                .is_some_and(|name| name.starts_with("Pods-"))
+        })
         .map(|dir| {
             let name = dir.file_name().unwrap_or_default().to_owned();
             dir.join(format!("{name}.release.xcconfig"))
@@ -105,7 +147,9 @@ fn link_flags(pods: &Utf8Path, pinned: &[String]) -> Result<Vec<String>> {
         .collect();
     configs.sort();
     if configs.is_empty() {
-        bail!("{support} holds no Podfile target's xcconfig, which says what the pods link against: run `pod install` there")
+        bail!(
+            "{support} holds no Podfile target's xcconfig, which says what the pods link against: run `pod install` there"
+        )
     }
     let mut flags: Vec<String> = Vec::new();
     for config in &configs {
@@ -117,8 +161,18 @@ fn link_flags(pods: &Utf8Path, pinned: &[String]) -> Result<Vec<String>> {
 
 /// The link flags of one xcconfig's `OTHER_LDFLAGS`, less what does not apply.
 fn ldflags(xcconfig: &str, pinned: &[String]) -> Vec<String> {
-    let Some(line) = xcconfig.lines().find_map(|line| line.trim().strip_prefix("OTHER_LDFLAGS")) else { return Vec::new() };
-    let words: Vec<String> = line.trim_start().trim_start_matches('=').split_whitespace().map(|word| word.trim_matches('"').to_owned()).collect();
+    let Some(line) = xcconfig
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("OTHER_LDFLAGS"))
+    else {
+        return Vec::new();
+    };
+    let words: Vec<String> = line
+        .trim_start()
+        .trim_start_matches('=')
+        .split_whitespace()
+        .map(|word| word.trim_matches('"').to_owned())
+        .collect();
     let mut flags = Vec::new();
     let mut at = 0;
     while at < words.len() {
@@ -164,20 +218,33 @@ struct Podspec {
 /// evaluated for a development pod: its patterns, and the platform's own
 /// added to them (`"osx": { "source_files": ... }`).
 fn local_podspec(pods: &Utf8Path, pod: &str, platform: &str) -> Result<Podspec> {
-    let path = pods.join("Local Podspecs").join(format!("{pod}.podspec.json"));
-    let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}, which `pod install` writes for a development pod: run it"))?;
-    let json: serde_json::Value = serde_json::from_str(&text).with_context(|| format!("{path} is not JSON"))?;
+    let path = pods
+        .join("Local Podspecs")
+        .join(format!("{pod}.podspec.json"));
+    let text = std::fs::read_to_string(&path).with_context(|| {
+        format!("reading {path}, which `pod install` writes for a development pod: run it")
+    })?;
+    let json: serde_json::Value =
+        serde_json::from_str(&text).with_context(|| format!("{path} is not JSON"))?;
     let strings = |value: Option<&serde_json::Value>| -> Vec<String> {
         match value {
             Some(serde_json::Value::String(one)) => vec![one.clone()],
-            Some(serde_json::Value::Array(many)) => many.iter().filter_map(serde_json::Value::as_str).map(str::to_owned).collect(),
+            Some(serde_json::Value::Array(many)) => many
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .collect(),
             _ => Vec::new(),
         }
     };
-    let mut spec = Podspec { source_files: strings(json.get("source_files")), vendored_frameworks: strings(json.get("vendored_frameworks")) };
+    let mut spec = Podspec {
+        source_files: strings(json.get("source_files")),
+        vendored_frameworks: strings(json.get("vendored_frameworks")),
+    };
     if let Some(own) = json.get(platform) {
         spec.source_files.extend(strings(own.get("source_files")));
-        spec.vendored_frameworks.extend(strings(own.get("vendored_frameworks")));
+        spec.vendored_frameworks
+            .extend(strings(own.get("vendored_frameworks")));
     }
     Ok(spec)
 }
@@ -189,7 +256,10 @@ fn local_podspec(pods: &Utf8Path, pod: &str, platform: &str) -> Result<Podspec> 
 fn glob(root: &Utf8Path, pattern: &str, directories: bool) -> Vec<Utf8PathBuf> {
     let mut found = Vec::new();
     for alternative in braces(pattern) {
-        let parts: Vec<&str> = alternative.split('/').filter(|part| !part.is_empty() && *part != ".").collect();
+        let parts: Vec<&str> = alternative
+            .split('/')
+            .filter(|part| !part.is_empty() && *part != ".")
+            .collect();
         walk(root, &parts, directories, &mut found);
     }
     found.sort();
@@ -198,8 +268,15 @@ fn glob(root: &Utf8Path, pattern: &str, directories: bool) -> Vec<Utf8PathBuf> {
 }
 
 fn walk(at: &Utf8Path, parts: &[&str], directories: bool, found: &mut Vec<Utf8PathBuf>) {
-    let Some((first, rest)) = parts.split_first() else { return };
-    let entries: Vec<Utf8PathBuf> = std::fs::read_dir(at).into_iter().flatten().flatten().filter_map(|entry| Utf8PathBuf::from_path_buf(entry.path()).ok()).collect();
+    let Some((first, rest)) = parts.split_first() else {
+        return;
+    };
+    let entries: Vec<Utf8PathBuf> = std::fs::read_dir(at)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.path()).ok())
+        .collect();
     if *first == "**" {
         // Zero directories, then one more and still `**`.
         walk(at, rest, directories, found);
@@ -224,7 +301,8 @@ fn walk(at: &Utf8Path, parts: &[&str], directories: bool, found: &mut Vec<Utf8Pa
 
 /// `*` any run of characters and `?` one, within a name.
 fn wildcard(pattern: &str, name: &str) -> bool {
-    let (pattern, name): (Vec<char>, Vec<char>) = (pattern.chars().collect(), name.chars().collect());
+    let (pattern, name): (Vec<char>, Vec<char>) =
+        (pattern.chars().collect(), name.chars().collect());
     let (mut p, mut n, mut star, mut mark) = (0, 0, None, 0);
     while n < name.len() {
         if p < pattern.len() && (pattern[p] == '?' || pattern[p] == name[n]) {
@@ -248,10 +326,17 @@ fn wildcard(pattern: &str, name: &str) -> bool {
 /// Each alternative a pattern's `{a,b}` groups spell, the first group
 /// expanded first.
 fn braces(pattern: &str) -> Vec<String> {
-    let Some(open) = pattern.find('{') else { return vec![pattern.to_owned()] };
-    let Some(close) = pattern[open..].find('}').map(|at| open + at) else { return vec![pattern.to_owned()] };
+    let Some(open) = pattern.find('{') else {
+        return vec![pattern.to_owned()];
+    };
+    let Some(close) = pattern[open..].find('}').map(|at| open + at) else {
+        return vec![pattern.to_owned()];
+    };
     let (head, tail) = (&pattern[..open], &pattern[close + 1..]);
-    pattern[open + 1..close].split(',').flat_map(|choice| braces(&format!("{head}{choice}{tail}"))).collect()
+    pattern[open + 1..close]
+        .split(',')
+        .flat_map(|choice| braces(&format!("{head}{choice}{tail}")))
+        .collect()
 }
 
 /// What a `Podfile.lock` pins.
@@ -288,11 +373,21 @@ fn parse(text: &str, path: &Utf8Path) -> Result<Lock> {
             section = line.trim_end_matches(':').trim();
             continue;
         }
-        let malformed = || anyhow::anyhow!("{path}:{}: `{}` is not an entry CocoaPods writes under `{section}`", index + 1, line.trim());
+        let malformed = || {
+            anyhow::anyhow!(
+                "{path}:{}: `{}` is not an entry CocoaPods writes under `{section}`",
+                index + 1,
+                line.trim()
+            )
+        };
         match section {
             "PODS" if line.starts_with("  - ") => {
                 let entry = unquote(line.trim_start_matches("  - ").trim_end_matches(':'));
-                let name = entry.split(" (").next().filter(|name| !name.is_empty()).ok_or_else(malformed)?;
+                let name = entry
+                    .split(" (")
+                    .next()
+                    .filter(|name| !name.is_empty())
+                    .ok_or_else(malformed)?;
                 let pod = name.split('/').next().unwrap_or(name).to_owned();
                 if seen.insert(pod.clone()) {
                     lock.pods.push(pod.clone());
@@ -302,7 +397,11 @@ fn parse(text: &str, path: &Utf8Path) -> Result<Lock> {
             "PODS" if line.starts_with("    - ") => {
                 let pod = current.clone().ok_or_else(malformed)?;
                 let entry = unquote(line.trim_start_matches("    - "));
-                let name = entry.split(" (").next().filter(|name| !name.is_empty()).ok_or_else(malformed)?;
+                let name = entry
+                    .split(" (")
+                    .next()
+                    .filter(|name| !name.is_empty())
+                    .ok_or_else(malformed)?;
                 let dependency = name.split('/').next().unwrap_or(name).to_owned();
                 let depends = lock.depends.entry(pod.clone()).or_default();
                 if dependency != pod && !depends.contains(&dependency) {
@@ -316,7 +415,9 @@ fn parse(text: &str, path: &Utf8Path) -> Result<Lock> {
                     lock.paths.insert(pod, unquote(value.trim()).to_owned());
                 }
             }
-            "EXTERNAL SOURCES" => external = Some(unquote(line.trim().trim_end_matches(':')).to_owned()),
+            "EXTERNAL SOURCES" => {
+                external = Some(unquote(line.trim().trim_end_matches(':')).to_owned());
+            }
             _ => {}
         }
     }
@@ -336,7 +437,9 @@ pub(super) fn frameworks_under(dir: &Utf8Path) -> Vec<Utf8PathBuf> {
     let mut pending = vec![dir.to_path_buf()];
     while let Some(at) = pending.pop() {
         for entry in std::fs::read_dir(&at).into_iter().flatten().flatten() {
-            let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else { continue };
+            let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else {
+                continue;
+            };
             if !path.is_dir() {
                 continue;
             }
@@ -358,7 +461,9 @@ fn headers_under(dir: &Utf8Path) -> Vec<Utf8PathBuf> {
     let mut pending = vec![dir.to_path_buf()];
     while let Some(at) = pending.pop() {
         for entry in std::fs::read_dir(&at).into_iter().flatten().flatten() {
-            let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else { continue };
+            let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else {
+                continue;
+            };
             if path.is_dir() {
                 pending.push(path);
             } else if path.extension() == Some("h") {
@@ -386,18 +491,32 @@ mod tests {
                     PODFILE CHECKSUM: 0f5d3d5c\n\nCOCOAPODS: 1.15.2\n";
         let lock = parse(text, Utf8Path::new("Podfile.lock")).unwrap();
         assert_eq!(lock.pods, ["AFNetworking", "Greeter", "Reachability"]);
-        assert_eq!(lock.paths.get("Greeter").map(String::as_str), Some("../Greeter"));
+        assert_eq!(
+            lock.paths.get("Greeter").map(String::as_str),
+            Some("../Greeter")
+        );
         // A pod's dependencies are pods: another's subspec is that pod, and
         // a pod's own subspec is not a dependency of it.
-        assert_eq!(lock.depends.get("Greeter").map(Vec::as_slice), Some(&["AFNetworking".to_owned(), "Reachability".to_owned()][..]));
-        assert_eq!(lock.depends.get("AFNetworking").map(Vec::as_slice), Some(&[][..]));
+        assert_eq!(
+            lock.depends.get("Greeter").map(Vec::as_slice),
+            Some(&["AFNetworking".to_owned(), "Reachability".to_owned()][..])
+        );
+        assert_eq!(
+            lock.depends.get("AFNetworking").map(Vec::as_slice),
+            Some(&[][..])
+        );
     }
 
     /// A line in `PODS` of no shape `CocoaPods` writes is an error: read as
     /// nothing, the pod would be missing from the link.
     #[test]
     fn a_malformed_entry_is_refused() {
-        let error = parse("PODS:\n Reachability (3.2)\n", Utf8Path::new("Podfile.lock")).unwrap_err().to_string();
+        let error = parse(
+            "PODS:\n Reachability (3.2)\n",
+            Utf8Path::new("Podfile.lock"),
+        )
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("Podfile.lock:2"), "{error}");
     }
 
@@ -405,17 +524,27 @@ mod tests {
     /// as `CocoaPods`' own check refuses it; the same one resolves each pod.
     #[test]
     fn pods_must_be_the_lockfiles() {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-cocoapods-{}", std::process::id()));
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-cocoapods-{}", std::process::id()));
         let lock = "PODS:\n  - Chirp (0.1.0)\n\nEXTERNAL SOURCES:\n  Chirp:\n    :path: Chirp\n\nCOCOAPODS: 1.11.3\n";
         std::fs::create_dir_all(dir.join("Chirp/Classes")).unwrap();
         std::fs::create_dir_all(dir.join("Pods/Headers/Public/Chirp")).unwrap();
         std::fs::write(dir.join("Podfile.lock"), lock).unwrap();
         // As `pod install` links them: into the pod's own sources.
         std::fs::write(dir.join("Chirp/Classes/Chirp.h"), "").unwrap();
-        std::os::unix::fs::symlink("../../../../Chirp/Classes/Chirp.h", dir.join("Pods/Headers/Public/Chirp/Chirp.h")).unwrap();
+        std::os::unix::fs::symlink(
+            "../../../../Chirp/Classes/Chirp.h",
+            dir.join("Pods/Headers/Public/Chirp/Chirp.h"),
+        )
+        .unwrap();
         std::fs::write(dir.join("Pods/Headers/Public/Chirp/Chirp-umbrella.h"), "").unwrap();
         std::fs::create_dir_all(dir.join("Pods/Local Podspecs")).unwrap();
-        std::fs::write(dir.join("Pods/Local Podspecs/Chirp.podspec.json"), r#"{ "name": "Chirp", "source_files": "Classes/**/*.{h,m}" }"#).unwrap();
+        std::fs::write(
+            dir.join("Pods/Local Podspecs/Chirp.podspec.json"),
+            r#"{ "name": "Chirp", "source_files": "Classes/**/*.{h,m}" }"#,
+        )
+        .unwrap();
         std::fs::write(dir.join("Chirp/README.md"), "").unwrap();
         std::fs::create_dir_all(dir.join("Pods/Target Support Files/Pods-Host")).unwrap();
         std::fs::write(
@@ -423,7 +552,11 @@ mod tests {
             "OTHER_LDFLAGS = $(inherited) -ObjC -l\"Chirp\" -framework \"Foundation\"\n",
         )
         .unwrap();
-        let claim = Dependencies { from: super::super::Resolver::Cocoapods, lockfile: Some("Podfile.lock".to_owned()), packages: None };
+        let claim = Dependencies {
+            from: super::super::Resolver::Cocoapods,
+            lockfile: Some("Podfile.lock".to_owned()),
+            packages: None,
+        };
         let error = resolve(&dir, "macos-13", &claim).unwrap_err().to_string();
         assert!(error.contains("run `pod install`"), "{error}");
         std::fs::write(dir.join("Pods/Manifest.lock"), lock).unwrap();
@@ -431,10 +564,16 @@ mod tests {
         assert_eq!(resolved.native.len(), 1);
         assert_eq!(resolved.native[0].sources, dir.join("Chirp"));
         // The pod's header, and not one CocoaPods wrote for it elsewhere.
-        assert_eq!(resolved.native[0].headers, [dir.join("Pods/Headers/Public/Chirp/Chirp.h")]);
+        assert_eq!(
+            resolved.native[0].headers,
+            [dir.join("Pods/Headers/Public/Chirp/Chirp.h")]
+        );
         assert_eq!(resolved.libs, ["-framework", "Foundation"]);
         // A development pod's files are its podspec's, not its directory's.
-        assert_eq!(resolved.native[0].files, Some(vec![dir.join("Chirp/Classes/Chirp.h")]));
+        assert_eq!(
+            resolved.native[0].files,
+            Some(vec![dir.join("Chirp/Classes/Chirp.h")])
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -445,7 +584,13 @@ mod tests {
         let config = "OTHER_LDFLAGS = $(inherited) -ObjC -l\"Reachability\" -l\"sqlite3\" -framework \"SystemConfiguration\" -weak_framework \"UserNotifications\"\n";
         assert_eq!(
             ldflags(config, &["Reachability".to_owned()]),
-            ["-lsqlite3", "-framework", "SystemConfiguration", "-weak_framework", "UserNotifications"]
+            [
+                "-lsqlite3",
+                "-framework",
+                "SystemConfiguration",
+                "-weak_framework",
+                "UserNotifications"
+            ]
         );
     }
 
@@ -453,14 +598,38 @@ mod tests {
     /// through any depth, and a framework bundle matched whole.
     #[test]
     fn a_podspec_pattern_names_its_files() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-podspec-glob-{}", std::process::id()));
-        for file in ["Classes/Chirp.h", "Classes/Chirp.m", "Classes/Internal/Tweeter.m", "Classes/notes.txt", "Tests/ChirpTests.m", "Beep.xcframework/Info.plist"] {
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-podspec-glob-{}", std::process::id()));
+        for file in [
+            "Classes/Chirp.h",
+            "Classes/Chirp.m",
+            "Classes/Internal/Tweeter.m",
+            "Classes/notes.txt",
+            "Tests/ChirpTests.m",
+            "Beep.xcframework/Info.plist",
+        ] {
             std::fs::create_dir_all(root.join(file).parent().unwrap()).unwrap();
             std::fs::write(root.join(file), "").unwrap();
         }
-        let relative = |paths: Vec<Utf8PathBuf>| paths.iter().map(|path| path.strip_prefix(&root).unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(relative(glob(&root, "Classes/**/*.{h,m}", false)), ["Classes/Chirp.h", "Classes/Chirp.m", "Classes/Internal/Tweeter.m"]);
-        assert_eq!(relative(glob(&root, "Beep.xcframework", true)), ["Beep.xcframework"]);
+        let relative = |paths: Vec<Utf8PathBuf>| {
+            paths
+                .iter()
+                .map(|path| path.strip_prefix(&root).unwrap().to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            relative(glob(&root, "Classes/**/*.{h,m}", false)),
+            [
+                "Classes/Chirp.h",
+                "Classes/Chirp.m",
+                "Classes/Internal/Tweeter.m"
+            ]
+        );
+        assert_eq!(
+            relative(glob(&root, "Beep.xcframework", true)),
+            ["Beep.xcframework"]
+        );
         assert!(glob(&root, "Classes/*.swift", false).is_empty());
         std::fs::remove_dir_all(&root).unwrap();
     }
@@ -468,6 +637,13 @@ mod tests {
     /// An empty lockfile, as `macos-brownfield` commits, pins nothing.
     #[test]
     fn an_empty_lockfile_pins_nothing() {
-        assert_eq!(parse("PODS: []\nCOCOAPODS: 1.15.2\n", Utf8Path::new("Podfile.lock")).unwrap(), Lock::default());
+        assert_eq!(
+            parse(
+                "PODS: []\nCOCOAPODS: 1.15.2\n",
+                Utf8Path::new("Podfile.lock")
+            )
+            .unwrap(),
+            Lock::default()
+        );
     }
 }

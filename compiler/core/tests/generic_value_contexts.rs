@@ -17,7 +17,9 @@ fn prepared(example: &str) -> Option<hir::Prepared> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(format!("../../examples/{example}/tsconfig.json"));
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).expect("snapshot");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&config)
+        .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     Some(hir::prepare(&snapshot).expect("valid HIR"))
 }
@@ -57,13 +59,22 @@ fn each_receiving_signature_reaches_its_own_typed_context() {
         .iter()
         .find(|func| func.name.starts_with("identity<value-f64@"))
         .expect("a number context");
-    assert_eq!(typed.params[0].ty, hir::HirType::NUMBER, "the context is not typed");
-    assert_eq!(named(&prepared, "identity<value-erased>").len(), 1, "one erased root");
+    assert_eq!(
+        typed.params[0].ty,
+        hir::HirType::NUMBER,
+        "the context is not typed"
+    );
+    assert_eq!(
+        named(&prepared, "identity<value-erased>").len(),
+        1,
+        "one erased root"
+    );
 }
 
 #[test]
 fn copies_stop_at_the_cap_and_the_rest_share_the_erased_root() {
-    let Some(prepared) = prepared("a-generic-function-value-uses-the-erased-root-after-eight-copies")
+    let Some(prepared) =
+        prepared("a-generic-function-value-uses-the-erased-root-after-eight-copies")
     else {
         return;
     };
@@ -74,5 +85,9 @@ fn copies_stop_at_the_cap_and_the_rest_share_the_erased_root() {
         .filter(|name| *name != "identity<value-erased>")
         .collect();
     assert_eq!(typed.len(), hir::generics::VALUE_CONTEXT_CAP, "{typed:?}");
-    assert_eq!(named(&prepared, "identity<value-erased>").len(), 1, "the root past the cap");
+    assert_eq!(
+        named(&prepared, "identity<value-erased>").len(),
+        1,
+        "the root past the cap"
+    );
 }

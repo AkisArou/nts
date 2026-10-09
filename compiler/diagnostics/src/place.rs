@@ -46,7 +46,11 @@ pub fn where_it_is(sources: &[SourceFile], at: &Location) -> String {
                 offset = original;
                 generated = was_generated.then_some(transform);
             }
-            None => return format!("{path} (as {transform} rewrote it; the position is in that text, not the file on disk)"),
+            None => {
+                return format!(
+                    "{path} (as {transform} rewrote it; the position is in that text, not the file on disk)"
+                );
+            }
         }
     }
     let Ok(text) = std::fs::read_to_string(path) else {
@@ -79,7 +83,11 @@ pub fn where_it_is(sources: &[SourceFile], at: &Location) -> String {
             .map_or(0, |at| at + 1);
     match generated {
         // The transform's name, not its whole identity: the rest is a cache key.
-        Some(transform) => format!("{path}:{line}:{} (in code {} generated from it)", column + 1, transform_name(transform)),
+        Some(transform) => format!(
+            "{path}:{line}:{} (in code {} generated from it)",
+            column + 1,
+            transform_name(transform)
+        ),
         None => format!("{path}:{line}:{}", column + 1),
     }
 }
@@ -131,7 +139,12 @@ pub fn where_it_spans(sources: &[SourceFile], at: &Location) -> String {
 /// one of them was measured to break when it changed.
 #[must_use]
 pub fn diagnostic_line(sources: &[SourceFile], diagnostic: &Diagnostic) -> String {
-    format!("{}: {} {}", where_it_is(sources, &diagnostic.primary), diagnostic.code, diagnostic.message)
+    format!(
+        "{}: {} {}",
+        where_it_is(sources, &diagnostic.primary),
+        diagnostic.code,
+        diagnostic.message
+    )
 }
 
 /// The byte offset of a UTF-16 code-unit offset in `text`.
@@ -161,15 +174,26 @@ fn transform_name(identity: &str) -> &str {
 /// start of what that code was written from. A position the map does not
 /// cover maps to the end of the copy before it. `None` without a map.
 fn original_offset(map: &[RewrittenSegment], offset: u32) -> Option<(u32, bool)> {
-    let contains = |segment: &&RewrittenSegment| offset >= segment.rewritten && offset < segment.rewritten + segment.len.max(1);
+    let contains = |segment: &&RewrittenSegment| {
+        offset >= segment.rewritten && offset < segment.rewritten + segment.len.max(1)
+    };
     // A copy inside generated code (a statement a compiled function kept as
     // written) is the more precise answer, so copies are asked first.
-    if let Some(copy) = map.iter().filter(|segment| !segment.generated).find(contains) {
+    if let Some(copy) = map
+        .iter()
+        .filter(|segment| !segment.generated)
+        .find(contains)
+    {
         return Some((copy.original + (offset - copy.rewritten), false));
     }
     // Generated code nests (a function, its statements, their expressions):
     // the smallest range holding the position names what it was written from.
-    if let Some(generated) = map.iter().filter(|segment| segment.generated).filter(contains).min_by_key(|segment| segment.len) {
+    if let Some(generated) = map
+        .iter()
+        .filter(|segment| segment.generated)
+        .filter(contains)
+        .min_by_key(|segment| segment.len)
+    {
         return Some((generated.original, true));
     }
     map.iter()
@@ -195,9 +219,15 @@ mod tests {
 
     #[test]
     fn a_position_in_a_rewritten_file_is_not_read_off_the_disk() {
-        let at = Location { file: SourceId(0), span: Span::new(40, 41) };
+        let at = Location {
+            file: SourceId(0),
+            span: Span::new(40, 41),
+        };
         let rendered = where_it_is(&sources(Some("react-compiler@1d34f91d")), &at);
-        assert_eq!(rendered, "src/App.tsx (as react-compiler@1d34f91d rewrote it; the position is in that text, not the file on disk)");
+        assert_eq!(
+            rendered,
+            "src/App.tsx (as react-compiler@1d34f91d rewrote it; the position is in that text, not the file on disk)"
+        );
         // The control: a file read as written is rendered as before, here
         // with no file to count lines in.
         assert_eq!(where_it_is(&sources(None), &at), "src/App.tsx");
@@ -205,27 +235,65 @@ mod tests {
 
     #[test]
     fn a_position_in_a_rewritten_file_is_traced_to_the_file_as_written() {
-        let copy = |rewritten, original, len| RewrittenSegment { rewritten, original, len, generated: false };
+        let copy = |rewritten, original, len| RewrittenSegment {
+            rewritten,
+            original,
+            len,
+            generated: false,
+        };
         // 0..20 copied from 5, then a function the transform printed from
         // the one at 30 in 20..60, holding a statement copied from 50 at
         // 40..48; 60..70 copied from 90.
         let map = [
             copy(0, 5, 20),
-            RewrittenSegment { rewritten: 20, original: 30, len: 40, generated: true },
+            RewrittenSegment {
+                rewritten: 20,
+                original: 30,
+                len: 40,
+                generated: true,
+            },
             // An expression in that function, printed from the one at 44.
-            RewrittenSegment { rewritten: 30, original: 44, len: 6, generated: true },
+            RewrittenSegment {
+                rewritten: 30,
+                original: 44,
+                len: 6,
+                generated: true,
+            },
             copy(40, 50, 8),
             copy(60, 90, 10),
         ];
-        assert_eq!(original_offset(&map, 3), Some((8, false)), "a copy maps byte for byte");
-        assert_eq!(original_offset(&map, 25), Some((30, true)), "generated code maps to what it came from");
-        assert_eq!(original_offset(&map, 32), Some((44, true)), "the smallest generated range holding it wins");
-        assert_eq!(original_offset(&map, 42), Some((52, false)), "a copy inside generated code is the more precise answer");
+        assert_eq!(
+            original_offset(&map, 3),
+            Some((8, false)),
+            "a copy maps byte for byte"
+        );
+        assert_eq!(
+            original_offset(&map, 25),
+            Some((30, true)),
+            "generated code maps to what it came from"
+        );
+        assert_eq!(
+            original_offset(&map, 32),
+            Some((44, true)),
+            "the smallest generated range holding it wins"
+        );
+        assert_eq!(
+            original_offset(&map, 42),
+            Some((52, false)),
+            "a copy inside generated code is the more precise answer"
+        );
         assert_eq!(original_offset(&map, 65), Some((95, false)));
-        assert_eq!(original_offset(&map, 75), Some((100, true)), "past every segment: the end of the copy before");
+        assert_eq!(
+            original_offset(&map, 75),
+            Some((100, true)),
+            "past every segment: the end of the copy before"
+        );
         // The control: no map, no answer, so the old sentence is printed.
         assert_eq!(original_offset(&[], 3), None);
-        assert_eq!(transform_name("react-compiler@1d34f91d jsx=true cache=typed"), "react-compiler");
+        assert_eq!(
+            transform_name("react-compiler@1d34f91d jsx=true cache=typed"),
+            "react-compiler"
+        );
     }
 
     /// A unit offset is not a byte offset, and the em dash is the cheapest
@@ -237,7 +305,11 @@ mod tests {
         // An em dash is one unit and three bytes.
         assert_eq!(super::byte_of_unit("a\u{2014}b", 0), 0);
         assert_eq!(super::byte_of_unit("a\u{2014}b", 1), 1);
-        assert_eq!(super::byte_of_unit("a\u{2014}b", 2), 4, "the unit after the dash is at byte 4");
+        assert_eq!(
+            super::byte_of_unit("a\u{2014}b", 2),
+            4,
+            "the unit after the dash is at byte 4"
+        );
         // An astral character is two units and four bytes, and neither half of
         // a surrogate pair has a byte of its own: both answer the byte after
         // the whole character, so no offset this returns is ever inside one.

@@ -14,7 +14,9 @@ use std::fmt::Write as _;
 
 /// `11F47AD5-7B73-42C0-ABAE-878B1E16ADEE`, the namespace every parameterized
 /// IID is derived under.
-const NAMESPACE: [u8; 16] = [0x11, 0xF4, 0x7A, 0xD5, 0x7B, 0x73, 0x42, 0xC0, 0xAB, 0xAE, 0x87, 0x8B, 0x1E, 0x16, 0xAD, 0xEE];
+const NAMESPACE: [u8; 16] = [
+    0x11, 0xF4, 0x7A, 0xD5, 0x7B, 0x73, 0x42, 0xC0, 0xAB, 0xAE, 0x87, 0x8B, 0x1E, 0x16, 0xAD, 0xEE,
+];
 
 /// The IID of the instantiation whose signature is `signature`, as
 /// `8-4-4-4-12` uppercase hexadecimal.
@@ -31,15 +33,30 @@ pub(crate) fn parameterized(signature: &str) -> String {
         let _ = write!(hex, "{byte:02X}");
         hex
     });
-    format!("{}-{}-{}-{}-{}", &hex[0..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..32])
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    )
 }
 
 /// SHA-1 (FIPS 180-4), in the standard's own names.
 #[allow(clippy::many_single_char_names)]
 fn sha1(data: &[u8]) -> [u8; 20] {
-    let mut state: [u32; 5] = [0x6745_2301, 0xEFCD_AB89, 0x98BA_DCFE, 0x1032_5476, 0xC3D2_E1F0];
+    let mut state: [u32; 5] = [
+        0x6745_2301,
+        0xEFCD_AB89,
+        0x98BA_DCFE,
+        0x1032_5476,
+        0xC3D2_E1F0,
+    ];
     let mut message = data.to_vec();
-    let length = u64::try_from(data.len()).unwrap_or(u64::MAX).wrapping_mul(8);
+    let length = u64::try_from(data.len())
+        .unwrap_or(u64::MAX)
+        .wrapping_mul(8);
     message.push(0x80);
     while message.len() % 64 != 56 {
         message.push(0);
@@ -51,7 +68,8 @@ fn sha1(data: &[u8]) -> [u8; 20] {
             words[at] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
         }
         for at in 16..80 {
-            words[at] = (words[at - 3] ^ words[at - 8] ^ words[at - 14] ^ words[at - 16]).rotate_left(1);
+            words[at] =
+                (words[at - 3] ^ words[at - 8] ^ words[at - 14] ^ words[at - 16]).rotate_left(1);
         }
         let [mut a, mut b, mut c, mut d, mut e] = state;
         for (at, word) in words.iter().enumerate() {
@@ -61,7 +79,12 @@ fn sha1(data: &[u8]) -> [u8; 20] {
                 40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1B_BCDC),
                 _ => (b ^ c ^ d, 0xCA62_C1D6),
             };
-            let next = a.rotate_left(5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(*word);
+            let next = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(*word);
             e = d;
             d = c;
             c = b.rotate_left(30);
@@ -95,9 +118,14 @@ mod tests {
     #[test]
     fn sha1_is_the_standard_one() {
         assert_eq!(hex(&sha1(b"")), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
-        assert_eq!(hex(&sha1(b"abc")), "a9993e364706816aba3e25717850c26c9cd0d89d");
         assert_eq!(
-            hex(&sha1(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")),
+            hex(&sha1(b"abc")),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
+        assert_eq!(
+            hex(&sha1(
+                b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+            )),
             "84983e441c3bd26ebaae4aa1f95129e5e54670f1"
         );
     }

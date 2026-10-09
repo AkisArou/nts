@@ -38,17 +38,15 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_jvm_emitter::{class::access, read};
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_jvm_emitter::{class::access, read};
 use std::path::{Path, PathBuf};
-
 
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     from.canonicalize().unwrap_or(from)
 }
-
 
 /// Examples chosen to reach both kinds of generated field: the declared ones,
 /// and the `$presence` word an optional property adds.
@@ -88,12 +86,16 @@ fn no_generated_field_is_public() {
         )
         .expect("a UTF-8 path");
 
-        let snapshot =
-            TsgoApi::for_compilation(tsgo.clone()).snapshot(&tsconfig).expect("snapshot");
+        let snapshot = TsgoApi::for_compilation(tsgo.clone())
+            .snapshot(&tsconfig)
+            .expect("snapshot");
         assert!(!snapshot.has_errors(), "{example} should typecheck");
         let prepared = hir::prepare_with(
             &snapshot,
-            &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() },
+            &hir::Options {
+                provider: hir::Provider::NoGc,
+                ..hir::Options::default()
+            },
         )
         .expect("prepared HIR should verify");
 
@@ -125,9 +127,18 @@ fn no_generated_field_is_public() {
     // mis-parsed the pool and read a field count of zero -- would pass this
     // test in silence, which is the failure this lane has hit three times in a
     // different costume.
-    assert!(seen > 0, "no fields were read at all: the parse or the sample is wrong, not the flags");
-    assert!(statics > 0, "no static field was reached, so the exclusion below is untested");
-    assert!(presence > 0, "no `$presence` field was reached, so the optional-property path is untested");
+    assert!(
+        seen > 0,
+        "no fields were read at all: the parse or the sample is wrong, not the flags"
+    );
+    assert!(
+        statics > 0,
+        "no static field was reached, so the exclusion below is untested"
+    );
+    assert!(
+        presence > 0,
+        "no `$presence` field was reached, so the optional-property path is untested"
+    );
 
     assert!(
         offenders.is_empty(),

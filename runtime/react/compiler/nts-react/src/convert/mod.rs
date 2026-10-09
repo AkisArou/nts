@@ -63,7 +63,8 @@ impl Converter<'_> {
 
     /// The items of a list property, or nothing when it is absent.
     fn list(&self, id: NodeId, property: &str) -> Vec<NodeId> {
-        self.child(id, property).map_or_else(Vec::new, |list| self.nodes.items(list).to_vec())
+        self.child(id, property)
+            .map_or_else(Vec::new, |list| self.nodes.items(list).to_vec())
     }
 
     fn record(&self, id: NodeId) -> &nts_semantic_schema::NodeRecord {
@@ -89,14 +90,19 @@ impl Converter<'_> {
     /// operator, whether an import is type-only.
     fn small(&self, id: NodeId) -> u8 {
         match self.record(id).data {
-            NodeData::Children { small, .. } | NodeData::String { small, .. } | NodeData::Extended { small, .. } => small,
+            NodeData::Children { small, .. }
+            | NodeData::String { small, .. }
+            | NodeData::Extended { small, .. } => small,
             NodeData::ListLength(_) => 0,
         }
     }
 
     /// The kinds of the modifier keywords written on a declaration.
     fn modifiers(&self, id: NodeId) -> Vec<u16> {
-        self.list(id, "modifiers").into_iter().map(|m| self.kind(m)).collect()
+        self.list(id, "modifiers")
+            .into_iter()
+            .map(|m| self.kind(m))
+            .collect()
     }
 
     fn has_modifier(&self, id: NodeId, modifier: u16) -> bool {
@@ -104,12 +110,16 @@ impl Converter<'_> {
     }
 
     fn unsupported(&self, id: NodeId, what: &str) -> Unsupported {
-        Unsupported { node: id, what: format!("{what} ({})", self.kind_name(id)) }
+        Unsupported {
+            node: id,
+            what: format!("{what} ({})", self.kind_name(id)),
+        }
     }
 
     fn kind_name(&self, id: NodeId) -> String {
         match self.record(id).kind {
-            NodeKind::Syntax(kind) => nts_semantic_schema::syntax::name_of(kind).map_or_else(|| format!("kind {kind}"), str::to_owned),
+            NodeKind::Syntax(kind) => nts_semantic_schema::syntax::name_of(kind)
+                .map_or_else(|| format!("kind {kind}"), str::to_owned),
             NodeKind::List => "a list".to_owned(),
         }
     }
@@ -155,7 +165,11 @@ impl Converter<'_> {
     /// the `:` that starts a type annotation or the `<` of type arguments.
     fn token_at(&self, from: u32, token: &str) -> Option<u32> {
         let at = self.text.token_start(from);
-        (self.text.slice(at, at + u32::try_from(token.len()).unwrap_or(0)) == token).then_some(at)
+        (self
+            .text
+            .slice(at, at + u32::try_from(token.len()).unwrap_or(0))
+            == token)
+            .then_some(at)
     }
 
     /// The offset of the last `token` before `before`, looking back past
@@ -203,7 +217,12 @@ impl Converter<'_> {
         // The program and the file are one tsgo node; only the program keeps
         // its id, so no two Babel nodes share one.
         base.node_id = None;
-        Ok(File { base, program, comments: self.comments(root), errors: Vec::new() })
+        Ok(File {
+            base,
+            program,
+            comments: self.comments(root),
+            errors: Vec::new(),
+        })
     }
 
     // ---- comments --------------------------------------------------------
@@ -235,7 +254,11 @@ impl Converter<'_> {
             return;
         }
         let mut at = self.pos(id);
-        for child in self.nodes.property_children(id).chain(self.jsdoc_children(id)) {
+        for child in self
+            .nodes
+            .property_children(id)
+            .chain(self.jsdoc_children(id))
+        {
             let child_pos = self.pos(child);
             if child_pos >= at {
                 self.scan_comments(at, child_pos, found);
@@ -275,7 +298,9 @@ impl Converter<'_> {
             } else if first == u16::from(b'/') && second == u16::from(b'*') {
                 let body_start = at + 2;
                 let mut end = body_start;
-                while end + 1 < units.len() && !(units[end] == u16::from(b'*') && units[end + 1] == u16::from(b'/')) {
+                while end + 1 < units.len()
+                    && !(units[end] == u16::from(b'*') && units[end + 1] == u16::from(b'/'))
+                {
                     end += 1;
                 }
                 let close = (end + 2).min(units.len());
@@ -306,7 +331,14 @@ impl Converter<'_> {
             end: Some(end),
             loc: Some(self.text.location(start, end)),
         };
-        (start, if block { Comment::CommentBlock(data) } else { Comment::CommentLine(data) })
+        (
+            start,
+            if block {
+                Comment::CommentBlock(data)
+            } else {
+                Comment::CommentLine(data)
+            },
+        )
     }
 }
 

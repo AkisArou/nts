@@ -49,10 +49,16 @@ fn repository() -> PathBuf {
 fn runtime_jar() -> PathBuf {
     static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
+            || repository().join("runtime/jvm/nts-runtime.jar"),
+            PathBuf::from,
+        );
         let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+        if std::fs::copy(&source, &mine).is_ok() {
+            mine
+        } else {
+            source
+        }
     })
     .clone()
 }
@@ -64,7 +70,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -87,7 +97,10 @@ fn run(driver: &str) -> Option<String> {
     let jar = runtime_jar();
 
     let vectors = dir.join("vectors.txt");
-    let generated = Command::new(&node).arg(here.join("vectors.mjs")).output().unwrap();
+    let generated = Command::new(&node)
+        .arg(here.join("vectors.mjs"))
+        .output()
+        .unwrap();
     assert!(
         generated.status.success(),
         "node could not generate the vectors:\n{}",
@@ -137,7 +150,10 @@ fn every_split_of_every_stream_decodes_to_the_same_bytes() {
     // prints `0 vectors, 0 chunk/output combinations, 0 mismatches` and would
     // satisfy an assertion on the last number alone -- which is the same hole
     // as a suite that stopped running reporting no failures.
-    assert!(said.ends_with("10 vectors, 400 chunk/output combinations, 0 mismatches"), "{said}");
+    assert!(
+        said.ends_with("10 vectors, 400 chunk/output combinations, 0 mismatches"),
+        "{said}"
+    );
 }
 
 /// The half that proves the first half can fail.

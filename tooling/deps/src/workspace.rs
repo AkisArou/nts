@@ -75,7 +75,9 @@ mod tests {
         assert!(!is_workspace_package(Utf8Path::new(
             "/repo/node_modules/.pnpm/mitt@3.0.1/node_modules/mitt"
         )));
-        assert!(!is_workspace_package(Utf8Path::new("/repo/node_modules/mitt")));
+        assert!(!is_workspace_package(Utf8Path::new(
+            "/repo/node_modules/mitt"
+        )));
     }
 
     #[test]

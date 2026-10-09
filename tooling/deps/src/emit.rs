@@ -135,7 +135,9 @@ pub fn write_tsconfig(
     let mut merged: BTreeMap<String, Vec<String>> = inherited.clone();
     for (specifier, targets) in paths {
         // The project wins: a developer who mapped a specifier by hand meant it.
-        merged.entry(specifier.clone()).or_insert_with(|| targets.clone());
+        merged
+            .entry(specifier.clone())
+            .or_insert_with(|| targets.clone());
     }
 
     let document = serde_json::json!({

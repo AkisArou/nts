@@ -192,7 +192,9 @@ fn a_recovered_array_reads_past_its_end_as_nan() {
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/a-closed-call-recovers-an-erased-object-parameter/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).expect("snapshot");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&config)
+        .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).expect("valid HIR");
     let copy = prepared
@@ -206,11 +208,19 @@ fn a_recovered_array_reads_past_its_end_as_nan() {
         "{:?}",
         copy.params[0].ty
     );
-    let scheduled = || copy.blocks.iter().flat_map(|block| &block.ops).map(|value| &copy.values[value.0 as usize].kind);
+    let scheduled = || {
+        copy.blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|value| &copy.values[value.0 as usize].kind)
+    };
     let calls = |helper: &str| {
         scheduled().any(|kind| matches!(kind, hir::OpKind::Call { callee: hir::Callee::External(name), .. } if name == helper))
     };
-    assert!(calls("nts_array_element") && calls("nts_value_to_number"), "the read is not answered");
+    assert!(
+        calls("nts_array_element") && calls("nts_value_to_number"),
+        "the read is not answered"
+    );
     assert!(
         !scheduled().any(|kind| matches!(kind, hir::OpKind::ArrayGet { checked: true, .. })),
         "a checked load traps where node answers undefined"

@@ -187,9 +187,10 @@ fn same_array(func: &Func, a: ValueId, b: ValueId) -> bool {
     ) {
         (OpKind::GlobalGet(one), OpKind::GlobalGet(two)) => {
             one == two
-                && !func.values.iter().any(|op| {
-                    matches!(op.kind, OpKind::GlobalSet { global, .. } if global == *one)
-                })
+                && !func
+                    .values
+                    .iter()
+                    .any(|op| matches!(op.kind, OpKind::GlobalSet { global, .. } if global == *one))
         }
         // And two reads of one **field**, which is the same sentence the
         // paragraph above writes about a global and which this function
@@ -238,9 +239,10 @@ fn same_array(func: &Func, a: ValueId, b: ValueId) -> bool {
             // is exposed to the same thing through a callee; this one asks
             // because the shape it exists for -- a receiver in a loop -- calls
             // more often than a module global is assigned.
-            let escapes = func.values.iter().any(|op| {
-                matches!(&op.kind, OpKind::Call { args, .. } if args.contains(one))
-            });
+            let escapes = func
+                .values
+                .iter()
+                .any(|op| matches!(&op.kind, OpKind::Call { args, .. } if args.contains(one)));
             !written && !escapes
         }
         _ => false,
@@ -356,19 +358,34 @@ pub fn answer_erased_reads(func: &mut Func) -> usize {
         let old = std::mem::take(&mut func.blocks[block].ops);
         let mut ops = Vec::with_capacity(old.len());
         for id in old {
-            if let OpKind::ArrayGet { array, index, checked: true } = func.value(id).kind
+            if let OpKind::ArrayGet {
+                array,
+                index,
+                checked: true,
+            } = func.value(id).kind
                 && matches!(&func.value(array).ty,
                     HirType::Managed(ManagedType::Array(element)) if **element == HirType::Erased)
             {
                 let origin = func.value(id).origin.clone();
                 let push = |func: &mut Func, ops: &mut Vec<ValueId>, kind, ty| {
                     let value = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
-                    func.values.push(Op { kind, ty, origin: origin.clone() });
+                    func.values.push(Op {
+                        kind,
+                        ty,
+                        origin: origin.clone(),
+                    });
                     ops.push(value);
                     value
                 };
-                let erased = push(func, &mut ops,
-                    OpKind::Erase { value: array, absent: Absent::Impossible }, HirType::Erased);
+                let erased = push(
+                    func,
+                    &mut ops,
+                    OpKind::Erase {
+                        value: array,
+                        absent: Absent::Impossible,
+                    },
+                    HirType::Erased,
+                );
                 let index = if func.value(index).ty == HirType::NUMBER {
                     index
                 } else {

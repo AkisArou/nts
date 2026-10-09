@@ -114,8 +114,11 @@ pub fn stack_map_table(
     // costs one encoding rather than the abstract interpreter the general
     // problem needs. Written down because the plan priced this as the expensive
     // part and it is not.
-    let mut frames: Vec<(u16, Option<VType>)> =
-        offsets.iter().filter(|&&at| at != 0).map(|&at| (at, None)).collect();
+    let mut frames: Vec<(u16, Option<VType>)> = offsets
+        .iter()
+        .filter(|&&at| at != 0)
+        .map(|&at| (at, None))
+        .collect();
     for (at, thrown) in handlers {
         if *at == 0 {
             continue;

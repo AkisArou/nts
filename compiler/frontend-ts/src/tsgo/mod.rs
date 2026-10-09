@@ -121,7 +121,11 @@ pub enum TsgoError {
     #[error(
         "{manifest} declares the nts surface {surface}, which is none of {known}: a package that claims a surface this compiler does not know is refused rather than read as ordinary code"
     )]
-    UnknownSurface { manifest: Utf8PathBuf, surface: String, known: String },
+    UnknownSurface {
+        manifest: Utf8PathBuf,
+        surface: String,
+        known: String,
+    },
 
     #[error(
         "{identity} was still revising its rewrite of the project after {rounds} rounds, the most a \
@@ -201,7 +205,11 @@ impl Client {
         Self::spawn_inner(executable, cwd, true)
     }
 
-    fn spawn_inner(executable: &Utf8Path, cwd: &Utf8Path, overlays: bool) -> Result<Self, TsgoError> {
+    fn spawn_inner(
+        executable: &Utf8Path,
+        cwd: &Utf8Path,
+        overlays: bool,
+    ) -> Result<Self, TsgoError> {
         let mut command = Command::new(executable.as_str());
         command.arg("--api").arg("--cwd").arg(cwd.as_str());
         if overlays {
@@ -232,7 +240,9 @@ impl Client {
     /// Whether `path` has been given text with [`Client::set_overlay`].
     #[must_use]
     pub fn has_overlay(&self, path: &str) -> bool {
-        self.overlays.as_ref().is_some_and(|overlays| overlays.contains_key(path))
+        self.overlays
+            .as_ref()
+            .is_some_and(|overlays| overlays.contains_key(path))
     }
 
     /// Have tsgo read `text` as the file at `path` from the next snapshot on;
@@ -250,11 +260,26 @@ impl Client {
             return Err(TsgoError::UnexpectedCallback(method.to_owned()));
         };
         if method != "readFile" {
-            write_frame(&mut self.stdin, MessageType::CallError, method, b"not enabled")?;
+            write_frame(
+                &mut self.stdin,
+                MessageType::CallError,
+                method,
+                b"not enabled",
+            )?;
             return Ok(());
         }
-        let path: String = serde_json::from_slice(payload).map_err(|source| TsgoError::Decode { method: method.to_owned(), source })?;
-        let answer = overlays.get(&path).map_or_else(|| b"null".to_vec(), |text| serde_json::json!({ "content": text }).to_string().into_bytes());
+        let path: String = serde_json::from_slice(payload).map_err(|source| TsgoError::Decode {
+            method: method.to_owned(),
+            source,
+        })?;
+        let answer = overlays.get(&path).map_or_else(
+            || b"null".to_vec(),
+            |text| {
+                serde_json::json!({ "content": text })
+                    .to_string()
+                    .into_bytes()
+            },
+        );
         write_frame(&mut self.stdin, MessageType::CallResponse, method, &answer)?;
         Ok(())
     }
@@ -344,12 +369,18 @@ impl Client {
     /// Take a snapshot in which `changed` -- files given new text with
     /// [`Client::set_overlay`] -- are read again. tsgo rechecks what they
     /// affect, not the whole program.
-    pub fn update_files(&mut self, changed: &[String]) -> Result<UpdateSnapshotResponse, TsgoError> {
+    pub fn update_files(
+        &mut self,
+        changed: &[String],
+    ) -> Result<UpdateSnapshotResponse, TsgoError> {
         self.request(
             proto::method::UPDATE_SNAPSHOT,
             &UpdateSnapshotParams {
                 file_changes: Some(proto::FileChanges {
-                    changed: changed.iter().map(|path| DocumentIdentifier(path.clone())).collect(),
+                    changed: changed
+                        .iter()
+                        .map(|path| DocumentIdentifier(path.clone()))
+                        .collect(),
                 }),
                 ..UpdateSnapshotParams::default()
             },
@@ -369,8 +400,12 @@ impl Client {
             file: Some(DocumentIdentifier(file.to_owned())),
             plain_js_unfiltered: false,
         };
-        let mut all: Vec<DiagnosticResponse> = self.request(proto::method::GET_SYNTACTIC_DIAGNOSTICS, &params)?;
-        all.extend(self.request::<Vec<DiagnosticResponse>>(proto::method::GET_SEMANTIC_DIAGNOSTICS, &params)?);
+        let mut all: Vec<DiagnosticResponse> =
+            self.request(proto::method::GET_SYNTACTIC_DIAGNOSTICS, &params)?;
+        all.extend(self.request::<Vec<DiagnosticResponse>>(
+            proto::method::GET_SEMANTIC_DIAGNOSTICS,
+            &params,
+        )?);
         Ok(all)
     }
 
@@ -393,7 +428,16 @@ impl Client {
             location: NodeHandle,
             flags: i32,
         }
-        self.request(proto::method::TYPE_TO_STRING, &Params { snapshot, project, type_id, location, flags })
+        self.request(
+            proto::method::TYPE_TO_STRING,
+            &Params {
+                snapshot,
+                project,
+                type_id,
+                location,
+                flags,
+            },
+        )
     }
 
     /// Fetch one file's encoded AST.
@@ -575,15 +619,30 @@ impl Client {
                 file: Some(DocumentIdentifier::file(file)),
                 plain_js_unfiltered: false,
             };
-            all.extend(self.request::<Vec<DiagnosticResponse>>(proto::method::GET_SYNTACTIC_DIAGNOSTICS, &params)?);
-            all.extend(self.request::<Vec<DiagnosticResponse>>(proto::method::GET_SEMANTIC_DIAGNOSTICS, &params)?);
+            all.extend(self.request::<Vec<DiagnosticResponse>>(
+                proto::method::GET_SYNTACTIC_DIAGNOSTICS,
+                &params,
+            )?);
+            all.extend(self.request::<Vec<DiagnosticResponse>>(
+                proto::method::GET_SEMANTIC_DIAGNOSTICS,
+                &params,
+            )?);
             if is_javascript(file) {
                 params.plain_js_unfiltered = true;
-                let unfiltered = self.request::<Vec<DiagnosticResponse>>(proto::method::GET_SEMANTIC_DIAGNOSTICS, &params)?;
+                let unfiltered = self.request::<Vec<DiagnosticResponse>>(
+                    proto::method::GET_SEMANTIC_DIAGNOSTICS,
+                    &params,
+                )?;
                 let early: Vec<DiagnosticResponse> = unfiltered
                     .into_iter()
                     .filter(|d| EARLY_ERRORS.contains(&d.code))
-                    .filter(|d| !all.iter().any(|seen| seen.code == d.code && seen.pos == d.pos && seen.file_name == d.file_name))
+                    .filter(|d| {
+                        !all.iter().any(|seen| {
+                            seen.code == d.code
+                                && seen.pos == d.pos
+                                && seen.file_name == d.file_name
+                        })
+                    })
                     .collect();
                 all.extend(early);
             }
@@ -824,7 +883,11 @@ impl Client {
     ) -> Result<Option<SymbolResponse>, TsgoError> {
         self.request(
             proto::method::GET_SYMBOL_OF_TYPE,
-            &GetTypePropertyParams { snapshot, project: project.clone(), ty },
+            &GetTypePropertyParams {
+                snapshot,
+                project: project.clone(),
+                ty,
+            },
         )
     }
 
@@ -1156,9 +1219,17 @@ impl TsgoApi {
 
 /// Start tsgo beside the config file it is being asked about, and shake hands;
 /// reading files through the client when `overlays`.
-fn connect(executable: &Utf8Path, tsconfig: &Utf8Path, overlays: bool) -> Result<Client, TsgoError> {
+fn connect(
+    executable: &Utf8Path,
+    tsconfig: &Utf8Path,
+    overlays: bool,
+) -> Result<Client, TsgoError> {
     let cwd = tsconfig.parent().unwrap_or(Utf8Path::new("."));
-    let mut client = if overlays { Client::spawn_with_overlays(executable, cwd)? } else { Client::spawn(executable, cwd)? };
+    let mut client = if overlays {
+        Client::spawn_with_overlays(executable, cwd)?
+    } else {
+        Client::spawn(executable, cwd)?
+    };
     client.initialize()?;
     Ok(client)
 }
@@ -1229,7 +1300,8 @@ impl TsgoApi {
         // worklist order -- so an unrelated edit reorders it. One module gave
         // 12, 21, 27 and 7 functions across four combinations of two files.
         let reached = nts_semantic_schema::reachability::for_frontend(snapshot);
-        let by_slot: FxHashMap<TypeId, u32> = interned.iter().map(|(tsgo, slot)| (slot, tsgo)).collect();
+        let by_slot: FxHashMap<TypeId, u32> =
+            interned.iter().map(|(tsgo, slot)| (slot, tsgo)).collect();
         let seeds: Vec<u32> = reached
             .seeds()
             .into_iter()
@@ -1329,16 +1401,31 @@ impl TsgoApi {
 impl TsgoApi {
     /// Start tsgo, open the project, and have the source transform, if there
     /// is one, rewrite it: the client, and the snapshot nts reads.
-    fn open(&mut self, tsconfig: &Utf8Path, root: &Utf8Path) -> Result<(Client, UpdateSnapshotResponse, Vec<String>), TsgoError> {
-        let overlays = self.transform.is_some() || self.generated.is_some() || !self.added.is_empty();
+    fn open(
+        &mut self,
+        tsconfig: &Utf8Path,
+        root: &Utf8Path,
+    ) -> Result<(Client, UpdateSnapshotResponse, Vec<String>), TsgoError> {
+        let overlays =
+            self.transform.is_some() || self.generated.is_some() || !self.added.is_empty();
         let mut client = connect(&self.executable, tsconfig, overlays)?;
         let mut opened = client.open_project(tsconfig)?;
-        let roots: Vec<String> = opened.projects.iter().flat_map(|project| project.root_files.iter().cloned()).collect();
+        let roots: Vec<String> = opened
+            .projects
+            .iter()
+            .flat_map(|project| project.root_files.iter().cloned())
+            .collect();
         if !self.added.is_empty() {
             opened = open_adding(&mut client, tsconfig, &roots, &self.added)?;
         }
         if let Some(generated) = self.generated.as_deref_mut() {
-            opened = open_generated(generated, &mut client, tsconfig, (&roots, &self.added), opened)?;
+            opened = open_generated(
+                generated,
+                &mut client,
+                tsconfig,
+                (&roots, &self.added),
+                opened,
+            )?;
         }
         let Some(transform) = self.transform.as_deref_mut() else {
             return Ok((client, opened, Vec::new()));
@@ -1363,26 +1450,39 @@ impl TsgoApi {
     /// What the source transform did, in the snapshot: which files it
     /// rewrote, and what it has to say about each of them.
     fn record_transform(&self, snapshot: &mut SemanticSnapshot, rewritten: &[String]) {
-        let Some(transform) = &self.transform else { return };
+        let Some(transform) = &self.transform else {
+            return;
+        };
         let identity = transform.identity();
         for (index, source) in snapshot.sources.iter_mut().enumerate() {
-            if rewritten.iter().any(|path| path.as_str() == source.display_path.as_str()) {
+            if rewritten
+                .iter()
+                .any(|path| path.as_str() == source.display_path.as_str())
+            {
                 source.rewritten_by = Some(identity.clone());
                 source.rewritten_map = transform.position_map(&source.display_path);
             }
             let file = SourceId(u32::try_from(index).unwrap_or(u32::MAX));
-            snapshot.diagnostics.extend(transform.diagnostics(&source.display_path).into_iter().map(|reported| {
-                nts_diagnostics::Diagnostic {
-                    severity: reported.severity,
-                    code: reported.code.to_owned(),
-                    message: reported.message,
-                    // The file as a whole: a function the transform gave back
-                    // is named in the message, and its span in the rewritten
-                    // text would point at nothing on disk.
-                    primary: nts_diagnostics::Location { file, span: nts_diagnostics::Span::new(0, 0) },
-                    labels: Vec::new(),
-                }
-            }));
+            snapshot.diagnostics.extend(
+                transform
+                    .diagnostics(&source.display_path)
+                    .into_iter()
+                    .map(|reported| {
+                        nts_diagnostics::Diagnostic {
+                            severity: reported.severity,
+                            code: reported.code.to_owned(),
+                            message: reported.message,
+                            // The file as a whole: a function the transform gave back
+                            // is named in the message, and its span in the rewritten
+                            // text would point at nothing on disk.
+                            primary: nts_diagnostics::Location {
+                                file,
+                                span: nts_diagnostics::Span::new(0, 0),
+                            },
+                            labels: Vec::new(),
+                        }
+                    }),
+            );
         }
     }
 }
@@ -1457,7 +1557,13 @@ impl SemanticSource for TsgoApi {
 
                 // Symbols first: a type's declaring symbol must be interned before the
                 // type records it, or the type would carry no arena index for it.
-                symbols::resolve(&mut client, &mut snapshot, &mut symbol_ids, &mut deferred, ctx)?;
+                symbols::resolve(
+                    &mut client,
+                    &mut snapshot,
+                    &mut symbol_ids,
+                    &mut deferred,
+                    ctx,
+                )?;
                 resolve_types(
                     &mut client,
                     &mut snapshot,
@@ -1551,11 +1657,20 @@ impl SemanticSource for TsgoApi {
         // entries. Older decoded snapshots cannot answer those questions.
         let asked = format!(
             "api-v2:asks:{}{}{}",
-            self.decompose.as_ref().map_or_else(|| "-".to_owned(), |b| format!("d{}", b.per_seed)),
-            self.resolve_calls.as_ref().map_or_else(|| "-".to_owned(), |b| format!("c{}", b.per_seed)),
-            self.fold_constants.as_ref().map_or_else(|| "-".to_owned(), |b| format!("k{}", b.per_seed)),
+            self.decompose
+                .as_ref()
+                .map_or_else(|| "-".to_owned(), |b| format!("d{}", b.per_seed)),
+            self.resolve_calls
+                .as_ref()
+                .map_or_else(|| "-".to_owned(), |b| format!("c{}", b.per_seed)),
+            self.fold_constants
+                .as_ref()
+                .map_or_else(|| "-".to_owned(), |b| format!("k{}", b.per_seed)),
         );
-        let transform = self.transform.as_ref().map_or_else(String::new, |transform| transform.identity());
+        let transform = self
+            .transform
+            .as_ref()
+            .map_or_else(String::new, |transform| transform.identity());
         let mut rest = match &self.generated {
             Some(generated) if transform.is_empty() => generated.identity(),
             Some(generated) => format!("{transform}+{}", generated.identity()),
@@ -1564,10 +1679,23 @@ impl SemanticSource for TsgoApi {
         // Their names: what they say is a source's, which the cache already
         // reads back (`cache::snapshot`).
         if !self.added.is_empty() {
-            let added = self.added.iter().map(|file| file.as_str()).collect::<Vec<_>>().join(",");
-            rest = if rest.is_empty() { format!("added[{added}]") } else { format!("{rest}+added[{added}]") };
+            let added = self
+                .added
+                .iter()
+                .map(|file| file.as_str())
+                .collect::<Vec<_>>()
+                .join(",");
+            rest = if rest.is_empty() {
+                format!("added[{added}]")
+            } else {
+                format!("{rest}+added[{added}]")
+            };
         }
-        if rest.is_empty() { asked } else { format!("{asked}+{rest}") }
+        if rest.is_empty() {
+            asked
+        } else {
+            format!("{asked}+{rest}")
+        }
     }
 }
 
@@ -1588,9 +1716,17 @@ impl SemanticSource for TsgoApi {
 /// **Opened again with other files, it is the same path given new text**,
 /// which tsgo reads again only when told (`Client::update_files`): without
 /// that, a generator's second round reopened its first round's program.
-fn open_adding(client: &mut Client, tsconfig: &Utf8Path, roots: &[String], files: &[Utf8PathBuf]) -> Result<UpdateSnapshotResponse, TsgoError> {
+fn open_adding(
+    client: &mut Client,
+    tsconfig: &Utf8Path,
+    roots: &[String],
+    files: &[Utf8PathBuf],
+) -> Result<UpdateSnapshotResponse, TsgoError> {
     let tsconfig = absolute(tsconfig);
-    let config = tsconfig.parent().unwrap_or(Utf8Path::new(".")).join("tsconfig.nts-open.json");
+    let config = tsconfig
+        .parent()
+        .unwrap_or(Utf8Path::new("."))
+        .join("tsconfig.nts-open.json");
     // The added files first, where the old wrappers put them -- ahead of the
     // project's `include` -- so a program that compiled through one interns
     // its types in the same order and compiles to the same bytes.
@@ -1609,8 +1745,14 @@ fn open_adding(client: &mut Client, tsconfig: &Utf8Path, roots: &[String], files
     let mut opened = client.open_project(&config)?;
     // The project opened last is the one whose program is read, where the
     // answer names it among the others.
-    if opened.projects.iter().any(|project| Utf8Path::new(&project.config_file_name) == config) {
-        opened.projects.retain(|project| Utf8Path::new(&project.config_file_name) == config);
+    if opened
+        .projects
+        .iter()
+        .any(|project| Utf8Path::new(&project.config_file_name) == config)
+    {
+        opened
+            .projects
+            .retain(|project| Utf8Path::new(&project.config_file_name) == config);
     }
     Ok(opened)
 }
@@ -1643,13 +1785,21 @@ fn open_generated(
             client
                 .diagnostics_of(project.snapshot, &opened.id, &opened.root_files)?
                 .into_iter()
-                .map(|d| generated::Complaint { code: d.code, text: d.text }),
+                .map(|d| generated::Complaint {
+                    code: d.code,
+                    text: d.text,
+                }),
         );
     }
     let mut opened = project;
     let mut current: Option<Vec<Utf8PathBuf>> = None;
     for _ in 0..ROUNDS {
-        let Some(files) = generated.files(tsconfig, roots, &complaints).map_err(TsgoError::Generated)? else { break };
+        let Some(files) = generated
+            .files(tsconfig, roots, &complaints)
+            .map_err(TsgoError::Generated)?
+        else {
+            break;
+        };
         if current.as_ref() == Some(&files) {
             break;
         }
@@ -1660,7 +1810,10 @@ fn open_generated(
                 client
                     .diagnostics_of(opened.snapshot, &project.id, &project.root_files)?
                     .into_iter()
-                    .map(|d| generated::Complaint { code: d.code, text: d.text }),
+                    .map(|d| generated::Complaint {
+                        code: d.code,
+                        text: d.text,
+                    }),
             );
         }
         current = Some(files);
@@ -1825,7 +1978,11 @@ fn collect_diagnostics(
         .collect();
 
     // The compiled files' only, which are the only ones kept below.
-    let files: Vec<&Utf8Path> = snapshot.sources.iter().map(|source| source.display_path.as_path()).collect();
+    let files: Vec<&Utf8Path> = snapshot
+        .sources
+        .iter()
+        .map(|source| source.display_path.as_path())
+        .collect();
     let mut converted = Vec::new();
     for project in &opened.projects {
         let reported = client.diagnostics_of(opened.snapshot, &project.id, &files)?;
@@ -1933,7 +2090,9 @@ fn compiled_files(
         // is (`docs/nts-config.md` 3a): its declarations are what the
         // program's `objc:AppKit` or `gi:Gtk` means. A `.d.ts` holds no code,
         // so nothing a package ships is lowered either way.
-        if metadata.is_from_external_library && !(path.as_str().ends_with(".d.ts") && surfaces.declares(&path)?) {
+        if metadata.is_from_external_library
+            && !(path.as_str().ends_with(".d.ts") && surfaces.declares(&path)?)
+        {
             continue;
         }
         compiled.push(path);
@@ -1955,19 +2114,31 @@ impl Surfaces {
     /// Whether the package holding `file` -- the nearest `package.json` above
     /// it -- declares itself a surface.
     fn declares(&mut self, file: &Utf8Path) -> Result<bool, TsgoError> {
-        let Some(manifest) = file.ancestors().skip(1).map(|dir| dir.join("package.json")).find(|candidate| candidate.is_file()) else {
+        let Some(manifest) = file
+            .ancestors()
+            .skip(1)
+            .map(|dir| dir.join("package.json"))
+            .find(|candidate| candidate.is_file())
+        else {
             return Ok(false);
         };
         if let Some(&known) = self.0.get(&manifest) {
             return Ok(known);
         }
         let text = std::fs::read_to_string(&manifest).unwrap_or_default();
-        let value: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+        let value: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
         let declared = match value.pointer("/nts/surface") {
             None => false,
-            Some(serde_json::Value::String(surface)) if SURFACES.contains(&surface.as_str()) => true,
+            Some(serde_json::Value::String(surface)) if SURFACES.contains(&surface.as_str()) => {
+                true
+            }
             Some(other) => {
-                return Err(TsgoError::UnknownSurface { manifest, surface: other.to_string(), known: SURFACES.join(", ") });
+                return Err(TsgoError::UnknownSurface {
+                    manifest,
+                    surface: other.to_string(),
+                    known: SURFACES.join(", "),
+                });
             }
         };
         self.0.insert(manifest, declared);

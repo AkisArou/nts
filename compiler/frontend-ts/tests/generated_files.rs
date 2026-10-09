@@ -27,7 +27,9 @@ export const sum: number = a + b + extra();
 /// `"include"`, or nothing, which is the default include -- importing two
 /// modules only a generator declares, and calling one only `extra.d.ts` does.
 fn project(name: &str, names: &str) -> Utf8PathBuf {
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-generated-files-{}-{name}", std::process::id()));
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+        .unwrap()
+        .join(format!("nts-generated-files-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join("generated")).unwrap();
@@ -42,7 +44,11 @@ fn project(name: &str, names: &str) -> Utf8PathBuf {
     )
     .unwrap();
     std::fs::write(dir.join("src/main.ts"), MAIN).unwrap();
-    std::fs::write(dir.join("generated/extra.d.ts"), "declare function extra(): number;\n").unwrap();
+    std::fs::write(
+        dir.join("generated/extra.d.ts"),
+        "declare function extra(): number;\n",
+    )
+    .unwrap();
     dir.join("tsconfig.json").canonicalize_utf8().unwrap()
 }
 
@@ -60,15 +66,31 @@ impl Generated for OnePerRound {
         "one-per-round".to_owned()
     }
 
-    fn files(&mut self, tsconfig: &Utf8Path, _roots: &[String], complaints: &[Complaint]) -> Result<Option<Vec<Utf8PathBuf>>, String> {
+    fn files(
+        &mut self,
+        tsconfig: &Utf8Path,
+        _roots: &[String],
+        complaints: &[Complaint],
+    ) -> Result<Option<Vec<Utf8PathBuf>>, String> {
         *self.rounds.lock().unwrap() += 1;
         let missing = complaints.iter().find_map(|complaint| {
-            (complaint.code == 2307).then(|| complaint.text.split('\'').nth(1).map(str::to_owned)).flatten()
+            (complaint.code == 2307)
+                .then(|| complaint.text.split('\'').nth(1).map(str::to_owned))
+                .flatten()
         });
-        let Some(module) = missing else { return Ok(None) };
+        let Some(module) = missing else {
+            return Ok(None);
+        };
         let short = module.trim_start_matches("gen:");
-        let file = tsconfig.parent().unwrap().join(format!("generated/{short}.d.ts"));
-        std::fs::write(&file, format!("declare module {module:?} {{ export const {short}: number; }}\n")).unwrap();
+        let file = tsconfig
+            .parent()
+            .unwrap()
+            .join(format!("generated/{short}.d.ts"));
+        std::fs::write(
+            &file,
+            format!("declare module {module:?} {{ export const {short}: number; }}\n"),
+        )
+        .unwrap();
         self.declared.push(file);
         Ok(Some(self.declared.clone()))
     }
@@ -77,7 +99,10 @@ impl Generated for OnePerRound {
 fn open(tsconfig: &Utf8Path, added: &[Utf8PathBuf]) -> (SemanticSnapshot, u32) {
     let rounds = Arc::new(Mutex::new(0));
     let mut source = TsgoApi::new(tsgo().unwrap())
-        .with_generated(Box::new(OnePerRound { declared: Vec::new(), rounds: Arc::clone(&rounds) }))
+        .with_generated(Box::new(OnePerRound {
+            declared: Vec::new(),
+            rounds: Arc::clone(&rounds),
+        }))
         .with_added(added);
     let snapshot = source.snapshot(tsconfig).unwrap();
     let rounds = *rounds.lock().unwrap();
@@ -85,7 +110,10 @@ fn open(tsconfig: &Utf8Path, added: &[Utf8PathBuf]) -> (SemanticSnapshot, u32) {
 }
 
 fn has_source(snapshot: &SemanticSnapshot, file: &str) -> bool {
-    snapshot.sources.iter().any(|source| source.display_path.ends_with(file))
+    snapshot
+        .sources
+        .iter()
+        .any(|source| source.display_path.ends_with(file))
 }
 
 /// However the config names the program's own file, the program opened is
@@ -104,11 +132,27 @@ fn the_project_keeps_its_own_files_however_its_config_names_them() {
         let tsconfig = project(names, names);
         let extra = tsconfig.parent().unwrap().join("generated/extra.d.ts");
         let (snapshot, rounds) = open(&tsconfig, &[extra]);
-        assert!(has_source(&snapshot, "src/main.ts"), "{names}: the program's own file is compiled");
-        assert!(has_source(&snapshot, "generated/a.d.ts") && has_source(&snapshot, "generated/b.d.ts"), "{names}: both rounds' files");
-        assert!(has_source(&snapshot, "generated/extra.d.ts"), "{names}: the added file");
-        assert_eq!(rounds, 3, "{names}: a round per module, and one that adds nothing");
-        let errors: Vec<_> = snapshot.diagnostics.iter().map(|d| format!("{} {}", d.code, d.message)).collect();
+        assert!(
+            has_source(&snapshot, "src/main.ts"),
+            "{names}: the program's own file is compiled"
+        );
+        assert!(
+            has_source(&snapshot, "generated/a.d.ts") && has_source(&snapshot, "generated/b.d.ts"),
+            "{names}: both rounds' files"
+        );
+        assert!(
+            has_source(&snapshot, "generated/extra.d.ts"),
+            "{names}: the added file"
+        );
+        assert_eq!(
+            rounds, 3,
+            "{names}: a round per module, and one that adds nothing"
+        );
+        let errors: Vec<_> = snapshot
+            .diagnostics
+            .iter()
+            .map(|d| format!("{} {}", d.code, d.message))
+            .collect();
         assert!(errors.is_empty(), "{names}: checks clean, said {errors:?}");
     }
 }

@@ -60,7 +60,15 @@ fn every_literal_spelling_names_the_same_kind_of_member() {
     let Some(lowered) = lower_at("tests/programs/computed-names") else {
         return;
     };
-    for member in ["plain", "quoted", "bracketed", "get getter", "set size", "#twice", "after"] {
+    for member in [
+        "plain",
+        "quoted",
+        "bracketed",
+        "get getter",
+        "set size",
+        "#twice",
+        "after",
+    ] {
         assert!(
             named(&lowered, &format!("Holder#{member}")).is_some(),
             "no function for `{member}`; lowered {:?}",

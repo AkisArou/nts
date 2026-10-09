@@ -35,7 +35,9 @@ pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<
     // than the one `nts build examples/app` was run in.
     let dir = &super::absolute(dir)?;
     let Some(named) = &claim.lockfile else {
-        bail!("`dependencies.{id}` resolves with SwiftPM and names no `lockfile`: `Package.resolved`, beside the `Package.swift` whose dependencies it pins")
+        bail!(
+            "`dependencies.{id}` resolves with SwiftPM and names no `lockfile`: `Package.resolved`, beside the `Package.swift` whose dependencies it pins"
+        )
     };
     let lockfile = dir.join(named.trim_start_matches("./"));
     let root = lockfile.parent().unwrap_or(dir).to_path_buf();
@@ -91,12 +93,18 @@ impl Workspace {
     fn read(root: &Utf8Path, lockfile: &Utf8Path) -> Result<Self> {
         let pins: BTreeMap<String, String> = match std::fs::read_to_string(lockfile) {
             Ok(text) => {
-                let json: Value = serde_json::from_str(&text).with_context(|| format!("{lockfile} is not JSON"))?;
+                let json: Value = serde_json::from_str(&text)
+                    .with_context(|| format!("{lockfile} is not JSON"))?;
                 json.get("pins")
                     .and_then(Value::as_array)
                     .into_iter()
                     .flatten()
-                    .filter_map(|pin| Some((pin.get("identity")?.as_str()?.to_owned(), pin.pointer("/state/revision")?.as_str()?.to_owned())))
+                    .filter_map(|pin| {
+                        Some((
+                            pin.get("identity")?.as_str()?.to_owned(),
+                            pin.pointer("/state/revision")?.as_str()?.to_owned(),
+                        ))
+                    })
                     .collect()
             }
             // A manifest with only local packages pins nothing, and SwiftPM
@@ -104,8 +112,15 @@ impl Workspace {
             Err(_) => BTreeMap::new(),
         };
         let state = root.join(".build").join("workspace-state.json");
-        let json: Value = std::fs::read_to_string(&state).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default();
-        let recorded: Vec<Value> = json.pointer("/object/dependencies").and_then(Value::as_array).cloned().unwrap_or_default();
+        let json: Value = std::fs::read_to_string(&state)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default();
+        let recorded: Vec<Value> = json
+            .pointer("/object/dependencies")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
         // A record's path is absolute, where the root was when it resolved;
         // what is under `.build/artifacts` is where it is now.
         let artifacts = json
@@ -118,17 +133,35 @@ impl Workspace {
                 let checksum = artifact.pointer("/source/checksum")?.as_str()?.to_owned();
                 let recorded = artifact.get("path")?.as_str()?;
                 let (_, under) = recorded.split_once("/.build/artifacts/")?;
-                Some((url, Artifact { checksum, path: root.join(".build").join("artifacts").join(under) }))
+                Some((
+                    url,
+                    Artifact {
+                        checksum,
+                        path: root.join(".build").join("artifacts").join(under),
+                    },
+                ))
             })
             .collect();
         let mut by_identity = BTreeMap::new();
         for (identity, revision) in &pins {
-            let checkout = recorded.iter().find(|dependency| dependency.pointer("/packageRef/identity").and_then(Value::as_str) == Some(identity));
-            let checked_out = checkout.and_then(|dependency| dependency.pointer("/state/checkoutState/revision")).and_then(Value::as_str);
-            let subpath = checkout.and_then(|dependency| dependency.get("subpath")).and_then(Value::as_str);
+            let checkout = recorded.iter().find(|dependency| {
+                dependency
+                    .pointer("/packageRef/identity")
+                    .and_then(Value::as_str)
+                    == Some(identity)
+            });
+            let checked_out = checkout
+                .and_then(|dependency| dependency.pointer("/state/checkoutState/revision"))
+                .and_then(Value::as_str);
+            let subpath = checkout
+                .and_then(|dependency| dependency.get("subpath"))
+                .and_then(Value::as_str);
             match (checked_out, subpath) {
                 (Some(checked_out), Some(subpath)) if checked_out == revision => {
-                    by_identity.insert(identity.clone(), root.join(".build").join("checkouts").join(subpath));
+                    by_identity.insert(
+                        identity.clone(),
+                        root.join(".build").join("checkouts").join(subpath),
+                    );
                 }
                 _ => bail!(
                     "{lockfile} pins `{identity}` at {revision}, and {state} does not record that checkout: \
@@ -136,7 +169,11 @@ impl Workspace {
                 ),
             }
         }
-        Ok(Self { by_identity, artifacts, state })
+        Ok(Self {
+            by_identity,
+            artifacts,
+            state,
+        })
     }
 }
 
@@ -145,10 +182,18 @@ impl Workspace {
     /// from `url` -- refused, naming `swift package resolve`, where it has
     /// not downloaded it, or downloaded it against another checksum than the
     /// manifest's now, which is a download the manifest no longer describes.
-    fn artifact(&self, package: &Utf8Path, name: &str, url: &str, checksum: Option<&str>) -> Result<Utf8PathBuf> {
+    fn artifact(
+        &self,
+        package: &Utf8Path,
+        name: &str,
+        url: &str,
+        checksum: Option<&str>,
+    ) -> Result<Utf8PathBuf> {
         let state = &self.state;
         let Some(artifact) = self.artifacts.get(url) else {
-            bail!("{package}'s binary target `{name}` is downloaded from {url}, and {state} records no such download: run `swift package resolve`")
+            bail!(
+                "{package}'s binary target `{name}` is downloaded from {url}, and {state} records no such download: run `swift package resolve`"
+            )
         };
         if checksum.is_some_and(|checksum| checksum != artifact.checksum) {
             bail!(
@@ -159,7 +204,10 @@ impl Workspace {
             )
         }
         if !artifact.path.is_dir() {
-            bail!("{state} records `{name}` extracted to {}, which is not there: run `swift package resolve`", artifact.path)
+            bail!(
+                "{state} records `{name}` extracted to {}, which is not there: run `swift package resolve`",
+                artifact.path
+            )
         }
         Ok(artifact.path.clone())
     }
@@ -172,18 +220,35 @@ fn dependencies(root: &Utf8Path, workspace: &Workspace) -> Result<Vec<Utf8PathBu
 
 /// The packages `manifest` depends on: a local one's path, a remote one's
 /// checkout.
-fn dependencies_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) -> Result<Vec<Utf8PathBuf>> {
+fn dependencies_of(
+    manifest: &Value,
+    package: &Utf8Path,
+    workspace: &Workspace,
+) -> Result<Vec<Utf8PathBuf>> {
     let mut found = Vec::new();
-    for dependency in manifest.get("dependencies").and_then(Value::as_array).into_iter().flatten() {
-        if let Some(local) = dependency.pointer("/fileSystem/0/path").and_then(Value::as_str) {
+    for dependency in manifest
+        .get("dependencies")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(local) = dependency
+            .pointer("/fileSystem/0/path")
+            .and_then(Value::as_str)
+        {
             found.push(Utf8PathBuf::from(local));
-        } else if let Some(identity) = dependency.pointer("/sourceControl/0/identity").and_then(Value::as_str) {
+        } else if let Some(identity) = dependency
+            .pointer("/sourceControl/0/identity")
+            .and_then(Value::as_str)
+        {
             let checkout = workspace.by_identity.get(identity).with_context(|| {
                 format!("{package}'s manifest depends on `{identity}`, which Package.resolved does not pin: run `swift package resolve`")
             })?;
             found.push(checkout.clone());
         } else {
-            bail!("{package}'s manifest depends on a package neither local nor from source control (a registry's), which is not read yet")
+            bail!(
+                "{package}'s manifest depends on a package neither local nor from source control (a registry's), which is not read yet"
+            )
         }
     }
     Ok(found)
@@ -198,28 +263,50 @@ fn dependencies_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) 
 /// answer depends on: the manifest's text, where it is (a local dependency's
 /// path comes back absolute), and the toolchain.
 fn dump(package: &Utf8Path) -> Result<Value> {
-    let tool = crate::swift::toolchain_root()?.join("usr").join("bin").join("swift-package");
-    let cache = std::env::var_os("HOME").map(|home| std::path::Path::new(&home).join(".cache/nts/swiftpm-manifests"));
+    let tool = crate::swift::toolchain_root()?
+        .join("usr")
+        .join("bin")
+        .join("swift-package");
+    let cache = std::env::var_os("HOME")
+        .map(|home| std::path::Path::new(&home).join(".cache/nts/swiftpm-manifests"));
     dump_with(&tool, cache.as_deref(), package)
 }
 
 /// [`dump`], with `tool` for `swift-package` and `cache` for where the
 /// answers are kept.
-fn dump_with(tool: &std::path::Path, cache: Option<&std::path::Path>, package: &Utf8Path) -> Result<Value> {
-    static KEPT: std::sync::OnceLock<std::sync::Mutex<BTreeMap<u64, Value>>> = std::sync::OnceLock::new();
+fn dump_with(
+    tool: &std::path::Path,
+    cache: Option<&std::path::Path>,
+    package: &Utf8Path,
+) -> Result<Value> {
+    static KEPT: std::sync::OnceLock<std::sync::Mutex<BTreeMap<u64, Value>>> =
+        std::sync::OnceLock::new();
     // One package reached by two spellings -- the root as the config names it,
     // and as a dependency's absolute path -- is one manifest.
-    let canonical = std::fs::canonicalize(package).ok().and_then(|path| Utf8PathBuf::from_path_buf(path).ok());
+    let canonical = std::fs::canonicalize(package)
+        .ok()
+        .and_then(|path| Utf8PathBuf::from_path_buf(path).ok());
     let package = canonical.as_deref().unwrap_or(package);
-    let manifest = std::fs::read(package.join("Package.swift")).with_context(|| format!("reading {package}/Package.swift"))?;
-    let stamp = std::fs::metadata(tool).map(|meta| format!("{}{:?}", meta.len(), meta.modified().ok())).unwrap_or_default();
-    let key = fnv(&[package.as_str().as_bytes(), &manifest, tool.to_string_lossy().as_bytes(), stamp.as_bytes()]);
+    let manifest = std::fs::read(package.join("Package.swift"))
+        .with_context(|| format!("reading {package}/Package.swift"))?;
+    let stamp = std::fs::metadata(tool)
+        .map(|meta| format!("{}{:?}", meta.len(), meta.modified().ok()))
+        .unwrap_or_default();
+    let key = fnv(&[
+        package.as_str().as_bytes(),
+        &manifest,
+        tool.to_string_lossy().as_bytes(),
+        stamp.as_bytes(),
+    ]);
     let kept = KEPT.get_or_init(Default::default);
     if let Some(value) = kept.lock().ok().and_then(|kept| kept.get(&key).cloned()) {
         return Ok(value);
     }
     let file = cache.map(|cache| cache.join(format!("{key:016x}.json")));
-    let stored: Option<Value> = file.as_ref().and_then(|file| std::fs::read(file).ok()).and_then(|bytes| serde_json::from_slice(&bytes).ok());
+    let stored: Option<Value> = file
+        .as_ref()
+        .and_then(|file| std::fs::read(file).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok());
     let value = if let Some(value) = stored {
         value
     } else {
@@ -227,7 +314,9 @@ fn dump_with(tool: &std::path::Path, cache: Option<&std::path::Path>, package: &
         // Written whole, then renamed into place: a reader never sees half.
         if let Some(file) = &file {
             let partial = file.with_extension(format!("{}.partial", std::process::id()));
-            if file.parent().is_some_and(|dir| std::fs::create_dir_all(dir).is_ok())
+            if file
+                .parent()
+                .is_some_and(|dir| std::fs::create_dir_all(dir).is_ok())
                 && std::fs::write(&partial, serde_json::to_vec(&value).unwrap_or_default()).is_ok()
             {
                 let _ = std::fs::rename(&partial, file);
@@ -270,15 +359,25 @@ fn evaluate(tool: &std::path::Path, package: &Utf8Path) -> Result<Value> {
                 stderr.trim()
             )
         }
-        bail!("{} could not read {package}/Package.swift:\n{}", tool.display(), stderr.trim())
+        bail!(
+            "{} could not read {package}/Package.swift:\n{}",
+            tool.display(),
+            stderr.trim()
+        )
     }
-    serde_json::from_slice(&output.stdout).context("swift-package dump-package printed something that is not JSON")
+    serde_json::from_slice(&output.stdout)
+        .context("swift-package dump-package printed something that is not JSON")
 }
 
 /// The targets of `manifest`'s library products, and those they depend on in
 /// the package, each as a module; and what they link, from their linker
 /// settings.
-fn modules_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) -> Result<(Vec<NativeModule>, Vec<String>)> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+fn modules_of(
+    manifest: &Value,
+    package: &Utf8Path,
+    workspace: &Workspace,
+) -> Result<(Vec<NativeModule>, Vec<String>)> {
     let targets: BTreeMap<&str, &Value> = manifest
         .get("targets")
         .and_then(Value::as_array)
@@ -292,15 +391,28 @@ fn modules_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) -> Re
         .into_iter()
         .flatten()
         .filter(|product| product.pointer("/type/library").is_some())
-        .flat_map(|product| product.get("targets").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str))
+        .flat_map(|product| {
+            product
+                .get("targets")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+        })
         .collect();
     let mut chosen = BTreeSet::new();
     while let Some(name) = wanted.pop() {
-        let Some(target) = targets.get(name) else { continue };
+        let Some(target) = targets.get(name) else {
+            continue;
+        };
         if !chosen.insert(name) {
             continue;
         }
-        wanted.extend(target_dependencies(target, &targets).iter().filter_map(|named| targets.get_key_value(named.as_str()).map(|(name, _)| *name)));
+        wanted.extend(
+            target_dependencies(target, &targets)
+                .iter()
+                .filter_map(|named| targets.get_key_value(named.as_str()).map(|(name, _)| *name)),
+        );
     }
     let mut modules = Vec::new();
     let mut libs = Vec::new();
@@ -310,8 +422,18 @@ fn modules_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) -> Re
     for name in &chosen {
         let target = targets[name];
         if target.get("type").and_then(Value::as_str) == Some("regular") {
-            let root = package.join(target.get("path").and_then(Value::as_str).map_or_else(|| format!("Sources/{name}"), str::to_owned));
-            let directory = root.join(target.get("publicHeadersPath").and_then(Value::as_str).unwrap_or("include"));
+            let root = package.join(
+                target
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .map_or_else(|| format!("Sources/{name}"), str::to_owned),
+            );
+            let directory = root.join(
+                target
+                    .get("publicHeadersPath")
+                    .and_then(Value::as_str)
+                    .unwrap_or("include"),
+            );
             if directory.is_dir() {
                 public.insert(name, directory);
             }
@@ -319,26 +441,72 @@ fn modules_of(manifest: &Value, package: &Utf8Path, workspace: &Workspace) -> Re
     }
     for name in chosen.iter().copied() {
         let target = targets[name];
-        let kind = target.get("type").and_then(Value::as_str).unwrap_or_default();
+        let kind = target
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let path = target.get("path").and_then(Value::as_str);
         match kind {
             "regular" => {
-                let root = package.join(path.map_or_else(|| format!("Sources/{name}"), str::to_owned));
-                let excluded: Vec<Utf8PathBuf> = strings(target.get("exclude")).into_iter().map(|path| root.join(path)).collect();
-                let listed = target.get("sources").and_then(Value::as_array).map(|sources| sources.iter().filter_map(Value::as_str).map(|path| root.join(path)).collect::<Vec<_>>());
+                let root =
+                    package.join(path.map_or_else(|| format!("Sources/{name}"), str::to_owned));
+                let excluded: Vec<Utf8PathBuf> = strings(target.get("exclude"))
+                    .into_iter()
+                    .map(|path| root.join(path))
+                    .collect();
+                let listed = target
+                    .get("sources")
+                    .and_then(Value::as_array)
+                    .map(|sources| {
+                        sources
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(|path| root.join(path))
+                            .collect::<Vec<_>>()
+                    });
                 let files = files_under(&root, listed.as_deref(), &excluded);
-                let own = root.join(target.get("publicHeadersPath").and_then(Value::as_str).unwrap_or("include"));
-                let headers = files_under(&own, None, &[]).into_iter().filter(|path| path.extension() == Some("h")).collect();
+                let own = root.join(
+                    target
+                        .get("publicHeadersPath")
+                        .and_then(Value::as_str)
+                        .unwrap_or("include"),
+                );
+                let headers = files_under(&own, None, &[])
+                    .into_iter()
+                    .filter(|path| path.extension() == Some("h"))
+                    .collect();
                 let depends = target_dependencies(target, &targets);
-                let mut include: Vec<Utf8PathBuf> = [own, root.clone()].into_iter().filter(|dir| dir.is_dir()).collect();
-                include.extend(reached(&depends, &targets).iter().filter_map(|dependency| public.get(dependency.as_str()).cloned()));
-                modules.push(NativeModule { name: name.to_owned(), sources: root, files: Some(files), headers, include, frameworks: Vec::new(), depends });
+                let mut include: Vec<Utf8PathBuf> = [own, root.clone()]
+                    .into_iter()
+                    .filter(|dir| dir.is_dir())
+                    .collect();
+                include.extend(
+                    reached(&depends, &targets)
+                        .iter()
+                        .filter_map(|dependency| public.get(dependency.as_str()).cloned()),
+                );
+                modules.push(NativeModule {
+                    name: name.to_owned(),
+                    sources: root,
+                    files: Some(files),
+                    headers,
+                    include,
+                    frameworks: Vec::new(),
+                    depends,
+                });
             }
             "binary" => {
                 let framework = match (path, target.get("url").and_then(Value::as_str)) {
                     (Some(path), _) => package.join(path),
-                    (None, Some(url)) => workspace.artifact(package, name, url, target.get("checksum").and_then(Value::as_str))?,
-                    (None, None) => bail!("{package}'s binary target `{name}` names neither a `path:` nor a `url:`"),
+                    (None, Some(url)) => workspace.artifact(
+                        package,
+                        name,
+                        url,
+                        target.get("checksum").and_then(Value::as_str),
+                    )?,
+                    (None, None) => bail!(
+                        "{package}'s binary target `{name}` names neither a `path:` nor a `url:`"
+                    ),
                 };
                 modules.push(NativeModule {
                     name: name.to_owned(),
@@ -367,7 +535,12 @@ fn target_dependencies(target: &Value, targets: &BTreeMap<&str, &Value>) -> Vec<
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|dependency| dependency.pointer("/byName/0").or_else(|| dependency.pointer("/target/0")).and_then(Value::as_str))
+        .filter_map(|dependency| {
+            dependency
+                .pointer("/byName/0")
+                .or_else(|| dependency.pointer("/target/0"))
+                .and_then(Value::as_str)
+        })
         .filter(|named| targets.contains_key(named))
         .map(str::to_owned)
         .collect()
@@ -392,13 +565,24 @@ fn reached(depends: &[String], targets: &BTreeMap<&str, &Value>) -> Vec<String> 
 /// A target's linker settings: `.linkedFramework("X")`, `.linkedLibrary("z")`.
 fn linker_settings(target: &Value) -> Vec<String> {
     let mut flags = Vec::new();
-    for setting in target.get("settings").and_then(Value::as_array).into_iter().flatten() {
+    for setting in target
+        .get("settings")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         if setting.get("tool").and_then(Value::as_str) != Some("linker") {
             continue;
         }
-        if let Some(framework) = setting.pointer("/kind/linkedFramework/0").and_then(Value::as_str) {
+        if let Some(framework) = setting
+            .pointer("/kind/linkedFramework/0")
+            .and_then(Value::as_str)
+        {
             flags.extend(["-framework".to_owned(), framework.to_owned()]);
-        } else if let Some(library) = setting.pointer("/kind/linkedLibrary/0").and_then(Value::as_str) {
+        } else if let Some(library) = setting
+            .pointer("/kind/linkedLibrary/0")
+            .and_then(Value::as_str)
+        {
             flags.push(format!("-l{library}"));
         }
     }
@@ -406,14 +590,25 @@ fn linker_settings(target: &Value) -> Vec<String> {
 }
 
 fn strings(value: Option<&Value>) -> Vec<String> {
-    value.and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect()
+    value
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect()
 }
 
 /// The files under `root` -- or under each of `listed`, where the manifest
 /// names its sources -- less those under an excluded path, sorted.
-fn files_under(root: &Utf8Path, listed: Option<&[Utf8PathBuf]>, excluded: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> {
+fn files_under(
+    root: &Utf8Path,
+    listed: Option<&[Utf8PathBuf]>,
+    excluded: &[Utf8PathBuf],
+) -> Vec<Utf8PathBuf> {
     let mut found = Vec::new();
-    let mut pending: Vec<Utf8PathBuf> = listed.map_or_else(|| vec![root.to_path_buf()], <[Utf8PathBuf]>::to_vec);
+    let mut pending: Vec<Utf8PathBuf> =
+        listed.map_or_else(|| vec![root.to_path_buf()], <[Utf8PathBuf]>::to_vec);
     while let Some(at) = pending.pop() {
         if excluded.iter().any(|path| at.starts_with(path)) {
             continue;
@@ -438,11 +633,17 @@ mod tests {
     use super::*;
 
     fn claim() -> Dependencies {
-        Dependencies { from: super::super::Resolver::Swiftpm, lockfile: Some("Package.resolved".to_owned()), packages: None }
+        Dependencies {
+            from: super::super::Resolver::Swiftpm,
+            lockfile: Some("Package.resolved".to_owned()),
+            packages: None,
+        }
     }
 
     fn scratch(name: &str) -> Utf8PathBuf {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-swiftpm-{name}-{}", std::process::id()));
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-swiftpm-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -452,7 +653,11 @@ mod tests {
     #[test]
     fn a_lockfile_pinning_nothing_resolves_to_nothing() {
         let dir = scratch("empty");
-        std::fs::write(dir.join("Package.resolved"), r#"{ "pins": [], "version": 2 }"#).unwrap();
+        std::fs::write(
+            dir.join("Package.resolved"),
+            r#"{ "pins": [], "version": 2 }"#,
+        )
+        .unwrap();
         assert!(resolve(&dir, "ios-17", &claim()).unwrap().is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -482,7 +687,11 @@ mod tests {
         let dir = scratch("manifest-cache");
         let tool = dir.join("swift-package");
         let count = dir.join("count");
-        std::fs::write(&tool, format!("#!/bin/sh\necho x >> {count}\necho '{{\"name\": \"Probe\"}}'\n")).unwrap();
+        std::fs::write(
+            &tool,
+            format!("#!/bin/sh\necho x >> {count}\necho '{{\"name\": \"Probe\"}}'\n"),
+        )
+        .unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
@@ -490,7 +699,11 @@ mod tests {
         }
         let package = dir.join("Probe");
         std::fs::create_dir_all(&package).unwrap();
-        std::fs::write(package.join("Package.swift"), "// swift-tools-version:5.9\n").unwrap();
+        std::fs::write(
+            package.join("Package.swift"),
+            "// swift-tools-version:5.9\n",
+        )
+        .unwrap();
         let cache = dir.join("cache");
         let evaluations = || std::fs::read_to_string(&count).map_or(0, |text| text.lines().count());
         let first = dump_with(tool.as_std_path(), Some(cache.as_std_path()), &package).unwrap();
@@ -501,10 +714,21 @@ mod tests {
         // own memory answers first. The next build's 0 evaluations are the
         // measurement's (macos-spm's rebuild), not this test's.
         let kept = std::fs::read_dir(&cache).unwrap().count();
-        assert_eq!(kept, 1, "nothing, or more than one answer, was kept on disk");
-        std::fs::write(package.join("Package.swift"), "// swift-tools-version:5.9\n// changed\n").unwrap();
+        assert_eq!(
+            kept, 1,
+            "nothing, or more than one answer, was kept on disk"
+        );
+        std::fs::write(
+            package.join("Package.swift"),
+            "// swift-tools-version:5.9\n// changed\n",
+        )
+        .unwrap();
         dump_with(tool.as_std_path(), Some(cache.as_std_path()), &package).unwrap();
-        assert_eq!(evaluations(), 2, "a changed manifest was answered from the old one");
+        assert_eq!(
+            evaluations(),
+            2,
+            "a changed manifest was answered from the old one"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -533,14 +757,36 @@ mod tests {
         .unwrap();
         let workspace = Workspace::read(&dir, &dir.join("Package.resolved")).unwrap();
         let package = Utf8Path::new("/elsewhere/probe");
-        let missing = workspace.artifact(package, "GoogleAppMeasurement", url, Some("be3f")).unwrap_err().to_string();
-        assert!(missing.contains("which is not there") && missing.contains("run `swift package resolve`"), "{missing}");
-        let extracted = dir.join(".build/artifacts/probe/GoogleAppMeasurement/GoogleAppMeasurement.xcframework");
+        let missing = workspace
+            .artifact(package, "GoogleAppMeasurement", url, Some("be3f"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            missing.contains("which is not there")
+                && missing.contains("run `swift package resolve`"),
+            "{missing}"
+        );
+        let extracted = dir
+            .join(".build/artifacts/probe/GoogleAppMeasurement/GoogleAppMeasurement.xcframework");
         std::fs::create_dir_all(&extracted).unwrap();
-        assert_eq!(workspace.artifact(package, "GoogleAppMeasurement", url, Some("be3f")).unwrap(), extracted);
-        let changed = workspace.artifact(package, "GoogleAppMeasurement", url, Some("0000")).unwrap_err().to_string();
-        assert!(changed.contains("at checksum 0000") && changed.contains("downloaded at be3f"), "{changed}");
-        let unknown = workspace.artifact(package, "Other", "https://example.invalid/Other.zip", None).unwrap_err().to_string();
+        assert_eq!(
+            workspace
+                .artifact(package, "GoogleAppMeasurement", url, Some("be3f"))
+                .unwrap(),
+            extracted
+        );
+        let changed = workspace
+            .artifact(package, "GoogleAppMeasurement", url, Some("0000"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            changed.contains("at checksum 0000") && changed.contains("downloaded at be3f"),
+            "{changed}"
+        );
+        let unknown = workspace
+            .artifact(package, "Other", "https://example.invalid/Other.zip", None)
+            .unwrap_err()
+            .to_string();
         assert!(unknown.contains("records no such download"), "{unknown}");
         std::fs::remove_dir_all(&dir).unwrap();
     }

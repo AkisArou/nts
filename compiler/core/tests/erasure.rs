@@ -122,7 +122,10 @@ fn the_deciding_use_survives_a_same_file_forwarder() {
     let Some(erasure) = classified() else { return };
     let forwarded = site(&erasure, "forwardsThroughLocal.value");
     assert_eq!(forwarded.verdict, Verdict::Examined);
-    assert!(forwarded.decided_elsewhere, "the deciding read is in reader.ts");
+    assert!(
+        forwarded.decided_elsewhere,
+        "the deciding read is in reader.ts"
+    );
 }
 
 /// A shared checker type must not merge two parameters' evidence.

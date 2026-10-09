@@ -156,7 +156,9 @@ impl NativeModule {
         let mut found: Vec<&NativeModule> = Vec::new();
         let mut pending: Vec<&str> = self.depends.iter().map(String::as_str).collect();
         while let Some(name) = pending.pop() {
-            let Some(module) = all.iter().find(|module| module.name == name) else { continue };
+            let Some(module) = all.iter().find(|module| module.name == name) else {
+                continue;
+            };
             if module.name == self.name || found.iter().any(|seen| seen.name == module.name) {
                 continue;
             }
@@ -179,7 +181,9 @@ impl NativeModule {
         let mut pending = vec![self.sources.clone()];
         while let Some(at) = pending.pop() {
             for entry in std::fs::read_dir(&at).into_iter().flatten().flatten() {
-                let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else { continue };
+                let Ok(path) = Utf8PathBuf::from_path_buf(entry.path()) else {
+                    continue;
+                };
                 if matches!(path.extension(), Some("framework" | "xcframework")) {
                     continue;
                 }
@@ -204,7 +208,10 @@ fn dedup_link_flags(flags: Vec<String>) -> Vec<String> {
     while let Some(flag) = words.next() {
         if matches!(flag.as_str(), "-framework" | "-weak_framework") {
             let Some(name) = words.next() else { break };
-            if !deduped.windows(2).any(|pair| pair[0] == flag && pair[1] == name) {
+            if !deduped
+                .windows(2)
+                .any(|pair| pair[0] == flag && pair[1] == name)
+            {
                 deduped.push(flag);
                 deduped.push(name);
             }
@@ -243,7 +250,8 @@ pub fn resolve(
 /// links: what a resolver whose paths are read from elsewhere starts from.
 fn absolute(dir: &Utf8Path) -> Result<Utf8PathBuf> {
     let absolute = std::path::absolute(dir).with_context(|| format!("making {dir} absolute"))?;
-    Utf8PathBuf::from_path_buf(absolute).map_err(|path| anyhow::anyhow!("{} is not UTF-8", path.display()))
+    Utf8PathBuf::from_path_buf(absolute)
+        .map_err(|path| anyhow::anyhow!("{} is not UTF-8", path.display()))
 }
 
 fn one(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
@@ -281,7 +289,11 @@ fn pkg_config(id: &str, claim: &Dependencies) -> Result<Resolution> {
              write `packages: [\"libnotify\"]`"
         )
     };
-    if Command::new("pkg-config").arg("--version").output().is_err() {
+    if Command::new("pkg-config")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         bail!(
             "`dependencies.{id}` needs pkg-config, which is not installed. \
              Install it (Debian/Ubuntu `apt install pkg-config`, Arch `pacman -S pkgconf`, \
@@ -329,7 +341,10 @@ fn flags(what: &str, packages: &[String]) -> Result<Vec<String>> {
             String::from_utf8_lossy(&output.stderr).trim()
         )
     }
-    Ok(String::from_utf8_lossy(&output.stdout).split_whitespace().map(ToOwned::to_owned).collect())
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .split_whitespace()
+        .map(ToOwned::to_owned)
+        .collect())
 }
 
 /// npm, which resolves packages this build neither links nor ships.
@@ -360,7 +375,9 @@ fn npm(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
         .and_then(serde_json::Value::as_object)
         // The root project is its own entry under the empty key, and it is not
         // a dependency of itself.
-        .map_or(0, |packages| packages.keys().filter(|key| !key.is_empty()).count());
+        .map_or(0, |packages| {
+            packages.keys().filter(|key| !key.is_empty()).count()
+        });
     Ok(Resolution {
         notes: vec![format!(
             "`dependencies.{id}` pins {count} npm package(s) in {named}, which the consumer \
@@ -461,7 +478,10 @@ fn jars(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
     };
     let path = dir.join(named);
     let text = std::fs::read_to_string(&path).with_context(|| {
-        format!("reading the {} classpath `dependencies.{id}` names", claim.from.name())
+        format!(
+            "reading the {} classpath `dependencies.{id}` names",
+            claim.from.name()
+        )
     })?;
     let mut classpath = Vec::new();
     for pin in parse_pins(&text, &path)? {
@@ -472,7 +492,10 @@ fn jars(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
         }
         classpath.push(locate(&path, id, &pin)?);
     }
-    Ok(Resolution { classpath, ..Resolution::default() })
+    Ok(Resolution {
+        classpath,
+        ..Resolution::default()
+    })
 }
 
 /// Find a pinned jar in the local repositories, and prove it is the pinned one.
@@ -505,7 +528,11 @@ fn locate(lockfile: &Utf8Path, id: &str, pin: &Pin) -> Result<Utf8PathBuf> {
          Fetch it from {} -- `mvn dependency:get -Dartifact={}` writes it under \
          `~/.m2/repository` -- or vendor the jar beside the lockfile as `{}`.",
         pin.coordinate(),
-        looked.iter().map(|p| format!("  {p}")).collect::<Vec<_>>().join("\n"),
+        looked
+            .iter()
+            .map(|p| format!("  {p}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
         pin.repository,
         pin.coordinate(),
         pin.file_name()
@@ -552,7 +579,12 @@ fn looked_in(
         for segment in pin.group.split('.') {
             maven = maven.join(segment);
         }
-        places.push(maven.join(&pin.artifact).join(&pin.version).join(pin.file_name()));
+        places.push(
+            maven
+                .join(&pin.artifact)
+                .join(&pin.version)
+                .join(pin.file_name()),
+        );
     }
     // Gradle keys the leaf directory on a digest of the file, so the version
     // directory is read rather than constructed -- and it keeps the group as
@@ -619,7 +651,10 @@ pub fn digest(bytes: &[u8]) -> String {
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
             let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16].wrapping_add(s0).wrapping_add(w[i - 7]).wrapping_add(s1);
+            w[i] = w[i - 16]
+                .wrapping_add(s0)
+                .wrapping_add(w[i - 7])
+                .wrapping_add(s1);
         }
         let mut v = h;
         for i in 0..64 {
@@ -633,7 +668,16 @@ pub fn digest(bytes: &[u8]) -> String {
             let s0 = v[0].rotate_right(2) ^ v[0].rotate_right(13) ^ v[0].rotate_right(22);
             let maj = (v[0] & v[1]) ^ (v[0] & v[2]) ^ (v[1] & v[2]);
             let t2 = s0.wrapping_add(maj);
-            v = [t1.wrapping_add(t2), v[0], v[1], v[2], v[3].wrapping_add(t1), v[4], v[5], v[6]];
+            v = [
+                t1.wrapping_add(t2),
+                v[0],
+                v[1],
+                v[2],
+                v[3].wrapping_add(t1),
+                v[4],
+                v[5],
+                v[6],
+            ];
         }
         for i in 0..8 {
             h[i] = h[i].wrapping_add(v[i]);
@@ -655,8 +699,7 @@ mod tests {
         Utf8Path::new("deps/maven.tsv")
     }
 
-    const ROW: &str =
-        "com.android.tools\tr8\t8.13.23\te3cdcb003d9beca956209ad6b9e9df31f26b732bfaed9c7c8674e903ca9f3b81\tBSD-3-Clause\ttool\thttps://maven.google.com";
+    const ROW: &str = "com.android.tools\tr8\t8.13.23\te3cdcb003d9beca956209ad6b9e9df31f26b732bfaed9c7c8674e903ca9f3b81\tBSD-3-Clause\ttool\thttps://maven.google.com";
 
     #[test]
     fn a_pinned_row_carries_every_column() {
@@ -685,22 +728,37 @@ mod tests {
         let short = ROW.rsplit_once('\t').expect("a tab").0;
         let failed = parse_pins(short, path()).expect_err("a short row is refused");
         let said = failed.to_string();
-        assert!(said.contains("deps/maven.tsv:1"), "does not say where:\n{said}");
-        assert!(said.contains("6 tab-separated field(s)"), "does not say what it found:\n{said}");
+        assert!(
+            said.contains("deps/maven.tsv:1"),
+            "does not say where:\n{said}"
+        );
+        assert!(
+            said.contains("6 tab-separated field(s)"),
+            "does not say what it found:\n{said}"
+        );
     }
 
     #[test]
     fn a_digest_that_is_not_one_is_refused() {
-        let bad = ROW.replace("e3cdcb003d9beca956209ad6b9e9df31f26b732bfaed9c7c8674e903ca9f3b81", "cafebabe");
+        let bad = ROW.replace(
+            "e3cdcb003d9beca956209ad6b9e9df31f26b732bfaed9c7c8674e903ca9f3b81",
+            "cafebabe",
+        );
         let said = parse_pins(&bad, path()).expect_err("refused").to_string();
-        assert!(said.contains("is not a SHA-256 digest"), "wrong reason:\n{said}");
+        assert!(
+            said.contains("is not a SHA-256 digest"),
+            "wrong reason:\n{said}"
+        );
     }
 
     #[test]
     fn a_scope_that_is_neither_runtime_nor_tool_is_refused() {
         let bad = ROW.replace("\ttool\t", "\tprovided\t");
         let said = parse_pins(&bad, path()).expect_err("refused").to_string();
-        assert!(said.contains("scope `provided`"), "does not name the scope:\n{said}");
+        assert!(
+            said.contains("scope `provided`"),
+            "does not name the scope:\n{said}"
+        );
     }
 
     /// The vectors, so the digest a build verifies with is the one everyone means.
@@ -711,7 +769,10 @@ mod tests {
     /// when two copies disagree.
     #[test]
     fn the_digest_is_the_one_everyone_else_means() {
-        assert_eq!(digest(b""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(
+            digest(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
         assert_eq!(
             digest(b"abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
@@ -755,8 +816,14 @@ mod tests {
         let said = resolve(Utf8Path::new("."), &declared, "windows-msvc", None)
             .expect_err("vcpkg is not read")
             .to_string();
-        assert!(said.contains("vcpkg"), "does not name the resolver:\n{said}");
-        assert!(said.contains("./deps/vcpkg.json"), "does not name the file:\n{said}");
+        assert!(
+            said.contains("vcpkg"),
+            "does not name the resolver:\n{said}"
+        );
+        assert!(
+            said.contains("./deps/vcpkg.json"),
+            "does not name the file:\n{said}"
+        );
     }
 
     fn module(name: &str, headers: bool, depends: &[&str]) -> NativeModule {
@@ -764,7 +831,11 @@ mod tests {
             name: name.to_owned(),
             sources: Utf8PathBuf::from(name),
             files: Some(Vec::new()),
-            headers: if headers { vec![Utf8PathBuf::from(format!("{name}/include/{name}.h"))] } else { Vec::new() },
+            headers: if headers {
+                vec![Utf8PathBuf::from(format!("{name}/include/{name}.h"))]
+            } else {
+                Vec::new()
+            },
             include: Vec::new(),
             frameworks: Vec::new(),
             depends: depends.iter().map(|name| (*name).to_owned()).collect(),
@@ -783,10 +854,22 @@ mod tests {
             module("CBlinkCore", true, &["CBlink"]),
             module("Shared", false, &[]),
         ];
-        let names: Vec<&str> = all[0].clang_dependencies(&all).iter().map(|module| module.name.as_str()).collect();
+        let names: Vec<&str> = all[0]
+            .clang_dependencies(&all)
+            .iter()
+            .map(|module| module.name.as_str())
+            .collect();
         assert_eq!(names, ["CBlink", "CBlinkCore"]);
-        let from_core: Vec<&str> = all[2].clang_dependencies(&all).iter().map(|module| module.name.as_str()).collect();
-        assert_eq!(from_core, ["CBlink"], "a cycle back to itself is not an import of itself");
+        let from_core: Vec<&str> = all[2]
+            .clang_dependencies(&all)
+            .iter()
+            .map(|module| module.name.as_str())
+            .collect();
+        assert_eq!(
+            from_core,
+            ["CBlink"],
+            "a cycle back to itself is not an import of itself"
+        );
     }
 
     fn a_pin() -> Pin {
@@ -837,7 +920,10 @@ mod tests {
     #[test]
     fn without_a_home_only_the_vendored_jar_is_looked_for() {
         let found = looked_in(Utf8Path::new("/project/deps/x.tsv"), &a_pin(), None, None);
-        assert_eq!(found, vec![Utf8PathBuf::from("/project/deps/gson-2.9.1.jar")]);
+        assert_eq!(
+            found,
+            vec![Utf8PathBuf::from("/project/deps/gson-2.9.1.jar")]
+        );
     }
 
     /// A Gradle cache is read rather than constructed, because its leaf is a
@@ -847,12 +933,16 @@ mod tests {
         let root = std::env::temp_dir().join("nts-gradle-layout-test");
         drop(std::fs::remove_dir_all(&root));
         let root = Utf8PathBuf::from_path_buf(root).expect("a UTF-8 temporary");
-        let version = root
-            .join("caches/modules-2/files-2.1/com.google.code.gson/gson/2.9.1");
+        let version = root.join("caches/modules-2/files-2.1/com.google.code.gson/gson/2.9.1");
         for leaf in ["bbbb2222", "aaaa1111"] {
             std::fs::create_dir_all(version.join(leaf)).expect("a cache leaf");
         }
-        let found = looked_in(Utf8Path::new("/project/deps/x.tsv"), &a_pin(), None, Some(&root));
+        let found = looked_in(
+            Utf8Path::new("/project/deps/x.tsv"),
+            &a_pin(),
+            None,
+            Some(&root),
+        );
         assert_eq!(
             found,
             vec![
@@ -896,7 +986,10 @@ mod tests {
         );
         let found = resolve(&directory, &declared, "node-api-8", None).expect("npm is read");
         assert!(found.classpath.is_empty(), "npm contributed a classpath");
-        assert!(found.libs.is_empty() && found.cflags.is_empty(), "npm contributed flags");
+        assert!(
+            found.libs.is_empty() && found.cflags.is_empty(),
+            "npm contributed flags"
+        );
         assert_eq!(found.notes.len(), 1, "the claim was read and said nothing");
         assert!(
             found.notes[0].contains("2 npm package(s)"),
@@ -929,11 +1022,18 @@ mod tests {
         let mut declared = BTreeMap::new();
         declared.insert(
             "linux-gnu".to_owned(),
-            Dependencies { from: Resolver::PkgConfig, lockfile: None, packages: None },
+            Dependencies {
+                from: Resolver::PkgConfig,
+                lockfile: None,
+                packages: None,
+            },
         );
         let said = resolve(Utf8Path::new("."), &declared, "linux-gnu", None)
             .expect_err("an empty claim is refused")
             .to_string();
-        assert!(said.contains("names no `packages`"), "wrong reason:\n{said}");
+        assert!(
+            said.contains("names no `packages`"),
+            "wrong reason:\n{said}"
+        );
     }
 }

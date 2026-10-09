@@ -5,18 +5,18 @@
 //! than no command: RFC §4.1 requires that unsupported reachable behavior be
 //! diagnosed precisely, and that promise starts here.
 
-mod bind;
 mod apple_surface;
+mod bind;
+mod bind_gir;
 mod bind_objc;
+mod bind_winmd;
+mod gir_surface;
+mod jar_resources;
 mod objc_bindings;
 mod objc_imports;
 mod swift;
-mod xcframework;
-mod bind_gir;
-mod gir_surface;
-mod bind_winmd;
 mod windows_surface;
-mod jar_resources;
+mod xcframework;
 
 use std::fmt::Write as _;
 
@@ -336,19 +336,29 @@ fn bind_gir(rest: &[String]) -> Result<()> {
     let root = rest
         .iter()
         .find(|arg| !arg.starts_with("--"))
-        .filter(|arg| !rest.windows(2).any(|pair| pair[0].starts_with("--") && pair[1] == **arg))
-        .ok_or_else(|| anyhow::anyhow!("`nts bind-gir` needs a namespace, as in `nts bind-gir Gtk-4.0`"))?;
+        .filter(|arg| {
+            !rest
+                .windows(2)
+                .any(|pair| pair[0].starts_with("--") && pair[1] == **arg)
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!("`nts bind-gir` needs a namespace, as in `nts bind-gir Gtk-4.0`")
+        })?;
     let mut search: Vec<Utf8PathBuf> = rest
         .windows(2)
         .filter(|pair| pair[0] == "--gir-dir")
         .map(|pair| Utf8PathBuf::from(&pair[1]))
         .collect();
     search.extend(bind_gir::search_path());
-    let out = rest
-        .windows(2)
-        .find(|pair| pair[0] == "--out")
-        .map_or_else(|| Utf8PathBuf::from("."), |pair| Utf8PathBuf::from(&pair[1]));
-    bind_gir::run(&bind_gir::Request { root: root.clone(), search, out })
+    let out = rest.windows(2).find(|pair| pair[0] == "--out").map_or_else(
+        || Utf8PathBuf::from("."),
+        |pair| Utf8PathBuf::from(&pair[1]),
+    );
+    bind_gir::run(&bind_gir::Request {
+        root: root.clone(),
+        search,
+        out,
+    })
 }
 
 /// A project's header to bind as the module: `--header native/Greeter.h`,
@@ -363,12 +373,31 @@ fn bind_objc_project(
         (None, None) => Ok(None),
         (Some(header), Some(symbols)) => {
             let header = std::path::PathBuf::from(header);
-            let mut search: Vec<std::path::PathBuf> = header.parent().map(std::path::Path::to_path_buf).into_iter().collect();
-            search.extend(repeated("--include").into_iter().map(std::path::PathBuf::from));
-            let frameworks = repeated("--framework-search").into_iter().map(std::path::PathBuf::from).collect();
-            Ok(Some(bind_objc::Project { header, search, frameworks, symbols: std::path::PathBuf::from(symbols), runtime_names: std::collections::BTreeMap::new() }))
+            let mut search: Vec<std::path::PathBuf> = header
+                .parent()
+                .map(std::path::Path::to_path_buf)
+                .into_iter()
+                .collect();
+            search.extend(
+                repeated("--include")
+                    .into_iter()
+                    .map(std::path::PathBuf::from),
+            );
+            let frameworks = repeated("--framework-search")
+                .into_iter()
+                .map(std::path::PathBuf::from)
+                .collect();
+            Ok(Some(bind_objc::Project {
+                header,
+                search,
+                frameworks,
+                symbols: std::path::PathBuf::from(symbols),
+                runtime_names: std::collections::BTreeMap::new(),
+            }))
         }
-        _ => anyhow::bail!("`--header` binds a project's header and needs `--project-symbols`, the directory its graph was extracted into, and the other way about"),
+        _ => anyhow::bail!(
+            "`--header` binds a project's header and needs `--project-symbols`, the directory its graph was extracted into, and the other way about"
+        ),
     }
 }
 
@@ -381,17 +410,23 @@ fn bind_objc_project(
 /// `tooling/apple/symbolgraph.sh` fetched for that SDK, or from `--symbols`.
 fn bind_objc(rest: &[String]) -> Result<()> {
     let repeated = |flag: &str| -> Vec<String> {
-        rest.windows(2).filter(|pair| pair[0] == flag).map(|pair| pair[1].clone()).collect()
+        rest.windows(2)
+            .filter(|pair| pair[0] == flag)
+            .map(|pair| pair[1].clone())
+            .collect()
     };
     let single = |flag: &str| -> Option<String> {
-        rest.windows(2).find(|pair| pair[0] == flag).map(|pair| pair[1].clone())
+        rest.windows(2)
+            .find(|pair| pair[0] == flag)
+            .map(|pair| pair[1].clone())
     };
     let sdk = single("--sdk")
         .or_else(|| std::env::var("NTS_APPLE_SDK").ok())
         .unwrap_or_else(|| apple_root().join("MacOSX.sdk").into_string());
     let request = bind_objc::Request {
         frameworks: repeated("--framework"),
-        module: single("--module").ok_or_else(|| anyhow::anyhow!("`nts bind-objc` needs `--module objc:<name>`"))?,
+        module: single("--module")
+            .ok_or_else(|| anyhow::anyhow!("`nts bind-objc` needs `--module objc:<name>`"))?,
         classes: repeated("--class"),
         protocols: repeated("--protocol"),
         functions: repeated("--function"),
@@ -405,19 +440,26 @@ fn bind_objc(rest: &[String]) -> Result<()> {
         provided: std::collections::BTreeSet::new(),
         project: bind_objc_project(&single, &repeated)?,
     };
-    if request.frameworks.is_empty() || (request.classes.is_empty() && request.names.is_empty() && !request.package) {
-        anyhow::bail!("`nts bind-objc` needs at least one `--framework`, and a `--class` or a `--name`");
+    if request.frameworks.is_empty()
+        || (request.classes.is_empty() && request.names.is_empty() && !request.package)
+    {
+        anyhow::bail!(
+            "`nts bind-objc` needs at least one `--framework`, and a `--class` or a `--name`"
+        );
     }
     let output = bind_objc::run(&request)?;
     if let Some(path) = single("--witness") {
-        std::fs::write(&path, &output.witness).with_context(|| format!("writing the witness to {path}"))?;
+        std::fs::write(&path, &output.witness)
+            .with_context(|| format!("writing the witness to {path}"))?;
     }
     if let Some(path) = single("--values") {
-        std::fs::write(&path, &output.values).with_context(|| format!("writing the values module to {path}"))?;
+        std::fs::write(&path, &output.values)
+            .with_context(|| format!("writing the values module to {path}"))?;
     }
     match single("--out") {
         Some(path) => {
-            std::fs::write(&path, &output.binding).with_context(|| format!("writing the binding to {path}"))?;
+            std::fs::write(&path, &output.binding)
+                .with_context(|| format!("writing the binding to {path}"))?;
             println!("wrote {path}");
         }
         None => print!("{}", output.binding),
@@ -431,7 +473,11 @@ fn bind_objc(rest: &[String]) -> Result<()> {
 /// reach in its own namespace's module: one `.d.ts`, one `.values.ts` and one
 /// `.refused.txt` each.
 fn bind_winmd(rest: &[String]) -> Result<()> {
-    let flag = |name: &str| rest.windows(2).find(|pair| pair[0] == name).map(|pair| pair[1].clone());
+    let flag = |name: &str| {
+        rest.windows(2)
+            .find(|pair| pair[0] == name)
+            .map(|pair| pair[1].clone())
+    };
     let namespaces: Vec<String> = rest
         .iter()
         .enumerate()
@@ -439,7 +485,9 @@ fn bind_winmd(rest: &[String]) -> Result<()> {
         .map(|(_, arg)| arg.clone())
         .collect();
     if namespaces.is_empty() {
-        bail!("`nts bind-winmd` needs a namespace, as in `nts bind-winmd Windows.Win32.UI.WindowsAndMessaging`");
+        bail!(
+            "`nts bind-winmd` needs a namespace, as in `nts bind-winmd Windows.Win32.UI.WindowsAndMessaging`"
+        );
     }
     bind_winmd::run(&bind_winmd::Request {
         namespaces,
@@ -462,7 +510,9 @@ fn bind_c(rest: &[String]) -> Result<()> {
             .collect()
     };
     let single = |flag: &str| -> Option<String> {
-        rest.windows(2).find(|pair| pair[0] == flag).map(|pair| pair[1].clone())
+        rest.windows(2)
+            .find(|pair| pair[0] == flag)
+            .map(|pair| pair[1].clone())
     };
     let request = bind::Request {
         headers: repeated("--header"),
@@ -486,7 +536,9 @@ fn bind_c(rest: &[String]) -> Result<()> {
             .map(|pair| {
                 pair.split_once(':')
                     .map(|(f, p)| (f.to_owned(), p.to_owned()))
-                    .ok_or_else(|| anyhow::anyhow!("`--no-escape` takes `function:parameter`, not `{pair}`"))
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("`--no-escape` takes `function:parameter`, not `{pair}`")
+                    })
             })
             .collect::<Result<_>>()?,
         aliases: repeated("--alias")
@@ -614,7 +666,9 @@ docs/nts-config.md for what it declares.",
 /// first version of this line read "older ... means stale", which is the true
 /// half stated as though it were both.
 fn binary_identity() {
-    let Ok(exe) = std::env::current_exe() else { return };
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
     println!("binary {}", exe.display());
     let linked = exe
         .metadata()
@@ -649,7 +703,9 @@ fn arguments() -> Option<Vec<String>> {
 // the usage test reads its arms as written, so it is not folded to fit.
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
-    let Some(given) = arguments() else { return Ok(()) };
+    let Some(given) = arguments() else {
+        return Ok(());
+    };
     let mut args = given.into_iter();
     match args.next().as_deref() {
         Some("frontend") => {
@@ -696,8 +752,15 @@ fn main() -> Result<()> {
         // is how that convention is read without a machine that runs it.
         Some("emit-llvm") => {
             let rest: Vec<String> = args.collect();
-            let os = rest.windows(2).find(|pair| pair[0] == "--os").map_or(host_os(), |pair| pair[1].as_str());
-            emit_llvm(&project(&rest)?, Emission::from_flags(), llvm_platform(os, host_arch()))
+            let os = rest
+                .windows(2)
+                .find(|pair| pair[0] == "--os")
+                .map_or(host_os(), |pair| pair[1].as_str());
+            emit_llvm(
+                &project(&rest)?,
+                Emission::from_flags(),
+                llvm_platform(os, host_arch()),
+            )
         }
         // The third backend. Not textual, so `--text` renders the listing that
         // stands in for reading `program.c` -- disassembled from the bytes
@@ -827,8 +890,6 @@ fn main() -> Result<()> {
     }
 }
 
-
-
 /// A jar, unpacked into a directory this run owns.
 ///
 /// **`nts-jvm-emitter` has no zip dependency and will not grow one to open an
@@ -918,13 +979,18 @@ fn nonnull_overrides(path: &Utf8Path) -> Result<std::collections::BTreeSet<Strin
     let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
     let root: serde_json::Value =
         serde_json::from_str(&text).with_context(|| format!("parsing {path}"))?;
-    let classes = root.as_object().ok_or_else(|| anyhow!("{path}: the top level is not an object"))?;
+    let classes = root
+        .as_object()
+        .ok_or_else(|| anyhow!("{path}: the top level is not an object"))?;
     let mut out = std::collections::BTreeSet::new();
     for (class, body) in classes {
         if class.starts_with("//") {
             continue;
         }
-        let Some(nullability) = body.get("nullability").and_then(serde_json::Value::as_object) else {
+        let Some(nullability) = body
+            .get("nullability")
+            .and_then(serde_json::Value::as_object)
+        else {
             continue;
         };
         for (member, how) in nullability {
@@ -946,6 +1012,7 @@ fn nonnull_overrides(path: &Utf8Path) -> Result<std::collections::BTreeSet<Strin
     Ok(out)
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn bind_java(args: &[String]) -> Result<()> {
     let mut jar: Option<Utf8PathBuf> = None;
     let mut classes: Option<Utf8PathBuf> = None;
@@ -959,21 +1026,52 @@ fn bind_java(args: &[String]) -> Result<()> {
     let mut at = 0;
     while at < args.len() {
         let value = |at: usize, what: &str| -> Result<String> {
-            args.get(at + 1).cloned().ok_or_else(|| anyhow!("`{what}` needs a value"))
+            args.get(at + 1)
+                .cloned()
+                .ok_or_else(|| anyhow!("`{what}` needs a value"))
         };
         match args[at].as_str() {
-            "--jar" => { jar = Some(Utf8PathBuf::from(value(at, "--jar")?)); at += 2 }
-            "--classes" => { classes = Some(Utf8PathBuf::from(value(at, "--classes")?)); at += 2 }
-            "--package" => { package = Some(value(at, "--package")?); at += 2 }
-            "--out" => { out = Some(Utf8PathBuf::from(value(at, "--out")?)); at += 2 }
-            "--prelude" => { prelude = true; at += 1 }
-            "--keeps" => { keeps = true; at += 1 }
-            "--self-contained" => { self_contained = true; at += 1 }
-            "--members" => { members = Some(Utf8PathBuf::from(value(at, "--members")?)); at += 2 }
-            "--overrides" => { overrides = Some(Utf8PathBuf::from(value(at, "--overrides")?)); at += 2 }
+            "--jar" => {
+                jar = Some(Utf8PathBuf::from(value(at, "--jar")?));
+                at += 2;
+            }
+            "--classes" => {
+                classes = Some(Utf8PathBuf::from(value(at, "--classes")?));
+                at += 2;
+            }
+            "--package" => {
+                package = Some(value(at, "--package")?);
+                at += 2;
+            }
+            "--out" => {
+                out = Some(Utf8PathBuf::from(value(at, "--out")?));
+                at += 2;
+            }
+            "--prelude" => {
+                prelude = true;
+                at += 1;
+            }
+            "--keeps" => {
+                keeps = true;
+                at += 1;
+            }
+            "--self-contained" => {
+                self_contained = true;
+                at += 1;
+            }
+            "--members" => {
+                members = Some(Utf8PathBuf::from(value(at, "--members")?));
+                at += 2;
+            }
+            "--overrides" => {
+                overrides = Some(Utf8PathBuf::from(value(at, "--overrides")?));
+                at += 2;
+            }
             // Refused rather than ignored. A misspelled flag that is skipped
             // produces a correct-looking file built with the wrong options.
-            other => bail!("unknown argument `{other}`; nts bind takes --jar or --classes, --package, --out, --prelude, --keeps, --self-contained, --members, --overrides"),
+            other => bail!(
+                "unknown argument `{other}`; nts bind takes --jar or --classes, --package, --out, --prelude, --keeps, --self-contained, --members, --overrides"
+            ),
         }
     }
     // **What the class file cannot say**, supplied out of band.
@@ -1026,9 +1124,13 @@ fn bind_java(args: &[String]) -> Result<()> {
             None => want.is_empty(),
         })
         .filter(|name| {
-            !name.rsplit('/').next().unwrap_or(name).split('$').skip(1).any(|part| {
-                !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())
-            })
+            !name
+                .rsplit('/')
+                .next()
+                .unwrap_or(name)
+                .split('$')
+                .skip(1)
+                .any(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
         })
         .collect::<Vec<_>>();
     if names.is_empty() {
@@ -1048,14 +1150,16 @@ fn bind_java(args: &[String]) -> Result<()> {
     // Blank lines and `#`-comments are skipped so the list can explain itself.
     nts_jvm_emitter::bind::keep_members(curated(members.as_ref())?);
     nts_jvm_emitter::bind::prune_to(self_contained.then(|| {
-        nts_jvm_emitter::bind::classes_under(root.as_std_path()).into_iter().collect()
+        nts_jvm_emitter::bind::classes_under(root.as_std_path())
+            .into_iter()
+            .collect()
     }));
     let resolve = nts_jvm_emitter::bind::FromDirectory(root.as_std_path().to_path_buf());
     let mut bodies = Vec::new();
     for name in &names {
         let path = root.as_std_path().join(format!("{name}.class"));
-        let bytes = std::fs::read(&path)
-            .map_err(|why| anyhow!("cannot read {}: {why}", path.display()))?;
+        let bytes =
+            std::fs::read(&path).map_err(|why| anyhow!("cannot read {}: {why}", path.display()))?;
         let class = nts_jvm_emitter::read::class_file(&bytes)
             .map_err(|why| anyhow!("{}: {why}", path.display()))?;
         // Refuse by name, never half-emit: a declaration file that silently
@@ -1077,12 +1181,19 @@ fn bind_java(args: &[String]) -> Result<()> {
     // text while `com.example.d.ts` was what got read -- offsets landing one
     // declaration over, which resolves a call to the wrong overload rather than
     // to none. The same defect as the shared `.d.ts` path, one size smaller.
-    let stem = if prelude { format!("{package}.prelude") } else { package.clone() };
+    let stem = if prelude {
+        format!("{package}.prelude")
+    } else {
+        package.clone()
+    };
     let declarations = out.join(format!("{stem}.d.ts"));
     let table = out.join(format!("{stem}.bind"));
     std::fs::write(&declarations, &text)?;
     std::fs::write(&table, nts_jvm_emitter::bind::write_table(&package, &bound))?;
-    println!("nts bind: {} class(es) -> {declarations} and {table}", names.len());
+    println!(
+        "nts bind: {} class(es) -> {declarations} and {table}",
+        names.len()
+    );
     if self_contained {
         println!(
             "nts bind: {} member(s) left out, mentioning classes outside this tree",
@@ -1115,9 +1226,15 @@ fn write_keeps(root: &Utf8Path, names: &[String], path: &Utf8Path) -> Result<()>
         let Ok(bytes) = std::fs::read(root.as_std_path().join(format!("{name}.class"))) else {
             continue;
         };
-        let Ok(class) = nts_jvm_emitter::read::class_file(&bytes) else { continue };
+        let Ok(class) = nts_jvm_emitter::read::class_file(&bytes) else {
+            continue;
+        };
         for (key, escaping) in nts_jvm_emitter::escapes::table(&class) {
-            let list = escaping.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ");
+            let list = escaping
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
             rows.push(format!("  \"{key}\": [{list}]"));
         }
     }
@@ -1135,12 +1252,18 @@ fn write_keeps(root: &Utf8Path, names: &[String], path: &Utf8Path) -> Result<()>
 fn report_snapshot_diagnostics(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<()> {
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            eprintln!("warning: {}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+            eprintln!(
+                "warning: {}",
+                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+            );
         }
     }
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
-            eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+            eprintln!(
+                "{}",
+                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+            );
         }
         bail!("the program does not typecheck");
     }
@@ -1271,7 +1394,12 @@ fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     // listing it: `target.chromium()`'s DOM. One program per project, so every
     // target's -- as one generator serves them all, below.
     let mut surface: Vec<Utf8PathBuf> = Vec::new();
-    for file in resolved.products.values().flat_map(|product| product.targets.iter()).flat_map(|target| target.surface.iter()) {
+    for file in resolved
+        .products
+        .values()
+        .flat_map(|product| product.targets.iter())
+        .flat_map(|target| target.surface.iter())
+    {
         if !surface.contains(file) {
             surface.push(file.clone());
         }
@@ -1295,15 +1423,28 @@ fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     // for (`gir_surface`). One generator per program: a project for two of
     // these platforms at once would need them composed, which nothing asks
     // for yet.
-    let windows = resolved.products.values().flat_map(|product| product.targets.iter()).any(|target| target.os == "windows");
+    let windows = resolved
+        .products
+        .values()
+        .flat_map(|product| product.targets.iter())
+        .any(|target| target.os == "windows");
     source = if windows {
         source.with_generated(Box::new(windows_surface::WindowsBindings::default()))
     } else if apple.is_empty() {
         source.with_generated(Box::new(gir_surface::GirBindings::new(resolved.gi.clone())))
     } else {
         let package = config.parent().unwrap_or_else(|| Utf8Path::new("."));
-        let native = resolved.native.iter().map(|entry| package.join(&entry.dir)).collect();
-        source.with_generated(Box::new(objc_bindings::ObjcBindings::new(apple, native, package.to_path_buf(), resolved.dependencies.clone())))
+        let native = resolved
+            .native
+            .iter()
+            .map(|entry| package.join(&entry.dir))
+            .collect();
+        source.with_generated(Box::new(objc_bindings::ObjcBindings::new(
+            apple,
+            native,
+            package.to_path_buf(),
+            resolved.dependencies.clone(),
+        )))
     };
     let Some(react) = resolved.react else {
         return Ok(source);
@@ -1465,10 +1606,15 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
 
 /// Why `prepare` produced nothing, printed, as the error a command fails
 /// with: a strict error is the program's to fix, invalid HIR the compiler's.
-fn refused(snapshot: &nts_semantic_schema::SemanticSnapshot, unprepared: &hir::Unprepared) -> anyhow::Error {
+fn refused(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    unprepared: &hir::Unprepared,
+) -> anyhow::Error {
     eprintln!("{}", unprepared.render(&snapshot.sources));
     match unprepared {
-        hir::Unprepared::Rejected(errors) => anyhow::anyhow!("the program does not compile: {} error(s)", errors.len()),
+        hir::Unprepared::Rejected(errors) => {
+            anyhow::anyhow!("the program does not compile: {} error(s)", errors.len())
+        }
         hir::Unprepared::Invalid(_) => anyhow::anyhow!("refusing to emit code from invalid HIR"),
     }
 }
@@ -1481,11 +1627,22 @@ fn dump_strict(tsconfig: &Utf8Path) -> Result<()> {
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     report_snapshot_diagnostics(&snapshot)?;
     let lowered = hir::lower::lower(&snapshot);
-    let errors = hir::obligations::check(&lowered.program, &lowered.arrivals.at_signature, nts_core::hir::HOST);
+    let errors = hir::obligations::check(
+        &lowered.program,
+        &lowered.arrivals.at_signature,
+        nts_core::hir::HOST,
+    );
     for error in &errors {
-        println!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, error));
+        println!(
+            "{}",
+            nts_diagnostics::diagnostic_line(&snapshot.sources, error)
+        );
         for label in &error.labels {
-            println!("  {}: {}", nts_diagnostics::where_it_is(&snapshot.sources, &label.location), label.message);
+            println!(
+                "  {}: {}",
+                nts_diagnostics::where_it_is(&snapshot.sources, &label.location),
+                label.message
+            );
         }
     }
     println!("{} error(s)", errors.len());
@@ -1507,7 +1664,10 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
     let judged = hir::obligations::census(&program, nts_core::hir::HOST);
 
     let reasons = |why: &[Why]| -> String {
-        why.iter().map(|why| hir::obligations::reason(*why)).collect::<Vec<_>>().join("; ")
+        why.iter()
+            .map(|why| hir::obligations::reason(*why))
+            .collect::<Vec<_>>()
+            .join("; ")
     };
     let known = |source: &Source| -> String {
         match source {
@@ -1529,21 +1689,31 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
     for one in &judged {
         let obligation = &one.obligation;
         let place = nts_diagnostics::where_it_is(&snapshot.sources, &obligation.location);
-        let c_type = hir::native::Type::Scalar(obligation.kind).c_type().into_owned();
+        let c_type = hir::native::Type::Scalar(obligation.kind)
+            .c_type()
+            .into_owned();
         let into = match &obligation.into {
             Into::Parameter { function, position } => format!("{function}#{position}"),
-            Into::NativeArgument { function, position } => format!("{function}#{position} (native)"),
+            Into::NativeArgument { function, position } => {
+                format!("{function}#{position} (native)")
+            }
             Into::NativeStore => "a native store".to_owned(),
             Into::Field { field } => format!("field {field}"),
             Into::Global { global } => format!("global {global}"),
             Into::Return => format!("{}'s result", one.func),
-            Into::ReturnElement { position } => format!("element {position} of {}'s result", one.func),
+            Into::ReturnElement { position } => {
+                format!("element {position} of {}'s result", one.func)
+            }
             Into::CallbackReturn { callback } => format!("{callback}'s result (native callback)"),
             Into::Local { local } => format!("local {local}"),
-            Into::ClosureArgument { position } => format!("argument #{position} through a function type"),
+            Into::ClosureArgument { position } => {
+                format!("argument #{position} through a function type")
+            }
             Into::Assertion => "an `as`".to_owned(),
         };
-        let range = obligation.range().map_or_else(|| "float".to_owned(), |(lo, hi)| format!("{lo}..{hi}"));
+        let range = obligation
+            .range()
+            .map_or_else(|| "float".to_owned(), |(lo, hi)| format!("{lo}..{hi}"));
         let verdict = if one.proven() { "proven" } else { "unproven" };
         if one.proven() {
             proven += 1;
@@ -1559,14 +1729,21 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
                 one.made
             );
         } else {
-            println!("{verdict:<9} {place}  {into} ({c_type}, {range}): knows {}, made by {:?}", known(&one.source), one.made);
+            println!(
+                "{verdict:<9} {place}  {into} ({c_type}, {range}): knows {}, made by {:?}",
+                known(&one.source),
+                one.made
+            );
             if !one.proven() {
                 println!("          {}", reasons(&one.unproven));
             }
         }
     }
     if !tsv {
-        println!("{} obligation(s): {proven} proven, {unproven} unproven", judged.len());
+        println!(
+            "{} obligation(s): {proven} proven, {unproven} unproven",
+            judged.len()
+        );
     }
     Ok(())
 }
@@ -1580,7 +1757,9 @@ fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
     }
 
     let program = if prepared {
-        hir::prepare(&snapshot).map_err(|unprepared| refused(&snapshot, &unprepared))?.program
+        hir::prepare(&snapshot)
+            .map_err(|unprepared| refused(&snapshot, &unprepared))?
+            .program
     } else {
         hir::lower::lower(&snapshot).program
     };
@@ -1789,16 +1968,15 @@ fn dump_receivers(args: &[String]) -> Result<()> {
     // answer", so it goes above the table and not in a footnote.
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            println!("warning: {}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+            println!(
+                "warning: {}",
+                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+            );
         }
     }
 
-    println!(
-        "unit: one field access -- a place a compiled program computes a field's offset."
-    );
-    println!(
-        "population: every field access in this program, refused functions included."
-    );
+    println!("unit: one field access -- a place a compiled program computes a field's offset.");
+    println!("population: every field access in this program, refused functions included.");
     println!();
 
     if per_site {
@@ -1822,8 +2000,7 @@ fn receivers_table(
 ) {
     use nts_core::receivers::{Access, Shape};
 
-    let mut by_file: std::collections::BTreeMap<u32, [u32; 4]> =
-        std::collections::BTreeMap::new();
+    let mut by_file: std::collections::BTreeMap<u32, [u32; 4]> = std::collections::BTreeMap::new();
     for site in &census.sites {
         let row = by_file.entry(site.location.file.0).or_default();
         row[match site.access {
@@ -1866,8 +2043,18 @@ fn receivers_table(
     println!(
         "{:<52} {:>6} {:>6} {:>5} {:>7} {:>9}",
         format!("total, {} files", by_file.len()),
-        census.sites.iter().filter(|s| s.access == Access::Read).map(|s| s.fields).sum::<u32>(),
-        census.sites.iter().filter(|s| s.access == Access::Write).map(|s| s.fields).sum::<u32>(),
+        census
+            .sites
+            .iter()
+            .filter(|s| s.access == Access::Read)
+            .map(|s| s.fields)
+            .sum::<u32>(),
+        census
+            .sites
+            .iter()
+            .filter(|s| s.access == Access::Write)
+            .map(|s| s.fields)
+            .sum::<u32>(),
         census
             .sites
             .iter()
@@ -1905,7 +2092,6 @@ fn receivers_table(
         println!("  a multiplier over a site, not a site: counted here and not above.");
         println!();
     }
-
 }
 
 /// Shapes, the spread multiplier, the exclusions, and the bracket.
@@ -1914,9 +2100,18 @@ fn receivers_summary(census: &nts_core::receivers::Census) {
     let interface = census.through_interfaces();
 
     let excluded = census.excluded;
-    println!("excluded  method or accessor  {:>7}  no storage to make indirect", excluded.not_stored);
-    println!("excluded  index signature     {:>7}  a table: no fixed offset to lose", excluded.index_signature);
-    println!("excluded  not a struct        {:>7}  a primitive, an array, `any`", excluded.not_a_struct);
+    println!(
+        "excluded  method or accessor  {:>7}  no storage to make indirect",
+        excluded.not_stored
+    );
+    println!(
+        "excluded  index signature     {:>7}  a table: no fixed offset to lose",
+        excluded.index_signature
+    );
+    println!(
+        "excluded  not a struct        {:>7}  a primitive, an array, `any`",
+        excluded.not_a_struct
+    );
     println!(
         "excluded  undeclared member   {:>7}  the type declares no such member",
         excluded.member_not_declared
@@ -1947,9 +2142,7 @@ fn receivers_summary(census: &nts_core::receivers::Census) {
     let share = f64::from(interface) * 100.0 / f64::from(total.max(1));
     let generated = census.generated_fields();
     let narrow_share = f64::from(interface) * 100.0 / f64::from(generated.max(1));
-    println!(
-        "broad indirection costs {interface} of {total} field accesses ({share:.1}%),"
-    );
+    println!("broad indirection costs {interface} of {total} field accesses ({share:.1}%),");
     // Two denominators, because a library receiver is two different things and
     // this cannot tell which. `Math.PI` reads no slot of ours and dilutes the
     // share; a `PropertyDescriptor` inhabited by a literal we built reads at a
@@ -1970,15 +2163,11 @@ fn receivers_summary(census: &nts_core::receivers::Census) {
     println!(
         "name, plus the ones nothing could examine. names over-approximate, so that set is safe."
     );
-    println!(
-        "neither bound is implementable: record 0294 rules that the complete set of classes"
-    );
+    println!("neither bound is implementable: record 0294 rules that the complete set of classes");
     println!(
         "structurally satisfying each interface is one nobody has. the upper bound reads only"
     );
-    println!(
-        "heritage clauses and misses a structural satisfier; the lower compares member names"
-    );
+    println!("heritage clauses and misses a structural satisfier; the lower compares member names");
     println!("and not types. they bracket the argument rather than answering it.");
     println!();
     println!(
@@ -1987,7 +2176,7 @@ fn receivers_summary(census: &nts_core::receivers::Census) {
     );
     println!("have to cover, as against what the cost is paid on.");
     arm_distribution(census, sound);
-    }
+}
 
 /// How long the type-test chain would be, where there is one.
 ///
@@ -2014,7 +2203,11 @@ fn arm_distribution(census: &nts_core::receivers::Census, sound: u32) {
     println!("arms  accesses   how long a type-test chain through that receiver would be");
     for (arms, fields) in &rows {
         let share = f64::from(*fields) * 100.0 / f64::from(counted.max(1));
-        let note = if *arms == 1 { "  no chain: nothing else can inhabit it" } else { "" };
+        let note = if *arms == 1 {
+            "  no chain: nothing else can inhabit it"
+        } else {
+            ""
+        };
         println!("{arms:>4}  {fields:>8}   {share:>5.1}%{note}");
     }
     if unknown > 0 {
@@ -2250,8 +2443,6 @@ fn describe_node(record: &nts_semantic_schema::NodeRecord) -> String {
     }
 }
 
-
-
 /// One function per header, one block per label, one operation per line.
 fn print_program(snapshot: &nts_semantic_schema::SemanticSnapshot, program: &hir::Program) {
     for func in &program.funcs {
@@ -2280,7 +2471,11 @@ fn print_program(snapshot: &nts_semantic_schema::SemanticSnapshot, program: &hir
         println!(
             "{}{}func {}({}) -> {} {{  @ {}",
             if func.exported { "export " } else { "" },
-            if func.abstract_declaration { "declare " } else { "" },
+            if func.abstract_declaration {
+                "declare "
+            } else {
+                ""
+            },
             func.name,
             params.join(", "),
             render(&func.return_type),
@@ -2359,12 +2554,18 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // explains the others.
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            println!("warning: {}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+            println!(
+                "warning: {}",
+                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+            );
         }
     }
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
-            println!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+            println!(
+                "{}",
+                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+            );
         }
         bail!("the program does not typecheck");
     }
@@ -2636,13 +2837,31 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
         // Named by the function it bridges rather than by the closure value, so
         // reading the dump answers "which function does C get" without first
         // resolving a layout by hand.
-        OpKind::NativeBridge { closure, signature, context, once, bridging } => {
+        OpKind::NativeBridge {
+            closure,
+            signature,
+            context,
+            once,
+            bridging,
+        } => {
             let with = if *context { " with context" } else { "" };
             let once = if *once { ", once" } else { "" };
-            format!("bridge %{} as {}{with}{once}{}", closure.0, signature.name, bridging_note(bridging))
+            format!(
+                "bridge %{} as {}{with}{once}{}",
+                closure.0,
+                signature.name,
+                bridging_note(bridging)
+            )
         }
-        OpKind::NativeBlock { invoke, context, signature } => {
-            format!("block %{} with %{} as {}", invoke.0, context.0, signature.name)
+        OpKind::NativeBlock {
+            invoke,
+            context,
+            signature,
+        } => {
+            format!(
+                "block %{} with %{} as {}",
+                invoke.0, context.0, signature.name
+            )
         }
         _ => unreachable!("only the constants reach here"),
     };
@@ -2687,8 +2906,14 @@ fn render_erasure(index: usize, ty: &str, kind: &OpKind, value: nts_core::hir::V
     let verb = match kind {
         // The absence is printed with the name, because two erases of one type
         // differ only in it and a dump that omitted it could not show which.
-        OpKind::Erase { absent: nts_core::hir::Absent::Null, .. } => "erase.or.null",
-        OpKind::Erase { absent: nts_core::hir::Absent::Undefined, .. } => "erase.or.undefined",
+        OpKind::Erase {
+            absent: nts_core::hir::Absent::Null,
+            ..
+        } => "erase.or.null",
+        OpKind::Erase {
+            absent: nts_core::hir::Absent::Undefined,
+            ..
+        } => "erase.or.undefined",
         OpKind::Erase { .. } => "erase",
         OpKind::TagOf { .. } => "tag.of",
         _ => "unerase",
@@ -2761,7 +2986,10 @@ fn render_shared_field(
         .map(|arm| format!("obj{}", arm.0))
         .collect::<Vec<_>>()
         .join(" | ");
-    format!("%{index} = field.get.shared %{}.{field} over {arms} : {ty}", value.0)
+    format!(
+        "%{index} = field.get.shared %{}.{field} over {arms} : {ty}",
+        value.0
+    )
 }
 
 /// An open read's arms, each with **its own** index.
@@ -2780,34 +3008,91 @@ fn render_arms(arms: &[nts_core::hir::FieldArm]) -> String {
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
-        OpKind::NativeLoad { pointer, index: offset } => format!("%{index} = native.load %{}[%{}] : {ty}", pointer.0, offset.0),
+        OpKind::NativeLoad {
+            pointer,
+            index: offset,
+        } => format!(
+            "%{index} = native.load %{}[%{}] : {ty}",
+            pointer.0, offset.0
+        ),
         OpKind::NativeLocal { count } => format!("%{index} = native.local {count} : {ty}"),
         // The storage and not a byte count: the count is the target's.
-        OpKind::NativeSizeOf(storage) => format!("%{index} = native.sizeof {} : {ty}", storage.c_type()),
+        OpKind::NativeSizeOf(storage) => {
+            format!("%{index} = native.sizeof {} : {ty}", storage.c_type())
+        }
         OpKind::ObjcClass { name, .. } => format!("%{index} = objc.class {name} : {ty}"),
         OpKind::ObjcSelector { name } => format!("%{index} = objc.selector {name} : {ty}"),
         OpKind::NativeMalloc { bytes } => format!("%{index} = native.malloc %{} : {ty}", bytes.0),
         OpKind::NativeFree { pointer } => format!("native.free %{}", pointer.0),
-        OpKind::PromiseSubscribe { promise, reaction, slot } => {
-            format!("promise.subscribe %{} <- %{}[{slot}]", promise.0, reaction.0)
+        OpKind::PromiseSubscribe {
+            promise,
+            reaction,
+            slot,
+        } => {
+            format!(
+                "promise.subscribe %{} <- %{}[{slot}]",
+                promise.0, reaction.0
+            )
         }
-        OpKind::NativeCopy { destination, source } => {
+        OpKind::NativeCopy {
+            destination,
+            source,
+        } => {
             format!("native.copy %{} <- %{}", destination.0, source.0)
         }
-        OpKind::NativeBridge { closure, signature, context, once, bridging } => {
+        OpKind::NativeBridge {
+            closure,
+            signature,
+            context,
+            once,
+            bridging,
+        } => {
             let with = if *context { " with context" } else { "" };
             let once = if *once { ", once" } else { "" };
-            format!("%{index} = native.bridge %{} as {}{with}{once}{} : {ty}", closure.0, signature.name, bridging_note(bridging))
+            format!(
+                "%{index} = native.bridge %{} as {}{with}{once}{} : {ty}",
+                closure.0,
+                signature.name,
+                bridging_note(bridging)
+            )
         }
-        OpKind::NativeBlock { invoke, context, signature } => {
-            format!("%{index} = native.block %{} with %{} as {} : {ty}", invoke.0, context.0, signature.name)
+        OpKind::NativeBlock {
+            invoke,
+            context,
+            signature,
+        } => {
+            format!(
+                "%{index} = native.block %{} with %{} as {} : {ty}",
+                invoke.0, context.0, signature.name
+            )
         }
-        OpKind::DelegateInvoke { signature } => format!("%{index} = native.delegate.invoke {} : {ty}", signature.name),
-        OpKind::NativeIndexAddress { pointer, index: offset } => format!("%{index} = native.index.addr %{}[%{}] : {ty}", pointer.0, offset.0),
-        OpKind::NativeFieldAddress { pointer, field } => format!("%{index} = native.field.addr %{}.{field} : {ty}", pointer.0),
-        OpKind::NativeBitLoad { pointer, field } => format!("%{index} = native.bit.load %{}.{field} : {ty}", pointer.0),
-        OpKind::NativeBitStore { pointer, field, value } => format!("native.bit.store %{}.{field} = %{}", pointer.0, value.0),
-        OpKind::NativeStore { pointer, index, value } => format!("native.store %{}[%{}], %{}", pointer.0, index.0, value.0),
+        OpKind::DelegateInvoke { signature } => format!(
+            "%{index} = native.delegate.invoke {} : {ty}",
+            signature.name
+        ),
+        OpKind::NativeIndexAddress {
+            pointer,
+            index: offset,
+        } => format!(
+            "%{index} = native.index.addr %{}[%{}] : {ty}",
+            pointer.0, offset.0
+        ),
+        OpKind::NativeFieldAddress { pointer, field } => {
+            format!("%{index} = native.field.addr %{}.{field} : {ty}", pointer.0)
+        }
+        OpKind::NativeBitLoad { pointer, field } => {
+            format!("%{index} = native.bit.load %{}.{field} : {ty}", pointer.0)
+        }
+        OpKind::NativeBitStore {
+            pointer,
+            field,
+            value,
+        } => format!("native.bit.store %{}.{field} = %{}", pointer.0, value.0),
+        OpKind::NativeStore {
+            pointer,
+            index,
+            value,
+        } => format!("native.store %{}[%{}], %{}", pointer.0, index.0, value.0),
         OpKind::Param(n) => format!("%{index} = param {n} : {ty}"),
         OpKind::BlockParam(n) => format!("%{index} = blockparam {n} : {ty}"),
         OpKind::ConstInt(_)
@@ -2823,9 +3108,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             value.0,
             classes.len()
         ),
-        OpKind::Erase { value, .. }
-        | OpKind::TagOf { value }
-        | OpKind::Unerase { value } => {
+        OpKind::Erase { value, .. } | OpKind::TagOf { value } | OpKind::Unerase { value } => {
             render_erasure(index, &ty, &op.kind, *value)
         }
         OpKind::Binary { op: bin, lhs, rhs } => {
@@ -2892,9 +3175,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::CellReady { cell, name } => {
             format!("cell.ready %{} `{name}`", cell.0)
         }
-        OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => {
-            render_element(index, &ty, &op.kind)
-        }
+        OpKind::ArrayGet { .. } | OpKind::ArraySet { .. } => render_element(index, &ty, &op.kind),
         OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. } => {
             suspension(index, op)
         }
@@ -3050,7 +3331,6 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-
 /// The entry point of a standalone program, and the host it needs.
 ///
 /// Both are a *choice* rather than part of the runtime: an embedder with its
@@ -3120,8 +3400,15 @@ fn write_standalone(
         sources.join(", "),
         nts_codegen_c::UV_HOST_HEADER_NAME,
         nts_codegen_c::UV_HOST_SOURCE_NAME,
-        host.files().map_or_else(String::new, |[(header, _), (source, _)]| format!(", {header}, {source}")),
-        if witness { format!(", {}", nts_codegen_c::NATIVE_WITNESS_NAME) } else { String::new() },
+        host.files()
+            .map_or_else(String::new, |[(header, _), (source, _)]| format!(
+                ", {header}, {source}"
+            )),
+        if witness {
+            format!(", {}", nts_codegen_c::NATIVE_WITNESS_NAME)
+        } else {
+            String::new()
+        },
     );
     // Every translation unit the program needs, which is not a fixed list: a
     // program that converts case gets `nts_unicode.c` too, and printing a
@@ -3135,7 +3422,9 @@ fn write_standalone(
     // 81 KB to 16 KB, because most of the runtime is unreachable from any one
     // program too.
     if !linking {
-        let glib_source = host.source().map_or_else(String::new, |source| format!(" {source}"));
+        let glib_source = host
+            .source()
+            .map_or_else(String::new, |source| format!(" {source}"));
         let glib_flags = match host {
             nts_codegen_c::LoopHost::Libuv => "",
             nts_codegen_c::LoopHost::Glib => " $(pkg-config --cflags --libs glib-2.0)",
@@ -3146,9 +3435,9 @@ fn write_standalone(
             nts_codegen_c::LoopHost::Win32 => " -luser32",
         };
         println!(
-        "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {}{glib_source} -luv -lm{glib_flags} -o program",
-        sources.join(" "),
-        nts_codegen_c::UV_HOST_SOURCE_NAME
+            "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {}{glib_source} -luv -lm{glib_flags} -o program",
+            sources.join(" "),
+            nts_codegen_c::UV_HOST_SOURCE_NAME
         );
     }
     Ok(())
@@ -3221,6 +3510,7 @@ impl Shape {
 /// named, with the backend, rather than skipped -- a build that silently omits
 /// one of three targets is worse than one that stops, because the missing
 /// artifact is discovered by whoever links against it.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn build(rest: &[String]) -> Result<()> {
     let tsconfig = project(rest)?;
     let Some(config_path) = nts_build::config::beside(&tsconfig) else {
@@ -3266,8 +3556,14 @@ fn build(rest: &[String]) -> Result<()> {
         if product.targets.is_empty() {
             bail!("product `{name}` names no targets, so there is nothing to build it for")
         }
-        let emission =
-            Emission { shape: Shape::of(&product.kind), product: Some((name, product)), linking: true, host: nts_codegen_c::LoopHost::Libuv, abi: native_abi(host_os()), llvm: None };
+        let emission = Emission {
+            shape: Shape::of(&product.kind),
+            product: Some((name, product)),
+            linking: true,
+            host: nts_codegen_c::LoopHost::Libuv,
+            abi: native_abi(host_os()),
+            llvm: None,
+        };
         for target in targets_for(name, product, only_os.as_deref())? {
             // **Before anything is written.** A kind whose packaging does not
             // exist would otherwise emit, compile, and produce a file of the
@@ -3391,7 +3687,9 @@ fn build(rest: &[String]) -> Result<()> {
             match target.backend.as_str() {
                 backend @ ("c" | "llvm") => {
                     let emission = Emission {
-                        llvm: (backend == "llvm").then(|| llvm_platform(&target.os, target.arch.as_deref().unwrap_or(host_arch()))),
+                        llvm: (backend == "llvm").then(|| {
+                            llvm_platform(&target.os, target.arch.as_deref().unwrap_or(host_arch()))
+                        }),
                         ..emission
                     };
                     refused += build_c(
@@ -3417,7 +3715,9 @@ fn build(rest: &[String]) -> Result<()> {
                     android.as_ref(),
                     &needs,
                 )?,
-                other => bail!("product `{name}` names backend `{other}`, which is not one of c, llvm, jvm"),
+                other => bail!(
+                    "product `{name}` names backend `{other}`, which is not one of c, llvm, jvm"
+                ),
             }
             built += 1;
         }
@@ -3459,7 +3759,11 @@ fn unresolved_foreign(
         // answered TS2305, and was never bound whole.
         let module = match diagnostic.code.as_str() {
             "TS2307" => diagnostic.message.split('\'').nth(1),
-            "TS2305" => diagnostic.message.split('"').nth(1).filter(|module| module.starts_with("winrt:")),
+            "TS2305" => diagnostic
+                .message
+                .split('"')
+                .nth(1)
+                .filter(|module| module.starts_with("winrt:")),
             _ => None,
         };
         let Some(module) = module else { continue };
@@ -3470,7 +3774,10 @@ fn unresolved_foreign(
             continue;
         };
         let at = Utf8PathBuf::from(source.display_path.as_str());
-        if !wanted.iter().any(|(m, f): &(String, Utf8PathBuf)| m == module && f == &at) {
+        if !wanted
+            .iter()
+            .any(|(m, f): &(String, Utf8PathBuf)| m == module && f == &at)
+        {
             wanted.push((module.to_owned(), at));
         }
     }
@@ -3493,8 +3800,12 @@ fn imported_names(file: &Utf8Path, module: &str) -> Result<(Vec<String>, Vec<Str
     let mut values = Vec::new();
     let mut types = Vec::new();
     for statement in text.split("import ").skip(1) {
-        let Some((clause, rest)) = statement.split_once(" from ") else { continue };
-        let Some(spelled) = rest.split(['"', '\'']).nth(1) else { continue };
+        let Some((clause, rest)) = statement.split_once(" from ") else {
+            continue;
+        };
+        let Some(spelled) = rest.split(['"', '\'']).nth(1) else {
+            continue;
+        };
         if spelled != module {
             continue;
         }
@@ -3571,8 +3882,11 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
     // it away, once.
     let generated_here = project.join("types").join("gir");
     if generated_here.join(".nts-stamp").is_file() {
-        std::fs::remove_dir_all(&generated_here).with_context(|| format!("removing {generated_here}"))?;
-        eprintln!("note: removed {generated_here}, the GIR bindings an older nts generated there; they come from the platform store now");
+        std::fs::remove_dir_all(&generated_here)
+            .with_context(|| format!("removing {generated_here}"))?;
+        eprintln!(
+            "note: removed {generated_here}, the GIR bindings an older nts generated there; they come from the platform store now"
+        );
     }
     // A `winrt:` or `c:Windows.Win32.*` module is Windows' platform,
     // installed from the store when the program is opened
@@ -3582,15 +3896,20 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
     for (generated, what) in [("winrt", "Windows Runtime"), ("winmd", "Win32")] {
         let generated_here = project.join("types").join(generated);
         if generated_here.join(".nts-stamp").is_file() {
-            std::fs::remove_dir_all(&generated_here).with_context(|| format!("removing {generated_here}"))?;
-            eprintln!("note: removed {generated_here}, the {what} bindings an older nts generated there; they come from the platform store now");
+            std::fs::remove_dir_all(&generated_here)
+                .with_context(|| format!("removing {generated_here}"))?;
+            eprintln!(
+                "note: removed {generated_here}, the {what} bindings an older nts generated there; they come from the platform store now"
+            );
         }
     }
     for (module, file) in wanted {
         if bind_gir::namespace_of(&module, &search).is_some() {
             continue;
         }
-        if bind_winmd::namespace_of(&module).is_some() || bind_winmd::winrt::namespace_of(&module).is_some() {
+        if bind_winmd::namespace_of(&module).is_some()
+            || bind_winmd::winrt::namespace_of(&module).is_some()
+        {
             continue;
         }
         bind_one(&module, &file, targets, project)?;
@@ -3659,7 +3978,9 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
         // reach there anyway -- it resolves the package through `paths` and its
         // own `include` is what governs. Two apps depending on one package each
         // get their own, which is what self-contained means.
-        let out = into.join("types").join(format!("{}.d.ts", module.replace([':', '/'], "-")));
+        let out = into
+            .join("types")
+            .join(format!("{}.d.ts", module.replace([':', '/'], "-")));
         std::fs::create_dir_all(out.parent().unwrap_or(into))
             .with_context(|| format!("creating {out}"))?;
         let mut command = std::process::Command::new(std::env::current_exe()?);
@@ -3677,8 +3998,11 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
         // so without them this read a header the build could compile and
         // reported that clang could not.
         for id in targets {
-            let claimed = nts_build::dependencies::resolve(package, &resolved.dependencies, id, None)
-                .with_context(|| format!("resolving the dependencies `{config_path}` declares"))?;
+            let claimed =
+                nts_build::dependencies::resolve(package, &resolved.dependencies, id, None)
+                    .with_context(|| {
+                        format!("resolving the dependencies `{config_path}` declares")
+                    })?;
             for flag in claimed.cflags {
                 command.arg("--clang").arg(flag);
             }
@@ -3691,7 +4015,10 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
                 String::from_utf8_lossy(&output.stderr)
             );
         }
-        println!("  bound {module} from {} into {out}", entry.header.as_deref().unwrap_or_default());
+        println!(
+            "  bound {module} from {} into {out}",
+            entry.header.as_deref().unwrap_or_default()
+        );
     }
     Ok(())
 }
@@ -3708,12 +4035,18 @@ fn native_sources(
     let mut found = Vec::new();
     for config_path in roots {
         let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
-        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        let Ok(resolved) = nts_build::config::resolve(config_path) else {
+            continue;
+        };
         for entry in &resolved.native {
             if !entry.covers(&target.id, target.minimum_version.as_deref()) {
                 continue;
             }
-            found.extend(directory_sources(&package.join(&entry.dir), target, &entry.dir)?);
+            found.extend(directory_sources(
+                &package.join(&entry.dir),
+                target,
+                &entry.dir,
+            )?);
         }
     }
     // What the target links besides: the native half of its `surface`, read
@@ -3721,7 +4054,10 @@ fn native_sources(
     // package's is not: no package can stand in for the target's.
     for directory in &target.native {
         if !directory.is_dir() {
-            bail!("target `{}` links the native directory {directory}, which is not there", target.id);
+            bail!(
+                "target `{}` links the native directory {directory}, which is not there",
+                target.id
+            );
         }
         found.extend(directory_sources(directory, target, directory.as_str())?);
     }
@@ -3731,15 +4067,30 @@ fn native_sources(
 
 /// The translation units of one native directory, as `compiled_here` picks
 /// them: none where the directory cannot be read.
-fn directory_sources(directory: &Utf8Path, target: &nts_build::config::Target, owner: &str) -> Result<Vec<NativeSource>> {
+fn directory_sources(
+    directory: &Utf8Path,
+    target: &nts_build::config::Target,
+    owner: &str,
+) -> Result<Vec<NativeSource>> {
     let module = directory.file_name().unwrap_or("native").to_owned();
-    let Ok(listing) = std::fs::read_dir(directory) else { return Ok(Vec::new()) };
+    let Ok(listing) = std::fs::read_dir(directory) else {
+        return Ok(Vec::new());
+    };
     let mut found = Vec::new();
     for item in listing.flatten() {
-        let path = Utf8PathBuf::from_path_buf(item.path()).map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
+        let path = Utf8PathBuf::from_path_buf(item.path())
+            .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
         if compiled_here(&path, target, owner)? {
             let object = Utf8PathBuf::from(format!("{}.o", path.file_name().unwrap_or("native")));
-            found.push(NativeSource { directory: directory.to_owned(), path, module: module.clone(), include: Vec::new(), headers: Vec::new(), imports: Vec::new(), object });
+            found.push(NativeSource {
+                directory: directory.to_owned(),
+                path,
+                module: module.clone(),
+                include: Vec::new(),
+                headers: Vec::new(),
+                imports: Vec::new(),
+                object,
+            });
         }
     }
     Ok(found)
@@ -3783,7 +4134,11 @@ fn compiled_here(path: &Utf8Path, target: &nts_build::config::Target, owner: &st
         Some(language @ ("m" | "swift")) => bail!(
             "{path} is {}, which builds for macOS and iOS here, and `{owner}` is compiled for {}: \
              name the targets the directory is for with `targets` in its `sources` entry",
-            if language == "m" { "Objective-C" } else { "Swift" },
+            if language == "m" {
+                "Objective-C"
+            } else {
+                "Swift"
+            },
             target.id
         ),
         _ => Ok(false),
@@ -3794,7 +4149,10 @@ fn compiled_here(path: &Utf8Path, target: &nts_build::config::Target, owner: &st
 /// each library's root, since a pod keeps them in directories of its own --
 /// compiled against the library's header maps, each library's Swift one
 /// module of its name.
-fn module_sources(modules: &[nts_build::dependencies::NativeModule], target: &nts_build::config::Target) -> Result<Vec<NativeSource>> {
+fn module_sources(
+    modules: &[nts_build::dependencies::NativeModule],
+    target: &nts_build::config::Target,
+) -> Result<Vec<NativeSource>> {
     let mut found = Vec::new();
     for module in modules {
         for path in module.source_files() {
@@ -3802,8 +4160,20 @@ fn module_sources(modules: &[nts_build::dependencies::NativeModule], target: &nt
                 let relative = path.strip_prefix(&module.sources).unwrap_or(&path);
                 let object = Utf8PathBuf::from(&module.name).join(format!("{relative}.o"));
                 let (include, headers) = (module.include.clone(), module.headers.clone());
-                let imports = module.clang_dependencies(modules).into_iter().map(|dependency| (dependency.name.clone(), dependency.headers.clone())).collect();
-                found.push(NativeSource { directory: module.sources.clone(), path, module: module.name.clone(), include, headers, imports, object });
+                let imports = module
+                    .clang_dependencies(modules)
+                    .into_iter()
+                    .map(|dependency| (dependency.name.clone(), dependency.headers.clone()))
+                    .collect();
+                found.push(NativeSource {
+                    directory: module.sources.clone(),
+                    path,
+                    module: module.name.clone(),
+                    include,
+                    headers,
+                    imports,
+                    object,
+                });
             }
         }
     }
@@ -3841,7 +4211,11 @@ fn build_jvm(
     // list there and reads as having no native code at all.
     let java = compile_java_roots(name, config_roots, target, sdk, out, &needs.classpath)?;
     if !java.is_empty() {
-        println!("  compiled {} Java package(s) in: {}", java.len(), java.join(", "));
+        println!(
+            "  compiled {} Java package(s) in: {}",
+            java.len(),
+            java.join(", ")
+        );
     }
     let classes = package_jvm(name, product, out, &java)?;
     match product.kind.as_str() {
@@ -3855,7 +4229,15 @@ fn build_jvm(
         "aar" => {
             println!(
                 "  {}",
-                package_aar(name, product, out, &classes, target, tsconfig, &needs.classpath)?
+                package_aar(
+                    name,
+                    product,
+                    out,
+                    &classes,
+                    target,
+                    tsconfig,
+                    &needs.classpath
+                )?
             );
             if !needs.classpath.is_empty() {
                 println!("  with {} pinned jar(s) in libs/", needs.classpath.len());
@@ -3870,7 +4252,10 @@ fn build_jvm(
                 package_runnable_jar(name, out, &classes, initializes, &needs.classpath)?
             );
             if !needs.classpath.is_empty() {
-                println!("  with {} pinned dependency jar(s) inside it", needs.classpath.len());
+                println!(
+                    "  with {} pinned dependency jar(s) inside it",
+                    needs.classpath.len()
+                );
             }
         }
         "application" | "executable" => {
@@ -3890,7 +4275,10 @@ fn build_jvm(
                 )?
             );
             if !needs.classpath.is_empty() {
-                println!("  with {} pinned jar(s) dexed into it", needs.classpath.len());
+                println!(
+                    "  with {} pinned jar(s) dexed into it",
+                    needs.classpath.len()
+                );
             }
             println!(
                 "  signed with the debug key at {}, which is not a release key",
@@ -3945,15 +4333,33 @@ fn build_c(
     } else {
         nts_codegen_c::LoopHost::Libuv
     };
-    let wrote = emit_c(tsconfig, Some(out), Emission { host, abi: native_abi(&target.os), ..emission })?;
+    let wrote = emit_c(
+        tsconfig,
+        Some(out),
+        Emission {
+            host,
+            abi: native_abi(&target.os),
+            ..emission
+        },
+    )?;
     let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
     println!("  {artifact}");
-    let shipped: Vec<Utf8PathBuf> = vendored_frameworks(needs, target)?.into_iter().filter(|framework| framework.dynamic).map(|framework| framework.slice).collect();
+    let shipped: Vec<Utf8PathBuf> = vendored_frameworks(needs, target)?
+        .into_iter()
+        .filter(|framework| framework.dynamic)
+        .map(|framework| framework.slice)
+        .collect();
     if is_macos_application(product, target) {
-        println!("  {}", package_macos_app(name, product, &artifact, target, &shipped)?);
+        println!(
+            "  {}",
+            package_macos_app(name, product, &artifact, target, &shipped)?
+        );
     }
     if is_ios_application(product, target) {
-        println!("  {}", package_ios_app(name, product, &artifact, target, &shipped)?);
+        println!(
+            "  {}",
+            package_ios_app(name, product, &artifact, target, &shipped)?
+        );
     }
     // Named here as well as on stderr, because a build whose last line is
     // `1 artifact(s)` has told the reader the opposite of what happened.
@@ -3997,8 +4403,11 @@ fn refuse_without_libuv(
         return Ok(());
     }
     let probe = out.join("nts_libuv_probe.c");
-    std::fs::write(&probe, "#include <uv.h>\nint nts_libuv_probe(void) { return 0; }\n")
-        .with_context(|| format!("writing {probe}"))?;
+    std::fs::write(
+        &probe,
+        "#include <uv.h>\nint nts_libuv_probe(void) { return 0; }\n",
+    )
+    .with_context(|| format!("writing {probe}"))?;
     let object = out.join("nts_libuv_probe.o");
     let mut command = tools.command();
     // **The same include path the compile will use**, or this asks a narrower
@@ -4016,7 +4425,10 @@ fn refuse_without_libuv(
     // discriminates.
     command.args(["-c", probe.as_str(), "-o", object.as_str()]);
     let asked = command.output().with_context(|| {
-        format!("asking the compiler for {} whether libuv is available", target.id)
+        format!(
+            "asking the compiler for {} whether libuv is available",
+            target.id
+        )
     })?;
     let _ = std::fs::remove_file(&probe);
     let _ = std::fs::remove_file(&object);
@@ -4111,15 +4523,32 @@ fn compile_program(
         // the code generation flags, and nothing that would warn unused.
         if source == PROGRAM_IR_NAME {
             let from = out.join(source);
-            let mut arguments: Vec<String> = ["-O2", "-ffunction-sections", "-fdata-sections", "-Wno-override-module"]
-                .iter()
-                .map(|flag| (*flag).to_owned())
-                .collect();
+            let mut arguments: Vec<String> = [
+                "-O2",
+                "-ffunction-sections",
+                "-fdata-sections",
+                "-Wno-override-module",
+            ]
+            .iter()
+            .map(|flag| (*flag).to_owned())
+            .collect();
             if pic {
                 arguments.push("-fPIC".to_owned());
             }
-            arguments.extend(["-c".to_owned(), from.to_string(), "-o".to_owned(), object.to_string()]);
-            compile_one(with.cache, with.tools, &from, &object, &arguments, &format!("compiling {source} for `{name}`"))?;
+            arguments.extend([
+                "-c".to_owned(),
+                from.to_string(),
+                "-o".to_owned(),
+                object.to_string(),
+            ]);
+            compile_one(
+                with.cache,
+                with.tools,
+                &from,
+                &object,
+                &arguments,
+                &format!("compiling {source} for `{name}`"),
+            )?;
             objects.push(object);
             continue;
         }
@@ -4152,7 +4581,12 @@ fn compile_program(
         }
         arguments.extend(program_includes(out, native, napi, with.cflags));
         let from = out.join(source);
-        arguments.extend(["-c".to_owned(), from.to_string(), "-o".to_owned(), object.to_string()]);
+        arguments.extend([
+            "-c".to_owned(),
+            from.to_string(),
+            "-o".to_owned(),
+            object.to_string(),
+        ]);
         compile_one(
             with.cache,
             with.tools,
@@ -4265,7 +4699,9 @@ fn compile_java_roots(
 /// Every `.java` under a root, at any depth, because a package is directories.
 fn java_files(root: &Utf8Path) -> Result<Vec<Utf8PathBuf>> {
     let mut found = Vec::new();
-    let Ok(listing) = std::fs::read_dir(root) else { return Ok(found) };
+    let Ok(listing) = std::fs::read_dir(root) else {
+        return Ok(found);
+    };
     for item in listing.flatten() {
         let path = Utf8PathBuf::from_path_buf(item.path())
             .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
@@ -4295,7 +4731,9 @@ fn declared_native_roots(
     let mut found = Vec::new();
     for config_path in config_roots {
         let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
-        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        let Ok(resolved) = nts_build::config::resolve(config_path) else {
+            continue;
+        };
         for entry in &resolved.native {
             if entry.covers(&target.id, target.minimum_version.as_deref()) {
                 found.push(package.join(&entry.dir).to_string());
@@ -4308,13 +4746,19 @@ fn declared_native_roots(
 
 /// Whether a product is packaged as a macOS application bundle: an
 /// `application`, as `app.macos(...)` makes, rather than an `executable`.
-fn is_macos_application(product: &nts_build::config::Product, target: &nts_build::config::Target) -> bool {
+fn is_macos_application(
+    product: &nts_build::config::Product,
+    target: &nts_build::config::Target,
+) -> bool {
     product.kind == "application" && target.os == "macos"
 }
 
 /// Whether a product is packaged as an iOS application bundle, which the
 /// simulator installs and launches by its identifier.
-fn is_ios_application(product: &nts_build::config::Product, target: &nts_build::config::Target) -> bool {
+fn is_ios_application(
+    product: &nts_build::config::Product,
+    target: &nts_build::config::Target,
+) -> bool {
     product.kind == "application" && target.os == "ios"
 }
 
@@ -4322,7 +4766,11 @@ fn is_ios_application(product: &nts_build::config::Product, target: &nts_build::
 /// before anything is written: `CFBundleIdentifier` is what the system files an
 /// application's preferences, permissions and notifications under, and an
 /// invented one collides with somebody else's.
-fn refuse_unidentified_bundle(name: &str, product: &nts_build::config::Product, target: &nts_build::config::Target) -> Result<()> {
+fn refuse_unidentified_bundle(
+    name: &str,
+    product: &nts_build::config::Product,
+    target: &nts_build::config::Target,
+) -> Result<()> {
     if is_ios_application(product, target) && product.application_id.is_none() {
         bail!(
             "product `{name}` is an iOS application and declares no `id`. The simulator \
@@ -4359,30 +4807,64 @@ fn package_macos_app(
     target: &nts_build::config::Target,
     frameworks: &[Utf8PathBuf],
 ) -> Result<Utf8PathBuf> {
-    let id = product.application_id.as_deref().context("checked by `refuse_unidentified_bundle`")?;
-    let bundle = executable.parent().unwrap_or_else(|| Utf8Path::new(".")).join(format!("{name}.app"));
+    let id = product
+        .application_id
+        .as_deref()
+        .context("checked by `refuse_unidentified_bundle`")?;
+    let bundle = executable
+        .parent()
+        .unwrap_or_else(|| Utf8Path::new("."))
+        .join(format!("{name}.app"));
     if bundle.exists() {
         std::fs::remove_dir_all(&bundle).with_context(|| format!("removing the old {bundle}"))?;
     }
     let binaries = bundle.join("Contents/MacOS");
     std::fs::create_dir_all(&binaries).with_context(|| format!("creating {binaries}"))?;
-    std::fs::copy(executable, binaries.join(name)).with_context(|| format!("copying {executable} into {bundle}"))?;
+    std::fs::copy(executable, binaries.join(name))
+        .with_context(|| format!("copying {executable} into {bundle}"))?;
     // The dynamic frameworks it loads, where an application keeps them.
     for framework in frameworks {
-        copy_bundle(framework, &bundle.join("Contents/Frameworks").join(framework.file_name().unwrap_or("vendored.framework")))?;
+        copy_bundle(
+            framework,
+            &bundle
+                .join("Contents/Frameworks")
+                .join(framework.file_name().unwrap_or("vendored.framework")),
+        )?;
     }
-    let escaped = |text: &str| text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let escaped = |text: &str| {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    };
     let mut keys = vec![
-        ("CFBundleExecutable", format!("<string>{}</string>", escaped(name))),
-        ("CFBundleIdentifier", format!("<string>{}</string>", escaped(id))),
-        ("CFBundleInfoDictionaryVersion", "<string>6.0</string>".to_owned()),
-        ("CFBundleName", format!("<string>{}</string>", escaped(name))),
+        (
+            "CFBundleExecutable",
+            format!("<string>{}</string>", escaped(name)),
+        ),
+        (
+            "CFBundleIdentifier",
+            format!("<string>{}</string>", escaped(id)),
+        ),
+        (
+            "CFBundleInfoDictionaryVersion",
+            "<string>6.0</string>".to_owned(),
+        ),
+        (
+            "CFBundleName",
+            format!("<string>{}</string>", escaped(name)),
+        ),
         ("CFBundlePackageType", "<string>APPL</string>".to_owned()),
         ("NSHighResolutionCapable", "<true/>".to_owned()),
-        ("NSPrincipalClass", "<string>NSApplication</string>".to_owned()),
+        (
+            "NSPrincipalClass",
+            "<string>NSApplication</string>".to_owned(),
+        ),
     ];
     if let Some(minimum) = &target.minimum_version {
-        keys.push(("LSMinimumSystemVersion", format!("<string>{}</string>", escaped(minimum))));
+        keys.push((
+            "LSMinimumSystemVersion",
+            format!("<string>{}</string>", escaped(minimum)),
+        ));
     }
     let mut plist = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
@@ -4412,33 +4894,70 @@ fn package_ios_app(
     target: &nts_build::config::Target,
     frameworks: &[Utf8PathBuf],
 ) -> Result<Utf8PathBuf> {
-    let id = product.application_id.as_deref().context("checked by `refuse_unidentified_bundle`")?;
-    let bundle = executable.parent().unwrap_or_else(|| Utf8Path::new(".")).join(format!("{name}.app"));
+    let id = product
+        .application_id
+        .as_deref()
+        .context("checked by `refuse_unidentified_bundle`")?;
+    let bundle = executable
+        .parent()
+        .unwrap_or_else(|| Utf8Path::new("."))
+        .join(format!("{name}.app"));
     if bundle.exists() {
         std::fs::remove_dir_all(&bundle).with_context(|| format!("removing the old {bundle}"))?;
     }
     std::fs::create_dir_all(&bundle).with_context(|| format!("creating {bundle}"))?;
-    std::fs::copy(executable, bundle.join(name)).with_context(|| format!("copying {executable} into {bundle}"))?;
+    std::fs::copy(executable, bundle.join(name))
+        .with_context(|| format!("copying {executable} into {bundle}"))?;
     for framework in frameworks {
-        copy_bundle(framework, &bundle.join("Frameworks").join(framework.file_name().unwrap_or("vendored.framework")))?;
+        copy_bundle(
+            framework,
+            &bundle
+                .join("Frameworks")
+                .join(framework.file_name().unwrap_or("vendored.framework")),
+        )?;
     }
-    let escaped = |text: &str| text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let escaped = |text: &str| {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    };
     let mut keys = vec![
-        ("CFBundleExecutable", format!("<string>{}</string>", escaped(name))),
-        ("CFBundleIdentifier", format!("<string>{}</string>", escaped(id))),
-        ("CFBundleInfoDictionaryVersion", "<string>6.0</string>".to_owned()),
-        ("CFBundleName", format!("<string>{}</string>", escaped(name))),
+        (
+            "CFBundleExecutable",
+            format!("<string>{}</string>", escaped(name)),
+        ),
+        (
+            "CFBundleIdentifier",
+            format!("<string>{}</string>", escaped(id)),
+        ),
+        (
+            "CFBundleInfoDictionaryVersion",
+            "<string>6.0</string>".to_owned(),
+        ),
+        (
+            "CFBundleName",
+            format!("<string>{}</string>", escaped(name)),
+        ),
         ("CFBundlePackageType", "<string>APPL</string>".to_owned()),
         ("CFBundleVersion", "<string>1</string>".to_owned()),
-        ("CFBundleSupportedPlatforms", "<array><string>iPhoneSimulator</string></array>".to_owned()),
+        (
+            "CFBundleSupportedPlatforms",
+            "<array><string>iPhoneSimulator</string></array>".to_owned(),
+        ),
         ("LSRequiresIPhoneOS", "<true/>".to_owned()),
         // A launch screen, even an empty one, is what makes the window the
         // whole screen rather than the letterboxed size of an old iPhone.
         ("UILaunchScreen", "<dict/>".to_owned()),
-        ("UIDeviceFamily", "<array><integer>1</integer><integer>2</integer></array>".to_owned()),
+        (
+            "UIDeviceFamily",
+            "<array><integer>1</integer><integer>2</integer></array>".to_owned(),
+        ),
     ];
     if let Some(minimum) = &target.minimum_version {
-        keys.push(("MinimumOSVersion", format!("<string>{}</string>", escaped(minimum))));
+        keys.push((
+            "MinimumOSVersion",
+            format!("<string>{}</string>", escaped(minimum)),
+        ));
     }
     let mut plist = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
@@ -4466,14 +4985,24 @@ struct Vendored {
 /// The binary frameworks the program's libraries ship, each as `target`
 /// links it: the slice of an `.xcframework` that fits its platform and
 /// architecture (`xcframework::framework_for`).
-fn vendored_frameworks(needs: &nts_build::dependencies::Resolution, target: &nts_build::config::Target) -> Result<Vec<Vendored>> {
+fn vendored_frameworks(
+    needs: &nts_build::dependencies::Resolution,
+    target: &nts_build::config::Target,
+) -> Result<Vec<Vendored>> {
     let arch = target.arch.as_deref().unwrap_or(host_arch());
-    let slice = xcframework::Slice { platform: &target.os, simulator: target.os == "ios", arch: if arch == "aarch64" { "arm64" } else { arch } };
+    let slice = xcframework::Slice {
+        platform: &target.os,
+        simulator: target.os == "ios",
+        arch: if arch == "aarch64" { "arm64" } else { arch },
+    };
     let mut vendored = Vec::new();
     for framework in needs.native.iter().flat_map(|library| &library.frameworks) {
         let chosen = xcframework::framework_for(framework, slice)?;
         let dynamic = framework_is_dynamic(&chosen)?;
-        vendored.push(Vendored { slice: chosen, dynamic });
+        vendored.push(Vendored {
+            slice: chosen,
+            dynamic,
+        });
     }
     Ok(vendored)
 }
@@ -4493,7 +5022,14 @@ fn vendored_link_flags(vendored: &[Vendored]) -> Vec<String> {
         }
     }
     if vendored.iter().any(|framework| framework.dynamic) {
-        flags.extend(["@executable_path", "@executable_path/../Frameworks", "@executable_path/Frameworks"].map(|rpath| format!("-Wl,-rpath,{rpath}")));
+        flags.extend(
+            [
+                "@executable_path",
+                "@executable_path/../Frameworks",
+                "@executable_path/Frameworks",
+            ]
+            .map(|rpath| format!("-Wl,-rpath,{rpath}")),
+        );
     }
     flags
 }
@@ -4503,7 +5039,10 @@ fn vendored_link_flags(vendored: &[Vendored]) -> Vec<String> {
 /// copies it into the bundle.
 fn ship_vendored(vendored: &[Vendored], out: &Utf8Path) -> Result<()> {
     for framework in vendored.iter().filter(|framework| framework.dynamic) {
-        copy_bundle(&framework.slice, &out.join(framework.slice.file_name().unwrap_or("vendored.framework")))?;
+        copy_bundle(
+            &framework.slice,
+            &out.join(framework.slice.file_name().unwrap_or("vendored.framework")),
+        )?;
     }
     Ok(())
 }
@@ -4516,8 +5055,10 @@ fn framework_is_dynamic(framework: &Utf8Path) -> Result<bool> {
     let name = framework.file_stem().context("a framework with no name")?;
     let binary = framework.join(name);
     let mut magic = [0u8; 8];
-    let mut file = std::fs::File::open(&binary).with_context(|| format!("reading {binary}, the framework's binary"))?;
-    std::io::Read::read_exact(&mut file, &mut magic).with_context(|| format!("reading {binary}"))?;
+    let mut file = std::fs::File::open(&binary)
+        .with_context(|| format!("reading {binary}, the framework's binary"))?;
+    std::io::Read::read_exact(&mut file, &mut magic)
+        .with_context(|| format!("reading {binary}"))?;
     Ok(&magic != b"!<arch>\n")
 }
 
@@ -4530,12 +5071,14 @@ fn copy_bundle(from: &Utf8Path, to: &Utf8Path) -> Result<()> {
     std::fs::create_dir_all(to).with_context(|| format!("creating {to}"))?;
     for entry in std::fs::read_dir(from).with_context(|| format!("reading {from}"))? {
         let entry = entry?;
-        let source = Utf8PathBuf::from_path_buf(entry.path()).map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
+        let source = Utf8PathBuf::from_path_buf(entry.path())
+            .map_err(|bad| anyhow!("{} is not UTF-8", bad.display()))?;
         let destination = to.join(source.file_name().unwrap_or_default());
         let kind = entry.file_type()?;
         if kind.is_symlink() {
             #[cfg(unix)]
-            std::os::unix::fs::symlink(std::fs::read_link(&source)?, &destination).with_context(|| format!("linking {destination}"))?;
+            std::os::unix::fs::symlink(std::fs::read_link(&source)?, &destination)
+                .with_context(|| format!("linking {destination}"))?;
         } else if kind.is_dir() {
             copy_bundle(&source, &destination)?;
         } else {
@@ -4625,7 +5168,6 @@ const C_BRANDS: &str = "c:types";
 /// would look for a file that is not there, reporting a path nobody typed.
 const RUNTIME_JAR: &str = nts_codegen_jvm::RUNTIME_JAR_NAME;
 
-
 /// Package the emitted classes into the jar the product names.
 ///
 /// **Two artifacts, not one, and the choice is deliberate.**
@@ -4676,7 +5218,10 @@ fn package_jvm(
         format!("running `jar` to package `{name}`. It ships with the JDK; is one on PATH?")
     })?;
     if !output.status.success() {
-        bail!("packaging `{name}` failed:\n{}", String::from_utf8_lossy(&output.stderr));
+        bail!(
+            "packaging `{name}` failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
     Ok(artifact)
 }
@@ -4765,9 +5310,14 @@ fn package_aar(
         .arg("-C")
         .arg(staged.as_str())
         .arg(".");
-    let output = command.output().context("running `jar` to package an AAR")?;
+    let output = command
+        .output()
+        .context("running `jar` to package an AAR")?;
     if !output.status.success() {
-        bail!("packaging `{name}` failed:\n{}", String::from_utf8_lossy(&output.stderr));
+        bail!(
+            "packaging `{name}` failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
     Ok(artifact)
 }
@@ -4797,7 +5347,9 @@ impl AndroidSdk {
 /// than `36.0.0` and both are newer than `9.0.0`, which a string sort gets
 /// backwards on the last pair.
 fn build_tools_versions(root: &Utf8Path) -> Vec<Utf8PathBuf> {
-    let Ok(entries) = std::fs::read_dir(root.join("build-tools")) else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(root.join("build-tools")) else {
+        return Vec::new();
+    };
     let mut found: Vec<(Vec<u64>, Utf8PathBuf)> = entries
         .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.ok()?.path()).ok())
         .filter(|path| path.is_dir())
@@ -4862,8 +5414,11 @@ fn android_sdk(name: &str, target: &nts_build::config::Target) -> Result<Android
     let build_tools = match (build_tools, versions.first()) {
         (Some(dir), _) => dir,
         (None, Some(newest)) => {
-            let missing: Vec<&str> =
-                APK_TOOLS.iter().copied().filter(|tool| !newest.join(tool).is_file()).collect();
+            let missing: Vec<&str> = APK_TOOLS
+                .iter()
+                .copied()
+                .filter(|tool| !newest.join(tool).is_file())
+                .collect();
             bail!(
                 "product `{name}` is an APK and no complete `build-tools` was found \
                  under {root}. The newest, {}, is missing {}. Install a complete one \
@@ -4892,7 +5447,10 @@ fn android_sdk(name: &str, target: &nts_build::config::Target) -> Result<Android
             target.id
         )
     }
-    Ok(AndroidSdk { build_tools, platform_jar })
+    Ok(AndroidSdk {
+        build_tools,
+        platform_jar,
+    })
 }
 
 /// Run one SDK tool, naming it rather than the step when it fails.
@@ -4906,7 +5464,11 @@ fn run_tool(mut command: std::process::Command, tool: &str, what: &str) -> Resul
         // `aapt2` reports on stdout and `apksigner` on stderr, so a message
         // taking only one of them is empty for half of these tools -- which is
         // the failure that reads as "it failed for no reason".
-        bail!("`{tool}` failed to {what}:\n{}{}", stderr.trim_end(), stdout.trim_end());
+        bail!(
+            "`{tool}` failed to {what}:\n{}{}",
+            stderr.trim_end(),
+            stdout.trim_end()
+        );
     }
     Ok(())
 }
@@ -4958,7 +5520,15 @@ fn package_apk(
     let staged = out.join("apk");
     drop(std::fs::remove_dir_all(&staged));
     std::fs::create_dir_all(&staged).with_context(|| format!("creating {staged}"))?;
-    let manifest = write_android_manifest(name, product, &staged, target, tsconfig, config_roots, min_api)?;
+    let manifest = write_android_manifest(
+        name,
+        product,
+        &staged,
+        target,
+        tsconfig,
+        config_roots,
+        min_api,
+    )?;
 
     // **The runtime jar goes in, and this is where it stops being optional.**
     // A jar consumer resolves the runtime as a dependency; an APK has no
@@ -5034,7 +5604,12 @@ fn package_apk(
 
     let aligned = staged.join("aligned.apk");
     let mut zipalign = sdk.tool("zipalign");
-    zipalign.arg("-p").arg("-f").arg("4").arg(unsigned.as_str()).arg(aligned.as_str());
+    zipalign
+        .arg("-p")
+        .arg("-f")
+        .arg("4")
+        .arg(unsigned.as_str())
+        .arg(aligned.as_str());
     run_tool(zipalign, "zipalign", "align the APK")?;
 
     let keystore = debug_keystore(out)?;
@@ -5091,7 +5666,11 @@ fn package_runnable_jar(
     std::fs::create_dir_all(&staged).with_context(|| format!("creating {staged}"))?;
 
     let call = if initializes {
-        format!("{}.{}();", nts_codegen_jvm::PROGRAM.replace('/', "."), nts_codegen_jvm::module_init_method())
+        format!(
+            "{}.{}();",
+            nts_codegen_jvm::PROGRAM.replace('/', "."),
+            nts_codegen_jvm::module_init_method()
+        )
     } else {
         "// the module declares only types and functions: nothing to evaluate".to_owned()
     };
@@ -5156,7 +5735,11 @@ fn package_runnable_jar(
         .collect();
     for source in &unpacked {
         let mut unpack = std::process::Command::new("jar");
-        unpack.arg("--extract").arg("--file").arg(source.as_str()).current_dir(built.as_str());
+        unpack
+            .arg("--extract")
+            .arg("--file")
+            .arg(source.as_str())
+            .current_dir(built.as_str());
         run_tool(unpack, "jar", "unpack a jar into the executable")?;
     }
     // A signature in the runtime jar's manifest would be checked against
@@ -5296,7 +5879,9 @@ fn contributed_manifest_fragments(
             continue;
         }
         let package = config_path.parent().unwrap_or_else(|| Utf8Path::new("."));
-        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        let Ok(resolved) = nts_build::config::resolve(config_path) else {
+            continue;
+        };
         for entry in &resolved.manifests {
             if entry.covers(&target.id, target.minimum_version.as_deref()) {
                 found.push(package.join(&entry.path).to_string());
@@ -5329,7 +5914,9 @@ fn dependencies_for(
         // A config that does not parse is not this function's error to report:
         // everything else reading these roots skips one too, and the build
         // fails on it where it is actually used.
-        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        let Ok(resolved) = nts_build::config::resolve(config_path) else {
+            continue;
+        };
         if resolved.dependencies.is_empty() {
             continue;
         }
@@ -5433,7 +6020,10 @@ fn napi_include(project: &Utf8Path) -> Option<Utf8PathBuf> {
     //
     // Each candidate is looked for at every ancestor, because the project may
     // be an example several directories inside the checkout.
-    for relative in ["third_party/node/src", "node_modules/node-api-headers/include"] {
+    for relative in [
+        "third_party/node/src",
+        "node_modules/node-api-headers/include",
+    ] {
         let mut at = Some(project);
         while let Some(directory) = at {
             let candidate = directory.join(relative);
@@ -5464,7 +6054,11 @@ fn host_os() -> &'static str {
 }
 
 fn host_arch() -> &'static str {
-    if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" }
+    if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "x86_64"
+    }
 }
 
 /// Whether a target is the machine we are standing on.
@@ -5536,7 +6130,12 @@ impl Toolchain {
     /// The SDK and target triple of an Apple toolchain, from its leading
     /// `-target` and `-isysroot`: what Swift compiles for.
     fn apple_target(&self) -> Option<(String, String)> {
-        let after = |flag: &str| self.leading.windows(2).find(|pair| pair[0] == flag).map(|pair| pair[1].clone());
+        let after = |flag: &str| {
+            self.leading
+                .windows(2)
+                .find(|pair| pair[0] == flag)
+                .map(|pair| pair[1].clone())
+        };
         let triple = after("-target").filter(|triple| triple.contains("-apple-"))?;
         Some((after("-isysroot")?, triple))
     }
@@ -5598,7 +6197,11 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
             host_os()
         )
     };
-    if std::process::Command::new("zig").arg("version").output().is_err() {
+    if std::process::Command::new("zig")
+        .arg("version")
+        .output()
+        .is_err()
+    {
         bail!(
             "product `{name}` targets {} and this is a {} machine, so it has to be \
              cross-compiled. `zig` is what this uses and it is not on PATH -- install \
@@ -5672,7 +6275,12 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
         leading.push(format!("-I{}", uv.join("include")));
         link.push(format!("-L{}", uv.join("lib")));
     }
-    Ok(Toolchain { program: "clang".to_owned(), leading, link, linker: None })
+    Ok(Toolchain {
+        program: "clang".to_owned(),
+        leading,
+        link,
+        linker: None,
+    })
 }
 
 /// The iOS simulator on an Intel Mac, which is what `x86_64` iOS can only be:
@@ -5693,7 +6301,8 @@ fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolc
     }
     let minimum = target.minimum_version.as_deref().unwrap_or("13.0");
     let root = apple_root();
-    let sdk = std::env::var("NTS_IOS_SIMULATOR_SDK").map_or_else(|_| root.join("iPhoneSimulator.sdk"), Utf8PathBuf::from);
+    let sdk = std::env::var("NTS_IOS_SIMULATOR_SDK")
+        .map_or_else(|_| root.join("iPhoneSimulator.sdk"), Utf8PathBuf::from);
     if !sdk.join("usr/include").is_dir() {
         bail!(
             "product `{name}` targets the iOS simulator, and there is no iPhoneSimulator.sdk \
@@ -5712,7 +6321,12 @@ fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         leading.push(format!("-I{}", uv.join("include")));
         link.push(format!("-L{}", uv.join("lib")));
     }
-    Ok(Toolchain { program: "clang".to_owned(), leading, link, linker: None })
+    Ok(Toolchain {
+        program: "clang".to_owned(),
+        leading,
+        link,
+        linker: None,
+    })
 }
 
 /// Where the Windows lane keeps what a Windows build needs and this box does not
@@ -5766,15 +6380,28 @@ fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<T
         leading.push(format!("-I{}", uv.join("include")));
         link.push(format!("-L{}", uv.join("lib")));
     }
-    let linker = vec!["zig".to_owned(), "cc".to_owned(), "-target".to_owned(), format!("{arch}-windows-gnu")];
-    Ok(Toolchain { program: "clang".to_owned(), leading, link, linker: Some(linker) })
+    let linker = vec![
+        "zig".to_owned(),
+        "cc".to_owned(),
+        "-target".to_owned(),
+        format!("{arch}-windows-gnu"),
+    ];
+    Ok(Toolchain {
+        program: "clang".to_owned(),
+        leading,
+        link,
+        linker: Some(linker),
+    })
 }
 
 /// What a C compile for Windows on `arch` passes clang: the target, zig's four
 /// mingw include directories and the macros zig compiles with. One derivation
 /// for the build and for `nts bind-winmd`, which reads the same headers.
 fn windows_compile_flags(arch: &str, zig: &Utf8Path) -> Vec<String> {
-    let mut flags = vec![format!("--target={arch}-w64-windows-gnu"), "-nostdlibinc".to_owned()];
+    let mut flags = vec![
+        format!("--target={arch}-w64-windows-gnu"),
+        "-nostdlibinc".to_owned(),
+    ];
     let headers = zig.join("libc/include");
     for directory in [
         format!("{arch}-windows-gnu"),
@@ -5788,7 +6415,10 @@ fn windows_compile_flags(arch: &str, zig: &Utf8Path) -> Vec<String> {
             flags.push(directory.to_string());
         }
     }
-    flags.extend(["-D__MSVCRT_VERSION__=0xE00".to_owned(), "-D_WIN32_WINNT=0x0a00".to_owned()]);
+    flags.extend([
+        "-D__MSVCRT_VERSION__=0xE00".to_owned(),
+        "-D_WIN32_WINNT=0x0a00".to_owned(),
+    ]);
     flags
 }
 
@@ -5800,16 +6430,21 @@ fn zig_lib_dir() -> Option<Utf8PathBuf> {
     // `.lib_dir = "/usr/lib/zig",` since 0.14 (ZON), `"lib_dir": "…"` before
     // (JSON): the value is the next quoted string after the key either way.
     let after = text.split_once("lib_dir")?.1;
-    let value = after.split('"').nth(if after.starts_with('"') { 2 } else { 1 })?;
+    let value = after
+        .split('"')
+        .nth(if after.starts_with('"') { 2 } else { 1 })?;
     Some(Utf8PathBuf::from(value))
 }
 
 fn run(mut command: std::process::Command, what: &str) -> Result<()> {
-    let output = command.output().with_context(|| {
-        format!("running the C compiler for {what}. Set CC to name one")
-    })?;
+    let output = command
+        .output()
+        .with_context(|| format!("running the C compiler for {what}. Set CC to name one"))?;
     if !output.status.success() {
-        bail!("{what} failed:\n{}", String::from_utf8_lossy(&output.stderr));
+        bail!(
+            "{what} failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
     Ok(())
 }
@@ -5856,7 +6491,14 @@ fn check_witness(
     // Under `-Werror` it failed any program that reached one of GIO's
     // deprecated `_finish`es -- `g_drive_eject_finish` -- as a mismatch.
     command
-        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-deprecated-declarations", "-fsyntax-only"])
+        .args([
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-Wno-deprecated-declarations",
+            "-fsyntax-only",
+        ])
         .arg("-I")
         .arg(out.as_str());
     // **The package's own headers too.** The witness includes what the binding
@@ -5897,6 +6539,7 @@ fn check_witness(
 /// grouping them would exist to satisfy a lint rather than to name anything --
 /// which is the test the `Compiling` bundle passes and this does not.
 #[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn link_c(
     name: &str,
     product: &nts_build::config::Product,
@@ -5932,8 +6575,13 @@ fn link_c(
         // path worked, which is the fourth time tonight that sentence has been
         // the diagnosis.
         let from = absolute(out);
-        let directory = from.parent().and_then(Utf8Path::parent).and_then(Utf8Path::parent);
-        let project = directory.and_then(Utf8Path::parent).unwrap_or_else(|| Utf8Path::new("."));
+        let directory = from
+            .parent()
+            .and_then(Utf8Path::parent)
+            .and_then(Utf8Path::parent);
+        let project = directory
+            .and_then(Utf8Path::parent)
+            .unwrap_or_else(|| Utf8Path::new("."));
         Some(napi_include(project).ok_or_else(|| {
             anyhow!(
                 "product `{name}` is a Node addon and `node_api.h` was not found. It is a \
@@ -5989,14 +6637,38 @@ fn link_c(
     // **Before anything is compiled**, because the alternative is what this
     // replaced: a raw `fatal error: 'uv.h' file not found` out of clang, forty
     // lines into a build, about a library the reader never named.
-    if sources.iter().any(|source| source == nts_codegen_c::UV_HOST_SOURCE_NAME) {
-        refuse_without_libuv(name, out, &tools, target, native, napi.as_deref(), &needs.cflags)?;
+    if sources
+        .iter()
+        .any(|source| source == nts_codegen_c::UV_HOST_SOURCE_NAME)
+    {
+        refuse_without_libuv(
+            name,
+            out,
+            &tools,
+            target,
+            native,
+            napi.as_deref(),
+            &needs.cflags,
+        )?;
     }
     let cache = ObjectCache::new(cache_dir, &tools);
     let mut objects = Vec::new();
-    let with = Compiling { cache: &cache, tools: &tools, cflags: &needs.cflags };
+    let with = Compiling {
+        cache: &cache,
+        tools: &tools,
+        cflags: &needs.cflags,
+    };
     compile_native(name, out, native, pic, &mut objects, &with)?;
-    compile_program(name, out, &sources, native, pic, napi.as_deref(), &with, &mut objects)?;
+    compile_program(
+        name,
+        out,
+        &sources,
+        native,
+        pic,
+        napi.as_deref(),
+        &with,
+        &mut objects,
+    )?;
 
     let artifact = out.join(artifact_name(name, product, target));
     if product.kind == "static-library" {
@@ -6012,7 +6684,11 @@ fn link_c(
         {
             let mut command = tools.link_command();
             if shared {
-                command.arg(if format == ObjectFormat::MachO { "-dynamiclib" } else { "-shared" });
+                command.arg(if format == ObjectFormat::MachO {
+                    "-dynamiclib"
+                } else {
+                    "-shared"
+                });
                 // **A Windows DLL is half an artifact without its import
                 // library.** The linker emits one either way; unnamed, it takes
                 // the first object's name -- this produced `program.c.lib`
@@ -6038,7 +6714,9 @@ fn link_c(
                 // libm is part of libSystem there, and the zig-derived sysroot
                 // carries no separate `libm.tbd` for `-lm` to find.
                 ObjectFormat::MachO => command.arg("-Wl,-dead_strip"),
-                ObjectFormat::Elf | ObjectFormat::Coff => command.args(["-Wl,--gc-sections", "-lm"]),
+                ObjectFormat::Elf | ObjectFormat::Coff => {
+                    command.args(["-Wl,--gc-sections", "-lm"])
+                }
             };
             // **After our own objects and before `-o`.** A static archive is
             // consumed left to right by the linker, so a `-l` that precedes the
@@ -6053,10 +6731,14 @@ fn link_c(
             // Swift's runtime, which the Swift objects name through their
             // autolink entries: its stubs in the SDK, and the OS's copy at
             // run time, where every macOS and iOS these targets reach has it.
-            if native.iter().any(|source| source.path.extension() == Some("swift"))
+            if native
+                .iter()
+                .any(|source| source.path.extension() == Some("swift"))
                 && let Some((sdk, _)) = tools.apple_target()
             {
-                command.arg(format!("-L{sdk}/usr/lib/swift")).arg("-Wl,-rpath,/usr/lib/swift");
+                command
+                    .arg(format!("-L{sdk}/usr/lib/swift"))
+                    .arg("-Wl,-rpath,/usr/lib/swift");
             }
             command.args(vendored_link_flags(&vendored_frameworks(needs, target)?));
             // **`--no-undefined` where it can be used**, which is the earliest
@@ -6083,7 +6765,8 @@ fn link_c(
     if wrote.winappsdk {
         for file in bind_winmd::winrt::shipped()? {
             let beside = out.join(file.file_name().unwrap_or_default());
-            std::fs::copy(&file, &beside).with_context(|| format!("copying {file} beside `{name}`"))?;
+            std::fs::copy(&file, &beside)
+                .with_context(|| format!("copying {file} beside `{name}`"))?;
         }
     }
     Ok(artifact)
@@ -6135,14 +6818,22 @@ fn native_abi(os: &str) -> nts_core::hir::native::NativeAbi {
 /// The LLVM backend's target: the data model `native_abi` gives, and the arch,
 /// which with it decides how a record crosses a call.
 fn llvm_platform(os: &str, arch: &str) -> nts_codegen_llvm::Platform {
-    let arch = if arch == "aarch64" { nts_codegen_llvm::Arch::Aarch64 } else { nts_codegen_llvm::Arch::X86_64 };
-    nts_codegen_llvm::Platform { abi: native_abi(os), arch }
+    let arch = if arch == "aarch64" {
+        nts_codegen_llvm::Arch::Aarch64
+    } else {
+        nts_codegen_llvm::Arch::X86_64
+    };
+    nts_codegen_llvm::Platform {
+        abi: native_abi(os),
+        arch,
+    }
 }
 
 /// The system libraries a static libuv needs on Windows: its `CMakeLists.txt`
 /// list for `WIN32`, which `tooling/windows/build-libuv.sh` builds from.
-const WINDOWS_UV_LIBS: [&str; 9] =
-    ["psapi", "user32", "advapi32", "iphlpapi", "userenv", "ws2_32", "dbghelp", "ole32", "shell32"];
+const WINDOWS_UV_LIBS: [&str; 9] = [
+    "psapi", "user32", "advapi32", "iphlpapi", "userenv", "ws2_32", "dbghelp", "ole32", "shell32",
+];
 
 /// Refused before anything compiles. A `.node` off ELF resolves `napi_*` from
 /// its host a way this link does not write -- `-undefined dynamic_lookup` on a
@@ -6193,7 +6884,10 @@ fn refuse_what_this_linker_cannot(
 /// remembers. The same rule gives the run-loop adapter its framework.
 fn loop_host_link_flags(sources: &[String], format: ObjectFormat) -> Vec<String> {
     let mut flags = Vec::new();
-    if sources.iter().any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME) {
+    if sources
+        .iter()
+        .any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME)
+    {
         flags.push("-luv".to_owned());
         // A static libuv brings its dependencies' names, not the libraries:
         // on Windows, its `CMakeLists.txt` list for `WIN32`.
@@ -6201,13 +6895,22 @@ fn loop_host_link_flags(sources: &[String], format: ObjectFormat) -> Vec<String>
             flags.extend(WINDOWS_UV_LIBS.iter().map(|lib| format!("-l{lib}")));
         }
     }
-    if sources.iter().any(|s| s == nts_codegen_c::CF_HOST_SOURCE_NAME) {
+    if sources
+        .iter()
+        .any(|s| s == nts_codegen_c::CF_HOST_SOURCE_NAME)
+    {
         flags.extend(["-framework".to_owned(), "CoreFoundation".to_owned()]);
     }
     // The Windows Runtime's API sets, which every Windows 10 and 11 has: no
     // redistributable, and nothing but `api-ms-win-core-winrt-*` imported.
-    if sources.iter().any(|s| s == nts_codegen_c::WINRT_SOURCE_NAME) {
-        flags.extend(["-lapi-ms-win-core-winrt-l1-1-0".to_owned(), "-lapi-ms-win-core-winrt-string-l1-1-0".to_owned()]);
+    if sources
+        .iter()
+        .any(|s| s == nts_codegen_c::WINRT_SOURCE_NAME)
+    {
+        flags.extend([
+            "-lapi-ms-win-core-winrt-l1-1-0".to_owned(),
+            "-lapi-ms-win-core-winrt-string-l1-1-0".to_owned(),
+        ]);
     }
     flags
 }
@@ -6215,7 +6918,11 @@ fn loop_host_link_flags(sources: &[String], format: ObjectFormat) -> Vec<String>
 /// `-lobjc` for a program that sends messages, each framework its bindings
 /// name (messages or C functions alike), and each C library (`@ntsLibrary`).
 fn binding_link_flags(wrote: &Wrote) -> Vec<String> {
-    let mut flags = if wrote.objc { vec!["-lobjc".to_owned()] } else { Vec::new() };
+    let mut flags = if wrote.objc {
+        vec!["-lobjc".to_owned()]
+    } else {
+        Vec::new()
+    };
     for framework in &wrote.frameworks {
         flags.push("-framework".to_owned());
         flags.push(framework.clone());
@@ -6256,8 +6963,10 @@ fn name_the_library(
 ) {
     match format {
         ObjectFormat::MachO => {
-            let file =
-                product.soname.clone().unwrap_or_else(|| artifact_name(name, product, target));
+            let file = product
+                .soname
+                .clone()
+                .unwrap_or_else(|| artifact_name(name, product, target));
             command.arg(format!("-Wl,-install_name,@rpath/{file}"));
         }
         ObjectFormat::Elf => {
@@ -6270,7 +6979,10 @@ fn name_the_library(
 }
 
 fn refuse_unresolved(name: &str, artifact: &Utf8Path) -> Result<()> {
-    let Ok(listed) = std::process::Command::new("nm").args(["-D", "-u"]).arg(artifact.as_str()).output()
+    let Ok(listed) = std::process::Command::new("nm")
+        .args(["-D", "-u"])
+        .arg(artifact.as_str())
+        .output()
     else {
         // No `nm` is not a build failure. It is one fewer check, said once.
         eprintln!("no `nm`, so `{name}` was not checked for unresolved symbols");
@@ -6305,7 +7017,6 @@ fn refuse_unresolved(name: &str, artifact: &Utf8Path) -> Result<()> {
     )
 }
 
-
 /// Where artifacts land: `--out <dir>`, or `.nts/build` beside the project.
 ///
 /// **Where output goes is the caller's business** in a way that backend, shape
@@ -6318,7 +7029,13 @@ fn output_root(rest: &[String], tsconfig: &Utf8Path) -> Utf8PathBuf {
         .position(|arg| arg == "--out")
         .and_then(|at| rest.get(at + 1))
         .map_or_else(
-            || tsconfig.parent().unwrap_or_else(|| Utf8Path::new(".")).join(".nts").join("build"),
+            || {
+                tsconfig
+                    .parent()
+                    .unwrap_or_else(|| Utf8Path::new("."))
+                    .join(".nts")
+                    .join("build")
+            },
             Utf8PathBuf::from,
         )
 }
@@ -6337,12 +7054,19 @@ fn cache_directory(
     tsconfig: &Utf8Path,
     resolved: &nts_build::config::Resolved,
 ) -> Option<Utf8PathBuf> {
-    let settings = resolved.build.as_ref().and_then(|build| build.cache.as_ref());
+    let settings = resolved
+        .build
+        .as_ref()
+        .and_then(|build| build.cache.as_ref());
     (settings.and_then(|cache| cache.local) != Some(false)).then(|| {
         tsconfig
             .parent()
             .unwrap_or_else(|| Utf8Path::new("."))
-            .join(settings.and_then(|cache| cache.directory.as_deref()).unwrap_or(".nts/cache"))
+            .join(
+                settings
+                    .and_then(|cache| cache.directory.as_deref())
+                    .unwrap_or(".nts/cache"),
+            )
     })
 }
 
@@ -6419,7 +7143,10 @@ impl ObjectCache {
             .output()
             .map_or(0, |output| hash_of(&output.stdout));
         let compiler = banner ^ hash_of(tools.key().as_bytes());
-        Self { directory: enabled.map(Utf8Path::to_path_buf), compiler }
+        Self {
+            directory: enabled.map(Utf8Path::to_path_buf),
+            compiler,
+        }
     }
 
     fn entry(&self, source: &Utf8Path, arguments: &[String]) -> Option<Entry> {
@@ -6448,7 +7175,10 @@ impl ObjectCache {
         }
         arguments.hash(&mut hasher);
         let key = format!("{:016x}", hasher.finish());
-        Some(Entry { object: directory.join(format!("{key}.o")), deps: directory.join(format!("{key}.deps")) })
+        Some(Entry {
+            object: directory.join(format!("{key}.o")),
+            deps: directory.join(format!("{key}.deps")),
+        })
     }
 
     /// Record `inputs` as what the entry was built against, as [`record`]
@@ -6462,13 +7192,17 @@ impl ObjectCache {
                 let _ = writeln!(recorded, "{:016x} {path}", hash_of(&bytes));
             }
         }
-        drop(std::fs::create_dir_all(entry.object.parent().unwrap_or(Utf8Path::new("."))));
+        drop(std::fs::create_dir_all(
+            entry.object.parent().unwrap_or(Utf8Path::new(".")),
+        ));
         drop(std::fs::write(&entry.deps, recorded));
     }
 
     /// Whether every file the entry was built against still hashes the same.
     fn current(entry: &Entry) -> bool {
-        let Ok(recorded) = std::fs::read_to_string(&entry.deps) else { return false };
+        let Ok(recorded) = std::fs::read_to_string(&entry.deps) else {
+            return false;
+        };
         recorded.lines().all(|line| {
             line.split_once(' ').is_some_and(|(hash, path)| {
                 std::fs::read(path).is_ok_and(|bytes| format!("{:016x}", hash_of(&bytes)) == hash)
@@ -6478,7 +7212,9 @@ impl ObjectCache {
 
     /// Record what a compile read, from the depfile `-MMD` wrote.
     fn record(entry: &Entry, depfile: &Utf8Path) {
-        let Ok(text) = std::fs::read_to_string(depfile) else { return };
+        let Ok(text) = std::fs::read_to_string(depfile) else {
+            return;
+        };
         // Make syntax: `target: a b \<newline> c`. The target half is before
         // the first colon and is not a dependency.
         let listed = text.split_once(':').map_or("", |(_, rest)| rest);
@@ -6489,7 +7225,9 @@ impl ObjectCache {
                 let _ = writeln!(recorded, "{:016x} {path}", hash_of(&bytes));
             }
         }
-        drop(std::fs::create_dir_all(entry.object.parent().unwrap_or(Utf8Path::new("."))));
+        drop(std::fs::create_dir_all(
+            entry.object.parent().unwrap_or(Utf8Path::new(".")),
+        ));
         drop(std::fs::write(&entry.deps, recorded));
     }
 }
@@ -6506,22 +7244,40 @@ mod module_cache_tests {
     /// this asserts the hit.
     #[test]
     fn a_module_is_reused_until_an_input_changes() {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-module-cache-{}", std::process::id()));
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-module-cache-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let (source, header) = (dir.join("Greeter.swift"), dir.join("Greeter.h"));
         std::fs::write(&source, "@objc public class Greeter {}\n").unwrap();
         std::fs::write(&header, "@interface Base\n@end\n").unwrap();
-        let cache = ObjectCache { directory: Some(dir.join("cache")), compiler: 0 };
+        let cache = ObjectCache {
+            directory: Some(dir.join("cache")),
+            compiler: 0,
+        };
         let key = ["Greeter".to_owned(), "x86_64-apple-macos13".to_owned()];
         let inputs = [source.as_path(), header.as_path()];
         let entry: Entry = cache.module_entry(&inputs, &key).unwrap();
         ObjectCache::record_inputs(&entry, &inputs);
-        assert!(ObjectCache::current(&entry), "an unchanged module was not reused");
+        assert!(
+            ObjectCache::current(&entry),
+            "an unchanged module was not reused"
+        );
         let again = cache.module_entry(&inputs, &key).unwrap();
-        assert_eq!(again.object, entry.object, "the same inputs keyed another entry");
+        assert_eq!(
+            again.object, entry.object,
+            "the same inputs keyed another entry"
+        );
         std::fs::write(&header, "@interface Base\n- (void)wave;\n@end\n").unwrap();
-        assert!(!ObjectCache::current(&entry), "an edited header left the old object current");
-        assert_ne!(cache.module_entry(&inputs, &key).unwrap().object, entry.object, "an edited header keyed the old entry");
+        assert!(
+            !ObjectCache::current(&entry),
+            "an edited header left the old object current"
+        );
+        assert_ne!(
+            cache.module_entry(&inputs, &key).unwrap().object,
+            entry.object,
+            "an edited header keyed the old entry"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
@@ -6545,7 +7301,8 @@ fn compile_one(
         && entry.object.exists()
         && ObjectCache::current(entry)
     {
-        std::fs::copy(&entry.object, object).with_context(|| format!("reusing {}", entry.object))?;
+        std::fs::copy(&entry.object, object)
+            .with_context(|| format!("reusing {}", entry.object))?;
         return Ok(());
     }
     let depfile = Utf8PathBuf::from(format!("{object}.d"));
@@ -6556,7 +7313,9 @@ fn compile_one(
     }
     run(command, what)?;
     if let Some(entry) = &entry {
-        drop(std::fs::create_dir_all(entry.object.parent().unwrap_or(Utf8Path::new("."))));
+        drop(std::fs::create_dir_all(
+            entry.object.parent().unwrap_or(Utf8Path::new(".")),
+        ));
         // A cache that cannot be written is not a build failure. It is the
         // build it would have been without one.
         if std::fs::copy(object, &entry.object).is_ok() {
@@ -6596,7 +7355,8 @@ fn append_library_initialiser(out: &Utf8Path, sources: &[String]) -> Result<()> 
         .append(true)
         .open(&program)
         .with_context(|| format!("opening {program} to append the library initialiser"))?;
-    std::io::Write::write_all(&mut file, text).with_context(|| format!("appending the library initialiser to {program}"))
+    std::io::Write::write_all(&mut file, text)
+        .with_context(|| format!("appending the library initialiser to {program}"))
 }
 
 /// Compile the package's own C alongside the program's.
@@ -6605,6 +7365,7 @@ fn append_library_initialiser(out: &Utf8Path, sources: &[String]) -> Result<()> 
 /// the only thing separating them from the generated ones is that. Its own
 /// directory is on the include path, because a header beside a `.c` is how C is
 /// written.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn compile_native(
     name: &str,
     out: &Utf8Path,
@@ -6613,42 +7374,93 @@ fn compile_native(
     objects: &mut Vec<Utf8PathBuf>,
     with: &Compiling<'_>,
 ) -> Result<()> {
-
     // A module's Swift is compiled whole into one object, as a SwiftPM
     // target is: a directory of it, or a library's -- with the library's
     // Objective-C as the module it sees as its own, where it has both.
-    let mut swift: std::collections::BTreeMap<&str, (Vec<std::path::PathBuf>, &NativeSource)> = std::collections::BTreeMap::new();
-    for source in native.iter().filter(|source| source.path.extension() == Some("swift")) {
-        swift.entry(source.module.as_str()).or_insert_with(|| (Vec::new(), source)).0.push(source.path.clone().into_std_path_buf());
+    let mut swift: std::collections::BTreeMap<&str, (Vec<std::path::PathBuf>, &NativeSource)> =
+        std::collections::BTreeMap::new();
+    for source in native
+        .iter()
+        .filter(|source| source.path.extension() == Some("swift"))
+    {
+        swift
+            .entry(source.module.as_str())
+            .or_insert_with(|| (Vec::new(), source))
+            .0
+            .push(source.path.clone().into_std_path_buf());
     }
     if !swift.is_empty() {
-        let (sdk, triple) = with.tools.apple_target().ok_or_else(|| anyhow!("`{name}` has Swift to compile and no Apple target to compile it for"))?;
+        let (sdk, triple) = with.tools.apple_target().ok_or_else(|| {
+            anyhow!("`{name}` has Swift to compile and no Apple target to compile it for")
+        })?;
         let toolchain = crate::swift::toolchain()?;
-        let target = crate::swift::Target { sdk: std::path::Path::new(&sdk), triple: &triple };
+        let target = crate::swift::Target {
+            sdk: std::path::Path::new(&sdk),
+            triple: &triple,
+        };
         for (module, (sources, first)) in &swift {
-            let headers: Vec<std::path::PathBuf> = first.headers.iter().map(|header| header.clone().into_std_path_buf()).collect();
-            let search: Vec<std::path::PathBuf> = first.include.iter().map(|directory| directory.clone().into_std_path_buf()).collect();
+            let headers: Vec<std::path::PathBuf> = first
+                .headers
+                .iter()
+                .map(|header| header.clone().into_std_path_buf())
+                .collect();
+            let search: Vec<std::path::PathBuf> = first
+                .include
+                .iter()
+                .map(|directory| directory.clone().into_std_path_buf())
+                .collect();
             let imported: Vec<(&str, Vec<std::path::PathBuf>)> = first
                 .imports
                 .iter()
-                .map(|(name, headers)| (name.as_str(), headers.iter().map(|header| header.clone().into_std_path_buf()).collect()))
+                .map(|(name, headers)| {
+                    (
+                        name.as_str(),
+                        headers
+                            .iter()
+                            .map(|header| header.clone().into_std_path_buf())
+                            .collect(),
+                    )
+                })
                 .collect();
-            let imports: Vec<crate::swift::Clang<'_>> = imported.iter().map(|(name, headers)| crate::swift::Clang { name, headers }).collect();
-            let unit = crate::swift::Module { name: module, sources, headers: &headers, search: &search, imports: &imports };
+            let imports: Vec<crate::swift::Clang<'_>> = imported
+                .iter()
+                .map(|(name, headers)| crate::swift::Clang { name, headers })
+                .collect();
+            let unit = crate::swift::Module {
+                name: module,
+                sources,
+                headers: &headers,
+                search: &search,
+                imports: &imports,
+            };
             // Reused while every file it reads hashes the same, as a C
             // source's object is: its Swift, its own headers and those of the
             // modules it imports -- and the SDK and toolchain, in the key. A
             // module recompiled whole on every build was most of a rebuild.
             let inputs: Vec<&Utf8Path> = native
                 .iter()
-                .filter(|source| source.module == *module && source.path.extension() == Some("swift"))
+                .filter(|source| {
+                    source.module == *module && source.path.extension() == Some("swift")
+                })
                 .map(|source| source.path.as_path())
                 .chain(first.headers.iter().map(Utf8PathBuf::as_path))
-                .chain(first.imports.iter().flat_map(|(_, headers)| headers.iter().map(Utf8PathBuf::as_path)))
+                .chain(
+                    first
+                        .imports
+                        .iter()
+                        .flat_map(|(_, headers)| headers.iter().map(Utf8PathBuf::as_path)),
+                )
                 .collect();
-            let key = [(*module).to_owned(), triple.clone(), sdk.clone(), toolchain.identity()];
+            let key = [
+                (*module).to_owned(),
+                triple.clone(),
+                sdk.clone(),
+                toolchain.identity(),
+            ];
             let entry = with.cache.module_entry(&inputs, &key);
-            let cached = entry.as_ref().filter(|entry| entry.object.exists() && ObjectCache::current(entry));
+            let cached = entry
+                .as_ref()
+                .filter(|entry| entry.object.exists() && ObjectCache::current(entry));
             let object = out.join(format!("{module}.swift.o"));
             // Its Objective-C reaches its Swift through the header Swift
             // writes, `#import "Mix-Swift.h"` or `<Mix/Mix-Swift.h>`, as
@@ -6660,14 +7472,17 @@ fn compile_native(
                 let header = out.join(format!("{module}-Swift.h"));
                 match cached {
                     Some(entry) if entry.object.with_extension("h").exists() => {
-                        std::fs::copy(entry.object.with_extension("h"), &header).with_context(|| format!("reusing {header}"))?;
+                        std::fs::copy(entry.object.with_extension("h"), &header)
+                            .with_context(|| format!("reusing {header}"))?;
                     }
                     _ => toolchain.objc_header(&unit, target, header.as_std_path())?,
                 }
-                std::fs::copy(&header, nested.join(format!("{module}-Swift.h"))).with_context(|| format!("copying {header}"))?;
+                std::fs::copy(&header, nested.join(format!("{module}-Swift.h")))
+                    .with_context(|| format!("copying {header}"))?;
             }
             if let Some(entry) = cached {
-                std::fs::copy(&entry.object, &object).with_context(|| format!("reusing {}", entry.object))?;
+                std::fs::copy(&entry.object, &object)
+                    .with_context(|| format!("reusing {}", entry.object))?;
             } else {
                 toolchain.compile(&unit, target, object.as_std_path())?;
                 if let Some(entry) = &entry {
@@ -6675,22 +7490,37 @@ fn compile_native(
                     ObjectCache::record_inputs(entry, &inputs);
                     drop(std::fs::copy(&object, &entry.object));
                     if !headers.is_empty() {
-                        drop(std::fs::copy(out.join(format!("{module}-Swift.h")), entry.object.with_extension("h")));
+                        drop(std::fs::copy(
+                            out.join(format!("{module}-Swift.h")),
+                            entry.object.with_extension("h"),
+                        ));
                     }
                 }
             }
             objects.push(object);
         }
     }
-    for NativeSource { directory, path: source, include, object, .. } in native.iter().filter(|source| source.path.extension() != Some("swift")) {
+    for NativeSource {
+        directory,
+        path: source,
+        include,
+        object,
+        ..
+    } in native
+        .iter()
+        .filter(|source| source.path.extension() != Some("swift"))
+    {
         let object = out.join(object);
         if let Some(parent) = object.parent() {
             std::fs::create_dir_all(parent).with_context(|| format!("creating {parent}"))?;
         }
         // Objective-C under ARC with blocks, as Xcode compiles a `.m`: the
         // project's classes count their objects as the program's do.
-        let language: &[&str] =
-            if source.extension() == Some("m") { &["-x", "objective-c", "-fobjc-arc", "-fblocks"] } else { &["-std=c11"] };
+        let language: &[&str] = if source.extension() == Some("m") {
+            &["-x", "objective-c", "-fobjc-arc", "-fblocks"]
+        } else {
+            &["-std=c11"]
+        };
         let mut arguments: Vec<String> = language
             .iter()
             .chain(&["-O2", "-ffunction-sections", "-fdata-sections"])
@@ -6710,7 +7540,12 @@ fn compile_native(
         // A dependency's include directories, which is the half of `pkg-config`
         // that a compile needs and a link does not.
         arguments.extend(with.cflags.iter().cloned());
-        arguments.extend(["-c".to_owned(), source.to_string(), "-o".to_owned(), object.to_string()]);
+        arguments.extend([
+            "-c".to_owned(),
+            source.to_string(),
+            "-o".to_owned(),
+            object.to_string(),
+        ]);
         compile_one(
             with.cache,
             with.tools,
@@ -6870,11 +7705,17 @@ fn chosen_products(
     Ok(match named.as_deref() {
         // One product by name, and `product` reports what a config declares when
         // the name is not one of them.
-        Some(_) => nts_build::config::product(resolved, named.as_deref())?.into_iter().collect(),
+        Some(_) => nts_build::config::product(resolved, named.as_deref())?
+            .into_iter()
+            .collect(),
         // Every product. A config with several is the normal case -- a shared
         // library beside a static archive of the same code is two -- and
         // building all of them is what "build this project" means.
-        None => resolved.products.iter().map(|(k, v)| (k.as_str(), v)).collect(),
+        None => resolved
+            .products
+            .iter()
+            .map(|(k, v)| (k.as_str(), v))
+            .collect(),
     })
 }
 
@@ -6928,15 +7769,15 @@ fn unsatisfied_claims(
         if own.as_ref() == Some(config_path) {
             continue;
         }
-        let Ok(resolved) = nts_build::config::resolve(config_path) else { continue };
+        let Ok(resolved) = nts_build::config::resolve(config_path) else {
+            continue;
+        };
         // No claim is a package that runs anywhere, which is most of them.
-        let Some(claims) = resolved.targets.as_ref().filter(|it| !it.is_empty()) else { continue };
+        let Some(claims) = resolved.targets.as_ref().filter(|it| !it.is_empty()) else {
+            continue;
+        };
         if claims.iter().any(|claim| {
-            nts_build::config::claim_covers(
-                claim,
-                &target.id,
-                target.minimum_version.as_deref(),
-            )
+            nts_build::config::claim_covers(claim, &target.id, target.minimum_version.as_deref())
         }) {
             continue;
         }
@@ -6963,9 +7804,14 @@ fn targets_for<'a>(
     product: &'a nts_build::config::Product,
     only_os: Option<&str>,
 ) -> Result<Vec<&'a nts_build::config::Target>> {
-    let Some(os) = only_os else { return Ok(product.targets.iter().collect()) };
-    let wanted: Vec<&nts_build::config::Target> =
-        product.targets.iter().filter(|target| target.os == os).collect();
+    let Some(os) = only_os else {
+        return Ok(product.targets.iter().collect());
+    };
+    let wanted: Vec<&nts_build::config::Target> = product
+        .targets
+        .iter()
+        .filter(|target| target.os == os)
+        .collect();
     if wanted.is_empty() {
         let available: Vec<&str> = product.targets.iter().map(|t| t.os.as_str()).collect();
         bail!(
@@ -7057,7 +7903,11 @@ fn absolute(path: &Utf8Path) -> Utf8PathBuf {
     // --out ...` with no project, in its own build directory, and got "no
     // `tsconfig.json` here". Found by running the test with a relative path,
     // which is the only reason it was reachable at all.
-    let path = if path.as_str().is_empty() { Utf8Path::new(".") } else { path };
+    let path = if path.as_str().is_empty() {
+        Utf8Path::new(".")
+    } else {
+        path
+    };
     std::fs::canonicalize(path)
         .ok()
         .and_then(|p| Utf8PathBuf::from_path_buf(p).ok())
@@ -7099,32 +7949,34 @@ fn write_cmake_hook(
     // addon, which is the ordinary case rather than the exotic one.
     for (name, product) in &resolved.products {
         for target in &product.targets {
-        let artifact = root.join(name).join(target_directory(target)).join(artifact_name(
-            name,
-            product,
-            target,
-        ));
-        // **The plain name where it is unambiguous.** `apps/linux-brownfield`
-        // asks for a consumer writing `find_package(Acme)` rather than a path,
-        // and `nts::sdk_linux_gnu_x86_64` is a path with underscores. A product
-        // with one target gets `nts::sdk`; one with several has to say which,
-        // because two targets cannot both answer to one name.
-        let label = if product.targets.len() == 1 {
-            name.clone()
-        } else {
-            format!("{name}_{}", target_directory(target).replace(['-', '.'], "_"))
-        };
-        let entry = absolute(&project.join(&product.entry));
-        let kind = match product.kind.as_str() {
-            "static-library" => "STATIC",
-            _ => "SHARED",
-        };
-        // `IMPORTED GLOBAL` so a consumer can link it from any directory, and
-        // the custom target is what carries the dependency: an imported target
-        // cannot itself have a build rule.
-        let _ = write!(
-            text,
-            "# --- {name} for {} ---\n\
+            let artifact = root
+                .join(name)
+                .join(target_directory(target))
+                .join(artifact_name(name, product, target));
+            // **The plain name where it is unambiguous.** `apps/linux-brownfield`
+            // asks for a consumer writing `find_package(Acme)` rather than a path,
+            // and `nts::sdk_linux_gnu_x86_64` is a path with underscores. A product
+            // with one target gets `nts::sdk`; one with several has to say which,
+            // because two targets cannot both answer to one name.
+            let label = if product.targets.len() == 1 {
+                name.clone()
+            } else {
+                format!(
+                    "{name}_{}",
+                    target_directory(target).replace(['-', '.'], "_")
+                )
+            };
+            let entry = absolute(&project.join(&product.entry));
+            let kind = match product.kind.as_str() {
+                "static-library" => "STATIC",
+                _ => "SHARED",
+            };
+            // `IMPORTED GLOBAL` so a consumer can link it from any directory, and
+            // the custom target is what carries the dependency: an imported target
+            // cannot itself have a build rule.
+            let _ = write!(
+                text,
+                "# --- {name} for {} ---\n\
              add_custom_command(\n\
              \x20 OUTPUT {artifact}\n\
              \x20 COMMAND ${{NTS_EXECUTABLE}} build {project} --out {root}\n\
@@ -7135,8 +7987,8 @@ fn write_cmake_hook(
              add_library(nts::{label} {kind} IMPORTED GLOBAL)\n\
              set_target_properties(nts::{label} PROPERTIES IMPORTED_LOCATION {artifact})\n\
              add_dependencies(nts::{label} nts_{label}_build)\n\n",
-            target.id
-        );
+                target.id
+            );
         }
     }
     let path = root.join("nts.cmake");
@@ -7339,7 +8191,9 @@ fn selected_roots(shape: Shape) -> Option<Vec<String>> {
 /// artifact nobody asked for, under a name that says otherwise, is worse than
 /// stopping.
 fn configured_product(tsconfig: &Utf8Path) -> Result<Option<(String, nts_build::config::Product)>> {
-    let Some(path) = nts_build::config::beside(tsconfig) else { return Ok(None) };
+    let Some(path) = nts_build::config::beside(tsconfig) else {
+        return Ok(None);
+    };
     let resolved = nts_build::config::resolve(&path)?;
     let named = requested_product()?;
     let Some((name, product)) = nts_build::config::product(&resolved, named.as_deref())? else {
@@ -7376,7 +8230,9 @@ fn configured_surface(
         Some((name, product)) => Some((name.to_owned(), product.clone())),
         None => configured_product(tsconfig)?,
     };
-    let Some((name, product)) = chosen else { return Ok(None) };
+    let Some((name, product)) = chosen else {
+        return Ok(None);
+    };
     let directory = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
     let entry = directory.join(&product.entry);
     let matched = nts_frontend_ts::entry_uris_for(std::slice::from_ref(&entry), snapshot);
@@ -7391,21 +8247,26 @@ fn configured_surface(
     // Said out loud, because it changes what is emitted and was not asked for on
     // this command line. A narrowed surface that happens silently is
     // indistinguishable from a compiler that lost the function.
-    eprintln!("{}: product `{name}` publishes what `{}` exports", FILE_LABEL, product.entry);
+    eprintln!(
+        "{}: product `{name}` publishes what `{}` exports",
+        FILE_LABEL, product.entry
+    );
     Ok(Some(matched))
 }
 
 /// What the notice above calls the config, without re-deriving the path.
 const FILE_LABEL: &str = nts_build::config::FILE_NAME;
 
-fn foreign_tables(
-    snapshot: &nts_semantic_schema::SemanticSnapshot,
-) -> hir::runtime::ForeignTable {
+fn foreign_tables(snapshot: &nts_semantic_schema::SemanticSnapshot) -> hir::runtime::ForeignTable {
     let mut out = rustc_hash::FxHashMap::default();
     for (index, source) in snapshot.sources.iter().enumerate() {
         let path = source.display_path.as_str();
-        let Some(stem) = path.strip_suffix(".d.ts") else { continue };
-        let Ok(text) = std::fs::read_to_string(format!("{stem}.bind")) else { continue };
+        let Some(stem) = path.strip_suffix(".d.ts") else {
+            continue;
+        };
+        let Ok(text) = std::fs::read_to_string(format!("{stem}.bind")) else {
+            continue;
+        };
         let rows = match nts_jvm_emitter::bind::read_table(&text) {
             Ok(rows) => rows,
             Err(why) => {
@@ -7422,9 +8283,16 @@ fn foreign_tables(
                 nts_jvm_emitter::bind::Call::Field => hir::runtime::ForeignKind::Field,
                 nts_jvm_emitter::bind::Call::StaticField => hir::runtime::ForeignKind::StaticField,
             };
-            let Ok(index) = u32::try_from(index) else { continue };
-            let Ok(end) = u32::try_from(row.end) else { continue };
-            out.insert((index, end), hir::runtime::ForeignCall { key: row.key, kind });
+            let Ok(index) = u32::try_from(index) else {
+                continue;
+            };
+            let Ok(end) = u32::try_from(row.end) else {
+                continue;
+            };
+            out.insert(
+                (index, end),
+                hir::runtime::ForeignCall { key: row.key, kind },
+            );
         }
     }
     out
@@ -7486,7 +8354,11 @@ fn emit_options<'a>(
     }
 }
 
-fn emit_llvm(tsconfig: &Utf8Path, emission: Emission, platform: nts_codegen_llvm::Platform) -> Result<()> {
+fn emit_llvm(
+    tsconfig: &Utf8Path,
+    emission: Emission,
+    platform: nts_codegen_llvm::Platform,
+) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
@@ -7501,7 +8373,13 @@ fn emit_llvm(tsconfig: &Utf8Path, emission: Emission, platform: nts_codegen_llvm
     };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, emission.host.checkpoints_after_callbacks()),
+        &emit_options(
+            entry.as_deref(),
+            &entry_files,
+            &foreign_tables(&snapshot),
+            configured,
+            emission.host.checkpoints_after_callbacks(),
+        ),
     ) {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
@@ -7511,7 +8389,10 @@ fn emit_llvm(tsconfig: &Utf8Path, emission: Emission, platform: nts_codegen_llvm
     // two refusals in it: `emit-c` reported them and this did not, so the
     // module looked like a backend that had rendered everything asked of it.
     for diagnostic in &prepared.diagnostics {
-        eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+        eprintln!(
+            "{}",
+            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+        );
     }
     let emitted = nts_codegen_llvm::emit(&prepared.program, platform);
     for diagnostic in &emitted.diagnostics {
@@ -7551,13 +8432,22 @@ fn emit_jvm(
     };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, false),
+        &emit_options(
+            entry.as_deref(),
+            &entry_files,
+            &foreign_tables(&snapshot),
+            configured,
+            false,
+        ),
     ) {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
     for diagnostic in &prepared.diagnostics {
-        eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+        eprintln!(
+            "{}",
+            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+        );
     }
     // **The package the product declares, as a binary-name prefix.** A config
     // says `com.acme.sdk` because that is how Java spells a package; the class
@@ -7565,7 +8455,10 @@ fn emit_jvm(
     let package = emission
         .product
         .and_then(|(_, product)| product.java_package.as_deref())
-        .map_or_else(|| nts_codegen_jvm::DEFAULT_PACKAGE.to_owned(), |named| named.replace('.', "/"));
+        .map_or_else(
+            || nts_codegen_jvm::DEFAULT_PACKAGE.to_owned(),
+            |named| named.replace('.', "/"),
+        );
     let emitted = nts_codegen_jvm::emit_into(&package, &prepared.program);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
@@ -7733,19 +8626,31 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     };
     let prepared = match hir::prepare_with(
         &snapshot,
-        &emit_options(entry.as_deref(), &entry_files, &foreign_tables(&snapshot), configured, emission.host.checkpoints_after_callbacks()),
+        &emit_options(
+            entry.as_deref(),
+            &entry_files,
+            &foreign_tables(&snapshot),
+            configured,
+            emission.host.checkpoints_after_callbacks(),
+        ),
     ) {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
     for diagnostic in &prepared.diagnostics {
-        eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+        eprintln!(
+            "{}",
+            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+        );
     }
     let program = prepared.program;
 
     let emitted = nts_codegen_c::emit(&program, emission.abi);
     for diagnostic in &emitted.diagnostics {
-        eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+        eprintln!(
+            "{}",
+            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+        );
     }
     refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
@@ -7771,7 +8676,11 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     // which nothing answers to.
     let Some(out) = out else {
         print!("{}", emitted.writer.text());
-        return Ok(Wrote { initializes, refused, ..Wrote::default() });
+        return Ok(Wrote {
+            initializes,
+            refused,
+            ..Wrote::default()
+        });
     };
 
     let mut wrote = write_c_output(&program, &emitted, out, emission, refused, initializes)?;
@@ -7805,7 +8714,10 @@ fn write_llvm_program(
 ) -> Result<()> {
     let rendered = nts_codegen_llvm::emit(program, platform);
     for diagnostic in &rendered.diagnostics {
-        eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+        eprintln!(
+            "{}",
+            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+        );
     }
     if !rendered.diagnostics.is_empty() {
         bail!(
@@ -7815,7 +8727,9 @@ fn write_llvm_program(
     }
     let path = out.join(PROGRAM_IR_NAME);
     std::fs::write(&path, &rendered.text).with_context(|| format!("writing {path}"))?;
-    println!("rendered {PROGRAM_IR_NAME} with the llvm backend, compiled in place of {PROGRAM_SOURCE_NAME}");
+    println!(
+        "rendered {PROGRAM_IR_NAME} with the llvm backend, compiled in place of {PROGRAM_SOURCE_NAME}"
+    );
     for source in &mut wrote.sources {
         if source == PROGRAM_SOURCE_NAME {
             PROGRAM_IR_NAME.clone_into(source);
@@ -7829,6 +8743,7 @@ fn write_llvm_program(
 /// Split out of `emit_c` because that function was 112 lines and clippy says so
 /// at 100. The seam is real rather than arbitrary: everything above decides
 /// *what* the program is, and everything here decides what lands on disk.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn write_c_output(
     program: &hir::Program,
     emitted: &nts_codegen_c::Emitted,
@@ -7885,7 +8800,10 @@ fn write_c_output(
             .funcs
             .iter()
             .any(|func| func.name == hir::lower::MODULE_INIT)
-            && emitted.refused.iter().any(|name| name == hir::lower::MODULE_INIT)
+            && emitted
+                .refused
+                .iter()
+                .any(|name| name == hir::lower::MODULE_INIT)
         {
             anyhow::bail!(
                 "this program's top-level code was declined by the C backend, so a standalone \
@@ -7905,7 +8823,10 @@ fn write_c_output(
         return Ok(Wrote {
             sources: std::iter::once("program.c".to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))
-                .chain(["main.c".to_owned(), nts_codegen_c::UV_HOST_SOURCE_NAME.to_owned()])
+                .chain([
+                    "main.c".to_owned(),
+                    nts_codegen_c::UV_HOST_SOURCE_NAME.to_owned(),
+                ])
                 .chain(host.source().map(str::to_owned))
                 .collect(),
             published,
@@ -7936,7 +8857,9 @@ fn write_c_output(
         return Ok(Wrote {
             sources: std::iter::once("program.c".to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))
-                .chain(std::iter::once(nts_codegen_napi::ADDON_SOURCE_NAME.to_owned()))
+                .chain(std::iter::once(
+                    nts_codegen_napi::ADDON_SOURCE_NAME.to_owned(),
+                ))
                 .collect(),
             published,
             published_without_a_symbol,
@@ -8022,12 +8945,19 @@ fn deps(rest: &[String]) -> Result<()> {
 /// cairo_gobject_context_get_type`, `, an array of 1 counted by 2`.
 fn bridging_note(bridging: &nts_core::hir::Bridging) -> String {
     use std::fmt::Write as _;
-    let mut note = bridging.boxed.iter().fold(String::new(), |mut note, parameter| {
-        let _ = write!(note, ", boxing {} by {}", parameter.at, parameter.get_type);
-        note
-    });
+    let mut note = bridging
+        .boxed
+        .iter()
+        .fold(String::new(), |mut note, parameter| {
+            let _ = write!(note, ", boxing {} by {}", parameter.at, parameter.get_type);
+            note
+        });
     for array in &bridging.arrays {
-        let _ = write!(note, ", an array of {} counted by {}", array.at, array.length_at);
+        let _ = write!(
+            note,
+            ", an array of {} counted by {}",
+            array.at, array.length_at
+        );
     }
     note
 }

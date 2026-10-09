@@ -29,9 +29,15 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir:
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
+    Some((
+        dir,
+        hir::prepare(&snapshot)
+            .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
+    ))
 }
 
 /// `Windows.Data.Json` as `examples/interop/windows-winrt` binds it, with
@@ -84,25 +90,50 @@ fn a_com_method_is_a_call_through_its_table() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for (slot, what) in [(6, "Parse"), (7, "Stringify"), (9, "GetNumber")] {
-        assert!(text.contains("(*(void ***)") && text.contains(&format!("[{slot}])(")), "no call through slot {slot} ({what}):\n{text}");
+        assert!(
+            text.contains("(*(void ***)") && text.contains(&format!("[{slot}])(")),
+            "no call through slot {slot} ({what}):\n{text}"
+        );
     }
-    assert!(text.contains("nts_winrt_factory("), "a static is not called on its factory:\n{text}");
+    assert!(
+        text.contains("nts_winrt_factory("),
+        "a static is not called on its factory:\n{text}"
+    );
     // The factory's IID crosses as the two words of its bytes, both above
     // 2^53, and exactly: widening them through a double on the way rounded
     // the low bits away, and Windows answered E_NOINTERFACE.
     for word in ["5251530675620369482", "6644118215154181009"] {
-        assert!(text.contains(word), "the IID word {word} does not reach the C exactly:\n{text}");
+        assert!(
+            text.contains(word),
+            "the IID word {word} does not reach the C exactly:\n{text}"
+        );
     }
-    assert!(text.contains("nts_com_take("), "the object Parse writes is not taken:\n{text}");
-    assert!(text.contains("nts_hresult_message("), "no HRESULT is checked:\n{text}");
-    assert!(text.contains("nts_string_from_hstring("), "the HSTRING Stringify writes is not read:\n{text}");
+    assert!(
+        text.contains("nts_com_take("),
+        "the object Parse writes is not taken:\n{text}"
+    );
+    assert!(
+        text.contains("nts_hresult_message("),
+        "no HRESULT is checked:\n{text}"
+    );
+    assert!(
+        text.contains("nts_string_from_hstring("),
+        "the HSTRING Stringify writes is not read:\n{text}"
+    );
     // No symbol is declared for a method with none.
-    assert!(!text.contains("Parse("), "a prototype or call names `Parse` as a symbol:\n{text}");
+    assert!(
+        !text.contains("Parse("),
+        "a prototype or call names `Parse` as a symbol:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -114,7 +145,11 @@ fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
         file.write(dir.as_std_path()).unwrap();
     }
     std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
-    let zig = Command::new("zig").arg("env").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+    let zig = Command::new("zig")
+        .arg("env")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
     let Some(lib) = zig
         .as_deref()
         .and_then(|env| env.split_once("lib_dir"))
@@ -127,14 +162,30 @@ fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
     let checked = Command::new("clang")
         .current_dir(dir)
         .args([
-            "--target=x86_64-w64-windows-gnu", "-nostdlibinc", "-isystem", &format!("{headers}/x86_64-windows-gnu"),
-            "-isystem", &format!("{headers}/generic-mingw"), "-isystem", &format!("{headers}/x86_64-windows-any"),
-            "-isystem", &format!("{headers}/any-windows-any"), "-std=c11", "-Wall", "-Werror", "-fsyntax-only",
-            "program.c", "nts_winrt.c",
+            "--target=x86_64-w64-windows-gnu",
+            "-nostdlibinc",
+            "-isystem",
+            &format!("{headers}/x86_64-windows-gnu"),
+            "-isystem",
+            &format!("{headers}/generic-mingw"),
+            "-isystem",
+            &format!("{headers}/x86_64-windows-any"),
+            "-isystem",
+            &format!("{headers}/any-windows-any"),
+            "-std=c11",
+            "-Wall",
+            "-Werror",
+            "-fsyntax-only",
+            "program.c",
+            "nts_winrt.c",
         ])
         .output()
         .unwrap();
-    assert!(checked.status.success(), "{}", String::from_utf8_lossy(&checked.stderr));
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
 }
 
 /// Each claim a binding can get wrong is refused where it is read, naming it,
@@ -142,7 +193,9 @@ fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
 #[test]
 fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
     let method_named = |slot_and_name: &str, method: &str| {
-        format!("    /**\n     * @ntsVtable {slot_and_name}\n     * @ntsHresult\n     */\n    {method}(this: IJsonValue): c_double;")
+        format!(
+            "    /**\n     * @ntsVtable {slot_and_name}\n     * @ntsHresult\n     */\n    {method}(this: IJsonValue): c_double;"
+        )
     };
     // (name, method spliced in, function spliced in, the call, the refusal)
     let cases: [(&str, String, String, &str, &str); 9] = [
@@ -211,7 +264,11 @@ fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
         ),
     ];
     for (name, method, function, call, refusal) in cases {
-        let imports = if function.is_empty() { "Parse" } else { &format!("Parse, {}", call.split('(').next().unwrap()) };
+        let imports = if function.is_empty() {
+            "Parse"
+        } else {
+            &format!("Parse, {}", call.split('(').next().unwrap())
+        };
         let source = format!(
             "import {{ {imports} }} from \"winrt:Windows.Data.Json\";\nexport function run(): void {{\n  {call};\n}}\n"
         );
@@ -220,9 +277,16 @@ fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
             return;
         };
         assert!(
-            prepared.diagnostics.iter().any(|d| d.message.contains(refusal)),
+            prepared
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(refusal)),
             "{name}: expected a refusal containing {refusal:?}, got {:?}",
-            prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+            prepared
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -251,19 +315,41 @@ export function run(): string {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The receiver, the string, then the two slots: four arguments.
-    let call = text.find("[7])(").unwrap_or_else(|| panic!("no call through slot 7:\n{text}")) + "[7])(".len();
-    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
-    assert_eq!(arguments, 4, "TryParse is not called with its receiver, input and two slots:\n{text}");
-    assert!(text.contains("nts_com_take("), "the object written to `result` is not taken:\n{text}");
-    let checked = text.find("nts_hresult_message(").unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
+    let call = text
+        .find("[7])(")
+        .unwrap_or_else(|| panic!("no call through slot 7:\n{text}"))
+        + "[7])(".len();
+    let arguments = text[call..]
+        .split_once(')')
+        .map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(
+        arguments, 4,
+        "TryParse is not called with its receiver, input and two slots:\n{text}"
+    );
+    assert!(
+        text.contains("nts_com_take("),
+        "the object written to `result` is not taken:\n{text}"
+    );
+    let checked = text
+        .find("nts_hresult_message(")
+        .unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
     for field in ["->result = ", "->returnValue = "] {
-        let stored = text.find(field).unwrap_or_else(|| panic!("no store to `{field}`:\n{text}"));
-        assert!(stored > checked, "`{field}` is stored before the HRESULT is checked:\n{text}");
+        let stored = text
+            .find(field)
+            .unwrap_or_else(|| panic!("no store to `{field}`:\n{text}"));
+        assert!(
+            stored > checked,
+            "`{field}` is stored before the HRESULT is checked:\n{text}"
+        );
     }
 
     windows_syntax(&dir, &emitted);
@@ -327,7 +413,11 @@ fn a_struct_holding_a_string_is_copied_at_the_call() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
@@ -337,15 +427,39 @@ fn a_struct_holding_a_string_is_copied_at_the_call() {
     );
     // Two arguments, each passed by value, each string lent and given back
     // on both of the call's paths.
-    assert_eq!(text.matches("nts_string_to_hstring(").count(), 2, "not one HSTRING per argument:\n{text}");
-    assert_eq!(text.matches("nts_hstring_release(").count(), 4, "an HSTRING is not given back on both paths:\n{text}");
-    assert_eq!(text.matches("struct Windows_UI_Xaml_Interop_TypeName, void *))").count(), 2, "not passed by value:\n{text}");
+    assert_eq!(
+        text.matches("nts_string_to_hstring(").count(),
+        2,
+        "not one HSTRING per argument:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_hstring_release(").count(),
+        4,
+        "an HSTRING is not given back on both paths:\n{text}"
+    );
+    assert_eq!(
+        text.matches("struct Windows_UI_Xaml_Interop_TypeName, void *))")
+            .count(),
+        2,
+        "not passed by value:\n{text}"
+    );
     // The literal's fields are stored into the struct, not into an object:
     // the only objects given a `kind` are the one held and the result.
-    assert_eq!(text.matches("->kind = ").count(), 2, "the literal was built as an object:\n{text}");
-    let copied_out = text.find("nts_string_from_hstring(").unwrap_or_else(|| panic!("the result's HSTRING is not copied out:\n{text}"));
-    let checked = text.rfind("[11])(").unwrap_or_else(|| panic!("no call through slot 11:\n{text}"));
-    assert!(copied_out > checked, "the result is read before the call:\n{text}");
+    assert_eq!(
+        text.matches("->kind = ").count(),
+        2,
+        "the literal was built as an object:\n{text}"
+    );
+    let copied_out = text
+        .find("nts_string_from_hstring(")
+        .unwrap_or_else(|| panic!("the result's HSTRING is not copied out:\n{text}"));
+    let checked = text
+        .rfind("[11])(")
+        .unwrap_or_else(|| panic!("no call through slot 11:\n{text}"));
+    assert!(
+        copied_out > checked,
+        "the result is read before the call:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -380,14 +494,26 @@ export function run(set: IJsonValue): string {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The receiver, the name, and the two slots: the struct's and the flag's.
-    let call = text.find("[10])(").unwrap_or_else(|| panic!("no call through slot 10:\n{text}")) + "[10])(".len();
-    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
-    assert_eq!(arguments, 4, "TryGetVector2 is not called with its receiver, name and two slots:\n{text}");
+    let call = text
+        .find("[10])(")
+        .unwrap_or_else(|| panic!("no call through slot 10:\n{text}"))
+        + "[10])(".len();
+    let arguments = text[call..]
+        .split_once(')')
+        .map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(
+        arguments, 4,
+        "TryGetVector2 is not called with its receiver, name and two slots:\n{text}"
+    );
     for field in ["->x = ", "->y = ", "->value = ", "->returnValue = "] {
         assert!(text.contains(field), "no store to `{field}`:\n{text}");
     }
@@ -411,17 +537,36 @@ export function run(): number {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    let call = text.find("[38])(").unwrap_or_else(|| panic!("no call through slot 38:\n{text}")) + "[38])(".len();
-    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
-    assert_eq!(arguments, 3, "not called with its receiver, the count slot and the block slot:\n{text}");
+    let call = text
+        .find("[38])(")
+        .unwrap_or_else(|| panic!("no call through slot 38:\n{text}"))
+        + "[38])(".len();
+    let arguments = text[call..]
+        .split_once(')')
+        .map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(
+        arguments, 3,
+        "not called with its receiver, the count slot and the block slot:\n{text}"
+    );
     let after = &text[call..];
-    let moved = after.find("nts_winrt_received_handles(").unwrap_or_else(|| panic!("the block is not moved into an array:\n{text}"));
-    let checked = after.find("nts_hresult_message(").unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
-    assert!(moved < checked, "the block is read after the branch, not on the call's own block:\n{text}");
+    let moved = after
+        .find("nts_winrt_received_handles(")
+        .unwrap_or_else(|| panic!("the block is not moved into an array:\n{text}"));
+    let checked = after
+        .find("nts_hresult_message(")
+        .unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
+    assert!(
+        moved < checked,
+        "the block is read after the branch, not on the call's own block:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -480,14 +625,30 @@ export function run(): number {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert_eq!(text.matches("nts_array_handles(").count(), 1, "the array of the interface itself is not lent in place:\n{text}");
-    assert_eq!(text.matches("nts_com_query_array(").count(), 1, "the array of another interface is not asked for the one taken:\n{text}");
+    assert_eq!(
+        text.matches("nts_array_handles(").count(),
+        1,
+        "the array of the interface itself is not lent in place:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_com_query_array(").count(),
+        1,
+        "the array of another interface is not asked for the one taken:\n{text}"
+    );
     // Given back on both of the call's paths, the array's last use.
-    assert_eq!(text.matches("nts_com_release_array(").count(), 2, "the queried block is not given back on both paths:\n{text}");
+    assert_eq!(
+        text.matches("nts_com_release_array(").count(),
+        2,
+        "the queried block is not given back on both paths:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -534,17 +695,39 @@ export function run(): string {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert_eq!(text.matches("nts_strings_to_hstrings(").count(), 1, "the strings are not lent as HSTRINGs:\n{text}");
-    assert_eq!(text.matches("nts_hstrings_release(").count(), 2, "the HSTRINGs are not given back on both paths:\n{text}");
-    let call = text.find("[11])(").unwrap_or_else(|| panic!("no call through slot 11:\n{text}")) + "[11])(".len();
+    assert_eq!(
+        text.matches("nts_strings_to_hstrings(").count(),
+        1,
+        "the strings are not lent as HSTRINGs:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_hstrings_release(").count(),
+        2,
+        "the HSTRINGs are not given back on both paths:\n{text}"
+    );
+    let call = text
+        .find("[11])(")
+        .unwrap_or_else(|| panic!("no call through slot 11:\n{text}"))
+        + "[11])(".len();
     let after = &text[call..];
-    let received = after.find("nts_winrt_received_strings(").unwrap_or_else(|| panic!("the strings handed back are not received:\n{text}"));
-    let checked = after.find("nts_hresult_message(").unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
-    assert!(received < checked, "the block is read after the branch, not on the call's own block:\n{text}");
+    let received = after
+        .find("nts_winrt_received_strings(")
+        .unwrap_or_else(|| panic!("the strings handed back are not received:\n{text}"));
+    let checked = after
+        .find("nts_hresult_message(")
+        .unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
+    assert!(
+        received < checked,
+        "the block is read after the branch, not on the call's own block:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -586,15 +769,35 @@ export function run(): number {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert_eq!(text.matches("nts_winrt_alloc(").count(), 1, "the array is not copied into one block:\n{text}");
-    assert_eq!(text.matches("nts_winrt_free(").count(), 3, "the lent block on both paths and the received one are not all freed:\n{text}");
-    let call = text.find("[10])(").unwrap_or_else(|| panic!("no call through slot 10:\n{text}")) + "[10])(".len();
-    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
-    assert_eq!(arguments, 5, "not called with its receiver, the count, the block, and the two slots:\n{text}");
+    assert_eq!(
+        text.matches("nts_winrt_alloc(").count(),
+        1,
+        "the array is not copied into one block:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_winrt_free(").count(),
+        3,
+        "the lent block on both paths and the received one are not all freed:\n{text}"
+    );
+    let call = text
+        .find("[10])(")
+        .unwrap_or_else(|| panic!("no call through slot 10:\n{text}"))
+        + "[10])(".len();
+    let arguments = text[call..]
+        .split_once(')')
+        .map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(
+        arguments, 5,
+        "not called with its receiver, the count, the block, and the two slots:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -651,15 +854,39 @@ export function run(): number {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert_eq!(text.matches("nts_winrt_array_items(").count(), 1, "the objects' own block is not lent:\n{text}");
-    assert_eq!(text.matches("nts_array_handles(").count(), 0, "a filled array is lent as one C reads, which refuses its NULLs:\n{text}");
-    assert_eq!(text.matches("nts_winrt_alloc(").count(), 2, "the strings and the structs are not each given a block:\n{text}");
-    assert_eq!(text.matches("nts_winrt_free(").count(), 4, "each block is not freed on both of its call's paths:\n{text}");
-    assert_eq!(text.matches("nts_string_from_hstring(").count(), 2, "the strings are not copied in on both paths:\n{text}");
+    assert_eq!(
+        text.matches("nts_winrt_array_items(").count(),
+        1,
+        "the objects' own block is not lent:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_array_handles(").count(),
+        0,
+        "a filled array is lent as one C reads, which refuses its NULLs:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_winrt_alloc(").count(),
+        2,
+        "the strings and the structs are not each given a block:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_winrt_free(").count(),
+        4,
+        "each block is not freed on both of its call's paths:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_string_from_hstring(").count(),
+        2,
+        "the strings are not copied in on both paths:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -713,13 +940,29 @@ export function run(): number {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert_eq!(text.matches("nts_winrt_array_items(").count(), 2, "the two arrays are not lent in place:\n{text}");
-    assert_eq!(text.matches("nts_winrt_alloc(").count(), 0, "a boolean array is copied into a block:\n{text}");
-    assert_eq!(text.matches("nts_winrt_free(").count(), 1, "the received block is not freed:\n{text}");
+    assert_eq!(
+        text.matches("nts_winrt_array_items(").count(),
+        2,
+        "the two arrays are not lent in place:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_winrt_alloc(").count(),
+        0,
+        "a boolean array is copied into a block:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_winrt_free(").count(),
+        1,
+        "the received block is not freed:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -762,16 +1005,34 @@ export function run(): boolean {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let arguments = |slot: &str| {
-        let call = text.find(&format!("[{slot}])(")).unwrap_or_else(|| panic!("no call through slot {slot}:\n{text}")) + slot.len() + 4;
-        text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1)
+        let call = text
+            .find(&format!("[{slot}])("))
+            .unwrap_or_else(|| panic!("no call through slot {slot}:\n{text}"))
+            + slot.len()
+            + 4;
+        text[call..]
+            .split_once(')')
+            .map_or(0, |(inside, _)| inside.matches(',').count() + 1)
     };
-    assert_eq!(arguments("23"), 3, "the one-argument overload is not slot 23's call (receiver, string, slot):\n{text}");
-    assert_eq!(arguments("17"), 4, "the two-argument overload is not slot 17's call:\n{text}");
+    assert_eq!(
+        arguments("23"),
+        3,
+        "the one-argument overload is not slot 23's call (receiver, string, slot):\n{text}"
+    );
+    assert_eq!(
+        arguments("17"),
+        4,
+        "the two-argument overload is not slot 17's call:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -819,13 +1080,24 @@ export function run(): number {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let run = &text[text.find("run(").expect("no run")..];
-    assert_eq!(run.matches("[6])(").count(), 3, "not Parse and two `get_Value`s through slot 6:\n{run}");
-    assert!(run.matches("nts_com_release(").count() >= 2, "a reference is not given back:\n{run}");
+    assert_eq!(
+        run.matches("[6])(").count(),
+        3,
+        "not Parse and two `get_Value`s through slot 6:\n{run}"
+    );
+    assert!(
+        run.matches("nts_com_release(").count() >= 2,
+        "a reference is not given back:\n{run}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -864,16 +1136,32 @@ export function run(flag: boolean | null): void {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     let run = &text[text.find("run(").expect("no run")..];
-    assert_eq!(run.matches("nts_winrt_reference(").count(), 1, "no reference made for the call:\n{run}");
+    assert_eq!(
+        run.matches("nts_winrt_reference(").count(),
+        1,
+        "no reference made for the call:\n{run}"
+    );
     let made = run.find("nts_winrt_reference(").unwrap_or(0);
-    let called = run.find("[10])(").unwrap_or_else(|| panic!("no call through slot 10:\n{run}"));
-    assert!(made < called, "the reference is made after the call:\n{run}");
-    assert!(run[called..].contains("nts_com_release("), "the reference is not given back after the call:\n{run}");
+    let called = run
+        .find("[10])(")
+        .unwrap_or_else(|| panic!("no call through slot 10:\n{run}"));
+    assert!(
+        made < called,
+        "the reference is made after the call:\n{run}"
+    );
+    assert!(
+        run[called..].contains("nts_com_release("),
+        "the reference is not given back after the call:\n{run}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -889,8 +1177,18 @@ fn a_declared_number_with_no_value_is_refused() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    let said: Vec<&str> = prepared.diagnostics.iter().map(|diagnostic| diagnostic.message.as_str()).collect();
-    assert!(said.iter().any(|message| message.contains("a declared `const` no one gives a value") && message.contains("declare it with its value")), "{said:?}");
+    let said: Vec<&str> = prepared
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect();
+    assert!(
+        said.iter().any(
+            |message| message.contains("a declared `const` no one gives a value")
+                && message.contains("declare it with its value")
+        ),
+        "{said:?}"
+    );
 }
 
 /// A binding's constant (`@ntsConstant`), as Win32's are declared: imported
@@ -916,21 +1214,41 @@ export function run(message: number): boolean {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert!(!text.contains("WM_PAINT"), "the constant is declared or linked rather than folded:\n{text}");
-    assert!(text.contains("15"), "the constant's value is not what the read is:\n{text}");
+    assert!(
+        !text.contains("WM_PAINT"),
+        "the constant is declared or linked rather than folded:\n{text}"
+    );
+    assert!(
+        text.contains("15"),
+        "the constant's value is not what the read is:\n{text}"
+    );
 
     let refused = r#"import { WM_HEX } from "c:Windows.Win32.UI.WindowsAndMessaging";
 export function run(message: number): boolean {
   return message === WM_HEX;
 }
 "#;
-    let Some((_dir, prepared)) = prepare("bound-constant-refused", binding, refused) else { return };
-    let said: Vec<&str> = prepared.diagnostics.iter().map(|diagnostic| diagnostic.message.as_str()).collect();
-    assert!(said.iter().any(|message| message.contains("`@ntsConstant 0x0F`, which is not a number")), "{said:?}");
+    let Some((_dir, prepared)) = prepare("bound-constant-refused", binding, refused) else {
+        return;
+    };
+    let said: Vec<&str> = prepared
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect();
+    assert!(
+        said.iter()
+            .any(|message| message.contains("`@ntsConstant 0x0F`, which is not a number")),
+        "{said:?}"
+    );
 }
 
 /// A sealed runtime class (`@ntsRuntimeClass`), declared as a TypeScript
@@ -982,13 +1300,28 @@ export function run(): string {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert_eq!(text.matches("nts_winrt_activate(").count(), 1, "the default constructor is not an activation:\n{text}");
-    assert_eq!(text.matches("nts_winrt_factory(").count(), 1, "the factory constructor is not called on the class's factory:\n{text}");
-    assert!(text.contains("nts_string_to_hstring("), "the constructor's string is not lent as an HSTRING:\n{text}");
+    assert_eq!(
+        text.matches("nts_winrt_activate(").count(),
+        1,
+        "the default constructor is not an activation:\n{text}"
+    );
+    assert_eq!(
+        text.matches("nts_winrt_factory(").count(),
+        1,
+        "the factory constructor is not called on the class's factory:\n{text}"
+    );
+    assert!(
+        text.contains("nts_string_to_hstring("),
+        "the constructor's string is not lent as an HSTRING:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -1010,7 +1343,9 @@ export function run(): string {
         return;
     };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("composable Windows Runtime class can be extended")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("composable Windows Runtime class can be extended")),
         "a class over a sealed class was not refused by name: {:?}",
         prepared.diagnostics
     );
@@ -1027,14 +1362,19 @@ fn a_struct_holding_a_string_is_never_storage() {
             "  export interface IFrameMethods {",
             "  import type { ByValue } from \"c:types\";\n  export interface IFrameMethods {\n    /**\n     * @ntsVtable 12 Held\n     * @ntsHresult\n     */\n    Held(this: IFrame, sourcePageType: ByValue<TypeName>): boolean;",
         );
-    let source = source
-        .replace("import { type IFrame, TypeKind }", "import { local } from \"c:memory\";\nimport { type IFrame, type TypeName }");
+    let source = source.replace(
+        "import { type IFrame, TypeKind }",
+        "import { local } from \"c:memory\";\nimport { type IFrame, type TypeName }",
+    );
     let Some((_, prepared)) = prepare("copied-storage", &binding, &source) else {
         eprintln!("skipped: no tsgo");
         return;
     };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("`Held`'s parameter `sourcePageType`") && d.message.contains("only ever `Copied<T>`")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("`Held`'s parameter `sourcePageType`")
+            && d.message.contains("only ever `Copied<T>`")),
         "a struct holding a string was taken as storage: {:?}",
         prepared.diagnostics
     );
@@ -1057,15 +1397,34 @@ fn a_static_taking_bytes_passes_the_count_before_them() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     // The factory, the count, the bytes, the result slot.
-    let call = text.find("[9])(").unwrap_or_else(|| panic!("no call through slot 9:\n{text}")) + "[9])(".len();
-    let arguments = text[call..].split_once(')').map_or(0, |(inside, _)| inside.matches(',').count() + 1);
-    assert_eq!(arguments, 4, "FromBytes is not called with the factory, the count, the bytes and the slot:\n{text}");
-    assert!(text.contains("nts_view_bytes("), "the bytes are not lent in place:\n{text}");
+    let call = text
+        .find("[9])(")
+        .unwrap_or_else(|| panic!("no call through slot 9:\n{text}"))
+        + "[9])(".len();
+    let arguments = text[call..]
+        .split_once(')')
+        .map_or(0, |(inside, _)| inside.matches(',').count() + 1);
+    assert_eq!(
+        arguments, 4,
+        "FromBytes is not called with the factory, the count, the bytes and the slot:\n{text}"
+    );
+    assert!(
+        text.contains("nts_view_bytes("),
+        "the bytes are not lent in place:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -1081,11 +1440,22 @@ fn a_handle_at_module_scope_is_a_global() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert!(text.contains("IJsonValue * value = 0;"), "the handle is not a global starting null:\n{text}");
+    assert!(
+        text.contains("IJsonValue * value = 0;"),
+        "the handle is not a global starting null:\n{text}"
+    );
 
     windows_syntax(&dir, &emitted);
 }
@@ -1102,7 +1472,10 @@ fn tags_on_one_line_are_refused_as_one_tag() {
         return;
     };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("names the slot and the method")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("names the slot and the method")),
         "{:?}",
         prepared.diagnostics
     );
@@ -1141,11 +1514,18 @@ fn a_static_in_a_namespace_is_called_on_its_factory() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    assert!(text.contains("nts_winrt_factory(") && text.contains("[6])("), "Parse is not called on its factory:\n{text}");
+    assert!(
+        text.contains("nts_winrt_factory(") && text.contains("[6])("),
+        "Parse is not called on its factory:\n{text}"
+    );
 }
 
 /// `@ntsQuery` is a runtime call that answers the object as another of its
@@ -1190,9 +1570,19 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let text = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64).writer.text().to_owned();
-    assert!(text.contains("nts_com_query("), "no QueryInterface:\n{text}");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let text = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64)
+        .writer
+        .text()
+        .to_owned();
+    assert!(
+        text.contains("nts_com_query("),
+        "no QueryInterface:\n{text}"
+    );
 
     for (name, extra, call, refusal) in [
         (
@@ -1208,12 +1598,23 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
             "not 8-4-4-4-12 hexadecimal digits",
         ),
     ] {
-        let source = format!("import {{ JsonValue }} from \"winrt:Windows.Data.Json\";\nexport function run(): void {{\n  {call};\n}}\n");
-        let Some((_, prepared)) = prepare(name, &binding(extra), &source) else { return };
+        let source = format!(
+            "import {{ JsonValue }} from \"winrt:Windows.Data.Json\";\nexport function run(): void {{\n  {call};\n}}\n"
+        );
+        let Some((_, prepared)) = prepare(name, &binding(extra), &source) else {
+            return;
+        };
         assert!(
-            prepared.diagnostics.iter().any(|d| d.message.contains(refusal)),
+            prepared
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(refusal)),
             "{name}: {:?}",
-            prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+            prepared
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -1251,23 +1652,37 @@ fn events(handler: &str, iid: &str) -> String {
 /// the caller's reference given back after the call.
 #[test]
 fn a_delegate_is_an_object_whose_invoke_calls_the_closure() {
-    let binding = events("(sender: IMemoryBufferReference, args: IInspectable) => void", "F4637D4A-0760-5431-BFC0-24EB1D4F6C4F");
+    let binding = events(
+        "(sender: IMemoryBufferReference, args: IInspectable) => void",
+        "F4637D4A-0760-5431-BFC0-24EB1D4F6C4F",
+    );
     let source = "import type { IMemoryBufferReference } from \"winrt:Windows.Foundation\";\nexport function watch(reference: IMemoryBufferReference): number {\n  let seen = 0;\n  reference.add_Closed((sender) => {\n    seen += sender.get_Capacity();\n  });\n  return seen;\n}\n";
     let Some((dir, prepared)) = prepare("delegate", &binding, source) else {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
-    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_invoke_")).unwrap_or_else(|| panic!("no Invoke adapter:\n{text}"));
+    let adapter = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_invoke_"))
+        .unwrap_or_else(|| panic!("no Invoke adapter:\n{text}"));
     assert!(
         adapter.contains("(void *self, struct Windows_Foundation_IMemoryBufferReference * a0, struct IInspectable * a1)")
             && adapter.contains("d->bridge)(a0, a1, d->context); return 0;"),
         "{adapter}"
     );
-    for (what, wanted) in [("the object", "nts_com_delegate("), ("the lend", "nts_closure_lend("), ("the give-back", "nts_com_release(")] {
+    for (what, wanted) in [
+        ("the object", "nts_com_delegate("),
+        ("the lend", "nts_closure_lend("),
+        ("the give-back", "nts_com_release("),
+    ] {
         assert!(text.contains(wanted), "no {what}:\n{text}");
     }
     windows_syntax(&dir, &emitted);
@@ -1279,17 +1694,34 @@ fn a_delegate_is_an_object_whose_invoke_calls_the_closure() {
 fn a_delegate_that_cannot_be_built_is_refused_by_name() {
     let source = "import type { IMemoryBufferReference } from \"winrt:Windows.Foundation\";\nexport function watch(reference: IMemoryBufferReference): void {\n  reference.add_Closed(() => 1);\n}\n";
     for (name, handler, iid, refusal) in [
-        ("delegate-result", "() => CNumber<\"int32\">", "F4637D4A-0760-5431-BFC0-24EB1D4F6C4F", "returns a value"),
-        ("delegate-iid", "() => void", "F4637D4A", "not 8-4-4-4-12 hexadecimal digits"),
+        (
+            "delegate-result",
+            "() => CNumber<\"int32\">",
+            "F4637D4A-0760-5431-BFC0-24EB1D4F6C4F",
+            "returns a value",
+        ),
+        (
+            "delegate-iid",
+            "() => void",
+            "F4637D4A",
+            "not 8-4-4-4-12 hexadecimal digits",
+        ),
     ] {
         let Some((_, prepared)) = prepare(name, &events(handler, iid), source) else {
             eprintln!("skipped: no tsgo");
             return;
         };
         assert!(
-            prepared.diagnostics.iter().any(|d| d.message.contains(refusal)),
+            prepared
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(refusal)),
             "{name}: expected {refusal:?}, got {:?}",
-            prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+            prepared
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
         );
     }
 }

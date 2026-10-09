@@ -21,7 +21,10 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 /// The C for `source`, compiled for reference counting.
 fn counted(name: &str, source: &str) -> Option<String> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
     let dir = Utf8Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -31,14 +34,20 @@ fn counted(name: &str, source: &str) -> Option<String> {
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
     let options = hir::Options {
         provider: hir::Provider::ReferenceCounting,
         ..hir::Options::default()
     };
     let prepared = hir::prepare_with(&snapshot, &options).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     Some(emitted.writer.text().to_owned())
@@ -54,7 +63,9 @@ fn counted(name: &str, source: &str) -> Option<String> {
 /// and a declaration's with `;`, which is the whole of the difference.
 fn body(text: &str, name: &str) -> String {
     let wanted = format!("{name}(");
-    let mut lines = text.lines().skip_while(|line| !(line.contains(&wanted) && line.ends_with('{')));
+    let mut lines = text
+        .lines()
+        .skip_while(|line| !(line.contains(&wanted) && line.ends_with('{')));
     let head = lines
         .next()
         .unwrap_or_else(|| panic!("no definition of `{name}` in the emitted C"));

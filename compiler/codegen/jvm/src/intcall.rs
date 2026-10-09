@@ -112,7 +112,9 @@ pub(crate) fn held_as(
     narrowed: &FxHashSet<ValueId>,
     value: ValueId,
 ) -> Option<nts_jvm_emitter::VType> {
-    narrowed.contains(&value).then_some(nts_jvm_emitter::VType::Integer)
+    narrowed
+        .contains(&value)
+        .then_some(nts_jvm_emitter::VType::Integer)
 }
 
 /// Call results declared `f64` that every use converts to an integer.
@@ -123,7 +125,13 @@ pub(crate) fn narrowed(func: &Func) -> FxHashSet<ValueId> {
         if !matches!(op.ty, HirType::Float { bits: 64 }) {
             continue;
         }
-        let OpKind::Call { callee: Callee::External(name), .. } = &op.kind else { continue };
+        let OpKind::Call {
+            callee: Callee::External(name),
+            ..
+        } = &op.kind
+        else {
+            continue;
+        };
         if has_integral_form(name) {
             candidates.insert(ValueId(u32::try_from(at).unwrap_or(0)));
         }
@@ -151,7 +159,9 @@ pub(crate) fn narrowed(func: &Func) -> FxHashSet<ValueId> {
     loop {
         let mut added = false;
         for (at, op) in func.values.iter().enumerate() {
-            let OpKind::Convert(source) = op.kind else { continue };
+            let OpKind::Convert(source) = op.kind else {
+                continue;
+            };
             if !candidates.contains(&source) || !matches!(op.ty, HirType::Int { .. }) {
                 continue;
             }
@@ -200,7 +210,10 @@ pub(crate) fn narrowed(func: &Func) -> FxHashSet<ValueId> {
 /// `(name, the argument that is a cursor, the `int` variant)`. A `None`
 /// position means the helper answers a cursor but takes none.
 #[must_use]
-#[allow(dead_code, reason = "the analysis is measured and correct; the emitter wiring is not")]
+#[allow(
+    dead_code,
+    reason = "the analysis is measured and correct; the emitter wiring is not"
+)]
 pub(crate) fn cursor_helper(name: &str) -> Option<(Option<usize>, bool, &'static str)> {
     Some(match name {
         // `nts_map_next(map, from)` -- takes a cursor and answers the next one.
@@ -253,10 +266,17 @@ pub(crate) fn cursor_helper(name: &str) -> Option<(Option<usize>, bool, &'static
 /// answer gets in.
 #[must_use]
 #[allow(dead_code, reason = "see the note at the end of this doc comment")]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(crate) fn cursors(func: &Func) -> FxHashSet<ValueId> {
     let mut class = FxHashSet::default();
     for (at, op) in func.values.iter().enumerate() {
-        let OpKind::Call { callee: Callee::External(name), .. } = &op.kind else { continue };
+        let OpKind::Call {
+            callee: Callee::External(name),
+            ..
+        } = &op.kind
+        else {
+            continue;
+        };
         if cursor_helper(name).is_some_and(|(_, answers, _)| answers)
             && matches!(op.ty, HirType::Float { bits: 64 })
         {
@@ -276,7 +296,9 @@ pub(crate) fn cursors(func: &Func) -> FxHashSet<ValueId> {
             let mut edge = |target: &nts_core::hir::BlockId, args: &[ValueId]| {
                 let params = &func.blocks[target.0 as usize].params;
                 for (at, arg) in args.iter().enumerate() {
-                    let Some(param) = params.get(at) else { continue };
+                    let Some(param) = params.get(at) else {
+                        continue;
+                    };
                     if class.contains(arg) {
                         grew |= class.insert(*param);
                     }
@@ -287,7 +309,13 @@ pub(crate) fn cursors(func: &Func) -> FxHashSet<ValueId> {
             };
             match &block.terminator {
                 Terminator::Jump { target, args } => edge(target, args),
-                Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
+                Terminator::Branch {
+                    then_target,
+                    then_args,
+                    else_target,
+                    else_args,
+                    ..
+                } => {
                     edge(then_target, then_args);
                     edge(else_target, else_args);
                 }
@@ -300,10 +328,17 @@ pub(crate) fn cursors(func: &Func) -> FxHashSet<ValueId> {
         // accounting caught it: `depth 0 -> 3 -> 2` where the descriptor says
         // two words go in and one comes back.
         for op in &func.values {
-            let OpKind::Call { callee: Callee::External(name), args, .. } = &op.kind else {
+            let OpKind::Call {
+                callee: Callee::External(name),
+                args,
+                ..
+            } = &op.kind
+            else {
                 continue;
             };
-            let Some((Some(position), _, _)) = cursor_helper(name) else { continue };
+            let Some((Some(position), _, _)) = cursor_helper(name) else {
+                continue;
+            };
             if let Some(argument) = args.get(position)
                 && whole_constant(func, *argument)
             {
@@ -331,7 +366,14 @@ pub(crate) fn cursors(func: &Func) -> FxHashSet<ValueId> {
             }
         }
         for (at, op) in func.values.iter().enumerate() {
-            let OpKind::Binary { op: BinOp::Add, lhs, rhs } = op.kind else { continue };
+            let OpKind::Binary {
+                op: BinOp::Add,
+                lhs,
+                rhs,
+            } = op.kind
+            else {
+                continue;
+            };
             if !matches!(op.ty, HirType::Float { bits: 64 }) {
                 continue;
             }
@@ -359,8 +401,6 @@ pub(crate) fn cursors(func: &Func) -> FxHashSet<ValueId> {
     class
 }
 
-
-
 /// Whether every use of every cursor is one this pass understands.
 ///
 /// Split from `cursors` because that function crossed a hundred lines, and this
@@ -378,7 +418,11 @@ fn uses_are_known(func: &Func, class: &FxHashSet<ValueId>) -> bool {
     for (at, op) in func.values.iter().enumerate() {
         let here = ValueId(u32::try_from(at).unwrap_or(0));
         match &op.kind {
-            OpKind::Binary { op: BinOp::Add, lhs, rhs } if class.contains(&here) => {
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs,
+                rhs,
+            } if class.contains(&here) => {
                 // Already admitted by the closure, and only as `cursor + const`.
                 if !((class.contains(lhs) && whole_constant(func, *rhs))
                     || (class.contains(rhs) && whole_constant(func, *lhs)))
@@ -386,16 +430,26 @@ fn uses_are_known(func: &Func, class: &FxHashSet<ValueId>) -> bool {
                     refused = true;
                 }
             }
-            OpKind::Binary { op: BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne, lhs, rhs } => {
+            OpKind::Binary {
+                op: BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne,
+                lhs,
+                rhs,
+            } => {
                 // A comparison consumes the cursor without producing one, and
                 // is sound against a whole constant or another cursor.
                 for (side, other) in [(lhs, rhs), (rhs, lhs)] {
-                    if class.contains(side) && !(whole_constant(func, *other) || class.contains(other)) {
+                    if class.contains(side)
+                        && !(whole_constant(func, *other) || class.contains(other))
+                    {
                         refused = true;
                     }
                 }
             }
-            OpKind::Call { callee: Callee::External(name), args, .. } => {
+            OpKind::Call {
+                callee: Callee::External(name),
+                args,
+                ..
+            } => {
                 let position = cursor_helper(name).and_then(|(at, _, _)| at);
                 for (index, arg) in args.iter().enumerate() {
                     if class.contains(arg) && position != Some(index) {
@@ -418,7 +472,13 @@ fn uses_are_known(func: &Func, class: &FxHashSet<ValueId>) -> bool {
     for block in &func.blocks {
         match &block.terminator {
             Terminator::Jump { target, args } => refused |= stray(func, class, *target, args),
-            Terminator::Branch { cond, then_target, then_args, else_target, else_args } => {
+            Terminator::Branch {
+                cond,
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+            } => {
                 refused |= class.contains(cond)
                     || stray(func, class, *then_target, then_args)
                     || stray(func, class, *else_target, else_args);
@@ -432,7 +492,12 @@ fn uses_are_known(func: &Func, class: &FxHashSet<ValueId>) -> bool {
 
 /// A jump argument whose parameter is not in the class -- a cursor leaving it.
 #[allow(dead_code)]
-fn stray(func: &Func, class: &FxHashSet<ValueId>, target: nts_core::hir::BlockId, args: &[ValueId]) -> bool {
+fn stray(
+    func: &Func,
+    class: &FxHashSet<ValueId>,
+    target: nts_core::hir::BlockId,
+    args: &[ValueId],
+) -> bool {
     let params = &func.blocks[target.0 as usize].params;
     args.iter()
         .enumerate()

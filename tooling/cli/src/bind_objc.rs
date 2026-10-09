@@ -140,7 +140,11 @@ pub(crate) struct Project {
 /// The name the Objective-C runtime has `objc` under: see
 /// [`Project::runtime_names`].
 fn runtime_name<'r>(request: &'r Request, objc: &'r str) -> &'r str {
-    request.project.as_ref().and_then(|project| project.runtime_names.get(objc)).map_or(objc, String::as_str)
+    request
+        .project
+        .as_ref()
+        .and_then(|project| project.runtime_names.get(objc))
+        .map_or(objc, String::as_str)
 }
 
 /// Initializers and class members one framework adds to another's class --
@@ -167,13 +171,22 @@ impl Lent {
     /// `other`'s members added to these.
     pub(crate) fn absorb(&mut self, other: &Lent) {
         for (class, members) in &other.members {
-            self.members.entry(class.clone()).or_default().extend(members.iter().cloned());
+            self.members
+                .entry(class.clone())
+                .or_default()
+                .extend(members.iter().cloned());
         }
         for (class, members) in &other.inherited {
-            self.inherited.entry(class.clone()).or_default().extend(members.iter().cloned());
+            self.inherited
+                .entry(class.clone())
+                .or_default()
+                .extend(members.iter().cloned());
         }
         for (module, names) in &other.imports {
-            self.imports.entry(module.clone()).or_default().extend(names.iter().cloned());
+            self.imports
+                .entry(module.clone())
+                .or_default()
+                .extend(names.iter().cloned());
         }
     }
 }
@@ -212,9 +225,13 @@ pub(crate) struct Adopted {
     pub(crate) refines: BTreeSet<String>,
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(crate) fn run(request: &Request) -> Result<Output> {
     if !request.module.starts_with("objc:") {
-        bail!("`nts bind-objc` writes an `objc:` module, and `{}` is not one", request.module);
+        bail!(
+            "`nts bind-objc` writes an `objc:` module, and `{}` is not one",
+            request.module
+        );
     }
     let unit = translation_unit(request)?;
     let headers = dump(request, &unit, &Wanted::Headers)?;
@@ -225,8 +242,18 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     // The frameworks it reads, and those whose declarations it imports --
     // read for who owns what, so a class of theirs its signatures name is
     // imported from its framework rather than declared here as a stub.
-    let mut modules: Vec<(std::path::PathBuf, String)> = request.frameworks.iter().map(|framework| (symbols.clone(), framework.clone())).collect();
-    modules.extend(request.provided.iter().filter(|framework| !request.frameworks.contains(framework)).map(|framework| (symbols.clone(), framework.clone())));
+    let mut modules: Vec<(std::path::PathBuf, String)> = request
+        .frameworks
+        .iter()
+        .map(|framework| (symbols.clone(), framework.clone()))
+        .collect();
+    modules.extend(
+        request
+            .provided
+            .iter()
+            .filter(|framework| !request.frameworks.contains(framework))
+            .map(|framework| (symbols.clone(), framework.clone())),
+    );
     // A project's module, whose graph is its own.
     if let Some(project) = &request.project {
         modules.push((project.symbols.clone(), framework_of(request).to_owned()));
@@ -234,7 +261,10 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     let swift = Swift::read(&symbols, &modules)?;
     let owned;
     let request = if request.package {
-        owned = Request { names: swift.declared_by(framework_of(request)), ..request.clone() };
+        owned = Request {
+            names: swift.declared_by(framework_of(request)),
+            ..request.clone()
+        };
         &owned
     } else {
         request
@@ -243,7 +273,12 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
     // A Core Foundation class is not an Objective-C one: its members are C
     // functions, which the second pass keeps the declarations of.
     let cf_types = cf::requested(&swift, &headers.typedefs, &request.classes);
-    let mut objc: Vec<String> = request.classes.iter().filter(|c| !cf_types.values().any(|name| name == *c)).cloned().collect();
+    let mut objc: Vec<String> = request
+        .classes
+        .iter()
+        .filter(|c| !cf_types.values().any(|name| name == *c))
+        .cloned()
+        .collect();
     // A package binds what its framework declares that the headers read here
     // define: a name Swift lists there for another framework's type
     // (`IOSurfaceRef` in Core Graphics) is that framework's to bind.
@@ -251,7 +286,12 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
         objc.retain(|class| headers.supers.contains_key(class));
         // And the classes of other frameworks it extends, for the members it
         // declares on them.
-        objc.extend(swift.extended_by(framework_of(request)).into_iter().filter(|class| headers.supers.contains_key(class)));
+        objc.extend(
+            swift
+                .extended_by(framework_of(request))
+                .into_iter()
+                .filter(|class| headers.supers.contains_key(class)),
+        );
     }
     // A class that does not exist at the deployment target -- introduced
     // after it, or deprecated by it -- is not bound, as a member is not, and
@@ -263,30 +303,70 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
         .keys()
         .filter_map(|class| {
             let symbol = swift.by_usr.get(&format!("c:objc(cs){class}"))?;
-            availability(symbol, platform, target).err().map(|reason| (class.clone(), reason))
+            availability(symbol, platform, target)
+                .err()
+                .map(|reason| (class.clone(), reason))
         })
         .collect();
-    let unbound: Vec<(String, String)> = objc.iter().filter_map(|class| Some((class.clone(), unavailable.get(class)?.clone()))).collect();
+    let unbound: Vec<(String, String)> = objc
+        .iter()
+        .filter_map(|class| Some((class.clone(), unavailable.get(class)?.clone())))
+        .collect();
     objc.retain(|class| !unavailable.contains_key(class));
     let bound = closure(&objc, &headers.supers)?;
     let protocols: BTreeSet<String> = request.protocols.iter().cloned().collect();
     let constants = swift.constants(&bound);
     let mut symbols = cf::functions(&swift, &cf_types, &request.functions);
     symbols.extend(constants.keys().cloned());
-    let bodies = dump(request, &unit, &Wanted::Bodies(&bound, &protocols, &symbols))?;
+    let bodies = dump(
+        request,
+        &unit,
+        &Wanted::Bodies(&bound, &protocols, &symbols),
+    )?;
     let package = request.package.then(|| framework_of(request).to_owned());
-    let deployment = Deployment { platform, target, unavailable };
-    let mut model = Model::read(&swift, &headers, &bodies, &bound, cf_types, deployment, Ownership { package, provided: request.provided.clone() });
+    let deployment = Deployment {
+        platform,
+        target,
+        unavailable,
+    };
+    let mut model = Model::read(
+        &swift,
+        &headers,
+        &bodies,
+        &bound,
+        cf_types,
+        deployment,
+        Ownership {
+            package,
+            provided: request.provided.clone(),
+        },
+    );
     model.unbound = unbound;
     model.read_cf(&bodies.functions, &request.functions);
     model.read_constants(&constants, &bodies.variables);
     model.settle_protocols();
     model.widen_overridden_getters();
-    let adoptions = if request.names.is_empty() { BTreeMap::new() } else { swift.adoptions(&bound, &headers.adopts) };
-    let records = model.records.iter().filter(|name| !request.records.contains_key(*name)).cloned().collect();
+    let adoptions = if request.names.is_empty() {
+        BTreeMap::new()
+    } else {
+        swift.adoptions(&bound, &headers.adopts)
+    };
+    let records = model
+        .records
+        .iter()
+        .filter(|name| !request.records.contains_key(*name))
+        .cloned()
+        .collect();
     let binding = render(request, &model);
     let lends = lends(request, &model, &binding);
-    Ok(Output { witness: witness(request, &model), values: render_values(request, &model), adoptions, records, lends, binding })
+    Ok(Output {
+        witness: witness(request, &model),
+        values: render_values(request, &model),
+        adoptions,
+        records,
+        lends,
+        binding,
+    })
 }
 
 /// Each rendered member's name, with every declaration of it as written --
@@ -296,12 +376,20 @@ pub(crate) fn run(request: &Request) -> Result<Output> {
 fn member_texts(members: &[String]) -> BTreeMap<String, BTreeSet<String>> {
     let mut texts: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for member in members {
-        for line in member.lines().map(str::trim).filter(|line| !line.starts_with("/**") && !line.starts_with('*') && !line.starts_with("//")) {
+        for line in member.lines().map(str::trim).filter(|line| {
+            !line.starts_with("/**") && !line.starts_with('*') && !line.starts_with("//")
+        }) {
             if line.starts_with("static ") {
                 continue;
             }
-            let bare = line.trim_start_matches("readonly ").trim_start_matches("get ").trim_start_matches("set ");
-            let name: String = bare.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '$' || *c == '"').collect();
+            let bare = line
+                .trim_start_matches("readonly ")
+                .trim_start_matches("get ")
+                .trim_start_matches("set ");
+            let name: String = bare
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '$' || *c == '"')
+                .collect();
             if !name.is_empty() {
                 texts.entry(name).or_default().insert(line.to_owned());
             }
@@ -317,9 +405,15 @@ fn framework_of(request: &Request) -> &str {
 
 /// The protocols `classes` adopt, in an interface or a category, and those
 /// they refine.
-fn adopted(classes: &BTreeSet<String>, adopts: &BTreeMap<String, BTreeSet<String>>) -> BTreeSet<String> {
+fn adopted(
+    classes: &BTreeSet<String>,
+    adopts: &BTreeMap<String, BTreeSet<String>>,
+) -> BTreeSet<String> {
     let mut seen = BTreeSet::new();
-    let mut pending: Vec<&String> = classes.iter().flat_map(|class| adopts.get(class).into_iter().flatten()).collect();
+    let mut pending: Vec<&String> = classes
+        .iter()
+        .flat_map(|class| adopts.get(class).into_iter().flatten())
+        .collect();
     while let Some(protocol) = pending.pop() {
         if seen.insert(protocol.clone()) {
             pending.extend(adopts.get(protocol).into_iter().flatten());
@@ -333,7 +427,11 @@ fn adopted(classes: &BTreeSet<String>, adopts: &BTreeMap<String, BTreeSet<String
 /// of this compiler's.
 fn witness(request: &Request, model: &Model) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "// Generated by `nts bind-objc --witness` beside {}. Do not edit: regenerate.", request.module);
+    let _ = writeln!(
+        out,
+        "// Generated by `nts bind-objc --witness` beside {}. Do not edit: regenerate.",
+        request.module
+    );
     out.push_str(
         "#include <objc/runtime.h>\n#include <stdio.h>\n\n\
          static int checked, missing;\n\n\
@@ -356,7 +454,13 @@ fn witness(request: &Request, model: &Model) -> String {
         for sent in &class.sent {
             // `self` and `_cmd`, then one per colon.
             let arguments = 2 + sent.selector.bytes().filter(|&byte| byte == b':').count();
-            let _ = writeln!(out, "  check(\"{}\", \"{}\", {}, {arguments});", runtime_name(request, &class.objc), sent.selector, u8::from(sent.class_side));
+            let _ = writeln!(
+                out,
+                "  check(\"{}\", \"{}\", {}, {arguments});",
+                runtime_name(request, &class.objc),
+                sent.selector,
+                u8::from(sent.class_side)
+            );
         }
     }
     out.push_str("  printf(\"%d messages checked, %d the runtime does not have\\n\", checked, missing);\n  return missing != 0;\n}\n");
@@ -372,14 +476,31 @@ fn witness(request: &Request, model: &Model) -> String {
 pub(crate) fn default_symbols(sdk: &str) -> Result<std::path::PathBuf> {
     let sdk = std::path::Path::new(sdk);
     let settings = sdk.join("SDKSettings.json");
-    let text = std::fs::read(&settings).with_context(|| format!("reading {}", settings.display()))?;
-    let settings: Value = serde_json::from_slice(&text).with_context(|| format!("reading {}", settings.display()))?;
-    let version = settings.get("Version").and_then(Value::as_str).context("SDKSettings.json names no `Version`")?;
-    let canonical = settings.get("CanonicalName").and_then(Value::as_str).unwrap_or("macosx");
-    let directory = if canonical.starts_with("macosx") { version } else { canonical };
+    let text =
+        std::fs::read(&settings).with_context(|| format!("reading {}", settings.display()))?;
+    let settings: Value =
+        serde_json::from_slice(&text).with_context(|| format!("reading {}", settings.display()))?;
+    let version = settings
+        .get("Version")
+        .and_then(Value::as_str)
+        .context("SDKSettings.json names no `Version`")?;
+    let canonical = settings
+        .get("CanonicalName")
+        .and_then(Value::as_str)
+        .unwrap_or("macosx");
+    let directory = if canonical.starts_with("macosx") {
+        version
+    } else {
+        canonical
+    };
     // `private/`: extracted at every access level, as `symbolgraph.sh` says
     // why. A graph from before that is in the directory above, never read.
-    Ok(sdk.parent().unwrap_or(sdk).join("symbolgraph").join("private").join(directory))
+    Ok(sdk
+        .parent()
+        .unwrap_or(sdk)
+        .join("symbolgraph")
+        .join("private")
+        .join(directory))
 }
 
 /// The platform a clang target is for, as a symbol graph's availability names
@@ -427,7 +548,11 @@ struct Deployment {
 /// Whether a symbol exists at `target` on `platform`: introduced by it, and
 /// not deprecated by it -- Swift warns at every use of one that is. One rule
 /// for a class and a member.
-fn availability(symbol: &Symbol, platform: &str, target: Version) -> std::result::Result<(), String> {
+fn availability(
+    symbol: &Symbol,
+    platform: &str,
+    target: Version,
+) -> std::result::Result<(), String> {
     for availability in &symbol.availability {
         if availability.is_unconditionally_deprecated {
             return Err("deprecated".to_owned());
@@ -436,17 +561,26 @@ fn availability(symbol: &Symbol, platform: &str, target: Version) -> std::result
             continue;
         }
         if let Some(introduced) = availability.introduced.filter(|v| *v > target) {
-            return Err(format!("introduced in {platform} {}.{}", introduced.major, introduced.minor));
+            return Err(format!(
+                "introduced in {platform} {}.{}",
+                introduced.major, introduced.minor
+            ));
         }
         if let Some(deprecated) = availability.deprecated.filter(|v| *v <= target) {
-            return Err(format!("deprecated in {platform} {}.{}", deprecated.major, deprecated.minor));
+            return Err(format!(
+                "deprecated in {platform} {}.{}",
+                deprecated.major, deprecated.minor
+            ));
         }
     }
     Ok(())
 }
 
 /// Each requested class and every ancestor, root first.
-fn closure(classes: &[String], supers: &BTreeMap<String, Option<String>>) -> Result<BTreeSet<String>> {
+fn closure(
+    classes: &[String],
+    supers: &BTreeMap<String, Option<String>>,
+) -> Result<BTreeSet<String>> {
     let mut bound = BTreeSet::new();
     for class in classes {
         let mut at = Some(class.clone());
@@ -468,7 +602,11 @@ enum Wanted<'a> {
     /// The bodies of these classes, and of the categories on them, and of
     /// these protocols; and the declarations of these C functions and extern
     /// variables.
-    Bodies(&'a BTreeSet<String>, &'a BTreeSet<String>, &'a BTreeSet<String>),
+    Bodies(
+        &'a BTreeSet<String>,
+        &'a BTreeSet<String>,
+        &'a BTreeSet<String>,
+    ),
 }
 
 /// What one pass read.
@@ -503,10 +641,30 @@ struct Dumped {
 
 fn dump(request: &Request, unit: &tempfile_path::TempFile, wanted: &Wanted<'_>) -> Result<Dumped> {
     let mut child = Command::new("clang")
-        .args(["-target", &request.target, "-isysroot", &request.sdk, "-x", "objective-c", "-fsyntax-only"])
+        .args([
+            "-target",
+            &request.target,
+            "-isysroot",
+            &request.sdk,
+            "-x",
+            "objective-c",
+            "-fsyntax-only",
+        ])
         .args(["-Xclang", "-ast-dump=json"])
-        .args(request.project.iter().flat_map(|project| &project.search).flat_map(|directory| [std::ffi::OsStr::new("-I"), directory.as_os_str()]))
-        .args(request.project.iter().flat_map(|project| &project.frameworks).flat_map(|directory| [std::ffi::OsStr::new("-F"), directory.as_os_str()]))
+        .args(
+            request
+                .project
+                .iter()
+                .flat_map(|project| &project.search)
+                .flat_map(|directory| [std::ffi::OsStr::new("-I"), directory.as_os_str()]),
+        )
+        .args(
+            request
+                .project
+                .iter()
+                .flat_map(|project| &project.frameworks)
+                .flat_map(|directory| [std::ffi::OsStr::new("-F"), directory.as_os_str()]),
+        )
         .arg(unit.path())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -514,11 +672,19 @@ fn dump(request: &Request, unit: &tempfile_path::TempFile, wanted: &Wanted<'_>) 
         .context("running clang for `nts bind-objc`")?;
     let stdout = child.stdout.take().context("clang's output")?;
     let mut dumped = Dumped::default();
-    let mut deserializer = serde_json::Deserializer::from_reader(BufReader::with_capacity(1 << 20, stdout));
-    let read = UnitSeed { wanted, out: &mut dumped }.deserialize(&mut deserializer);
+    let mut deserializer =
+        serde_json::Deserializer::from_reader(BufReader::with_capacity(1 << 20, stdout));
+    let read = UnitSeed {
+        wanted,
+        out: &mut dumped,
+    }
+    .deserialize(&mut deserializer);
     let finished = child.wait_with_output().context("waiting for clang")?;
     if !finished.status.success() {
-        bail!("clang could not read the frameworks:\n{}", String::from_utf8_lossy(&finished.stderr));
+        bail!(
+            "clang could not read the frameworks:\n{}",
+            String::from_utf8_lossy(&finished.stderr)
+        );
     }
     read.context("reading clang's AST dump")?;
     Ok(dumped)
@@ -546,7 +712,10 @@ impl<'de> Visitor<'de> for UnitSeed<'_, '_> {
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
         while let Some(key) = map.next_key::<String>()? {
             if key == "inner" {
-                map.next_value_seed(Declarations { wanted: self.wanted, out: &mut *self.out })?;
+                map.next_value_seed(Declarations {
+                    wanted: self.wanted,
+                    out: &mut *self.out,
+                })?;
             } else {
                 map.next_value::<IgnoredAny>()?;
             }
@@ -573,7 +742,13 @@ impl<'de> Visitor<'de> for Declarations<'_, '_> {
         f.write_str("top-level declarations")
     }
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<(), A::Error> {
-        while seq.next_element_seed(Declaration { wanted: self.wanted, out: &mut *self.out })?.is_some() {}
+        while seq
+            .next_element_seed(Declaration {
+                wanted: self.wanted,
+                out: &mut *self.out,
+            })?
+            .is_some()
+        {}
         Ok(())
     }
 }
@@ -611,7 +786,18 @@ struct Declared {
 /// superclass, a protocol's requirements, conformances, a function's or a
 /// variable's type, an enum, a record, a typedef.
 fn file(out: &mut Dumped, wanted: &Wanted<'_>, declared: Declared) {
-    let Declared { kind, name, interface, parent, width, body, aliased, function, variable, adopted } = declared;
+    let Declared {
+        kind,
+        name,
+        interface,
+        parent,
+        width,
+        body,
+        aliased,
+        function,
+        variable,
+        adopted,
+    } = declared;
     if let (Some(name), Some(aliased)) = (name.as_ref(), aliased) {
         out.typedefs.entry(name.clone()).or_insert(aliased);
     }
@@ -658,7 +844,8 @@ fn file(out: &mut Dumped, wanted: &Wanted<'_>, declared: Declared) {
         }
         ("FunctionDecl", Some(name)) => {
             if let (Some(ty), Some(inner)) = (function, body) {
-                out.functions.insert(name, serde_json::json!({ "type": ty, "inner": inner }));
+                out.functions
+                    .insert(name, serde_json::json!({ "type": ty, "inner": inner }));
             }
         }
         ("EnumDecl", Some(name)) => {
@@ -688,7 +875,12 @@ fn file(out: &mut Dumped, wanted: &Wanted<'_>, declared: Declared) {
 /// the mutable `struct __CFString` is `NSMutableString`.
 fn toll_free(pointee: &str) -> Option<&'static str> {
     let constant = pointee.trim_start().starts_with("const ");
-    let tag = pointee.trim().trim_start_matches("const ").trim().strip_prefix("struct ")?.trim();
+    let tag = pointee
+        .trim()
+        .trim_start_matches("const ")
+        .trim()
+        .strip_prefix("struct ")?
+        .trim();
     Some(match (tag, constant) {
         ("__CFString", true) => "NSString",
         ("__CFString", false) => "NSMutableString",
@@ -730,7 +922,8 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
         f.write_str("a declaration")
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
-        let (mut kind, mut name, mut interface, mut parent, mut width) = (String::new(), None, None, None, None);
+        let (mut kind, mut name, mut interface, mut parent, mut width) =
+            (String::new(), None, None, None, None);
         let mut complete = false;
         let mut body = None;
         let mut aliased = None;
@@ -745,7 +938,10 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                 "super" => parent = named(&map.next_value::<Value>()?),
                 "protocols" => {
                     let listed = map.next_value::<Value>()?;
-                    adopted = listed.as_array().map(|list| list.iter().filter_map(named).collect()).unwrap_or_default();
+                    adopted = listed
+                        .as_array()
+                        .map(|list| list.iter().filter_map(named).collect())
+                        .unwrap_or_default();
                 }
                 "completeDefinition" => complete = map.next_value()?,
                 "fixedUnderlyingType" => {
@@ -755,7 +951,10 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                     aliased = desugared(&map.next_value::<Value>()?);
                 }
                 "type" if kind == "FunctionDecl" => function = Some(map.next_value::<Value>()?),
-                "type" if kind == "VarDecl" && matches!(self.wanted, Wanted::Bodies(_, _, wanted) if name.as_ref().is_some_and(|n| wanted.contains(n))) => {
+                "type"
+                    if kind == "VarDecl"
+                        && matches!(self.wanted, Wanted::Bodies(_, _, wanted) if name.as_ref().is_some_and(|n| wanted.contains(n))) =>
+                {
                     variable = Some(map.next_value::<Value>()?);
                 }
                 "inner" => {
@@ -766,9 +965,12 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                             // A category on NSObject is every framework's
                             // extension of every object, hundreds of methods;
                             // the root is bound as the runtime declares it.
-                            "ObjCCategoryDecl" => interface.as_ref().is_some_and(|n| bound.contains(n) && n != "NSObject"),
+                            "ObjCCategoryDecl" => interface
+                                .as_ref()
+                                .is_some_and(|n| bound.contains(n) && n != "NSObject"),
                             "ObjCProtocolDecl" => name.as_ref().is_some_and(|n| {
-                                (n == "NSObject" && bound.contains("NSObject")) || protocols.contains(n)
+                                (n == "NSObject" && bound.contains("NSObject"))
+                                    || protocols.contains(n)
                             }),
                             "FunctionDecl" => name.as_ref().is_some_and(|n| functions.contains(n)),
                             _ => false,
@@ -785,7 +987,22 @@ impl<'de> Visitor<'de> for Declaration<'_, '_> {
                 }
             }
         }
-        file(self.out, self.wanted, Declared { kind, name, interface, parent, width, body, aliased, function, variable, adopted });
+        file(
+            self.out,
+            self.wanted,
+            Declared {
+                kind,
+                name,
+                interface,
+                parent,
+                width,
+                body,
+                aliased,
+                function,
+                variable,
+                adopted,
+            },
+        );
         Ok(())
     }
 }
@@ -815,12 +1032,18 @@ fn enum_constants(members: &[Value]) -> Vec<(String, i128)> {
 /// A type's spelling with every typedef expanded, which is what decides how
 /// it crosses.
 fn desugared(ty: &Value) -> Option<String> {
-    ty.get("desugaredQualType").or_else(|| ty.get("qualType")).and_then(Value::as_str).map(str::to_owned)
+    ty.get("desugaredQualType")
+        .or_else(|| ty.get("qualType"))
+        .and_then(Value::as_str)
+        .map(str::to_owned)
 }
 
 /// The spelling as written, which is where nullability is.
 fn written(ty: &Value) -> String {
-    ty.get("qualType").and_then(Value::as_str).unwrap_or_default().to_owned()
+    ty.get("qualType")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
 }
 
 /// A type as the binding writes it, or why it cannot.
@@ -885,7 +1108,12 @@ impl Symbol {
     /// C reserves by a leading underscore -- `__CGPointEqualToPoint`, the
     /// inline body of `CGPointEqualToPoint`, and ivars such as `_pi`.
     fn offered(&self) -> bool {
-        let usr = self.identifier.identifier.split("::SYNTHESIZED::").next().unwrap_or_default();
+        let usr = self
+            .identifier
+            .identifier
+            .split("::SYNTHESIZED::")
+            .next()
+            .unwrap_or_default();
         let own = usr.rsplit(['@', ')']).next().unwrap_or_default();
         matches!(self.access.as_str(), "public" | "open") && !own.starts_with('_')
     }
@@ -911,7 +1139,11 @@ impl Symbol {
     /// Only a name Swift made: a declaration whose own name has the prefix
     /// is not [`offered`](Symbol::offered).
     fn unrefined(mut self) -> Self {
-        let restore = |name: &str| name.strip_prefix("__").unwrap_or(name).replacen("(__", "(", 1);
+        let restore = |name: &str| {
+            name.strip_prefix("__")
+                .unwrap_or(name)
+                .replacen("(__", "(", 1)
+        };
         self.names.title = restore(&self.names.title);
         for component in &mut self.path {
             *component = restore(component);
@@ -926,7 +1158,11 @@ impl Symbol {
     /// availability macro (`API_UNAVAILABLE(watchos) __kindof NSTextElement
     /// *`), and a weak property is optional in Swift whatever its header says.
     fn optionality(&self) -> Optionality {
-        let text: String = self.fragments.iter().map(|fragment| fragment.spelling.as_str()).collect();
+        let text: String = self
+            .fragments
+            .iter()
+            .map(|fragment| fragment.spelling.as_str())
+            .collect();
         let value = match text.rsplit_once("->") {
             Some((_, result)) => result,
             None => text.split_once(':').map_or("", |(_, ty)| ty),
@@ -944,7 +1180,12 @@ impl Symbol {
     /// Whether this is Swift's `async` import of a method: the one Swift makes
     /// from a completion handler, beside the one taking it, under one USR.
     fn is_async(&self) -> bool {
-        self.fragments.iter().any(|fragment| fragment.spelling.split_whitespace().any(|word| word == "async"))
+        self.fragments.iter().any(|fragment| {
+            fragment
+                .spelling
+                .split_whitespace()
+                .any(|word| word == "async")
+        })
     }
 }
 
@@ -1012,49 +1253,86 @@ pub(crate) struct Swift {
 impl Swift {
     /// The graphs of `modules`, each in its directory, and of `ObjectiveC`,
     /// which declares `NSObject`, in the SDK's `directory`.
-    pub(crate) fn read(directory: &std::path::Path, modules: &[(std::path::PathBuf, String)]) -> Result<Self> {
+    pub(crate) fn read(
+        directory: &std::path::Path,
+        modules: &[(std::path::PathBuf, String)],
+    ) -> Result<Self> {
         let mut by_usr = BTreeMap::new();
         let mut owner = BTreeMap::new();
         let mut asynchronous = BTreeMap::new();
         let mut optional = BTreeSet::new();
-        let mut modules: Vec<(&std::path::Path, &str)> = modules.iter().map(|(directory, module)| (directory.as_path(), module.as_str())).collect();
+        let mut modules: Vec<(&std::path::Path, &str)> = modules
+            .iter()
+            .map(|(directory, module)| (directory.as_path(), module.as_str()))
+            .collect();
         modules.push((directory, "ObjectiveC"));
         for (directory, module) in modules {
             for path in graphs(directory, module)? {
                 // A framework's own graph declares its symbols; one of its
                 // extension graphs (`AppKit@Foundation`) also lists the
                 // classes it extends, which are still their framework's.
-                let extension = path.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.contains('@'));
-                let text = std::fs::read(&path)
-                    .with_context(|| format!("reading {} -- run tooling/apple/symbolgraph.sh {module}", path.display()))?;
-                let graph: Graph =
-                    serde_json::from_slice(&text).with_context(|| format!("reading {}", path.display()))?;
-            // Clang's declarations only: an `s:` symbol is Swift's own, which
-            // an Objective-C message cannot reach.
-                let symbols = graph.symbols.into_iter().filter(|s| s.identifier.identifier.starts_with("c:") && s.offered());
+                let extension = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.contains('@'));
+                let text = std::fs::read(&path).with_context(|| {
+                    format!(
+                        "reading {} -- run tooling/apple/symbolgraph.sh {module}",
+                        path.display()
+                    )
+                })?;
+                let graph: Graph = serde_json::from_slice(&text)
+                    .with_context(|| format!("reading {}", path.display()))?;
+                // Clang's declarations only: an `s:` symbol is Swift's own, which
+                // an Objective-C message cannot reach.
+                let symbols = graph
+                    .symbols
+                    .into_iter()
+                    .filter(|s| s.identifier.identifier.starts_with("c:") && s.offered());
                 for symbol in symbols.map(Symbol::unrefined) {
                     // `NSObject` is Swift's `ObjectiveC` module's, which has no
                     // framework header; a Swift programmer has it from Foundation.
-                    let declared_by = if module == "ObjectiveC" { "Foundation" } else { module };
+                    let declared_by = if module == "ObjectiveC" {
+                        "Foundation"
+                    } else {
+                        module
+                    };
                     if extension {
-                        owner.entry(symbol.identifier.identifier.clone()).or_insert_with(|| declared_by.to_owned());
+                        owner
+                            .entry(symbol.identifier.identifier.clone())
+                            .or_insert_with(|| declared_by.to_owned());
                     } else {
                         owner.insert(symbol.identifier.identifier.clone(), declared_by.to_owned());
                     }
-                    let into = if symbol.is_async() { &mut asynchronous } else { &mut by_usr };
+                    let into = if symbol.is_async() {
+                        &mut asynchronous
+                    } else {
+                        &mut by_usr
+                    };
                     into.insert(symbol.identifier.identifier.clone(), symbol);
                 }
                 optional.extend(
-                    graph.relationships.into_iter().filter(|r| r.kind == "optionalRequirementOf").map(|r| r.source),
+                    graph
+                        .relationships
+                        .into_iter()
+                        .filter(|r| r.kind == "optionalRequirementOf")
+                        .map(|r| r.source),
                 );
             }
         }
-        Ok(Self { by_usr, owner, asynchronous, optional })
+        Ok(Self {
+            by_usr,
+            owner,
+            asynchronous,
+            optional,
+        })
     }
 
     /// The framework that declares Objective-C class `class`.
     fn class_owner(&self, class: &str) -> Option<&str> {
-        self.owner.get(&format!("c:objc(cs){class}")).map(String::as_str)
+        self.owner
+            .get(&format!("c:objc(cs){class}"))
+            .map(String::as_str)
     }
 
     /// The Objective-C classes of other frameworks that `framework` declares
@@ -1063,8 +1341,15 @@ impl Swift {
         self.owner
             .iter()
             .filter(|(_, owner)| *owner == framework)
-            .filter_map(|(usr, _)| usr.strip_prefix("c:objc(cs)")?.split_once('(').map(|(class, _)| class.to_owned()))
-            .filter(|class| self.class_owner(class).is_some_and(|owner| owner != framework))
+            .filter_map(|(usr, _)| {
+                usr.strip_prefix("c:objc(cs)")?
+                    .split_once('(')
+                    .map(|(class, _)| class.to_owned())
+            })
+            .filter(|class| {
+                self.class_owner(class)
+                    .is_some_and(|owner| owner != framework)
+            })
             .collect()
     }
 
@@ -1079,8 +1364,18 @@ impl Swift {
                 || (usr.starts_with("c:@T@") && symbol.kind.identifier == "swift.class");
             // The `NSObject` protocol is the `NSObject` class's, which every
             // binding's classes and protocols already extend.
-            if kind_bound && usr != "c:objc(pl)NSObject" && symbol.path.len() == 1 && self.owner.get(usr).is_some_and(|owner| owner == framework) {
-                names.insert(symbol.path[0].split('(').next().unwrap_or_default().to_owned());
+            if kind_bound
+                && usr != "c:objc(pl)NSObject"
+                && symbol.path.len() == 1
+                && self.owner.get(usr).is_some_and(|owner| owner == framework)
+            {
+                names.insert(
+                    symbol.path[0]
+                        .split('(')
+                        .next()
+                        .unwrap_or_default()
+                        .to_owned(),
+                );
             }
         }
         names.into_iter().collect()
@@ -1102,7 +1397,9 @@ impl Swift {
             // A function's path carries its labels: `UIApplicationMain(_:_:_:_:)`.
             let top_level = |symbol: &Symbol| {
                 symbol.path.len() == 1
-                    && symbol.path[0].strip_prefix(name.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('('))
+                    && symbol.path[0]
+                        .strip_prefix(name.as_str())
+                        .is_some_and(|rest| rest.is_empty() || rest.starts_with('('))
             };
             for (usr, symbol) in self.by_usr.iter().filter(|(_, symbol)| top_level(symbol)) {
                 found = true;
@@ -1124,7 +1421,10 @@ impl Swift {
                 }
             }
             if !found {
-                bail!("`{name}` is not a name Swift imports from {}", request.frameworks.join(", "));
+                bail!(
+                    "`{name}` is not a name Swift imports from {}",
+                    request.frameworks.join(", ")
+                );
             }
         }
         if !request.names.is_empty() {
@@ -1142,7 +1442,10 @@ impl Swift {
     fn close_over_cf_classes(&self, request: &mut Request) {
         let cf_class = |usr: &str| {
             let name = usr.strip_prefix("c:@T@")?.strip_suffix("Ref")?;
-            self.by_usr.get(usr).filter(|symbol| symbol.kind.identifier == "swift.class").map(|_| name.to_owned())
+            self.by_usr
+                .get(usr)
+                .filter(|symbol| symbol.kind.identifier == "swift.class")
+                .map(|_| name.to_owned())
         };
         loop {
             let reached: BTreeSet<String> = self
@@ -1150,10 +1453,19 @@ impl Swift {
                 .iter()
                 .filter(|(usr, symbol)| {
                     let owner = symbol.path.first().map(String::as_str).unwrap_or_default();
-                    let function = usr.strip_prefix("c:@F@").is_some_and(|name| request.functions.iter().any(|f| f == name));
-                    function || (symbol.path.len() == 2 && request.classes.iter().any(|class| class == owner))
+                    let function = usr
+                        .strip_prefix("c:@F@")
+                        .is_some_and(|name| request.functions.iter().any(|f| f == name));
+                    function
+                        || (symbol.path.len() == 2
+                            && request.classes.iter().any(|class| class == owner))
                 })
-                .flat_map(|(_, symbol)| symbol.fragments.iter().filter_map(|fragment| fragment.precise.as_deref().and_then(cf_class)))
+                .flat_map(|(_, symbol)| {
+                    symbol
+                        .fragments
+                        .iter()
+                        .filter_map(|fragment| fragment.precise.as_deref().and_then(cf_class))
+                })
                 .filter(|name| !request.classes.contains(name))
                 .collect();
             if reached.is_empty() {
@@ -1169,41 +1481,75 @@ impl Swift {
     /// Objective-C class each belongs to and its symbol. A global's USR is
     /// `c:@` and its C name, with no `@` after it.
     fn constants(&self, classes: &BTreeSet<String>) -> BTreeMap<String, (String, Symbol)> {
-        let by_swift: BTreeMap<String, &String> = classes.iter().map(|objc| (self.class(objc), objc)).collect();
+        let by_swift: BTreeMap<String, &String> = classes
+            .iter()
+            .map(|objc| (self.class(objc), objc))
+            .collect();
         self.by_usr
             .iter()
             .filter(|(usr, symbol)| {
-                usr.strip_prefix("c:@").is_some_and(|rest| !rest.contains('@')) && symbol.kind.identifier == "swift.type.property"
+                usr.strip_prefix("c:@")
+                    .is_some_and(|rest| !rest.contains('@'))
+                    && symbol.kind.identifier == "swift.type.property"
             })
             .filter_map(|(usr, symbol)| {
-                let [class, _] = symbol.path.as_slice() else { return None };
+                let [class, _] = symbol.path.as_slice() else {
+                    return None;
+                };
                 let objc = by_swift.get(class)?;
-                Some((usr["c:@".len()..].to_owned(), ((*objc).clone(), symbol.clone())))
+                Some((
+                    usr["c:@".len()..].to_owned(),
+                    ((*objc).clone(), symbol.clone()),
+                ))
             })
             .collect()
     }
 
     /// The name Swift gives Objective-C class `class`: `Timer` for `NSTimer`.
     fn class(&self, class: &str) -> String {
-        self.get(&format!("c:objc(cs){class}")).map_or_else(|| class.to_owned(), |s| s.names.title.clone())
+        self.get(&format!("c:objc(cs){class}"))
+            .map_or_else(|| class.to_owned(), |s| s.names.title.clone())
     }
 
     /// See [`Output::adoptions`].
-    fn adoptions(&self, bound: &BTreeSet<String>, adopts: &BTreeMap<String, BTreeSet<String>>) -> BTreeMap<String, BTreeMap<String, Adopted>> {
-        let swift_name = |protocol: &str| self.get(&format!("c:objc(pl){protocol}")).map(|symbol| symbol.names.title.clone());
+    fn adoptions(
+        &self,
+        bound: &BTreeSet<String>,
+        adopts: &BTreeMap<String, BTreeSet<String>>,
+    ) -> BTreeMap<String, BTreeMap<String, Adopted>> {
+        let swift_name = |protocol: &str| {
+            self.get(&format!("c:objc(pl){protocol}"))
+                .map(|symbol| symbol.names.title.clone())
+        };
         let mut index = BTreeMap::new();
         for class in bound {
             let mut protocols = BTreeMap::new();
             for protocol in adopted(&std::iter::once(class.clone()).collect(), adopts) {
                 let container = format!("c:objc(pl){protocol}");
-                let Some(name) = swift_name(&protocol) else { continue };
+                let Some(name) = swift_name(&protocol) else {
+                    continue;
+                };
                 let members = self
                     .by_usr
                     .iter()
-                    .filter(|(usr, _)| usr.strip_prefix(container.as_str()).is_some_and(|rest| rest.starts_with('(')))
-                    .map(|(_, member)| member.names.title.split('(').next().unwrap_or_default().to_owned())
+                    .filter(|(usr, _)| {
+                        usr.strip_prefix(container.as_str())
+                            .is_some_and(|rest| rest.starts_with('('))
+                    })
+                    .map(|(_, member)| {
+                        member
+                            .names
+                            .title
+                            .split('(')
+                            .next()
+                            .unwrap_or_default()
+                            .to_owned()
+                    })
                     .collect();
-                let refines = adopted(&std::iter::once(protocol.clone()).collect(), adopts).iter().filter_map(|p| swift_name(p)).collect();
+                let refines = adopted(&std::iter::once(protocol.clone()).collect(), adopts)
+                    .iter()
+                    .filter_map(|p| swift_name(p))
+                    .collect();
                 protocols.insert(name, Adopted { members, refines });
             }
             index.insert(self.class(class), protocols);
@@ -1218,9 +1564,14 @@ impl Swift {
 fn graphs(directory: &std::path::Path, module: &str) -> Result<Vec<std::path::PathBuf>> {
     let prefix = format!("{module}@");
     let mut extensions = Vec::new();
-    for entry in std::fs::read_dir(directory).with_context(|| format!("reading {}", directory.display()))? {
+    for entry in
+        std::fs::read_dir(directory).with_context(|| format!("reading {}", directory.display()))?
+    {
         let name = entry?.file_name();
-        if name.to_str().is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".symbols.json")) {
+        if name
+            .to_str()
+            .is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".symbols.json"))
+        {
             extensions.push(directory.join(name));
         }
     }
@@ -1428,6 +1779,7 @@ struct Reading<'v> {
 }
 
 impl<'a> Model<'a> {
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn read(
         swift: &'a Swift,
         headers: &'a Dumped,
@@ -1438,13 +1790,20 @@ impl<'a> Model<'a> {
         ownership: Ownership,
     ) -> Self {
         let Ownership { package, provided } = ownership;
-        let Deployment { platform, target, unavailable } = deployment;
+        let Deployment {
+            platform,
+            target,
+            unavailable,
+        } = deployment;
         let mut typedefs = headers.typedefs.clone();
         for decl in bodies.bodies.values().flatten() {
             if decl.get("kind").and_then(Value::as_str) == Some("ObjCTypeParamDecl")
                 && let Some(name) = named(decl)
             {
-                let bound = decl.get("type").and_then(desugared).unwrap_or_else(|| "id".to_owned());
+                let bound = decl
+                    .get("type")
+                    .and_then(desugared)
+                    .unwrap_or_else(|| "id".to_owned());
                 typedefs.entry(name).or_insert(bound);
             }
         }
@@ -1479,16 +1838,35 @@ impl<'a> Model<'a> {
             let mut decls: Vec<Origin<'a>> = bodies
                 .bodies
                 .get(&class)
-                .map(|b| b.iter().map(|decl| Origin { decl, container: container.clone() }).collect())
+                .map(|b| {
+                    b.iter()
+                        .map(|decl| Origin {
+                            decl,
+                            container: container.clone(),
+                        })
+                        .collect()
+                })
                 .unwrap_or_default();
             if class == "NSObject" {
-                decls.extend(bodies.root_protocol.iter().map(|decl| Origin { decl, container: "c:objc(pl)NSObject".to_owned() }));
+                decls.extend(bodies.root_protocol.iter().map(|decl| Origin {
+                    decl,
+                    container: "c:objc(pl)NSObject".to_owned(),
+                }));
             }
-            decls.sort_by_key(|origin| origin.decl.get("kind").and_then(Value::as_str) != Some("ObjCPropertyDecl"));
+            decls.sort_by_key(|origin| {
+                origin.decl.get("kind").and_then(Value::as_str) != Some("ObjCPropertyDecl")
+            });
             let (inherited, names, overloads, getters) = parent
                 .as_ref()
                 .and_then(|p| read.get(p))
-                .map(|r| (r.repeated.clone(), r.names.clone(), r.overloads.clone(), r.getters.clone()))
+                .map(|r| {
+                    (
+                        r.repeated.clone(),
+                        r.names.clone(),
+                        r.overloads.clone(),
+                        r.getters.clone(),
+                    )
+                })
                 .unwrap_or_default();
             let mut reading = Reading {
                 seen: BTreeSet::new(),
@@ -1532,35 +1910,70 @@ impl<'a> Model<'a> {
     /// most methods alike -- `parser(_:didStartElement:...)`,
     /// `parser(_:foundCharacters:)` -- and TypeScript one member per name, so
     /// a shared base name takes its first label: `parserDidStartElement`.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn protocol(&mut self, objc: &str, decls: &[Value]) -> Protocol {
         let container = format!("c:objc(pl){objc}");
-        let swift = self.swift.get(&container).map_or_else(|| objc.to_owned(), |s| s.names.title.clone());
-        let adopter = Class { objc: objc.to_owned(), swift: swift.clone(), parent: None, members: Vec::new(), extensions: Vec::new(), skipped: Vec::new(), sent: Vec::new() };
+        let swift = self
+            .swift
+            .get(&container)
+            .map_or_else(|| objc.to_owned(), |s| s.names.title.clone());
+        let adopter = Class {
+            objc: objc.to_owned(),
+            swift: swift.clone(),
+            parent: None,
+            members: Vec::new(),
+            extensions: Vec::new(),
+            skipped: Vec::new(),
+            sent: Vec::new(),
+        };
         let mut requirements = Vec::new();
         let mut properties = Vec::new();
         let mut skipped = Vec::new();
-        for decl in decls.iter().filter(|d| d.get("isImplicit").and_then(Value::as_bool) != Some(true)) {
+        for decl in decls
+            .iter()
+            .filter(|d| d.get("isImplicit").and_then(Value::as_bool) != Some(true))
+        {
             let Some(name) = named(decl) else { continue };
             match decl.get("kind").and_then(Value::as_str) {
-                Some("ObjCMethodDecl") if decl.get("instance").and_then(Value::as_bool) == Some(false) => {
-                    skipped.push(format!("+{name}: a class-side requirement, which a TypeScript class cannot write"));
+                Some("ObjCMethodDecl")
+                    if decl.get("instance").and_then(Value::as_bool) == Some(false) =>
+                {
+                    skipped.push(format!(
+                        "+{name}: a class-side requirement, which a TypeScript class cannot write"
+                    ));
                 }
                 Some("ObjCMethodDecl") => {
                     let usr = format!("{container}(im){name}");
-                    let Some(symbol) = self.swift.get(&usr).cloned() else { continue };
-                    match self.available(&symbol).and_then(|()| self.requirement(&adopter, decl, &symbol, self.swift.optional.contains(&usr))) {
+                    let Some(symbol) = self.swift.get(&usr).cloned() else {
+                        continue;
+                    };
+                    match self.available(&symbol).and_then(|()| {
+                        self.requirement(
+                            &adopter,
+                            decl,
+                            &symbol,
+                            self.swift.optional.contains(&usr),
+                        )
+                    }) {
                         Ok(requirement) => requirements.push(requirement),
                         Err(why) => skipped.push(format!("-{name}: {why}")),
                     }
                 }
-                Some("ObjCPropertyDecl") if decl.get("class").and_then(Value::as_bool) == Some(true) => {
+                Some("ObjCPropertyDecl")
+                    if decl.get("class").and_then(Value::as_bool) == Some(true) =>
+                {
                     skipped.push(format!("@property (class) {name}: a class-side requirement, which a TypeScript class cannot write"));
                 }
                 Some("ObjCPropertyDecl") => {
                     let usr = format!("{container}(py){name}");
-                    let Some(symbol) = self.swift.get(&usr).cloned() else { continue };
+                    let Some(symbol) = self.swift.get(&usr).cloned() else {
+                        continue;
+                    };
                     let optional = self.swift.optional.contains(&usr);
-                    match self.available(&symbol).and_then(|()| self.property_requirement(&adopter, decl, &symbol, optional)) {
+                    match self
+                        .available(&symbol)
+                        .and_then(|()| self.property_requirement(&adopter, decl, &symbol, optional))
+                    {
                         Ok(property) => properties.push(property),
                         Err(why) => skipped.push(format!("@property {name}: {why}")),
                     }
@@ -1576,13 +1989,19 @@ impl<'a> Model<'a> {
         // `applicationDidUpdate` (`application(_:didUpdate:)`) never takes
         // the name of the method Swift calls that.
         let unique = |requirement: &Requirement| bases.get(requirement.base.as_str()) == Some(&1);
-        let mut taken: BTreeSet<String> = requirements.iter().filter(|r| unique(r)).map(|r| r.base.clone()).collect();
+        let mut taken: BTreeSet<String> = requirements
+            .iter()
+            .filter(|r| unique(r))
+            .map(|r| r.base.clone())
+            .collect();
         let mut members = Vec::new();
         // A property first, by its Swift name, which a method's derived name
         // then steers clear of: `window` is `UIApplicationDelegate`'s.
         for (name, text) in properties {
             if !taken.insert(name.clone()) {
-                skipped.push(format!("@property {name}: named as a method of the protocol is"));
+                skipped.push(format!(
+                    "@property {name}: named as a method of the protocol is"
+                ));
                 continue;
             }
             members.push(text);
@@ -1591,11 +2010,20 @@ impl<'a> Model<'a> {
             let name = if unique(requirement) {
                 requirement.base.clone()
             } else {
-                let first = requirement.labels.iter().find(|l| *l != "_").map(|l| format!("{}{}", requirement.base, capitalized(l)));
-                first.filter(|name| !taken.contains(name)).unwrap_or_else(|| selector_name(&requirement.selector))
+                let first = requirement
+                    .labels
+                    .iter()
+                    .find(|l| *l != "_")
+                    .map(|l| format!("{}{}", requirement.base, capitalized(l)));
+                first
+                    .filter(|name| !taken.contains(name))
+                    .unwrap_or_else(|| selector_name(&requirement.selector))
             };
             if !unique(requirement) && !taken.insert(name.clone()) {
-                skipped.push(format!("-{}: named `{name}` as another requirement is", requirement.selector));
+                skipped.push(format!(
+                    "-{}: named `{name}` as another requirement is",
+                    requirement.selector
+                ));
                 continue;
             }
             members.push(format!(
@@ -1617,7 +2045,14 @@ impl<'a> Model<'a> {
             .filter(|parent| self.declared_protocols.contains(*parent))
             .map(|parent| self.protocol_name(parent))
             .collect();
-        Protocol { objc: objc.to_owned(), swift, base, refines, members, skipped }
+        Protocol {
+            objc: objc.to_owned(),
+            swift,
+            base,
+            refines,
+            members,
+            skipped,
+        }
     }
 
     /// A protocol's property requirement, as Swift imports it -- `var window:
@@ -1626,17 +2061,35 @@ impl<'a> Model<'a> {
     /// property signature, `?` where Swift marks it `optional`, `readonly`
     /// where the header does, and tagged with its getter and setter where
     /// they are not the ones its name gives.
-    fn property_requirement(&mut self, adopter: &Class, decl: &Value, symbol: &Symbol, optional: bool) -> std::result::Result<(String, String), String> {
+    fn property_requirement(
+        &mut self,
+        adopter: &Class,
+        decl: &Value,
+        symbol: &Symbol,
+        optional: bool,
+    ) -> std::result::Result<(String, String), String> {
         let name = named(decl).unwrap_or_default();
         let ty = decl.get("type").ok_or("no type")?;
         if written(ty).contains("(^") || desugared(ty).is_some_and(|d| d.contains("(^")) {
-            return Err("a block property requirement, which a field holding a closure cannot answer".to_owned());
+            return Err(
+                "a block property requirement, which a field holding a closure cannot answer"
+                    .to_owned(),
+            );
         }
-        let spelled = optional_as_swift(self.spell(adopter, ty, Position::Result)?, symbol.optionality() != Optionality::Neither);
+        let spelled = optional_as_swift(
+            self.spell(adopter, ty, Position::Result)?,
+            symbol.optionality() != Optionality::Neither,
+        );
         let readonly = decl.get("readonly").and_then(Value::as_bool) == Some(true);
         let swift_name = symbol.names.title.clone();
-        let getter = decl.get("getter").and_then(named).unwrap_or_else(|| name.clone());
-        let setter = decl.get("setter").and_then(named).unwrap_or_else(|| format!("set{}:", capitalized(&name)));
+        let getter = decl
+            .get("getter")
+            .and_then(named)
+            .unwrap_or_else(|| name.clone());
+        let setter = decl
+            .get("setter")
+            .and_then(named)
+            .unwrap_or_else(|| format!("set{}:", capitalized(&name)));
         let mut tags = Vec::new();
         if getter != swift_name {
             tags.push(format!("@ntsSelector {getter}"));
@@ -1661,20 +2114,43 @@ impl<'a> Model<'a> {
     /// A protocol method as the adopting class writes it: every argument
     /// positional, as Objective-C hands it over -- an object as itself, a
     /// string as the `NSString` it is.
-    fn requirement(&mut self, adopter: &Class, decl: &Value, symbol: &Symbol, optional: bool) -> std::result::Result<Requirement, String> {
+    fn requirement(
+        &mut self,
+        adopter: &Class,
+        decl: &Value,
+        symbol: &Symbol,
+        optional: bool,
+    ) -> std::result::Result<Requirement, String> {
         if decl.get("variadic").and_then(Value::as_bool) == Some(true) {
             return Err("variadic".to_owned());
         }
         let (base, labels) = swift_name(&symbol.names.title);
         let mut parameters = Vec::new();
         for (at, parameter) in parameters_of(decl).into_iter().enumerate() {
-            let spelled = self.spell(adopter, parameter.get("type").ok_or("a parameter with no type")?, Position::Block)?;
+            let spelled = self.spell(
+                adopter,
+                parameter.get("type").ok_or("a parameter with no type")?,
+                Position::Block,
+            )?;
             let spelled = swift_string(spelled);
-            let name = named(parameter).filter(|n| !n.is_empty() && !reserved(n)).unwrap_or_else(|| format!("arg{at}"));
+            let name = named(parameter)
+                .filter(|n| !n.is_empty() && !reserved(n))
+                .unwrap_or_else(|| format!("arg{at}"));
             parameters.push(format!("{name}: {spelled}"));
         }
-        let result = swift_string(self.spell(adopter, decl.get("returnType").ok_or("no return type")?, Position::Block)?);
-        Ok(Requirement { selector: named(decl).unwrap_or_default(), base, labels, optional, parameters: parameters.join(", "), result })
+        let result = swift_string(self.spell(
+            adopter,
+            decl.get("returnType").ok_or("no return type")?,
+            Position::Block,
+        )?);
+        Ok(Requirement {
+            selector: named(decl).unwrap_or_default(),
+            base,
+            labels,
+            optional,
+            parameters: parameters.join(", "),
+            result,
+        })
     }
 
     fn import(&mut self, module: &'static str, name: &'static str) {
@@ -1689,27 +2165,47 @@ impl<'a> Model<'a> {
     /// `NotificationCenter`'s takes an `NSObject?` -- the ancestor's is kept
     /// beside it, since TypeScript holds a subclass's overloads to its
     /// base's, and both send the one selector.
-    fn repeat_overload(&mut self, class: &mut Class, origin: Origin<'a>, reading: &mut Reading<'a>) {
+    fn repeat_overload(
+        &mut self,
+        class: &mut Class,
+        origin: Origin<'a>,
+        reading: &mut Reading<'a>,
+    ) {
         let decl = origin.decl;
         let Some(selector) = named(decl) else { return };
-        let instance = decl.get("instance").and_then(Value::as_bool).unwrap_or(true);
+        let instance = decl
+            .get("instance")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
         let key = format!("{}{selector}", if instance { "-" } else { "+" });
         if !reading.seen.contains(&key) {
             self.member(class, origin, reading);
             return;
         }
-        let usr = format!("{}({}){selector}", origin.container, if instance { "im" } else { "cm" });
-        let Some(mut symbol) = self.swift.get(&usr).cloned() else { return };
+        let usr = format!(
+            "{}({}){selector}",
+            origin.container,
+            if instance { "im" } else { "cm" }
+        );
+        let Some(mut symbol) = self.swift.get(&usr).cloned() else {
+            return;
+        };
         Self::fold_clashing(&mut symbol, reading);
         // Still a property's name after folding: the property keeps it.
         let (is_static, name, _) = Self::shape(&symbol);
-        if name.is_some_and(|name| reading.names.get(&(is_static, name)) == Some(&Named::Property)) {
+        if name.is_some_and(|name| reading.names.get(&(is_static, name)) == Some(&Named::Property))
+        {
             return;
         }
         // The same overload up to its parameters' names -- `cView` in one
         // header, `clipView` in the other -- is the one already there.
-        if let Ok(text) = self.available(&symbol).and_then(|()| self.method(class, decl, &symbol))
-            && !class.members.iter().any(|member| unnamed(member) == unnamed(&text))
+        if let Ok(text) = self
+            .available(&symbol)
+            .and_then(|()| self.method(class, decl, &symbol))
+            && !class
+                .members
+                .iter()
+                .any(|member| unnamed(member) == unnamed(&text))
         {
             class.members.push(text);
         }
@@ -1730,6 +2226,7 @@ impl<'a> Model<'a> {
         }
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn member(&mut self, class: &mut Class, origin: Origin<'a>, reading: &mut Reading<'a>) {
         let decl = origin.decl;
         if decl.get("isImplicit").and_then(Value::as_bool) == Some(true) {
@@ -1738,15 +2235,30 @@ impl<'a> Model<'a> {
         let (usr, key, shown) = match decl.get("kind").and_then(Value::as_str) {
             Some("ObjCMethodDecl") => {
                 let Some(selector) = named(decl) else { return };
-                let instance = decl.get("instance").and_then(Value::as_bool).unwrap_or(true);
+                let instance = decl
+                    .get("instance")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true);
                 let sign = if instance { "-" } else { "+" };
-                (format!("{}({}){selector}", origin.container, if instance { "im" } else { "cm" }), format!("{sign}{selector}"), format!("{sign}{selector}"))
+                (
+                    format!(
+                        "{}({}){selector}",
+                        origin.container,
+                        if instance { "im" } else { "cm" }
+                    ),
+                    format!("{sign}{selector}"),
+                    format!("{sign}{selector}"),
+                )
             }
             Some("ObjCPropertyDecl") => {
                 let Some(name) = named(decl) else { return };
                 let class_property = decl.get("class").and_then(Value::as_bool) == Some(true);
                 let tag = if class_property { "cpy" } else { "py" };
-                (format!("{}({tag}){name}", origin.container), format!("{tag} {name}"), format!("@property {name}"))
+                (
+                    format!("{}({tag}){name}", origin.container),
+                    format!("{tag} {name}"),
+                    format!("@property {name}"),
+                )
             }
             _ => return,
         };
@@ -1755,7 +2267,9 @@ impl<'a> Model<'a> {
         }
         // Swift does not import it -- `alloc`, `new`, what it marks
         // unavailable -- so there is no such member to bind, and nothing to say.
-        let Some(mut symbol) = self.swift.get(&usr).cloned() else { return };
+        let Some(mut symbol) = self.swift.get(&usr).cloned() else {
+            return;
+        };
         Self::fold_clashing(&mut symbol, reading);
         let bound = self.available(&symbol).and_then(|()| {
             let text = if decl.get("kind").and_then(Value::as_str) == Some("ObjCMethodDecl") {
@@ -1806,7 +2320,13 @@ impl<'a> Model<'a> {
                 }
                 class.members.push(text);
                 class.sent.extend(sent_by(decl));
-                if let Some(asynchronous) = self.swift.asynchronous.get(&usr).filter(|_| is_method).cloned() {
+                if let Some(asynchronous) = self
+                    .swift
+                    .asynchronous
+                    .get(&usr)
+                    .filter(|_| is_method)
+                    .cloned()
+                {
                     match self.promise(class, decl, &symbol, &asynchronous) {
                         Ok(overload) => {
                             if extension {
@@ -1814,14 +2334,19 @@ impl<'a> Model<'a> {
                             }
                             class.members.push(overload);
                         }
-                        Err(why) => class.skipped.push(format!("{shown} as Swift's `async` form: {why}")),
+                        Err(why) => class
+                            .skipped
+                            .push(format!("{shown} as Swift's `async` form: {why}")),
                     }
                 }
             }
             Err(why) => class.skipped.push(format!("{shown}: {why}")),
         }
         let initializer = symbol.kind.identifier == "swift.init";
-        let instancetype = decl.get("returnType").map(written).is_some_and(|t| strip_attributes(&t).starts_with("instancetype"));
+        let instancetype = decl
+            .get("returnType")
+            .map(written)
+            .is_some_and(|t| strip_attributes(&t).starts_with("instancetype"));
         if initializer || instancetype {
             reading.repeated.push(origin);
         }
@@ -1846,16 +2371,28 @@ impl<'a> Model<'a> {
     fn shape(symbol: &Symbol) -> (bool, Option<String>, Named) {
         let kind = symbol.kind.identifier.as_str();
         let is_static = kind.starts_with("swift.type.");
-        let named_as = if kind.ends_with("property") { Named::Property } else { Named::Method };
+        let named_as = if kind.ends_with("property") {
+            Named::Property
+        } else {
+            Named::Method
+        };
         let name = (kind != "swift.init").then(|| swift_name(&symbol.names.title).0);
         (is_static, name, named_as)
     }
 
     /// A method, under Swift's name: an initializer (a factory's too) as a
     /// constructor, and a getter Swift imports as a property as one.
-    fn method(&mut self, class: &Class, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
+    fn method(
+        &mut self,
+        class: &Class,
+        decl: &Value,
+        symbol: &Symbol,
+    ) -> std::result::Result<String, String> {
         let selector = named(decl).unwrap_or_default();
-        let instance = decl.get("instance").and_then(Value::as_bool).unwrap_or(true);
+        let instance = decl
+            .get("instance")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
         if decl.get("variadic").and_then(Value::as_bool) == Some(true) {
             return Err("variadic".to_owned());
         }
@@ -1866,18 +2403,39 @@ impl<'a> Model<'a> {
         let modifier = if instance { "" } else { "static " };
         if kind.ends_with("property") {
             let spelled = self.spell(class, result, Position::Result)?;
-            return Ok(format!("    /** @ntsSelector {selector} */\n    {modifier}get {}(): {spelled};", quoted_key(&base)));
+            return Ok(format!(
+                "    /** @ntsSelector {selector} */\n    {modifier}get {}(): {spelled};",
+                quoted_key(&base)
+            ));
         }
         // Swift took an argument away: the `NSError **` it throws instead of
         // passing, which the call leaves out and the compiler supplies.
         let throws = labels.len() + 1 == parameters.len()
-            && parameters.last().and_then(|p| p.get("type")).and_then(desugared).is_some_and(|ty| unqualified(&ty) == "NSError**");
-        let parameters = if throws { &parameters[..labels.len()] } else { &parameters[..] };
+            && parameters
+                .last()
+                .and_then(|p| p.get("type"))
+                .and_then(desugared)
+                .is_some_and(|ty| unqualified(&ty) == "NSError**");
+        let parameters = if throws {
+            &parameters[..labels.len()]
+        } else {
+            &parameters[..]
+        };
         if labels.len() != parameters.len() {
-            return Err(format!("Swift's `{}` awaits a completion handler it passes as `async` (S5)", symbol.names.title));
+            return Err(format!(
+                "Swift's `{}` awaits a completion handler it passes as `async` (S5)",
+                symbol.names.title
+            ));
         }
         let (arguments, _) = self.arguments(class, parameters, &labels)?;
-        let mut tags = vec![format!("@ntsSelector {}", if kind == "swift.init" && !instance { format!("+{selector}") } else { selector })];
+        let mut tags = vec![format!(
+            "@ntsSelector {}",
+            if kind == "swift.init" && !instance {
+                format!("+{selector}")
+            } else {
+                selector
+            }
+        )];
         if throws {
             tags.push("@ntsThrows error nts_nserror_message".to_owned());
         }
@@ -1893,7 +2451,10 @@ impl<'a> Model<'a> {
             spelled if throws => spelled.trim_end_matches(" | null").to_owned(),
             spelled => optional_as_swift(spelled, symbol.optionality() == Optionality::Optional),
         };
-        Ok(format!("{doc}    {modifier}{}({arguments}): {result};", quoted(&base)))
+        Ok(format!(
+            "{doc}    {modifier}{}({arguments}): {result};",
+            quoted(&base)
+        ))
     }
 
     /// Swift's `async` form of a method taking a completion handler, as the
@@ -1901,7 +2462,13 @@ impl<'a> Model<'a> {
     /// the handler, returning a promise of what the handler is given. The
     /// promise is a function of the values module, which calls the method
     /// with a handler that settles it.
-    fn promise(&mut self, class: &Class, decl: &Value, symbol: &Symbol, asynchronous: &Symbol) -> std::result::Result<String, String> {
+    fn promise(
+        &mut self,
+        class: &Class,
+        decl: &Value,
+        symbol: &Symbol,
+        asynchronous: &Symbol,
+    ) -> std::result::Result<String, String> {
         // A class method's form is a static member, and its function takes
         // no receiver: `NSAnimationContext.runAnimationGroup(changes)`.
         let is_static = decl.get("instance").and_then(Value::as_bool) == Some(false);
@@ -1911,10 +2478,15 @@ impl<'a> Model<'a> {
         };
         let (base, labels) = swift_name(&asynchronous.names.title);
         let (method, method_labels) = swift_name(&symbol.names.title);
-        if labels.len() != leading.len() || method_labels.get(..leading.len()) != Some(&labels[..]) {
-            return Err("its arguments are labelled otherwise than the handler's method's".to_owned());
+        if labels.len() != leading.len() || method_labels.get(..leading.len()) != Some(&labels[..])
+        {
+            return Err(
+                "its arguments are labelled otherwise than the handler's method's".to_owned(),
+            );
         }
-        let written = strip_attributes(&written(handler.get("type").ok_or("a handler with no type")?));
+        let written = strip_attributes(&written(
+            handler.get("type").ok_or("a handler with no type")?,
+        ));
         if !written.contains("(^") {
             return Err("a last parameter that is not a block".to_owned());
         }
@@ -1935,7 +2507,16 @@ impl<'a> Model<'a> {
         let arity = values.len();
         // Swift returns what a throwing handler is given as not optional once
         // there is no error.
-        let values: Vec<String> = values.iter().map(|v| if throws { v.trim_end_matches(" | null").to_owned() } else { v.clone() }).collect();
+        let values: Vec<String> = values
+            .iter()
+            .map(|v| {
+                if throws {
+                    v.trim_end_matches(" | null").to_owned()
+                } else {
+                    v.clone()
+                }
+            })
+            .collect();
         // Several values are Swift's tuple: `async -> (Data, URLResponse)`.
         let value = match values.as_slice() {
             [] => "void".to_owned(),
@@ -1948,15 +2529,27 @@ impl<'a> Model<'a> {
         let nullable = given.iter().take(arity).any(|v| v.ends_with(" | null"));
         let (arguments, names) = self.arguments_shaped(class, leading, &labels, false)?;
         let mut function = format!("nts_async_{}_{base}", class.objc);
-        while self.promises.iter().any(|promise| promise.function == function) {
+        while self
+            .promises
+            .iter()
+            .any(|promise| promise.function == function)
+        {
             function.push('_');
         }
         let modifier = if is_static { "static " } else { "" };
-        let overload = format!("    /** @ntsCall {function} */\n    {modifier}{}({arguments}): Promise<{value}>;", quoted(&base));
+        let overload = format!(
+            "    /** @ntsCall {function} */\n    {modifier}{}({arguments}): Promise<{value}>;",
+            quoted(&base)
+        );
         self.promises.push(Promise {
             function,
             is_static,
-            receiver: class.swift.rsplit('.').next().unwrap_or_default().to_owned(),
+            receiver: class
+                .swift
+                .rsplit('.')
+                .next()
+                .unwrap_or_default()
+                .to_owned(),
             method: quoted(&method),
             parameters: arguments,
             names,
@@ -1972,7 +2565,12 @@ impl<'a> Model<'a> {
     /// Swift's rule for the arguments: the unlabelled ones first, positional,
     /// and every one from the first label on in one object, keyed by its
     /// label, which the call passes as a literal the compiler never builds.
-    fn arguments(&mut self, class: &Class, parameters: &[&Value], labels: &[String]) -> std::result::Result<(String, Vec<String>), String> {
+    fn arguments(
+        &mut self,
+        class: &Class,
+        parameters: &[&Value],
+        labels: &[String],
+    ) -> std::result::Result<(String, Vec<String>), String> {
         self.arguments_shaped(class, parameters, labels, true)
     }
 
@@ -1992,8 +2590,14 @@ impl<'a> Model<'a> {
         let mut keys = BTreeSet::new();
         let mut trailing = None;
         for (at, (parameter, label)) in parameters.iter().zip(labels).enumerate() {
-            let spelled = self.spell(class, parameter.get("type").ok_or("a parameter with no type")?, Position::Parameter)?;
-            let name = named(parameter).filter(|n| !n.is_empty() && !reserved(n) && n != "labels").unwrap_or_else(|| format!("arg{at}"));
+            let spelled = self.spell(
+                class,
+                parameter.get("type").ok_or("a parameter with no type")?,
+                Position::Parameter,
+            )?;
+            let name = named(parameter)
+                .filter(|n| !n.is_empty() && !reserved(n) && n != "labels")
+                .unwrap_or_else(|| format!("arg{at}"));
             // Swift's trailing closure: a block last is passed after the
             // labels, unlabelled, as `sort { a, b in ... }` is written.
             if trailing_closure && at + 1 == parameters.len() && spelled.contains(") => ") {
@@ -2005,10 +2609,20 @@ impl<'a> Model<'a> {
                 // relatedBy:toItem:attribute:multiplier:constant:)` -- which one
                 // object cannot hold twice: the repeat takes its parameter's own
                 // name, the header's (`attr2`, `endRadius`, `newParent`).
-                let key = if label == "_" { name.clone() } else { label.clone() };
-                let key = if keys.contains(&key) { name.clone() } else { key };
+                let key = if label == "_" {
+                    name.clone()
+                } else {
+                    label.clone()
+                };
+                let key = if keys.contains(&key) {
+                    name.clone()
+                } else {
+                    key
+                };
                 if !keys.insert(key.clone()) {
-                    return Err(format!("Swift repeats the label `{key}`, which one object cannot"));
+                    return Err(format!(
+                        "Swift repeats the label `{key}`, which one object cannot"
+                    ));
                 }
                 labelled.push(format!("{}: {spelled}", quoted_key(&key)));
             }
@@ -2017,7 +2631,14 @@ impl<'a> Model<'a> {
             positional.push(format!("labels: {{ {} }}", labelled.join("; ")));
         }
         positional.extend(trailing);
-        let names = positional.iter().map(|p| p.split_once(':').map_or(p.as_str(), |(name, _)| name).to_owned()).collect();
+        let names = positional
+            .iter()
+            .map(|p| {
+                p.split_once(':')
+                    .map_or(p.as_str(), |(name, _)| name)
+                    .to_owned()
+            })
+            .collect();
         Ok((positional.join(", "), names))
     }
 
@@ -2028,7 +2649,12 @@ impl<'a> Model<'a> {
     /// Accessors and not a field, so a subclass the program writes overrides
     /// one (`override var isFlipped: Bool`) as TypeScript allows an accessor
     /// to override an accessor, and refuses it to override a field.
-    fn property(&mut self, class: &Class, decl: &Value, symbol: &Symbol) -> std::result::Result<String, String> {
+    fn property(
+        &mut self,
+        class: &Class,
+        decl: &Value,
+        symbol: &Symbol,
+    ) -> std::result::Result<String, String> {
         let name = named(decl).unwrap_or_default();
         let ty = decl.get("type").ok_or("no type")?;
         // A block: a closure the program sets -- Swift's `var completionBlock:
@@ -2038,15 +2664,29 @@ impl<'a> Model<'a> {
             return self.block_property(class, decl, symbol, ty);
         }
         let clang = self.spell(class, ty, Position::Result)?;
-        let spelled = optional_as_swift(clang.clone(), symbol.optionality() == Optionality::Optional);
+        let spelled =
+            optional_as_swift(clang.clone(), symbol.optionality() == Optionality::Optional);
         // What the setter takes: `null` too for a `null_resettable` property,
         // which Swift writes `T!`.
-        let written = optional_as_swift(self.or_fields(spelled.clone()), symbol.optionality() != Optionality::Neither);
+        let written = optional_as_swift(
+            self.or_fields(spelled.clone()),
+            symbol.optionality() != Optionality::Neither,
+        );
         let readonly = decl.get("readonly").and_then(Value::as_bool) == Some(true);
         let swift_name = symbol.names.title.clone();
-        let getter = decl.get("getter").and_then(named).unwrap_or_else(|| name.clone());
-        let setter = decl.get("setter").and_then(named).unwrap_or_else(|| format!("set{}:", capitalized(&name)));
-        let is_static = if decl.get("class").and_then(Value::as_bool) == Some(true) { "static " } else { "" };
+        let getter = decl
+            .get("getter")
+            .and_then(named)
+            .unwrap_or_else(|| name.clone());
+        let setter = decl
+            .get("setter")
+            .and_then(named)
+            .unwrap_or_else(|| format!("set{}:", capitalized(&name)));
+        let is_static = if decl.get("class").and_then(Value::as_bool) == Some(true) {
+            "static "
+        } else {
+            ""
+        };
         let key = quoted_key(&swift_name);
         let mut text = String::new();
         if getter != swift_name {
@@ -2065,40 +2705,77 @@ impl<'a> Model<'a> {
 
     /// A block property as its setter alone: `set completionBlock(value: (()
     /// => void) | null)`. A read-only one has nothing to set.
-    fn block_property(&mut self, class: &Class, decl: &Value, symbol: &Symbol, ty: &Value) -> std::result::Result<String, String> {
+    fn block_property(
+        &mut self,
+        class: &Class,
+        decl: &Value,
+        symbol: &Symbol,
+        ty: &Value,
+    ) -> std::result::Result<String, String> {
         if decl.get("readonly").and_then(Value::as_bool) == Some(true) {
             return Err("a block as a result or a read-only property".to_owned());
         }
         let name = named(decl).unwrap_or_default();
         let closure = self.spell(class, ty, Position::Parameter)?;
-        let optional = written(ty).contains("_Nullable") || symbol.optionality() != Optionality::Neither;
+        let optional =
+            written(ty).contains("_Nullable") || symbol.optionality() != Optionality::Neither;
         // A nullable block is spelled optional already (`spell`).
-        let value = if optional && !closure.ends_with(" | null") { format!("({closure}) | null") } else { closure };
+        let value = if optional && !closure.ends_with(" | null") {
+            format!("({closure}) | null")
+        } else {
+            closure
+        };
         let swift_name = symbol.names.title.clone();
-        let setter = decl.get("setter").and_then(named).unwrap_or_else(|| format!("set{}:", capitalized(&name)));
-        let is_static = if decl.get("class").and_then(Value::as_bool) == Some(true) { "static " } else { "" };
+        let setter = decl
+            .get("setter")
+            .and_then(named)
+            .unwrap_or_else(|| format!("set{}:", capitalized(&name)));
+        let is_static = if decl.get("class").and_then(Value::as_bool) == Some(true) {
+            "static "
+        } else {
+            ""
+        };
         let mut text = String::new();
         if setter != format!("set{}:", capitalized(&swift_name)) {
             let _ = writeln!(text, "    /** @ntsSet {setter} */");
         }
-        let _ = write!(text, "    {is_static}set {}(value: {value});", quoted_key(&swift_name));
+        let _ = write!(
+            text,
+            "    {is_static}set {}(value: {value});",
+            quoted_key(&swift_name)
+        );
         Ok(text)
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn spell(&mut self, class: &Class, ty: &Value, position: Position) -> Spelled {
         let written = strip_attributes(&written(ty));
         let desugared = desugared(ty).unwrap_or_default();
-        let or_null = |text: String| if written.contains("_Nullable") { format!("{text} | null") } else { text };
+        let or_null = |text: String| {
+            if written.contains("_Nullable") {
+                format!("{text} | null")
+            } else {
+                text
+            }
+        };
         if written.contains("(^") || desugared.contains("(^") {
             // A block type the header names by a typedef --
             // `NSTableViewDiffableDataSourceCellProvider` -- is read from what
             // the typedef spells.
-            let spelled = if written.contains("(^") { written.clone() } else { desugared.clone() };
+            let spelled = if written.contains("(^") {
+                written.clone()
+            } else {
+                desugared.clone()
+            };
             return match position {
                 // Swift's `((Bool) -> Void)?`: the block pointer's own
                 // nullability, `(^ _Nullable)`, not one of its parameters'.
                 Position::Parameter => self.block(class, &spelled).map(|closure| {
-                    if block_is_nullable(&spelled) { format!("({closure}) | null") } else { closure }
+                    if block_is_nullable(&spelled) {
+                        format!("({closure}) | null")
+                    } else {
+                        closure
+                    }
                 }),
                 Position::Block => Err("a block that takes or returns a block".to_owned()),
                 // A block the program is handed has no closure to be.
@@ -2107,10 +2784,17 @@ impl<'a> Model<'a> {
         }
         // A typedef clang left unexpanded -- a block's parameters are only
         // ever spelled: an enum by its name.
-        if let Some(name) = written.split_whitespace().next().filter(|name| desugared == written && self.headers.enums.contains_key(*name)) {
+        if let Some(name) = written
+            .split_whitespace()
+            .next()
+            .filter(|name| desugared == written && self.headers.enums.contains_key(*name))
+        {
             return self.enumeration(name);
         }
-        if (written.starts_with("BOOL") && !written.contains('*')) || desugared == "bool" || desugared == "_Bool" {
+        if (written.starts_with("BOOL") && !written.contains('*'))
+            || desugared == "bool"
+            || desugared == "_Bool"
+        {
             return Ok("boolean".to_owned());
         }
         if desugared == "void" {
@@ -2166,15 +2850,22 @@ impl<'a> Model<'a> {
                 }
                 return Ok(or_null("string".to_owned()));
             }
-            if self.c_function && position != Position::Block && matches!(base, "NSArray" | "NSDictionary" | "NSSet") {
-                return Err(format!("a collection, `{base}`, which a C function passes as the object it is and only a message copies"));
+            if self.c_function
+                && position != Position::Block
+                && matches!(base, "NSArray" | "NSDictionary" | "NSSet")
+            {
+                return Err(format!(
+                    "a collection, `{base}`, which a C function passes as the object it is and only a message copies"
+                ));
             }
             // Swift's `[T]`: an `NSArray` is copied into a TypeScript array and
             // out of one, its elements objects or strings. Not a mutable one,
             // which Swift keeps as the object it is.
             if base == "NSArray" && position != Position::Block {
                 // Swift's `[T]?` where the header says `_Nullable`.
-                return self.array_element(pointee).map(|element| or_null(format!("{element}[]")));
+                return self
+                    .array_element(pointee)
+                    .map(|element| or_null(format!("{element}[]")));
             }
             // Swift's `[String: V]`: a map of string keys, copied into the
             // `NSDictionary` a message takes and out of the one it answers.
@@ -2185,26 +2876,43 @@ impl<'a> Model<'a> {
             // its elements objects -- hashed and compared by `-hash` and
             // `-isEqual:`, as Swift's are -- or strings.
             if base == "NSSet" && position != Position::Block {
-                return self.array_element(pointee).map(|element| or_null(format!("Set<{element}>")));
+                return self
+                    .array_element(pointee)
+                    .map(|element| or_null(format!("Set<{element}>")));
             }
             if position != Position::Block
-                && matches!(base, "NSMutableArray" | "NSDictionary" | "NSMutableDictionary" | "NSSet" | "NSMutableSet" | "NSOrderedSet")
+                && matches!(
+                    base,
+                    "NSMutableArray"
+                        | "NSDictionary"
+                        | "NSMutableDictionary"
+                        | "NSSet"
+                        | "NSMutableSet"
+                        | "NSOrderedSet"
+                )
             {
-                return Err(format!("a collection, `{base}`, which crosses as an object when it is bound"));
+                return Err(format!(
+                    "a collection, `{base}`, which crosses as an object when it is bound"
+                ));
             }
             if self.headers.supers.contains_key(base) {
                 return Ok(or_null(self.class_type(base)?));
             }
             return self.unsafe_pointer(&written, pointee, &desugared, position);
         }
-        if let Some(name) = desugared.strip_prefix("struct ").filter(|name| !name.ends_with('*')) {
+        if let Some(name) = desugared
+            .strip_prefix("struct ")
+            .filter(|name| !name.ends_with('*'))
+        {
             return self.by_value(name, position);
         }
         // A C function pointer -- `CGPathApply`'s, an event tap's callback: in
         // an `objc:` module a function type is a block, which the call passes
         // as one, and a function pointer is not.
         if desugared.contains("(*") {
-            return Err(format!("a C function pointer, `{desugared}`, which a function type here would pass as a block"));
+            return Err(format!(
+                "a C function pointer, `{desugared}`, which a function type here would pass as a block"
+            ));
         }
         Err(format!("a `{desugared}`"))
     }
@@ -2214,13 +2922,24 @@ impl<'a> Model<'a> {
     /// The Swift number a pointer's pointee is: named directly (`CGFloat`,
     /// `double`), or through the typedefs that lead to one (`CGGlyph`).
     fn pointee_number(&self, written: &str, pointee: &str) -> Option<&'static str> {
-        let clean = |text: &str| text.replace("_Nullable", "").replace("_Nonnull", "").trim().trim_start_matches("const ").trim().to_owned();
+        let clean = |text: &str| {
+            text.replace("_Nullable", "")
+                .replace("_Nonnull", "")
+                .trim()
+                .trim_start_matches("const ")
+                .trim()
+                .to_owned()
+        };
         let written = clean(written.split('*').next().unwrap_or_default());
         let pointee = clean(pointee);
         if let Some(number) = swift_number(&written, &pointee) {
             return Some(number);
         }
-        let mut name = if pointee.contains(' ') { written } else { pointee };
+        let mut name = if pointee.contains(' ') {
+            written
+        } else {
+            pointee
+        };
         for _ in 0..8 {
             let aliased = clean(self.typedefs.get(&name)?);
             if let Some(number) = swift_number(&aliased, &aliased) {
@@ -2231,8 +2950,20 @@ impl<'a> Model<'a> {
         None
     }
 
-    fn unsafe_pointer(&mut self, written: &str, pointee: &str, desugared: &str, position: Position) -> Spelled {
-        let or_null = |text: String| if written.contains("_Nullable") { format!("{text} | null") } else { text };
+    fn unsafe_pointer(
+        &mut self,
+        written: &str,
+        pointee: &str,
+        desugared: &str,
+        position: Position,
+    ) -> Spelled {
+        let or_null = |text: String| {
+            if written.contains("_Nullable") {
+                format!("{text} | null")
+            } else {
+                text
+            }
+        };
         if position == Position::Parameter && (pointee == "const char" || pointee == "char") {
             self.import("objc:types", "CString");
             return Ok("CString".to_owned());
@@ -2251,7 +2982,14 @@ impl<'a> Model<'a> {
         // when the call returns -- a claim no header makes.
         if position == Position::Parameter {
             let strings = pointee.replace("_Nullable", "").replace("_Nonnull", "");
-            if matches!(strings.split_whitespace().collect::<Vec<_>>().join(" ").as_str(), "char *" | "const char *" | "const char *const") {
+            if matches!(
+                strings
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .as_str(),
+                "char *" | "const char *" | "const char *const"
+            ) {
                 self.import("c:types", "Ptr");
                 return Ok(or_null("Ptr<unknown>".to_owned()));
             }
@@ -2259,7 +2997,9 @@ impl<'a> Model<'a> {
         // Swift's `UnsafeMutablePointer<ObjCBool>`: a `BOOL *`, like
         // `fileExists(atPath:isDirectory:)`'s, whose byte is read as `[0]`
         // -- or a block's `stop`, which the closure writes.
-        if matches!(position, Position::Parameter | Position::Block) && written.trim_start_matches("const ").starts_with("BOOL") {
+        if matches!(position, Position::Parameter | Position::Block)
+            && written.trim_start_matches("const ").starts_with("BOOL")
+        {
             self.import("objc:types", "ObjCBool");
             self.import("c:types", "Ptr");
             return Ok(or_null("Ptr<ObjCBool>".to_owned()));
@@ -2271,7 +3011,9 @@ impl<'a> Model<'a> {
         // through the typedefs Swift sees through (`CGGlyph`, `unichar` and
         // `size_t` are `UInt16`, `UInt16` and `UInt`). `ConstPtr` where C
         // promises not to write, which a `Ptr` still satisfies.
-        if !pointee.contains('*') && let Some(number) = self.pointee_number(written, pointee) {
+        if !pointee.contains('*')
+            && let Some(number) = self.pointee_number(written, pointee)
+        {
             let constant = pointee.trim_start().starts_with("const ");
             let brand = if constant { "ConstPtr" } else { "Ptr" };
             self.import("objc:types", number);
@@ -2282,14 +3024,22 @@ impl<'a> Model<'a> {
         // a record read in place -- as the address a program passes,
         // `local<NSRange>()`, is handed, or a block is given: `ConstPtr`
         // where C promises not to write.
-        if let Some(name) = struct_through_typedefs(&self.typedefs, pointee.trim_start_matches("const "))
+        if let Some(name) =
+            struct_through_typedefs(&self.typedefs, pointee.trim_start_matches("const "))
             && self.headers.records.contains_key(&name)
         {
             let name = name.as_str();
             self.record(name)?;
-            let brand = if pointee.trim_start().starts_with("const ") { "ConstPtr" } else { "Ptr" };
+            let brand = if pointee.trim_start().starts_with("const ") {
+                "ConstPtr"
+            } else {
+                "Ptr"
+            };
             self.import("c:types", brand);
-            return Ok(or_null(format!("{brand}<{}>", record_name(&self.typedefs, name))));
+            return Ok(or_null(format!(
+                "{brand}<{}>",
+                record_name(&self.typedefs, name)
+            )));
         }
         // Swift's `UnsafeMutableRawPointer`: an address the program
         // passes, or is handed, and does not read as any type.
@@ -2300,10 +3050,17 @@ impl<'a> Model<'a> {
         // `struct CGColor *`, the pointer a Core Foundation class's `Ref`
         // typedef names: a class Swift imports, which this binding binds
         // only when asked to.
-        if let Some(tag) = desugared.strip_prefix("struct ").and_then(|rest| rest.strip_suffix(" *"))
-            && self.typedefs.get(&format!("{tag}Ref")).is_some_and(|aliased| aliased.trim_start_matches("const ") == desugared)
+        if let Some(tag) = desugared
+            .strip_prefix("struct ")
+            .and_then(|rest| rest.strip_suffix(" *"))
+            && self
+                .typedefs
+                .get(&format!("{tag}Ref"))
+                .is_some_and(|aliased| aliased.trim_start_matches("const ") == desugared)
         {
-            return Err(format!("`{tag}`, a Core Foundation class this binding does not bind (`--class {tag}`)"));
+            return Err(format!(
+                "`{tag}`, a Core Foundation class this binding does not bind (`--class {tag}`)"
+            ));
         }
         Err(format!("a `{desugared}`"))
     }
@@ -2314,7 +3071,11 @@ impl<'a> Model<'a> {
         self.record(name)?;
         self.import("c:types", "ByValue");
         let spelled = format!("ByValue<{}>", record_name(&self.typedefs, name));
-        Ok(if position == Position::Parameter { self.or_fields(spelled) } else { spelled })
+        Ok(if position == Position::Parameter {
+            self.or_fields(spelled)
+        } else {
+            spelled
+        })
     }
 
     /// What a program passes where C takes a record by value: the record's
@@ -2322,7 +3083,12 @@ impl<'a> Model<'a> {
     /// `NSRect(origin:size:)` -- `ByValue<CGRect> | Fields<CGRect>`. Any
     /// other type is itself.
     fn or_fields(&mut self, spelled: String) -> String {
-        let Some(record) = spelled.strip_prefix("ByValue<").and_then(|rest| rest.strip_suffix('>')) else { return spelled };
+        let Some(record) = spelled
+            .strip_prefix("ByValue<")
+            .and_then(|rest| rest.strip_suffix('>'))
+        else {
+            return spelled;
+        };
         self.import("c:types", "Fields");
         format!("{spelled} | Fields<{record}>")
     }
@@ -2333,15 +3099,29 @@ impl<'a> Model<'a> {
     /// before `(^`, and the parameters in the last parentheses.
     fn block(&mut self, class: &Class, written: &str) -> Spelled {
         let (given, result) = self.block_parts(class, written)?;
-        let given: Vec<String> = given.iter().enumerate().map(|(at, ty)| format!("arg{at}: {ty}")).collect();
+        let given: Vec<String> = given
+            .iter()
+            .enumerate()
+            .map(|(at, ty)| format!("arg{at}: {ty}"))
+            .collect();
         Ok(format!("({}) => {result}", given.join(", ")))
     }
 
     /// A block's parameters and result, each spelled as a block's are.
-    fn block_parts(&mut self, class: &Class, written: &str) -> std::result::Result<(Vec<String>, String), String> {
-        let (result, rest) = written.split_once("(^").ok_or("a block clang spells another way")?;
+    fn block_parts(
+        &mut self,
+        class: &Class,
+        written: &str,
+    ) -> std::result::Result<(Vec<String>, String), String> {
+        let (result, rest) = written
+            .split_once("(^")
+            .ok_or("a block clang spells another way")?;
         let open = rest.find(")(").ok_or("a block clang spells another way")? + 1;
-        let parameters = rest[open..].trim().strip_prefix('(').and_then(|p| p.strip_suffix(')')).ok_or("a block clang spells another way")?;
+        let parameters = rest[open..]
+            .trim()
+            .strip_prefix('(')
+            .and_then(|p| p.strip_suffix(')'))
+            .ok_or("a block clang spells another way")?;
         let mut spelled = Vec::new();
         let mut depth = 0usize;
         let mut start = 0;
@@ -2361,8 +3141,16 @@ impl<'a> Model<'a> {
         // A string the block is given is the program's `string`: lowering
         // copies the `NSString` in for the call (`native::block_role`), as it
         // does a method's. Its result is still the object it is.
-        for piece in pieces.iter().map(|p| p.trim()).filter(|p| !p.is_empty() && *p != "void") {
-            spelled.push(swift_string(self.spell(class, &block_part(piece, &self.typedefs), Position::Block)?));
+        for piece in pieces
+            .iter()
+            .map(|p| p.trim())
+            .filter(|p| !p.is_empty() && *p != "void")
+        {
+            spelled.push(swift_string(self.spell(
+                class,
+                &block_part(piece, &self.typedefs),
+                Position::Block,
+            )?));
         }
         // `NS_SWIFT_UI_ACTOR void (^)(BOOL)`: an attribute of the block, not
         // part of its result's type.
@@ -2380,22 +3168,31 @@ impl<'a> Model<'a> {
     /// strings, through any typedef (`NSAttributedStringKey`), and a value
     /// that is an object -- `id` is `NSObject` -- or a string.
     fn dictionary(&mut self, pointee: &str) -> Spelled {
-        let arguments = pointee.split_once('<').map(|(_, rest)| rest.trim_end().trim_end_matches('>').trim());
+        let arguments = pointee
+            .split_once('<')
+            .map(|(_, rest)| rest.trim_end().trim_end_matches('>').trim());
         let Some((key, value)) = arguments.and_then(|arguments| arguments.split_once(',')) else {
             return Err("a dictionary whose key type the header does not name".to_owned());
         };
         let key = key.trim().trim_end_matches('*').trim();
         let key_is_string = key == "NSString"
-            || self.typedefs.get(key).is_some_and(|aliased| aliased.trim().trim_end_matches('*').trim() == "NSString");
+            || self
+                .typedefs
+                .get(key)
+                .is_some_and(|aliased| aliased.trim().trim_end_matches('*').trim() == "NSString");
         if !key_is_string {
-            return Err(format!("a dictionary keyed by `{key}`, which a map of strings cannot be"));
+            return Err(format!(
+                "a dictionary keyed by `{key}`, which a map of strings cannot be"
+            ));
         }
         let value = value.trim().trim_start_matches("__kindof ").trim();
         let value = if value == "id" || value.starts_with("id<") {
             self.object("NSObject")
         } else {
             let class = value.trim_end_matches('*').trim();
-            let class = class.split_once('<').map_or(class, |(class, _)| class.trim());
+            let class = class
+                .split_once('<')
+                .map_or(class, |(class, _)| class.trim());
             if class == "NSString" {
                 "string".to_owned()
             } else if self.headers.supers.contains_key(class) {
@@ -2413,9 +3210,15 @@ impl<'a> Model<'a> {
     /// spelled as a C function's result is, so an `NSString *` is a
     /// `BridgedString`. A constant clang did not declare, or one the target
     /// does not have, is listed with its reason.
-    pub(super) fn read_constants(&mut self, constants: &BTreeMap<String, (String, Symbol)>, variables: &BTreeMap<String, Value>) {
+    pub(super) fn read_constants(
+        &mut self,
+        constants: &BTreeMap<String, (String, Symbol)>,
+        variables: &BTreeMap<String, Value>,
+    ) {
         for (name, (objc, symbol)) in constants {
-            let Some(at) = self.classes.iter().position(|class| &class.objc == objc) else { continue };
+            let Some(at) = self.classes.iter().position(|class| &class.objc == objc) else {
+                continue;
+            };
             let spelling = Class {
                 objc: self.classes[at].objc.clone(),
                 swift: self.classes[at].swift.clone(),
@@ -2426,7 +3229,8 @@ impl<'a> Model<'a> {
                 sent: Vec::new(),
             };
             let spelled = self.available(symbol).and_then(|()| {
-                let ty = without_top_const(variables.get(name).ok_or("no header here declares it")?);
+                let ty =
+                    without_top_const(variables.get(name).ok_or("no header here declares it")?);
                 self.in_c_function(|model| model.spell(&spelling, &ty, Position::Result))
             });
             let class = &mut self.classes[at];
@@ -2451,7 +3255,9 @@ impl<'a> Model<'a> {
 
     /// The Swift name of protocol `objc`, as its graph gives it.
     fn protocol_name(&self, objc: &str) -> String {
-        self.swift.get(&format!("c:objc(pl){objc}")).map_or_else(|| objc.to_owned(), |s| s.names.title.clone())
+        self.swift
+            .get(&format!("c:objc(pl){objc}"))
+            .map_or_else(|| objc.to_owned(), |s| s.names.title.clone())
     }
 
     /// The declared protocols class `objc` conforms to, by Swift name: those
@@ -2460,13 +3266,22 @@ impl<'a> Model<'a> {
     /// UITextInput` gives it: `textField.insertText(_:)`.
     fn conformances(&self, objc: &str) -> Vec<String> {
         let mut seen = BTreeSet::new();
-        let mut pending: Vec<&String> = self.headers.adopts.get(objc).into_iter().flatten().collect();
+        let mut pending: Vec<&String> = self
+            .headers
+            .adopts
+            .get(objc)
+            .into_iter()
+            .flatten()
+            .collect();
         while let Some(protocol) = pending.pop() {
             if seen.insert(protocol.clone()) {
                 pending.extend(self.headers.adopts.get(protocol).into_iter().flatten());
             }
         }
-        seen.iter().filter(|protocol| self.declared_protocols.contains(*protocol)).map(|protocol| self.protocol_name(protocol)).collect()
+        seen.iter()
+            .filter(|protocol| self.declared_protocols.contains(*protocol))
+            .map(|protocol| self.protocol_name(protocol))
+            .collect()
     }
 
     /// Each protocol as TypeScript can declare it: without a member its base
@@ -2485,16 +3300,32 @@ impl<'a> Model<'a> {
         let mut widen: Vec<(usize, String)> = Vec::new();
         for class in &self.classes {
             for (name, texts) in member_texts(&class.members) {
-                if !texts.iter().any(|text| text.starts_with(&getter(&name)) && text.ends_with(" | null;")) {
+                if !texts
+                    .iter()
+                    .any(|text| text.starts_with(&getter(&name)) && text.ends_with(" | null;"))
+                {
                     continue;
                 }
-                let mut at = class.parent.as_ref().and_then(|parent| self.classes.iter().position(|c| c.swift == *parent));
+                let mut at = class
+                    .parent
+                    .as_ref()
+                    .and_then(|parent| self.classes.iter().position(|c| c.swift == *parent));
                 while let Some(index) = at {
                     let ancestor = &self.classes[index];
-                    if member_texts(&ancestor.members).get(&name).is_some_and(|texts| texts.iter().any(|text| text.starts_with(&getter(&name)) && !text.ends_with(" | null;"))) {
+                    if member_texts(&ancestor.members)
+                        .get(&name)
+                        .is_some_and(|texts| {
+                            texts.iter().any(|text| {
+                                text.starts_with(&getter(&name)) && !text.ends_with(" | null;")
+                            })
+                        })
+                    {
                         widen.push((index, name.clone()));
                     }
-                    at = ancestor.parent.as_ref().and_then(|parent| self.classes.iter().position(|c| c.swift == *parent));
+                    at = ancestor
+                        .parent
+                        .as_ref()
+                        .and_then(|parent| self.classes.iter().position(|c| c.swift == *parent));
                 }
             }
         }
@@ -2503,7 +3334,12 @@ impl<'a> Model<'a> {
                 *entry = entry
                     .lines()
                     .map(|line| match line.strip_suffix(';') {
-                        Some(head) if line.trim_start().starts_with(&getter(&name)) && !head.ends_with(" | null") => format!("{head} | null;"),
+                        Some(head)
+                            if line.trim_start().starts_with(&getter(&name))
+                                && !head.ends_with(" | null") =>
+                        {
+                            format!("{head} | null;")
+                        }
                         _ => line.to_owned(),
                     })
                     .collect::<Vec<_>>()
@@ -2520,25 +3356,47 @@ impl<'a> Model<'a> {
                 for (member, set) in member_texts(&current.members) {
                     texts.entry(member).or_insert(set);
                 }
-                at = current.parent.as_ref().and_then(|parent| model.classes.iter().find(|c| c.swift == *parent));
+                at = current
+                    .parent
+                    .as_ref()
+                    .and_then(|parent| model.classes.iter().find(|c| c.swift == *parent));
             }
             texts
         };
-        let own: BTreeMap<String, BTreeMap<String, BTreeSet<String>>> =
-            self.protocols.iter().map(|p| (p.swift.rsplit('.').next().unwrap_or_default().to_owned(), member_texts(&p.members))).collect();
+        let own: BTreeMap<String, BTreeMap<String, BTreeSet<String>>> = self
+            .protocols
+            .iter()
+            .map(|p| {
+                (
+                    p.swift.rsplit('.').next().unwrap_or_default().to_owned(),
+                    member_texts(&p.members),
+                )
+            })
+            .collect();
         let mut settled = Vec::new();
         for protocol in &self.protocols {
-            let name = protocol.swift.rsplit('.').next().unwrap_or_default().to_owned();
+            let name = protocol
+                .swift
+                .rsplit('.')
+                .next()
+                .unwrap_or_default()
+                .to_owned();
             let base = chain_texts(self, &protocol.base);
             let mut members = Vec::new();
             let mut skipped = protocol.skipped.clone();
             for member in &protocol.members {
                 let clashes = member_texts(std::slice::from_ref(member))
                     .iter()
-                    .find(|(member_name, texts)| base.get(*member_name).is_some_and(|declared| declared != *texts))
+                    .find(|(member_name, texts)| {
+                        base.get(*member_name)
+                            .is_some_and(|declared| declared != *texts)
+                    })
                     .map(|(member_name, _)| member_name.clone());
                 match clashes {
-                    Some(member_name) => skipped.push(format!("{member_name}: declared differently by {}", protocol.base)),
+                    Some(member_name) => skipped.push(format!(
+                        "{member_name}: declared differently by {}",
+                        protocol.base
+                    )),
                     None => members.push(member.clone()),
                 }
             }
@@ -2560,15 +3418,24 @@ impl<'a> Model<'a> {
                     for (member, texts) in own.get(at).cloned().unwrap_or_default() {
                         theirs.entry(member).or_default().extend(texts);
                     }
-                    if let Some(next) = self.protocols.iter().find(|p| p.swift.rsplit('.').next() == Some(at)) {
+                    if let Some(next) = self
+                        .protocols
+                        .iter()
+                        .find(|p| p.swift.rsplit('.').next() == Some(at))
+                    {
                         pending.extend(next.refines.iter().map(String::as_str));
                     }
                 }
-                if theirs.iter().all(|(member, texts)| known.get(member).is_none_or(|mine| mine == texts)) {
+                if theirs
+                    .iter()
+                    .all(|(member, texts)| known.get(member).is_none_or(|mine| mine == texts))
+                {
                     known.extend(theirs);
                     refines.push(refined.clone());
                 } else {
-                    skipped.push(format!("refines {refined}, whose members this one declares differently"));
+                    skipped.push(format!(
+                        "refines {refined}, whose members this one declares differently"
+                    ));
                 }
             }
             settled.push((members, refines, skipped));
@@ -2607,9 +3474,16 @@ impl<'a> Model<'a> {
             for (name, texts) in member_texts(&current.members) {
                 known.entry(name).or_default().push(texts);
             }
-            at = current.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+            at = current
+                .parent
+                .as_ref()
+                .and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
         }
-        let by_name: BTreeMap<&str, &Protocol> = self.protocols.iter().map(|p| (p.swift.rsplit('.').next().unwrap_or_default(), p)).collect();
+        let by_name: BTreeMap<&str, &Protocol> = self
+            .protocols
+            .iter()
+            .map(|p| (p.swift.rsplit('.').next().unwrap_or_default(), p))
+            .collect();
         let mut accepted = Vec::new();
         let mut redeclared: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for conformance in conformances {
@@ -2618,7 +3492,9 @@ impl<'a> Model<'a> {
             let mut seen = BTreeSet::new();
             let mut bases = BTreeSet::new();
             while let Some(name) = pending.pop() {
-                let Some(protocol) = by_name.get(name).filter(|_| seen.insert(name)) else { continue };
+                let Some(protocol) = by_name.get(name).filter(|_| seen.insert(name)) else {
+                    continue;
+                };
                 for (member, texts) in member_texts(&protocol.members) {
                     members.entry(member).or_default().extend(texts);
                 }
@@ -2638,7 +3514,10 @@ impl<'a> Model<'a> {
                     for (member, texts) in member_texts(&current.members) {
                         members.entry(member).or_insert(texts);
                     }
-                    at = current.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+                    at = current
+                        .parent
+                        .as_ref()
+                        .and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
                 }
             }
             // A base the class descends from: its members are the class's
@@ -2646,19 +3525,30 @@ impl<'a> Model<'a> {
             // redeclares one, which the interface then redeclares as that
             // ancestor has it.
             for base in bases.iter().filter(|base| ancestry.contains(*base)) {
-                let Some(base) = self.classes.iter().find(|c| c.swift == *base) else { continue };
+                let Some(base) = self.classes.iter().find(|c| c.swift == *base) else {
+                    continue;
+                };
                 for (member, texts) in member_texts(&base.members) {
                     if redeclared.contains_key(&member) {
                         continue;
                     }
-                    if let Some(entries) = self.nearest_declaration(class, &member).filter(|(declarer, _)| declarer.swift != base.swift && declarer.swift != class.swift).map(|(_, entries)| entries)
+                    if let Some(entries) = self
+                        .nearest_declaration(class, &member)
+                        .filter(|(declarer, _)| {
+                            declarer.swift != base.swift && declarer.swift != class.swift
+                        })
+                        .map(|(_, entries)| entries)
                         && member_texts(&entries).get(&member) != Some(&texts)
                     {
                         redeclared.insert(member, entries);
                     }
                 }
             }
-            if members.iter().all(|(name, texts)| known.get(name).is_none_or(|declared| declared.iter().all(|known| known == texts))) {
+            if members.iter().all(|(name, texts)| {
+                known
+                    .get(name)
+                    .is_none_or(|declared| declared.iter().all(|known| known == texts))
+            }) {
                 for (name, texts) in members {
                     known.entry(name).or_default().push(texts);
                 }
@@ -2667,7 +3557,11 @@ impl<'a> Model<'a> {
         }
         // Only for a conformance that is merged: with none there is no second
         // base to disagree with.
-        let redeclared = if accepted.is_empty() { Vec::new() } else { redeclared.into_values().flatten().collect() };
+        let redeclared = if accepted.is_empty() {
+            Vec::new()
+        } else {
+            redeclared.into_values().flatten().collect()
+        };
         (accepted, redeclared)
     }
 
@@ -2677,14 +3571,23 @@ impl<'a> Model<'a> {
     fn repeated_lent<'l>(&self, class: &Class, lent: &'l Lent) -> Vec<&'l String> {
         let own = member_texts(&class.members);
         let mut repeated = Vec::new();
-        let mut at = class.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+        let mut at = class
+            .parent
+            .as_ref()
+            .and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
         while let Some(ancestor) = at {
             for member in lent.inherited.get(&ancestor.objc).into_iter().flatten() {
-                if member_texts(std::slice::from_ref(member)).keys().any(|name| own.contains_key(name)) {
+                if member_texts(std::slice::from_ref(member))
+                    .keys()
+                    .any(|name| own.contains_key(name))
+                {
                     repeated.push(member);
                 }
             }
-            at = ancestor.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+            at = ancestor
+                .parent
+                .as_ref()
+                .and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
         }
         repeated
     }
@@ -2705,22 +3608,44 @@ impl<'a> Model<'a> {
         let own = member_texts(&class.members);
         let mine = self.merged_requirements(class);
         let mut repeated: Vec<String> = Vec::new();
-        let mut at = class.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+        let mut at = class
+            .parent
+            .as_ref()
+            .and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
         while let Some(ancestor) = at {
             for (name, entries) in self.merged_requirements(ancestor) {
-                let Some(declared) = own.get(&name).filter(|_| !mine.contains_key(&name)) else { continue };
+                let Some(declared) = own.get(&name).filter(|_| !mine.contains_key(&name)) else {
+                    continue;
+                };
                 for entry in entries {
                     let optional = format!("{name}?(");
                     let required = format!("{name}(");
-                    let entry = entry.lines().map(|line| if line.trim_start().starts_with(&optional) { line.replacen(&optional, &required, 1) } else { line.to_owned() }).collect::<Vec<_>>().join("\n");
-                    let is_method = member_texts(std::slice::from_ref(&entry)).get(&name).is_some_and(|texts| texts.iter().all(|text| text.starts_with(&required)));
-                    let texts = member_texts(std::slice::from_ref(&entry)).remove(&name).unwrap_or_default();
+                    let entry = entry
+                        .lines()
+                        .map(|line| {
+                            if line.trim_start().starts_with(&optional) {
+                                line.replacen(&optional, &required, 1)
+                            } else {
+                                line.to_owned()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let is_method = member_texts(std::slice::from_ref(&entry))
+                        .get(&name)
+                        .is_some_and(|texts| texts.iter().all(|text| text.starts_with(&required)));
+                    let texts = member_texts(std::slice::from_ref(&entry))
+                        .remove(&name)
+                        .unwrap_or_default();
                     if is_method && !texts.is_subset(declared) && !repeated.contains(&entry) {
                         repeated.push(entry);
                     }
                 }
             }
-            at = ancestor.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+            at = ancestor
+                .parent
+                .as_ref()
+                .and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
         }
         repeated
     }
@@ -2728,13 +3653,19 @@ impl<'a> Model<'a> {
     /// The members the protocols merged into `class` bring, and those they
     /// refine, by name.
     fn merged_requirements(&self, class: &Class) -> BTreeMap<String, Vec<String>> {
-        let by_name: BTreeMap<&str, &Protocol> = self.protocols.iter().map(|p| (p.swift.rsplit('.').next().unwrap_or_default(), p)).collect();
+        let by_name: BTreeMap<&str, &Protocol> = self
+            .protocols
+            .iter()
+            .map(|p| (p.swift.rsplit('.').next().unwrap_or_default(), p))
+            .collect();
         let (accepted, _) = self.agreeing(class, self.conformances(&class.objc));
         let mut pending: Vec<&str> = accepted.iter().map(String::as_str).collect();
         let mut seen = BTreeSet::new();
         let mut members: BTreeMap<String, Vec<String>> = BTreeMap::new();
         while let Some(name) = pending.pop() {
-            let Some(protocol) = by_name.get(name).filter(|_| seen.insert(name)) else { continue };
+            let Some(protocol) = by_name.get(name).filter(|_| seen.insert(name)) else {
+                continue;
+            };
             for entry in &protocol.members {
                 for member in member_texts(std::slice::from_ref(entry)).into_keys() {
                     members.entry(member).or_default().push(entry.clone());
@@ -2747,14 +3678,26 @@ impl<'a> Model<'a> {
 
     /// The class in `class`'s chain, itself first, that declares `member`,
     /// with the entries declaring it.
-    fn nearest_declaration<'c>(&'c self, class: &'c Class, member: &str) -> Option<(&'c Class, Vec<String>)> {
+    fn nearest_declaration<'c>(
+        &'c self,
+        class: &'c Class,
+        member: &str,
+    ) -> Option<(&'c Class, Vec<String>)> {
         let mut at = Some(class);
         while let Some(current) = at {
-            let entries: Vec<String> = current.members.iter().filter(|entry| member_texts(std::slice::from_ref(*entry)).contains_key(member)).cloned().collect();
+            let entries: Vec<String> = current
+                .members
+                .iter()
+                .filter(|entry| member_texts(std::slice::from_ref(*entry)).contains_key(member))
+                .cloned()
+                .collect();
             if !entries.is_empty() {
                 return Some((current, entries));
             }
-            at = current.parent.as_ref().and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
+            at = current
+                .parent
+                .as_ref()
+                .and_then(|parent| self.classes.iter().find(|c| c.swift == *parent));
         }
         None
     }
@@ -2766,12 +3709,22 @@ impl<'a> Model<'a> {
         if inner.contains(',') || !self.declared_protocols.contains(inner) {
             return None;
         }
-        Some(self.swift.get(&format!("c:objc(pl){inner}")).map_or_else(|| inner.to_owned(), |s| s.names.title.clone()))
+        Some(
+            self.swift
+                .get(&format!("c:objc(pl){inner}"))
+                .map_or_else(|| inner.to_owned(), |s| s.names.title.clone()),
+        )
     }
 
     /// A toll-free bridged Core Foundation pointer, spelled as its Foundation
     /// class, or `None` where `pointee` is not one.
-    fn toll_free_object(&mut self, class: &Class, written: &str, pointee: &str, position: Position) -> Option<Spelled> {
+    fn toll_free_object(
+        &mut self,
+        class: &Class,
+        written: &str,
+        pointee: &str,
+        position: Position,
+    ) -> Option<Spelled> {
         // A toll-free bridged Core Foundation type is the Foundation
         // object it is: a `CFStringRef` is an `NSString *` to the runtime,
         // and a message's `CFStringRef` spells as the `NSString *` does, as
@@ -2785,16 +3738,24 @@ impl<'a> Model<'a> {
         if self.c_function {
             return Some(Err(format!(
                 "a `{}`, toll-free as `{foundation}`, which a C function's prototype declares as the Core Foundation type and this binding cannot yet say",
-                written.trim_end_matches(" _Nullable").trim_end_matches(" _Nonnull")
+                written
+                    .trim_end_matches(" _Nullable")
+                    .trim_end_matches(" _Nonnull")
             )));
         }
-        let nullable = if written.contains("_Nullable") { " _Nullable" } else { "" };
+        let nullable = if written.contains("_Nullable") {
+            " _Nullable"
+        } else {
+            ""
+        };
         let object = serde_json::json!({ "qualType": format!("{foundation} *{nullable}"), "desugaredQualType": format!("{foundation} *") });
         Some(self.spell(class, &object, position))
     }
 
     fn array_element(&mut self, pointee: &str) -> Spelled {
-        let argument = pointee.split_once('<').map_or("id", |(_, rest)| rest.trim_end_matches('>').trim());
+        let argument = pointee
+            .split_once('<')
+            .map_or("id", |(_, rest)| rest.trim_end_matches('>').trim());
         let argument = argument.trim_start_matches("__kindof ").trim();
         if argument == "id" || argument.starts_with("id<") {
             return Ok(self.object("NSObject"));
@@ -2802,7 +3763,9 @@ impl<'a> Model<'a> {
         // `NSView<NSCollectionViewElement> *`: the class, whose protocols a
         // TypeScript array element does not carry.
         let class = argument.trim_end_matches('*').trim();
-        let class = class.split_once('<').map_or(class, |(class, _)| class.trim());
+        let class = class
+            .split_once('<')
+            .map_or(class, |(class, _)| class.trim());
         // `NSPasteboardType`, a typedef of `NSString *` Swift wraps as a
         // struct of statics: a string here, as it is outside an array.
         if let Some(aliased) = self.typedefs.get(class).cloned()
@@ -2823,14 +3786,26 @@ impl<'a> Model<'a> {
     /// `CEnum<NSWindow.StyleMask, UInt>`. One Swift does not name crosses as
     /// its width alone.
     fn enumeration(&mut self, name: &str) -> Spelled {
-        let width = self.headers.enums.get(name).ok_or_else(|| format!("enum `{name}`, which has no fixed width"))?;
-        let brand = swift_number(width, width).ok_or_else(|| format!("enum `{name}`, as wide as a `{width}`"))?;
+        let width = self
+            .headers
+            .enums
+            .get(name)
+            .ok_or_else(|| format!("enum `{name}`, which has no fixed width"))?;
+        let brand = swift_number(width, width)
+            .ok_or_else(|| format!("enum `{name}`, as wide as a `{width}`"))?;
         self.import("objc:types", brand);
-        let Some(symbol) = self.swift.get(&format!("c:@E@{name}")).cloned() else { return Ok(brand.to_owned()) };
+        let Some(symbol) = self.swift.get(&format!("c:@E@{name}")).cloned() else {
+            return Ok(brand.to_owned());
+        };
         // Another framework's, in a package: imported from its module -- the
         // enum, or the class it is nested in -- rather than declared twice,
         // which would make two unrelated `const enum`s.
-        let foreign = self.swift.owner.get(&format!("c:@E@{name}")).filter(|owner| self.elsewhere(owner)).cloned();
+        let foreign = self
+            .swift
+            .owner
+            .get(&format!("c:@E@{name}"))
+            .filter(|owner| self.elsewhere(owner))
+            .cloned();
         if let Some(owner) = foreign {
             if let Some(root) = symbol.path.first() {
                 self.foreign.entry(owner).or_default().insert(root.clone());
@@ -2848,15 +3823,26 @@ impl<'a> Model<'a> {
                     // A renamed case keeps its old spelling as a second,
                     // deprecated symbol of the same title.
                     let title = case.path.last()?.clone();
-                    (self.available(case).is_ok() && titles.insert(title.clone())).then_some((title, *value))
+                    (self.available(case).is_ok() && titles.insert(title.clone()))
+                        .then_some((title, *value))
                 })
                 .collect();
-            self.enums.insert(name.to_owned(), Enum { path: symbol.path.clone(), cases });
+            self.enums.insert(
+                name.to_owned(),
+                Enum {
+                    path: symbol.path.clone(),
+                    cases,
+                },
+            );
         }
         self.import("c:types", "CEnum");
         // An `NS_OPTIONS` is Swift's `OptionSet`, whose empty set is `[]`:
         // here `0`, which is no case of the enum.
-        let empty = if symbol.kind.identifier == "swift.struct" { " | 0" } else { "" };
+        let empty = if symbol.kind.identifier == "swift.struct" {
+            " | 0"
+        } else {
+            ""
+        };
         Ok(format!("CEnum<{}{empty}, {brand}>", symbol.path.join(".")))
     }
 
@@ -2868,7 +3854,10 @@ impl<'a> Model<'a> {
         // declarations would be two unrelated TypeScript classes.
         if let Some(owner) = self.foreign_owner(name) {
             let swift = self.swift.class(name);
-            self.foreign.entry(owner).or_default().insert(swift.split('.').next().unwrap_or_default().to_owned());
+            self.foreign
+                .entry(owner)
+                .or_default()
+                .insert(swift.split('.').next().unwrap_or_default().to_owned());
             return swift;
         }
         if !self.bound.contains(name) && !self.mentioned.contains_key(name) {
@@ -2888,7 +3877,14 @@ impl<'a> Model<'a> {
     /// another framework's class: an extension.
     fn extends(&self, class: &str, usr: &str) -> bool {
         self.package.as_deref().is_some_and(|package| {
-            self.swift.class_owner(class).is_some_and(|owner| owner != package) && self.swift.owner.get(usr).is_some_and(|owner| owner == package)
+            self.swift
+                .class_owner(class)
+                .is_some_and(|owner| owner != package)
+                && self
+                    .swift
+                    .owner
+                    .get(usr)
+                    .is_some_and(|owner| owner == package)
         })
     }
 
@@ -2896,24 +3892,37 @@ impl<'a> Model<'a> {
     /// declare: in a package, any framework but its own; and in any binding,
     /// one an installed platform package provides (`Request::provided`).
     fn elsewhere(&self, owner: &str) -> bool {
-        self.package.as_deref().is_some_and(|package| owner != package) || self.provided.contains(owner)
+        self.package
+            .as_deref()
+            .is_some_and(|package| owner != package)
+            || self.provided.contains(owner)
     }
 
     /// Whether this binding declares class `name`: every bound class but
     /// those declared elsewhere (`Self::elsewhere`).
     fn owns(&self, name: &str) -> bool {
-        self.swift.class_owner(name).is_none_or(|owner| !self.elsewhere(owner))
+        self.swift
+            .class_owner(name)
+            .is_none_or(|owner| !self.elsewhere(owner))
     }
 
     /// The framework that declares class `name`, where that is elsewhere.
     fn foreign_owner(&self, name: &str) -> Option<String> {
-        self.swift.class_owner(name).filter(|owner| self.elsewhere(owner)).map(str::to_owned)
+        self.swift
+            .class_owner(name)
+            .filter(|owner| self.elsewhere(owner))
+            .map(str::to_owned)
     }
 
     /// Record `name` as one a signature passes by value, and every record it
     /// holds, so each is declared.
     fn record(&mut self, name: &str) -> std::result::Result<(), String> {
-        let fields = self.headers.records.get(name).ok_or_else(|| format!("struct `{name}`, which no header here defines"))?.clone();
+        let fields = self
+            .headers
+            .records
+            .get(name)
+            .ok_or_else(|| format!("struct `{name}`, which no header here defines"))?
+            .clone();
         if self.records.contains(name) {
             return Ok(());
         }
@@ -2923,7 +3932,9 @@ impl<'a> Model<'a> {
             } else if let Some(number) = swift_number(ty, ty) {
                 self.import("objc:types", number);
             } else {
-                return Err(format!("struct `{name}`, whose member `{field}` is a `{ty}`"));
+                return Err(format!(
+                    "struct `{name}`, whose member `{field}` is a `{ty}`"
+                ));
             }
         }
         self.import("c:types", "Struct");
@@ -2938,8 +3949,14 @@ impl<'a> Model<'a> {
 /// and clang's printed type lost it. Only an object or a string, which is
 /// what can be nil; a number Swift makes optional is another matter.
 fn optional_as_swift(spelled: String, optional: bool) -> String {
-    let object = !matches!(spelled.as_str(), "boolean" | "void") && !spelled.starts_with("CEnum<") && !spelled.starts_with("ByValue<");
-    if object && !SWIFT_NUMBERS.contains(&spelled.as_str()) && !spelled.ends_with(" | null") && optional {
+    let object = !matches!(spelled.as_str(), "boolean" | "void")
+        && !spelled.starts_with("CEnum<")
+        && !spelled.starts_with("ByValue<");
+    if object
+        && !SWIFT_NUMBERS.contains(&spelled.as_str())
+        && !spelled.ends_with(" | null")
+        && optional
+    {
         format!("{spelled} | null")
     } else {
         spelled
@@ -2950,7 +3967,12 @@ fn optional_as_swift(spelled: String, optional: bool) -> String {
 fn parameters_of(decl: &Value) -> Vec<&Value> {
     decl.get("inner")
         .and_then(Value::as_array)
-        .map(|inner| inner.iter().filter(|p| p.get("kind").and_then(Value::as_str) == Some("ParmVarDecl")).collect())
+        .map(|inner| {
+            inner
+                .iter()
+                .filter(|p| p.get("kind").and_then(Value::as_str) == Some("ParmVarDecl"))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -2963,18 +3985,35 @@ fn selector_name(selector: &str) -> String {
 }
 
 fn sent_by(decl: &Value) -> Vec<Sent> {
-    let Some(name) = named(decl) else { return Vec::new() };
+    let Some(name) = named(decl) else {
+        return Vec::new();
+    };
     match decl.get("kind").and_then(Value::as_str) {
         Some("ObjCMethodDecl") => {
-            vec![Sent { selector: name, class_side: decl.get("instance").and_then(Value::as_bool) == Some(false) }]
+            vec![Sent {
+                selector: name,
+                class_side: decl.get("instance").and_then(Value::as_bool) == Some(false),
+            }]
         }
         Some("ObjCPropertyDecl") => {
             let class_side = decl.get("class").and_then(Value::as_bool) == Some(true);
-            let getter = decl.get("getter").and_then(named).unwrap_or_else(|| name.clone());
-            let mut sent = vec![Sent { selector: getter, class_side }];
+            let getter = decl
+                .get("getter")
+                .and_then(named)
+                .unwrap_or_else(|| name.clone());
+            let mut sent = vec![Sent {
+                selector: getter,
+                class_side,
+            }];
             if decl.get("readonly").and_then(Value::as_bool) != Some(true) {
-                let setter = decl.get("setter").and_then(named).unwrap_or_else(|| format!("set{}:", capitalized(&name)));
-                sent.push(Sent { selector: setter, class_side });
+                let setter = decl
+                    .get("setter")
+                    .and_then(named)
+                    .unwrap_or_else(|| format!("set{}:", capitalized(&name)));
+                sent.push(Sent {
+                    selector: setter,
+                    class_side,
+                });
             }
             sent
         }
@@ -2983,7 +4022,10 @@ fn sent_by(decl: &Value) -> Vec<Sent> {
 }
 
 /// Each class of `bound` with its superclass, every class after its own.
-fn root_first(bound: &BTreeSet<String>, supers: &BTreeMap<String, Option<String>>) -> Vec<(String, Option<String>)> {
+fn root_first(
+    bound: &BTreeSet<String>,
+    supers: &BTreeMap<String, Option<String>>,
+) -> Vec<(String, Option<String>)> {
     let mut placed = BTreeSet::new();
     let mut order = Vec::new();
     while placed.len() < bound.len() {
@@ -3004,7 +4046,17 @@ fn root_first(bound: &BTreeSet<String>, supers: &BTreeMap<String, Option<String>
 fn block_part(spelling: &str, typedefs: &BTreeMap<String, String>) -> Value {
     let bare: Vec<&str> = spelling
         .split_whitespace()
-        .filter(|word| !matches!(*word, "_Nullable" | "_Nonnull" | "_Null_unspecified" | "__strong" | "__autoreleasing" | "__unsafe_unretained"))
+        .filter(|word| {
+            !matches!(
+                *word,
+                "_Nullable"
+                    | "_Nonnull"
+                    | "_Null_unspecified"
+                    | "__strong"
+                    | "__autoreleasing"
+                    | "__unsafe_unretained"
+            )
+        })
         .collect();
     let mut bare = bare.join(" ");
     // A typedef, as far down as it goes: `NSModalResponse` is `NSInteger`,
@@ -3023,7 +4075,17 @@ fn block_part(spelling: &str, typedefs: &BTreeMap<String, String>) -> Value {
 /// `NSError * _Nullable * _Nullable` is `NSError**`.
 fn unqualified(ty: &str) -> String {
     ty.split_whitespace()
-        .filter(|word| !matches!(*word, "_Nullable" | "_Nonnull" | "_Null_unspecified" | "__autoreleasing" | "__strong" | "const"))
+        .filter(|word| {
+            !matches!(
+                *word,
+                "_Nullable"
+                    | "_Nonnull"
+                    | "_Null_unspecified"
+                    | "__autoreleasing"
+                    | "__strong"
+                    | "const"
+            )
+        })
         .collect::<String>()
 }
 
@@ -3053,18 +4115,34 @@ fn documented(tags: &[String]) -> String {
 fn prefer_doubles(members: &mut Vec<String>) {
     let name = |member: &str| {
         let declaration = member.lines().last().unwrap_or_default().trim();
-        let declaration = declaration.trim_start_matches("static ").trim_start_matches("get ").trim_start_matches("set ");
+        let declaration = declaration
+            .trim_start_matches("static ")
+            .trim_start_matches("get ")
+            .trim_start_matches("set ");
         declaration.split('(').next().unwrap_or_default().to_owned()
     };
     let rank = |member: &str| {
-        let parameters = member.lines().last().unwrap_or_default().split_once('(').map_or("", |(_, rest)| rest);
-        let parameters = parameters.rsplit_once("):").map_or(parameters, |(parameters, _)| parameters);
-        let has = |names: &[&str]| names.iter().any(|ty| parameters.contains(&format!(": {ty}")) || parameters.contains(&format!(": {ty};")));
+        let parameters = member
+            .lines()
+            .last()
+            .unwrap_or_default()
+            .split_once('(')
+            .map_or("", |(_, rest)| rest);
+        let parameters = parameters
+            .rsplit_once("):")
+            .map_or(parameters, |(parameters, _)| parameters);
+        let has = |names: &[&str]| {
+            names.iter().any(|ty| {
+                parameters.contains(&format!(": {ty}")) || parameters.contains(&format!(": {ty};"))
+            })
+        };
         if has(&["Double", "CGFloat", "TimeInterval"]) {
             0
         } else if has(&["Float"]) {
             1
-        } else if has(&["Int", "UInt", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64"]) {
+        } else if has(&[
+            "Int", "UInt", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64",
+        ]) {
             2
         } else {
             0
@@ -3104,7 +4182,11 @@ fn struct_through_typedefs(typedefs: &BTreeMap<String, String>, spelled: &str) -
 /// otherwise the tag.
 fn record_name(typedefs: &BTreeMap<String, String>, tag: &str) -> String {
     let plain = tag.trim_start_matches('_');
-    if plain != tag && typedefs.get(plain).is_some_and(|aliased| aliased.trim() == format!("struct {tag}")) {
+    if plain != tag
+        && typedefs
+            .get(plain)
+            .is_some_and(|aliased| aliased.trim() == format!("struct {tag}"))
+    {
         return plain.to_owned();
     }
     tag.to_owned()
@@ -3116,10 +4198,19 @@ fn record_name(typedefs: &BTreeMap<String, String>, tag: &str) -> String {
 /// is `splitViewCanCollapseSubview(_:_:)`. None when no argument has one.
 fn folded_label(title: &str) -> Option<String> {
     let (base, rest) = title.split_once('(')?;
-    let mut labels: Vec<String> = rest.trim_end_matches(')').split(':').filter(|l| !l.is_empty()).map(str::to_owned).collect();
+    let mut labels: Vec<String> = rest
+        .trim_end_matches(')')
+        .split(':')
+        .filter(|l| !l.is_empty())
+        .map(str::to_owned)
+        .collect();
     let at = labels.iter().position(|label| label != "_")?;
     let folded = std::mem::replace(&mut labels[at], "_".to_owned());
-    Some(format!("{base}{}({}:)", capitalized(&folded), labels.join(":")))
+    Some(format!(
+        "{base}{}({}:)",
+        capitalized(&folded),
+        labels.join(":")
+    ))
 }
 
 /// A method's declaration with its positional parameters' names taken out:
@@ -3150,7 +4241,10 @@ fn unnamed(text: &str) -> String {
         }
         if at_parameter && (c.is_alphanumeric() || c == '_' || c == '$') {
             // The name, up to its colon.
-            while chars.peek().is_some_and(|next| next.is_alphanumeric() || *next == '_' || *next == '$') {
+            while chars
+                .peek()
+                .is_some_and(|next| next.is_alphanumeric() || *next == '_' || *next == '$')
+            {
                 chars.next();
             }
             out.push(if chars.peek() == Some(&':') { '_' } else { c });
@@ -3166,16 +4260,35 @@ fn unnamed(text: &str) -> String {
 }
 
 fn swift_name(title: &str) -> (String, Vec<String>) {
-    let Some((base, rest)) = title.split_once('(') else { return (title.to_owned(), Vec::new()) };
-    let labels = rest.trim_end_matches(')').split(':').filter(|l| !l.is_empty()).map(str::to_owned).collect();
+    let Some((base, rest)) = title.split_once('(') else {
+        return (title.to_owned(), Vec::new());
+    };
+    let labels = rest
+        .trim_end_matches(')')
+        .split(':')
+        .filter(|l| !l.is_empty())
+        .map(str::to_owned)
+        .collect();
     (base.to_owned(), labels)
 }
 
 /// Every name [`swift_number`] answers: a number, which no `?` makes
 /// nullable.
 const SWIFT_NUMBERS: [&str; 14] = [
-    "CGFloat", "TimeInterval", "Int", "UInt", "Double", "Float", "Int8", "UInt8", "Int16", "UInt16", "Int32", "UInt32",
-    "Int64", "UInt64",
+    "CGFloat",
+    "TimeInterval",
+    "Int",
+    "UInt",
+    "Double",
+    "Float",
+    "Int8",
+    "UInt8",
+    "Int16",
+    "UInt16",
+    "Int32",
+    "UInt32",
+    "Int64",
+    "UInt64",
 ];
 
 /// The name Swift gives a C number: by its written spelling where that is a
@@ -3184,35 +4297,49 @@ const SWIFT_NUMBERS: [&str; 14] = [
 fn swift_number(written: &str, desugared: &str) -> Option<&'static str> {
     // A `const` scalar is the scalar: by value, C's qualifier changes nothing
     // a caller passes or a constant holds.
-    let (written, desugared) = (written.trim().trim_start_matches("const ").trim(), desugared.trim().trim_start_matches("const ").trim());
-    Some(match written.split_whitespace().next().unwrap_or_default() {
-        "CGFloat" => "CGFloat",
-        "NSTimeInterval" => "TimeInterval",
-        "NSInteger" => "Int",
-        "NSUInteger" => "UInt",
-        _ => match desugared {
-            "double" => "Double",
-            "float" => "Float",
-            "int" => "Int32",
-            "unsigned int" => "UInt32",
-            "long" => "Int",
-            "unsigned long" => "UInt",
-            "long long" => "Int64",
-            "unsigned long long" => "UInt64",
-            "short" => "Int16",
-            "unsigned short" => "UInt16",
-            "char" | "signed char" => "Int8",
-            "unsigned char" => "UInt8",
-            _ => return None,
+    let (written, desugared) = (
+        written.trim().trim_start_matches("const ").trim(),
+        desugared.trim().trim_start_matches("const ").trim(),
+    );
+    Some(
+        match written.split_whitespace().next().unwrap_or_default() {
+            "CGFloat" => "CGFloat",
+            "NSTimeInterval" => "TimeInterval",
+            "NSInteger" => "Int",
+            "NSUInteger" => "UInt",
+            _ => match desugared {
+                "double" => "Double",
+                "float" => "Float",
+                "int" => "Int32",
+                "unsigned int" => "UInt32",
+                "long" => "Int",
+                "unsigned long" => "UInt",
+                "long long" => "Int64",
+                "unsigned long long" => "UInt64",
+                "short" => "Int16",
+                "unsigned short" => "UInt16",
+                "char" | "signed char" => "Int8",
+                "unsigned char" => "UInt8",
+                _ => return None,
+            },
         },
-    })
+    )
 }
 
 /// A member or label name as TypeScript accepts it in a type.
 fn quoted_key(name: &str) -> String {
-    let identifier = name.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$');
-    if identifier { name.to_owned() } else { format!("\"{name}\"") }
+    let identifier = name
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$');
+    if identifier {
+        name.to_owned()
+    } else {
+        format!("\"{name}\"")
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -3242,9 +4369,14 @@ fn swift_string(spelled: String) -> String {
 /// -- read from the marker between `(^` and its `)`, where one of the
 /// block's parameters being nullable (`(NSError * _Nullable)`) says nothing.
 fn block_is_nullable(written: &str) -> bool {
-    written.split_once("(^").and_then(|(_, rest)| rest.split_once(')')).is_some_and(|(marker, _)| {
-        marker.split_whitespace().any(|word| word == "_Nullable" || word == "__nullable" || word == "_Null_unspecified")
-    })
+    written
+        .split_once("(^")
+        .and_then(|(_, rest)| rest.split_once(')'))
+        .is_some_and(|(marker, _)| {
+            marker.split_whitespace().any(|word| {
+                word == "_Nullable" || word == "__nullable" || word == "_Null_unspecified"
+            })
+        })
 }
 
 /// A variable's type without its own top-level `const` -- `NSString *const`
@@ -3274,8 +4406,12 @@ fn strip_attributes(written: &str) -> String {
     // Swift's attributes, which name no type: `NS_SWIFT_UI_ACTOR`,
     // `NS_SWIFT_SENDABLE`, `NS_REFINED_FOR_SWIFT`, each with no arguments.
     let bare = |text: &str| {
-        let word = text.split(|c: char| c.is_whitespace() || c == '(').next().unwrap_or_default();
-        (word.starts_with("NS_SWIFT_") || word == "NS_REFINED_FOR_SWIFT") && !text[word.len()..].trim_start().starts_with('(')
+        let word = text
+            .split(|c: char| c.is_whitespace() || c == '(')
+            .next()
+            .unwrap_or_default();
+        (word.starts_with("NS_SWIFT_") || word == "NS_REFINED_FOR_SWIFT")
+            && !text[word.len()..].trim_start().starts_with('(')
     };
     while bare(&text) || text.starts_with("API_") || text.starts_with("NS_SWIFT_") {
         if bare(&text) {
@@ -3307,24 +4443,74 @@ fn strip_attributes(written: &str) -> String {
 
 fn capitalized(text: &str) -> String {
     let mut letters = text.chars();
-    letters.next().map(|c| c.to_ascii_uppercase()).into_iter().chain(letters).collect()
+    letters
+        .next()
+        .map(|c| c.to_ascii_uppercase())
+        .into_iter()
+        .chain(letters)
+        .collect()
 }
 
 /// `new` opens a construct signature where a method name is written, so it is
 /// quoted; the rest are names a member may have.
 fn quoted(name: &str) -> String {
-    if name == "new" { "\"new\"".to_owned() } else { name.to_owned() }
+    if name == "new" {
+        "\"new\"".to_owned()
+    } else {
+        name.to_owned()
+    }
 }
 
 /// Names a parameter may not have.
 fn reserved(name: &str) -> bool {
     matches!(
         name,
-        "break" | "case" | "catch" | "class" | "const" | "continue" | "debugger" | "default" | "delete" | "do" | "else"
-            | "enum" | "export" | "extends" | "false" | "finally" | "for" | "function" | "if" | "import" | "in"
-            | "instanceof" | "new" | "null" | "return" | "super" | "switch" | "this" | "throw" | "true" | "try"
-            | "typeof" | "var" | "void" | "while" | "with" | "yield" | "let" | "static" | "implements" | "interface"
-            | "package" | "private" | "protected" | "public" | "await"
+        "break"
+            | "case"
+            | "catch"
+            | "class"
+            | "const"
+            | "continue"
+            | "debugger"
+            | "default"
+            | "delete"
+            | "do"
+            | "else"
+            | "enum"
+            | "export"
+            | "extends"
+            | "false"
+            | "finally"
+            | "for"
+            | "function"
+            | "if"
+            | "import"
+            | "in"
+            | "instanceof"
+            | "new"
+            | "null"
+            | "return"
+            | "super"
+            | "switch"
+            | "this"
+            | "throw"
+            | "true"
+            | "try"
+            | "typeof"
+            | "var"
+            | "void"
+            | "while"
+            | "with"
+            | "yield"
+            | "let"
+            | "static"
+            | "implements"
+            | "interface"
+            | "package"
+            | "private"
+            | "protected"
+            | "public"
+            | "await"
     )
 }
 
@@ -3357,20 +4543,46 @@ fn render_class(out: &mut String, request: &Request, model: &Model, class: &Clas
             }
         }
     };
-    let extends = class.parent.as_ref().map(|p| format!(" extends {p}")).unwrap_or_default();
+    let extends = class
+        .parent
+        .as_ref()
+        .map(|p| format!(" extends {p}"))
+        .unwrap_or_default();
     let path: Vec<String> = class.swift.split('.').map(str::to_owned).collect();
     let name = path.last().map_or("", String::as_str);
     let mut text = String::new();
-    let _ = writeln!(text, "  /** @ntsClass {} */\n  export class {name}{extends} {{", runtime_name(request, &class.objc));
+    let _ = writeln!(
+        text,
+        "  /** @ntsClass {} */\n  export class {name}{extends} {{",
+        runtime_name(request, &class.objc)
+    );
     for line in &class.members {
         let _ = writeln!(text, "{line}");
     }
-    let lent: Vec<&String> = request.lent.members.get(&class.objc).into_iter().flatten().collect();
-    section(&mut text, "What the platform's other frameworks add, which only this declaration can hold:", &lent);
+    let lent: Vec<&String> = request
+        .lent
+        .members
+        .get(&class.objc)
+        .into_iter()
+        .flatten()
+        .collect();
+    section(
+        &mut text,
+        "What the platform's other frameworks add, which only this declaration can hold:",
+        &lent,
+    );
     let repeated = model.repeated_lent(class, &request.lent);
-    section(&mut text, "What the platform's other frameworks add to an ancestor, under a name this class declares:", &repeated);
+    section(
+        &mut text,
+        "What the platform's other frameworks add to an ancestor, under a name this class declares:",
+        &repeated,
+    );
     let required = model.repeated_requirements(class);
-    section(&mut text, "What an ancestor's protocols require, under a name this class declares:", &required.iter().collect::<Vec<_>>());
+    section(
+        &mut text,
+        "What an ancestor's protocols require, under a name this class declares:",
+        &required.iter().collect::<Vec<_>>(),
+    );
     if !class.skipped.is_empty() {
         let _ = writeln!(text, "    // Not bound, each for the reason given:");
         for line in &class.skipped {
@@ -3382,12 +4594,20 @@ fn render_class(out: &mut String, request: &Request, model: &Model, class: &Clas
     // interface of the same name: the protocols' methods are its own.
     let (conformances, redeclared) = model.agreeing(class, model.conformances(&class.objc));
     if !conformances.is_empty() {
-        let _ = write!(text, "  export interface {name} extends {} {{", conformances.join(", "));
+        let _ = write!(
+            text,
+            "  export interface {name} extends {} {{",
+            conformances.join(", ")
+        );
         if redeclared.is_empty() {
             let _ = writeln!(text, "}}");
         } else {
             let _ = writeln!(text);
-            section(&mut text, "As the class inherits it, where the protocols' base declares it otherwise:", &redeclared.iter().collect::<Vec<_>>());
+            section(
+                &mut text,
+                "As the class inherits it, where the protocols' base declares it otherwise:",
+                &redeclared.iter().collect::<Vec<_>>(),
+            );
             let _ = writeln!(text, "  }}");
         }
     }
@@ -3404,7 +4624,10 @@ fn render_protocol(out: &mut String, request: &Request, protocol: &Protocol) {
         "  /** @ntsProtocol {} */\n  export interface {} extends {} {{",
         runtime_name(request, &protocol.objc),
         path.last().map_or("", String::as_str),
-        std::iter::once(protocol.base.as_str()).chain(protocol.refines.iter().map(String::as_str)).collect::<Vec<_>>().join(", ")
+        std::iter::once(protocol.base.as_str())
+            .chain(protocol.refines.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join(", ")
     );
     for line in &protocol.members {
         let _ = writeln!(text, "{line}");
@@ -3419,6 +4642,7 @@ fn render_protocol(out: &mut String, request: &Request, protocol: &Protocol) {
     nest(out, &path, &text);
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn render(request: &Request, model: &Model) -> String {
     let mut out = String::new();
     let _ = writeln!(
@@ -3426,7 +4650,12 @@ fn render(request: &Request, model: &Model) -> String {
         "// Generated by `nts bind-objc` from the macOS SDK and Swift's symbol graphs. Do not edit: regenerate.\n//\n\
          // nts bind-objc --module {} {} {}",
         request.module,
-        request.frameworks.iter().map(|f| format!("--framework {f}")).collect::<Vec<_>>().join(" "),
+        request
+            .frameworks
+            .iter()
+            .map(|f| format!("--framework {f}"))
+            .collect::<Vec<_>>()
+            .join(" "),
         request
             .classes
             .iter()
@@ -3451,13 +4680,20 @@ fn render(request: &Request, model: &Model) -> String {
     }
     let _ = writeln!(out, " */\ndeclare module \"{}\" {{", request.module);
     if !model.unbound.is_empty() {
-        let _ = writeln!(out, "  // Classes not bound, each for the reason given -- the runtime has none of them:");
+        let _ = writeln!(
+            out,
+            "  // Classes not bound, each for the reason given -- the runtime has none of them:"
+        );
         for (class, reason) in &model.unbound {
             let _ = writeln!(out, "  //   {}: {reason}", model.swift.class(class));
         }
     }
     for (module, names) in &model.imports {
-        let _ = writeln!(out, "  import type {{ {} }} from \"{module}\";", names.iter().copied().collect::<Vec<_>>().join(", "));
+        let _ = writeln!(
+            out,
+            "  import type {{ {} }} from \"{module}\";",
+            names.iter().copied().collect::<Vec<_>>().join(", ")
+        );
     }
     render_foreign_imports(&mut out, model);
     if let Some(package) = &model.package {
@@ -3466,27 +4702,53 @@ fn render(request: &Request, model: &Model) -> String {
     // A struct another package declares, imported from it rather than
     // declared again.
     let mut provided: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
-    for name in model.records.iter().filter_map(|name| request.records.get(name).map(|module| (name, module))) {
-        provided.entry(name.1.as_str()).or_default().insert(record_name(&model.typedefs, name.0));
+    for name in model
+        .records
+        .iter()
+        .filter_map(|name| request.records.get(name).map(|module| (name, module)))
+    {
+        provided
+            .entry(name.1.as_str())
+            .or_default()
+            .insert(record_name(&model.typedefs, name.0));
     }
     for (module, names) in &provided {
-        let _ = writeln!(out, "  import type {{ {} }} from \"{module}\";", names.iter().cloned().collect::<Vec<_>>().join(", "));
+        let _ = writeln!(
+            out,
+            "  import type {{ {} }} from \"{module}\";",
+            names.iter().cloned().collect::<Vec<_>>().join(", ")
+        );
     }
-    for name in model.records.iter().filter(|name| !request.records.contains_key(*name)) {
-        let fields = model.headers.records.get(name).map(Vec::as_slice).unwrap_or_default();
+    for name in model
+        .records
+        .iter()
+        .filter(|name| !request.records.contains_key(*name))
+    {
+        let fields = model
+            .headers
+            .records
+            .get(name)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
         let typedefs = &model.typedefs;
         let members: Vec<String> = fields
             .iter()
             .map(|(field, ty)| {
-                let spelled = ty
-                    .strip_prefix("struct ")
-                    .map_or_else(|| swift_number(ty, ty).unwrap_or("never").to_owned(), |inner| record_name(typedefs, inner));
+                let spelled = ty.strip_prefix("struct ").map_or_else(
+                    || swift_number(ty, ty).unwrap_or("never").to_owned(),
+                    |inner| record_name(typedefs, inner),
+                );
                 format!("{field}: {spelled}")
             })
             .collect();
         // Under Swift's name, and C's struct tag in the brand, which is what
         // the backends spell: `NSRange` is `struct _NSRange`.
-        let _ = writeln!(out, "\n  export type {} = Struct<{{ {} }}, \"{name}\">;", record_name(typedefs, name), members.join("; "));
+        let _ = writeln!(
+            out,
+            "\n  export type {} = Struct<{{ {} }}, \"{name}\">;",
+            record_name(typedefs, name),
+            members.join("; ")
+        );
     }
     render_enums(&mut out, model);
     for class in model.classes.iter().filter(|class| model.owns(&class.objc)) {
@@ -3502,12 +4764,19 @@ fn render(request: &Request, model: &Model) -> String {
         let _ = writeln!(out, "{function}");
     }
     for (name, parent) in &model.mentioned {
-        let extends = parent.as_ref().map(|p| format!(" extends {}", model.swift.class(p))).unwrap_or_default();
+        let extends = parent
+            .as_ref()
+            .map(|p| format!(" extends {}", model.swift.class(p)))
+            .unwrap_or_default();
         let swift = model.swift.class(name);
         let path: Vec<String> = swift.split('.').map(str::to_owned).collect();
         // An `NSError` a completion handler is given: what an `async throws`
         // form rejects with is its description.
-        let members = if name == "NSError" { "\n    get localizedDescription(): string;\n  " } else { "" };
+        let members = if name == "NSError" {
+            "\n    get localizedDescription(): string;\n  "
+        } else {
+            ""
+        };
         let text = format!(
             "  /** Named by a signature here, and not bound: its ancestors' members only.\n   * @ntsClass {} */\n  export class {}{extends} {{{members}}}\n",
             runtime_name(request, name),
@@ -3528,17 +4797,45 @@ fn import_lent(out: &mut String, request: &Request) {
     let known = |name: &str| {
         out.lines().any(|line| {
             let line = line.trim_start();
-            (line.starts_with("import ") && line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).any(|word| word == name))
-                || ["export class ", "export interface ", "export type ", "export const enum ", "export function "]
-                    .iter()
-                    .any(|prefix| line.strip_prefix(prefix).is_some_and(|rest| rest.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next() == Some(name)))
+            (line.starts_with("import ")
+                && line
+                    .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                    .any(|word| word == name))
+                || [
+                    "export class ",
+                    "export interface ",
+                    "export type ",
+                    "export const enum ",
+                    "export function ",
+                ]
+                .iter()
+                .any(|prefix| {
+                    line.strip_prefix(prefix).is_some_and(|rest| {
+                        rest.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                            .next()
+                            == Some(name)
+                    })
+                })
         })
     };
     let mut lines = String::new();
-    for (module, names) in request.lent.imports.iter().filter(|(module, _)| **module != request.module) {
-        let wanted: Vec<&str> = names.iter().map(String::as_str).filter(|name| !known(name)).collect();
+    for (module, names) in request
+        .lent
+        .imports
+        .iter()
+        .filter(|(module, _)| **module != request.module)
+    {
+        let wanted: Vec<&str> = names
+            .iter()
+            .map(String::as_str)
+            .filter(|name| !known(name))
+            .collect();
         if !wanted.is_empty() {
-            let _ = writeln!(lines, "  import type {{ {} }} from \"{module}\";", wanted.join(", "));
+            let _ = writeln!(
+                lines,
+                "  import type {{ {} }} from \"{module}\";",
+                wanted.join(", ")
+            );
         }
     }
     let header = format!("declare module \"{}\" {{\n", request.module);
@@ -3555,9 +4852,18 @@ fn import_lent(out: &mut String, request: &Request) {
 /// The name of an extension member only the class's declaration can hold --
 /// an initializer or a class member -- or `None` for an instance member.
 fn class_side(member: &str) -> Option<String> {
-    let declaration = member.lines().map(str::trim).rfind(|line| !line.starts_with("/**") && !line.starts_with('*'))?;
-    (declaration.starts_with("constructor(") || declaration.starts_with("static "))
-        .then(|| declaration.split(['(', ':']).next().unwrap_or_default().trim().to_owned())
+    let declaration = member
+        .lines()
+        .map(str::trim)
+        .rfind(|line| !line.starts_with("/**") && !line.starts_with('*'))?;
+    (declaration.starts_with("constructor(") || declaration.starts_with("static ")).then(|| {
+        declaration
+            .split(['(', ':'])
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_owned()
+    })
 }
 
 /// What this package lends the classes other frameworks declare (`Lent`):
@@ -3565,44 +4871,80 @@ fn class_side(member: &str) -> Option<String> {
 /// frameworks it needs -- the class's and this one, which is where the method
 /// is -- and the names it uses, by the module each comes from.
 fn lends(request: &Request, model: &Model, binding: &str) -> BTreeMap<String, Lent> {
-    let Some(package) = &model.package else { return BTreeMap::new() };
+    let Some(package) = &model.package else {
+        return BTreeMap::new();
+    };
     // Where each name this binding can spell comes from: its own
     // declarations, then what it imports.
     let mut from: BTreeMap<String, String> = BTreeMap::new();
     // The module's own block ends at the first line that closes it; what
     // follows extends other modules.
     for line in binding.lines().take_while(|line| *line != "}") {
-        let Some(rest) = line.strip_prefix("  export ") else { continue };
-        let rest = rest.trim_start_matches("declare ").trim_start_matches("const ");
-        let Some((_, rest)) = rest.split_once(' ') else { continue };
-        let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
+        let Some(rest) = line.strip_prefix("  export ") else {
+            continue;
+        };
+        let rest = rest
+            .trim_start_matches("declare ")
+            .trim_start_matches("const ");
+        let Some((_, rest)) = rest.split_once(' ') else {
+            continue;
+        };
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
         if !name.is_empty() {
             from.entry(name).or_insert_with(|| request.module.clone());
         }
     }
     for (module, names) in &model.imports {
         for name in names {
-            from.entry((*name).to_owned()).or_insert_with(|| (*module).to_owned());
+            from.entry((*name).to_owned())
+                .or_insert_with(|| (*module).to_owned());
         }
     }
     for (framework, names) in &model.foreign {
         for name in names {
-            from.entry(name.clone()).or_insert_with(|| format!("objc:{framework}"));
+            from.entry(name.clone())
+                .or_insert_with(|| format!("objc:{framework}"));
         }
     }
     for (record, module) in &request.records {
-        from.entry(record_name(&model.typedefs, record)).or_insert_with(|| module.clone());
+        from.entry(record_name(&model.typedefs, record))
+            .or_insert_with(|| module.clone());
     }
     let mut lends: BTreeMap<String, Lent> = BTreeMap::new();
-    for class in model.classes.iter().filter(|class| !class.extensions.is_empty()) {
-        let Some(owner) = model.swift.class_owner(&class.objc).filter(|owner| owner != package) else { continue };
+    for class in model
+        .classes
+        .iter()
+        .filter(|class| !class.extensions.is_empty())
+    {
+        let Some(owner) = model
+            .swift
+            .class_owner(&class.objc)
+            .filter(|owner| owner != package)
+        else {
+            continue;
+        };
         for member in &class.extensions {
             let lent = lends.entry(owner.to_owned()).or_default();
-            let into = if class_side(member).is_some() { &mut lent.members } else { &mut lent.inherited };
-            into.entry(class.objc.clone()).or_default().push(tagged(member, &format!("{owner} {package}")));
+            let into = if class_side(member).is_some() {
+                &mut lent.members
+            } else {
+                &mut lent.inherited
+            };
+            into.entry(class.objc.clone())
+                .or_default()
+                .push(tagged(member, &format!("{owner} {package}")));
             for word in member.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')) {
-                if let Some(module) = from.get(word).filter(|module| **module != format!("objc:{owner}")) {
-                    lent.imports.entry(module.clone()).or_default().insert(word.to_owned());
+                if let Some(module) = from
+                    .get(word)
+                    .filter(|module| **module != format!("objc:{owner}"))
+                {
+                    lent.imports
+                        .entry(module.clone())
+                        .or_default()
+                        .insert(word.to_owned());
                 }
             }
         }
@@ -3614,19 +4956,40 @@ fn lends(request: &Request, model: &Model, binding: &str) -> BTreeMap<String, Le
 /// a program that calls it links, where the enclosing module's would not do.
 fn tagged(member: &str, frameworks: &str) -> String {
     if let Some(end) = member.rfind("*/") {
-        return format!("{}\n     * @ntsFramework {frameworks}\n     {}", member[..end].trim_end(), &member[end..]);
+        return format!(
+            "{}\n     * @ntsFramework {frameworks}\n     {}",
+            member[..end].trim_end(),
+            &member[end..]
+        );
     }
     let indent: String = member.chars().take_while(|c| *c == ' ').collect();
     format!("{indent}/** @ntsFramework {frameworks} */\n{member}")
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn render_extensions(out: &mut String, request: &Request, model: &Model) {
-    let Some(package) = &model.package else { return };
+    let Some(package) = &model.package else {
+        return;
+    };
     let mut by_owner: BTreeMap<&str, String> = BTreeMap::new();
-    for class in model.classes.iter().filter(|class| !class.extensions.is_empty()) {
-        let Some(owner) = model.swift.class_owner(&class.objc).filter(|owner| owner != package) else { continue };
+    for class in model
+        .classes
+        .iter()
+        .filter(|class| !class.extensions.is_empty())
+    {
+        let Some(owner) = model
+            .swift
+            .class_owner(&class.objc)
+            .filter(|owner| owner != package)
+        else {
+            continue;
+        };
         let text = by_owner.entry(owner).or_default();
-        let _ = writeln!(text, "  interface {} {{", class.swift.rsplit('.').next().unwrap_or_default());
+        let _ = writeln!(
+            text,
+            "  interface {} {{",
+            class.swift.rsplit('.').next().unwrap_or_default()
+        );
         let mut lent = Vec::new();
         for member in &class.extensions {
             // An interface merges instance members only: an initializer and a
@@ -3639,7 +5002,11 @@ fn render_extensions(out: &mut String, request: &Request, model: &Model) {
             let _ = writeln!(text, "{member}");
         }
         if !lent.is_empty() {
-            let _ = writeln!(text, "    // Declared by {owner}'s package, on the class, which alone can add them:\n    //   {}", lent.join(", "));
+            let _ = writeln!(
+                text,
+                "    // Declared by {owner}'s package, on the class, which alone can add them:\n    //   {}",
+                lent.join(", ")
+            );
         }
         let _ = writeln!(text, "  }}");
     }
@@ -3650,12 +5017,31 @@ fn render_extensions(out: &mut String, request: &Request, model: &Model) {
         .headers
         .supers
         .keys()
-        .filter_map(|objc| Some((model.swift.class(objc), model.swift.class_owner(objc).filter(|owner| owner != package)?)))
+        .filter_map(|objc| {
+            Some((
+                model.swift.class(objc),
+                model
+                    .swift
+                    .class_owner(objc)
+                    .filter(|owner| owner != package)?,
+            ))
+        })
         .collect();
     for enumeration in model.enums.values() {
-        let Some(owner) = enumeration.path.first().filter(|_| enumeration.path.len() > 1).and_then(|root| owners.get(root)) else { continue };
+        let Some(owner) = enumeration
+            .path
+            .first()
+            .filter(|_| enumeration.path.len() > 1)
+            .and_then(|root| owners.get(root))
+        else {
+            continue;
+        };
         let mut text = String::new();
-        let _ = writeln!(text, "  export const enum {} {{", enumeration.path.last().map_or("", String::as_str));
+        let _ = writeln!(
+            text,
+            "  export const enum {} {{",
+            enumeration.path.last().map_or("", String::as_str)
+        );
         for (case, value) in &enumeration.cases {
             let _ = writeln!(text, "    {} = {value},", quoted_key(case));
         }
@@ -3664,26 +5050,80 @@ fn render_extensions(out: &mut String, request: &Request, model: &Model) {
     }
     // What the extended module declares itself is never this package's to
     // import: its classes, and anything nested in them.
-    let foreign: BTreeSet<String> = model.classes.iter().filter(|class| !model.owns(&class.objc)).filter_map(|class| class.swift.split('.').next().map(str::to_owned)).collect();
-    let mut own: BTreeSet<String> = model.classes.iter().filter(|class| model.owns(&class.objc)).filter_map(|class| class.swift.split('.').next().map(str::to_owned)).collect();
-    own.extend(model.enums.values().filter_map(|enumeration| enumeration.path.first().cloned()).filter(|root| !foreign.contains(root)));
-    own.extend(model.records.iter().map(|name| record_name(&model.typedefs, name)));
-    own.extend(model.protocols.iter().filter_map(|protocol| protocol.swift.split('.').next().map(str::to_owned)));
+    let foreign: BTreeSet<String> = model
+        .classes
+        .iter()
+        .filter(|class| !model.owns(&class.objc))
+        .filter_map(|class| class.swift.split('.').next().map(str::to_owned))
+        .collect();
+    let mut own: BTreeSet<String> = model
+        .classes
+        .iter()
+        .filter(|class| model.owns(&class.objc))
+        .filter_map(|class| class.swift.split('.').next().map(str::to_owned))
+        .collect();
+    own.extend(
+        model
+            .enums
+            .values()
+            .filter_map(|enumeration| enumeration.path.first().cloned())
+            .filter(|root| !foreign.contains(root)),
+    );
+    own.extend(
+        model
+            .records
+            .iter()
+            .map(|name| record_name(&model.typedefs, name)),
+    );
+    own.extend(
+        model
+            .protocols
+            .iter()
+            .filter_map(|protocol| protocol.swift.split('.').next().map(str::to_owned)),
+    );
     // And the stubs it declares for classes of frameworks not generated
     // (CloudKit's `CKShare`).
-    own.extend(model.mentioned.keys().filter_map(|name| model.swift.class(name).split('.').next().map(str::to_owned)));
+    own.extend(
+        model
+            .mentioned
+            .keys()
+            .filter_map(|name| model.swift.class(name).split('.').next().map(str::to_owned)),
+    );
     for (owner, body) in by_owner {
-        let words: BTreeSet<&str> = body.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).collect();
-        let _ = writeln!(out, "\n// `{}`'s extensions of `{owner}`'s classes, as Swift's.\ndeclare module \"objc:{owner}\" {{", request.module.trim_start_matches("objc:"));
+        let words: BTreeSet<&str> = body
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .collect();
+        let _ = writeln!(
+            out,
+            "\n// `{}`'s extensions of `{owner}`'s classes, as Swift's.\ndeclare module \"objc:{owner}\" {{",
+            request.module.trim_start_matches("objc:")
+        );
         for (module, names) in &model.imports {
-            let used: Vec<&str> = names.iter().copied().filter(|name| words.contains(name)).collect();
+            let used: Vec<&str> = names
+                .iter()
+                .copied()
+                .filter(|name| words.contains(name))
+                .collect();
             if !used.is_empty() {
-                let _ = writeln!(out, "  import type {{ {} }} from \"{module}\";", used.join(", "));
+                let _ = writeln!(
+                    out,
+                    "  import type {{ {} }} from \"{module}\";",
+                    used.join(", ")
+                );
             }
         }
-        let used: Vec<&str> = own.iter().map(String::as_str).filter(|name| words.contains(name)).collect();
+        let used: Vec<&str> = own
+            .iter()
+            .map(String::as_str)
+            .filter(|name| words.contains(name))
+            .collect();
         if !used.is_empty() {
-            let _ = writeln!(out, "  import type {{ {} }} from \"{}\";", used.join(", "), request.module);
+            let _ = writeln!(
+                out,
+                "  import type {{ {} }} from \"{}\";",
+                used.join(", "),
+                request.module
+            );
         }
         out.push_str(&body);
         out.push_str("}\n");
@@ -3701,7 +5141,12 @@ fn render_enums(out: &mut String, model: &Model) {
             .headers
             .supers
             .keys()
-            .filter(|class| model.swift.class_owner(class).is_some_and(|owner| owner != package))
+            .filter(|class| {
+                model
+                    .swift
+                    .class_owner(class)
+                    .is_some_and(|owner| owner != package)
+            })
             .map(|class| model.swift.class(class))
             .collect(),
         None => BTreeSet::new(),
@@ -3728,21 +5173,35 @@ fn render_enums(out: &mut String, model: &Model) {
 fn render_foreign_imports(out: &mut String, model: &Model) {
     let mut foreign = model.foreign.clone();
     for class in model.classes.iter().filter(|class| model.owns(&class.objc)) {
-        let Some(parent) = model.headers.supers.get(&class.objc).cloned().flatten() else { continue };
+        let Some(parent) = model.headers.supers.get(&class.objc).cloned().flatten() else {
+            continue;
+        };
         if let Some(owner) = model.foreign_owner(&parent) {
             let swift = model.swift.class(&parent);
-            foreign.entry(owner).or_default().insert(swift.split('.').next().unwrap_or_default().to_owned());
+            foreign
+                .entry(owner)
+                .or_default()
+                .insert(swift.split('.').next().unwrap_or_default().to_owned());
         }
     }
     for (module, names) in &foreign {
-        let _ = writeln!(out, "  import {{ {} }} from \"objc:{module}\";", names.iter().cloned().collect::<Vec<_>>().join(", "));
+        let _ = writeln!(
+            out,
+            "  import {{ {} }} from \"objc:{module}\";",
+            names.iter().cloned().collect::<Vec<_>>().join(", ")
+        );
     }
 }
 
 /// A package's re-exports: the frameworks it reads, as Swift's `import
 /// AppKit` gives Foundation too.
 fn render_reexports(out: &mut String, request: &Request, package: &str) {
-    let reexported: BTreeSet<&str> = request.frameworks.iter().map(String::as_str).filter(|framework| *framework != package).collect();
+    let reexported: BTreeSet<&str> = request
+        .frameworks
+        .iter()
+        .map(String::as_str)
+        .filter(|framework| *framework != package)
+        .collect();
     for framework in reexported {
         let _ = writeln!(out, "  export * from \"objc:{framework}\";");
     }
@@ -3751,6 +5210,7 @@ fn render_reexports(out: &mut String, request: &Request, package: &str) {
 /// The values module: each `async` form as a function wrapping the method
 /// that takes a completion handler in a promise the handler settles, which is
 /// the import Swift itself makes. What each imports is only what it names.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn render_values(request: &Request, model: &Model) -> String {
     if model.promises.is_empty() {
         return String::new();
@@ -3765,11 +5225,21 @@ fn render_values(request: &Request, model: &Model) -> String {
             1 => vec!["value".to_owned()],
             n => (0..n).map(|at| format!("value{at}")).collect(),
         };
-        let unwrap = if promise.throws && promise.nullable { "!" } else { "" };
+        let unwrap = if promise.throws && promise.nullable {
+            "!"
+        } else {
+            ""
+        };
         let settled = match names.as_slice() {
             [] => String::new(),
             [one] => format!("{one}{unwrap}"),
-            many => format!("[{}]", many.iter().map(|n| format!("{n}{unwrap}")).collect::<Vec<_>>().join(", ")),
+            many => format!(
+                "[{}]",
+                many.iter()
+                    .map(|n| format!("{n}{unwrap}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         };
         // The operation is outstanding from before the message -- a handler
         // Cocoa calls at once, inside it, ends what was begun -- until the
@@ -3780,7 +5250,11 @@ fn render_values(request: &Request, model: &Model) -> String {
         if promise.throws {
             handler.push("error".to_owned());
         }
-        let typed: Vec<String> = handler.iter().zip(&promise.given).map(|(name, ty)| format!("{name}: {ty}")).collect();
+        let typed: Vec<String> = handler
+            .iter()
+            .zip(&promise.given)
+            .map(|(name, ty)| format!("{name}: {ty}"))
+            .collect();
         let executor = if promise.throws {
             arguments.push(format!(
                 "({}) => {{\n      nts_pending_end();\n      if (error !== null) {{\n        reject(new Error(error.localizedDescription));\n      }} else {{\n        resolve({settled});\n      }}\n    }}",
@@ -3788,7 +5262,10 @@ fn render_values(request: &Request, model: &Model) -> String {
             ));
             "(resolve, reject)"
         } else {
-            arguments.push(format!("({}) => {{\n      nts_pending_end();\n      resolve({settled});\n    }}", typed.join(", ")));
+            arguments.push(format!(
+                "({}) => {{\n      nts_pending_end();\n      resolve({settled});\n    }}",
+                typed.join(", ")
+            ));
             "(resolve)"
         };
         // An instance method's function takes the receiver first; a class
@@ -3798,7 +5275,10 @@ fn render_values(request: &Request, model: &Model) -> String {
         } else if promise.parameters.is_empty() {
             (format!("self: {}", promise.receiver), "self".to_owned())
         } else {
-            (format!("self: {}, {}", promise.receiver, promise.parameters), "self".to_owned())
+            (
+                format!("self: {}, {}", promise.receiver, promise.parameters),
+                "self".to_owned(),
+            )
         };
         let _ = write!(
             bodies,
@@ -3809,7 +5289,9 @@ fn render_values(request: &Request, model: &Model) -> String {
             arguments.join(", ")
         );
     }
-    let words: BTreeSet<&str> = bodies.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).collect();
+    let words: BTreeSet<&str> = bodies
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .collect();
     let mut own: BTreeSet<String> = BTreeSet::new();
     for class in &model.classes {
         own.extend(class.swift.split('.').next().map(str::to_owned));
@@ -3817,7 +5299,12 @@ fn render_values(request: &Request, model: &Model) -> String {
     for enumeration in model.enums.values() {
         own.extend(enumeration.path.first().cloned());
     }
-    own.extend(model.records.iter().map(|name| record_name(&model.typedefs, name)));
+    own.extend(
+        model
+            .records
+            .iter()
+            .map(|name| record_name(&model.typedefs, name)),
+    );
     for name in model.mentioned.keys() {
         own.extend(model.swift.class(name).split('.').next().map(str::to_owned));
     }
@@ -3832,7 +5319,10 @@ fn render_values(request: &Request, model: &Model) -> String {
         } else {
             for name in names.iter().filter(|name| words.contains(name.as_str())) {
                 own.remove(name);
-                elsewhere.entry(format!("objc:{framework}")).or_default().insert(name.clone());
+                elsewhere
+                    .entry(format!("objc:{framework}"))
+                    .or_default()
+                    .insert(name.clone());
             }
         }
     }
@@ -3843,18 +5333,39 @@ fn render_values(request: &Request, model: &Model) -> String {
          // `@ntsCall` overload names.\n",
         request.module
     );
-    let used: Vec<&str> = own.iter().map(String::as_str).filter(|name| words.contains(name)).collect();
+    let used: Vec<&str> = own
+        .iter()
+        .map(String::as_str)
+        .filter(|name| words.contains(name))
+        .collect();
     if !used.is_empty() {
-        let _ = writeln!(out, "import {{ {} }} from \"{}\";", used.join(", "), request.module);
+        let _ = writeln!(
+            out,
+            "import {{ {} }} from \"{}\";",
+            used.join(", "),
+            request.module
+        );
     }
     for (module, names) in &elsewhere {
-        let _ = writeln!(out, "import {{ {} }} from \"{module}\";", names.iter().cloned().collect::<Vec<_>>().join(", "));
+        let _ = writeln!(
+            out,
+            "import {{ {} }} from \"{module}\";",
+            names.iter().cloned().collect::<Vec<_>>().join(", ")
+        );
     }
     out.push_str("import { nts_pending_begin, nts_pending_end } from \"c:pending\";\n");
     for (module, names) in &model.imports {
-        let used: Vec<&str> = names.iter().copied().filter(|name| words.contains(name)).collect();
+        let used: Vec<&str> = names
+            .iter()
+            .copied()
+            .filter(|name| words.contains(name))
+            .collect();
         if !used.is_empty() {
-            let _ = writeln!(out, "import type {{ {} }} from \"{module}\";", used.join(", "));
+            let _ = writeln!(
+                out,
+                "import type {{ {} }} from \"{module}\";",
+                used.join(", ")
+            );
         }
     }
     out.push_str(&bodies);
@@ -3875,7 +5386,10 @@ mod tempfile_path {
     impl TempFile {
         pub(crate) fn with(suffix: &str, text: &str) -> Result<Self> {
             let made = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!("nts-bind-objc-{}-{made}{suffix}", std::process::id()));
+            let path = std::env::temp_dir().join(format!(
+                "nts-bind-objc-{}-{made}{suffix}",
+                std::process::id()
+            ));
             std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
             Ok(Self(path))
         }
@@ -3898,7 +5412,13 @@ mod tests {
 
     #[test]
     fn a_swift_title_is_a_base_name_and_labels() {
-        assert_eq!(swift_name("setFrame(_:display:)"), ("setFrame".to_owned(), vec!["_".to_owned(), "display".to_owned()]));
+        assert_eq!(
+            swift_name("setFrame(_:display:)"),
+            (
+                "setFrame".to_owned(),
+                vec!["_".to_owned(), "display".to_owned()]
+            )
+        );
         assert_eq!(swift_name("init()"), ("init".to_owned(), Vec::new()));
         assert_eq!(swift_name("shared"), ("shared".to_owned(), Vec::new()));
     }
@@ -3927,11 +5447,17 @@ mod tests {
             ("char", "char"),
             ("unsigned char", "unsigned char"),
         ];
-        let answered: std::collections::BTreeSet<&str> = c_types.iter().filter_map(|(w, d)| swift_number(w, d)).collect();
+        let answered: std::collections::BTreeSet<&str> = c_types
+            .iter()
+            .filter_map(|(w, d)| swift_number(w, d))
+            .collect();
         let listed: std::collections::BTreeSet<&str> = SWIFT_NUMBERS.iter().copied().collect();
         assert_eq!(answered, listed);
         // A class whose name is as short as a number's is still an object.
-        assert_eq!(optional_as_swift("UILabel".to_owned(), true), "UILabel | null");
+        assert_eq!(
+            optional_as_swift("UILabel".to_owned(), true),
+            "UILabel | null"
+        );
         assert_eq!(optional_as_swift("UInt64".to_owned(), true), "UInt64");
         assert_eq!(swift_number("NSInteger", "long"), Some("Int"));
         assert_eq!(swift_number("double", "double"), Some("Double"));
@@ -4144,7 +5670,11 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             format!(r#"{{"kind":"optionalRequirementOf","source":"c:objc(pl)ShapeDelegate{member}","target":"c:objc(pl)ShapeDelegate"}}"#)
         });
         let required = r#"{"kind":"requirementOf","source":"c:objc(pl)ShapeDelegate(im)shapeDidMove:","target":"c:objc(pl)ShapeDelegate"}"#;
-        format!(r#"{{"symbols":[{}],"relationships":[{},{required}]}}"#, symbols.join(","), optional.join(","))
+        format!(
+            r#"{{"symbols":[{}],"relationships":[{},{required}]}}"#,
+            symbols.join(","),
+            optional.join(",")
+        )
     }
 
     /// The synthetic framework's SDK and graphs, written under a directory of
@@ -4154,17 +5684,30 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
     #[test]
     fn a_lent_member_carries_its_frameworks() {
         assert_eq!(
-            tagged("    /** @ntsSelector +indexPathForRow:inSection: */\n    constructor(labels: { forRow: Int; inSection: Int });", "Foundation UIKit"),
+            tagged(
+                "    /** @ntsSelector +indexPathForRow:inSection: */\n    constructor(labels: { forRow: Int; inSection: Int });",
+                "Foundation UIKit"
+            ),
             "    /** @ntsSelector +indexPathForRow:inSection:\n     * @ntsFramework Foundation UIKit\n     */\n    constructor(labels: { forRow: Int; inSection: Int });"
         );
-        assert_eq!(tagged("    static get shared(): X;", "Foundation UIKit"), "    /** @ntsFramework Foundation UIKit */\n    static get shared(): X;");
-        assert_eq!(class_side("    /** @ntsSelector new */\n    constructor();").as_deref(), Some("constructor"));
-        assert_eq!(class_side("    static get shared(): X;").as_deref(), Some("static get shared"));
+        assert_eq!(
+            tagged("    static get shared(): X;", "Foundation UIKit"),
+            "    /** @ntsFramework Foundation UIKit */\n    static get shared(): X;"
+        );
+        assert_eq!(
+            class_side("    /** @ntsSelector new */\n    constructor();").as_deref(),
+            Some("constructor")
+        );
+        assert_eq!(
+            class_side("    static get shared(): X;").as_deref(),
+            Some("static get shared")
+        );
         assert_eq!(class_side("    get row(): Int;"), None);
     }
 
     fn fake_request(test: &str) -> Request {
-        let root = std::env::temp_dir().join(format!("nts-bind-objc-{test}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("nts-bind-objc-{test}-{}", std::process::id()));
         let headers = root.join("System/Library/Frameworks/Fake.framework/Headers");
         let symbols = root.join("symbolgraph");
         std::fs::create_dir_all(&headers).unwrap();
@@ -4206,18 +5749,39 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             }))
             .unwrap()
         };
-        let moved = symbol("c:@F@CGContextMoveToPoint", &["CGContext", "__moveTo(x:y:)"], "public");
+        let moved = symbol(
+            "c:@F@CGContextMoveToPoint",
+            &["CGContext", "__moveTo(x:y:)"],
+            "public",
+        );
         assert!(moved.offered());
         let moved = moved.unrefined();
         assert_eq!(moved.names.title, "moveTo(x:y:)");
         assert_eq!(moved.path, ["CGContext", "moveTo(x:y:)"]);
-        let init = symbol("c:objc(cs)UIListContentView(im)initWithConfiguration:", &["UIListContentView", "init(__configuration:)"], "open").unrefined();
+        let init = symbol(
+            "c:objc(cs)UIListContentView(im)initWithConfiguration:",
+            &["UIListContentView", "init(__configuration:)"],
+            "open",
+        )
+        .unrefined();
         assert_eq!(init.names.title, "init(configuration:)");
         for (usr, path, access) in [
-            ("c:@F@__CGPointEqualToPoint", "__CGPointEqualToPoint(_:_:)", "public"),
+            (
+                "c:@F@__CGPointEqualToPoint",
+                "__CGPointEqualToPoint(_:_:)",
+                "public",
+            ),
             ("c:@S@NSMapEnumerator@FI@_pi", "_pi", "public"),
-            ("c:@CM@UIKit@@objc(cs)UITableViewCell(py)_bridgedConfigurationState", "configurationState", "public"),
-            ("c:@F@CGFloatNearlyEqualToFloat", "CGFloatNearlyEqualToFloat(_:_:)", "internal"),
+            (
+                "c:@CM@UIKit@@objc(cs)UITableViewCell(py)_bridgedConfigurationState",
+                "configurationState",
+                "public",
+            ),
+            (
+                "c:@F@CGFloatNearlyEqualToFloat",
+                "CGFloatNearlyEqualToFloat(_:_:)",
+                "internal",
+            ),
         ] {
             assert!(!symbol(usr, &[path], access).offered(), "{usr} is offered");
         }
@@ -4229,24 +5793,43 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
     /// declare is an error that says which.
     #[test]
     fn a_program_names_what_it_binds_as_swift_does() {
-        let by_objc = Request { classes: vec!["Circle".to_owned()], protocols: vec!["ShapeDelegate".to_owned()], ..fake_request("objc-names") };
-        let by_swift = Request { names: vec!["Round".to_owned(), "ShapeWatching".to_owned()], ..fake_request("swift-names") };
+        let by_objc = Request {
+            classes: vec!["Circle".to_owned()],
+            protocols: vec!["ShapeDelegate".to_owned()],
+            ..fake_request("objc-names")
+        };
+        let by_swift = Request {
+            names: vec!["Round".to_owned(), "ShapeWatching".to_owned()],
+            ..fake_request("swift-names")
+        };
         let (objc, swift) = match (run(&by_objc), run(&by_swift)) {
             (Ok(objc), Ok(swift)) => (objc.binding, swift.binding),
-            (Err(error), _) | (_, Err(error)) if Command::new("clang").arg("--version").output().is_err() => {
+            (Err(error), _) | (_, Err(error))
+                if Command::new("clang").arg("--version").output().is_err() =>
+            {
                 eprintln!("skipped: no clang ({error})");
                 return;
             }
             (Err(error), _) | (_, Err(error)) => panic!("{error:#}"),
         };
         assert_eq!(objc, swift);
-        let missing = Request { names: vec!["Round".to_owned(), "Square".to_owned()], ..fake_request("missing-name") };
-        let error = run(&missing).err().map(|error| format!("{error:#}")).unwrap_or_default();
-        assert!(error.contains("`Square` is not a name Swift imports from Fake"), "{error}");
+        let missing = Request {
+            names: vec!["Round".to_owned(), "Square".to_owned()],
+            ..fake_request("missing-name")
+        };
+        let error = run(&missing)
+            .err()
+            .map(|error| format!("{error:#}"))
+            .unwrap_or_default();
+        assert!(
+            error.contains("`Square` is not a name Swift imports from Fake"),
+            "{error}"
+        );
     }
 
     /// Every rule the binding applies, on real clang output.
     #[test]
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn a_framework_is_bound_as_swift_imports_it() {
         let root = std::env::temp_dir().join(format!("nts-bind-objc-test-{}", std::process::id()));
         let headers = root.join("System/Library/Frameworks/Fake.framework/Headers");
@@ -4390,19 +5973,29 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         }
         // What Swift does not import has no member here: `alloc`, and Swift's
         // own methods.
-        assert!(!text.contains("alloc") && !text.contains("swifty"), "{text}");
+        assert!(
+            !text.contains("alloc") && !text.contains("swifty"),
+            "{text}"
+        );
         assert_async(&text, &values);
         assert_cf(&text);
         // A subclass keeps its base's overload beside its own of the same
         // selector, since TypeScript holds it to its base's; and a property
         // named as an ancestor's other one is left to the ancestor.
-        let round = text.split("export class Round extends Shape {").nth(1).and_then(|rest| rest.split("\n  }").next()).unwrap_or_default();
+        let round = text
+            .split("export class Round extends Shape {")
+            .nth(1)
+            .and_then(|rest| rest.split("\n  }").next())
+            .unwrap_or_default();
         for expected in [
             "    /** @ntsSelector paint: */\n    paint(other: Round): void;",
             "    /** @ntsSelector paint: */\n    paint(other: Shape): void;",
             "    //   @property peerCircle: Swift's `peer` is an ancestor's property read with `peer`, not this one",
         ] {
-            assert!(round.contains(expected), "no `{expected}` in Round:\n{round}");
+            assert!(
+                round.contains(expected),
+                "no `{expected}` in Round:\n{round}"
+            );
         }
     }
 
@@ -4494,13 +6087,35 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
         };
         let symbols_json = [
             symbol("c:objc(cs)Root", "swift.class", "Root", r#""Root""#, ""),
-            symbol("c:objc(cs)Glass", "swift.class", "Glass", r#""Glass""#, r#"{"domain":"macOS","introduced":{"major":26,"minor":0}}"#),
+            symbol(
+                "c:objc(cs)Glass",
+                "swift.class",
+                "Glass",
+                r#""Glass""#,
+                r#"{"domain":"macOS","introduced":{"major":26,"minor":0}}"#,
+            ),
             symbol("c:objc(cs)Menu", "swift.class", "Menu", r#""Menu""#, ""),
-            symbol("c:objc(cs)Menu(im)glass", "swift.method", "glass()", r#""Menu","glass()""#, ""),
-            symbol("c:objc(cs)Menu(im)count", "swift.method", "count()", r#""Menu","count()""#, ""),
+            symbol(
+                "c:objc(cs)Menu(im)glass",
+                "swift.method",
+                "glass()",
+                r#""Menu","glass()""#,
+                "",
+            ),
+            symbol(
+                "c:objc(cs)Menu(im)count",
+                "swift.method",
+                "count()",
+                r#""Menu","count()""#,
+                "",
+            ),
         ]
         .join(",");
-        std::fs::write(symbols.join("Late.symbols.json"), format!(r#"{{"symbols":[{symbols_json}]}}"#)).unwrap();
+        std::fs::write(
+            symbols.join("Late.symbols.json"),
+            format!(r#"{{"symbols":[{symbols_json}]}}"#),
+        )
+        .unwrap();
         std::fs::write(symbols.join("ObjectiveC.symbols.json"), r#"{"symbols":[]}"#).unwrap();
         let request = Request {
             frameworks: vec!["Late".to_owned()],
@@ -4527,10 +6142,22 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
             Err(error) => panic!("{error:#}"),
         };
         let _ = std::fs::remove_dir_all(&root);
-        assert!(text.contains("//   Glass: introduced in macOS 26.0"), "the binding does not say why Glass is left out:\n{text}");
-        assert!(!text.contains("@ntsClass Glass"), "Glass was bound or stubbed:\n{text}");
-        assert!(text.contains("count(): Int;"), "Menu lost a member that names no late class:\n{text}");
-        assert!(text.contains("`Glass`, introduced in macOS 26.0"), "Menu.glass was not refused for naming Glass:\n{text}");
+        assert!(
+            text.contains("//   Glass: introduced in macOS 26.0"),
+            "the binding does not say why Glass is left out:\n{text}"
+        );
+        assert!(
+            !text.contains("@ntsClass Glass"),
+            "Glass was bound or stubbed:\n{text}"
+        );
+        assert!(
+            text.contains("count(): Int;"),
+            "Menu lost a member that names no late class:\n{text}"
+        );
+        assert!(
+            text.contains("`Glass`, introduced in macOS 26.0"),
+            "Menu.glass was not refused for naming Glass:\n{text}"
+        );
     }
 
     #[test]
@@ -4544,25 +6171,51 @@ PenRef _Nullable PenCopyTwin(PenRef pen, PenRef other);
 
     #[test]
     fn an_overload_is_the_same_whatever_its_parameters_are_called() {
-        assert_eq!(unnamed("f(cView: NSClipView): void;"), unnamed("f(clipView: NSClipView): void;"));
+        assert_eq!(
+            unnamed("f(cView: NSClipView): void;"),
+            unnamed("f(clipView: NSClipView): void;")
+        );
         assert_ne!(unnamed("f(a: Shape): void;"), unnamed("f(a: Round): void;"));
         // A label object's keys are the call's, not names.
-        assert_ne!(unnamed("f(labels: { at: Int }): void;"), unnamed("f(labels: { to: Int }): void;"));
-        assert_eq!(unnamed("f(x: Int, labels: { at: Int }): void;"), unnamed("f(y: Int, labels: { at: Int }): void;"));
+        assert_ne!(
+            unnamed("f(labels: { at: Int }): void;"),
+            unnamed("f(labels: { to: Int }): void;")
+        );
+        assert_eq!(
+            unnamed("f(x: Int, labels: { at: Int }): void;"),
+            unnamed("f(y: Int, labels: { at: Int }): void;")
+        );
     }
 
     #[test]
     fn an_availability_annotation_is_not_part_of_the_type() {
-        assert_eq!(strip_attributes("API_AVAILABLE(macos(11.0)) NSString *"), "NSString *");
-        assert_eq!(strip_attributes("NSString * _Nonnull"), "NSString * _Nonnull");
+        assert_eq!(
+            strip_attributes("API_AVAILABLE(macos(11.0)) NSString *"),
+            "NSString *"
+        );
+        assert_eq!(
+            strip_attributes("NSString * _Nonnull"),
+            "NSString * _Nonnull"
+        );
         assert_eq!(strip_attributes("NS_SWIFT_UI_ACTOR void"), "void");
-        assert_eq!(strip_attributes("NS_SWIFT_NAME(x) API_AVAILABLE(ios(2.0)) BOOL"), "BOOL");
+        assert_eq!(
+            strip_attributes("NS_SWIFT_NAME(x) API_AVAILABLE(ios(2.0)) BOOL"),
+            "BOOL"
+        );
         assert_eq!(strip_attributes("BOOL"), "BOOL");
         let constant = serde_json::json!({ "qualType": "NSNotificationName", "desugaredQualType": "NSString *const" });
-        assert_eq!(without_top_const(&constant)["desugaredQualType"], "NSString *");
-        assert_eq!(without_top_const(&serde_json::json!({ "qualType": "const char *" }))["qualType"], "const char *");
+        assert_eq!(
+            without_top_const(&constant)["desugaredQualType"],
+            "NSString *"
+        );
+        assert_eq!(
+            without_top_const(&serde_json::json!({ "qualType": "const char *" }))["qualType"],
+            "const char *"
+        );
         assert!(block_is_nullable("void (^ _Nullable)(BOOL)"));
         assert!(!block_is_nullable("void (^)(NSError * _Nullable)"));
-        assert!(!block_is_nullable("void (^ _Nonnull)(NSString * _Nullable)"));
+        assert!(!block_is_nullable(
+            "void (^ _Nonnull)(NSString * _Nullable)"
+        ));
     }
 }

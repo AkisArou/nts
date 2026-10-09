@@ -193,7 +193,13 @@ impl ClassBuilder {
         });
     }
 
-    pub fn method(&mut self, access: u16, name: impl Into<String>, descriptor: impl Into<String>, body: Option<Body>) {
+    pub fn method(
+        &mut self,
+        access: u16,
+        name: impl Into<String>,
+        descriptor: impl Into<String>,
+        body: Option<Body>,
+    ) {
         self.methods.push(Method {
             access,
             name: name.into(),
@@ -256,10 +262,7 @@ impl ClassBuilder {
         pool: &mut Pool,
         initial: &[FieldFromStatic<'_>],
     ) -> Result<(), Error> {
-        let mut code = crate::code::Code::new(
-            vec![frames::VType::Object(self.name.clone())],
-            1,
-        );
+        let mut code = crate::code::Code::new(vec![frames::VType::Object(self.name.clone())], 1);
         code.load(origin, crate::insn::Kind::Ref, 0);
         code.invoke_special(origin, pool, &self.super_name, "<init>", "()V");
         // After the super call, so `this` is initialized and a `putfield`
@@ -267,7 +270,13 @@ impl ClassBuilder {
         // and only the super constructor may touch it.
         for field in initial {
             code.load(origin, crate::insn::Kind::Ref, 0);
-            code.get_static(origin, pool, field.from_class, field.from_field, field.descriptor);
+            code.get_static(
+                origin,
+                pool,
+                field.from_class,
+                field.from_field,
+                field.descriptor,
+            );
             code.put_field(origin, pool, &self.name, field.field, field.descriptor);
         }
         code.ret(origin, None);
@@ -363,8 +372,14 @@ impl ClassBuilder {
             // `Code` and `Signature`, each present or not, counted before
             // either is written -- the count is a `u2` ahead of the bytes and
             // cannot be patched afterwards.
-            let signature = method.signature.as_ref().map(|it| (pool.utf8("Signature"), pool.utf8(it)));
-            write_count(&mut tail, usize::from(method.body.is_some()) + usize::from(signature.is_some()));
+            let signature = method
+                .signature
+                .as_ref()
+                .map(|it| (pool.utf8("Signature"), pool.utf8(it)));
+            write_count(
+                &mut tail,
+                usize::from(method.body.is_some()) + usize::from(signature.is_some()),
+            );
             if let Some(body) = method.body {
                 let (attribute, origins) = code_attribute(&mut pool, &body);
                 tail.extend_from_slice(&attribute);
@@ -449,16 +464,27 @@ fn code_attribute(pool: &mut Pool, body: &Body) -> (Vec<u8>, Vec<Origin>) {
         line_body.extend_from_slice(&line.to_be_bytes());
     }
     attributes.extend_from_slice(&name.to_be_bytes());
-    attributes.extend_from_slice(&u32::try_from(line_body.len()).unwrap_or(u32::MAX).to_be_bytes());
+    attributes.extend_from_slice(
+        &u32::try_from(line_body.len())
+            .unwrap_or(u32::MAX)
+            .to_be_bytes(),
+    );
     attributes.extend_from_slice(&line_body);
 
     let mut attribute_count = 1;
-    if let Some(frames) =
-        frames::stack_map_table(pool, &body.locals, &body.frame_offsets, &body.handler_frames)
-    {
+    if let Some(frames) = frames::stack_map_table(
+        pool,
+        &body.locals,
+        &body.frame_offsets,
+        &body.handler_frames,
+    ) {
         let name = pool.utf8("StackMapTable");
         attributes.extend_from_slice(&name.to_be_bytes());
-        attributes.extend_from_slice(&u32::try_from(frames.len()).unwrap_or(u32::MAX).to_be_bytes());
+        attributes.extend_from_slice(
+            &u32::try_from(frames.len())
+                .unwrap_or(u32::MAX)
+                .to_be_bytes(),
+        );
         attributes.extend_from_slice(&frames);
         attribute_count += 1;
     }
@@ -466,7 +492,11 @@ fn code_attribute(pool: &mut Pool, body: &Body) -> (Vec<u8>, Vec<Origin>) {
     let mut inner = Vec::new();
     inner.extend_from_slice(&body.max_stack.to_be_bytes());
     inner.extend_from_slice(&body.max_locals.to_be_bytes());
-    inner.extend_from_slice(&u32::try_from(body.code.len()).unwrap_or(u32::MAX).to_be_bytes());
+    inner.extend_from_slice(
+        &u32::try_from(body.code.len())
+            .unwrap_or(u32::MAX)
+            .to_be_bytes(),
+    );
     inner.extend_from_slice(&body.code);
     // The exception table, in declaration order -- which is search order
     // (JVMS 4.7.3), so writing it sorted would silently change which handler
@@ -502,7 +532,9 @@ mod tests {
         let mut builder = ClassBuilder::new("nts/gen/Frame", "java/lang/Object");
         builder.method(access::PUBLIC, "resume", "()V", None);
         builder.method(access::PUBLIC, "resume", "()V", None);
-        let error = builder.build(Pool::default()).expect_err("a duplicate must not build");
+        let error = builder
+            .build(Pool::default())
+            .expect_err("a duplicate must not build");
         assert!(
             matches!(&error, Error::DuplicateMember { kind: "method", name, descriptor }
                 if name == "resume" && descriptor == "()V"),
@@ -518,7 +550,10 @@ mod tests {
         let mut builder = ClassBuilder::new("nts/gen/Frame", "java/lang/Object");
         builder.method(access::PUBLIC, "resume", "()V", None);
         builder.method(access::PUBLIC, "resume", "(I)V", None);
-        assert!(builder.build(Pool::default()).is_ok(), "overloads must build");
+        assert!(
+            builder.build(Pool::default()).is_ok(),
+            "overloads must build"
+        );
     }
 
     /// **Fields and methods are separate member tables**, so a field and a
@@ -529,7 +564,10 @@ mod tests {
         let mut builder = ClassBuilder::new("nts/gen/Thing", "java/lang/Object");
         builder.field(access::PUBLIC, "size", "I");
         builder.method(access::PUBLIC, "size", "()I", None);
-        assert!(builder.build(Pool::default()).is_ok(), "separate tables must build");
+        assert!(
+            builder.build(Pool::default()).is_ok(),
+            "separate tables must build"
+        );
     }
 
     #[test]
@@ -537,7 +575,12 @@ mod tests {
         let mut builder = ClassBuilder::new("nts/gen/Thing", "java/lang/Object");
         builder.field(access::PUBLIC, "$presence", "I");
         builder.field(access::PUBLIC, "$presence", "I");
-        let error = builder.build(Pool::default()).expect_err("a duplicate must not build");
-        assert!(matches!(&error, Error::DuplicateMember { kind: "field", .. }), "wrong: {error}");
+        let error = builder
+            .build(Pool::default())
+            .expect_err("a duplicate must not build");
+        assert!(
+            matches!(&error, Error::DuplicateMember { kind: "field", .. }),
+            "wrong: {error}"
+        );
     }
 }

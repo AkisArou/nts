@@ -20,19 +20,21 @@ use react_compiler_ast::declarations::{
     Declaration, ExportDefaultDecl, ExportSpecifier, ImportKind, ImportSpecifier, ModuleExportName,
 };
 use react_compiler_ast::expressions::{
-    ArrowFunctionBody, ClassBody, Expression, FunctionExpression, Identifier, ObjectExpressionProperty,
+    ArrowFunctionBody, ClassBody, Expression, FunctionExpression, Identifier,
+    ObjectExpressionProperty,
 };
 use react_compiler_ast::jsx::{
-    JSXAttributeItem, JSXAttributeValue, JSXChild, JSXElement, JSXElementName, JSXExpressionContainerExpr,
-    JSXMemberExprObject, JSXMemberExpression,
+    JSXAttributeItem, JSXAttributeValue, JSXChild, JSXElement, JSXElementName,
+    JSXExpressionContainerExpr, JSXMemberExprObject, JSXMemberExpression,
 };
 use react_compiler_ast::patterns::{ObjectPatternProperty, PatternLike};
 use react_compiler_ast::scope::{
-    BindingData, BindingId, BindingKind, ImportBindingData, ImportBindingKind, ScopeData, ScopeId, ScopeInfo, ScopeKind,
+    BindingData, BindingId, BindingKind, ImportBindingData, ImportBindingKind, ScopeData, ScopeId,
+    ScopeInfo, ScopeKind,
 };
 use react_compiler_ast::statements::{
-    BlockStatement, ClassDeclaration, ForInOfLeft, ForInit, FunctionDeclaration, Statement, VariableDeclaration,
-    VariableDeclarationKind,
+    BlockStatement, ClassDeclaration, ForInOfLeft, ForInit, FunctionDeclaration, Statement,
+    VariableDeclaration, VariableDeclarationKind,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
@@ -54,7 +56,10 @@ pub struct Resolution {
 
 #[must_use]
 pub fn resolve(file: &File) -> Resolution {
-    let mut builder = Builder { pass: Pass::Declare, ..Builder::default() };
+    let mut builder = Builder {
+        pass: Pass::Declare,
+        ..Builder::default()
+    };
     builder.program(file);
     builder.group_bindings_by_scope();
     builder.pass = Pass::Resolve;
@@ -69,7 +74,10 @@ pub fn resolve(file: &File) -> Resolution {
         node_id_to_scope: builder.node_id_to_scope,
         program_scope: ScopeId(0),
     };
-    Resolution { info, by_address: builder.by_address }
+    Resolution {
+        info,
+        by_address: builder.by_address,
+    }
 }
 
 /// A node's address, as the key of a node that may have no id.
@@ -119,7 +127,12 @@ impl Builder {
         let address = address(node);
         let scope = if self.pass == Pass::Declare {
             let scope = ScopeId(u32::try_from(self.scopes.len()).unwrap_or(u32::MAX));
-            self.scopes.push(ScopeData { id: scope, parent: self.stack.last().copied(), kind, bindings: FxHashMap::default() });
+            self.scopes.push(ScopeData {
+                id: scope,
+                parent: self.stack.last().copied(),
+                kind,
+                bindings: FxHashMap::default(),
+            });
             self.scope_at.insert(address, scope);
             if let Some(id) = node.node_id {
                 self.node_id_to_scope.insert(id, scope);
@@ -151,7 +164,12 @@ impl Builder {
             .iter()
             .rev()
             .copied()
-            .find(|s| matches!(self.scopes[s.0 as usize].kind, ScopeKind::Function | ScopeKind::Program))
+            .find(|s| {
+                matches!(
+                    self.scopes[s.0 as usize].kind,
+                    ScopeKind::Function | ScopeKind::Program
+                )
+            })
             .unwrap_or(ScopeId(0))
     }
 
@@ -168,7 +186,10 @@ impl Builder {
         for (new, old) in order.iter().enumerate() {
             renumbered[*old] = BindingId(u32::try_from(new).unwrap_or(u32::MAX));
         }
-        let mut bindings: Vec<BindingData> = order.iter().map(|old| self.bindings[*old].clone()).collect();
+        let mut bindings: Vec<BindingData> = order
+            .iter()
+            .map(|old| self.bindings[*old].clone())
+            .collect();
         for binding in &mut bindings {
             binding.id = renumbered[binding.id.0 as usize];
         }
@@ -183,7 +204,11 @@ impl Builder {
     /// Registers `identifier` in `scope` on the declare pass. A name declared
     /// twice in one scope keeps its first binding, as Babel's does.
     fn declare(&mut self, scope: ScopeId, identifier: &Identifier, declared: Declared<'_>) {
-        if self.pass != Pass::Declare || self.scopes[scope.0 as usize].bindings.contains_key(&identifier.name) {
+        if self.pass != Pass::Declare
+            || self.scopes[scope.0 as usize]
+                .bindings
+                .contains_key(&identifier.name)
+        {
             return;
         }
         let id = BindingId(u32::try_from(self.bindings.len()).unwrap_or(u32::MAX));
@@ -197,20 +222,40 @@ impl Builder {
             declaration_node_id: identifier.base.node_id,
             import: declared.import,
         });
-        self.scopes[scope.0 as usize].bindings.insert(identifier.name.clone(), id);
+        self.scopes[scope.0 as usize]
+            .bindings
+            .insert(identifier.name.clone(), id);
     }
 
     /// Every name a pattern declares.
-    fn declare_pattern(&mut self, scope: ScopeId, pattern: &PatternLike, kind: &BindingKind, declaration_type: &str) {
+    fn declare_pattern(
+        &mut self,
+        scope: ScopeId,
+        pattern: &PatternLike,
+        kind: &BindingKind,
+        declaration_type: &str,
+    ) {
         match pattern {
             PatternLike::Identifier(identifier) => {
-                self.declare(scope, identifier, Declared { kind: kind.clone(), declaration_type, import: None });
+                self.declare(
+                    scope,
+                    identifier,
+                    Declared {
+                        kind: kind.clone(),
+                        declaration_type,
+                        import: None,
+                    },
+                );
             }
             PatternLike::ObjectPattern(object) => {
                 for property in &object.properties {
                     match property {
-                        ObjectPatternProperty::ObjectProperty(p) => self.declare_pattern(scope, &p.value, kind, declaration_type),
-                        ObjectPatternProperty::RestElement(r) => self.declare_pattern(scope, &r.argument, kind, declaration_type),
+                        ObjectPatternProperty::ObjectProperty(p) => {
+                            self.declare_pattern(scope, &p.value, kind, declaration_type);
+                        }
+                        ObjectPatternProperty::RestElement(r) => {
+                            self.declare_pattern(scope, &r.argument, kind, declaration_type);
+                        }
                     }
                 }
             }
@@ -219,8 +264,12 @@ impl Builder {
                     self.declare_pattern(scope, element, kind, declaration_type);
                 }
             }
-            PatternLike::AssignmentPattern(assignment) => self.declare_pattern(scope, &assignment.left, kind, declaration_type),
-            PatternLike::RestElement(rest) => self.declare_pattern(scope, &rest.argument, kind, declaration_type),
+            PatternLike::AssignmentPattern(assignment) => {
+                self.declare_pattern(scope, &assignment.left, kind, declaration_type);
+            }
+            PatternLike::RestElement(rest) => {
+                self.declare_pattern(scope, &rest.argument, kind, declaration_type);
+            }
             _ => {}
         }
     }
@@ -315,7 +364,9 @@ impl Builder {
                 self.enter(&s.base, ScopeKind::For);
                 if let Some(init) = &s.init {
                     match init.as_ref() {
-                        ForInit::VariableDeclaration(declaration) => self.variable_declaration(declaration),
+                        ForInit::VariableDeclaration(declaration) => {
+                            self.variable_declaration(declaration);
+                        }
                         ForInit::Expression(expression) => self.expression(expression),
                     }
                 }
@@ -393,13 +444,35 @@ impl Builder {
                                 ModuleExportName::StringLiteral(l) => l.value.to_string_lossy(),
                             }),
                         ),
-                        ImportSpecifier::ImportDefaultSpecifier(s) => (&s.local, "ImportDefaultSpecifier", ImportBindingKind::Default, None),
-                        ImportSpecifier::ImportNamespaceSpecifier(s) => (&s.local, "ImportNamespaceSpecifier", ImportBindingKind::Namespace, None),
+                        ImportSpecifier::ImportDefaultSpecifier(s) => (
+                            &s.local,
+                            "ImportDefaultSpecifier",
+                            ImportBindingKind::Default,
+                            None,
+                        ),
+                        ImportSpecifier::ImportNamespaceSpecifier(s) => (
+                            &s.local,
+                            "ImportNamespaceSpecifier",
+                            ImportBindingKind::Namespace,
+                            None,
+                        ),
                     };
                     let declared = if type_only {
-                        Declared { kind: BindingKind::Unknown, declaration_type, import: None }
+                        Declared {
+                            kind: BindingKind::Unknown,
+                            declaration_type,
+                            import: None,
+                        }
                     } else {
-                        Declared { kind: BindingKind::Module, declaration_type, import: Some(ImportBindingData { source: source.clone(), kind, imported }) }
+                        Declared {
+                            kind: BindingKind::Module,
+                            declaration_type,
+                            import: Some(ImportBindingData {
+                                source: source.clone(),
+                                kind,
+                                imported,
+                            }),
+                        }
                     };
                     self.declare(ScopeId(0), local, declared);
                     self.identifier(local);
@@ -428,9 +501,20 @@ impl Builder {
                 // `import lib = require(…)`: Babel binds `lib` with no kind it
                 // names, and scope.ts records it as `unknown`.
                 let raw = unknown.raw().parse_value();
-                if let Some(id) = raw.get("id").and_then(|id| serde_json::from_value::<Identifier>(id.clone()).ok()) {
+                if let Some(id) = raw
+                    .get("id")
+                    .and_then(|id| serde_json::from_value::<Identifier>(id.clone()).ok())
+                {
                     let scope = self.current();
-                    self.declare(scope, &id, Declared { kind: BindingKind::Unknown, declaration_type: "TSImportEqualsDeclaration", import: None });
+                    self.declare(
+                        scope,
+                        &id,
+                        Declared {
+                            kind: BindingKind::Unknown,
+                            declaration_type: "TSImportEqualsDeclaration",
+                            import: None,
+                        },
+                    );
                     self.identifier(&id);
                 }
             }
@@ -467,9 +551,9 @@ impl Builder {
         let (scope, kind) = match declaration.kind {
             VariableDeclarationKind::Var => (self.function_scope(), BindingKind::Var),
             VariableDeclarationKind::Let => (self.current(), BindingKind::Let),
-            VariableDeclarationKind::Const | VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing => {
-                (self.current(), BindingKind::Const)
-            }
+            VariableDeclarationKind::Const
+            | VariableDeclarationKind::Using
+            | VariableDeclarationKind::AwaitUsing => (self.current(), BindingKind::Const),
         };
         for declarator in &declaration.declarations {
             self.declare_pattern(scope, &declarator.id, &kind, "VariableDeclarator");
@@ -494,7 +578,15 @@ impl Builder {
     fn function_declaration(&mut self, f: &FunctionDeclaration) {
         if let Some(id) = &f.id {
             let scope = self.current();
-            self.declare(scope, id, Declared { kind: BindingKind::Hoisted, declaration_type: "FunctionDeclaration", import: None });
+            self.declare(
+                scope,
+                id,
+                Declared {
+                    kind: BindingKind::Hoisted,
+                    declaration_type: "FunctionDeclaration",
+                    import: None,
+                },
+            );
             self.identifier(id);
         }
         self.function(&f.base, None, &f.params, Body::Block(&f.body));
@@ -507,16 +599,32 @@ impl Builder {
     fn class_declaration(&mut self, c: &ClassDeclaration) {
         if let Some(id) = &c.id {
             let scope = self.current();
-            self.declare(scope, id, Declared { kind: BindingKind::Let, declaration_type: "ClassDeclaration", import: None });
+            self.declare(
+                scope,
+                id,
+                Declared {
+                    kind: BindingKind::Let,
+                    declaration_type: "ClassDeclaration",
+                    import: None,
+                },
+            );
         }
-        let name = c.id.as_ref().map(|id| (id, "ClassDeclaration", BindingKind::Let));
+        let name =
+            c.id.as_ref()
+                .map(|id| (id, "ClassDeclaration", BindingKind::Let));
         self.class(&c.base, name, c.super_class.as_deref(), &c.body);
     }
 
     /// A function's own scope, with its name (for a function expression), its
     /// parameters and its body. A destructuring parameter is a scope of its
     /// own in Babel, holding no bindings.
-    fn function(&mut self, node: &BaseNode, local: Option<(&Identifier, &str)>, params: &[PatternLike], body: Body<'_>) {
+    fn function(
+        &mut self,
+        node: &BaseNode,
+        local: Option<(&Identifier, &str)>,
+        params: &[PatternLike],
+        body: Body<'_>,
+    ) {
         self.enter(node, ScopeKind::Function);
         let scope = self.current();
         // Babel registers the parameters first, then a function expression's
@@ -526,7 +634,15 @@ impl Builder {
             self.declare_pattern(scope, param, &BindingKind::Param, declaration_type);
         }
         if let Some((name, declaration_type)) = local {
-            self.declare(scope, name, Declared { kind: BindingKind::Local, declaration_type, import: None });
+            self.declare(
+                scope,
+                name,
+                Declared {
+                    kind: BindingKind::Local,
+                    declaration_type,
+                    import: None,
+                },
+            );
             self.identifier(name);
         }
         for param in params {
@@ -572,7 +688,15 @@ impl Builder {
         self.enter(node, ScopeKind::Class);
         if let Some((name, declaration_type, kind)) = name {
             let scope = self.current();
-            self.declare(scope, name, Declared { kind, declaration_type, import: None });
+            self.declare(
+                scope,
+                name,
+                Declared {
+                    kind,
+                    declaration_type,
+                    import: None,
+                },
+            );
             self.identifier(name);
         }
         self.leave();
@@ -720,7 +844,9 @@ impl Builder {
             }
             Expression::SpreadElement(e) => self.expression(&e.argument),
             Expression::ClassExpression(c) => {
-                let name = c.id.as_ref().map(|id| (id, "ClassExpression", BindingKind::Local));
+                let name =
+                    c.id.as_ref()
+                        .map(|id| (id, "ClassExpression", BindingKind::Local));
                 self.class(&c.base, name, c.super_class.as_deref(), &c.body);
             }
             Expression::ParenthesizedExpression(e) => self.expression(&e.expression),
@@ -755,7 +881,9 @@ impl Builder {
         for attribute in &element.opening_element.attributes {
             match attribute {
                 JSXAttributeItem::JSXAttribute(a) => match &a.value {
-                    Some(JSXAttributeValue::JSXExpressionContainer(c)) => self.jsx_container(&c.expression),
+                    Some(JSXAttributeValue::JSXExpressionContainer(c)) => {
+                        self.jsx_container(&c.expression);
+                    }
                     Some(JSXAttributeValue::JSXElement(e)) => self.jsx_element(e),
                     Some(JSXAttributeValue::JSXFragment(f)) => self.jsx_children(&f.children),
                     _ => {}
@@ -784,7 +912,9 @@ impl Builder {
     /// The identifier at the root of `<a.b.C>`.
     fn jsx_member_object(&mut self, member: &JSXMemberExpression) {
         match member.object.as_ref() {
-            JSXMemberExprObject::JSXIdentifier(identifier) => self.reference(&identifier.base, &identifier.name),
+            JSXMemberExprObject::JSXIdentifier(identifier) => {
+                self.reference(&identifier.base, &identifier.name);
+            }
             JSXMemberExprObject::JSXMemberExpression(inner) => self.jsx_member_object(inner),
         }
     }
@@ -794,7 +924,9 @@ impl Builder {
             match child {
                 JSXChild::JSXElement(element) => self.jsx_element(element),
                 JSXChild::JSXFragment(fragment) => self.jsx_children(&fragment.children),
-                JSXChild::JSXExpressionContainer(container) => self.jsx_container(&container.expression),
+                JSXChild::JSXExpressionContainer(container) => {
+                    self.jsx_container(&container.expression);
+                }
                 JSXChild::JSXSpreadChild(spread) => self.expression(&spread.expression),
                 JSXChild::JSXText(_) => {}
             }
@@ -839,7 +971,11 @@ fn declared_names(declaration: &Declaration) -> Vec<&str> {
                     }
                 }
             }
-            PatternLike::ArrayPattern(a) => a.elements.iter().flatten().for_each(|e| pattern_names(e, out)),
+            PatternLike::ArrayPattern(a) => a
+                .elements
+                .iter()
+                .flatten()
+                .for_each(|e| pattern_names(e, out)),
             PatternLike::AssignmentPattern(a) => pattern_names(&a.left, out),
             PatternLike::RestElement(r) => pattern_names(&r.argument, out),
             _ => {}
@@ -849,7 +985,10 @@ fn declared_names(declaration: &Declaration) -> Vec<&str> {
     match declaration {
         Declaration::FunctionDeclaration(f) => out.extend(f.id.as_ref().map(|i| i.name.as_str())),
         Declaration::ClassDeclaration(c) => out.extend(c.id.as_ref().map(|i| i.name.as_str())),
-        Declaration::VariableDeclaration(v) => v.declarations.iter().for_each(|d| pattern_names(&d.id, &mut out)),
+        Declaration::VariableDeclaration(v) => v
+            .declarations
+            .iter()
+            .for_each(|d| pattern_names(&d.id, &mut out)),
         _ => {}
     }
     out

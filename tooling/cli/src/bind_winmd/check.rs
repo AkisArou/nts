@@ -39,7 +39,11 @@ impl Probe {
     }
 }
 
-pub(crate) fn against_headers(bindings: &mut [Binding], headers: &[String], clang_args: &[String]) -> Result<()> {
+pub(crate) fn against_headers(
+    bindings: &mut [Binding],
+    headers: &[String],
+    clang_args: &[String],
+) -> Result<()> {
     let mut dropped: BTreeSet<Name> = BTreeSet::new();
     for binding in bindings.iter_mut() {
         let probe = probe(binding, headers);
@@ -76,16 +80,24 @@ fn probe(binding: &Binding, headers: &[String]) -> Probe {
                 "__builtin_types_compatible_p(__typeof__((({record_c} *)0)->{field}[0]), {element}) && \
                  sizeof((({record_c} *)0)->{field}) / sizeof((({record_c} *)0)->{field}[0]) == {count}"
             ),
-            None => format!("__builtin_types_compatible_p(__typeof__((({record_c} *)0)->{field}), {field_c})"),
+            None => format!(
+                "__builtin_types_compatible_p(__typeof__((({record_c} *)0)->{field}), {field_c})"
+            ),
         };
-        probe.line(&format!("_Static_assert({assertion}, \"{record}.{field}\");"), Some(Line::Field(record.clone())));
+        probe.line(
+            &format!("_Static_assert({assertion}, \"{record}.{field}\");"),
+            Some(Line::Field(record.clone())),
+        );
     }
     for constant in &binding.constants {
         // Only a macro can be compared here: an enumerator, or a value the
         // headers do not define, is Microsoft's word, which is the source.
         probe.line(&format!("#ifdef {}", constant.name), None);
         probe.line(
-            &format!("_Static_assert((long long)({0}) == (long long)({1}), \"{0}\");", constant.name, constant.value),
+            &format!(
+                "_Static_assert((long long)({0}) == (long long)({1}), \"{0}\");",
+                constant.name, constant.value
+            ),
             Some(Line::Constant(constant.name.clone())),
         );
         probe.line("#endif", None);
@@ -120,13 +132,27 @@ fn compile(namespace: &str, text: &str, clang_args: &[String]) -> Result<String>
 
 /// Remove from `binding` what an error line names. An error on no assertion
 /// line means the headers themselves did not compile, and says so.
-fn drop_rejected(binding: &mut Binding, stderr: &str, lines: &BTreeMap<usize, Line>, dropped: &mut BTreeSet<Name>) -> Result<()> {
+fn drop_rejected(
+    binding: &mut Binding,
+    stderr: &str,
+    lines: &BTreeMap<usize, Line>,
+    dropped: &mut BTreeSet<Name>,
+) -> Result<()> {
     let file = format!("{}.c", binding.namespace.replace('.', "_"));
     let mut functions = BTreeSet::new();
     let mut records = BTreeSet::new();
     let mut constants = BTreeSet::new();
-    for error in stderr.lines().filter(|line| line.contains(": error:") && line.contains(&file)) {
-        let Some(number) = error.split(':').nth(1).and_then(|n| n.parse::<usize>().ok()) else { continue };
+    for error in stderr
+        .lines()
+        .filter(|line| line.contains(": error:") && line.contains(&file))
+    {
+        let Some(number) = error
+            .split(':')
+            .nth(1)
+            .and_then(|n| n.parse::<usize>().ok())
+        else {
+            continue;
+        };
         match lines.get(&number) {
             Some(Line::Function(name)) => functions.insert(name.clone()),
             Some(Line::Field(record)) => records.insert(record.clone()),
@@ -136,21 +162,30 @@ fn drop_rejected(binding: &mut Binding, stderr: &str, lines: &BTreeMap<usize, Li
     }
     for record in &records {
         dropped.insert((binding.namespace.clone(), record.clone()));
-        binding.refused.push((record.clone(), "a field's type disagrees with the header".into()));
+        binding.refused.push((
+            record.clone(),
+            "a field's type disagrees with the header".into(),
+        ));
     }
     binding.types.retain(|decl| !records.contains(decl.name()));
     let mut refused = Vec::new();
     binding.functions.retain(|function| {
         let keep = !functions.contains(&function.name);
         if !keep {
-            refused.push((function.name.clone(), "its type disagrees with the header".into()));
+            refused.push((
+                function.name.clone(),
+                "its type disagrees with the header".into(),
+            ));
         }
         keep
     });
     binding.constants.retain(|constant| {
         let keep = !constants.contains(&constant.name);
         if !keep {
-            refused.push((constant.name.clone(), "its value disagrees with the header".into()));
+            refused.push((
+                constant.name.clone(),
+                "its value disagrees with the header".into(),
+            ));
         }
         keep
     });
@@ -166,17 +201,25 @@ fn cascade(bindings: &mut [Binding], mut dropped: BTreeSet<Name>) {
             let namespace = binding.namespace.clone();
             let mut refused = Vec::new();
             binding.types.retain(|decl| {
-                let named = decl.uses().is_some_and(|uses| uses.iter().any(|u| dropped.contains(u)));
+                let named = decl
+                    .uses()
+                    .is_some_and(|uses| uses.iter().any(|u| dropped.contains(u)));
                 if named {
                     more.insert((namespace.clone(), decl.name().to_owned()));
-                    refused.push((decl.name().to_owned(), "it names a type that was dropped".into()));
+                    refused.push((
+                        decl.name().to_owned(),
+                        "it names a type that was dropped".into(),
+                    ));
                 }
                 !named
             });
             binding.functions.retain(|function| {
                 let named = function.uses.iter().any(|u| dropped.contains(u));
                 if named {
-                    refused.push((function.name.clone(), "it names a type that was dropped".into()));
+                    refused.push((
+                        function.name.clone(),
+                        "it names a type that was dropped".into(),
+                    ));
                 }
                 !named
             });

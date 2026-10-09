@@ -25,19 +25,38 @@ pub struct Session {
 impl Session {
     /// Starts tsgo and loads the project `tsconfig` names.
     pub fn open(tsconfig: &Utf8Path) -> Result<Self> {
-        let executable = tsgo::locate().ok_or_else(|| anyhow!("no tsgo: set NTS_TSGO, or build it (target/tsgo)"))?;
-        let directory = tsconfig.parent().context("a tsconfig path has a directory")?.to_owned();
-        let mut client = Client::spawn(&executable, &directory).with_context(|| format!("cannot start {executable}"))?;
+        let executable = tsgo::locate()
+            .ok_or_else(|| anyhow!("no tsgo: set NTS_TSGO, or build it (target/tsgo)"))?;
+        let directory = tsconfig
+            .parent()
+            .context("a tsconfig path has a directory")?
+            .to_owned();
+        let mut client = Client::spawn(&executable, &directory)
+            .with_context(|| format!("cannot start {executable}"))?;
         client.initialize().context("tsgo did not initialise")?;
-        let response = client.open_project(tsconfig).with_context(|| format!("tsgo could not load {tsconfig}"))?;
-        let project = response.projects.first().map(|p| p.id.clone()).with_context(|| format!("{tsconfig} opened no project"))?;
-        Ok(Self { client, snapshot: response.snapshot, project, directory })
+        let response = client
+            .open_project(tsconfig)
+            .with_context(|| format!("tsgo could not load {tsconfig}"))?;
+        let project = response
+            .projects
+            .first()
+            .map(|p| p.id.clone())
+            .with_context(|| format!("{tsconfig} opened no project"))?;
+        Ok(Self {
+            client,
+            snapshot: response.snapshot,
+            project,
+            directory,
+        })
     }
 
     /// The project's own TypeScript sources: under the project directory, not
     /// declarations, not reached through `node_modules`.
     pub fn own_sources(&mut self) -> Result<Vec<Utf8PathBuf>> {
-        let names = self.client.source_file_names(self.snapshot, &self.project).context("tsgo listed no files")?;
+        let names = self
+            .client
+            .source_file_names(self.snapshot, &self.project)
+            .context("tsgo listed no files")?;
         let mut own: Vec<Utf8PathBuf> = names
             .into_iter()
             .map(Utf8PathBuf::from)
@@ -55,14 +74,29 @@ impl Session {
     /// The checker's type at node `node` of `tree` (the file at `path`),
     /// printed as TypeScript written at that node: what the frontend's
     /// source transforms are answered, from this session.
-    pub fn type_text(&mut self, path: &Utf8Path, tree: &EncodedSourceFile, node: NodeId) -> Option<String> {
-        nts_frontend_ts::tsgo::transform::type_at(&mut self.client, self.snapshot, &self.project, path, tree, node)
+    pub fn type_text(
+        &mut self,
+        path: &Utf8Path,
+        tree: &EncodedSourceFile,
+        node: NodeId,
+    ) -> Option<String> {
+        nts_frontend_ts::tsgo::transform::type_at(
+            &mut self.client,
+            self.snapshot,
+            &self.project,
+            path,
+            tree,
+            node,
+        )
     }
 
     /// One file's syntax tree. Its nodes are numbered from 0, the `SourceFile`,
     /// and a node's tsgo handle is its number plus one (tsgo's index 0 is nil).
     pub fn file(&mut self, path: &Utf8Path) -> Result<EncodedSourceFile> {
-        let payload = self.client.source_file(self.snapshot, &self.project, path).with_context(|| format!("tsgo has no {path}"))?;
+        let payload = self
+            .client
+            .source_file(self.snapshot, &self.project, path)
+            .with_context(|| format!("tsgo has no {path}"))?;
         decode(&payload, SourceId(0)).map_err(|error| anyhow!("{path} does not decode: {error}"))
     }
 }

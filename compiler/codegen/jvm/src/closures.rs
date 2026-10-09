@@ -81,7 +81,10 @@ fn closure_layout<'a>(program: &'a Program, ty: &HirType) -> Option<&'a nts_core
 }
 
 /// The layout `layout` names as its base, if it names one.
-fn base_of<'a>(program: &'a Program, layout: &nts_core::hir::Layout) -> Option<&'a nts_core::hir::Layout> {
+fn base_of<'a>(
+    program: &'a Program,
+    layout: &nts_core::hir::Layout,
+) -> Option<&'a nts_core::hir::Layout> {
     crate::hierarchy::jvm_base(program, layout).and_then(|at| program.layouts.get(at))
 }
 
@@ -93,7 +96,13 @@ fn base_of<'a>(program: &'a Program, layout: &nts_core::hir::Layout) -> Option<&
 fn edges(terminator: &Terminator) -> Vec<(BlockId, &Vec<ValueId>)> {
     match terminator {
         Terminator::Jump { target, args } => vec![(*target, args)],
-        Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
+        Terminator::Branch {
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+            ..
+        } => {
             vec![(*then_target, then_args), (*else_target, else_args)]
         }
         Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
@@ -159,7 +168,11 @@ pub fn joined(package: &str, program: &Program, func: &Func) -> FxHashMap<ValueI
             if types::class_name(package, layout) != wanted {
                 differs = true;
             }
-            if base_of(program, layout).map(|l| types::class_name(package, l)).as_deref() != Some(shared.as_str()) {
+            if base_of(program, layout)
+                .map(|l| types::class_name(package, l))
+                .as_deref()
+                != Some(shared.as_str())
+            {
                 agree = false;
                 break;
             }
@@ -176,5 +189,7 @@ pub(crate) fn held_as(
     widened: &FxHashMap<ValueId, String>,
     value: ValueId,
 ) -> Option<nts_jvm_emitter::VType> {
-    widened.get(&value).map(|name| nts_jvm_emitter::VType::Object(name.clone()))
+    widened
+        .get(&value)
+        .map(|name| nts_jvm_emitter::VType::Object(name.clone()))
 }

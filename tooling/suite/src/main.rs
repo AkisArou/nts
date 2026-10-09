@@ -495,8 +495,9 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
     let workers = workers(files.len());
     let done = std::sync::atomic::AtomicUsize::new(0);
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let results: Vec<std::sync::Mutex<Option<Examined>>> =
-        (0..files.len()).map(|_| std::sync::Mutex::new(None)).collect();
+    let results: Vec<std::sync::Mutex<Option<Examined>>> = (0..files.len())
+        .map(|_| std::sync::Mutex::new(None))
+        .collect();
 
     std::thread::scope(|scope| -> Result<()> {
         let mut handles = Vec::new();
@@ -511,8 +512,9 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
                         return;
                     };
                     let examined = examine(file, &workspace, tsgo);
-                    *results[at].lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
-                        Some(examined);
+                    *results[at]
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(examined);
                     let count = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                     if count % 25 == 0 {
                         println!("  {count} files...");
@@ -521,7 +523,9 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
             }));
         }
         for handle in handles {
-            handle.join().map_err(|_| anyhow::anyhow!("a worker panicked"))?;
+            handle
+                .join()
+                .map_err(|_| anyhow::anyhow!("a worker panicked"))?;
         }
         Ok(())
     })?;
@@ -540,7 +544,10 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         blocked: Vec::new(),
     };
     for (at, slot) in results.into_iter().enumerate() {
-        let Some(examined) = slot.into_inner().unwrap_or_else(std::sync::PoisonError::into_inner) else {
+        let Some(examined) = slot
+            .into_inner()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        else {
             continue;
         };
         for note in examined.notes {
@@ -670,7 +677,9 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
          README wherever it is run from, including a sealed worktree — the \
          destination is chosen when the binary is built, not when it runs. \
          Regenerate with `cargo run --release -p nts-suite`.</sub>\n",
-        env!("CARGO_MANIFEST_DIR").rsplit_once("/tooling/").map_or("?", |(root, _)| root)
+        env!("CARGO_MANIFEST_DIR")
+            .rsplit_once("/tooling/")
+            .map_or("?", |(root, _)| root)
     );
     let _ = writeln!(
         out,

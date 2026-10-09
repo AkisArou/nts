@@ -523,7 +523,10 @@ fn loop_conditions_carry_their_writes_and_publish_the_final_write() {
         return;
     };
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
-    assert_eq!(lowered.program.funcs.iter().filter(|f| f.exported).count(), 10);
+    assert_eq!(
+        lowered.program.funcs.iter().filter(|f| f.exported).count(),
+        10
+    );
     hir::verify::verify(&lowered.program).expect("every loop has valid SSA");
     for name in ["whilePostfix", "forPostfix", "doContinue"] {
         let f = func(&lowered, name);
@@ -533,12 +536,17 @@ fn loop_conditions_carry_their_writes_and_publish_the_final_write() {
         assert_eq!(args.len(), 2, "{name} carries both count and steps");
     }
     let zero = func(&lowered, "zeroIterations");
-    assert!(zero.blocks.iter().any(|block| {
-        let Terminator::Branch { else_args, .. } = &block.terminator else {
-            return false;
-        };
-        else_args.iter().any(|arg| matches!(zero.value(*arg).kind, OpKind::Binary { op: BinOp::Add, .. }))
-    }), "even a false first condition must publish its increment");
+    assert!(
+        zero.blocks.iter().any(|block| {
+            let Terminator::Branch { else_args, .. } = &block.terminator else {
+                return false;
+            };
+            else_args
+                .iter()
+                .any(|arg| matches!(zero.value(*arg).kind, OpKind::Binary { op: BinOp::Add, .. }))
+        }),
+        "even a false first condition must publish its increment"
+    );
 }
 
 #[test]
@@ -716,9 +724,14 @@ fn a_finally_is_lowered_once_per_way_out() {
     let tens = loop_through
         .values
         .iter()
-        .filter(|op| matches!(op.kind, OpKind::ConstFloat(ten) if (ten - 10.0).abs() < f64::EPSILON))
+        .filter(
+            |op| matches!(op.kind, OpKind::ConstFloat(ten) if (ten - 10.0).abs() < f64::EPSILON),
+        )
         .count();
-    assert_eq!(tens, 3, "one copy of the `finally` per way out of the `try`");
+    assert_eq!(
+        tens, 3,
+        "one copy of the `finally` per way out of the `try`"
+    );
 }
 
 #[test]
@@ -744,7 +757,9 @@ fn a_finally_that_returns_replaces_the_return() {
         .collect();
     assert!(!returned.is_empty(), "the function returns something");
     assert!(
-        returned.iter().all(|number| (number - 99.0).abs() < f64::EPSILON),
+        returned
+            .iter()
+            .all(|number| (number - 99.0).abs() < f64::EPSILON),
         "every `return` is the `finally`'s: {returned:?}"
     );
 }
@@ -982,7 +997,15 @@ fn a_dispatched_call_keeps_the_return_its_declaration_promises() {
     let call = optional
         .values
         .iter()
-        .position(|op| matches!(op.kind, OpKind::Call { callee: Callee::Closure { .. }, .. }))
+        .position(|op| {
+            matches!(
+                op.kind,
+                OpKind::Call {
+                    callee: Callee::Closure { .. },
+                    ..
+                }
+            )
+        })
         .expect("`f?.(x)` calls through the closure table");
     let answer = optional
         .values
@@ -1103,7 +1126,10 @@ fn a_conditional_write_in_a_loop_reaches_the_loop_header() {
     // was not collected.
     let f = func(&lowered, "orInALoop");
     let Terminator::Jump { args, .. } = &f.entry().terminator else {
-        panic!("the entry should jump into the header, got {:?}", f.entry().terminator);
+        panic!(
+            "the entry should jump into the header, got {:?}",
+            f.entry().terminator
+        );
     };
     assert_eq!(
         args.len(),
@@ -1201,7 +1227,12 @@ fn a_user_iterable_is_stepped_once_per_iteration() {
             )
         })
         .collect();
-    assert_eq!(steps.len(), 1, "one `next()` per iteration, got {}", steps.len());
+    assert_eq!(
+        steps.len(),
+        1,
+        "one `next()` per iteration, got {}",
+        steps.len()
+    );
 
     // And the iterator itself is built once, outside the loop -- the entry
     // block runs exactly once per call.
@@ -1216,7 +1247,10 @@ fn a_user_iterable_is_stepped_once_per_iteration() {
             )
         })
         .count();
-    assert_eq!(built, 1, "`[Symbol.iterator]()` is called once, before the loop");
+    assert_eq!(
+        built, 1,
+        "`[Symbol.iterator]()` is called once, before the loop"
+    );
 }
 
 #[test]
@@ -1240,9 +1274,13 @@ fn a_protocol_loop_carries_no_cursor() {
         .max()
         .unwrap_or(0);
     assert_eq!(
-        carried, 1,
+        carried,
+        1,
         "only the accumulator is carried; a cursor would make it two: {:?}",
-        func.blocks.iter().map(|b| b.params.len()).collect::<Vec<_>>(),
+        func.blocks
+            .iter()
+            .map(|b| b.params.len())
+            .collect::<Vec<_>>(),
     );
 }
 
@@ -1280,16 +1318,14 @@ fn a_parameter_property_stores_the_field_before_the_body() {
     // If the store were emitted after the body this reads an uninitialised slot
     // and the answer is wrong rather than the program invalid.
     let mixed = func(&lowered, "Blended#constructor");
-    let first_store = mixed
-        .entry()
-        .ops
-        .iter()
-        .position(|value| matches!(mixed.values[value.0 as usize].kind, OpKind::FieldSet { .. }));
-    let first_read = mixed
-        .entry()
-        .ops
-        .iter()
-        .position(|value| matches!(mixed.values[value.0 as usize].kind, OpKind::FieldGet { .. }));
+    let first_store =
+        mixed.entry().ops.iter().position(|value| {
+            matches!(mixed.values[value.0 as usize].kind, OpKind::FieldSet { .. })
+        });
+    let first_read =
+        mixed.entry().ops.iter().position(|value| {
+            matches!(mixed.values[value.0 as usize].kind, OpKind::FieldGet { .. })
+        });
     assert!(
         matches!((first_store, first_read), (Some(store), Some(read)) if store < read),
         "the store must precede the body's read: store {first_store:?}, read {first_read:?}",
@@ -1321,9 +1357,9 @@ fn an_enum_member_is_an_immediate_and_not_a_lookup() {
     // `Red = 1`, `Green = 2`, `Blue = 4` all present as immediates.
     for want in [1.0, 2.0, 4.0] {
         assert!(
-            func.values
-                .iter()
-                .any(|op| matches!(op.kind, OpKind::ConstFloat(v) if (v - want).abs() < f64::EPSILON)),
+            func.values.iter().any(
+                |op| matches!(op.kind, OpKind::ConstFloat(v) if (v - want).abs() < f64::EPSILON)
+            ),
             "no immediate for the member valued {want}",
         );
     }
@@ -1396,9 +1432,10 @@ fn an_enum_folds_through_the_alias_an_import_names() {
     );
 
     let holds_float = |name: &str, want: f64| {
-        func(&lowered, name).values.iter().any(
-            |op| matches!(op.kind, OpKind::ConstFloat(v) if (v - want).abs() < f64::EPSILON),
-        )
+        func(&lowered, name)
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::ConstFloat(v) if (v - want).abs() < f64::EPSILON))
     };
     let holds_string = |name: &str, want: &str| {
         func(&lowered, name)

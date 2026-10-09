@@ -113,8 +113,7 @@ fn match_sources(
         .sources
         .iter()
         .filter(|source| {
-            std::fs::canonicalize(&source.display_path)
-                .is_ok_and(|at| named.contains(&at))
+            std::fs::canonicalize(&source.display_path).is_ok_and(|at| named.contains(&at))
         })
         .map(|source| source.uri.clone())
         .collect()

@@ -38,10 +38,16 @@ fn repository() -> PathBuf {
 fn runtime_jar() -> PathBuf {
     static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
+            || repository().join("runtime/jvm/nts-runtime.jar"),
+            PathBuf::from,
+        );
         let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+        if std::fs::copy(&source, &mine).is_ok() {
+            mine
+        } else {
+            source
+        }
     })
     .clone()
 }
@@ -53,7 +59,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -62,7 +72,9 @@ fn tool(name: &str) -> Option<PathBuf> {
 
 #[test]
 fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-env-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -98,7 +110,7 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
         "the environment test failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-        // The **count**, not only the zero. A suite that stopped running half its
+    // The **count**, not only the zero. A suite that stopped running half its
     // cases reports no failures perfectly well, which is the assertion
     // `android.rs` already makes about `PASS: 11` and the one every other
     // driver here was missing.
@@ -120,7 +132,9 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
 /// threw as a string.
 #[test]
 fn a_rejection_keeps_the_tag_it_arrived_with() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let root = repository();
     let jar = runtime_jar();
     let dir = std::env::temp_dir().join(format!("nts-reject-{}", std::process::id()));
@@ -171,7 +185,9 @@ fn a_rejection_keeps_the_tag_it_arrived_with() {
 /// `drain` with work it will never be told about.
 #[test]
 fn one_default_environment_and_one_lane_owns_it() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let root = repository();
     let jar = runtime_jar();
     let dir = std::env::temp_dir().join(format!("nts-default-lane-{}", std::process::id()));
@@ -222,7 +238,9 @@ fn one_default_environment_and_one_lane_owns_it() {
 /// and never finishes closing.
 #[test]
 fn closing_under_arriving_completions_loses_nothing() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-close-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -257,7 +275,7 @@ fn closing_under_arriving_completions_loses_nothing() {
         "the close race failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-        // The **count**, not only the zero. A suite that stopped running half its
+    // The **count**, not only the zero. A suite that stopped running half its
     // cases reports no failures perfectly well, which is the assertion
     // `android.rs` already makes about `PASS: 11` and the one every other
     // driver here was missing.

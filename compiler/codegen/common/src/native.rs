@@ -1,8 +1,11 @@
 //! One native-layout inventory for both emitters. C tag collisions are errors,
 //! never resolved by whichever declaration happened to be visited first.
+use nts_core::hir::{
+    HirType, Program,
+    native::{Pointee, Record, RecordKind},
+};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use nts_core::hir::{HirType, Program, native::{Pointee, Record, RecordKind}};
 
 #[derive(Debug, Default)]
 pub struct Layouts {
@@ -27,10 +30,7 @@ impl Layouts {
             // names no tag either. Its *width* matters to whoever emits the
             // member, not to this walk, which is about which structs need a
             // definition.
-            Pointee::Scalar(_)
-            | Pointee::Bits { .. }
-            | Pointee::Void
-            | Pointee::FnPointer(_) => {}
+            Pointee::Scalar(_) | Pointee::Bits { .. } | Pointee::Void | Pointee::FnPointer(_) => {}
 
             // Each names whatever it is a view of, so the record any of them
             // reaches still needs its definition emitted. One arm rather than
@@ -47,7 +47,12 @@ impl Layouts {
             Pointee::Record(layout) => {
                 self.tag(&layout.name, layout.kind)?;
                 if let Some(existing) = self.structs.get(&layout.name) {
-                    if existing != layout { return Err(format!("conflicting native layouts for C struct `{}`", layout.name)); }
+                    if existing != layout {
+                        return Err(format!(
+                            "conflicting native layouts for C struct `{}`",
+                            layout.name
+                        ));
+                    }
                     return Ok(());
                 }
                 self.structs.insert(layout.name.clone(), layout.clone());
@@ -55,8 +60,13 @@ impl Layouts {
                     // A reserved word is spelled with a trailing `_`
                     // (`native_member`); anything else that is no identifier
                     // stays refused.
-                    if !super::symbols::is_native_c_identifier(&super::symbols::native_member(&field.name)) {
-                        return Err(format!("native field `{}` is not a C member identifier", field.name));
+                    if !super::symbols::is_native_c_identifier(&super::symbols::native_member(
+                        &field.name,
+                    )) {
+                        return Err(format!(
+                            "native field `{}` is not a C member identifier",
+                            field.name
+                        ));
                     }
                     self.visit(&field.ty)?;
                 }
@@ -88,28 +98,66 @@ impl Layouts {
 /// # Errors
 /// A tag has conflicting layouts, or a name cannot be represented in C.
 pub fn layouts(program: &Program) -> Result<Layouts, String> {
-    let storage = program.funcs.iter().flat_map(|f| &f.values).any(|v| matches!(v.kind,
-        nts_core::hir::OpKind::NativeMalloc { .. } | nts_core::hir::OpKind::NativeFree { .. }));
+    let storage = program.funcs.iter().flat_map(|f| &f.values).any(|v| {
+        matches!(
+            v.kind,
+            nts_core::hir::OpKind::NativeMalloc { .. } | nts_core::hir::OpKind::NativeFree { .. }
+        )
+    });
     if storage {
-        for op in program.funcs.iter().flat_map(|f| f.blocks.iter().flat_map(|b| b.ops.iter().map(|v| f.value(*v)))) {
-            if let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } = &op.kind
-                && matches!(target.name.as_str(), "malloc" | "free" | "nts_native_malloc") {
-                return Err(format!("native `{}` collides with the compiler's memory operations; use c:stdlib", target.name));
+        for op in program.funcs.iter().flat_map(|f| {
+            f.blocks
+                .iter()
+                .flat_map(|b| b.ops.iter().map(|v| f.value(*v)))
+        }) {
+            if let nts_core::hir::OpKind::Call {
+                callee: nts_core::hir::Callee::Native(target),
+                ..
+            } = &op.kind
+                && matches!(
+                    target.name.as_str(),
+                    "malloc" | "free" | "nts_native_malloc"
+                )
+            {
+                return Err(format!(
+                    "native `{}` collides with the compiler's memory operations; use c:stdlib",
+                    target.name
+                ));
             }
         }
     }
     let mut found = Layouts::default();
-    for ty in program.funcs.iter().flat_map(|func| {
-        std::iter::once(&func.return_type).chain(func.params.iter().map(|p| &p.ty)).chain(func.values.iter().map(|v| &v.ty))
-    }).chain(program.layouts.iter().flat_map(|l| l.fields.iter().map(|f| &f.ty)))
-        .chain(program.globals.iter().map(|g| &g.ty)) {
-        if let HirType::NativePointer(pointee) = ty { found.visit(pointee)?; }
+    for ty in program
+        .funcs
+        .iter()
+        .flat_map(|func| {
+            std::iter::once(&func.return_type)
+                .chain(func.params.iter().map(|p| &p.ty))
+                .chain(func.values.iter().map(|v| &v.ty))
+        })
+        .chain(
+            program
+                .layouts
+                .iter()
+                .flat_map(|l| l.fields.iter().map(|f| &f.ty)),
+        )
+        .chain(program.globals.iter().map(|g| &g.ty))
+    {
+        if let HirType::NativePointer(pointee) = ty {
+            found.visit(pointee)?;
+        }
     }
     // A record a composed class's forwarder passes through by value, which no
     // value of the program need hold: the forwarder's C still spells it.
-    let forwarded = program.foreign_classes.iter().filter_map(|class| class.composition.as_ref()).flat_map(|composition| &composition.forwarded);
+    let forwarded = program
+        .foreign_classes
+        .iter()
+        .filter_map(|class| class.composition.as_ref())
+        .flat_map(|composition| &composition.forwarded);
     for ty in forwarded.flat_map(|forward| &forward.signature.parameters) {
-        if let nts_core::hir::native::Type::Record(record) = ty { found.visit(&Pointee::Record(record.clone()))?; }
+        if let nts_core::hir::native::Type::Record(record) = ty {
+            found.visit(&Pointee::Record(record.clone()))?;
+        }
     }
     Ok(found)
 }

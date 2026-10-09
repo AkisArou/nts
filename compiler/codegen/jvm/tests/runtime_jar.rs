@@ -241,7 +241,11 @@ fn the_jar_names_no_method_android_spells_differently() {
         .lines()
         .map(|line| line.trim_end_matches(".class").replace('/', "."))
         .collect();
-    assert!(classes.len() > 20, "the jar listed {} classes", classes.len());
+    assert!(
+        classes.len() > 20,
+        "the jar listed {} classes",
+        classes.len()
+    );
 
     let listed = Command::new(&javap)
         .arg("-v")
@@ -290,7 +294,11 @@ fn the_jar_names_no_method_android_spells_differently() {
 fn d8_accepts_the_runtime_jar() {
     let root = root();
     let jar = root.join("runtime/jvm/nts-runtime.jar");
-    assert!(jar.exists(), "the jar this test is about is missing: {}", jar.display());
+    assert!(
+        jar.exists(),
+        "the jar this test is about is missing: {}",
+        jar.display()
+    );
 
     let Some(sdk) = std::env::var("ANDROID_HOME")
         .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
@@ -311,7 +319,13 @@ fn d8_accepts_the_runtime_jar() {
             found.sort();
             found
         })
-        .and_then(|found| found.into_iter().rev().map(|dir| dir.join("d8")).find(|d8| d8.exists()))
+        .and_then(|found| {
+            found
+                .into_iter()
+                .rev()
+                .map(|dir| dir.join("d8"))
+                .find(|d8| d8.exists())
+        })
     else {
         eprintln!("SKIP d8_accepts_the_runtime_jar: no build-tools with d8");
         return;

@@ -150,9 +150,7 @@ impl Manifest {
         let name = &self.name;
 
         match &self.exports {
-            Some(serde_json::Value::Object(map))
-                if map.keys().any(|key| key.starts_with('.')) =>
-            {
+            Some(serde_json::Value::Object(map)) if map.keys().any(|key| key.starts_with('.')) => {
                 for (key, value) in map {
                     if !key.starts_with('.') || key.contains('*') {
                         continue;
@@ -266,9 +264,7 @@ mod tests {
 
     #[test]
     fn conditions_without_subpaths_are_the_root_specifier() {
-        let m = manifest(
-            r#"{"name":"p","exports":{"types":"./d.d.ts","import":"./dist/i.js"}}"#,
-        );
+        let m = manifest(r#"{"name":"p","exports":{"types":"./d.d.ts","import":"./dist/i.js"}}"#);
         let entries = m.entry_points();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].specifier, "p");
@@ -277,9 +273,7 @@ mod tests {
 
     #[test]
     fn subpaths_become_their_own_specifiers() {
-        let m = manifest(
-            r#"{"name":"z","exports":{".":"./dist/index.js","./v4":"./dist/v4.js"}}"#,
-        );
+        let m = manifest(r#"{"name":"z","exports":{".":"./dist/index.js","./v4":"./dist/v4.js"}}"#);
         let specifiers: Vec<_> = m.entry_points().into_iter().map(|e| e.specifier).collect();
         assert_eq!(specifiers, vec!["z".to_owned(), "z/v4".to_owned()]);
     }

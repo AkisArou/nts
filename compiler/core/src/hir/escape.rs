@@ -332,7 +332,6 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     let handed_back: Vec<FxHashSet<u32>> = program.funcs.iter().map(returned_params).collect();
     let put_into: Vec<Vec<(u32, u32)>> = program.funcs.iter().map(stores_into).collect();
 
-
     // Every parameter starts held, and is released to `escapes` by evidence.
     let mut escaping_params: Vec<FxHashSet<u32>> =
         program.funcs.iter().map(|_| FxHashSet::default()).collect();
@@ -365,10 +364,16 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
 
         let mut changed = false;
         for (index, func) in program.funcs.iter().enumerate() {
-            for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate()
+            for (slot, parameter) in func
+                .parameter_values()
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
                 .filter_map(|(slot, parameter)| parameter.map(|parameter| (slot, parameter)))
             {
-                let Ok(slot) = u32::try_from(slot) else { continue };
+                let Ok(slot) = u32::try_from(slot) else {
+                    continue;
+                };
                 if results[index].escapes(parameter) && escaping_params[index].insert(slot) {
                     changed = true;
                 }
@@ -592,15 +597,15 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                     let confinable = matches!(
                         func.values[container.0 as usize].kind,
                         OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-                    ) && (!repeated.contains(stored) || repeated.contains(container))
+                    ) && (!repeated.contains(stored)
+                        || repeated.contains(container))
                         && !buffers(&func.values[container.0 as usize].ty, of);
                     // A parameter stored into a parameter's field is published
                     // rather than escaped: see `stores_into`. The caller knows
                     // whether the container outlives anything and this does not.
-                    let deferred_to_caller = matches!(
-                        func.values[container.0 as usize].kind,
-                        OpKind::Param(_)
-                    ) && matches!(func.values[stored.0 as usize].kind, OpKind::Param(_));
+                    let deferred_to_caller =
+                        matches!(func.values[container.0 as usize].kind, OpKind::Param(_))
+                            && matches!(func.values[stored.0 as usize].kind, OpKind::Param(_));
                     if confinable {
                         reachable_from.push((*container, *stored));
                     } else if !deferred_to_caller {
@@ -618,7 +623,14 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                         gone_into_the_unknown(&mut escapes, func, callee, args);
                         continue;
                     };
-                    escape_into(&mut escapes, func, args, targets, of.arity, of.escaping_params);
+                    escape_into(
+                        &mut escapes,
+                        func,
+                        args,
+                        targets,
+                        of.arity,
+                        of.escaping_params,
+                    );
                     let one = matches!(callee, Callee::Direct(_));
                     for target in targets {
                         for slot in &of.leaking[*target] {
@@ -662,8 +674,16 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                 // the operation was added, exactly as `Suspend` once did, and the
                 // first `.then` put its reaction -- and the handler stored in it --
                 // in the C stack frame, which segfaulted when the microtask ran.
-                OpKind::Suspend { promise, frame: handed, .. }
-                | OpKind::PromiseSubscribe { promise, reaction: handed, .. } => {
+                OpKind::Suspend {
+                    promise,
+                    frame: handed,
+                    ..
+                }
+                | OpKind::PromiseSubscribe {
+                    promise,
+                    reaction: handed,
+                    ..
+                } => {
                     escaped(&mut escapes, func, *promise);
                     escaped(&mut escapes, func, *handed);
                 }
@@ -671,7 +691,14 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
             }
         }
 
-        escape_through(&mut escapes, func, &repeated, &live, &mut carried, &block.terminator);
+        escape_through(
+            &mut escapes,
+            func,
+            &repeated,
+            &live,
+            &mut carried,
+            &block.terminator,
+        );
     }
 
     // Now the stores, once every other reason to escape is known.
@@ -756,8 +783,24 @@ fn escape_through(
             else_args,
             ..
         } => {
-            hand_on(escapes, func, repeated, live, carried, *then_target, then_args);
-            hand_on(escapes, func, repeated, live, carried, *else_target, else_args);
+            hand_on(
+                escapes,
+                func,
+                repeated,
+                live,
+                carried,
+                *then_target,
+                then_args,
+            );
+            hand_on(
+                escapes,
+                func,
+                repeated,
+                live,
+                carried,
+                *else_target,
+                else_args,
+            );
         }
         Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
     }
@@ -782,7 +825,11 @@ fn still_live_where_it_is_made(
     made: ValueId,
     param: ValueId,
 ) -> bool {
-    let Some(at) = func.blocks.iter().position(|block| block.ops.contains(&made)) else {
+    let Some(at) = func
+        .blocks
+        .iter()
+        .position(|block| block.ops.contains(&made))
+    else {
         return true;
     };
     let block = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
@@ -890,12 +937,7 @@ fn hand_on(
 /// on the right dies on the next line and could sit in the frame, and nothing
 /// could put it there while handing it to `nts_str_append` counted as losing
 /// it.
-fn gone_into_the_unknown(
-    escapes: &mut Escapes,
-    func: &Func,
-    callee: &Callee,
-    args: &[ValueId],
-) {
+fn gone_into_the_unknown(escapes: &mut Escapes, func: &Func, callee: &Callee, args: &[ValueId]) {
     // Which argument slots a call this analysis cannot see into may keep. `None`
     // is *unknown*, and unknown means all of them -- the distinction between
     // "nothing was proved" and "nothing escapes" is the whole content of this
@@ -1473,7 +1515,13 @@ mod tests {
             0,
             vec![
                 op(OpKind::ObjectNew { frame: false }, object()),
-                op(OpKind::Erase { value: ValueId(0) , absent: super::super::Absent::Impossible }, HirType::Erased),
+                op(
+                    OpKind::Erase {
+                        value: ValueId(0),
+                        absent: super::super::Absent::Impossible,
+                    },
+                    HirType::Erased,
+                ),
                 op(
                     OpKind::GlobalSet {
                         global: 0,
@@ -1537,7 +1585,13 @@ mod tests {
             0,
             vec![
                 op(OpKind::ObjectNew { frame: false }, object()),
-                op(OpKind::Erase { value: ValueId(0), absent: super::super::Absent::Impossible }, HirType::Erased),
+                op(
+                    OpKind::Erase {
+                        value: ValueId(0),
+                        absent: super::super::Absent::Impossible,
+                    },
+                    HirType::Erased,
+                ),
                 op(
                     OpKind::Call {
                         callee: Callee::Direct("entry".to_owned()),
@@ -1555,8 +1609,14 @@ mod tests {
         ));
 
         let escapes = analyze_program(&program);
-        assert!(escapes[0].escapes(ValueId(0)), "the parameter is what was stored");
-        assert!(!escapes[1].is_frame_local(ValueId(0)), "so the caller's object is on the heap");
+        assert!(
+            escapes[0].escapes(ValueId(0)),
+            "the parameter is what was stored"
+        );
+        assert!(
+            !escapes[1].is_frame_local(ValueId(0)),
+            "so the caller's object is on the heap"
+        );
     }
 
     /// A function that only forwards its parameter takes on the obligation of
@@ -1650,7 +1710,10 @@ mod tests {
 
         let escapes = analyze_program(&program);
         let caller = &escapes[2];
-        assert!(!caller.is_frame_local(ValueId(1)), "what `keeper` keeps is on the heap");
+        assert!(
+            !caller.is_frame_local(ValueId(1)),
+            "what `keeper` keeps is on the heap"
+        );
         // And the container is not: `keeper` reads through it and keeps nothing
         // of it but its contents, which is what `leaks_its_fields` is for.
         assert!(caller.is_frame_local(ValueId(0)));
@@ -1715,7 +1778,6 @@ mod tests {
         assert!(escapes[0].is_frame_local(ValueId(0)));
         assert!(escapes[0].is_frame_local(ValueId(1)));
     }
-
 
     /// ...but not when the collector can *buffer* the container.
     ///
@@ -1876,7 +1938,10 @@ mod foreign_contracts {
             Some(vec![1])
         );
         assert_eq!(
-            kept_slots(&native(vec![Retention::NotRetained, Retention::NotRetained])),
+            kept_slots(&native(vec![
+                Retention::NotRetained,
+                Retention::NotRetained
+            ])),
             Some(Vec::new())
         );
 
@@ -1886,6 +1951,9 @@ mod foreign_contracts {
         // And the other foreign lane still answers from its own table rather
         // than from a native declaration, which is what "one arm, two lanes"
         // has to mean: one place, two sources of evidence.
-        assert_eq!(kept_slots(&Callee::External("nts_unknown_helper".to_owned())), None);
+        assert_eq!(
+            kept_slots(&Callee::External("nts_unknown_helper".to_owned())),
+            None
+        );
     }
 }

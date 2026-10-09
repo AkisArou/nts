@@ -95,7 +95,11 @@ impl CachePlan {
             // Whether `T` already admits `undefined` is not a question the text
             // answers (`(i: T) => U | undefined` does not), and a second
             // `| undefined` is harmless.
-            let ty = if slot.init == "undefined" { format!("({}) | undefined", slot.ty) } else { slot.ty.clone() };
+            let ty = if slot.init == "undefined" {
+                format!("({}) | undefined", slot.ty)
+            } else {
+                slot.ty.clone()
+            };
             fields.push(format!("s{at}: {ty}"));
         }
         format!("{{ {} }}", fields.join("; "))
@@ -109,12 +113,23 @@ impl CachePlan {
 
     /// The shape, with the record written as `ty` (its type, or an alias of it).
     pub(super) fn shape_of(&self, ty: &str) -> String {
-        let names: Vec<String> = (0..self.words()).map(|w| format!("f{w}")).chain((0..self.slots.len()).map(|at| format!("s{at}"))).collect();
+        let names: Vec<String> = (0..self.words())
+            .map(|w| format!("f{w}"))
+            .chain((0..self.slots.len()).map(|at| format!("s{at}")))
+            .collect();
         let fresh: Vec<String> = (0..self.words())
             .map(|w| format!("f{w}: 0"))
-            .chain(self.slots.iter().enumerate().map(|(at, slot)| format!("s{at}: {}", slot.init)))
+            .chain(
+                self.slots
+                    .iter()
+                    .enumerate()
+                    .map(|(at, slot)| format!("s{at}: {}", slot.init)),
+            )
             .collect();
-        let copied: Vec<String> = names.iter().map(|name| format!("{name}: c.{name}")).collect();
+        let copied: Vec<String> = names
+            .iter()
+            .map(|name| format!("{name}: c.{name}"))
+            .collect();
         format!(
             "{{ create: (): {ty} => ({{ {} }}), clone: (c: {ty}): {ty} => ({{ {} }}) }}",
             fresh.join(", "),
@@ -125,7 +140,11 @@ impl CachePlan {
     /// Whether the record's types name any of `locals` -- the function's type
     /// parameters and local types -- which a module-scope shape cannot see.
     pub(super) fn names_any(&self, locals: &[String]) -> bool {
-        self.slots.iter().any(|slot| slot.ty.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '$').any(|word| locals.iter().any(|local| local == word)))
+        self.slots.iter().any(|slot| {
+            slot.ty
+                .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '$')
+                .any(|word| locals.iter().any(|local| local == word))
+        })
     }
 
     /// What `cacheOf` is called with: the hoisted shape, or the shape itself.
@@ -138,7 +157,11 @@ impl CachePlan {
 
     /// `cacheOf`'s type argument, for a shape written inline.
     pub(super) fn type_argument(&self) -> String {
-        if self.hoisted.is_some() { String::new() } else { format!("<{}>", self.record_type()) }
+        if self.hoisted.is_some() {
+            String::new()
+        } else {
+            format!("<{}>", self.record_type())
+        }
     }
 
     /// How a read of slot `at` is written: the field, cast to what was stored
@@ -185,18 +208,32 @@ pub(super) fn find(body: &Value, callee: &str) -> Option<CacheUse> {
     let (name, size) = statements.iter().find_map(|statement| {
         let declarator = statement.get("declarations")?.as_array()?.first()?;
         let init = declarator.get("init")?;
-        (init.get("type")?.as_str()? == "CallExpression" && init.get("callee")?.get("name")?.as_str()? == callee).then_some(())?;
+        (init.get("type")?.as_str()? == "CallExpression"
+            && init.get("callee")?.get("name")?.as_str()? == callee)
+            .then_some(())?;
         let size = index(init.get("arguments")?.as_array()?.first()?.get("value")?)?;
-        Some((declarator.get("id")?.get("name")?.as_str()?.to_owned(), size))
+        Some((
+            declarator.get("id")?.get("name")?.as_str()?.to_owned(),
+            size,
+        ))
     })?;
-    let mut found = CacheUse { name, size, stored: vec![None; size], ..CacheUse::default() };
+    let mut found = CacheUse {
+        name,
+        size,
+        stored: vec![None; size],
+        ..CacheUse::default()
+    };
     walk(body, &mut found, false);
     Some(found)
 }
 
 /// A slot index or cache size, which the compiler writes as a numeric
 /// literal: a JSON number that is a small whole number.
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "checked whole and in range just above")]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "checked whole and in range just above"
+)]
 fn index(value: &Value) -> Option<usize> {
     let number = value.as_f64()?;
     (number.fract() == 0.0 && (0.0..1e6).contains(&number)).then_some(number as usize)
@@ -217,7 +254,10 @@ fn walk(value: &Value, found: &mut CacheUse, in_test: bool) {
             match map.get("type").and_then(Value::as_str) {
                 Some("IfStatement") => {
                     let test = map.get("test").unwrap_or(&Value::Null);
-                    let mut reads = CacheUse { name: found.name.clone(), ..CacheUse::default() };
+                    let mut reads = CacheUse {
+                        name: found.name.clone(),
+                        ..CacheUse::default()
+                    };
                     touches(test, &mut reads);
                     if reads.scopes > 0 {
                         found.scopes += 1;
@@ -232,13 +272,19 @@ fn walk(value: &Value, found: &mut CacheUse, in_test: bool) {
                 }
                 Some("BinaryExpression") if !in_test => {
                     let operands = [map.get("left"), map.get("right")];
-                    if operands.iter().flatten().any(|operand| slot_of(operand, &found.name).is_some()) {
+                    if operands
+                        .iter()
+                        .flatten()
+                        .any(|operand| slot_of(operand, &found.name).is_some())
+                    {
                         found.unguarded = true;
                     }
                 }
                 Some("AssignmentExpression") => {
-                    if let (Some(at), Some(right)) = (map.get("left").and_then(|left| slot_of(left, &found.name)), map.get("right"))
-                        && let Some(slot) = found.stored.get_mut(at)
+                    if let (Some(at), Some(right)) = (
+                        map.get("left").and_then(|left| slot_of(left, &found.name)),
+                        map.get("right"),
+                    ) && let Some(slot) = found.stored.get_mut(at)
                         && slot.is_none()
                     {
                         *slot = Some(right.clone());
@@ -258,7 +304,10 @@ fn walk(value: &Value, found: &mut CacheUse, in_test: bool) {
 
 /// Whether `value` reads a slot of `cache` anywhere.
 pub(super) fn reads(value: &Value, cache: &str) -> bool {
-    let mut found = CacheUse { name: cache.to_owned(), ..CacheUse::default() };
+    let mut found = CacheUse {
+        name: cache.to_owned(),
+        ..CacheUse::default()
+    };
     touches(value, &mut found);
     found.scopes > 0
 }
@@ -272,7 +321,9 @@ fn touches(value: &Value, found: &mut CacheUse) {
                 found.scopes = 1;
                 return;
             }
-            map.iter().filter(|(key, _)| *key != "loc").for_each(|(_, child)| touches(child, found));
+            map.iter()
+                .filter(|(key, _)| *key != "loc")
+                .for_each(|(_, child)| touches(child, found));
         }
         _ => {}
     }
@@ -282,7 +333,9 @@ fn touches(value: &Value, found: &mut CacheUse) {
 pub(super) fn is_sentinel_test(test: &Value, cache: &str) -> bool {
     test.get("type").and_then(Value::as_str) == Some("BinaryExpression")
         && test.get("operator").and_then(Value::as_str) == Some("===")
-        && test.get("left").is_some_and(|left| slot_of(left, cache).is_some())
+        && test
+            .get("left")
+            .is_some_and(|left| slot_of(left, cache).is_some())
         && test
             .get("right")
             .and_then(|right| right.get("arguments"))
@@ -304,11 +357,22 @@ pub(super) fn plan(found: &CacheUse, types: Vec<Option<String>>) -> Option<Cache
         .map(|ty| {
             let ty = ty?;
             // A slot of `any` or `unknown` is no better typed than the array.
-            let loose = ty.split(|c: char| !c.is_alphanumeric() && c != '_').any(|word| word == "any" || word == "unknown");
-            (!loose).then(|| Slot { init: default_of(&ty), ty })
+            let loose = ty
+                .split(|c: char| !c.is_alphanumeric() && c != '_')
+                .any(|word| word == "any" || word == "unknown");
+            (!loose).then(|| Slot {
+                init: default_of(&ty),
+                ty,
+            })
         })
         .collect::<Option<Vec<Slot>>>()?;
-    Some(CachePlan { name: found.name.clone(), slots, scopes: found.scopes, next_scope: 0, hoisted: None })
+    Some(CachePlan {
+        name: found.name.clone(),
+        slots,
+        scopes: found.scopes,
+        next_scope: 0,
+        hoisted: None,
+    })
 }
 
 #[cfg(test)]
@@ -319,7 +383,16 @@ mod tests {
     fn a_plan_spells_its_record_and_how_to_make_and_copy_one() {
         let plan = CachePlan {
             name: "$".to_owned(),
-            slots: vec![Slot { ty: "string".to_owned(), init: "\"\"" }, Slot { ty: "Element".to_owned(), init: "undefined" }],
+            slots: vec![
+                Slot {
+                    ty: "string".to_owned(),
+                    init: "\"\"",
+                },
+                Slot {
+                    ty: "Element".to_owned(),
+                    init: "undefined",
+                },
+            ],
             scopes: 1,
             next_scope: 0,
             hoisted: None,
@@ -337,12 +410,21 @@ mod tests {
         // result -- is still widened as a whole, or `undefined` would not fit.
         let callback = CachePlan {
             name: "$".to_owned(),
-            slots: vec![Slot { ty: "(i: Item) => boolean | undefined".to_owned(), init: "undefined" }],
+            slots: vec![Slot {
+                ty: "(i: Item) => boolean | undefined".to_owned(),
+                init: "undefined",
+            }],
             scopes: 1,
             next_scope: 0,
             hoisted: None,
         };
-        assert!(callback.shape().contains("s0: ((i: Item) => boolean | undefined) | undefined"), "{}", callback.shape());
+        assert!(
+            callback
+                .shape()
+                .contains("s0: ((i: Item) => boolean | undefined) | undefined"),
+            "{}",
+            callback.shape()
+        );
         assert_eq!(CachePlan::filled(0), ("f0".to_owned(), 1));
         assert_eq!(CachePlan::filled(31), ("f1".to_owned(), 2));
     }

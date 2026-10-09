@@ -40,7 +40,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -58,7 +62,9 @@ fn android() -> PathBuf {
 /// hand-written list of these disagreed with `consumer-rules.pro`.
 fn shipped_sources() -> Vec<PathBuf> {
     let mut found = Vec::new();
-    let Ok(sets) = std::fs::read_dir(android().join("src")) else { return found };
+    let Ok(sets) = std::fs::read_dir(android().join("src")) else {
+        return found;
+    };
     let mut roots: Vec<PathBuf> = sets
         .flatten()
         .map(|entry| entry.path())
@@ -69,7 +75,10 @@ fn shipped_sources() -> Vec<PathBuf> {
         // reflection can do -- and they are no more shipped than `src/test` is.
         .filter(|path| {
             path.is_dir()
-                && path.file_name().and_then(|it| it.to_str()).is_some_and(|it| !it.ends_with("test") && !it.ends_with("Test"))
+                && path
+                    .file_name()
+                    .and_then(|it| it.to_str())
+                    .is_some_and(|it| !it.ends_with("test") && !it.ends_with("Test"))
         })
         .collect();
     roots.sort();
@@ -85,7 +94,9 @@ fn sources(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(at) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&at) else { continue };
+        let Ok(entries) = std::fs::read_dir(&at) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -103,7 +114,9 @@ fn sources(root: &Path) -> Vec<PathBuf> {
 /// it is the one file that needs the SDK.
 fn build(javac: &Path, dir: &Path) -> Result<(), String> {
     let mut compile = Command::new(javac);
-    compile.args(["--release", "8", "-Xlint:all,-options", "-Werror", "-d"]).arg(dir);
+    compile
+        .args(["--release", "8", "-Xlint:all,-options", "-Werror", "-d"])
+        .arg(dir);
     for path in sources(&android().join("src/main")) {
         compile.arg(path);
     }
@@ -126,18 +139,45 @@ fn the_primitives_pass_their_own_suite_against_real_sockets_and_tls() {
     };
     let dir = std::env::temp_dir().join(format!("nts-android-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    build(&javac, &dir).unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
+    build(&javac, &dir)
+        .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
 
     let store = dir.join("store.p12");
     let made = Command::new(&keytool)
-        .args(["-genkeypair", "-alias", "nts-web", "-keyalg", "RSA", "-keysize", "2048"])
-        .args(["-validity", "1", "-dname", "CN=nts-web-test", "-ext", "SAN=ip:127.0.0.1"])
+        .args([
+            "-genkeypair",
+            "-alias",
+            "nts-web",
+            "-keyalg",
+            "RSA",
+            "-keysize",
+            "2048",
+        ])
+        .args([
+            "-validity",
+            "1",
+            "-dname",
+            "CN=nts-web-test",
+            "-ext",
+            "SAN=ip:127.0.0.1",
+        ])
         .arg("-keystore")
         .arg(&store)
-        .args(["-storetype", "PKCS12", "-storepass", "test-only", "-keypass", "test-only"])
+        .args([
+            "-storetype",
+            "PKCS12",
+            "-storepass",
+            "test-only",
+            "-keypass",
+            "test-only",
+        ])
         .output()
         .unwrap();
-    assert!(made.status.success(), "keytool: {}", String::from_utf8_lossy(&made.stderr));
+    assert!(
+        made.status.success(),
+        "keytool: {}",
+        String::from_utf8_lossy(&made.stderr)
+    );
 
     let ran = Command::new(&java)
         .arg("-Xverify:all")
@@ -176,10 +216,13 @@ fn the_primitives_pass_their_own_suite_against_real_sockets_and_tls() {
 /// that `ConnectivityManager` delivers these events at all, and in this order.
 #[test]
 fn a_handover_sweeps_the_sockets_and_nothing_else_does() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let dir = std::env::temp_dir().join(format!("nts-network-watch-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    build(&javac, &dir).unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
+    build(&javac, &dir)
+        .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
     let ran = Command::new(&java)
         .arg("-Xverify:all")
         .arg("-cp")
@@ -194,20 +237,27 @@ fn a_handover_sweeps_the_sockets_and_nothing_else_does() {
         String::from_utf8_lossy(&ran.stderr)
     );
     // The count, not only the zero.
-    assert!(said.contains("PASS: 13 default-network cases, 0 failures"), "{said}");
+    assert!(
+        said.contains("PASS: 13 default-network cases, 0 failures"),
+        "{said}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The Android SDK's `d8`, `android.jar` and a build-tools directory that has
 /// both, or `None`.
 fn sdk() -> Option<(PathBuf, PathBuf)> {
-    let home = PathBuf::from(std::env::var_os("ANDROID_HOME").or_else(|| std::env::var_os("ANDROID_SDK_ROOT"))?);
-    let platform = std::fs::read_dir(home.join("platforms")).ok()?
+    let home = PathBuf::from(
+        std::env::var_os("ANDROID_HOME").or_else(|| std::env::var_os("ANDROID_SDK_ROOT"))?,
+    );
+    let platform = std::fs::read_dir(home.join("platforms"))
+        .ok()?
         .flatten()
         .map(|entry| entry.path().join("android.jar"))
         .filter(|jar| jar.exists())
         .max()?;
-    let tools = std::fs::read_dir(home.join("build-tools")).ok()?
+    let tools = std::fs::read_dir(home.join("build-tools"))
+        .ok()?
         .flatten()
         .map(|entry| entry.path())
         .filter(|path| path.join("d8").exists())
@@ -239,7 +289,9 @@ fn sdk() -> Option<(PathBuf, PathBuf)> {
 /// satisfy "zero invoke-custom" perfectly.
 #[test]
 fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
-    let (Some(javac), Some((tools, platform))) = (tool("javac"), sdk()) else { return };
+    let (Some(javac), Some((tools, platform))) = (tool("javac"), sdk()) else {
+        return;
+    };
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-d8-{}", std::process::id()));
     let classes = dir.join("classes");
@@ -250,7 +302,8 @@ fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
     // classpath instead fails on `LambdaMetafactory`, which the SDK does not
     // ship because D8 is what removes the need for it.
     let mut compile = Command::new(&javac);
-    compile.args(["--release", "8", "-Xlint:all,-options", "-Werror", "-cp"])
+    compile
+        .args(["--release", "8", "-Xlint:all,-options", "-Werror", "-cp"])
         .arg(&platform)
         .arg("-d")
         .arg(&classes);
@@ -271,12 +324,19 @@ fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
         .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
 
     for (what, out, inputs) in [
-        ("the Android library", dir.join("library"), sources_of(&classes)),
+        (
+            "the Android library",
+            dir.join("library"),
+            sources_of(&classes),
+        ),
         ("nts-runtime.jar", dir.join("runtime"), vec![jar.clone()]),
     ] {
         std::fs::create_dir_all(&out).unwrap();
         let mut dex = Command::new(tools.join("d8"));
-        dex.args(["--min-api", "26", "--lib"]).arg(&platform).arg("--output").arg(&out);
+        dex.args(["--min-api", "26", "--lib"])
+            .arg(&platform)
+            .arg("--output")
+            .arg(&out);
         for input in &inputs {
             dex.arg(input);
         }
@@ -289,7 +349,11 @@ fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
         let produced = out.join("classes.dex");
         assert!(produced.exists(), "d8 produced no dex for {what}");
 
-        let dumped = Command::new(tools.join("dexdump")).arg("-d").arg(&produced).output().unwrap();
+        let dumped = Command::new(tools.join("dexdump"))
+            .arg("-d")
+            .arg(&produced)
+            .output()
+            .unwrap();
         let listing = String::from_utf8_lossy(&dumped.stdout);
         let custom = listing.matches("invoke-custom").count();
         assert_eq!(
@@ -330,7 +394,10 @@ fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
     let cache = std::env::temp_dir().join("nts-android-tools");
     std::fs::create_dir_all(&cache).ok()?;
     let mut jars = Vec::new();
-    for pin in pinned().into_iter().filter(|pin| scopes.contains(&pin.scope.as_str())) {
+    for pin in pinned()
+        .into_iter()
+        .filter(|pin| scopes.contains(&pin.scope.as_str()))
+    {
         let name = format!("{}-{}.jar", pin.artifact, pin.version);
         let path = cache.join(&name);
         if !path.exists() {
@@ -395,12 +462,15 @@ fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
 /// must be gone, because a run where R8 removed nothing at all would satisfy
 /// "the kept classes are still here" without shrinking anything.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
     let (Some(javac), Some(java), Some((tools, platform))) = (tool("javac"), tool("java"), sdk())
     else {
         return;
     };
-    let Some(r8) = fetch(&["tool"]).and_then(|jars| jars.into_iter().next()) else { return };
+    let Some(r8) = fetch(&["tool"]).and_then(|jars| jars.into_iter().next()) else {
+        return;
+    };
     // The production adapter is compiled and shrunk here too. It was not, and
     // it has no caller in Java either -- so every method on it was one R8 run
     // away from being removed from a release build, exactly the way
@@ -416,7 +486,11 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         .collect::<Vec<_>>()
         .join(":");
     let mut compile = Command::new(&javac);
-    compile.args(["--release", "8", "-Xlint:-options", "-cp"]).arg(&compile_path).arg("-d").arg(&classes);
+    compile
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(&compile_path)
+        .arg("-d")
+        .arg(&classes);
     // **Every source set, discovered rather than listed.** Three times in this
     // lane a keep rule and the compiled source list have disagreed:
     // `AndroidNetworking`'s rule matched nothing because `src/android` was not
@@ -433,13 +507,23 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         compile.arg(path);
     }
     let built = compile.output().unwrap();
-    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+    assert!(
+        built.status.success(),
+        "javac: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
 
     let mut shrink = Command::new(&java);
     shrink
         .arg("-cp")
         .arg(&r8)
-        .args(["com.android.tools.r8.R8", "--release", "--min-api", "29", "--lib"])
+        .args([
+            "com.android.tools.r8.R8",
+            "--release",
+            "--min-api",
+            "29",
+            "--lib",
+        ])
         .arg(&platform);
     // Nothing but the platform on the library path. This lane ships no
     // third-party jars any more, so what is shrunk here is all of what ships.
@@ -480,8 +564,10 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         String::from_utf8_lossy(&ran.stderr),
         String::from_utf8_lossy(&ran.stdout)
     );
-    let missing: Vec<&str> =
-        said.lines().filter(|it| it.contains("Missing class")).collect();
+    let missing: Vec<&str> = said
+        .lines()
+        .filter(|it| it.contains("Missing class"))
+        .collect();
     assert!(
         missing.is_empty(),
         "the shipped library references classes outside the pinned set, so the transitive \
@@ -510,7 +596,10 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
              is silent until something calls a method that is no longer there"
         );
     }
-    for gone in ["Lorg/nts/web/NetworkPrimitives$Connection;", "Lorg/nts/web/NetworkPrimitives$TimerEntry;"] {
+    for gone in [
+        "Lorg/nts/web/NetworkPrimitives$Connection;",
+        "Lorg/nts/web/NetworkPrimitives$TimerEntry;",
+    ] {
         assert!(
             !listing.contains(gone),
             "R8 kept {gone}, which is private and reached only from inside. A run that removed \
@@ -525,7 +614,9 @@ fn sources_of(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(at) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&at) else { continue };
+        let Ok(entries) = std::fs::read_dir(&at) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -552,6 +643,7 @@ fn sources_of(root: &Path) -> Vec<PathBuf> {
 /// tunnel to `localhost` must succeed on both and one to `127.0.0.1` must fail
 /// on both.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn the_two_tunnels_answer_the_same_through_one_proxy() {
     let (Some(javac), Some(java), Some(keytool)) = (tool("javac"), tool("java"), tool("keytool"))
     else {
@@ -560,7 +652,8 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-both-tunnels-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    build(&javac, &dir).unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
+    build(&javac, &dir)
+        .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
 
     let jar = std::env::var_os("NTS_JVM_RUNTIME_JAR")
         .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
@@ -571,18 +664,63 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
     let cert = dir.join("nts.cer");
     let trust = dir.join("trust.p12");
     for args in [
-        vec!["-genkeypair", "-alias", "nts", "-keyalg", "RSA", "-keysize", "2048",
-             "-validity", "1", "-dname", "CN=nts-test", "-ext", "SAN=dns:localhost",
-             "-keystore", server.to_str().unwrap(), "-storetype", "PKCS12",
-             "-storepass", "changeit", "-keypass", "changeit"],
-        vec!["-exportcert", "-alias", "nts", "-storetype", "PKCS12", "-storepass", "changeit",
-             "-keystore", server.to_str().unwrap(), "-file", cert.to_str().unwrap()],
-        vec!["-importcert", "-noprompt", "-alias", "nts", "-storetype", "PKCS12",
-             "-storepass", "changeit", "-file", cert.to_str().unwrap(),
-             "-keystore", trust.to_str().unwrap()],
+        vec![
+            "-genkeypair",
+            "-alias",
+            "nts",
+            "-keyalg",
+            "RSA",
+            "-keysize",
+            "2048",
+            "-validity",
+            "1",
+            "-dname",
+            "CN=nts-test",
+            "-ext",
+            "SAN=dns:localhost",
+            "-keystore",
+            server.to_str().unwrap(),
+            "-storetype",
+            "PKCS12",
+            "-storepass",
+            "changeit",
+            "-keypass",
+            "changeit",
+        ],
+        vec![
+            "-exportcert",
+            "-alias",
+            "nts",
+            "-storetype",
+            "PKCS12",
+            "-storepass",
+            "changeit",
+            "-keystore",
+            server.to_str().unwrap(),
+            "-file",
+            cert.to_str().unwrap(),
+        ],
+        vec![
+            "-importcert",
+            "-noprompt",
+            "-alias",
+            "nts",
+            "-storetype",
+            "PKCS12",
+            "-storepass",
+            "changeit",
+            "-file",
+            cert.to_str().unwrap(),
+            "-keystore",
+            trust.to_str().unwrap(),
+        ],
     ] {
         let ran = Command::new(&keytool).args(&args).output().unwrap();
-        assert!(ran.status.success(), "keytool: {}", String::from_utf8_lossy(&ran.stderr));
+        assert!(
+            ran.status.success(),
+            "keytool: {}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
     }
 
     let classpath = format!("{}:{}", mine.display(), dir.display());
@@ -614,7 +752,11 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
         .output()
         .unwrap();
     let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
-    assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
+    assert!(
+        ran.status.success(),
+        "{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
     // The **count**, not only the zero: a suite that stopped running half its
     // cases reports no failures perfectly well. Same assertion as `PASS: 11`
     // above, which is where the idea came from and where it stopped.
@@ -641,7 +783,8 @@ fn both_adapters_negotiate_the_same_application_protocol() {
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-both-alpn-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    build(&javac, &dir).unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
+    build(&javac, &dir)
+        .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
 
     let jar = std::env::var_os("NTS_JVM_RUNTIME_JAR")
         .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
@@ -653,13 +796,36 @@ fn both_adapters_negotiate_the_same_application_protocol() {
     // is also the only arrangement that would work unchanged on a device.
     let store = dir.join("server.p12");
     let ran = Command::new(&keytool)
-        .args(["-genkeypair", "-alias", "nts", "-keyalg", "RSA", "-keysize", "2048",
-               "-validity", "1", "-dname", "CN=nts-alpn", "-ext", "SAN=dns:localhost",
-               "-keystore", store.to_str().unwrap(), "-storetype", "PKCS12",
-               "-storepass", "changeit", "-keypass", "changeit"])
+        .args([
+            "-genkeypair",
+            "-alias",
+            "nts",
+            "-keyalg",
+            "RSA",
+            "-keysize",
+            "2048",
+            "-validity",
+            "1",
+            "-dname",
+            "CN=nts-alpn",
+            "-ext",
+            "SAN=dns:localhost",
+            "-keystore",
+            store.to_str().unwrap(),
+            "-storetype",
+            "PKCS12",
+            "-storepass",
+            "changeit",
+            "-keypass",
+            "changeit",
+        ])
         .output()
         .unwrap();
-    assert!(ran.status.success(), "keytool: {}", String::from_utf8_lossy(&ran.stderr));
+    assert!(
+        ran.status.success(),
+        "keytool: {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
 
     let classpath = format!("{}:{}", mine.display(), dir.display());
     let compiled = Command::new(&javac)
@@ -697,7 +863,11 @@ fn both_adapters_negotiate_the_same_application_protocol() {
         .output()
         .unwrap();
     let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
-    assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
+    assert!(
+        ran.status.success(),
+        "{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
     // The count as well as the zero, for the reason the tunnels test gives.
     assert!(said.ends_with("10 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
@@ -743,7 +913,11 @@ fn the_library_compiles_against_the_api_level_it_declares() {
         .join(":");
 
     let mut compile = Command::new(&javac);
-    compile.args(["--release", "8", "-Xlint:-options", "-cp"]).arg(&classpath).arg("-d").arg(&dir);
+    compile
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(&classpath)
+        .arg("-d")
+        .arg(&dir);
     for path in shipped_sources() {
         compile.arg(path);
     }
@@ -834,7 +1008,8 @@ fn the_library_is_java_eight_and_names_no_sdk_outside_its_one_sdk_file() {
     let Some(javac) = tool("javac") else { return };
     let dir = std::env::temp_dir().join(format!("nts-android-bytes-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    build(&javac, &dir).unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
+    build(&javac, &dir)
+        .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
 
     let mut checked = 0;
     let mut stack = vec![dir.clone()];
@@ -860,8 +1035,11 @@ fn the_library_is_java_eight_and_names_no_sdk_outside_its_one_sdk_file() {
             checked += 1;
         }
     }
-    assert!(checked >= 8, "only {checked} classes were checked, which is fewer than this \
-        library has -- the build produced less than it should have");
+    assert!(
+        checked >= 8,
+        "only {checked} classes were checked, which is fewer than this \
+        library has -- the build produced less than it should have"
+    );
 
     // The SDK dependency is one file, and that is what makes the rest of it
     // testable here. A second `android.*` import anywhere in `src/main` would

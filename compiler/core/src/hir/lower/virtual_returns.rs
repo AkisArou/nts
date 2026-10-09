@@ -49,9 +49,7 @@ use rustc_hash::FxHashMap;
 use nts_semantic_schema::{GeneratedReason, Origin, SemanticSnapshot, TypeId, TypeKind};
 
 use super::{Hierarchy, without_the_raising_suffix};
-use crate::hir::{
-    Absent, Block, Callee, Func, HirType, Op, OpKind, Program, Terminator, ValueId,
-};
+use crate::hir::{Absent, Block, Callee, Func, HirType, Op, OpKind, Program, Terminator, ValueId};
 
 /// The suffix a bridge takes after the entry it answers for.
 const ERASED_SUFFIX: &str = "@erased";
@@ -67,13 +65,19 @@ pub(super) fn bridge(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program
     let calls = virtual_calls(program);
     let owners = owners_by_name(hierarchy);
     let tables = slot_tables(program);
-    let mut index: FxHashMap<String, usize> =
-        program.funcs.iter().enumerate().map(|(at, func)| (func.name.clone(), at)).collect();
+    let mut index: FxHashMap<String, usize> = program
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(at, func)| (func.name.clone(), at))
+        .collect();
     // Sorted, so one compiler on one input makes its bridges in one order.
     let mut slots: Vec<(&(TypeId, String), &u32)> = hierarchy.slots.iter().collect();
     slots.sort_by_key(|(_, slot)| **slot);
     for ((root, member), &slot) in slots {
-        let Some(owner) = hierarchy.name.get(root) else { continue };
+        let Some(owner) = hierarchy.name.get(root) else {
+            continue;
+        };
         let root_declaration = format!("{owner}#{member}");
         let through = calls.get(&slot).map(Vec::as_slice).unwrap_or_default();
         let empty = BTreeMap::new();
@@ -119,7 +123,11 @@ fn virtual_calls(program: &Program) -> FxHashMap<u32, Vec<(usize, ValueId)>> {
     for (at, func) in program.funcs.iter().enumerate() {
         for block in &func.blocks {
             for &value in &block.ops {
-                if let OpKind::Call { callee: Callee::Virtual { slot, .. }, .. } = &func.value(value).kind {
+                if let OpKind::Call {
+                    callee: Callee::Virtual { slot, .. },
+                    ..
+                } = &func.value(value).kind
+                {
                     calls.entry(*slot).or_default().push((at, value));
                 }
             }
@@ -134,8 +142,15 @@ fn slot_tables(program: &Program) -> FxHashMap<u32, BTreeMap<String, Vec<usize>>
     let mut tables: FxHashMap<u32, BTreeMap<String, Vec<usize>>> = FxHashMap::default();
     for (at, layout) in program.layouts.iter().enumerate() {
         for (slot, entry) in layout.methods.iter().enumerate() {
-            let (Some(entry), Ok(slot)) = (entry, u32::try_from(slot)) else { continue };
-            tables.entry(slot).or_default().entry(entry.clone()).or_default().push(at);
+            let (Some(entry), Ok(slot)) = (entry, u32::try_from(slot)) else {
+                continue;
+            };
+            tables
+                .entry(slot)
+                .or_default()
+                .entry(entry.clone())
+                .or_default()
+                .push(at);
         }
     }
     tables
@@ -151,12 +166,18 @@ fn disagrees_with_an_erased_answer(
     calls: &[(usize, ValueId)],
 ) -> bool {
     let by_name = |name: &str| index.get(name).map(|&at| &program.funcs[at]);
-    let mut answers: Vec<&HirType> =
-        table.keys().filter_map(|name| by_name(name)).map(|func| &func.return_type).collect();
+    let mut answers: Vec<&HirType> = table
+        .keys()
+        .filter_map(|name| by_name(name))
+        .map(|func| &func.return_type)
+        .collect();
     for &(at, value) in calls {
         let op = program.funcs[at].value(value);
         answers.push(&op.ty);
-        if let OpKind::Call { callee: Callee::Virtual { declared, .. }, .. } = &op.kind
+        if let OpKind::Call {
+            callee: Callee::Virtual { declared, .. },
+            ..
+        } = &op.kind
             && let Some(func) = by_name(declared)
         {
             answers.push(&func.return_type);
@@ -189,20 +210,37 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
             origin: origin.clone(),
         })
         .collect();
-    let args: Vec<ValueId> = (0..values.len()).map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX))).collect();
+    let args: Vec<ValueId> = (0..values.len())
+        .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
+        .collect();
     let push = |values: &mut Vec<Op>, kind: OpKind, ty: HirType| {
-        values.push(Op { kind, ty, origin: origin.clone() });
+        values.push(Op {
+            kind,
+            ty,
+            origin: origin.clone(),
+        });
         ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX))
     };
     let answered = push(
         &mut values,
-        OpKind::Call { callee: Callee::Direct(target.name.clone()), args, frame: None },
+        OpKind::Call {
+            callee: Callee::Direct(target.name.clone()),
+            args,
+            frame: None,
+        },
         target.return_type.clone(),
     );
     let answer = if matches!(target.return_type, HirType::Void | HirType::Never) {
         push(&mut values, OpKind::ConstUndefined, HirType::Erased)
     } else {
-        push(&mut values, OpKind::Erase { value: answered, absent }, HirType::Erased)
+        push(
+            &mut values,
+            OpKind::Erase {
+                value: answered,
+                absent,
+            },
+            HirType::Erased,
+        )
     };
     let ops = (target.params.len()..values.len())
         .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
@@ -212,7 +250,11 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
         params: target.params.clone(),
         return_type: HirType::Erased,
         values,
-        blocks: vec![Block { params: Vec::new(), ops, terminator: Terminator::Return(Some(answer)) }],
+        blocks: vec![Block {
+            params: Vec::new(),
+            ops,
+            terminator: Terminator::Return(Some(answer)),
+        }],
         origin,
         exported: false,
         initializes_receiver: false,
@@ -234,22 +276,36 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
 /// was. The call keeps its value id by moving: the call goes to a fresh id typed
 /// `Erased`, and the old id becomes the `Unerase` of it, so every use of the old
 /// id reads the value it always did.
-fn retarget(program: &mut Program, index: &FxHashMap<String, usize>, at: usize, value: ValueId, root: &str) {
+fn retarget(
+    program: &mut Program,
+    index: &FxHashMap<String, usize>,
+    at: usize,
+    value: ValueId,
+    root: &str,
+) {
     let by_name = |name: &str| index.get(name).map(|&at| &program.funcs[at]);
-    let erased_declaration = |name: &str| by_name(name).filter(|func| func.return_type == HirType::Erased);
-    let OpKind::Call { callee: Callee::Virtual { declared, .. }, .. } = &program.funcs[at].value(value).kind else {
+    let erased_declaration =
+        |name: &str| by_name(name).filter(|func| func.return_type == HirType::Erased);
+    let OpKind::Call {
+        callee: Callee::Virtual { declared, .. },
+        ..
+    } = &program.funcs[at].value(value).kind
+    else {
         return;
     };
     let target = if erased_declaration(declared).is_some() {
         None
     } else {
-        let (Some(through), Some(root_func)) =
-            (by_name(declared), erased_declaration(root))
-        else {
+        let (Some(through), Some(root_func)) = (by_name(declared), erased_declaration(root)) else {
             return;
         };
         let agree = through.params.len() == root_func.params.len()
-            && through.params.iter().zip(&root_func.params).skip(1).all(|(a, b)| a.ty == b.ty);
+            && through
+                .params
+                .iter()
+                .zip(&root_func.params)
+                .skip(1)
+                .all(|(a, b)| a.ty == b.ty);
         if !agree {
             return;
         }
@@ -257,7 +313,14 @@ fn retarget(program: &mut Program, index: &FxHashMap<String, usize>, at: usize, 
     };
     let func = &mut program.funcs[at];
     let op = &mut func.values[value.0 as usize];
-    if let (Some(target), OpKind::Call { callee: Callee::Virtual { declared, .. }, .. }) = (target, &mut op.kind) {
+    if let (
+        Some(target),
+        OpKind::Call {
+            callee: Callee::Virtual { declared, .. },
+            ..
+        },
+    ) = (target, &mut op.kind)
+    {
         *declared = target;
     }
     if matches!(op.ty, HirType::Erased | HirType::Void | HirType::Never) {
@@ -301,21 +364,38 @@ fn result_absent(
     if !crate::hir::tags::payload_is_a_reference(returns) {
         return Absent::Impossible;
     }
-    let Some((owner, member)) = entry.split_once('#') else { return Absent::Impossible };
+    let Some((owner, member)) = entry.split_once('#') else {
+        return Absent::Impossible;
+    };
     let member = without_the_raising_suffix(member).0;
-    let result = owners.get(owner).into_iter().flatten().find_map(|ty| member_result(snapshot, *ty, member));
-    result.map_or(Absent::Impossible, |result| super::absent_of_result(snapshot, result))
+    let result = owners
+        .get(owner)
+        .into_iter()
+        .flatten()
+        .find_map(|ty| member_result(snapshot, *ty, member));
+    result.map_or(Absent::Impossible, |result| {
+        super::absent_of_result(snapshot, result)
+    })
 }
 
 /// The checker's result type for `member` of `owner`: a getter's property type,
 /// or a method's signature's return.
 fn member_result(snapshot: &SemanticSnapshot, owner: TypeId, member: &str) -> Option<TypeId> {
-    let TypeKind::Object { properties } = &snapshot.types.get(owner.0 as usize)?.kind else { return None };
+    let TypeKind::Object { properties } = &snapshot.types.get(owner.0 as usize)?.kind else {
+        return None;
+    };
     if let Some(getter) = member.strip_prefix("get ") {
-        return properties.iter().find(|property| property.name == getter).map(|property| property.ty);
+        return properties
+            .iter()
+            .find(|property| property.name == getter)
+            .map(|property| property.ty);
     }
     let property = properties.iter().find(|property| property.name == member)?;
-    let TypeKind::Function(signature) = snapshot.types.get(property.ty.0 as usize)?.kind else { return None };
-    snapshot.signatures.get(signature.0 as usize).map(|signature| signature.return_type)
+    let TypeKind::Function(signature) = snapshot.types.get(property.ty.0 as usize)?.kind else {
+        return None;
+    };
+    snapshot
+        .signatures
+        .get(signature.0 as usize)
+        .map(|signature| signature.return_type)
 }
-

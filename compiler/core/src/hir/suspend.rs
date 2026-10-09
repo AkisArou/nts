@@ -293,9 +293,10 @@ fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
 /// Whether a function needs a frame, including generators with no yields.
 fn suspends(func: &Func) -> bool {
     func.frame.is_some()
-        || func.values.iter().any(|op| {
-            matches!(op.kind, OpKind::Await { .. } | OpKind::Yield { .. })
-        })
+        || func
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::Await { .. } | OpKind::Yield { .. }))
 }
 
 /// The second name a function about to be split provides.
@@ -371,9 +372,8 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
                 // Keyed on the id rather than on the name's suffix, because that is the
                 // invariant being kept; `function_copies` puts the plain copy first, so the
                 // layout that wins is the original's and the choice is deterministic.
-                let claimed = |existing: &Layout| {
-                    existing.types.iter().any(|ty| layout.types.contains(ty))
-                };
+                let claimed =
+                    |existing: &Layout| existing.types.iter().any(|ty| layout.types.contains(ty));
                 if !layouts.iter().any(claimed) && !program.layouts.iter().any(claimed) {
                     layouts.push(layout);
                 }
@@ -798,7 +798,7 @@ fn entry_function(
         origin: func.origin.clone(),
         exported: func.exported,
         initializes_receiver: false,
-            abstract_declaration: false,
+        abstract_declaration: false,
         async_result: None,
         frame: None,
         obligations: Vec::new(),
@@ -1089,6 +1089,7 @@ fn frame_fields(
 /// the block's parameters and is reached the ordinary way; every later segment
 /// is reached only from the dispatch, which is why everything live at one has
 /// to be in the frame rather than in a block parameter.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn resume_function(
     func: &Func,
     frame_ty: &HirType,
@@ -1216,13 +1217,25 @@ fn resume_function(
             // dispatch chain, which is what `segment_layout` reserved the extra
             // block for. A generator has no such block: a `yield` cannot
             // reject, and neither has a function whose every `await` is caught.
-            let caught = matches!(&build.values[awaited.0 as usize].kind,
-                OpKind::Await { rejects_to: Some(_), .. });
+            let caught = matches!(
+                &build.values[awaited.0 as usize].kind,
+                OpKind::Await {
+                    rejects_to: Some(_),
+                    ..
+                }
+            );
             body.push(rejection_check(
                 &mut build,
                 frame,
                 std::mem::take(&mut params),
-                (super::BlockId(if caught { landing + 1 } else { base.saturating_sub(1) }), Vec::new()),
+                (
+                    super::BlockId(if caught {
+                        landing + 1
+                    } else {
+                        base.saturating_sub(1)
+                    }),
+                    Vec::new(),
+                ),
                 super::BlockId(landing + 1 + u32::from(caught)),
             ));
             body.extend(caught_edge(&mut build, frame, slot_of, &starts, awaited));
@@ -1346,8 +1359,8 @@ fn assembled_resume(
         name: name.to_owned(),
         params: vec![super::Param {
             name: "frame".to_owned(),
-                // A receiver is not a declared parameter.
-                shape: super::ParamShape::Ordinary,
+            // A receiver is not a declared parameter.
+            shape: super::ParamShape::Ordinary,
             ty: frame_ty,
             origin: func.origin.clone(),
             known: super::facts::Facts::TOP,
@@ -1365,7 +1378,7 @@ fn assembled_resume(
         origin: func.origin.clone(),
         exported: false,
         initializes_receiver: false,
-            abstract_declaration: false,
+        abstract_declaration: false,
         async_result: None,
         frame: None,
         obligations: Vec::new(),
@@ -1384,7 +1397,7 @@ fn assembled_resume(
 /// is borrowed by that pass's convention. It is borrowed from whoever
 /// provided the reference, which is exactly what makes giving it back here
 /// correct rather than double.
-    fn give_the_frame_back(
+fn give_the_frame_back(
     build: &mut Build,
     blocks: &mut [super::Block],
     frame: super::ValueId,
@@ -1446,11 +1459,9 @@ fn segment_layout(
     // error.
     // A caught await additionally needs its rejected-edge operand block, so
     // neither the reason nor a handler's frame reload runs on fulfillment.
-    let blocks_for = |value: ValueId| {
-        match &func.values[value.0 as usize].kind {
-            OpKind::Await { rejects_to, .. } => 2 + usize::from(rejects_to.is_some()),
-            _ => 1,
-        }
+    let blocks_for = |value: ValueId| match &func.values[value.0 as usize].kind {
+        OpKind::Await { rejects_to, .. } => 2 + usize::from(rejects_to.is_some()),
+        _ => 1,
     };
     let base = u32::try_from(points.len() + 2 + usize::from(shared_exit)).unwrap_or(0);
     let mut starts = Vec::new();
@@ -1490,7 +1501,10 @@ fn shifted_arena(func: &Func, frame_ty: &HirType, fixed: u32) -> Vec<Op> {
     for op in &func.values {
         let kind = match op.kind {
             // Already in the shifted arena's terms: the frame is value zero.
-            OpKind::Param(at) => OpKind::FieldGet { object: ValueId(0), field: fixed + at },
+            OpKind::Param(at) => OpKind::FieldGet {
+                object: ValueId(0),
+                field: fixed + at,
+            },
             ref kind => {
                 let mut kind = kind.clone();
                 super::simplify::substitute(&mut kind, |value| ValueId(value.0 + 1));
@@ -1601,7 +1615,10 @@ fn caught_edge(
     Some(super::Block {
         params: Vec::new(),
         ops: std::mem::take(&mut build.ops),
-        terminator: Terminator::Jump { target: super::BlockId(starts[it.handler.0 as usize]), args },
+        terminator: Terminator::Jump {
+            target: super::BlockId(starts[it.handler.0 as usize]),
+            args,
+        },
     })
 }
 
@@ -1703,13 +1720,19 @@ pub(super) fn settled_reader(payload: &HirType) -> Option<&'static str> {
 /// The runtime payload's actual representation. `BigInt` is logically unboxed
 /// but travels through the tagged promise slot as an owned immutable box.
 pub(super) fn settled_storage(payload: &HirType) -> HirType {
-    if read_by_unerasing(payload) { HirType::Erased } else { payload.clone() }
+    if read_by_unerasing(payload) {
+        HirType::Erased
+    } else {
+        payload.clone()
+    }
 }
 
 /// Whether a handle is a host's (`HostClass`), which a promise holds as a value
 /// tagged `NTS_TAG_HANDLE_HOST` rather than in its slot for a C pointer.
 pub(super) fn host_handle(pointee: &super::native::Pointee) -> bool {
-    pointee.family().is_some_and(super::native::Family::stack_rooted)
+    pointee
+        .family()
+        .is_some_and(super::native::Family::stack_rooted)
 }
 
 /// Whether a payload travels through the promise's tagged value and is read back
@@ -1767,7 +1790,13 @@ fn read_settled(
         // result is counted as the caller's own, so the conversion is what
         // takes the reference the call's release gives back.
         let boxed = build.push(OpKind::Convert(lent), boxed_ty);
-        let root = build.push(OpKind::FieldGet { object: boxed, field: 0 }, HirType::NativePointer(root));
+        let root = build.push(
+            OpKind::FieldGet {
+                object: boxed,
+                field: 0,
+            },
+            HirType::NativePointer(root),
+        );
         build.values[awaited.0 as usize].kind = OpKind::Convert(root);
         build.ops.push(awaited);
         if let Some(slot) = slot_of.get(&awaited).copied() {
@@ -1788,7 +1817,9 @@ fn read_settled(
     );
     build.values[awaited.0 as usize].kind = if read_by_unerasing(payload) {
         OpKind::Unerase { value }
-    } else { OpKind::Convert(value) };
+    } else {
+        OpKind::Convert(value)
+    };
     build.ops.push(awaited);
     if let Some(slot) = slot_of.get(&awaited).copied() {
         build.set(frame, slot, awaited);

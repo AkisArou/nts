@@ -55,8 +55,8 @@ use nts_semantic_schema::{
     SignatureRecord, SymbolId, TypeId, TypeKind, TypeRecord, syntax,
 };
 use rustc_hash::FxHashMap;
-use std::collections::BTreeMap;
 use std::cell::{OnceCell, RefCell};
+use std::collections::BTreeMap;
 
 /// How deep into a type's structure substitution follows before giving up on
 /// a template: the nesting of `Node<Node<Node<T>>>`, not the size of the
@@ -120,7 +120,11 @@ pub fn materialise(snapshot: &SemanticSnapshot) -> Option<SemanticSnapshot> {
 /// The sigma a class instantiation binds: the declaration's own parameters to
 /// the instantiation's arguments.
 #[must_use]
-pub fn sigma_of_instance(snapshot: &SemanticSnapshot, declaration: TypeId, instance: TypeId) -> Sigma {
+pub fn sigma_of_instance(
+    snapshot: &SemanticSnapshot,
+    declaration: TypeId,
+    instance: TypeId,
+) -> Sigma {
     let parameters = arguments(snapshot, declaration);
     let concrete = arguments(snapshot, instance);
     parameters.into_iter().zip(concrete).collect()
@@ -201,7 +205,10 @@ impl<'a> Templates<'a> {
             // Its own -- a method returning `Entry<V, K>` also has all-
             // parameter arguments, and so does `Inner<T>` written inside
             // `Outer<T>`, which is exactly a template.
-            if args.iter().all(|arg| owners.get(arg) == Some(&Owner::Type(symbol))) {
+            if args
+                .iter()
+                .all(|arg| owners.get(arg) == Some(&Owner::Type(symbol)))
+            {
                 declarations.entry(symbol).or_insert(ty);
             }
             index.entry((symbol, args)).or_insert(ty);
@@ -302,7 +309,9 @@ impl<'a> Templates<'a> {
     #[must_use]
     pub fn resolve(&self, ty: TypeId, sigma: &Sigma) -> Option<TypeId> {
         let key = (ty, sigma.iter().map(|(k, v)| (*k, *v)).collect());
-        if let Some(found) = self.resolved.borrow().get(&key) { return *found; }
+        if let Some(found) = self.resolved.borrow().get(&key) {
+            return *found;
+        }
         let found = substitute(&mut Lookup::new(self), ty, sigma, 0);
         self.resolved.borrow_mut().insert(key, found);
         found
@@ -335,7 +344,11 @@ impl<'a> Templates<'a> {
                 *of == symbol && **ty != declaration && args.len() == parameters.len()
             })
             .filter_map(|((_, args), instance)| {
-                let sigma = parameters.iter().copied().zip(args.iter().copied()).collect();
+                let sigma = parameters
+                    .iter()
+                    .copied()
+                    .zip(args.iter().copied())
+                    .collect();
                 let bound = self.resolve(ty, &sigma)?;
                 (!mentions_a_parameter(self.snapshot, bound)).then_some((*instance, bound))
             })
@@ -378,11 +391,16 @@ impl<'a> Templates<'a> {
     fn plan(&self) -> Vec<(TypeId, Sigma)> {
         let functions = super::generics::function_instantiations(self.snapshot);
         // Lowering's lookup-only Templates never pays for this collection.
-        let required = self.required_call_forms.get_or_init(||
-            required_call_forms(self.snapshot, &self.owners));
+        let required = self
+            .required_call_forms
+            .get_or_init(|| required_call_forms(self.snapshot, &self.owners));
         let mut plan = Vec::new();
-        let mut owners: Vec<Owner> = self.by_owner.keys()
-            .chain(required.keys()).copied().collect();
+        let mut owners: Vec<Owner> = self
+            .by_owner
+            .keys()
+            .chain(required.keys())
+            .copied()
+            .collect();
         owners.sort_by_key(|owner| match owner {
             Owner::Type(symbol) => (0, symbol.0),
             Owner::Function(node) => (1, node.0),
@@ -393,8 +411,13 @@ impl<'a> Templates<'a> {
         let mut lookup = Lookup::new(self);
         for owner in owners {
             for sigma in self.sigmas_of(owner, &functions) {
-                for template in self.by_owner.get(&owner).into_iter().flatten()
-                    .chain(required.get(&owner).into_iter().flatten()) {
+                for template in self
+                    .by_owner
+                    .get(&owner)
+                    .into_iter()
+                    .flatten()
+                    .chain(required.get(&owner).into_iter().flatten())
+                {
                     if substitute(&mut lookup, *template, &sigma, 0).is_none() {
                         plan.push((*template, sigma.clone()));
                     }
@@ -414,7 +437,11 @@ impl<'a> Templates<'a> {
             let Some(&declaration) = self.declarations.get(symbol) else {
                 continue;
             };
-            if ty == declaration || args.iter().any(|arg| mentions_a_parameter(self.snapshot, *arg)) {
+            if ty == declaration
+                || args
+                    .iter()
+                    .any(|arg| mentions_a_parameter(self.snapshot, *arg))
+            {
                 continue;
             }
             // The instance's own entry, or -- as `collect_hierarchy` falls
@@ -428,7 +455,10 @@ impl<'a> Templates<'a> {
             else {
                 continue;
             };
-            if bases.iter().any(|base| mentions_a_parameter(self.snapshot, *base)) {
+            if bases
+                .iter()
+                .any(|base| mentions_a_parameter(self.snapshot, *base))
+            {
                 settle.push((ty, sigma_of_instance(self.snapshot, declaration, ty)));
             }
         }
@@ -450,7 +480,13 @@ impl<'a> Templates<'a> {
                     .filter(|((of, args), ty)| {
                         *of == symbol && **ty != declaration && args.len() == parameters.len()
                     })
-                    .map(|((_, args), _)| parameters.iter().copied().zip(args.iter().copied()).collect())
+                    .map(|((_, args), _)| {
+                        parameters
+                            .iter()
+                            .copied()
+                            .zip(args.iter().copied())
+                            .collect()
+                    })
                     .collect()
             }
             Owner::Function(declaration) => functions
@@ -476,11 +512,14 @@ impl<'a> Templates<'a> {
 /// Each unique root gets one bounded ownership walk. An owner with no concrete
 /// offered copy has no sigma in `plan` and therefore materialises nothing.
 fn required_call_forms(
-    snapshot: &SemanticSnapshot, owners: &FxHashMap<TypeId, Owner>,
+    snapshot: &SemanticSnapshot,
+    owners: &FxHashMap<TypeId, Owner>,
 ) -> FxHashMap<Owner, Vec<TypeId>> {
     let mut roots = rustc_hash::FxHashSet::default();
     for target in snapshot.call_targets.values() {
-        let Some(signature) = snapshot.signatures.get(target.signature.0 as usize) else { continue; };
+        let Some(signature) = snapshot.signatures.get(target.signature.0 as usize) else {
+            continue;
+        };
         roots.extend(signature.parameters.iter().map(|param| param.ty));
         roots.insert(signature.return_type);
     }
@@ -488,9 +527,17 @@ fn required_call_forms(
     roots.sort();
     let mut found: FxHashMap<Owner, Vec<TypeId>> = FxHashMap::default();
     for ty in roots {
-        if !snapshot.types.get(ty.0 as usize).is_some_and(|record| matches!(record.kind,
-            TypeKind::Function(_) | TypeKind::Union(_) | TypeKind::Array(_)
-            | TypeKind::Tuple(_) | TypeKind::Intersection(_) | TypeKind::Object { .. })) {
+        if !snapshot.types.get(ty.0 as usize).is_some_and(|record| {
+            matches!(
+                record.kind,
+                TypeKind::Function(_)
+                    | TypeKind::Union(_)
+                    | TypeKind::Array(_)
+                    | TypeKind::Tuple(_)
+                    | TypeKind::Intersection(_)
+                    | TypeKind::Object { .. }
+            )
+        }) {
             continue;
         }
         if let Some(owner @ Owner::Function(_)) = one_owner_of(snapshot, owners, ty) {
@@ -536,8 +583,16 @@ trait Site {
     fn declarations(&self) -> &FxHashMap<SymbolId, TypeId>;
 }
 
-fn substitute_all(site: &mut impl Site, types: &[TypeId], sigma: &Sigma, depth: u32) -> Option<Vec<TypeId>> {
-    types.iter().map(|ty| substitute(site, *ty, sigma, depth)).collect()
+fn substitute_all(
+    site: &mut impl Site,
+    types: &[TypeId],
+    sigma: &Sigma,
+    depth: u32,
+) -> Option<Vec<TypeId>> {
+    types
+        .iter()
+        .map(|ty| substitute(site, *ty, sigma, depth))
+        .collect()
 }
 
 /// The id `ty` has under `sigma`, or `None` where this site cannot name one.
@@ -579,7 +634,10 @@ fn substitute_kind(site: &mut impl Site, ty: TypeId, sigma: &Sigma, depth: u32) 
                 let args = substitute_all(site, &args, sigma, depth + 1)?;
                 // A binding that is itself a parameter leaves the result a
                 // template, and a template is not something to materialise.
-                if args.iter().any(|arg| mentions_a_parameter(site.snapshot(), *arg)) {
+                if args
+                    .iter()
+                    .any(|arg| mentions_a_parameter(site.snapshot(), *arg))
+                {
                     return None;
                 }
                 return site.instance(symbol, declaration, args, depth + 1);
@@ -595,7 +653,11 @@ fn substitute_kind(site: &mut impl Site, ty: TypeId, sigma: &Sigma, depth: u32) 
             TypeKind::Intersection(substitute_all(site, items, sigma, depth + 1)?)
         }
         TypeKind::Function(signature) => {
-            let signature = site.snapshot().signatures.get(signature.0 as usize)?.clone();
+            let signature = site
+                .snapshot()
+                .signatures
+                .get(signature.0 as usize)?
+                .clone();
             let substituted = substitute_signature(&signature, depth + 1, &mut |ty, depth| {
                 substitute(site, ty, sigma, depth)
             })?;
@@ -642,8 +704,10 @@ impl From<&SignatureRecord> for SignatureBucket {
     fn from(signature: &SignatureRecord) -> Self {
         Self {
             parameters: signature.parameters.iter().map(|param| param.ty).collect(),
-            returns: signature.return_type, type_parameters: signature.type_parameters.clone(),
-            construct: signature.is_construct, this: signature.this_type,
+            returns: signature.return_type,
+            type_parameters: signature.type_parameters.clone(),
+            construct: signature.is_construct,
+            this: signature.this_type,
         }
     }
 }
@@ -663,7 +727,9 @@ impl From<&TypeKind> for CompositeBucket {
             TypeKind::Array(element) => Self::Array(*element),
             TypeKind::Tuple(items) => Self::Tuple(items.clone()),
             TypeKind::Intersection(items) => Self::Intersection(items.clone()),
-            TypeKind::Object { properties } => Self::Object(properties.iter().map(|prop| prop.ty).collect()),
+            TypeKind::Object { properties } => {
+                Self::Object(properties.iter().map(|prop| prop.ty).collect())
+            }
             _ => Self::Other(std::mem::discriminant(kind)),
         }
     }
@@ -687,10 +753,18 @@ impl LookupIndex {
         let mut canonical = Vec::with_capacity(snapshot.signatures.len());
         for (at, signature) in snapshot.signatures.iter().enumerate() {
             let id = SignatureId(u32::try_from(at).unwrap_or(u32::MAX));
-            let bucket = index.signatures.entry(SignatureBucket::from(signature)).or_default();
-            let first = bucket.iter().copied().find(|found|
-                snapshot.signatures.get(found.0 as usize) == Some(signature)).unwrap_or(id);
-            if first == id { bucket.push(id); }
+            let bucket = index
+                .signatures
+                .entry(SignatureBucket::from(signature))
+                .or_default();
+            let first = bucket
+                .iter()
+                .copied()
+                .find(|found| snapshot.signatures.get(found.0 as usize) == Some(signature))
+                .unwrap_or(id);
+            if first == id {
+                bucket.push(id);
+            }
             canonical.push(first);
         }
         for (at, record) in snapshot.types.iter().enumerate() {
@@ -711,7 +785,8 @@ impl LookupIndex {
                 TypeKind::Function(signature) => {
                     if let Some(first) = canonical.get(signature.0 as usize) {
                         let slot = index.functions.entry((record.symbol, *first)).or_insert(id);
-                        if signature == first && !matches!(snapshot.types.get(slot.0 as usize)
+                        if signature == first
+                            && !matches!(snapshot.types.get(slot.0 as usize)
                             .map(|found| &found.kind), Some(TypeKind::Function(found)) if found == first)
                         {
                             *slot = id;
@@ -723,29 +798,55 @@ impl LookupIndex {
                         index.unions.entry((record.symbol, members)).or_insert(id);
                     }
                 }
-                _ => index.composites.entry((record.symbol, CompositeBucket::from(&record.kind)))
-                    .or_default().push(id),
+                _ => index
+                    .composites
+                    .entry((record.symbol, CompositeBucket::from(&record.kind)))
+                    .or_default()
+                    .push(id),
             }
         }
         index
     }
 
-    fn signature(&self, snapshot: &SemanticSnapshot, wanted: &SignatureRecord) -> Option<SignatureId> {
-        self.signatures.get(&SignatureBucket::from(wanted))?.iter().copied()
+    fn signature(
+        &self,
+        snapshot: &SemanticSnapshot,
+        wanted: &SignatureRecord,
+    ) -> Option<SignatureId> {
+        self.signatures
+            .get(&SignatureBucket::from(wanted))?
+            .iter()
+            .copied()
             .find(|id| snapshot.signatures.get(id.0 as usize) == Some(wanted))
     }
 
-    fn composite(&self, snapshot: &SemanticSnapshot, wanted: &TypeKind, symbol: Option<SymbolId>) -> Option<TypeId> {
+    fn composite(
+        &self,
+        snapshot: &SemanticSnapshot,
+        wanted: &TypeKind,
+        symbol: Option<SymbolId>,
+    ) -> Option<TypeId> {
         match wanted {
             TypeKind::Function(signature) => {
                 let wanted = snapshot.signatures.get(signature.0 as usize)?;
                 let canonical = self.signature(snapshot, wanted)?;
                 self.functions.get(&(symbol, canonical)).copied()
             }
-            TypeKind::Union(members) => self.unions.get(&(symbol, union_members(snapshot, members)?)).copied(),
-            _ => self.composites.get(&(symbol, CompositeBucket::from(wanted)))?.iter().copied()
-                .find(|id| snapshot.types.get(id.0 as usize)
-                    .is_some_and(|record| record.kind == *wanted)),
+            TypeKind::Union(members) => self
+                .unions
+                .get(&(symbol, union_members(snapshot, members)?))
+                .copied(),
+            _ => self
+                .composites
+                .get(&(symbol, CompositeBucket::from(wanted)))?
+                .iter()
+                .copied()
+                .find(|id| {
+                    snapshot
+                        .types
+                        .get(id.0 as usize)
+                        .is_some_and(|record| record.kind == *wanted)
+                }),
         }
     }
 }
@@ -780,7 +881,9 @@ impl Site for Lookup<'_, '_> {
     }
 
     fn composite(&mut self, wanted: TypeKind, symbol: Option<SymbolId>) -> Option<TypeId> {
-        self.templates.lookup_index.get_or_init(|| LookupIndex::new(self.templates.snapshot))
+        self.templates
+            .lookup_index
+            .get_or_init(|| LookupIndex::new(self.templates.snapshot))
             .composite(self.templates.snapshot, &wanted, symbol)
     }
 
@@ -795,7 +898,9 @@ impl Site for Lookup<'_, '_> {
     }
 
     fn signature(&mut self, wanted: SignatureRecord) -> Option<SignatureId> {
-        self.templates.lookup_index.get_or_init(|| LookupIndex::new(self.templates.snapshot))
+        self.templates
+            .lookup_index
+            .get_or_init(|| LookupIndex::new(self.templates.snapshot))
             .signature(self.templates.snapshot, &wanted)
     }
 
@@ -842,8 +947,12 @@ fn union_members(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Option<Vec<
                 work.extend(items.iter().map(|item| (*item, depth + 1, false)));
             }
             TypeKind::Boolean => found.extend([UnionMember::False, UnionMember::True]),
-            TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(false)) => found.push(UnionMember::False),
-            TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(true)) => found.push(UnionMember::True),
+            TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(false)) => {
+                found.push(UnionMember::False);
+            }
+            TypeKind::Literal(nts_semantic_schema::LiteralValue::Boolean(true)) => {
+                found.push(UnionMember::True);
+            }
             _ => found.push(UnionMember::Type(ty)),
         }
     }
@@ -892,7 +1001,9 @@ impl<'s> Writer<'s> {
                 .snapshot
                 .base_types
                 .get(ty)
-                .or_else(|| declaration.and_then(|declaration| self.snapshot.base_types.get(&declaration)))
+                .or_else(|| {
+                    declaration.and_then(|declaration| self.snapshot.base_types.get(&declaration))
+                })
                 .cloned()
             else {
                 continue;
@@ -933,7 +1044,10 @@ impl Site for Writer<'_> {
         if let Some(found) = find_record(self.snapshot, &wanted, symbol) {
             return Some(found);
         }
-        Some(self.push(TypeRecord { kind: wanted, symbol }))
+        Some(self.push(TypeRecord {
+            kind: wanted,
+            symbol,
+        }))
     }
 
     /// `D<args>`: the record with those arguments, made if it does not exist.
@@ -960,9 +1074,15 @@ impl Site for Writer<'_> {
         self.snapshot.type_arguments.insert(id, args.clone());
         self.index.insert((symbol, args.clone()), id);
 
-        let own: Sigma = arguments(self.snapshot, declaration).into_iter().zip(args).collect();
-        let Some(TypeKind::Object { properties }) =
-            self.snapshot.types.get(declaration.0 as usize).map(|record| record.kind.clone())
+        let own: Sigma = arguments(self.snapshot, declaration)
+            .into_iter()
+            .zip(args)
+            .collect();
+        let Some(TypeKind::Object { properties }) = self
+            .snapshot
+            .types
+            .get(declaration.0 as usize)
+            .map(|record| record.kind.clone())
         else {
             return Some(id);
         };
@@ -988,7 +1108,10 @@ impl Site for Writer<'_> {
                 let ty = substitute(self, property.ty, &own, depth).or_else(|| {
                     (!mentions_a_parameter(self.snapshot, property.ty)).then_some(property.ty)
                 })?;
-                Some(PropertyRecord { ty, ..property.clone() })
+                Some(PropertyRecord {
+                    ty,
+                    ..property.clone()
+                })
             })
             .collect();
         if let Some(record) = self.snapshot.types.get_mut(id.0 as usize) {
@@ -1001,9 +1124,8 @@ impl Site for Writer<'_> {
             let bases: Vec<TypeId> = bases
                 .into_iter()
                 .filter_map(|base| {
-                    substitute(self, base, &own, depth).or_else(|| {
-                        (!mentions_a_parameter(self.snapshot, base)).then_some(base)
-                    })
+                    substitute(self, base, &own, depth)
+                        .or_else(|| (!mentions_a_parameter(self.snapshot, base)).then_some(base))
                 })
                 .collect();
             self.snapshot.base_types.insert(id, bases);
@@ -1085,7 +1207,10 @@ fn parameter_owners(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, Owner> {
             .get(declaration.0 as usize)
             .and_then(|node| node.parent);
         while let Some(at) = parent
-            && snapshot.nodes.get(at.0 as usize).is_some_and(|node| node.kind == NodeKind::List)
+            && snapshot
+                .nodes
+                .get(at.0 as usize)
+                .is_some_and(|node| node.kind == NodeKind::List)
         {
             parent = snapshot.nodes[at.0 as usize].parent;
         }
@@ -1126,7 +1251,11 @@ fn parameter_owners(snapshot: &SemanticSnapshot) -> FxHashMap<TypeId, Owner> {
 }
 
 fn arguments(snapshot: &SemanticSnapshot, ty: TypeId) -> Vec<TypeId> {
-    snapshot.type_arguments.get(&ty).cloned().unwrap_or_default()
+    snapshot
+        .type_arguments
+        .get(&ty)
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// An instantiation's arguments, as many as the declaration has parameters.
@@ -1137,7 +1266,11 @@ fn arguments(snapshot: &SemanticSnapshot, ty: TypeId) -> Vec<TypeId> {
 /// base kept the form's -- `Derived<number>` extending `Base<T>`, whose
 /// `value: T` then had no representation. Truncated to the declaration's
 /// arity, `Base<T, this>` under `T := number` is `Base<number>`.
-fn instantiation_arguments(snapshot: &SemanticSnapshot, ty: TypeId, declaration: TypeId) -> Vec<TypeId> {
+fn instantiation_arguments(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    declaration: TypeId,
+) -> Vec<TypeId> {
     let mut args = arguments(snapshot, ty);
     args.truncate(arguments(snapshot, declaration).len());
     args
@@ -1231,7 +1364,11 @@ pub(super) fn mentions_a_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> b
 }
 
 /// An existing record equal to `wanted`, with the same declaring symbol.
-fn find_record(snapshot: &SemanticSnapshot, wanted: &TypeKind, symbol: Option<SymbolId>) -> Option<TypeId> {
+fn find_record(
+    snapshot: &SemanticSnapshot,
+    wanted: &TypeKind,
+    symbol: Option<SymbolId>,
+) -> Option<TypeId> {
     snapshot
         .types
         .iter()
@@ -1254,7 +1391,10 @@ mod tests {
 
     fn snapshot(kinds: Vec<TypeKind>) -> SemanticSnapshot {
         SemanticSnapshot {
-            types: kinds.into_iter().map(|kind| TypeRecord { kind, symbol: None }).collect(),
+            types: kinds
+                .into_iter()
+                .map(|kind| TypeRecord { kind, symbol: None })
+                .collect(),
             ..SemanticSnapshot::default()
         }
     }
@@ -1274,18 +1414,39 @@ mod tests {
         snapshot.types[7].symbol = Some(SymbolId(0));
         let templates = Templates::new(&snapshot);
         let mut lookup = Lookup::new(&templates);
-        assert_eq!(lookup.composite(TypeKind::Union(vec![TypeId(0), TypeId(3)]), None), Some(TypeId(5)));
-        assert_eq!(lookup.composite(TypeKind::Union(vec![TypeId(0), TypeId(4)]), None), Some(TypeId(6)));
-        assert_eq!(lookup.composite(TypeKind::Union(vec![TypeId(5), TypeId(3)]), Some(SymbolId(0))), Some(TypeId(7)));
-        assert_eq!(lookup.composite(TypeKind::Union(vec![TypeId(3), TypeId(4)]), None), None);
+        assert_eq!(
+            lookup.composite(TypeKind::Union(vec![TypeId(0), TypeId(3)]), None),
+            Some(TypeId(5))
+        );
+        assert_eq!(
+            lookup.composite(TypeKind::Union(vec![TypeId(0), TypeId(4)]), None),
+            Some(TypeId(6))
+        );
+        assert_eq!(
+            lookup.composite(
+                TypeKind::Union(vec![TypeId(5), TypeId(3)]),
+                Some(SymbolId(0))
+            ),
+            Some(TypeId(7))
+        );
+        assert_eq!(
+            lookup.composite(TypeKind::Union(vec![TypeId(3), TypeId(4)]), None),
+            None
+        );
     }
 
     #[test]
     fn recursive_union_is_not_replaced_by_its_finite_leaves() {
-        let snapshot = snapshot(vec![TypeKind::Number, TypeKind::Union(vec![TypeId(0), TypeId(1)])]);
+        let snapshot = snapshot(vec![
+            TypeKind::Number,
+            TypeKind::Union(vec![TypeId(0), TypeId(1)]),
+        ]);
         assert!(union_members(&snapshot, &[TypeId(1)]).is_none());
         let templates = Templates::new(&snapshot);
-        assert_eq!(Lookup::new(&templates).composite(TypeKind::Union(vec![TypeId(0)]), None), None);
+        assert_eq!(
+            Lookup::new(&templates).composite(TypeKind::Union(vec![TypeId(0)]), None),
+            None
+        );
     }
 
     #[test]
@@ -1297,39 +1458,76 @@ mod tests {
             TypeKind::Function(SignatureId(2)),
         ]);
         let signature = SignatureRecord {
-            parameters: vec![ParameterRecord { name: "value".to_owned(), ty: TypeId(0), optional: false, rest: false }],
-            return_type: TypeId(0), type_parameters: Vec::new(), is_construct: false,
-            type_predicate: None, this_type: None,
+            parameters: vec![ParameterRecord {
+                name: "value".to_owned(),
+                ty: TypeId(0),
+                optional: false,
+                rest: false,
+            }],
+            return_type: TypeId(0),
+            type_parameters: Vec::new(),
+            is_construct: false,
+            type_predicate: None,
+            this_type: None,
         };
         snapshot.signatures = vec![signature.clone(), signature.clone(), signature];
         snapshot.signatures[2].parameters[0].optional = true;
         snapshot.types[1].symbol = Some(SymbolId(0));
         let templates = Templates::new(&snapshot);
         let mut lookup = Lookup::new(&templates);
-        assert_eq!(lookup.composite(TypeKind::Function(SignatureId(0)), None), Some(TypeId(2)));
-        assert_eq!(lookup.composite(TypeKind::Function(SignatureId(2)), None), Some(TypeId(3)));
-        assert_eq!(lookup.composite(TypeKind::Function(SignatureId(2)), Some(SymbolId(0))), None);
+        assert_eq!(
+            lookup.composite(TypeKind::Function(SignatureId(0)), None),
+            Some(TypeId(2))
+        );
+        assert_eq!(
+            lookup.composite(TypeKind::Function(SignatureId(2)), None),
+            Some(TypeId(3))
+        );
+        assert_eq!(
+            lookup.composite(TypeKind::Function(SignatureId(2)), Some(SymbolId(0))),
+            None
+        );
     }
 
     #[test]
     fn coarse_object_bucket_preserves_member_flags_and_identity() {
         let property = PropertyRecord {
-            name: "value".to_owned(), ty: TypeId(0), readonly: false, optional: false,
-            declaration: None, kind: nts_semantic_schema::MemberKind::Field, own: true,
+            name: "value".to_owned(),
+            ty: TypeId(0),
+            readonly: false,
+            optional: false,
+            declaration: None,
+            kind: nts_semantic_schema::MemberKind::Field,
+            own: true,
         };
-        let mut optional = property.clone(); optional.optional = true;
-        let mut readonly = property.clone(); readonly.readonly = true;
-        let mut renamed = property.clone(); renamed.name = "other".to_owned();
-        let snapshot = snapshot(vec![TypeKind::Number,
-            TypeKind::Object { properties: vec![property.clone()] },
-            TypeKind::Object { properties: vec![optional] },
-            TypeKind::Object { properties: vec![readonly] },
-            TypeKind::Object { properties: vec![renamed] },
+        let mut optional = property.clone();
+        optional.optional = true;
+        let mut readonly = property.clone();
+        readonly.readonly = true;
+        let mut renamed = property.clone();
+        renamed.name = "other".to_owned();
+        let snapshot = snapshot(vec![
+            TypeKind::Number,
+            TypeKind::Object {
+                properties: vec![property.clone()],
+            },
+            TypeKind::Object {
+                properties: vec![optional],
+            },
+            TypeKind::Object {
+                properties: vec![readonly],
+            },
+            TypeKind::Object {
+                properties: vec![renamed],
+            },
         ]);
         let index = LookupIndex::new(&snapshot);
         for at in 1..5 {
             let kind = &snapshot.types[at].kind;
-            assert_eq!(index.composite(&snapshot, kind, None), Some(TypeId(u32::try_from(at).expect("four records"))));
+            assert_eq!(
+                index.composite(&snapshot, kind, None),
+                Some(TypeId(u32::try_from(at).expect("four records")))
+            );
             assert_eq!(index.composite(&snapshot, kind, Some(SymbolId(0))), None);
         }
     }
@@ -1337,9 +1535,15 @@ mod tests {
     #[test]
     fn root_resolution_cache_is_separate_for_each_sigma() {
         let snapshot = snapshot(vec![
-            TypeKind::TypeParameter { name: "T".to_owned(), constraint: None },
-            TypeKind::Array(TypeId(0)), TypeKind::Number, TypeKind::String,
-            TypeKind::Array(TypeId(2)), TypeKind::Array(TypeId(3)),
+            TypeKind::TypeParameter {
+                name: "T".to_owned(),
+                constraint: None,
+            },
+            TypeKind::Array(TypeId(0)),
+            TypeKind::Number,
+            TypeKind::String,
+            TypeKind::Array(TypeId(2)),
+            TypeKind::Array(TypeId(3)),
         ]);
         let templates = Templates::new(&snapshot);
         let number = Sigma::from([(TypeId(0), TypeId(2))]);
@@ -1352,33 +1556,57 @@ mod tests {
 
     #[test]
     fn call_form_roots_exclude_unused_class_and_mixed_owners() {
-        let parameter = |name: &str| TypeKind::TypeParameter { name: name.to_owned(), constraint: None };
+        let parameter = |name: &str| TypeKind::TypeParameter {
+            name: name.to_owned(),
+            constraint: None,
+        };
         let mut snapshot = snapshot(vec![
-            parameter("T"), parameter("U"), parameter("ClassT"), TypeKind::Number,
+            parameter("T"),
+            parameter("U"),
+            parameter("ClassT"),
+            TypeKind::Number,
             TypeKind::Union(vec![TypeId(0), TypeId(3)]),
             TypeKind::Tuple(vec![TypeId(0), TypeId(1)]),
             TypeKind::Function(SignatureId(0)),
             TypeKind::Array(TypeId(1)), // Not mentioned by any recorded call.
         ]);
         let signature = |types: &[TypeId]| SignatureRecord {
-            parameters: types.iter().enumerate().map(|(at, ty)| ParameterRecord {
-                name: format!("p{at}"), ty: *ty, optional: false, rest: false,
-            }).collect(),
-            return_type: TypeId(3), type_parameters: Vec::new(),
-            is_construct: false, type_predicate: None, this_type: None,
+            parameters: types
+                .iter()
+                .enumerate()
+                .map(|(at, ty)| ParameterRecord {
+                    name: format!("p{at}"),
+                    ty: *ty,
+                    optional: false,
+                    rest: false,
+                })
+                .collect(),
+            return_type: TypeId(3),
+            type_parameters: Vec::new(),
+            is_construct: false,
+            type_predicate: None,
+            this_type: None,
         };
-        snapshot.signatures = vec![signature(&[TypeId(2)]),
-            signature(&[TypeId(4), TypeId(5), TypeId(6), TypeId(4)])];
-        snapshot.call_targets.insert(NodeId(0), nts_semantic_schema::CallTarget {
-            signature: SignatureId(1), callee: None,
-        });
+        snapshot.signatures = vec![
+            signature(&[TypeId(2)]),
+            signature(&[TypeId(4), TypeId(5), TypeId(6), TypeId(4)]),
+        ];
+        snapshot.call_targets.insert(
+            NodeId(0),
+            nts_semantic_schema::CallTarget {
+                signature: SignatureId(1),
+                callee: None,
+            },
+        );
         let owner = Owner::Function(NodeId(10));
         let owners = FxHashMap::from_iter([
-            (TypeId(0), owner), (TypeId(1), Owner::Function(NodeId(11))),
+            (TypeId(0), owner),
+            (TypeId(1), Owner::Function(NodeId(11))),
             (TypeId(2), Owner::Type(SymbolId(0))),
         ]);
-        assert_eq!(required_call_forms(&snapshot, &owners),
-            FxHashMap::from_iter([(owner, vec![TypeId(4)])]));
+        assert_eq!(
+            required_call_forms(&snapshot, &owners),
+            FxHashMap::from_iter([(owner, vec![TypeId(4)])])
+        );
     }
-
 }

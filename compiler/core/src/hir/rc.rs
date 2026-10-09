@@ -138,7 +138,14 @@ pub fn insert(program: &mut Program) -> Report {
         let one = if own::inert(func) {
             count_only_returns(func, &layouts, &summaries)
         } else {
-            insert_into(func, Declared { layouts: &layouts, globals: &globals }, &summaries)
+            insert_into(
+                func,
+                Declared {
+                    layouts: &layouts,
+                    globals: &globals,
+                },
+                &summaries,
+            )
         };
         report.retains += one.retains;
         report.releases += one.releases;
@@ -167,7 +174,10 @@ fn ordered(
     let mut counted_values: Vec<ValueId> = values
         .iter()
         .copied()
-        .filter(|value| own::owned(func, layouts, *value) || (map.owns(*value) && own::counted(func, layouts, *value)))
+        .filter(|value| {
+            own::owned(func, layouts, *value)
+                || (map.owns(*value) && own::counted(func, layouts, *value))
+        })
         .collect();
     counted_values.sort_unstable();
     counted_values
@@ -248,8 +258,18 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
 
         let early = release_at_last_use(
             func,
-            &Settled { map: &map, live: &live },
-            &Block { at, terminator: &block.terminator, moved: &moved, arriving: &arriving, frame_names: &frame_names, layouts },
+            &Settled {
+                map: &map,
+                live: &live,
+            },
+            &Block {
+                at,
+                terminator: &block.terminator,
+                moved: &moved,
+                arriving: &arriving,
+                frame_names: &frame_names,
+                layouts,
+            },
             &mut ops,
             &mut report,
         );
@@ -395,23 +415,34 @@ fn only_erased(func: &Func, value: ValueId) -> bool {
     let mut views = vec![value];
     // Bounded: a chain of views is as long as a class hierarchy.
     while let Some(at) = views.pop().filter(|_| views.len() < 64) {
-        if func.blocks.iter().any(|block| super::operands_of_terminator(&block.terminator).contains(&at)) {
+        if func
+            .blocks
+            .iter()
+            .any(|block| super::operands_of_terminator(&block.terminator).contains(&at))
+        {
             return false;
         }
         // The arena, not the blocks: this pass has the block it is rebuilding
         // out of `func.blocks`, and a use there is still a use.
         for (index, op) in func.values.iter().enumerate() {
-            if matches!(op.kind, OpKind::Retain(_) | OpKind::Release(_)) || !super::operands_of(&op.kind).contains(&at) {
+            if matches!(op.kind, OpKind::Retain(_) | OpKind::Release(_))
+                || !super::operands_of(&op.kind).contains(&at)
+            {
                 continue;
             }
             match &op.kind {
                 OpKind::Erase { value: erasing, .. } if *erasing == at => erased = true,
-                OpKind::Convert(_) if op.ty.counting().is_some() => views.push(ValueId(u32::try_from(index).unwrap_or(u32::MAX))),
+                OpKind::Convert(_) if op.ty.counting().is_some() => {
+                    views.push(ValueId(u32::try_from(index).unwrap_or(u32::MAX)));
+                }
                 // A runtime helper that keeps none of its arguments reads the
                 // object and holds nothing (`runtime::keeps`) -- `nts_gobject_made`,
                 // which a construction calls -- so nothing on the platform's
                 // side can be holding it through that use.
-                OpKind::Call { callee: super::Callee::External(name), .. } if super::runtime::keeps(name).is_some_and(<[usize]>::is_empty) => {}
+                OpKind::Call {
+                    callee: super::Callee::External(name),
+                    ..
+                } if super::runtime::keeps(name).is_some_and(<[usize]>::is_empty) => {}
                 _ => return false,
             }
         }
@@ -449,7 +480,12 @@ fn frame_names(func: &Func) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
         .filter_map(|(name, roots)| {
             let framed: Vec<ValueId> = roots
                 .into_iter()
-                .filter(|root| matches!(func.values[root.0 as usize].kind, OpKind::ObjectNew { frame: true }))
+                .filter(|root| {
+                    matches!(
+                        func.values[root.0 as usize].kind,
+                        OpKind::ObjectNew { frame: true }
+                    )
+                })
                 .collect();
             (!framed.is_empty()).then_some((name, framed))
         })
@@ -462,6 +498,7 @@ fn frame_names(func: &Func) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
 ///
 /// `ops` is the block as `count_ops` left it, retains and stores included: a
 /// retain reads its value, so a release never lands before one.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn release_at_last_use(
     func: &mut Func,
     settled: &Settled<'_>,
@@ -495,10 +532,19 @@ fn release_at_last_use(
     // `each_upto((n) => { first += n }); return first + second` is a cell
     // moved into the closure and read after the call. From the move on, the
     // value is the container's, so it leans on the container.
-    let mut moved_into: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    let mut moved_into: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> =
+        rustc_hash::FxHashMap::default();
     for op in ops.iter() {
-        if let OpKind::FieldSet { object: container, value, .. } | OpKind::ArraySet { array: container, value, .. } =
-            &func.values[op.0 as usize].kind
+        if let OpKind::FieldSet {
+            object: container,
+            value,
+            ..
+        }
+        | OpKind::ArraySet {
+            array: container,
+            value,
+            ..
+        } = &func.values[op.0 as usize].kind
             && block.moved.contains(value)
         {
             moved_into.entry(*value).or_default().push(*container);
@@ -510,11 +556,22 @@ fn release_at_last_use(
     // uncounted store is exactly the case that needs it. See `Leaning::holds`.
     let mut holds: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
     let frame = |value: &ValueId| {
-        matches!(func.values[value.0 as usize].kind, OpKind::ObjectNew { frame: true })
+        matches!(
+            func.values[value.0 as usize].kind,
+            OpKind::ObjectNew { frame: true }
+        )
     };
     for op in ops.iter() {
-        if let OpKind::FieldSet { object: container, value, .. }
-        | OpKind::ArraySet { array: container, value, .. } = &func.values[op.0 as usize].kind
+        if let OpKind::FieldSet {
+            object: container,
+            value,
+            ..
+        }
+        | OpKind::ArraySet {
+            array: container,
+            value,
+            ..
+        } = &func.values[op.0 as usize].kind
             && (frame(container) || frame(value))
         {
             holds.entry(*container).or_default().push(*value);
@@ -585,7 +642,11 @@ fn release_at_last_use(
 /// hazard when `c` is a block parameter naming a frame cell (a captured `let`
 /// passed to a closure after an inlined `forEach`, the Chromium lane's second
 /// live-list vector).
-fn reads_of(leaning: &mut Leaning<'_, '_>, frame_names: &rustc_hash::FxHashMap<ValueId, Vec<ValueId>>, op: ValueId) -> Vec<ValueId> {
+fn reads_of(
+    leaning: &mut Leaning<'_, '_>,
+    frame_names: &rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    op: ValueId,
+) -> Vec<ValueId> {
     let mut read = vec![op];
     let kind = &leaning.func.values[op.0 as usize].kind;
     let mut held: Vec<ValueId> = Vec::new();
@@ -715,7 +776,11 @@ impl Leaning<'_, '_> {
     fn holds_nothing(&self, value: ValueId) -> bool {
         let scalar = matches!(
             self.func.values[value.0 as usize].ty,
-            HirType::Void | HirType::Never | HirType::Bool | HirType::Int { .. } | HirType::Float { .. }
+            HirType::Void
+                | HirType::Never
+                | HirType::Bool
+                | HirType::Int { .. }
+                | HirType::Float { .. }
         );
         !scalar
             && (self.map.borrowed(value)
@@ -725,10 +790,13 @@ impl Leaning<'_, '_> {
 
 /// Every block parameter, with the arguments each edge into it carries.
 fn arriving(func: &Func) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
-    let mut arriving: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> = rustc_hash::FxHashMap::default();
+    let mut arriving: rustc_hash::FxHashMap<ValueId, Vec<ValueId>> =
+        rustc_hash::FxHashMap::default();
     for block in &func.blocks {
         for (target, args) in edges_of(&block.terminator) {
-            let Some(params) = func.blocks.get(target.0 as usize).map(|b| &b.params) else { continue };
+            let Some(params) = func.blocks.get(target.0 as usize).map(|b| &b.params) else {
+                continue;
+            };
             for (param, argument) in params.iter().zip(args) {
                 arriving.entry(*param).or_default().push(argument);
             }
@@ -1296,15 +1364,29 @@ mod tests {
     use nts_semantic_schema::Origin;
 
     fn origin() -> Origin {
-        Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) })
+        Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        })
     }
 
     fn op(kind: OpKind, ty: HirType) -> Op {
-        Op { kind, ty, origin: origin() }
+        Op {
+            kind,
+            ty,
+            origin: origin(),
+        }
     }
 
     fn call(name: &str, args: Vec<ValueId>, ty: HirType) -> Op {
-        op(OpKind::Call { callee: Callee::External(name.to_owned()), args, frame: None }, ty)
+        op(
+            OpKind::Call {
+                callee: Callee::External(name.to_owned()),
+                args,
+                frame: None,
+            },
+            ty,
+        )
     }
 
     fn number() -> HirType {
@@ -1319,10 +1401,10 @@ mod tests {
     /// `reads` building %2 from %1 as the caller says.
     fn straight(reads: Op, later: Vec<ValueId>) -> Program {
         let values = vec![
-            op(OpKind::Param(0), number()),                      // %0
+            op(OpKind::Param(0), number()),                           // %0
             call("nts_number_to_string", vec![ValueId(0)], string()), // %1  owned
-            reads,                                               // %2
-            call("later", later, number()),                      // %3
+            reads,                                                    // %2
+            call("later", later, number()),                           // %3
         ];
         let func = Func {
             name: "f".to_owned(),
@@ -1351,7 +1433,10 @@ mod tests {
             written_return: None,
             written_return_elements: Vec::new(),
         };
-        Program { funcs: vec![func], ..Program::default() }
+        Program {
+            funcs: vec![func],
+            ..Program::default()
+        }
     }
 
     /// A frame object read only through another name for it -- a block
@@ -1379,20 +1464,33 @@ mod tests {
     fn a_frame_object_read_through_a_block_parameter_is_released_after_the_read() {
         let cell = HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(1)));
         let values = vec![
-            op(OpKind::Param(0), number()),                                          // %0
-            call("nts_number_to_string", vec![ValueId(0)], string()),                // %1  owned
-            op(OpKind::ObjectNew { frame: true }, cell.clone()),                     // %2  the cell
-            op(OpKind::FieldSet { object: ValueId(2), field: 0, value: ValueId(1) }, HirType::Void), // %3
-            op(OpKind::BlockParam(0), cell.clone()),                                 // %4  another name
-            op(OpKind::BlockParam(0), cell),                                         // %5  and a third
-            call("read", vec![ValueId(5)], number()),                                // %6  reads it
+            op(OpKind::Param(0), number()),                           // %0
+            call("nts_number_to_string", vec![ValueId(0)], string()), // %1  owned
+            op(OpKind::ObjectNew { frame: true }, cell.clone()),      // %2  the cell
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(2),
+                    field: 0,
+                    value: ValueId(1),
+                },
+                HirType::Void,
+            ), // %3
+            op(OpKind::BlockParam(0), cell.clone()),                  // %4  another name
+            op(OpKind::BlockParam(0), cell),                          // %5  and a third
+            call("read", vec![ValueId(5)], number()),                 // %6  reads it
         ];
         let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
         program.layouts = vec![Layout {
             types: vec![nts_semantic_schema::TypeId(1)],
             name: "Cell".to_owned(),
             interfaces: Vec::new(),
-            fields: vec![crate::hir::Field { name: "value".to_owned(), ty: string(), readonly: false, declared_by: None, written: None }],
+            fields: vec![crate::hir::Field {
+                name: "value".to_owned(),
+                ty: string(),
+                readonly: false,
+                declared_by: None,
+                written: None,
+            }],
             methods: Vec::new(),
             base: None,
         }];
@@ -1402,21 +1500,50 @@ mod tests {
             Block {
                 params: Vec::new(),
                 ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
-                terminator: Terminator::Jump { target: crate::hir::BlockId(1), args: vec![ValueId(2)] },
+                terminator: Terminator::Jump {
+                    target: crate::hir::BlockId(1),
+                    args: vec![ValueId(2)],
+                },
             },
-            Block { params: vec![ValueId(4)], ops: Vec::new(), terminator: Terminator::Jump { target: crate::hir::BlockId(2), args: vec![ValueId(4)] } },
-            Block { params: vec![ValueId(5)], ops: vec![ValueId(6)], terminator: Terminator::Return(Some(ValueId(6))) },
+            Block {
+                params: vec![ValueId(4)],
+                ops: Vec::new(),
+                terminator: Terminator::Jump {
+                    target: crate::hir::BlockId(2),
+                    args: vec![ValueId(4)],
+                },
+            },
+            Block {
+                params: vec![ValueId(5)],
+                ops: vec![ValueId(6)],
+                terminator: Terminator::Return(Some(ValueId(6))),
+            },
         ];
         insert(&mut program);
         let func = &program.funcs[0];
-        let gives_back_the_cell = |value: &ValueId| matches!(func.values[value.0 as usize].kind, OpKind::FieldGet { object: ValueId(2), .. });
+        let gives_back_the_cell = |value: &ValueId| {
+            matches!(
+                func.values[value.0 as usize].kind,
+                OpKind::FieldGet {
+                    object: ValueId(2),
+                    ..
+                }
+            )
+        };
         let ops = &func.blocks[2].ops;
         let read = ops.iter().position(|value| *value == ValueId(6));
-        let released: Vec<usize> = ops.iter().enumerate().filter(|(_, value)| gives_back_the_cell(value)).map(|(at, _)| at).collect();
+        let released: Vec<usize> = ops
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| gives_back_the_cell(value))
+            .map(|(at, _)| at)
+            .collect();
         assert!(
             !released.is_empty() && read.is_some_and(|read| released.iter().all(|at| *at > read)),
             "the cell's string is given back before `read` reads it: {:?}",
-            ops.iter().map(|value| &func.values[value.0 as usize].kind).collect::<Vec<_>>()
+            ops.iter()
+                .map(|value| &func.values[value.0 as usize].kind)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -1442,7 +1569,10 @@ mod tests {
     fn a_temporary_is_released_after_its_last_use() {
         let mut program = straight(call("use", vec![ValueId(1)], number()), Vec::new());
         insert(&mut program);
-        assert_eq!(released_after(&program), vec![(ValueId(1), Some(ValueId(2)))]);
+        assert_eq!(
+            released_after(&program),
+            vec![(ValueId(1), Some(ValueId(2)))]
+        );
     }
 
     /// A pointer into it holds no count -- `char *` of a string handed to C
@@ -1450,10 +1580,15 @@ mod tests {
     /// which reads the pointer.
     #[test]
     fn a_pointer_into_a_value_keeps_it() {
-        let pointer = HirType::NativePointer(crate::hir::native::Pointee::Scalar(crate::hir::native::Scalar::Char));
+        let pointer = HirType::NativePointer(crate::hir::native::Pointee::Scalar(
+            crate::hir::native::Scalar::Char,
+        ));
         let mut program = straight(op(OpKind::Convert(ValueId(1)), pointer), vec![ValueId(2)]);
         insert(&mut program);
-        assert_eq!(released_after(&program), vec![(ValueId(1), Some(ValueId(3)))]);
+        assert_eq!(
+            released_after(&program),
+            vec![(ValueId(1), Some(ValueId(3)))]
+        );
     }
 
     /// The raw address a view lends C -- `nts_view_bytes`, a pointer into the
@@ -1463,10 +1598,18 @@ mod tests {
     /// failure in this placement that is not a wrong number.
     #[test]
     fn a_raw_address_into_a_managed_value_keeps_it() {
-        let bytes = HirType::NativePointer(crate::hir::native::Pointee::Scalar(crate::hir::native::Scalar::UInt8));
-        let mut program = straight(call("nts_view_bytes", vec![ValueId(1)], bytes), vec![ValueId(2)]);
+        let bytes = HirType::NativePointer(crate::hir::native::Pointee::Scalar(
+            crate::hir::native::Scalar::UInt8,
+        ));
+        let mut program = straight(
+            call("nts_view_bytes", vec![ValueId(1)], bytes),
+            vec![ValueId(2)],
+        );
         insert(&mut program);
-        assert_eq!(released_after(&program), vec![(ValueId(1), Some(ValueId(3)))]);
+        assert_eq!(
+            released_after(&program),
+            vec![(ValueId(1), Some(ValueId(3)))]
+        );
     }
 
     /// A counted foreign object keeps its block's end, past its last use:
@@ -1477,17 +1620,19 @@ mod tests {
     /// the exclusion is the protection, not a conservatism to remove.
     #[test]
     fn a_delegate_handed_to_an_assign_property_outlives_its_last_use() {
-        let delegate = HirType::NativePointer(crate::hir::native::Pointee::Opaque(crate::hir::native::Handle {
-            tag: "Elements".to_owned(),
-            ancestors: vec!["NSObject".to_owned()],
-            family: crate::hir::native::Family::Objc,
-            interface: false,
-        }));
+        let delegate = HirType::NativePointer(crate::hir::native::Pointee::Opaque(
+            crate::hir::native::Handle {
+                tag: "Elements".to_owned(),
+                ancestors: vec!["NSObject".to_owned()],
+                family: crate::hir::native::Family::Objc,
+                interface: false,
+            },
+        ));
         let values = vec![
-            op(OpKind::Param(0), number()),                                    // %0
-            call("objc_make_delegate", vec![ValueId(0)], delegate),            // %1  owned
-            call("set_delegate", vec![ValueId(1)], HirType::Void),             // %2  its last use
-            call("parse", Vec::new(), number()),                               // %3  sends to it
+            op(OpKind::Param(0), number()),                         // %0
+            call("objc_make_delegate", vec![ValueId(0)], delegate), // %1  owned
+            call("set_delegate", vec![ValueId(1)], HirType::Void),  // %2  its last use
+            call("parse", Vec::new(), number()),                    // %3  sends to it
         ];
         let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
         program.funcs[0].values = values;
@@ -1504,7 +1649,11 @@ mod tests {
         assert!(
             releases.len() == 1 && parse.is_some_and(|parse| releases[0] > parse),
             "the delegate is released before `parse` sends to it: {:?}",
-            func.blocks[0].ops.iter().map(|v| &func.values[v.0 as usize].kind).collect::<Vec<_>>()
+            func.blocks[0]
+                .ops
+                .iter()
+                .map(|v| &func.values[v.0 as usize].kind)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -1516,14 +1665,17 @@ mod tests {
     /// between its two calls -- XAML cleared the destroyed panel's children and
     /// the size read 0 (winui-hello's `replaced`, under rc only).
     #[test]
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn a_foreign_handle_made_after_an_early_exit_outlives_its_last_read() {
         let handle = objc_handle("Elements");
-        let native = crate::hir::native::Type::Pointer(crate::hir::native::Pointee::Opaque(crate::hir::native::Handle {
-            tag: "Elements".to_owned(),
-            ancestors: vec!["NSObject".to_owned()],
-            family: crate::hir::native::Family::Objc,
-            interface: false,
-        }));
+        let native = crate::hir::native::Type::Pointer(crate::hir::native::Pointee::Opaque(
+            crate::hir::native::Handle {
+                tag: "Elements".to_owned(),
+                ancestors: vec!["NSObject".to_owned()],
+                family: crate::hir::native::Family::Objc,
+                interface: false,
+            },
+        ));
         let read = crate::hir::native::Function {
             name: "read".to_owned(),
             convention: crate::hir::native::Convention::C,
@@ -1548,12 +1700,19 @@ mod tests {
             hresult: false,
         };
         let values = vec![
-            op(OpKind::Param(0), number()),                                                      // %0
-            call("ok", Vec::new(), HirType::Bool),                                               // %1
-            call("objc_make", vec![ValueId(0)], handle),                                         // %2  owned
-            op(OpKind::Call { callee: Callee::Native(std::sync::Arc::new(read)), args: vec![ValueId(2)], frame: None }, HirType::Void), // %3  its last read
-            call("later", Vec::new(), number()),                                                 // %4
-            call("failed", Vec::new(), HirType::Bool),                                           // %5
+            op(OpKind::Param(0), number()),              // %0
+            call("ok", Vec::new(), HirType::Bool),       // %1
+            call("objc_make", vec![ValueId(0)], handle), // %2  owned
+            op(
+                OpKind::Call {
+                    callee: Callee::Native(std::sync::Arc::new(read)),
+                    args: vec![ValueId(2)],
+                    frame: None,
+                },
+                HirType::Void,
+            ), // %3  its last read
+            call("later", Vec::new(), number()),         // %4
+            call("failed", Vec::new(), HirType::Bool),   // %5
         ];
         let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
         let func = &mut program.funcs[0];
@@ -1571,7 +1730,11 @@ mod tests {
                 },
             },
             // The early exit, before the handle exists.
-            Block { params: Vec::new(), ops: Vec::new(), terminator: Terminator::Return(Some(ValueId(0))) },
+            Block {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: Terminator::Return(Some(ValueId(0))),
+            },
             // The read, then the check every Windows Runtime call ends in: a
             // failure throws (an exit of its own) and success goes on.
             Block {
@@ -1585,8 +1748,16 @@ mod tests {
                     else_args: Vec::new(),
                 },
             },
-            Block { params: Vec::new(), ops: Vec::new(), terminator: Terminator::Unreachable },
-            Block { params: Vec::new(), ops: vec![ValueId(4)], terminator: Terminator::Return(Some(ValueId(4))) },
+            Block {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: Terminator::Unreachable,
+            },
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(4)],
+                terminator: Terminator::Return(Some(ValueId(4))),
+            },
         ];
         insert(&mut program);
         let func = &program.funcs[0];
@@ -1601,10 +1772,15 @@ mod tests {
         assert!(
             releases.len() == 1 && later.is_some_and(|later| releases[0] > later),
             "the handle is released before `later`: {:?}",
-            ops.iter().map(|v| &func.values[v.0 as usize].kind).collect::<Vec<_>>()
+            ops.iter()
+                .map(|v| &func.values[v.0 as usize].kind)
+                .collect::<Vec<_>>()
         );
         assert!(
-            func.blocks[1].ops.iter().all(|v| !matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(2)))),
+            func.blocks[1]
+                .ops
+                .iter()
+                .all(|v| !matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(2)))),
             "the early exit releases a handle it never saw"
         );
     }
@@ -1624,11 +1800,11 @@ mod tests {
     #[test]
     fn a_foreign_handle_held_through_a_loop_is_released_at_its_exits_only() {
         let values = vec![
-            op(OpKind::Param(0), number()),                                  // %0
-            call("objc_make", vec![ValueId(0)], objc_handle("Elements")),    // %1  owned
-            call("more", Vec::new(), HirType::Bool),                         // %2
-            call("failed", Vec::new(), HirType::Bool),                       // %3
-            call("later", Vec::new(), number()),                             // %4
+            op(OpKind::Param(0), number()),                               // %0
+            call("objc_make", vec![ValueId(0)], objc_handle("Elements")), // %1  owned
+            call("more", Vec::new(), HirType::Bool),                      // %2
+            call("failed", Vec::new(), HirType::Bool),                    // %3
+            call("later", Vec::new(), number()),                          // %4
         ];
         let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
         let func = &mut program.funcs[0];
@@ -1642,43 +1818,105 @@ mod tests {
         };
         func.blocks = vec![
             // b0: the handle, then the loop.
-            Block { params: Vec::new(), ops: vec![ValueId(0), ValueId(1)], terminator: Terminator::Jump { target: crate::hir::BlockId(1), args: Vec::new() } },
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1)],
+                terminator: Terminator::Jump {
+                    target: crate::hir::BlockId(1),
+                    args: Vec::new(),
+                },
+            },
             // b1: the loop's head.
-            Block { params: Vec::new(), ops: vec![ValueId(2)], terminator: branch(2, 2, 4) },
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(2)],
+                terminator: branch(2, 2, 4),
+            },
             // b2: its body, whose call can fail.
-            Block { params: Vec::new(), ops: vec![ValueId(3)], terminator: branch(3, 3, 1) },
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(3)],
+                terminator: branch(3, 3, 1),
+            },
             // b3: the failure, an exit inside the loop's reach.
-            Block { params: Vec::new(), ops: Vec::new(), terminator: Terminator::Unreachable },
+            Block {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: Terminator::Unreachable,
+            },
             // b4: after the loop.
-            Block { params: Vec::new(), ops: vec![ValueId(4)], terminator: Terminator::Return(Some(ValueId(4))) },
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(4)],
+                terminator: Terminator::Return(Some(ValueId(4))),
+            },
         ];
         insert(&mut program);
         let func = &program.funcs[0];
         let released_in = |block: usize| {
-            func.blocks[block].ops.iter().filter(|v| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1)))).count()
+            func.blocks[block]
+                .ops
+                .iter()
+                .filter(|v| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1))))
+                .count()
         };
-        let ops = |block: usize| func.blocks[block].ops.iter().map(|v| &func.values[v.0 as usize].kind).collect::<Vec<_>>();
+        let ops = |block: usize| {
+            func.blocks[block]
+                .ops
+                .iter()
+                .map(|v| &func.values[v.0 as usize].kind)
+                .collect::<Vec<_>>()
+        };
         // The loop's blocks and any block an edge's release was split into
         // on the way round: none may release it.
-        for (block, _) in func.blocks.iter().enumerate().filter(|(at, _)| ![3, 4].contains(at)) {
-            assert_eq!(released_in(block), 0, "b{block} releases the handle inside or before the loop: {:?}", ops(block));
+        for (block, _) in func
+            .blocks
+            .iter()
+            .enumerate()
+            .filter(|(at, _)| ![3, 4].contains(at))
+        {
+            assert_eq!(
+                released_in(block),
+                0,
+                "b{block} releases the handle inside or before the loop: {:?}",
+                ops(block)
+            );
         }
-        assert_eq!(released_in(3), 1, "the failure exit does not release it once: {:?}", ops(3));
-        assert_eq!(released_in(4), 1, "the return does not release it once: {:?}", ops(4));
+        assert_eq!(
+            released_in(3),
+            1,
+            "the failure exit does not release it once: {:?}",
+            ops(3)
+        );
+        assert_eq!(
+            released_in(4),
+            1,
+            "the return does not release it once: {:?}",
+            ops(4)
+        );
         let later = func.blocks[4].ops.iter().position(|v| *v == ValueId(4));
-        let release = func.blocks[4].ops.iter().position(|v| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1))));
+        let release = func.blocks[4]
+            .ops
+            .iter()
+            .position(|v| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1))));
         assert!(later < release, "released before `later`: {:?}", ops(4));
     }
 
     /// An Objective-C handle, `Elements : NSObject`, or the `NSObject` view of
     /// one.
     fn objc_handle(tag: &str) -> HirType {
-        HirType::NativePointer(crate::hir::native::Pointee::Opaque(crate::hir::native::Handle {
-            tag: tag.to_owned(),
-            ancestors: if tag == "NSObject" { Vec::new() } else { vec!["NSObject".to_owned()] },
-            family: crate::hir::native::Family::Objc,
-            interface: false,
-        }))
+        HirType::NativePointer(crate::hir::native::Pointee::Opaque(
+            crate::hir::native::Handle {
+                tag: tag.to_owned(),
+                ancestors: if tag == "NSObject" {
+                    Vec::new()
+                } else {
+                    vec!["NSObject".to_owned()]
+                },
+                family: crate::hir::native::Family::Objc,
+                interface: false,
+            },
+        ))
     }
 
     /// `f(n) { %1 = make(n); ...erase %1, through `views` Converts...; store(erased); later() }`,
@@ -1693,13 +1931,21 @@ mod tests {
             values.push(op(OpKind::Convert(from), objc_handle("NSObject")));
         }
         let erasing = ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX));
-        values.push(op(OpKind::Erase { value: erasing, absent: Absent::Impossible }, HirType::Erased));
+        values.push(op(
+            OpKind::Erase {
+                value: erasing,
+                absent: Absent::Impossible,
+            },
+            HirType::Erased,
+        ));
         let erased = ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX));
         values.push(call("store", vec![erased], HirType::Void));
         values.push(call("later", Vec::new(), number()));
         let later = ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX));
         let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
-        program.funcs[0].blocks[0].ops = (0..values.len()).map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX))).collect();
+        program.funcs[0].blocks[0].ops = (0..values.len())
+            .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
+            .collect();
         program.funcs[0].blocks[0].terminator = Terminator::Return(Some(later));
         program.funcs[0].values = values;
         insert(&mut program);
@@ -1723,7 +1969,10 @@ mod tests {
     #[test]
     fn a_foreign_object_only_erased_is_released_after_its_last_use() {
         let (releases, later) = erased_temporary(0);
-        assert!(releases.len() == 1 && later.is_some_and(|later| releases[0] < later), "{releases:?} against `later` at {later:?}");
+        assert!(
+            releases.len() == 1 && later.is_some_and(|later| releases[0] < later),
+            "{releases:?} against `later` at {later:?}"
+        );
     }
 
     /// The same through a view: `new GtkButton()` is a `GtkWidget *` converted
@@ -1731,7 +1980,10 @@ mod tests {
     #[test]
     fn a_foreign_object_erased_through_a_view_is_released_after_its_last_use() {
         let (releases, later) = erased_temporary(1);
-        assert!(releases.len() == 1 && later.is_some_and(|later| releases[0] < later), "{releases:?} against `later` at {later:?}");
+        assert!(
+            releases.len() == 1 && later.is_some_and(|later| releases[0] < later),
+            "{releases:?} against `later` at {later:?}"
+        );
     }
 
     /// An erased copy that takes a count of its own frees the original to go
@@ -1739,14 +1991,34 @@ mod tests {
     /// own last use.
     #[test]
     fn a_counted_copy_does_not_hold_the_original() {
-        let erased = op(OpKind::Erase { value: ValueId(1), absent: Absent::Impossible }, HirType::Erased);
+        let erased = op(
+            OpKind::Erase {
+                value: ValueId(1),
+                absent: Absent::Impossible,
+            },
+            HirType::Erased,
+        );
         let mut program = straight(erased, vec![ValueId(2)]);
         insert(&mut program);
-        assert_eq!(released_after(&program), vec![(ValueId(1), Some(ValueId(2))), (ValueId(2), Some(ValueId(3)))]);
+        assert_eq!(
+            released_after(&program),
+            vec![
+                (ValueId(1), Some(ValueId(2))),
+                (ValueId(2), Some(ValueId(3)))
+            ]
+        );
         let func = &program.funcs[0];
-        let kinds: Vec<&OpKind> = func.blocks[0].ops.iter().map(|v| &func.values[v.0 as usize].kind).collect();
-        let retained = kinds.iter().position(|k| matches!(k, OpKind::Retain(ValueId(2))));
-        let released = kinds.iter().position(|k| matches!(k, OpKind::Release(ValueId(1))));
+        let kinds: Vec<&OpKind> = func.blocks[0]
+            .ops
+            .iter()
+            .map(|v| &func.values[v.0 as usize].kind)
+            .collect();
+        let retained = kinds
+            .iter()
+            .position(|k| matches!(k, OpKind::Retain(ValueId(2))));
+        let released = kinds
+            .iter()
+            .position(|k| matches!(k, OpKind::Release(ValueId(1))));
         assert!(retained < released, "{kinds:?}");
     }
 }

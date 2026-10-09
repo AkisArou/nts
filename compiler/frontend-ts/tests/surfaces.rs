@@ -14,11 +14,21 @@ use nts_semantic_schema::{SemanticSnapshot, SnapshotError};
 /// the package's `package.json` says it.
 fn over_a_package(arm: &str, nts: &str) -> Option<Result<SemanticSnapshot, SnapshotError>> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-surfaces-{}-{arm}", std::process::id()));
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+        .unwrap()
+        .join(format!("nts-surfaces-{}-{arm}", std::process::id()));
     let package = dir.join("node_modules/@x/kit");
     std::fs::create_dir_all(&package).unwrap();
-    std::fs::write(package.join("package.json"), format!(r#"{{ "name": "@x/kit", "types": "index.d.ts"{nts} }}"#)).unwrap();
-    std::fs::write(package.join("index.d.ts"), "declare module \"objc:Kit\" {\n  export class Kit {\n    count(): number;\n  }\n}\n").unwrap();
+    std::fs::write(
+        package.join("package.json"),
+        format!(r#"{{ "name": "@x/kit", "types": "index.d.ts"{nts} }}"#),
+    )
+    .unwrap();
+    std::fs::write(
+        package.join("index.d.ts"),
+        "declare module \"objc:Kit\" {\n  export class Kit {\n    count(): number;\n  }\n}\n",
+    )
+    .unwrap();
     std::fs::write(dir.join("main.ts"), "import { Kit } from \"objc:Kit\";\nexport function count(kit: Kit): number {\n  return kit.count();\n}\n").unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -30,7 +40,10 @@ fn over_a_package(arm: &str, nts: &str) -> Option<Result<SemanticSnapshot, Snaps
 }
 
 fn reads_the_package(snapshot: &SemanticSnapshot) -> bool {
-    snapshot.sources.iter().any(|source| source.uri.ends_with("node_modules/@x/kit/index.d.ts"))
+    snapshot
+        .sources
+        .iter()
+        .any(|source| source.uri.ends_with("node_modules/@x/kit/index.d.ts"))
 }
 
 /// **A package that says it is a platform surface is read**: its
@@ -38,16 +51,24 @@ fn reads_the_package(snapshot: &SemanticSnapshot) -> bool {
 /// them as much as it needs the program's own.
 #[test]
 fn a_surface_packages_declarations_are_read() {
-    let Some(snapshot) = over_a_package("surface", r#", "nts": { "surface": "objc" }"#) else { return };
-    assert!(reads_the_package(&snapshot.expect("snapshot should succeed")));
+    let Some(snapshot) = over_a_package("surface", r#", "nts": { "surface": "objc" }"#) else {
+        return;
+    };
+    assert!(reads_the_package(
+        &snapshot.expect("snapshot should succeed")
+    ));
 }
 
 /// Any other package under `node_modules` is not the program's, and is not
 /// read.
 #[test]
 fn an_ordinary_package_is_not_read() {
-    let Some(snapshot) = over_a_package("ordinary", "") else { return };
-    assert!(!reads_the_package(&snapshot.expect("snapshot should succeed")));
+    let Some(snapshot) = over_a_package("ordinary", "") else {
+        return;
+    };
+    assert!(!reads_the_package(
+        &snapshot.expect("snapshot should succeed")
+    ));
 }
 
 /// A surface this compiler does not know is refused by name, not read as an
@@ -55,9 +76,14 @@ fn an_ordinary_package_is_not_read() {
 /// no word of why.
 #[test]
 fn an_unknown_surface_is_refused_by_name() {
-    let Some(snapshot) = over_a_package("unknown", r#", "nts": { "surface": "cobol" }"#) else { return };
+    let Some(snapshot) = over_a_package("unknown", r#", "nts": { "surface": "cobol" }"#) else {
+        return;
+    };
     match snapshot {
         Err(SnapshotError::Project(why)) => assert!(why.contains("\"cobol\""), "{why}"),
-        other => panic!("an unknown surface was not refused: {:?}", other.map(|snapshot| snapshot.sources.len())),
+        other => panic!(
+            "an unknown surface was not refused: {:?}",
+            other.map(|snapshot| snapshot.sources.len())
+        ),
     }
 }

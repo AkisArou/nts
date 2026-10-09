@@ -92,7 +92,9 @@ pub fn fixup_whitespace(text: &str, decode: bool) -> String {
 /// `ContainsOnlyTriviaWhiteSpaces`.
 #[must_use]
 pub fn is_formatting(text: &str) -> bool {
-    text.chars().all(|ch| is_line_break(ch) || is_whitespace_single_line(ch)) && text.contains(is_line_break)
+    text.chars()
+        .all(|ch| is_line_break(ch) || is_whitespace_single_line(ch))
+        && text.contains(is_line_break)
 }
 
 fn is_line_break(ch: char) -> bool {
@@ -103,7 +105,8 @@ fn is_line_break(ch: char) -> bool {
 fn is_whitespace_single_line(ch: char) -> bool {
     matches!(
         ch,
-        ' ' | '\t' | '\u{b}' | '\u{c}' | '\u{a0}' | '\u{85}' | '\u{1680}' | '\u{2000}'..='\u{200b}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}'
+        ' ' | '\t' | '\u{b}' | '\u{c}' | '\u{a0}' | '\u{85}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200b}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}'
     )
 }
 
@@ -124,7 +127,10 @@ mod tests {
 
     #[test]
     fn entities_are_decoded() {
-        assert_eq!(decode_entities("a &amp; b &#65;&#x42; &nope; &"), "a & b AB &nope; &");
+        assert_eq!(
+            decode_entities("a &amp; b &#65;&#x42; &nope; &"),
+            "a & b AB &nope; &"
+        );
         assert_eq!(decode_entities("&a&amp;"), "&a&");
     }
 

@@ -87,7 +87,10 @@ fn a_quiet_accessor_is_not_refused_for_want_of_a_copy() {
         eprintln!("SKIP: tsgo is not built");
         return;
     };
-    assert!(compiled(&lowered, "aQuietGetter"), "a getter that cannot throw compiles");
+    assert!(
+        compiled(&lowered, "aQuietGetter"),
+        "a getter that cannot throw compiles"
+    );
     assert!(
         !compiled(&lowered, "Box#get plain@raises"),
         "and gets no copy, because it has nothing to carry"
@@ -124,7 +127,11 @@ fn an_overridden_accessor_dispatches_at_its_own_slot() {
     assert!(
         lowered.diagnostics.is_empty(),
         "nothing refuses now: {:?}",
-        lowered.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        lowered
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
     );
     for name in [
         "anOverriddenGetter",

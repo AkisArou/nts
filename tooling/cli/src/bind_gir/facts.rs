@@ -80,8 +80,21 @@ impl Facts {
 
 /// Ask the headers what `asked` wants to know.
 pub(crate) fn resolve(headers: &[String], asked: &Asked<'_>, cflags: &[String]) -> Result<Facts> {
-    let Asked { structs, enums, slots, sized, functions, macros } = *asked;
-    if structs.is_empty() && enums.is_empty() && slots.is_empty() && sized.is_empty() && functions.is_empty() && macros.is_empty() {
+    let Asked {
+        structs,
+        enums,
+        slots,
+        sized,
+        functions,
+        macros,
+    } = *asked;
+    if structs.is_empty()
+        && enums.is_empty()
+        && slots.is_empty()
+        && sized.is_empty()
+        && functions.is_empty()
+        && macros.is_empty()
+    {
         return Ok(Facts::default());
     }
     let mut probe = String::new();
@@ -90,13 +103,22 @@ pub(crate) fn resolve(headers: &[String], asked: &Asked<'_>, cflags: &[String]) 
     }
     probe.push_str("#include <stddef.h>\n");
     for (at, (class_struct, member)) in slots.iter().enumerate() {
-        let _ = writeln!(probe, "enum {{ {PREFIX}offset_{at} = (int)offsetof({class_struct}, {member}) }};");
+        let _ = writeln!(
+            probe,
+            "enum {{ {PREFIX}offset_{at} = (int)offsetof({class_struct}, {member}) }};"
+        );
     }
     for (at, c_type) in sized.iter().enumerate() {
-        let _ = writeln!(probe, "enum {{ {PREFIX}size_{at} = (int)sizeof({c_type}) }};");
+        let _ = writeln!(
+            probe,
+            "enum {{ {PREFIX}size_{at} = (int)sizeof({c_type}) }};"
+        );
     }
     for (at, function) in functions.iter().enumerate() {
-        let _ = writeln!(probe, "enum {{ {PREFIX}declared_{at} = (int)sizeof(&{function}) }};");
+        let _ = writeln!(
+            probe,
+            "enum {{ {PREFIX}declared_{at} = (int)sizeof(&{function}) }};"
+        );
     }
     for (at, name) in macros.iter().enumerate() {
         let _ = writeln!(probe, "enum {{ {PREFIX}macro_{at} = (int)({name}) }};");
@@ -109,23 +131,39 @@ pub(crate) fn resolve(headers: &[String], asked: &Asked<'_>, cflags: &[String]) 
     }
     // One directory per call, since namespaces are read at once.
     let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("nts-bind-gir-facts-{}-{call}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("nts-bind-gir-facts-{}-{call}", std::process::id()));
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let path = dir.join("facts.c");
     std::fs::write(&path, probe).with_context(|| format!("writing {}", path.display()))?;
     // Errors are expected and harmless here: a name the headers do not
     // declare is an invalid declaration, and is simply absent from the answer.
-    let output = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
-        // No spelling correction: clang recovers from an undeclared name by
-        // using the one it guesses was meant -- `g_date_time_get_type` became
-        // `g_date_time_get_ymd` -- and the enumerator asking about it then
-        // reads as valid, answering for a function the headers never declare.
-        .args(["-std=c11", "-fsyntax-only", "-w", "-fno-color-diagnostics", "-ferror-limit=0", "-fno-spell-checking"])
-        .args(cflags)
-        .args(["-Xclang", "-ast-dump", "-Xclang", "-ast-dump-filter", "-Xclang", PREFIX])
-        .arg(&path)
-        .output()
-        .context("running clang to read what the headers define")?;
+    let output =
+        std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
+            // No spelling correction: clang recovers from an undeclared name by
+            // using the one it guesses was meant -- `g_date_time_get_type` became
+            // `g_date_time_get_ymd` -- and the enumerator asking about it then
+            // reads as valid, answering for a function the headers never declare.
+            .args([
+                "-std=c11",
+                "-fsyntax-only",
+                "-w",
+                "-fno-color-diagnostics",
+                "-ferror-limit=0",
+                "-fno-spell-checking",
+            ])
+            .args(cflags)
+            .args([
+                "-Xclang",
+                "-ast-dump",
+                "-Xclang",
+                "-ast-dump-filter",
+                "-Xclang",
+                PREFIX,
+            ])
+            .arg(&path)
+            .output()
+            .context("running clang to read what the headers define")?;
     let _ = std::fs::remove_dir_all(&dir);
     Ok(parse(&String::from_utf8_lossy(&output.stdout), asked))
 }
@@ -154,19 +192,37 @@ pub(crate) struct Asked<'a> {
 }
 
 fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
-    let Asked { structs, enums, slots, sized, functions, macros } = *asked;
+    let Asked {
+        structs,
+        enums,
+        slots,
+        sized,
+        functions,
+        macros,
+    } = *asked;
     let mut facts = Facts::default();
     let mut lines = dump.lines().peekable();
     while let Some(line) = lines.next() {
         if line.contains("VarDecl") && !line.contains(" invalid ") {
-            let Some(rest) = line.split_once(&format!(" {PREFIX}tag_")).map(|(_, rest)| rest) else { continue };
-            let Some((index, types)) = rest.split_once(' ') else { continue };
-            let Some(c_type) = index.parse::<usize>().ok().and_then(|n| structs.get(n)) else { continue };
+            let Some(rest) = line
+                .split_once(&format!(" {PREFIX}tag_"))
+                .map(|(_, rest)| rest)
+            else {
+                continue;
+            };
+            let Some((index, types)) = rest.split_once(' ') else {
+                continue;
+            };
+            let Some(c_type) = index.parse::<usize>().ok().and_then(|n| structs.get(n)) else {
+                continue;
+            };
             // `'GtkWidget':'struct _GtkWidget'`, or `'struct _X'` alone when
             // the name already was the struct.
             let quoted: Vec<&str> = types.split('\'').skip(1).step_by(2).collect();
             if let Some(tag) = quoted.last().and_then(|t| t.strip_prefix("struct ")) {
-                facts.tags.insert((*c_type).to_owned(), tag.trim().to_owned());
+                facts
+                    .tags
+                    .insert((*c_type).to_owned(), tag.trim().to_owned());
             }
         } else if line.contains("EnumConstantDecl") && !line.contains(" invalid ") {
             let index = |kind: &str| {
@@ -200,7 +256,9 @@ fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
                 }
                 continue;
             }
-            let Some(c_type) = index("sign").and_then(|n| enums.get(n)) else { continue };
+            let Some(c_type) = index("sign").and_then(|n| enums.get(n)) else {
+                continue;
+            };
             match enumerator_value(&mut lines) {
                 Some("1") => facts.signed.insert((*c_type).to_owned()),
                 Some("0") => facts.unsigned.insert((*c_type).to_owned()),
@@ -277,11 +335,20 @@ EnumConstantDecl 0x13 <t.c:13:8, col:50> col:8 ntsbindgir_declared_1 'int'
             },
         );
         assert!(facts.declared.contains("gtk_text_iter_get_type"));
-        assert!(!facts.declared.contains("g_date_time_get_type"), "an undeclared function was answered");
+        assert!(
+            !facts.declared.contains("g_date_time_get_type"),
+            "an undeclared function was answered"
+        );
         assert_eq!(facts.sizes["GtkTextIter"], 80);
-        assert!(!facts.sizes.contains_key("GBytes"), "an opaque record was given a size");
+        assert!(
+            !facts.sizes.contains_key("GBytes"),
+            "an opaque record was given a size"
+        );
         assert_eq!(facts.offsets[&slots[0]], 424);
-        assert!(!facts.offsets.contains_key(&slots[1]), "an invalid offsetof answered");
+        assert!(
+            !facts.offsets.contains_key(&slots[1]),
+            "an invalid offsetof answered"
+        );
         assert_eq!(facts.tags["GtkWidget"], "_GtkWidget");
         assert_eq!(facts.tags["GdkRectangle"], "_cairo_rectangle_int");
         assert_eq!(facts.tags["struct _Plain"], "_Plain");
@@ -310,9 +377,19 @@ EnumConstantDecl 0x1 <facts.c:2:8, col:48> col:8 ntsbindgir_macro_0 'int'
 ";
         let facts = super::parse(
             dump,
-            &super::Asked { structs: &[], enums: &[], slots: &[], sized: &[], functions: &[], macros: &["G_TYPE_STRING", "G_TYPE_GTYPE"] },
+            &super::Asked {
+                structs: &[],
+                enums: &[],
+                slots: &[],
+                sized: &[],
+                functions: &[],
+                macros: &["G_TYPE_STRING", "G_TYPE_GTYPE"],
+            },
         );
         assert_eq!(facts.macros.get("G_TYPE_STRING"), Some(&64));
-        assert!(!facts.macros.contains_key("G_TYPE_GTYPE"), "a macro defined as a call was valued");
+        assert!(
+            !facts.macros.contains_key("G_TYPE_GTYPE"),
+            "a macro defined as a call was valued"
+        );
     }
 }

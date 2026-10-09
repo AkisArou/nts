@@ -72,10 +72,16 @@ fn repository() -> PathBuf {
 fn runtime_jar() -> PathBuf {
     static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
+            || repository().join("runtime/jvm/nts-runtime.jar"),
+            PathBuf::from,
+        );
         let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+        if std::fs::copy(&source, &mine).is_ok() {
+            mine
+        } else {
+            source
+        }
     })
     .clone()
 }
@@ -87,7 +93,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -118,7 +128,10 @@ fn compare() -> Option<(String, String)> {
 
     let jar = runtime_jar();
 
-    let expected = Command::new(&node).arg(here.join("vectors.mjs")).output().unwrap();
+    let expected = Command::new(&node)
+        .arg(here.join("vectors.mjs"))
+        .output()
+        .unwrap();
     assert!(
         expected.status.success(),
         "node could not generate the vectors:\n{}",
@@ -161,7 +174,9 @@ fn compare() -> Option<(String, String)> {
 
 #[test]
 fn every_accessor_agrees_with_node_by_bit_pattern() {
-    let Some((expected, found)) = both() else { return };
+    let Some((expected, found)) = both() else {
+        return;
+    };
     let want: Vec<&str> = expected.lines().collect();
     let got: Vec<&str> = found.lines().collect();
     assert_eq!(

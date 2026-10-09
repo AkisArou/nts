@@ -147,8 +147,13 @@ pub enum ParameterDefault {
 pub fn parse_defaults(text: &str) -> Result<Vec<(String, ParameterDefault)>, String> {
     let mut defaults: Vec<(String, ParameterDefault)> = Vec::new();
     for word in text.split_whitespace() {
-        let Some((name, value)) = word.split_once('=').filter(|(name, _)| is_c_identifier(name)) else {
-            return Err(format!("@ntsDefault `{word}` that is not `parameter=value`, as in `@ntsDefault flags=0 cancellable=null`"));
+        let Some((name, value)) = word
+            .split_once('=')
+            .filter(|(name, _)| is_c_identifier(name))
+        else {
+            return Err(format!(
+                "@ntsDefault `{word}` that is not `parameter=value`, as in `@ntsDefault flags=0 cancellable=null`"
+            ));
         };
         let value = match value {
             "null" => ParameterDefault::Null,
@@ -207,7 +212,8 @@ pub struct Send {
 
 /// The selectors ARC reserves to itself. On an object the program counts,
 /// sending one would release (or retain, or free) behind the count's back.
-pub const ARC_OWNED_SELECTORS: [&str; 5] = ["retain", "release", "autorelease", "dealloc", "retainCount"];
+pub const ARC_OWNED_SELECTORS: [&str; 5] =
+    ["retain", "release", "autorelease", "dealloc", "retainCount"];
 
 impl Send {
     /// Whether the selector is in `family` by ARC's rule (clang's
@@ -217,7 +223,11 @@ impl Send {
     /// `copyright` is not.
     #[must_use]
     pub fn in_family(selector: &str, family: &str) -> bool {
-        let first = selector.split(':').next().unwrap_or("").trim_start_matches('_');
+        let first = selector
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .trim_start_matches('_');
         first
             .strip_prefix(family)
             .is_some_and(|rest| !rest.starts_with(|c: char| c.is_ascii_lowercase()))
@@ -354,7 +364,9 @@ impl Encoding {
             return Type::Pointer(Pointee::Void);
         }
         if self == Self::View {
-            return Type::Pointer(Pointee::Const(Box::new(Pointee::Opaque(Handle::borrowed_string()))));
+            return Type::Pointer(Pointee::Const(Box::new(Pointee::Opaque(
+                Handle::borrowed_string(),
+            ))));
         }
         let unit = match self {
             Self::Utf8 => Scalar::Char,
@@ -386,20 +398,31 @@ pub enum Role {
     ///
     /// `boxed`: the callback's parameters that are boxed records, which the
     /// bridge boxes (`OpKind::NativeBridge`).
-    Closure { lifetime: Lifetime, bridge: std::sync::Arc<FnPointer>, bridging: super::Bridging },
+    Closure {
+        lifetime: Lifetime,
+        bridge: std::sync::Arc<FnPointer>,
+        bridging: super::Bridging,
+    },
     /// A TypeScript function as an Objective-C block (`Block<F>`): one C
     /// parameter, the block's address. `bridge` is the trampoline's type,
     /// `signature` with the context after it; `signature` is the block's own.
     /// The closure is lent for the call; a callee that keeps the block
     /// copies it, and the copy lends it again.
-    Block { bridge: std::sync::Arc<FnPointer>, signature: std::sync::Arc<FnPointer> },
+    Block {
+        bridge: std::sync::Arc<FnPointer>,
+        signature: std::sync::Arc<FnPointer>,
+    },
     /// A TypeScript function as a Windows Runtime delegate (`Delegate<F, IID>`
     /// in `winrt:types`): one C parameter, a COM object whose `Invoke` is the
     /// adapter for `signature` (`HRESULT (*)(void *self, A...)`), holding the
     /// bridge -- `signature` with the context after it -- and the closure,
     /// lent for as long as the object lives. The caller's reference is given
     /// back after the call; a callee that keeps the delegate added its own.
-    Delegate { bridge: std::sync::Arc<FnPointer>, signature: std::sync::Arc<FnPointer>, iid: std::sync::Arc<str> },
+    Delegate {
+        bridge: std::sync::Arc<FnPointer>,
+        signature: std::sync::Arc<FnPointer>,
+        iid: std::sync::Arc<str>,
+    },
     /// A TypeScript value where the Windows Runtime takes an `IInspectable`
     /// (`Inspectable`, `winrt:types`): a string, number or boolean boxed as an
     /// `IPropertyValue`, as the Windows Runtime's JavaScript projection boxed
@@ -436,7 +459,11 @@ pub enum Role {
     /// NULL, and a value as a reference made for the call
     /// (`nts_winrt_reference`), of `PropertyValue`'s `property_type` where it
     /// boxes that type, and given back after the call.
-    Reference { iid: std::sync::Arc<str>, value: Referenced, property_type: u8 },
+    Reference {
+        iid: std::sync::Arc<str>,
+        value: Referenced,
+        property_type: u8,
+    },
     /// An array of objects the callee fills (`FilledHandles<H>` in
     /// `winrt:types`), its count a parameter of its own: the array's own
     /// block of handles lent in place, emptied first, so each reference the
@@ -482,7 +509,11 @@ pub enum Role {
     ///
     /// `inner` is how the property crosses, as a positional parameter of its
     /// type would: `Plain`, a `String`, an `NSString` or an `NSArray`.
-    Label { key: String, last: bool, inner: Box<Role> },
+    Label {
+        key: String,
+        last: bool,
+        inner: Box<Role>,
+    },
     /// A TypeScript `string` where an Objective-C message takes an
     /// `NSString *`, as Swift's `String` crosses: its UTF-16 lent for the
     /// call, an `NSString` made of it (`CFStringCreateWithCharacters`, +1, so
@@ -512,7 +543,10 @@ pub enum Role {
     /// status says it succeeded, as `written` says. Hidden from TypeScript.
     /// `field` is the property of the call's value it is read into, for an
     /// `@ntsHresult out` method; otherwise the slot's value is the call's.
-    Result { written: Written, field: Option<std::sync::Arc<str>> },
+    Result {
+        written: Written,
+        field: Option<std::sync::Arc<str>>,
+    },
     /// The object a call is made on that the declaration does not spell: a
     /// runtime class's static is called on its activation factory, which the
     /// call supplies. Hidden from TypeScript, and fed by the call site.
@@ -612,15 +646,28 @@ pub struct Reference {
 pub fn parse_references(text: &str) -> Result<Vec<Reference>, String> {
     let words: Vec<&str> = text.split_whitespace().collect();
     if words.is_empty() || !words.len().is_multiple_of(3) {
-        return Err(format!("@ntsReference `{text}` that is not `<parameter> <IID> <PropertyType>` triples"));
+        return Err(format!(
+            "@ntsReference `{text}` that is not `<parameter> <IID> <PropertyType>` triples"
+        ));
     }
     words
         .chunks(3)
         .map(|triple| {
-            let property_type = triple[2].parse::<u8>().ok().filter(|kind| (1..=20).contains(kind)).ok_or_else(|| {
-                format!("@ntsReference `{text}` whose PropertyType `{}` is not 1 to 20", triple[2])
-            })?;
-            Ok(Reference { parameter: triple[0].to_owned(), iid: triple[1].into(), property_type })
+            let property_type = triple[2]
+                .parse::<u8>()
+                .ok()
+                .filter(|kind| (1..=20).contains(kind))
+                .ok_or_else(|| {
+                    format!(
+                        "@ntsReference `{text}` whose PropertyType `{}` is not 1 to 20",
+                        triple[2]
+                    )
+                })?;
+            Ok(Reference {
+                parameter: triple[0].to_owned(),
+                iid: triple[1].into(),
+                property_type,
+            })
         })
         .collect()
 }
@@ -641,17 +688,33 @@ pub enum Referenced {
 /// what that `T` is.
 fn referenced(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Referenced> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let TypeKind::Union(members) = kind(ty)? else { return None };
-    if !members.iter().any(|member| matches!(kind(*member), Some(TypeKind::Null))) {
+    let TypeKind::Union(members) = kind(ty)? else {
+        return None;
+    };
+    if !members
+        .iter()
+        .any(|member| matches!(kind(*member), Some(TypeKind::Null)))
+    {
         return None;
     }
-    let present: Vec<TypeId> = members.iter().copied().filter(|member| !matches!(kind(*member), Some(TypeKind::Null))).collect();
+    let present: Vec<TypeId> = members
+        .iter()
+        .copied()
+        .filter(|member| !matches!(kind(*member), Some(TypeKind::Null)))
+        .collect();
     // `boolean | null` is `true | false | null` to the checker.
-    let boolean = |id: &TypeId| matches!(kind(*id), Some(TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_))));
+    let boolean = |id: &TypeId| {
+        matches!(
+            kind(*id),
+            Some(TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)))
+        )
+    };
     if !present.is_empty() && present.iter().all(boolean) {
         return Some(Referenced::Bool);
     }
-    let [value] = present.as_slice() else { return None };
+    let [value] = present.as_slice() else {
+        return None;
+    };
     let value = *value;
     if string_encoding(snapshot, value) == Some(Encoding::HString) {
         return Some(Referenced::HString);
@@ -683,7 +746,9 @@ pub enum Bridged {
 /// native ABI before, so nothing that compiled reads differently.
 pub(crate) fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(String, TypeId)>> {
     let record = snapshot.types.get(ty.0 as usize)?;
-    let TypeKind::Object { properties } = &record.kind else { return None };
+    let TypeKind::Object { properties } = &record.kind else {
+        return None;
+    };
     if record.symbol.is_some() || properties.is_empty() {
         return None;
     }
@@ -691,7 +756,9 @@ pub(crate) fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(
     // anonymous object types too, made of readonly `__`-named properties (the
     // checker escapes the name to `___`), and each is already a type of its
     // own here. A label is an ordinary name.
-    if properties.iter().any(|p| p.readonly || p.name.starts_with("__"))
+    if properties
+        .iter()
+        .any(|p| p.readonly || p.name.starts_with("__"))
         || pointer(snapshot, ty).is_some()
         || is_layout(snapshot, ty)
     {
@@ -718,10 +785,16 @@ pub(crate) fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(
 /// which is a missing word rather than a diagnostic. The advice moves inside the
 /// sentence so it still ends on the thing that is unsupported, and both messages
 /// are built here so they cannot drift apart again.
-fn no_abi_type(snapshot: &SemanticSnapshot, ty: TypeId, function: &str, parameter: Option<&str>) -> String {
+fn no_abi_type(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    function: &str,
+    parameter: Option<&str>,
+) -> String {
     // Named for the rule it breaks rather than for what else it could be.
     if let Some(record) = schema::string_struct_as_storage(snapshot, ty) {
-        let what = parameter.map_or_else(|| "return".to_owned(), |name| format!("parameter `{name}`"));
+        let what =
+            parameter.map_or_else(|| "return".to_owned(), |name| format!("parameter `{name}`"));
         return format!(
             "foreign function `{function}`'s {what}, `{record}` as storage -- a struct holding a Windows Runtime string, which is only ever `Copied<T>`,"
         );
@@ -766,7 +839,11 @@ impl Function {
             libraries: Vec::new(),
             defaults: Vec::new(),
             result_as: None,
-            vtable: Some(Vtable { slot, method: name.to_owned(), factory: None }),
+            vtable: Some(Vtable {
+                slot,
+                method: name.to_owned(),
+                factory: None,
+            }),
             hresult: false,
         }
     }
@@ -854,7 +931,9 @@ impl Function {
     /// The C parameter the `ts`th TypeScript parameter lands in.
     #[must_use]
     pub fn c_index(&self, ts: usize) -> Option<usize> {
-        self.slots().find(|(_, _, fed)| *fed == Some(ts)).map(|(at, _, _)| at)
+        self.slots()
+            .find(|(_, _, fed)| *fed == Some(ts))
+            .map(|(at, _, _)| at)
     }
 }
 
@@ -993,7 +1072,11 @@ impl FnPointer {
                 }
             }
         }
-        Self { name, parameters, result: Box::new(result) }
+        Self {
+            name,
+            parameters,
+            result: Box::new(result),
+        }
     }
 
     /// `int (*NAME)(const void *, const void *)`, as a whole typedef.
@@ -1002,9 +1085,17 @@ impl FnPointer {
         let parameters = if self.parameters.is_empty() {
             "void".to_owned()
         } else {
-            self.parameters.iter().map(Type::c_type).collect::<Vec<_>>().join(", ")
+            self.parameters
+                .iter()
+                .map(Type::c_type)
+                .collect::<Vec<_>>()
+                .join(", ")
         };
-        format!("typedef {} (*{})({parameters});", self.result.c_type(), self.name)
+        format!(
+            "typedef {} (*{})({parameters});",
+            self.result.c_type(),
+            self.name
+        )
     }
 
     /// `int (**)(int)` -- a pointer *to* one, with no typedef in it.
@@ -1032,7 +1123,11 @@ impl FnPointer {
         let parameters = if self.parameters.is_empty() {
             "void".to_owned()
         } else {
-            self.parameters.iter().map(Type::c_type_expanded).collect::<Vec<_>>().join(", ")
+            self.parameters
+                .iter()
+                .map(Type::c_type_expanded)
+                .collect::<Vec<_>>()
+                .join(", ")
         };
         format!("{} (*)({parameters})", self.result.c_type_expanded())
     }
@@ -1130,7 +1225,10 @@ pub enum Pointee {
     /// `struct utsname` is five of these and its size is nothing without them.
     /// A pointer to one is not this; this is the storage itself, which is why
     /// it appears as a member and decays to a pointer when read.
-    Array { element: Box<Pointee>, length: u32 },
+    Array {
+        element: Box<Pointee>,
+        length: u32,
+    },
     /// A C **function**, which is what a function pointer points at.
     ///
     /// The function and not the pointer, so the surrounding convention holds:
@@ -1223,7 +1321,10 @@ type HostPairs = Vec<(&'static str, &'static str)>;
 
 fn host_pairs() -> std::sync::MutexGuard<'static, HostPairs> {
     static PAIRS: std::sync::OnceLock<std::sync::Mutex<HostPairs>> = std::sync::OnceLock::new();
-    PAIRS.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    PAIRS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl HostFamily {
@@ -1238,12 +1339,17 @@ impl HostFamily {
     #[must_use]
     pub fn of(retain: &str, release: &str) -> Self {
         let mut pairs = host_pairs();
-        if let Some(at) = pairs.iter().position(|(r, l)| *r == retain && *l == release) {
+        if let Some(at) = pairs
+            .iter()
+            .position(|(r, l)| *r == retain && *l == release)
+        {
             return Self(u16::try_from(at).expect("a host family's index fits its width"));
         }
         let keep = |name: &str| -> &'static str { Box::leak(name.to_owned().into_boxed_str()) };
         pairs.push((keep(retain), keep(release)));
-        Self(u16::try_from(pairs.len() - 1).expect("fewer than 65,536 host families in one process"))
+        Self(
+            u16::try_from(pairs.len() - 1).expect("fewer than 65,536 host families in one process"),
+        )
     }
 
     /// The symbol that roots one of this family's objects.
@@ -1280,7 +1386,11 @@ impl Counting {
     #[must_use]
     pub fn called(&self, retain: bool) -> String {
         let name = if retain { self.retain } else { self.release };
-        if self.null_safe { name.to_owned() } else { Self::guarded(name) }
+        if self.null_safe {
+            name.to_owned()
+        } else {
+            Self::guarded(name)
+        }
     }
 
     /// The guard around `name`: `nts_guarded_g_object_unref`.
@@ -1348,16 +1458,32 @@ impl Family {
     pub fn counting(self) -> Option<Counting> {
         match self {
             Self::C => None,
-            Self::Objc => Some(Counting { retain: "objc_retain", release: "objc_release", null_safe: true }),
+            Self::Objc => Some(Counting {
+                retain: "objc_retain",
+                release: "objc_release",
+                null_safe: true,
+            }),
             // `ref_sink`, as glib-rs takes a borrowed object: a plain ref on
             // an ordinary one, and on a new widget -- born floating, handed
             // back transfer-none -- the floating reference itself, which
             // otherwise nothing would ever drop.
-            Self::GObject => Some(Counting { retain: "g_object_ref_sink", release: "g_object_unref", null_safe: false }),
-            Self::Com => Some(Counting { retain: "nts_com_addref", release: "nts_com_release", null_safe: true }),
+            Self::GObject => Some(Counting {
+                retain: "g_object_ref_sink",
+                release: "g_object_unref",
+                null_safe: false,
+            }),
+            Self::Com => Some(Counting {
+                retain: "nts_com_addref",
+                release: "nts_com_release",
+                null_safe: true,
+            }),
             // Not null-safe, as no promise about a host's pair is made: a
             // nullable handle's count goes through the guard.
-            Self::Host(host) => Some(Counting { retain: host.retain(), release: host.release(), null_safe: false }),
+            Self::Host(host) => Some(Counting {
+                retain: host.retain(),
+                release: host.release(),
+                null_safe: false,
+            }),
         }
     }
 }
@@ -1369,17 +1495,31 @@ impl Family {
 #[must_use]
 pub fn handle_box(family: Family) -> Option<(super::TypeId, Pointee, &'static str)> {
     match family {
-        Family::GObject => Some((super::TypeId(super::HANDLE_BOX_GOBJECT), gobject_root(), "HandleBoxGObject")),
+        Family::GObject => Some((
+            super::TypeId(super::HANDLE_BOX_GOBJECT),
+            gobject_root(),
+            "HandleBoxGObject",
+        )),
         Family::Objc => Some((
             super::TypeId(super::HANDLE_BOX_OBJC),
-            Pointee::Opaque(Handle { tag: "NSObject".to_owned(), ancestors: Vec::new(), family: Family::Objc, interface: false }),
+            Pointee::Opaque(Handle {
+                tag: "NSObject".to_owned(),
+                ancestors: Vec::new(),
+                family: Family::Objc,
+                interface: false,
+            }),
             "HandleBoxObjc",
         )),
         // `interface` is `GObjectInterface`'s mark (`___c_interface`), not
         // "a COM interface": every Windows Runtime handle is one of those.
         Family::Com => Some((
             super::TypeId(super::HANDLE_BOX_COM),
-            Pointee::Opaque(Handle { tag: "IInspectable".to_owned(), ancestors: Vec::new(), family: Family::Com, interface: false }),
+            Pointee::Opaque(Handle {
+                tag: "IInspectable".to_owned(),
+                ancestors: Vec::new(),
+                family: Family::Com,
+                interface: false,
+            }),
             "HandleBoxCom",
         )),
         // No box yet: a host family has no root type the compiler knows, so
@@ -1393,7 +1533,12 @@ pub fn handle_box(family: Family) -> Option<(super::TypeId, Pointee, &'static st
 /// its release is the family's.
 #[must_use]
 pub fn gobject_root() -> Pointee {
-    Pointee::Opaque(Handle { tag: "_GObject".to_owned(), ancestors: vec!["_GTypeInstance".to_owned()], family: Family::GObject, interface: false })
+    Pointee::Opaque(Handle {
+        tag: "_GObject".to_owned(),
+        ancestors: vec!["_GTypeInstance".to_owned()],
+        family: Family::GObject,
+        interface: false,
+    })
 }
 
 impl Pointee {
@@ -1432,11 +1577,18 @@ impl Handle {
             // The prerequisite's chain, which this one extends: `GtkEntry`'s
             // is `GtkWidget`'s and more. Whether it implements the interface
             // is TypeScript's `__c_implements`, which is not in a handle.
-            let chain: Vec<&String> = self.ancestors.iter().chain(std::iter::once(&self.tag)).collect();
+            let chain: Vec<&String> = self
+                .ancestors
+                .iter()
+                .chain(std::iter::once(&self.tag))
+                .collect();
             return self.family == to.family
                 && self != to
                 && chain.len() >= to.ancestors.len()
-                && chain.iter().zip(&to.ancestors).all(|(mine, theirs)| *mine == theirs);
+                && chain
+                    .iter()
+                    .zip(&to.ancestors)
+                    .all(|(mine, theirs)| *mine == theirs);
         }
         (self.family == to.family || to.family == Family::C)
             && self.ancestors.len() > to.ancestors.len()
@@ -1447,7 +1599,12 @@ impl Handle {
 
 impl From<String> for Handle {
     fn from(tag: String) -> Self {
-        Self { tag, ancestors: Vec::new(), family: Family::C, interface: false }
+        Self {
+            tag,
+            ancestors: Vec::new(),
+            family: Family::C,
+            interface: false,
+        }
     }
 }
 
@@ -1470,21 +1627,36 @@ impl Handle {
     /// field, made for a call or copied out of one.
     #[must_use]
     pub fn hstring() -> Self {
-        Self { tag: "HSTRING__".to_owned(), ancestors: Vec::new(), family: Family::C, interface: false }
+        Self {
+            tag: "HSTRING__".to_owned(),
+            ancestors: Vec::new(),
+            family: Family::C,
+            interface: false,
+        }
     }
 
     /// The opaque string a `StringView` lends: `const NtsBorrowedString *`, which
     /// C reads with `nts_string_view`.
     #[must_use]
     pub fn borrowed_string() -> Self {
-        Self { tag: "NtsBorrowedString".to_owned(), ancestors: Vec::new(), family: Family::C, interface: false }
+        Self {
+            tag: "NtsBorrowedString".to_owned(),
+            ancestors: Vec::new(),
+            family: Family::C,
+            interface: false,
+        }
     }
 
     /// A Foundation class a bridge makes or reads -- `NSString`, `NSArray` --
     /// which the program only ever holds as an `NSObject`.
     #[must_use]
     pub fn objc(tag: &str) -> Self {
-        Self { tag: tag.to_owned(), ancestors: vec!["NSObject".to_owned()], family: Family::Objc, interface: false }
+        Self {
+            tag: tag.to_owned(),
+            ancestors: vec!["NSObject".to_owned()],
+            family: Family::Objc,
+            interface: false,
+        }
     }
 }
 
@@ -1605,7 +1777,11 @@ impl Record {
     pub const fn from_header(&self) -> bool {
         matches!(
             self.naming,
-            Naming::Tagged { from_header: Some(_) } | Naming::Typedef { from_header: Some(_) }
+            Naming::Tagged {
+                from_header: Some(_)
+            } | Naming::Typedef {
+                from_header: Some(_)
+            }
         )
     }
 
@@ -1663,7 +1839,10 @@ impl Pointee {
             Self::Pointer(pointee) => {
                 pointee.counting().is_some() && !pointee.family().is_some_and(Family::stack_rooted)
             }
-            Self::Record(record) => record.fields.iter().any(|field| field.ty.holds_counted_off_the_stack()),
+            Self::Record(record) => record
+                .fields
+                .iter()
+                .any(|field| field.ty.holds_counted_off_the_stack()),
             Self::Array { element, .. } | Self::Flexible(element) | Self::Const(element) => {
                 element.holds_counted_off_the_stack()
             }
@@ -1678,7 +1857,9 @@ impl Pointee {
         match self {
             Self::Pointer(pointee) => pointee.counting().is_some(),
             Self::Record(record) => record.fields.iter().any(|field| field.ty.holds_counted()),
-            Self::Array { element, .. } | Self::Flexible(element) | Self::Const(element) => element.holds_counted(),
+            Self::Array { element, .. } | Self::Flexible(element) | Self::Const(element) => {
+                element.holds_counted()
+            }
             _ => false,
         }
     }
@@ -1710,7 +1891,9 @@ impl Pointee {
             // `char * const` -- because `const char *` is a pointer to a const
             // `char`, a different type. Written before first, a
             // `const char * const *` came out `const const char * *`.
-            Self::Const(pointee) if matches!(**pointee, Self::Pointer(_)) => format!("{} const", pointee.c_type()),
+            Self::Const(pointee) if matches!(**pointee, Self::Pointer(_)) => {
+                format!("{} const", pointee.c_type())
+            }
             Self::Const(pointee) => format!("const {}", pointee.c_type()),
             // The element's spelling. C writes the length in the *declarator*
             // -- `char name[65]`, not `char[65] name` -- so a member emits it
@@ -1962,7 +2145,9 @@ impl Type {
             // declarator around the name, so it cannot be written where a type
             // precedes a name; every use goes through the typedef instead.
             Self::FnPointer(signature) => return std::borrow::Cow::Borrowed(&signature.name),
-            Self::Record(record) => return std::borrow::Cow::Owned(Pointee::Record(record.clone()).c_type()),
+            Self::Record(record) => {
+                return std::borrow::Cow::Owned(Pointee::Record(record.clone()).c_type());
+            }
             Self::Managed(ty) => match ty {
                 ManagedType::BoxedBigInt => "NtsBigIntBox *",
                 ManagedType::String => "NtsString *",
@@ -1986,71 +2171,91 @@ impl Type {
 /// same question about a *member*: a function-typed member is a C function
 /// pointer for exactly the reason a function-typed parameter is, and two
 /// answers to that would be two places to keep in agreement.
-    pub(crate) fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
-        if let Some(scalar) = int_bool(snapshot, ty) {
-            return Some(Type::Scalar(scalar));
-        }
-        if let Some(record) = schema::by_value(snapshot, ty) {
-            return Some(Type::Record(record));
-        }
-        if let Some(name) = pointer(snapshot, ty) {
-            return Some(Type::Pointer(name));
-        }
-        if let Some(scalar) = scalar(snapshot, ty) {
-            return Some(Type::Scalar(scalar));
-        }
-        match &snapshot.types.get(ty.0 as usize)?.kind {
-            TypeKind::Boolean => Some(Type::Bool),
-            TypeKind::Void => Some(Type::Void),
-            // A type parameter is what its constraint is: the polymorphic `this`
-            // of a method, whose constraint is the class -- `this.emit(...)`
-            // inside a GObject subclass passes the instance as the handle it is.
-            TypeKind::TypeParameter { constraint: Some(constraint), .. } => abi_type(snapshot, *constraint),
-            // `F | null`: the same function pointer, which C passes as NULL
-            // when the program passes `null`. A null pointer and a valid one
-            // share a representation, as they do for `Ptr<T> | null`.
-            //
-            // **`| null` is the API's claim, not a safety net.** It says the
-            // C function documents NULL as meaningful there -- `SetTimer`
-            // posting `WM_TIMER` instead of calling back -- and nothing here
-            // can check that. A function that calls a NULL callback anyway
-            // crashes, and that is its contract, not this binding's.
-            TypeKind::Union(parts) => {
-                let [a, b] = parts.as_slice() else { return None };
-                let is_null = |id: &TypeId| matches!(snapshot.types.get(id.0 as usize).map(|t| &t.kind), Some(TypeKind::Null));
-                let payload = if is_null(a) { b } else if is_null(b) { a } else { return None };
-                match abi_type(snapshot, *payload)? {
-                    function @ Type::FnPointer(_) => Some(function),
-                    _ => None,
-                }
-            }
-            // An ordinary TypeScript function type, which at a C ABI
-            // boundary can mean one thing: a function pointer. No wrapper
-            // type is invented to say so, because there is nothing else it
-            // could have meant and a second spelling would be a second
-            // fact to keep in agreement.
-            //
-            // Every parameter and the result go through this same function,
-            // so a callback taking a `Ptr<T>` or returning `c_int` is
-            // described by the rules already in use, and one that takes
-            // something with no C ABI is refused here rather than at the
-            // point where it would have been emitted.
-            TypeKind::Function(id) => {
-                let signature = snapshot.signatures.get(id.0 as usize)?;
-                let (parameters, _) = callback_slots(snapshot, signature)?;
-                let result = abi_type(snapshot, signature.return_type)?;
-                // A callback taking or returning a record by value would need
-                // its bridge to do what a call does here; nothing does yet.
-                if parameters.iter().chain([&result]).any(|ty| matches!(ty, Type::Record(_))) {
-                    return None;
-                }
-                Some(Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
-                    parameters, result,
-                ))))
-            }
-            _ => None,
-        }
+pub(crate) fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+    if let Some(scalar) = int_bool(snapshot, ty) {
+        return Some(Type::Scalar(scalar));
     }
+    if let Some(record) = schema::by_value(snapshot, ty) {
+        return Some(Type::Record(record));
+    }
+    if let Some(name) = pointer(snapshot, ty) {
+        return Some(Type::Pointer(name));
+    }
+    if let Some(scalar) = scalar(snapshot, ty) {
+        return Some(Type::Scalar(scalar));
+    }
+    match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Boolean => Some(Type::Bool),
+        TypeKind::Void => Some(Type::Void),
+        // A type parameter is what its constraint is: the polymorphic `this`
+        // of a method, whose constraint is the class -- `this.emit(...)`
+        // inside a GObject subclass passes the instance as the handle it is.
+        TypeKind::TypeParameter {
+            constraint: Some(constraint),
+            ..
+        } => abi_type(snapshot, *constraint),
+        // `F | null`: the same function pointer, which C passes as NULL
+        // when the program passes `null`. A null pointer and a valid one
+        // share a representation, as they do for `Ptr<T> | null`.
+        //
+        // **`| null` is the API's claim, not a safety net.** It says the
+        // C function documents NULL as meaningful there -- `SetTimer`
+        // posting `WM_TIMER` instead of calling back -- and nothing here
+        // can check that. A function that calls a NULL callback anyway
+        // crashes, and that is its contract, not this binding's.
+        TypeKind::Union(parts) => {
+            let [a, b] = parts.as_slice() else {
+                return None;
+            };
+            let is_null = |id: &TypeId| {
+                matches!(
+                    snapshot.types.get(id.0 as usize).map(|t| &t.kind),
+                    Some(TypeKind::Null)
+                )
+            };
+            let payload = if is_null(a) {
+                b
+            } else if is_null(b) {
+                a
+            } else {
+                return None;
+            };
+            match abi_type(snapshot, *payload)? {
+                function @ Type::FnPointer(_) => Some(function),
+                _ => None,
+            }
+        }
+        // An ordinary TypeScript function type, which at a C ABI
+        // boundary can mean one thing: a function pointer. No wrapper
+        // type is invented to say so, because there is nothing else it
+        // could have meant and a second spelling would be a second
+        // fact to keep in agreement.
+        //
+        // Every parameter and the result go through this same function,
+        // so a callback taking a `Ptr<T>` or returning `c_int` is
+        // described by the rules already in use, and one that takes
+        // something with no C ABI is refused here rather than at the
+        // point where it would have been emitted.
+        TypeKind::Function(id) => {
+            let signature = snapshot.signatures.get(id.0 as usize)?;
+            let (parameters, _) = callback_slots(snapshot, signature)?;
+            let result = abi_type(snapshot, signature.return_type)?;
+            // A callback taking or returning a record by value would need
+            // its bridge to do what a call does here; nothing does yet.
+            if parameters
+                .iter()
+                .chain([&result])
+                .any(|ty| matches!(ty, Type::Record(_)))
+            {
+                return None;
+            }
+            Some(Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+                parameters, result,
+            ))))
+        }
+        _ => None,
+    }
+}
 
 /// Whether a callback bridge's argument is a string C lends: the
 /// `const char *` a `string` parameter is in the callback's C signature
@@ -2065,7 +2270,11 @@ impl Type {
 /// call outlives the release.
 #[must_use]
 pub fn lent_string(foreign: &Type, compiled: &super::HirType) -> bool {
-    *foreign == Encoding::Utf8.c_type() && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
+    *foreign == Encoding::Utf8.c_type()
+        && matches!(
+            compiled,
+            super::HirType::Managed(super::ManagedType::String)
+        )
 }
 
 /// The C type of a callback's `string` result: `char *`, which C owns.
@@ -2088,7 +2297,11 @@ pub fn owned_c_string() -> Type {
 /// not.
 #[must_use]
 pub fn owned_string(foreign: &Type, compiled: &super::HirType) -> bool {
-    *foreign == owned_c_string() && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
+    *foreign == owned_c_string()
+        && matches!(
+            compiled,
+            super::HirType::Managed(super::ManagedType::String)
+        )
 }
 
 /// Whether an Objective-C entry point's argument is an `NSString` the runtime
@@ -2103,7 +2316,10 @@ pub fn owned_string(foreign: &Type, compiled: &super::HirType) -> bool {
 #[must_use]
 pub fn lent_ns_string(foreign: &Type, compiled: &super::HirType) -> bool {
     matches!(foreign, Type::Pointer(Pointee::Opaque(handle)) if *handle == Handle::ns_string())
-        && matches!(compiled, super::HirType::Managed(super::ManagedType::String))
+        && matches!(
+            compiled,
+            super::HirType::Managed(super::ManagedType::String)
+        )
 }
 
 /// Whether an Objective-C entry point answers an `NSString` made of the
@@ -2140,32 +2356,43 @@ fn callback_slots(
 ) -> Option<(Vec<Type>, super::Bridging)> {
     let mut parameters = Vec::with_capacity(signature.parameters.len());
     let mut bridging = super::Bridging::default();
-    let one = |parameters: &mut Vec<Type>, bridging: &mut super::Bridging, ty: TypeId| -> Option<()> {
-        let at = u32::try_from(parameters.len()).ok()?;
-        if is_c_string(snapshot, ty) {
-            parameters.push(Encoding::Utf8.c_type());
-        } else if let Some(array) = native_array(snapshot, ty).filter(|array| array.role == Role::Handles) {
-            let slots = array_slots(snapshot, "a callback", "an array", &array, parameters.len()).ok()?;
-            let (mut elements, mut length) = (None, None);
-            for (offset, (c, role)) in slots.into_iter().enumerate() {
-                let slot = at + u32::try_from(offset).ok()?;
-                match role {
-                    Role::Handles => elements = Some(slot),
-                    Role::Length { .. } => length = Some(slot),
-                    _ => return None,
+    let one =
+        |parameters: &mut Vec<Type>, bridging: &mut super::Bridging, ty: TypeId| -> Option<()> {
+            let at = u32::try_from(parameters.len()).ok()?;
+            if is_c_string(snapshot, ty) {
+                parameters.push(Encoding::Utf8.c_type());
+            } else if let Some(array) =
+                native_array(snapshot, ty).filter(|array| array.role == Role::Handles)
+            {
+                let slots =
+                    array_slots(snapshot, "a callback", "an array", &array, parameters.len())
+                        .ok()?;
+                let (mut elements, mut length) = (None, None);
+                for (offset, (c, role)) in slots.into_iter().enumerate() {
+                    let slot = at + u32::try_from(offset).ok()?;
+                    match role {
+                        Role::Handles => elements = Some(slot),
+                        Role::Length { .. } => length = Some(slot),
+                        _ => return None,
+                    }
+                    parameters.push(c);
                 }
-                parameters.push(c);
+                // Only a counted one: C says how long by nothing else.
+                bridging.arrays.push(super::HandleArrayParameter {
+                    at: elements?,
+                    length_at: length?,
+                });
+            } else {
+                if let Some(record) = schema::boxed(snapshot, ty) {
+                    bridging.boxed.push(super::BoxedParameter {
+                        at,
+                        get_type: record.get_type,
+                    });
+                }
+                parameters.push(abi_type(snapshot, ty)?);
             }
-            // Only a counted one: C says how long by nothing else.
-            bridging.arrays.push(super::HandleArrayParameter { at: elements?, length_at: length? });
-        } else {
-            if let Some(record) = schema::boxed(snapshot, ty) {
-                bridging.boxed.push(super::BoxedParameter { at, get_type: record.get_type });
-            }
-            parameters.push(abi_type(snapshot, ty)?);
-        }
-        Some(())
-    };
+            Some(())
+        };
     for parameter in &signature.parameters {
         match &snapshot.types.get(parameter.ty.0 as usize)?.kind {
             TypeKind::Tuple(elements) if parameter.rest => {
@@ -2187,8 +2414,12 @@ fn is_c_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     match kind(&ty) {
         Some(TypeKind::String) => true,
         Some(TypeKind::Union(parts)) => {
-            parts.iter().any(|part| matches!(kind(part), Some(TypeKind::String)))
-                && parts.iter().all(|part| matches!(kind(part), Some(TypeKind::String | TypeKind::Null)))
+            parts
+                .iter()
+                .any(|part| matches!(kind(part), Some(TypeKind::String)))
+                && parts
+                    .iter()
+                    .all(|part| matches!(kind(part), Some(TypeKind::String | TypeKind::Null)))
         }
         _ => false,
     }
@@ -2200,10 +2431,7 @@ fn is_c_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// something with no C ABI -- refused here rather than where it would have
 /// been emitted.
 #[must_use]
-pub fn fn_pointer(
-    snapshot: &SemanticSnapshot,
-    ty: TypeId,
-) -> Option<std::sync::Arc<FnPointer>> {
+pub fn fn_pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::sync::Arc<FnPointer>> {
     match abi_type(snapshot, ty)? {
         Type::FnPointer(signature) => Some(signature),
         _ => None,
@@ -2217,7 +2445,10 @@ impl Function {
     /// and would otherwise pass every check a pointer passes.
     #[must_use]
     pub fn passes_a_record(&self) -> bool {
-        self.parameters.iter().chain([&self.result]).any(|ty| matches!(ty, Type::Record(_)))
+        self.parameters
+            .iter()
+            .chain([&self.result])
+            .any(|ty| matches!(ty, Type::Record(_)))
     }
 
     /// The storage a record result is written into, when there is one: the
@@ -2245,7 +2476,11 @@ impl Function {
     /// which the call writes into its destination and does not produce.
     #[must_use]
     pub fn call_result(&self) -> HirType {
-        if self.destination().is_some() { HirType::Void } else { self.result.representation() }
+        if self.destination().is_some() {
+            HirType::Void
+        } else {
+            self.result.representation()
+        }
     }
 
     /// Aliases such as `int`/`int32_t` agree on the supported LP64 targets;
@@ -2266,6 +2501,7 @@ impl Function {
     /// `@ntsDefault`, read by [`parse_defaults`]. The Windows Runtime's two:
     /// `@ntsHresult`'s shape, and `@ntsReference`'s parameters, read by
     /// [`parse_references`].
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     pub fn from_signature(
         snapshot: &SemanticSnapshot,
         name: String,
@@ -2276,7 +2512,11 @@ impl Function {
         (hresult, references): (Option<Hresult>, &[Reference]),
     ) -> Result<Self, String> {
         let abi_type = |ty| {
-            if abi == Some("managed") { managed_abi_type(snapshot, ty) } else { abi_type(snapshot, ty) }
+            if abi == Some("managed") {
+                managed_abi_type(snapshot, ty)
+            } else {
+                abi_type(snapshot, ty)
+            }
         };
         if let Some(abi) = abi
             && abi != "managed"
@@ -2310,7 +2550,8 @@ impl Function {
                 continue;
             }
             if parameter.optional {
-                let Some((_, value)) = defaults.iter().find(|(named, _)| *named == parameter.name) else {
+                let Some((_, value)) = defaults.iter().find(|(named, _)| *named == parameter.name)
+                else {
                     return Err(format!(
                         "foreign function `{name}` with an optional parameter `{}` that no @ntsDefault gives a value",
                         parameter.name
@@ -2334,7 +2575,8 @@ impl Function {
                 continue;
             }
             if abi.is_none()
-                && let Some(slots) = c_parameter(snapshot, &name, parameter, (parameters.len(), references))?
+                && let Some(slots) =
+                    c_parameter(snapshot, &name, parameter, (parameters.len(), references))?
             {
                 for (ty, role) in slots {
                     parameters.push(ty);
@@ -2345,19 +2587,32 @@ impl Function {
             let ty = abi_type(parameter.ty)
                 .filter(|ty| *ty != Type::Void)
                 .ok_or_else(|| no_abi_type(snapshot, parameter.ty, &name, Some(&parameter.name)))?;
-            if consumed(snapshot, &name, parameter, &ty)? { consumes.push(parameters.len()); }
+            if consumed(snapshot, &name, parameter, &ty)? {
+                consumes.push(parameters.len());
+            }
             parameters.push(ty);
             roles.push(Role::Plain);
         }
         let returned = if let Some(shape) = hresult {
-            hresult_result(snapshot, &name, signature.return_type, abi, shape, (&mut parameters, &mut roles))?
+            hresult_result(
+                snapshot,
+                &name,
+                signature.return_type,
+                abi,
+                shape,
+                (&mut parameters, &mut roles),
+            )?
         } else {
             returned(snapshot, &name, signature.return_type, abi)?
         };
         let result = records_checked(&name, &parameters, variadic.is_some(), returned.result)?;
         Ok(Self {
             name,
-            convention: if abi == Some("managed") { Convention::Nts } else { Convention::C },
+            convention: if abi == Some("managed") {
+                Convention::Nts
+            } else {
+                Convention::C
+            },
             retention: by_value_retention(retention_of(&roles), &parameters, &result),
             parameters,
             variadic,
@@ -2393,7 +2648,11 @@ impl Function {
 /// at is read and not kept. A record result is written through one more
 /// argument, past the declared ones, into storage the callee never sees as an
 /// address. Both are borrows, which is what lets a `NativeLocal` be either.
-fn by_value_retention(mut retention: Vec<Retention>, parameters: &[Type], result: &Type) -> Vec<Retention> {
+fn by_value_retention(
+    mut retention: Vec<Retention>,
+    parameters: &[Type],
+    result: &Type,
+) -> Vec<Retention> {
     for (at, ty) in parameters.iter().enumerate() {
         if matches!(ty, Type::Record(_))
             && let Some(slot) = retention.get_mut(at)
@@ -2412,7 +2671,12 @@ fn by_value_retention(mut retention: Vec<Retention>, parameters: &[Type], result
 /// been checked, along with the one shape a record result's destination cannot
 /// share: a variadic tail, which would put it after arguments whose count only
 /// the call knows.
-fn records_checked(name: &str, parameters: &[Type], variadic: bool, result: Type) -> Result<Type, String> {
+fn records_checked(
+    name: &str,
+    parameters: &[Type],
+    variadic: bool,
+    result: Type,
+) -> Result<Type, String> {
     for ty in parameters {
         if let Type::Record(record) = ty {
             by_value_record_is_passable(name, record, Direction::Lent)?;
@@ -2422,7 +2686,9 @@ fn records_checked(name: &str, parameters: &[Type], variadic: bool, result: Type
         by_value_record_is_passable(name, record, Direction::Returned)?;
     }
     if variadic && matches!(result, Type::Record(_)) {
-        return Err(format!("foreign function `{name}` is variadic and returns a record by value"));
+        return Err(format!(
+            "foreign function `{name}` is variadic and returns a record by value"
+        ));
     }
     Ok(result)
 }
@@ -2456,8 +2722,17 @@ enum Direction {
 /// - **Not packed and no flexible member.** A packed record's registers are
 ///   not what its members suggest, and a flexible member has no extent to
 ///   copy.
-fn by_value_record_is_passable(name: &str, record: &Record, direction: Direction) -> Result<(), String> {
-    let refuse = |why: &str| Err(format!("foreign function `{name}` passes `{}` by value, which {why}", record.name));
+fn by_value_record_is_passable(
+    name: &str,
+    record: &Record,
+    direction: Direction,
+) -> Result<(), String> {
+    let refuse = |why: &str| {
+        Err(format!(
+            "foreign function `{name}` passes `{}` by value, which {why}",
+            record.name
+        ))
+    };
     if record.untagged() {
         return refuse("C has no name for");
     }
@@ -2474,7 +2749,11 @@ fn by_value_record_is_passable(name: &str, record: &Record, direction: Direction
             record.name, field.name
         ));
     }
-    if record.fields.iter().any(|field| matches!(field.ty, Pointee::Flexible(_))) {
+    if record
+        .fields
+        .iter()
+        .any(|field| matches!(field.ty, Pointee::Flexible(_)))
+    {
         return refuse("ends in a flexible array member with no extent to copy");
     }
     Ok(())
@@ -2485,7 +2764,10 @@ fn retention_of(roles: &[Role]) -> Vec<Retention> {
         .iter()
         .scan(false, |scoped, role| {
             Some(match role {
-                Role::Closure { lifetime: Lifetime::Call, .. } => {
+                Role::Closure {
+                    lifetime: Lifetime::Call,
+                    ..
+                } => {
                     *scoped = true;
                     Retention::NotRetained
                 }
@@ -2511,18 +2793,26 @@ fn retention_of(roles: &[Role]) -> Vec<Retention> {
 /// A `Role::Delegate`, as a parameter taking one has.
 pub(crate) fn listener_delegate(snapshot: &SemanticSnapshot, ty: TypeId) -> Result<Role, String> {
     let Some((function, kind @ ClosureKind::Delegate(_))) = closure(snapshot, ty) else {
-        return Err("an event listener whose type is not a delegate (`Event<F, IID, Slots>`)".to_owned());
+        return Err(
+            "an event listener whose type is not a delegate (`Event<F, IID, Slots>`)".to_owned(),
+        );
     };
     match closure_slots(snapshot, "addEventListener", "listener", function, kind)?.pop() {
         Some((_, role @ Role::Delegate { .. })) => Ok(role),
-        _ => Err("an event listener whose type is not a delegate (`Event<F, IID, Slots>`)".to_owned()),
+        _ => Err(
+            "an event listener whose type is not a delegate (`Event<F, IID, Slots>`)".to_owned(),
+        ),
     }
 }
 
 /// What the bridge of the callback type `function` converts among its C
 /// parameters (`callback_slots`), which are the function's own in order.
 fn bridging_of(snapshot: &SemanticSnapshot, function: TypeId) -> super::Bridging {
-    let Some(TypeKind::Function(signature)) = snapshot.types.get(function.0 as usize).map(|record| &record.kind) else {
+    let Some(TypeKind::Function(signature)) = snapshot
+        .types
+        .get(function.0 as usize)
+        .map(|record| &record.kind)
+    else {
         return super::Bridging::default();
     };
     snapshot
@@ -2538,9 +2828,15 @@ fn bridging_of(snapshot: &SemanticSnapshot, function: TypeId) -> super::Bridging
 /// ([`owned_string`]). Only here, since only a bridge converts a result: a
 /// function pointer C calls directly, or a record's member, has no bridge
 /// to copy one, and still refuses it.
-fn callback_signature(snapshot: &SemanticSnapshot, function: TypeId) -> Option<std::sync::Arc<FnPointer>> {
+fn callback_signature(
+    snapshot: &SemanticSnapshot,
+    function: TypeId,
+) -> Option<std::sync::Arc<FnPointer>> {
     let owned = match &snapshot.types.get(function.0 as usize)?.kind {
-        TypeKind::Function(id) => snapshot.signatures.get(id.0 as usize).filter(|signature| is_c_string(snapshot, signature.return_type)),
+        TypeKind::Function(id) => snapshot
+            .signatures
+            .get(id.0 as usize)
+            .filter(|signature| is_c_string(snapshot, signature.return_type)),
         _ => None,
     };
     let Some(signature) = owned else {
@@ -2553,7 +2849,10 @@ fn callback_signature(snapshot: &SemanticSnapshot, function: TypeId) -> Option<s
     if parameters.iter().any(|ty| matches!(ty, Type::Record(_))) {
         return None;
     }
-    Some(std::sync::Arc::new(FnPointer::spell(parameters, owned_c_string())))
+    Some(std::sync::Arc::new(FnPointer::spell(
+        parameters,
+        owned_c_string(),
+    )))
 }
 
 /// The C parameters one `Closure<F>` or `ScopedClosure<F>` becomes: the
@@ -2592,7 +2891,14 @@ fn closure_slots(
         // with a result of its own writes it through a parameter, which is
         // not built.
         ClosureKind::Delegate(iid) if *declared.result == Type::Void => {
-            return Ok(vec![(context, Role::Delegate { bridge, signature: declared, iid })]);
+            return Ok(vec![(
+                context,
+                Role::Delegate {
+                    bridge,
+                    signature: declared,
+                    iid,
+                },
+            )]);
         }
         ClosureKind::Delegate(_) => {
             return Err(format!(
@@ -2610,17 +2916,36 @@ fn closure_slots(
     // What C's parameter is: the bridge's own type, or for an erased closure
     // `GCallback`, which the bridge is converted to.
     let slot = match kind {
-        ClosureKind::Erased(_) => Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void))),
-        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Retained | ClosureKind::Block | ClosureKind::Delegate(_) => {
-            Type::FnPointer(bridge.clone())
-        }
+        ClosureKind::Erased(_) => Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+            Vec::new(),
+            Type::Void,
+        ))),
+        ClosureKind::Scoped
+        | ClosureKind::Once
+        | ClosureKind::Retained
+        | ClosureKind::Block
+        | ClosureKind::Delegate(_) => Type::FnPointer(bridge.clone()),
     };
     let bridging = bridging_of(snapshot, function);
-    let mut slots = vec![(slot, Role::Closure { lifetime, bridge, bridging }), (context.clone(), Role::ClosureData)];
+    let mut slots = vec![
+        (
+            slot,
+            Role::Closure {
+                lifetime,
+                bridge,
+                bridging,
+            },
+        ),
+        (context.clone(), Role::ClosureData),
+    ];
     match kind {
-        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Block | ClosureKind::Delegate(_) => {}
+        ClosureKind::Scoped | ClosureKind::Once | ClosureKind::Block | ClosureKind::Delegate(_) => {
+        }
         ClosureKind::Retained => slots.push((
-            Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context], Type::Void))),
+            Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+                vec![context],
+                Type::Void,
+            ))),
             Role::ClosureNotify,
         )),
         // The destroy function's C type is the binding's to state: C libraries
@@ -2656,9 +2981,18 @@ pub(crate) fn block_role(declared: &FnPointer) -> Role {
     let parameters: Vec<Type> = declared
         .parameters
         .iter()
-        .map(|ty| if *ty == c_string { Type::Pointer(Pointee::Opaque(Handle::ns_string())) } else { ty.clone() })
+        .map(|ty| {
+            if *ty == c_string {
+                Type::Pointer(Pointee::Opaque(Handle::ns_string()))
+            } else {
+                ty.clone()
+            }
+        })
         .collect();
-    let signature = std::sync::Arc::new(FnPointer::spell(parameters.clone(), (*declared.result).clone()));
+    let signature = std::sync::Arc::new(FnPointer::spell(
+        parameters.clone(),
+        (*declared.result).clone(),
+    ));
     let mut callback = parameters;
     callback.push(Type::Pointer(Pointee::Void));
     let bridge = std::sync::Arc::new(FnPointer::spell(callback, (*declared.result).clone()));
@@ -2683,8 +3017,11 @@ pub(crate) fn imp_signature(
     // written in Swift.
     let ty_of = |ty: TypeId| {
         abi_type(snapshot, ty).or_else(|| {
-            matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Number))
-                .then_some(Type::Scalar(Scalar::Double))
+            matches!(
+                snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+                Some(TypeKind::Number)
+            )
+            .then_some(Type::Scalar(Scalar::Double))
         })
     };
     // A `string` parameter is the `NSString *` the runtime passes, copied
@@ -2693,9 +3030,14 @@ pub(crate) fn imp_signature(
     // point makes of the method's, answered at +0 (`answered_ns_string`).
     let passable = |name: &str, ty: TypeId| {
         ty_of(ty)
-            .or_else(|| is_c_string(snapshot, ty).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
+            .or_else(|| {
+                is_c_string(snapshot, ty)
+                    .then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string())))
+            })
             .filter(|ty| *ty != Type::Void)
-            .ok_or_else(|| format!("parameter `{name}`, whose type has no C type the runtime could pass"))
+            .ok_or_else(|| {
+                format!("parameter `{name}`, whose type has no C type the runtime could pass")
+            })
     };
     for parameter in &signature.parameters {
         // Labels -- `mouseDown(labels: { with: NSEvent })`, Swift's
@@ -2712,7 +3054,10 @@ pub(crate) fn imp_signature(
         parameters.push(passable(&parameter.name, parameter.ty)?);
     }
     let result = ty_of(signature.return_type)
-        .or_else(|| is_c_string(snapshot, signature.return_type).then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string()))))
+        .or_else(|| {
+            is_c_string(snapshot, signature.return_type)
+                .then(|| Type::Pointer(Pointee::Opaque(Handle::ns_string())))
+        })
         .ok_or("a result whose type has no C type the runtime could take")?;
     Ok(FnPointer::spell(parameters, result))
 }
@@ -2729,8 +3074,18 @@ pub(crate) fn vfunc_signature(
     signature: &nts_semantic_schema::SignatureRecord,
     defaults: &[(String, ParameterDefault)],
 ) -> Result<FnPointer, String> {
-    let slot = Function::from_signature(snapshot, "the virtual function".to_owned(), signature, None, None, defaults, (None, &[]))?;
-    let parameters = std::iter::once(Type::Pointer(receiver)).chain(slot.parameters).collect();
+    let slot = Function::from_signature(
+        snapshot,
+        "the virtual function".to_owned(),
+        signature,
+        None,
+        None,
+        defaults,
+        (None, &[]),
+    )?;
+    let parameters = std::iter::once(Type::Pointer(receiver))
+        .chain(slot.parameters)
+        .collect();
     Ok(FnPointer::spell(parameters, slot.result))
 }
 
@@ -2779,10 +3134,15 @@ pub(crate) fn event_slots(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(St
         return None;
     };
     let text = parts.iter().find_map(|part| {
-        let TypeKind::Object { properties } = kind_of(*part)? else { return None };
+        let TypeKind::Object { properties } = kind_of(*part)? else {
+            return None;
+        };
         let event = properties.iter().find(|p| p.name == "___c_event")?;
         let defined = match kind_of(event.ty)? {
-            TypeKind::Union(members) => members.iter().copied().find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined)))?,
+            TypeKind::Union(members) => members
+                .iter()
+                .copied()
+                .find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined)))?,
             _ => event.ty,
         };
         match kind_of(defined)? {
@@ -2815,9 +3175,10 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
     // An optional property reads as `T | undefined`: the `T`.
     let defined = |id: TypeId| -> Option<TypeId> {
         match kind_of(id)? {
-            TypeKind::Union(members) => {
-                members.iter().copied().find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined)))
-            }
+            TypeKind::Union(members) => members
+                .iter()
+                .copied()
+                .find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined))),
             _ => Some(id),
         }
     };
@@ -2833,17 +3194,25 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
             TypeKind::Function(_) => function = Some(*part),
             TypeKind::Object { properties } => {
                 let closure = properties.iter().find(|p| p.name == "___c_closure")?;
-                let TypeKind::Literal(LiteralValue::String(kind)) = kind_of(defined(closure.ty)?)? else {
+                let TypeKind::Literal(LiteralValue::String(kind)) = kind_of(defined(closure.ty)?)?
+                else {
                     return None;
                 };
                 marker = Some(kind.clone());
-                notify = properties.iter().find(|p| p.name == "___c_notify").and_then(|p| defined(p.ty));
-                iid = properties.iter().find(|p| p.name == "___c_iid").and_then(|p| defined(p.ty)).and_then(|id| {
-                    match kind_of(id)? {
-                        TypeKind::Literal(LiteralValue::String(iid)) => Some(std::sync::Arc::<str>::from(iid.as_str())),
+                notify = properties
+                    .iter()
+                    .find(|p| p.name == "___c_notify")
+                    .and_then(|p| defined(p.ty));
+                iid = properties
+                    .iter()
+                    .find(|p| p.name == "___c_iid")
+                    .and_then(|p| defined(p.ty))
+                    .and_then(|id| match kind_of(id)? {
+                        TypeKind::Literal(LiteralValue::String(iid)) => {
+                            Some(std::sync::Arc::<str>::from(iid.as_str()))
+                        }
                         _ => None,
-                    }
-                });
+                    });
             }
             _ => return None,
         }
@@ -2889,7 +3258,9 @@ pub(crate) fn native_array_argument(snapshot: &SemanticSnapshot, ty: TypeId) -> 
 /// C hands an array of objects (`nts_array_from_handles`) takes it as. The
 /// markers are optional and never exist, so the value is exactly the array.
 pub(crate) fn lent_handles_value(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<TypeId> {
-    native_array(snapshot, ty).filter(|array| array.role == Role::Handles && !array.nullable).map(|array| array.value)
+    native_array(snapshot, ty)
+        .filter(|array| array.role == Role::Handles && !array.nullable)
+        .map(|array| array.value)
 }
 
 /// Whether a parameter is `CHandles`: an array of handles C is lent as its
@@ -2912,14 +3283,16 @@ pub(crate) fn fills_records(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// function type, so this reads the parts of one intersection and nothing
 /// deeper. A part is a marker when every property it has is one; the value
 /// is the other part, and is an object type with properties of its own.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> {
     let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
     // An optional marker reads as `T | undefined`: the `T`.
     let defined = |id: TypeId| -> Option<TypeId> {
         match kind_of(id)? {
-            TypeKind::Union(members) => {
-                members.iter().copied().find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined)))
-            }
+            TypeKind::Union(members) => members
+                .iter()
+                .copied()
+                .find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined))),
             _ => Some(id),
         }
     };
@@ -2929,7 +3302,9 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     };
     let (ty, nullable) = match kind_of(ty)? {
         TypeKind::Union(parts) => {
-            let [a, b] = parts.as_slice() else { return None };
+            let [a, b] = parts.as_slice() else {
+                return None;
+            };
             // `| null`, or `| undefined` -- an optional property's -- which a
             // lent array has one absence for, the NULL C is passed.
             match (kind_of(*a)?, kind_of(*b)?) {
@@ -2940,7 +3315,9 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         }
         _ => (ty, false),
     };
-    let TypeKind::Intersection(parts) = kind_of(ty)? else { return None };
+    let TypeKind::Intersection(parts) = kind_of(ty)? else {
+        return None;
+    };
     let mut strings = None;
     let mut bytes = None;
     let mut elements = None;
@@ -2954,7 +3331,8 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     for part in parts {
         let markers = match kind_of(*part)? {
             TypeKind::Object { properties }
-                if !properties.is_empty() && properties.iter().all(|p| p.name.starts_with("___c_")) =>
+                if !properties.is_empty()
+                    && properties.iter().all(|p| p.name.starts_with("___c_")) =>
             {
                 properties
             }
@@ -2985,18 +3363,31 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
     // the callee fills.
     let windows = match booleans {
         Some(access) => Some(booleans_array(snapshot, value, &access)),
-        None if filled => Some(filled_array(snapshot, value, (strings.clone(), handles.clone(), records))),
+        None if filled => Some(filled_array(
+            snapshot,
+            value,
+            (strings.clone(), handles.clone(), records),
+        )),
         None => None,
     };
     if let Some(parts) = windows {
         let (role, managed, c) = parts?;
-        return Some(NativeArray { role, managed, c, nullable, count: count.map(|ty| (ty, after)), value });
+        return Some(NativeArray {
+            role,
+            managed,
+            c,
+            nullable,
+            count: count.map(|ty| (ty, after)),
+            value,
+        });
     }
     let char = Pointee::Scalar(Scalar::Char);
     let (role, managed, c) = match (strings, bytes, elements, handles) {
         (None, None, None, None) if records.is_some() => records_array(snapshot, value, records?)?,
         // Windows Runtime strings, `HStrings` in `winrt:types`.
-        (Some(spelling), None, None, None) if spelling == "hstring" => hstrings_array(snapshot, value)?,
+        (Some(spelling), None, None, None) if spelling == "hstring" => {
+            hstrings_array(snapshot, value)?
+        }
         // A typed array's elements, spelled as C spells them: the spelling
         // names the element, and must name the array's own. Borrowed as bytes
         // are -- `nts_view_bytes` is the elements' address whatever they are.
@@ -3006,8 +3397,15 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
             // A view of bytes, whatever TypeScript calls its class: what the
             // program passes is its storage.
             let managed = super::lower::representation(snapshot, value)?;
-            let HirType::Managed(ManagedType::View(element)) = &managed else { return None };
-            if **element != (HirType::Int { bits: 8, signed: false }) {
+            let HirType::Managed(ManagedType::View(element)) = &managed else {
+                return None;
+            };
+            if **element
+                != (HirType::Int {
+                    bits: 8,
+                    signed: false,
+                })
+            {
                 return None;
             }
             let pointee = match spelling.as_str() {
@@ -3023,25 +3421,68 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         (None, None, None, Some(spelling)) => handles_array(snapshot, value, &spelling)?,
         _ => return None,
     };
-    Some(NativeArray { role, managed, c, nullable, count: count.map(|ty| (ty, after)), value })
+    Some(NativeArray {
+        role,
+        managed,
+        c,
+        nullable,
+        count: count.map(|ty| (ty, after)),
+        value,
+    })
 }
 
 /// A typed array's elements (`CElements<A, Q>`), spelled as C spells them:
 /// the spelling names the element, and must name the array's own. Borrowed as
 /// bytes are -- `nts_view_bytes` is the elements' address whatever they are.
-fn borrowed_elements(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str) -> Option<(Role, HirType, Type)> {
+fn borrowed_elements(
+    snapshot: &SemanticSnapshot,
+    value: TypeId,
+    spelling: &str,
+) -> Option<(Role, HirType, Type)> {
     let managed = super::lower::representation(snapshot, value)?;
-    let HirType::Managed(ManagedType::View(element)) = &managed else { return None };
+    let HirType::Managed(ManagedType::View(element)) = &managed else {
+        return None;
+    };
     let (constant, scalar) = match spelling.strip_prefix("const ") {
         Some(bare) => (true, bare),
         None => (false, spelling),
     };
     let (scalar, wants) = match scalar {
-        "int8_t" => (Scalar::Int8, HirType::Int { bits: 8, signed: true }),
-        "int16_t" => (Scalar::Int16, HirType::Int { bits: 16, signed: true }),
-        "uint16_t" => (Scalar::UInt16, HirType::Int { bits: 16, signed: false }),
-        "int32_t" => (Scalar::Int32, HirType::Int { bits: 32, signed: true }),
-        "uint32_t" => (Scalar::UInt32, HirType::Int { bits: 32, signed: false }),
+        "int8_t" => (
+            Scalar::Int8,
+            HirType::Int {
+                bits: 8,
+                signed: true,
+            },
+        ),
+        "int16_t" => (
+            Scalar::Int16,
+            HirType::Int {
+                bits: 16,
+                signed: true,
+            },
+        ),
+        "uint16_t" => (
+            Scalar::UInt16,
+            HirType::Int {
+                bits: 16,
+                signed: false,
+            },
+        ),
+        "int32_t" => (
+            Scalar::Int32,
+            HirType::Int {
+                bits: 32,
+                signed: true,
+            },
+        ),
+        "uint32_t" => (
+            Scalar::UInt32,
+            HirType::Int {
+                bits: 32,
+                signed: false,
+            },
+        ),
         "float" => (Scalar::Float, HirType::Float { bits: 32 }),
         "double" => (Scalar::Double, HirType::Float { bits: 64 }),
         _ => return None,
@@ -3049,7 +3490,11 @@ fn borrowed_elements(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str)
     if **element != wants {
         return None;
     }
-    let pointee = if constant { Pointee::Const(Box::new(Pointee::Scalar(scalar))) } else { Pointee::Scalar(scalar) };
+    let pointee = if constant {
+        Pointee::Const(Box::new(Pointee::Scalar(scalar)))
+    } else {
+        Pointee::Scalar(scalar)
+    };
     Some((Role::Bytes, managed, Type::Pointer(pointee)))
 }
 
@@ -3057,9 +3502,15 @@ fn borrowed_elements(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str)
 /// the handles, typed as the handle's own struct, or `void` where `Q` says.
 /// `CStrings<Q>`: a `string[]` as a NULL-terminated `char **`, its pointers
 /// and characters `const` as `spelling` says.
-fn cstrings_array(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str) -> Option<(Role, HirType, Type)> {
+fn cstrings_array(
+    snapshot: &SemanticSnapshot,
+    value: TypeId,
+    spelling: &str,
+) -> Option<(Role, HirType, Type)> {
     let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let TypeKind::Array(element) = kind_of(value)? else { return None };
+    let TypeKind::Array(element) = kind_of(value)? else {
+        return None;
+    };
     if !matches!(kind_of(*element)?, TypeKind::String) {
         return None;
     }
@@ -3067,19 +3518,29 @@ fn cstrings_array(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str) ->
     let c = match spelling {
         "char" => Type::Pointer(Pointee::Pointer(Box::new(char))),
         "const" => Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))),
-        "const const" => Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))),
+        "const const" => Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(
+            Pointee::Const(Box::new(char)),
+        ))))),
         _ => return None,
     };
-    let managed = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
+    let managed = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(
+        ManagedType::String,
+    ))));
     Some((Role::Strings, managed, c))
 }
 
 /// `CopiedArray<T>`: an array of plain objects as a block of the struct `T`,
 /// each copied into it for the call. Not a struct holding a string, whose
 /// `HSTRING`s would each be lent for the call from inside the copy's loop.
-fn records_array(snapshot: &SemanticSnapshot, value: TypeId, record: TypeId) -> Option<(Role, HirType, Type)> {
+fn records_array(
+    snapshot: &SemanticSnapshot,
+    value: TypeId,
+    record: TypeId,
+) -> Option<(Role, HirType, Type)> {
     let managed = super::lower::representation(snapshot, value)?;
-    let HirType::Managed(ManagedType::Array(element)) = &managed else { return None };
+    let HirType::Managed(ManagedType::Array(element)) = &managed else {
+        return None;
+    };
     if !matches!(**element, HirType::Managed(ManagedType::Object(_))) {
         return None;
     }
@@ -3087,12 +3548,20 @@ fn records_array(snapshot: &SemanticSnapshot, value: TypeId, record: TypeId) -> 
     if record.fields.iter().any(|field| matches!(&field.ty, Pointee::Pointer(held) if matches!(&**held, Pointee::Opaque(handle) if *handle == Handle::hstring()))) {
         return None;
     }
-    Some((Role::Records(record.clone()), managed, Type::Pointer(Pointee::Record(record))))
+    Some((
+        Role::Records(record.clone()),
+        managed,
+        Type::Pointer(Pointee::Record(record)),
+    ))
 }
 
 /// `Booleans` or `FilledBooleans`: a `boolean[]`'s own elements, one byte
 /// each as the Windows Runtime's booleans are, read (`const`) or filled.
-fn booleans_array(snapshot: &SemanticSnapshot, value: TypeId, access: &str) -> Option<(Role, HirType, Type)> {
+fn booleans_array(
+    snapshot: &SemanticSnapshot,
+    value: TypeId,
+    access: &str,
+) -> Option<(Role, HirType, Type)> {
     let managed = super::lower::representation(snapshot, value)?;
     if managed != HirType::Managed(ManagedType::Array(Box::new(HirType::Bool))) {
         return None;
@@ -3116,11 +3585,16 @@ fn filled_array(
     (strings, handles, records): (Option<String>, Option<String>, Option<TypeId>),
 ) -> Option<(Role, HirType, Type)> {
     match (strings.as_deref(), handles.as_deref(), records) {
-        (Some("hstring"), None, None) => hstrings_array(snapshot, value).map(|(_, managed, c)| (Role::FilledStrings, managed, c)),
-        (None, Some("element"), None) => handles_array(snapshot, value, "element").map(|(_, managed, c)| (Role::FilledHandles, managed, c)),
+        (Some("hstring"), None, None) => {
+            hstrings_array(snapshot, value).map(|(_, managed, c)| (Role::FilledStrings, managed, c))
+        }
+        (None, Some("element"), None) => handles_array(snapshot, value, "element")
+            .map(|(_, managed, c)| (Role::FilledHandles, managed, c)),
         (None, None, Some(record)) => {
             let managed = super::lower::representation(snapshot, value)?;
-            let HirType::Managed(ManagedType::Array(element)) = &managed else { return None };
+            let HirType::Managed(ManagedType::Array(element)) = &managed else {
+                return None;
+            };
             if !matches!(**element, HirType::Managed(ManagedType::Object(_))) {
                 return None;
             }
@@ -3138,24 +3612,44 @@ fn filled_array(
 /// one per element, which the runtime makes and nothing else reads.
 fn hstrings_array(snapshot: &SemanticSnapshot, value: TypeId) -> Option<(Role, HirType, Type)> {
     let kind_of = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let TypeKind::Array(element) = kind_of(value)? else { return None };
+    let TypeKind::Array(element) = kind_of(value)? else {
+        return None;
+    };
     if !matches!(kind_of(*element)?, TypeKind::String) {
         return None;
     }
-    let managed = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(ManagedType::String))));
-    Some((Role::HStrings, managed, Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void)))))
+    let managed = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(
+        ManagedType::String,
+    ))));
+    Some((
+        Role::HStrings,
+        managed,
+        Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void))),
+    ))
 }
 
-fn handles_array(snapshot: &SemanticSnapshot, value: TypeId, spelling: &str) -> Option<(Role, HirType, Type)> {
+fn handles_array(
+    snapshot: &SemanticSnapshot,
+    value: TypeId,
+    spelling: &str,
+) -> Option<(Role, HirType, Type)> {
     let managed = super::lower::representation(snapshot, value)?;
-    let HirType::Managed(ManagedType::Array(element)) = &managed else { return None };
-    let HirType::NativePointer(pointee @ Pointee::Opaque(_)) = &**element else { return None };
+    let HirType::Managed(ManagedType::Array(element)) = &managed else {
+        return None;
+    };
+    let HirType::NativePointer(pointee @ Pointee::Opaque(_)) = &**element else {
+        return None;
+    };
     let pointee = match spelling {
         "element" => pointee.clone(),
         "void" => Pointee::Void,
         _ => return None,
     };
-    Some((Role::Handles, managed, Type::Pointer(Pointee::Pointer(Box::new(pointee)))))
+    Some((
+        Role::Handles,
+        managed,
+        Type::Pointer(Pointee::Pointer(Box::new(pointee))),
+    ))
 }
 
 /// The C slots a `CStrings`, `CBytes` or `CHandles` parameter occupies, `at` being the
@@ -3171,12 +3665,32 @@ fn array_slots(
         return Ok(vec![(array.c.clone(), array.role.clone())]);
     };
     let Some(length @ Type::Scalar(_)) = abi_type(snapshot, count) else {
-        return Err(format!("foreign function `{name}` parameter `{parameter}`: a `Counted` length that is not a C integer brand"));
+        return Err(format!(
+            "foreign function `{name}` parameter `{parameter}`: a `Counted` length that is not a C integer brand"
+        ));
     };
     Ok(if after {
-        vec![(array.c.clone(), array.role.clone()), (length, Role::Length { array: at, nullable: array.nullable })]
+        vec![
+            (array.c.clone(), array.role.clone()),
+            (
+                length,
+                Role::Length {
+                    array: at,
+                    nullable: array.nullable,
+                },
+            ),
+        ]
     } else {
-        vec![(length, Role::Length { array: at + 1, nullable: array.nullable }), (array.c.clone(), array.role.clone())]
+        vec![
+            (
+                length,
+                Role::Length {
+                    array: at + 1,
+                    nullable: array.nullable,
+                },
+            ),
+            (array.c.clone(), array.role.clone()),
+        ]
     })
 }
 
@@ -3257,14 +3771,18 @@ fn managed_abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
 fn returned_text(array: bool, string: Option<&ReturnedString>) -> Option<Type> {
     let char = Pointee::Scalar(Scalar::Char);
     if array {
-        Some(Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))))
+        Some(Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(
+            Box::new(Pointee::Const(Box::new(char))),
+        )))))
     } else if string.is_some_and(|string| string.view) {
-        Some(Type::Pointer(Pointee::Const(Box::new(Pointee::Opaque(Handle {
-            tag: "NtsStringView".to_owned(),
-            ancestors: Vec::new(),
-            family: Family::C,
-            interface: false,
-        })))))
+        Some(Type::Pointer(Pointee::Const(Box::new(Pointee::Opaque(
+            Handle {
+                tag: "NtsStringView".to_owned(),
+                ancestors: Vec::new(),
+                family: Family::C,
+                interface: false,
+            },
+        )))))
     } else if string.is_some() {
         Some(Type::Pointer(Pointee::Const(Box::new(char))))
     } else {
@@ -3290,17 +3808,30 @@ fn tags_name_parameters(
     throws: Option<(&str, &str)>,
     defaults: &[(String, ParameterDefault)],
 ) -> Result<(), String> {
-    let find = |named: &str| signature.parameters.iter().find(|parameter| parameter.name == named);
+    let find = |named: &str| {
+        signature
+            .parameters
+            .iter()
+            .find(|parameter| parameter.name == named)
+    };
     if let Some((slot, _)) = throws
         && find(slot).is_none()
     {
-        return Err(format!("foreign function `{name}` @ntsThrows names no parameter `{slot}`"));
+        return Err(format!(
+            "foreign function `{name}` @ntsThrows names no parameter `{slot}`"
+        ));
     }
     for (named, _) in defaults {
         match find(named) {
-            None => return Err(format!("foreign function `{name}` @ntsDefault names no parameter `{named}`")),
+            None => {
+                return Err(format!(
+                    "foreign function `{name}` @ntsDefault names no parameter `{named}`"
+                ));
+            }
             Some(parameter) if !parameter.optional => {
-                return Err(format!("foreign function `{name}` @ntsDefault for `{named}`, which is not optional"));
+                return Err(format!(
+                    "foreign function `{name}` @ntsDefault for `{named}`, which is not optional"
+                ));
             }
             Some(_) => {}
         }
@@ -3325,7 +3856,15 @@ fn hresult_result(
     shape: Hresult,
     (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>),
 ) -> Result<Returned, String> {
-    let status = Returned { result: Type::Scalar(Scalar::Int32), array: None, dictionary: None, set: None, string: None, owned: false, program: None };
+    let status = Returned {
+        result: Type::Scalar(Scalar::Int32),
+        array: None,
+        dictionary: None,
+        set: None,
+        string: None,
+        owned: false,
+        program: None,
+    };
     if shape == Hresult::Out {
         let fields = labels_of(snapshot, ty).ok_or_else(|| {
             format!("foreign function `{name}` is `@ntsHresult out` and its result is not an object type literal of required fields")
@@ -3337,7 +3876,9 @@ fn hresult_result(
                 ));
             }
             let Some((pointer, written)) = written_slot(snapshot, name, *ty, abi)? else {
-                return Err(format!("foreign function `{name}` is `@ntsHresult out` with a `void` field `{field}`"));
+                return Err(format!(
+                    "foreign function `{name}` is `@ntsHresult out` with a `void` field `{field}`"
+                ));
             };
             // The slot is the record's storage, which cannot also be a field
             // of an object of the program's: a struct field is copied out
@@ -3349,7 +3890,10 @@ fn hresult_result(
             }
             received_count(written, (parameters, roles));
             parameters.push(pointer);
-            roles.push(Role::Result { written, field: Some(field.as_str().into()) });
+            roles.push(Role::Result {
+                written,
+                field: Some(field.as_str().into()),
+            });
         }
         return Ok(status);
     }
@@ -3363,7 +3907,10 @@ fn hresult_result(
     if let Some((pointer, written)) = written_slot(snapshot, name, ty, abi)? {
         received_count(written, (&mut *parameters, &mut *roles));
         parameters.push(pointer);
-        roles.push(Role::Result { written, field: None });
+        roles.push(Role::Result {
+            written,
+            field: None,
+        });
     }
     Ok(status)
 }
@@ -3371,7 +3918,13 @@ fn hresult_result(
 /// The count slot a received array's comes after: the Windows Runtime's
 /// `ReceiveArray` is `UINT32 *count, T **elements`, in that order.
 fn received_count(written: Written, (parameters, roles): (&mut Vec<Type>, &mut Vec<Role>)) {
-    if matches!(written, Written::Received { .. } | Written::ReceivedHandles | Written::ReceivedStrings | Written::ReceivedElements) {
+    if matches!(
+        written,
+        Written::Received { .. }
+            | Written::ReceivedHandles
+            | Written::ReceivedStrings
+            | Written::ReceivedElements
+    ) {
         parameters.push(Type::Pointer(Pointee::Scalar(Scalar::UInt32)));
         roles.push(Role::ReceivedCount);
     }
@@ -3379,30 +3932,48 @@ fn received_count(written: Written, (parameters, roles): (&mut Vec<Type>, &mut V
 
 /// The pointer C writes a value of TypeScript type `ty` through, and how the
 /// slot is read after: `None` for `void`, which is written nowhere.
-fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&str>) -> Result<Option<(Type, Written)>, String> {
+fn written_slot(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    ty: TypeId,
+    abi: Option<&str>,
+) -> Result<Option<(Type, Written)>, String> {
     // A typed array can only be written as the Windows Runtime writes an
     // array it hands back: a pointer to its elements, beside their count.
     if let Some((scalar, kind)) = received_array(snapshot, ty) {
-        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(scalar)))), Written::Received { kind })));
+        return Ok(Some((
+            Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(scalar)))),
+            Written::Received { kind },
+        )));
     }
     // An array of objects, as its block of interface pointers, which only
     // the runtime reads: `void **`.
     if received_handles(snapshot, ty) {
         let block = Pointee::Pointer(Box::new(Pointee::Void));
-        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(block))), Written::ReceivedHandles)));
+        return Ok(Some((
+            Type::Pointer(Pointee::Pointer(Box::new(block))),
+            Written::ReceivedHandles,
+        )));
     }
     // An array of structs, as its block of them.
-    if let Some(TypeKind::Array(element)) = snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
+    if let Some(TypeKind::Array(element)) =
+        snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
         && let Some(record) = schema::copied(snapshot, *element)
     {
-        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Record(record)))), Written::ReceivedElements)));
+        return Ok(Some((
+            Type::Pointer(Pointee::Pointer(Box::new(Pointee::Record(record)))),
+            Written::ReceivedElements,
+        )));
     }
     // An array of booleans, as its block of one-byte booleans, copied as a
     // struct array's elements are.
     if matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Array(element))
         if matches!(snapshot.types.get(element.0 as usize).map(|record| &record.kind), Some(TypeKind::Boolean)))
     {
-        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(Scalar::Bool8)))), Written::ReceivedElements)));
+        return Ok(Some((
+            Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(Scalar::Bool8)))),
+            Written::ReceivedElements,
+        )));
     }
     // An array of strings, as its block of `HSTRING`s, which only the
     // runtime reads.
@@ -3410,12 +3981,18 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
         if matches!(snapshot.types.get(element.0 as usize).map(|record| &record.kind), Some(TypeKind::String)))
     {
         let block = Pointee::Pointer(Box::new(Pointee::Void));
-        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(block))), Written::ReceivedStrings)));
+        return Ok(Some((
+            Type::Pointer(Pointee::Pointer(Box::new(block))),
+            Written::ReceivedStrings,
+        )));
     }
     // A value or `null`, as the `IReference<T>` that holds it: the
     // reference's pointer, read after.
     if let Some(value) = referenced(snapshot, ty) {
-        return Ok(Some((Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void))), Written::Reference(value))));
+        return Ok(Some((
+            Type::Pointer(Pointee::Pointer(Box::new(Pointee::Void))),
+            Written::Reference(value),
+        )));
     }
     let (written, kind) = if string_encoding(snapshot, ty) == Some(Encoding::HString) {
         (Type::Pointer(Pointee::Void), Written::HString)
@@ -3464,14 +4041,33 @@ fn written_slot(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option
 /// `None` for any other type: what a received array is copied as.
 fn received_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Scalar, u32)> {
     let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
-    let element = super::builtin::typed_array_element(&snapshot.symbols.get(symbol.0 as usize)?.name)?;
+    let element =
+        super::builtin::typed_array_element(&snapshot.symbols.get(symbol.0 as usize)?.name)?;
     let scalar = match element {
-        HirType::Int { bits: 8, signed: true } => Scalar::Int8,
-        HirType::Int { bits: 8, signed: false } => Scalar::UInt8,
-        HirType::Int { bits: 16, signed: true } => Scalar::Int16,
-        HirType::Int { bits: 16, signed: false } => Scalar::UInt16,
-        HirType::Int { bits: 32, signed: true } => Scalar::Int32,
-        HirType::Int { bits: 32, signed: false } => Scalar::UInt32,
+        HirType::Int {
+            bits: 8,
+            signed: true,
+        } => Scalar::Int8,
+        HirType::Int {
+            bits: 8,
+            signed: false,
+        } => Scalar::UInt8,
+        HirType::Int {
+            bits: 16,
+            signed: true,
+        } => Scalar::Int16,
+        HirType::Int {
+            bits: 16,
+            signed: false,
+        } => Scalar::UInt16,
+        HirType::Int {
+            bits: 32,
+            signed: true,
+        } => Scalar::Int32,
+        HirType::Int {
+            bits: 32,
+            signed: false,
+        } => Scalar::UInt32,
         HirType::Float { bits: 32 } => Scalar::Float,
         HirType::Float { bits: 64 } => Scalar::Double,
         _ => return None,
@@ -3482,7 +4078,9 @@ fn received_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Scalar, u3
 /// Whether `ty` is an array of Windows Runtime objects, each perhaps `null`:
 /// what a `ReceiveArray` of interfaces is read into.
 fn received_handles(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    let Some(TypeKind::Array(element)) = snapshot.types.get(ty.0 as usize).map(|record| &record.kind) else {
+    let Some(TypeKind::Array(element)) =
+        snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
+    else {
         return false;
     };
     matches!(schema::pointer(snapshot, *element), Some(Pointee::Opaque(handle)) if handle.family == Family::Com)
@@ -3506,9 +4104,22 @@ struct Returned {
     program: Option<Type>,
 }
 
-fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&str>) -> Result<Returned, String> {
-    let string = if abi.is_none() { returned_string(snapshot, ty) } else { None };
-    let array = if abi.is_none() { returned_strings(snapshot, ty) } else { None };
+fn returned(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    ty: TypeId,
+    abi: Option<&str>,
+) -> Result<Returned, String> {
+    let string = if abi.is_none() {
+        returned_string(snapshot, ty)
+    } else {
+        None
+    };
+    let array = if abi.is_none() {
+        returned_strings(snapshot, ty)
+    } else {
+        None
+    };
     // `Erased<H>`, as C's `void *` -- `gtk_list_item_get_item` returns the
     // item GIR says is an object and C declares `gpointer` -- read back as the
     // `H` the program holds, which is `Declared`'s conversion with `void *`
@@ -3520,7 +4131,11 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
     // Only an array of objects here: a `string[]` result is a C function's
     // NULL-terminated `char **` too, and is an `NSArray` only where the callee
     // turns out to be a message (`bridge_strings`).
-    let bridged = if abi.is_none() { bridged_array(snapshot, ty).filter(|element| *element != Bridged::String) } else { None };
+    let bridged = if abi.is_none() {
+        bridged_array(snapshot, ty).filter(|element| *element != Bridged::String)
+    } else {
+        None
+    };
     if abi.is_none()
         && let Some(dictionary) = bridged_dictionary(snapshot, ty)
     {
@@ -3564,19 +4179,30 @@ fn returned(snapshot: &SemanticSnapshot, name: &str, ty: TypeId, abi: Option<&st
         (None, None) => if abi == Some("managed") {
             managed_abi_type(snapshot, ty)
         } else {
-            abi_type(snapshot, ty).or_else(|| promised(snapshot, ty)).or_else(|| returned_closure(snapshot, ty))
+            abi_type(snapshot, ty)
+                .or_else(|| promised(snapshot, ty))
+                .or_else(|| returned_closure(snapshot, ty))
         }
-            .ok_or_else(|| no_abi_type(snapshot, ty, name, None))?,
+        .ok_or_else(|| no_abi_type(snapshot, ty, name, None))?,
     };
     Ok(Returned {
         result,
         array: None,
         dictionary: None,
         set: None,
-        string: array.map(|nullable| ReturnedString { nullable, free: None, array: true, view: false }).or(string),
+        string: array
+            .map(|nullable| ReturnedString {
+                nullable,
+                free: None,
+                array: true,
+                view: false,
+            })
+            .or(string),
         owned: owned_result(snapshot, name, ty)?,
         // A `CBool`'s integer, read back as a boolean.
-        program: declared.map(|(_, program)| program).or_else(|| int_bool(snapshot, ty).map(|_| Type::Bool)),
+        program: declared
+            .map(|(_, program)| program)
+            .or_else(|| int_bool(snapshot, ty).map(|_| Type::Bool)),
     })
 }
 
@@ -3592,7 +4218,9 @@ fn branded(snapshot: &SemanticSnapshot, ty: TypeId, property: &str) -> bool {
         },
         _ => ty,
     };
-    let Some(TypeKind::Intersection(parts)) = kind(ty) else { return false };
+    let Some(TypeKind::Intersection(parts)) = kind(ty) else {
+        return false;
+    };
     parts.iter().any(|part| {
         matches!(kind(*part), Some(TypeKind::Object { properties })
             if matches!(properties.as_slice(), [p] if p.name == property && p.optional && p.readonly))
@@ -3608,7 +4236,12 @@ fn branded(snapshot: &SemanticSnapshot, ty: TypeId, property: &str) -> bool {
 ///
 /// `Consumed` on a handle the program does not count: there is no reference
 /// here to hand.
-fn consumed(snapshot: &SemanticSnapshot, name: &str, parameter: &nts_semantic_schema::ParameterRecord, ty: &Type) -> Result<bool, String> {
+fn consumed(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    parameter: &nts_semantic_schema::ParameterRecord,
+    ty: &Type,
+) -> Result<bool, String> {
     if !branded(snapshot, parameter.ty, "___c_consumed") {
         return Ok(false);
     }
@@ -3658,7 +4291,11 @@ fn owned_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<b
 ///
 /// `D` not a handle among `T`'s declared ancestors -- which includes an
 /// interface `T` implements, since a handle's chain records its parents only.
-fn declared_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Result<Option<(Type, Type)>, String> {
+fn declared_result(
+    snapshot: &SemanticSnapshot,
+    name: &str,
+    ty: TypeId,
+) -> Result<Option<(Type, Type)>, String> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
     // `Declared<T, D> | null`: the handle, which may be NULL like any other.
     let ty = match kind(ty) {
@@ -3669,25 +4306,41 @@ fn declared_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Resul
         },
         _ => ty,
     };
-    let Some(TypeKind::Intersection(parts)) = kind(ty) else { return Ok(None) };
+    let Some(TypeKind::Intersection(parts)) = kind(ty) else {
+        return Ok(None);
+    };
     let declared = parts.iter().find_map(|part| match kind(*part) {
         Some(TypeKind::Object { properties }) => match properties.as_slice() {
-            [property] if property.name == "___c_declared" && property.optional && property.readonly => Some(property.ty),
+            [property]
+                if property.name == "___c_declared" && property.optional && property.readonly =>
+            {
+                Some(property.ty)
+            }
             _ => None,
         },
         _ => None,
     });
-    let Some(declared) = declared else { return Ok(None) };
+    let Some(declared) = declared else {
+        return Ok(None);
+    };
     let declared = match kind(declared) {
-        Some(TypeKind::Union(members)) => members.iter().copied().find(|m| !matches!(kind(*m), Some(TypeKind::Undefined))),
+        Some(TypeKind::Union(members)) => members
+            .iter()
+            .copied()
+            .find(|m| !matches!(kind(*m), Some(TypeKind::Undefined))),
         _ => Some(declared),
     };
     let handle = |pointee: Option<Pointee>| match pointee {
         Some(Pointee::Opaque(handle)) => Some(handle),
         _ => None,
     };
-    let (Some(c), Some(program)) = (handle(declared.and_then(|d| pointer(snapshot, d))), handle(pointer(snapshot, ty))) else {
-        return Err(format!("foreign function `{name}` with a `Declared` result whose types are not both handles"));
+    let (Some(c), Some(program)) = (
+        handle(declared.and_then(|d| pointer(snapshot, d))),
+        handle(pointer(snapshot, ty)),
+    ) else {
+        return Err(format!(
+            "foreign function `{name}` with a `Declared` result whose types are not both handles"
+        ));
     };
     if !program.upcasts_to(&c) {
         return Err(format!(
@@ -3695,7 +4348,10 @@ fn declared_result(snapshot: &SemanticSnapshot, name: &str, ty: TypeId) -> Resul
             c.tag, program.tag
         ));
     }
-    Ok(Some((Type::Pointer(Pointee::Opaque(c)), Type::Pointer(Pointee::Opaque(program)))))
+    Ok(Some((
+        Type::Pointer(Pointee::Opaque(c)),
+        Type::Pointer(Pointee::Opaque(program)),
+    )))
 }
 
 /// The C type of an optional parameter `@ntsDefault` gives a value: its type
@@ -3712,42 +4368,61 @@ fn defaulted(
         Some(TypeKind::Union(parts)) => parts.clone(),
         _ => vec![parameter.ty],
     };
-    let members: Vec<TypeId> = members.into_iter().filter(|m| !matches!(kind(*m), Some(TypeKind::Undefined))).collect();
-    let nullable = members.iter().any(|m| matches!(kind(*m), Some(TypeKind::Null)));
-    let payload: Vec<TypeId> = members.into_iter().filter(|m| !matches!(kind(*m), Some(TypeKind::Null))).collect();
+    let members: Vec<TypeId> = members
+        .into_iter()
+        .filter(|m| !matches!(kind(*m), Some(TypeKind::Undefined)))
+        .collect();
+    let nullable = members
+        .iter()
+        .any(|m| matches!(kind(*m), Some(TypeKind::Null)));
+    let payload: Vec<TypeId> = members
+        .into_iter()
+        .filter(|m| !matches!(kind(*m), Some(TypeKind::Null)))
+        .collect();
     let parameter = &parameter.name;
     // `boolean` is `true | false` to the checker, so it arrives here as two
     // literals once `undefined` is gone.
-    let boolean = |m: &TypeId| matches!(kind(*m), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
+    let boolean =
+        |m: &TypeId| matches!(kind(*m), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
     // And a `CEnum` is its members, each `member & brand`.
     let ty = match payload.as_slice() {
         [one] => abi_type(snapshot, *one),
         [_, _] if payload.iter().all(boolean) => Some(Type::Bool),
-        members => enum_members_scalar(snapshot, members).or_else(|| int_bool_members(snapshot, members)).map(Type::Scalar),
+        members => enum_members_scalar(snapshot, members)
+            .or_else(|| int_bool_members(snapshot, members))
+            .map(Type::Scalar),
     };
     match (value, ty) {
         (ParameterDefault::Int(value), Some(Type::Bool)) if !nullable => {
             if value == 0 || value == 1 {
                 Ok(Type::Bool)
             } else {
-                Err(format!("foreign function `{name}` @ntsDefault gives boolean `{parameter}` {value}, which is not 0 or 1"))
+                Err(format!(
+                    "foreign function `{name}` @ntsDefault gives boolean `{parameter}` {value}, which is not 0 or 1"
+                ))
             }
         }
-        (ParameterDefault::Int(value), Some(Type::Scalar(scalar))) if !nullable => match scalar.representation() {
-            HirType::Int { bits, signed } => {
-                let (low, high) = if signed {
-                    (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
-                } else {
-                    (0, (1i128 << bits) - 1)
-                };
-                if (low..=high).contains(&i128::from(value)) {
-                    Ok(Type::Scalar(scalar))
-                } else {
-                    Err(format!("foreign function `{name}` @ntsDefault gives `{parameter}` {value}, outside its C type"))
+        (ParameterDefault::Int(value), Some(Type::Scalar(scalar))) if !nullable => {
+            match scalar.representation() {
+                HirType::Int { bits, signed } => {
+                    let (low, high) = if signed {
+                        (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
+                    } else {
+                        (0, (1i128 << bits) - 1)
+                    };
+                    if (low..=high).contains(&i128::from(value)) {
+                        Ok(Type::Scalar(scalar))
+                    } else {
+                        Err(format!(
+                            "foreign function `{name}` @ntsDefault gives `{parameter}` {value}, outside its C type"
+                        ))
+                    }
                 }
+                _ => Err(format!(
+                    "foreign function `{name}` @ntsDefault for floating-point `{parameter}`, which takes only an integer or null"
+                )),
             }
-            _ => Err(format!("foreign function `{name}` @ntsDefault for floating-point `{parameter}`, which takes only an integer or null")),
-        },
+        }
         (ParameterDefault::Null, Some(ty @ Type::Pointer(_))) if nullable => Ok(ty),
         (ParameterDefault::Int(_), _) => Err(format!(
             "foreign function `{name}` @ntsDefault gives `{parameter}` an integer, which only a C integer or boolean parameter takes"
@@ -3764,7 +4439,11 @@ fn error_slot(
     parameter: &nts_semantic_schema::ParameterRecord,
     converter: &str,
 ) -> Result<(Type, Role), String> {
-    let members = match snapshot.types.get(parameter.ty.0 as usize).map(|record| &record.kind) {
+    let members = match snapshot
+        .types
+        .get(parameter.ty.0 as usize)
+        .map(|record| &record.kind)
+    {
         Some(TypeKind::Union(parts)) => parts.clone(),
         _ => vec![parameter.ty],
     };
@@ -3779,9 +4458,16 @@ fn error_slot(
         ));
     };
     if !is_c_identifier(converter) {
-        return Err(format!("foreign function `{name}` @ntsThrows converter `{converter}` that is not a C function name"));
+        return Err(format!(
+            "foreign function `{name}` @ntsThrows converter `{converter}` that is not a C function name"
+        ));
     }
-    Ok((ty, Role::ErrorSlot { converter: converter.to_owned() }))
+    Ok((
+        ty,
+        Role::ErrorSlot {
+            converter: converter.to_owned(),
+        },
+    ))
 }
 
 /// The parameters only the C convention has, each a type TypeScript spells
@@ -3802,6 +4488,7 @@ fn error_slot(
 ///   in, which a length slot names its array by.
 /// - A parameter `references` names (`@ntsReference`): a `T | null` as the
 ///   `IReference<T>` made for the call.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn c_parameter(
     snapshot: &SemanticSnapshot,
     name: &str,
@@ -3810,11 +4497,18 @@ fn c_parameter(
 ) -> Result<Option<Vec<(Type, Role)>>, String> {
     // A value or `null` a Windows Runtime call takes as an `IReference<T>`
     // (`@ntsReference`).
-    if let Some(reference) = references.iter().find(|reference| reference.parameter == parameter.name) {
+    if let Some(reference) = references
+        .iter()
+        .find(|reference| reference.parameter == parameter.name)
+    {
         let value = referenced(snapshot, parameter.ty).ok_or_else(|| {
             format!("foreign function `{name}` @ntsReference parameter `{}` whose type is not a value or `null`", parameter.name)
         })?;
-        let role = Role::Reference { iid: reference.iid.clone(), value, property_type: reference.property_type };
+        let role = Role::Reference {
+            iid: reference.iid.clone(),
+            value,
+            property_type: reference.property_type,
+        };
         return Ok(Some(vec![(Type::Pointer(Pointee::Void), role)]));
     }
     // A struct the program holds as a plain object (`Copied<T>`), before the
@@ -3831,32 +4525,64 @@ fn c_parameter(
                 // A property crosses as a positional parameter of its type
                 // would: an array Swift bridges, a string, or its C type.
                 let (ty, inner) = if let Some(value) = bridged_dictionary(snapshot, *ty) {
-                    (Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))), Role::NSDictionary(value))
+                    (
+                        Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))),
+                        Role::NSDictionary(value),
+                    )
                 } else if let Some(element) = bridged_set(snapshot, *ty) {
-                    (Type::Pointer(Pointee::Opaque(Handle::objc("NSSet"))), Role::NSSet(element))
+                    (
+                        Type::Pointer(Pointee::Opaque(Handle::objc("NSSet"))),
+                        Role::NSSet(element),
+                    )
                 } else if let Some(element) = bridged_array(snapshot, *ty) {
-                    (Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))), Role::NSArray(element))
+                    (
+                        Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))),
+                        Role::NSArray(element),
+                    )
                 } else if let Some(encoding) = string_encoding(snapshot, *ty) {
                     (encoding.c_type(), Role::String(encoding))
                 } else {
                     let ty = abi_type(snapshot, *ty)
                         .filter(|ty| *ty != Type::Void)
-                        .ok_or_else(|| no_abi_type(snapshot, *ty, name, Some(&format!("{}.{key}", parameter.name))))?;
+                        .ok_or_else(|| {
+                            no_abi_type(
+                                snapshot,
+                                *ty,
+                                name,
+                                Some(&format!("{}.{key}", parameter.name)),
+                            )
+                        })?;
                     (ty, Role::Plain)
                 };
-                Ok((ty, Role::Label { key: key.clone(), last: at + 1 == labels.len(), inner: Box::new(inner) }))
+                Ok((
+                    ty,
+                    Role::Label {
+                        key: key.clone(),
+                        last: at + 1 == labels.len(),
+                        inner: Box::new(inner),
+                    },
+                ))
             })
             .collect::<Result<Vec<_>, String>>()
             .map(Some);
     }
     if let Some(value) = bridged_dictionary(snapshot, parameter.ty) {
-        return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))), Role::NSDictionary(value))]));
+        return Ok(Some(vec![(
+            Type::Pointer(Pointee::Opaque(Handle::objc("NSDictionary"))),
+            Role::NSDictionary(value),
+        )]));
     }
     if let Some(element) = bridged_set(snapshot, parameter.ty) {
-        return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSSet"))), Role::NSSet(element))]));
+        return Ok(Some(vec![(
+            Type::Pointer(Pointee::Opaque(Handle::objc("NSSet"))),
+            Role::NSSet(element),
+        )]));
     }
     if let Some(element) = bridged_array(snapshot, parameter.ty) {
-        return Ok(Some(vec![(Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))), Role::NSArray(element))]));
+        return Ok(Some(vec![(
+            Type::Pointer(Pointee::Opaque(Handle::objc("NSArray"))),
+            Role::NSArray(element),
+        )]));
     }
     if let Some(array) = native_array(snapshot, parameter.ty) {
         return array_slots(snapshot, name, &parameter.name, &array, at).map(Some);
@@ -3871,14 +4597,18 @@ fn c_parameter(
         return Ok(Some(vec![(encoding.c_type(), Role::String(encoding))]));
     }
     if is_string_literal(snapshot, parameter.ty) {
-        return Ok(Some(vec![(Encoding::Utf8.c_type(), Role::String(Encoding::Utf8))]));
+        return Ok(Some(vec![(
+            Encoding::Utf8.c_type(),
+            Role::String(Encoding::Utf8),
+        )]));
     }
     match closure(snapshot, parameter.ty) {
-        Some((function, kind)) => closure_slots(snapshot, name, &parameter.name, function, kind).map(Some),
+        Some((function, kind)) => {
+            closure_slots(snapshot, name, &parameter.name, function, kind).map(Some)
+        }
         None => Ok(None),
     }
 }
-
 
 /// The slot an `Inspectable` parameter passes (`Role::Box`): a union of one
 /// Windows Runtime object type with a string, a number or a boolean, and
@@ -3887,12 +4617,17 @@ fn c_parameter(
 /// have the ownership pass release it a second time.
 fn boxable(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let TypeKind::Union(members) = kind(ty)? else { return None };
+    let TypeKind::Union(members) = kind(ty)? else {
+        return None;
+    };
     let mut object = None;
     let mut primitive = false;
     for member in members {
         match kind(*member)? {
-            TypeKind::String | TypeKind::Number | TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => primitive = true,
+            TypeKind::String
+            | TypeKind::Number
+            | TypeKind::Boolean
+            | TypeKind::Literal(LiteralValue::Boolean(_)) => primitive = true,
             TypeKind::Null | TypeKind::Undefined => {}
             // An array of strings, which the runtime boxes as an
             // `IPropertyValue` of `HSTRING`s and unboxes back into one.
@@ -3900,9 +4635,12 @@ fn boxable(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
             // A numeric typed array, which the runtime boxes as an
             // `IPropertyValue` of the array (`nts_winrt_box`) and unboxes back
             // into one -- except an `Int8Array`, which no `PropertyType` holds.
-            _ if received_array(snapshot, *member).is_some_and(|(scalar, _)| scalar != Scalar::Int8) => {}
+            _ if received_array(snapshot, *member)
+                .is_some_and(|(scalar, _)| scalar != Scalar::Int8) => {}
             _ => match abi_type(snapshot, *member)? {
-                Type::Pointer(Pointee::Opaque(handle)) if handle.family == Family::Com && object.is_none() => {
+                Type::Pointer(Pointee::Opaque(handle))
+                    if handle.family == Family::Com && object.is_none() =>
+                {
                     object = Some(Type::Pointer(Pointee::Void));
                 }
                 _ => return None,
@@ -3925,7 +4663,10 @@ fn bridged_set(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
         _ => ty,
     };
     let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
-    if !matches!(snapshot.symbols.get(symbol.0 as usize)?.name.as_str(), "Set" | "ReadonlySet") {
+    if !matches!(
+        snapshot.symbols.get(symbol.0 as usize)?.name.as_str(),
+        "Set" | "ReadonlySet"
+    ) {
         return None;
     }
     let element = *snapshot.type_arguments.get(&ty)?.first()?;
@@ -3933,7 +4674,9 @@ fn bridged_set(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
         return Some(Bridged::String);
     }
     match pointer(snapshot, element)? {
-        Pointee::Opaque(handle) if handle.family == Family::Objc => Some(Bridged::Object(Pointee::Opaque(handle))),
+        Pointee::Opaque(handle) if handle.family == Family::Objc => {
+            Some(Bridged::Object(Pointee::Opaque(handle)))
+        }
         _ => None,
     }
 }
@@ -3952,7 +4695,10 @@ fn bridged_dictionary(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged
         _ => ty,
     };
     let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
-    if !matches!(snapshot.symbols.get(symbol.0 as usize)?.name.as_str(), "Map" | "ReadonlyMap") {
+    if !matches!(
+        snapshot.symbols.get(symbol.0 as usize)?.name.as_str(),
+        "Map" | "ReadonlyMap"
+    ) {
         return None;
     }
     let arguments = snapshot.type_arguments.get(&ty)?;
@@ -3964,7 +4710,9 @@ fn bridged_dictionary(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged
         return Some(Bridged::String);
     }
     match pointer(snapshot, value)? {
-        Pointee::Opaque(handle) if handle.family == Family::Objc => Some(Bridged::Object(Pointee::Opaque(handle))),
+        Pointee::Opaque(handle) if handle.family == Family::Objc => {
+            Some(Bridged::Object(Pointee::Opaque(handle)))
+        }
         _ => None,
     }
 }
@@ -3985,12 +4733,19 @@ fn bridged_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
         },
         _ => ty,
     };
-    let TypeKind::Array(element) = *kind(ty)? else { return None };
-    if matches!(snapshot.types.get(element.0 as usize)?.kind, TypeKind::String) {
+    let TypeKind::Array(element) = *kind(ty)? else {
+        return None;
+    };
+    if matches!(
+        snapshot.types.get(element.0 as usize)?.kind,
+        TypeKind::String
+    ) {
         return Some(Bridged::String);
     }
     match pointer(snapshot, element)? {
-        Pointee::Opaque(handle) if handle.family == Family::Objc => Some(Bridged::Object(Pointee::Opaque(handle))),
+        Pointee::Opaque(handle) if handle.family == Family::Objc => {
+            Some(Bridged::Object(Pointee::Opaque(handle)))
+        }
         _ => None,
     }
 }
@@ -4015,8 +4770,11 @@ pub(crate) fn is_branded_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
     match kind(ty) {
         Some(TypeKind::Intersection(parts)) => {
-            let [a, b] = parts.as_slice() else { return false };
-            let literal = |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
+            let [a, b] = parts.as_slice() else {
+                return false;
+            };
+            let literal =
+                |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
             let brand = |id: TypeId| {
                 matches!(kind(id), Some(TypeKind::Object { properties })
                     if matches!(properties.as_slice(), [p] if p.name == "___c_bool" && p.optional && p.readonly))
@@ -4035,8 +4793,10 @@ pub(crate) fn is_branded_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// other one -- `string & { real: number }` -- is a value with a layout, and
 /// is not this.
 pub(crate) fn is_branded_string(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    matches!(snapshot.types.get(ty.0 as usize).map(|record| &record.kind), Some(TypeKind::Intersection(_)))
-        && string_encoding(snapshot, ty).is_some()
+    matches!(
+        snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+        Some(TypeKind::Intersection(_))
+    ) && string_encoding(snapshot, ty).is_some()
 }
 
 /// How a `string` parameter crosses, or `None` for anything that is not one:
@@ -4048,39 +4808,69 @@ pub(crate) fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option
         // A template literal type is a set of strings, and crosses as one.
         TypeKind::String | TypeKind::TemplateLiteral { .. } => Some(Encoding::Utf8),
         TypeKind::Intersection(parts) => {
-            let [a, b] = parts.as_slice() else { return None };
-            let (text, brand) = if matches!(kind(*a), Some(TypeKind::String)) { (a, b) } else { (b, a) };
+            let [a, b] = parts.as_slice() else {
+                return None;
+            };
+            let (text, brand) = if matches!(kind(*a), Some(TypeKind::String)) {
+                (a, b)
+            } else {
+                (b, a)
+            };
             if !matches!(kind(*text), Some(TypeKind::String)) {
                 return None;
             }
-            let TypeKind::Object { properties } = kind(*brand)? else { return None };
+            let TypeKind::Object { properties } = kind(*brand)? else {
+                return None;
+            };
             match properties.as_slice() {
-                [property] if property.name == "___c_utf16" && property.optional && property.readonly => {
+                [property]
+                    if property.name == "___c_utf16" && property.optional && property.readonly =>
+                {
                     Some(Encoding::Utf16)
                 }
-                [property] if property.name == "___c_hstring" && property.optional && property.readonly => {
+                [property]
+                    if property.name == "___c_hstring"
+                        && property.optional
+                        && property.readonly =>
+                {
                     Some(Encoding::HString)
                 }
-                [property] if property.name == "___c_view" && property.optional && property.readonly => {
+                [property]
+                    if property.name == "___c_view" && property.optional && property.readonly =>
+                {
                     Some(Encoding::View)
                 }
                 // `CString`: UTF-8 said out loud, where a plain `string` would
                 // be an `NSString` -- in an Objective-C message.
-                [property] if property.name == "___c_utf8" && property.optional && property.readonly => {
+                [property]
+                    if property.name == "___c_utf8" && property.optional && property.readonly =>
+                {
                     Some(Encoding::Utf8)
                 }
                 // `BridgedString`: a string an `NSString *` carries, which
                 // the call bridges (`bridge_strings`); read here as the text
                 // it is.
-                [property] if property.name == "___objc_nsstring" && property.optional && property.readonly => {
+                [property]
+                    if property.name == "___objc_nsstring"
+                        && property.optional
+                        && property.readonly =>
+                {
                     Some(Encoding::Utf8)
                 }
                 _ => None,
             }
         }
         TypeKind::Union(parts) => {
-            let [a, b] = parts.as_slice() else { return None };
-            let payload = if matches!(kind(*a), Some(TypeKind::Null)) { *b } else if matches!(kind(*b), Some(TypeKind::Null)) { *a } else { return None };
+            let [a, b] = parts.as_slice() else {
+                return None;
+            };
+            let payload = if matches!(kind(*a), Some(TypeKind::Null)) {
+                *b
+            } else if matches!(kind(*b), Some(TypeKind::Null)) {
+                *a
+            } else {
+                return None;
+            };
             string_encoding(snapshot, payload)
         }
         _ => None,
@@ -4097,14 +4887,15 @@ pub(crate) fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option
 fn is_string_literal(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
         Some(TypeKind::Literal(LiteralValue::String(_)) | TypeKind::TemplateLiteral { .. }) => true,
-        Some(TypeKind::Union(parts)) => {
-            parts.iter().all(|part| {
-                matches!(
-                    snapshot.types.get(part.0 as usize).map(|record| &record.kind),
-                    Some(TypeKind::Literal(LiteralValue::String(_)) | TypeKind::TemplateLiteral { .. })
-                )
-            })
-        }
+        Some(TypeKind::Union(parts)) => parts.iter().all(|part| {
+            matches!(
+                snapshot
+                    .types
+                    .get(part.0 as usize)
+                    .map(|record| &record.kind),
+                Some(TypeKind::Literal(LiteralValue::String(_)) | TypeKind::TemplateLiteral { .. })
+            )
+        }),
         _ => false,
     }
 }
@@ -4130,8 +4921,10 @@ fn rest_element(
             "foreign function `{name}` with a rest parameter that is not last"
         ));
     }
-    let Some(TypeKind::Array(element)) =
-        snapshot.types.get(parameter.ty.0 as usize).map(|record| &record.kind)
+    let Some(TypeKind::Array(element)) = snapshot
+        .types
+        .get(parameter.ty.0 as usize)
+        .map(|record| &record.kind)
     else {
         return Err(format!(
             "foreign function `{name}` rest parameter `{}` is not an array type",
@@ -4158,12 +4951,16 @@ fn variadic_tail_is_passable(name: &str, ty: &Type, no_fixed: bool) -> Result<()
     // mentions. Refused with the promoted type named, which is what the binding
     // should say.
     if matches!(ty, Type::Record(_)) {
-        return Err(format!("foreign function `{name}` passes records by value through `...`, which C cannot say how to"));
+        return Err(format!(
+            "foreign function `{name}` passes records by value through `...`, which C cannot say how to"
+        ));
     }
     if let Some(promoted) = ty.promoted_for_variadic() {
         return Err(format!(
             "foreign function `{name}` variadic tail is `{}`, which C promotes to `{}` before the callee sees it; declare `{}`",
-            ty.c_type(), promoted.c_type(), promoted.c_type()
+            ty.c_type(),
+            promoted.c_type(),
+            promoted.c_type()
         ));
     }
     Ok(())
@@ -4179,15 +4976,15 @@ impl Type {
     /// naming one of those describes something other than what is passed.
     #[must_use]
     pub fn promoted_for_variadic(&self) -> Option<Self> {
-        let Self::Scalar(scalar) = self else { return None };
+        let Self::Scalar(scalar) = self else {
+            return None;
+        };
         Some(Self::Scalar(match scalar {
             // Every value of these fits in an `int`, signed or not, so C11
             // 6.3.1.1p2 promotes all of them to the signed one.
-            Scalar::Char
-            | Scalar::Int8
-            | Scalar::UInt8
-            | Scalar::Int16
-            | Scalar::UInt16 => Scalar::Int,
+            Scalar::Char | Scalar::Int8 | Scalar::UInt8 | Scalar::Int16 | Scalar::UInt16 => {
+                Scalar::Int
+            }
             Scalar::Float => Scalar::Double,
             _ => return None,
         }))
@@ -4332,7 +5129,10 @@ impl Scalar {
                 let half = 1i128 << (bits - 1);
                 Some((-half, half - 1))
             }
-            HirType::Int { bits, signed: false } => Some((0, (1i128 << bits) - 1)),
+            HirType::Int {
+                bits,
+                signed: false,
+            } => Some((0, (1i128 << bits) - 1)),
             _ => None,
         }
     }
@@ -4346,9 +5146,10 @@ impl Scalar {
     #[must_use]
     pub fn facts(self) -> super::facts::Facts {
         #[allow(clippy::cast_precision_loss)]
-        self.integer_range().map_or(super::facts::Facts::TOP, |(lo, hi)| {
-            super::facts::Facts::new(lo as f64, hi as f64, true, false, false)
-        })
+        self.integer_range()
+            .map_or(super::facts::Facts::TOP, |(lo, hi)| {
+                super::facts::Facts::new(lo as f64, hi as f64, true, false, false)
+            })
     }
 
     #[must_use]
@@ -4357,7 +5158,6 @@ impl Scalar {
             // Signed here because it is signed on this target. The *type* is
             // distinct from `signed char` regardless; the representation is
             // what the target says, and LP64 Linux says signed.
-
             Self::Int | Self::Int32 | Self::Long32 => HirType::Int {
                 bits: 32,
                 signed: true,
@@ -4366,7 +5166,10 @@ impl Scalar {
                 bits: 32,
                 signed: false,
             },
-            Self::Char | Self::Int8 => HirType::Int { bits: 8, signed: true },
+            Self::Char | Self::Int8 => HirType::Int {
+                bits: 8,
+                signed: true,
+            },
             Self::UInt8 => HirType::Int {
                 bits: 8,
                 signed: false,
@@ -4476,10 +5279,16 @@ impl Scalar {
 /// than a `number` (`c_int`, `CNumber<"size_t">`, an enum member).
 #[must_use]
 pub fn over_bigint(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    let Some(TypeKind::Intersection(parts)) = snapshot.types.get(ty.0 as usize).map(|t| &t.kind) else {
+    let Some(TypeKind::Intersection(parts)) = snapshot.types.get(ty.0 as usize).map(|t| &t.kind)
+    else {
         return false;
     };
-    parts.iter().any(|part| matches!(snapshot.types.get(part.0 as usize).map(|t| &t.kind), Some(TypeKind::BigInt)))
+    parts.iter().any(|part| {
+        matches!(
+            snapshot.types.get(part.0 as usize).map(|t| &t.kind),
+            Some(TypeKind::BigInt)
+        )
+    })
 }
 
 #[must_use]
@@ -4559,10 +5368,23 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 /// Whether a brand's type is `true`, or the `true | undefined` an optional
 /// property of it reads as.
 fn is_true(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    let is = |ty: TypeId| matches!(snapshot.types.get(ty.0 as usize).map(|t| &t.kind), Some(TypeKind::Literal(LiteralValue::Boolean(true))));
+    let is = |ty: TypeId| {
+        matches!(
+            snapshot.types.get(ty.0 as usize).map(|t| &t.kind),
+            Some(TypeKind::Literal(LiteralValue::Boolean(true)))
+        )
+    };
     match snapshot.types.get(ty.0 as usize).map(|t| &t.kind) {
-        Some(TypeKind::Union(parts)) => parts.iter().any(|part| is(*part))
-            && parts.iter().all(|part| is(*part) || matches!(snapshot.types.get(part.0 as usize).map(|t| &t.kind), Some(TypeKind::Undefined))),
+        Some(TypeKind::Union(parts)) => {
+            parts.iter().any(|part| is(*part))
+                && parts.iter().all(|part| {
+                    is(*part)
+                        || matches!(
+                            snapshot.types.get(part.0 as usize).map(|t| &t.kind),
+                            Some(TypeKind::Undefined)
+                        )
+                })
+        }
         _ => is(ty),
     }
 }
@@ -4592,11 +5414,18 @@ pub fn present_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar>
     if let Some(kind) = scalar(snapshot, ty) {
         return Some(kind);
     }
-    let TypeKind::Union(parts) = &snapshot.types.get(ty.0 as usize)?.kind else { return None };
+    let TypeKind::Union(parts) = &snapshot.types.get(ty.0 as usize)?.kind else {
+        return None;
+    };
     let present: Vec<TypeId> = parts
         .iter()
         .copied()
-        .filter(|part| !matches!(snapshot.types.get(part.0 as usize).map(|t| &t.kind), Some(TypeKind::Undefined | TypeKind::Null)))
+        .filter(|part| {
+            !matches!(
+                snapshot.types.get(part.0 as usize).map(|t| &t.kind),
+                Some(TypeKind::Undefined | TypeKind::Null)
+            )
+        })
         .collect();
     match present.as_slice() {
         [one] => scalar(snapshot, *one),
@@ -4608,7 +5437,12 @@ pub fn present_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar>
 /// flattened further -- an optional `CEnum` parameter is its members and
 /// `undefined`, in one union.
 fn enum_members_scalar(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Option<Scalar> {
-    branded_members(snapshot, members, |literal| matches!(literal, LiteralValue::Number(_)), "___c_enum")
+    branded_members(
+        snapshot,
+        members,
+        |literal| matches!(literal, LiteralValue::Number(_)),
+        "___c_enum",
+    )
 }
 
 /// `CBool<B>`: a boolean C holds in the integer brand `B` -- `GLib`'s
@@ -4625,7 +5459,12 @@ pub fn int_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 }
 
 fn int_bool_members(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Option<Scalar> {
-    branded_members(snapshot, members, |literal| matches!(literal, LiteralValue::Boolean(_)), "___c_bool")
+    branded_members(
+        snapshot,
+        members,
+        |literal| matches!(literal, LiteralValue::Boolean(_)),
+        "___c_bool",
+    )
 }
 
 /// A union whose every member is a literal `is_member` accepts intersected
@@ -4637,11 +5476,16 @@ fn branded_members(
     brand_name: &str,
 ) -> Option<Scalar> {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let is_member = |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(literal)) if is_literal(literal));
+    let is_member =
+        |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(literal)) if is_literal(literal));
     let mut brand = None;
     for &member in members {
-        let TypeKind::Intersection(parts) = kind(member)? else { return None };
-        let [a, b] = parts.as_slice() else { return None };
+        let TypeKind::Intersection(parts) = kind(member)? else {
+            return None;
+        };
+        let [a, b] = parts.as_slice() else {
+            return None;
+        };
         let object = match (is_member(*a), is_member(*b)) {
             (true, false) => *b,
             (false, true) => *a,
@@ -4652,25 +5496,39 @@ fn branded_members(
         }
         brand = Some(object);
     }
-    let TypeKind::Object { properties } = kind(brand?)? else { return None };
-    let [property] = properties.as_slice() else { return None };
+    let TypeKind::Object { properties } = kind(brand?)? else {
+        return None;
+    };
+    let [property] = properties.as_slice() else {
+        return None;
+    };
     // tsgo's escaped name: a source name beginning `__` has one more `_`.
-    if property.name != brand_name || !property.readonly || !property.optional || property.kind != MemberKind::Field {
+    if property.name != brand_name
+        || !property.readonly
+        || !property.optional
+        || property.kind != MemberKind::Field
+    {
         return None;
     }
     let given: Vec<TypeId> = match kind(property.ty)? {
-        TypeKind::Union(parts) => parts.iter().copied().filter(|p| !matches!(kind(*p), Some(TypeKind::Undefined))).collect(),
+        TypeKind::Union(parts) => parts
+            .iter()
+            .copied()
+            .filter(|p| !matches!(kind(*p), Some(TypeKind::Undefined)))
+            .collect(),
         _ => vec![property.ty],
     };
-    let [given] = given.as_slice() else { return None };
+    let [given] = given.as_slice() else {
+        return None;
+    };
     scalar(snapshot, *given).filter(|scalar| matches!(scalar.representation(), HirType::Int { .. }))
 }
 
 pub(crate) mod schema;
 pub use schema::{PROGRAM_GTYPE, is_by_name_thunk, is_layout, pointer, storage};
 pub(crate) use schema::{
-    composable_base, extends_com, extends_objc, gobject_parent, gtype_function, implemented, is_com_class, is_objc_class, objc_meta, objc_name,
-    registered_by_a_runtime, superclass,
+    composable_base, extends_com, extends_objc, gobject_parent, gtype_function, implemented,
+    is_com_class, is_objc_class, objc_meta, objc_name, registered_by_a_runtime, superclass,
 };
 
 /// What `@ntsComposable Microsoft.UI.Xaml.Application <factory IID> <slot>
@@ -4704,25 +5562,42 @@ pub struct Forwarded {
 /// answering only its HRESULT. A number, a `boolean`, a record by value, an
 /// object (a reference the caller owns, `nts_com_answer`) or a string (an
 /// `HSTRING` of its own, `nts_com_answer_string`) is answered.
-pub(crate) fn override_signature(snapshot: &SemanticSnapshot, signature: &nts_semantic_schema::SignatureRecord) -> Result<FnPointer, String> {
+pub(crate) fn override_signature(
+    snapshot: &SemanticSnapshot,
+    signature: &nts_semantic_schema::SignatureRecord,
+) -> Result<FnPointer, String> {
     // A string answered is the slot's `HSTRING`, made from the method's string
     // where the adapter writes it (`nts_com_answer_string`).
     if is_hstring(snapshot, signature.return_type) {
         let mut parameters = vec![Type::Pointer(Pointee::Void)];
         for parameter in &signature.parameters {
-            let ty = slot_parameter(snapshot, parameter.ty)
-                .ok_or_else(|| format!("parameter `{}`, whose type has no C type the runtime could pass", parameter.name))?;
+            let ty = slot_parameter(snapshot, parameter.ty).ok_or_else(|| {
+                format!(
+                    "parameter `{}`, whose type has no C type the runtime could pass",
+                    parameter.name
+                )
+            })?;
             parameters.push(ty);
         }
-        return Ok(FnPointer::spell(parameters, Type::Managed(ManagedType::String)));
+        return Ok(FnPointer::spell(
+            parameters,
+            Type::Managed(ManagedType::String),
+        ));
     }
-    let Some(result @ (Type::Void | Type::Bool | Type::Scalar(_) | Type::Record(_) | Type::Pointer(_))) = abi_type(snapshot, signature.return_type) else {
+    let Some(
+        result @ (Type::Void | Type::Bool | Type::Scalar(_) | Type::Record(_) | Type::Pointer(_)),
+    ) = abi_type(snapshot, signature.return_type)
+    else {
         return Err("a result with no C type the slot could answer".to_owned());
     };
     let mut parameters = vec![Type::Pointer(Pointee::Void)];
     for parameter in &signature.parameters {
-        let ty = slot_parameter(snapshot, parameter.ty)
-            .ok_or_else(|| format!("parameter `{}`, whose type has no C type the runtime could pass", parameter.name))?;
+        let ty = slot_parameter(snapshot, parameter.ty).ok_or_else(|| {
+            format!(
+                "parameter `{}`, whose type has no C type the runtime could pass",
+                parameter.name
+            )
+        })?;
         parameters.push(ty);
     }
     Ok(FnPointer::spell(parameters, result))
@@ -4747,11 +5622,15 @@ pub(crate) fn is_hstring(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// answering an HRESULT. Nothing is converted, so a result of any type is one
 /// pointer, and a record by value crosses as the platform passes it; what is
 /// refused is a result the binding spells as `out` parameters' fields.
-pub(crate) fn forward_signature(snapshot: &SemanticSnapshot, signature: &nts_semantic_schema::SignatureRecord) -> Result<FnPointer, String> {
+pub(crate) fn forward_signature(
+    snapshot: &SemanticSnapshot,
+    signature: &nts_semantic_schema::SignatureRecord,
+) -> Result<FnPointer, String> {
     let mut parameters = vec![Type::Pointer(Pointee::Void)];
     for parameter in &signature.parameters {
         // A string is an `HSTRING` handle at the slot, passed on untouched.
-        let ty = slot_parameter(snapshot, parameter.ty).ok_or_else(|| format!("parameter `{}`, whose type has no C type", parameter.name))?;
+        let ty = slot_parameter(snapshot, parameter.ty)
+            .ok_or_else(|| format!("parameter `{}`, whose type has no C type", parameter.name))?;
         parameters.push(ty);
     }
     if is_hstring(snapshot, signature.return_type) {
@@ -4785,7 +5664,17 @@ pub fn js_name(abi: &str) -> String {
         // An acronym and then a digit or an underscore, `X509`: all of it.
         n => n,
     };
-    chars.iter().enumerate().map(|(at, c)| if at < lowered { c.to_ascii_lowercase() } else { *c }).collect()
+    chars
+        .iter()
+        .enumerate()
+        .map(|(at, c)| {
+            if at < lowered {
+                c.to_ascii_lowercase()
+            } else {
+                *c
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -4821,8 +5710,11 @@ pub(crate) fn is_object_pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> bool
     let object = |id: TypeId| matches!(kind(id), Some(TypeKind::Structured { flags }) if *flags == NON_PRIMITIVE);
     match kind(ty) {
         Some(TypeKind::Union(parts)) => {
-            let [a, b] = parts.as_slice() else { return false };
-            (object(*a) && matches!(kind(*b), Some(TypeKind::Null))) || (object(*b) && matches!(kind(*a), Some(TypeKind::Null)))
+            let [a, b] = parts.as_slice() else {
+                return false;
+            };
+            (object(*a) && matches!(kind(*b), Some(TypeKind::Null)))
+                || (object(*b) && matches!(kind(*a), Some(TypeKind::Null)))
         }
         _ => object(ty),
     }
@@ -4836,7 +5728,12 @@ pub(crate) fn is_object_pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> bool
 fn returned_string(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<ReturnedString> {
     let kind = snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
     if string_encoding(snapshot, ty) == Some(Encoding::View) {
-        return Some(ReturnedString { nullable: matches!(kind, Some(TypeKind::Union(_))), free: None, array: false, view: true });
+        return Some(ReturnedString {
+            nullable: matches!(kind, Some(TypeKind::Union(_))),
+            free: None,
+            array: false,
+            view: true,
+        });
     }
     // A union of string literals -- lib.dom's spelling of a WebIDL enum,
     // `CanvasFillRule` -- is a string that is never `null` by its type: the same
@@ -4844,7 +5741,12 @@ fn returned_string(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<ReturnedSt
     // in `parameter_slots`), answered as a non-nullable string. It was refused
     // as "a type with no native ABI" on the return side only.
     if is_string_literal(snapshot, ty) {
-        return Some(ReturnedString { nullable: false, free: None, array: false, view: false });
+        return Some(ReturnedString {
+            nullable: false,
+            free: None,
+            array: false,
+            view: false,
+        });
     }
     is_string(snapshot, ty).then_some(ReturnedString {
         nullable: !matches!(kind, Some(TypeKind::String)),
@@ -4865,8 +5767,12 @@ fn returned_strings(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<bool> {
     if is_array(ty) {
         return Some(false);
     }
-    let TypeKind::Union(parts) = kind_of(ty)? else { return None };
-    let [a, b] = parts.as_slice() else { return None };
+    let TypeKind::Union(parts) = kind_of(ty)? else {
+        return None;
+    };
+    let [a, b] = parts.as_slice() else {
+        return None;
+    };
     let null = |id: TypeId| matches!(kind_of(id), Some(TypeKind::Null));
     ((null(*a) && is_array(*b)) || (null(*b) && is_array(*a))).then_some(true)
 }
@@ -4875,7 +5781,9 @@ fn returned_strings(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<bool> {
 #[must_use]
 pub fn is_c_identifier(name: &str) -> bool {
     let mut chars = name.chars();
-    chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
@@ -4914,7 +5822,10 @@ mod handles {
 
         assert!(!widget.converts_to(&button), "downcast");
         assert!(!label.converts_to(&button), "sibling");
-        assert!(!button.converts_to(&button), "a conversion to itself is equality, not this");
+        assert!(
+            !button.converts_to(&button),
+            "a conversion to itself is equality, not this"
+        );
         // Same tag, no chain: a plain `Opaque` is a different declaration of
         // the struct, and nothing says it is the same class.
         assert!(!button.converts_to(&plain));
@@ -4945,14 +5856,22 @@ pub fn iid_words(text: &str) -> Option<(u64, u64)> {
         bytes[at] = byte(from)?;
     }
     let (low, high) = bytes.split_at(8);
-    Some((u64::from_le_bytes(low.try_into().ok()?), u64::from_le_bytes(high.try_into().ok()?)))
+    Some((
+        u64::from_le_bytes(low.try_into().ok()?),
+        u64::from_le_bytes(high.try_into().ok()?),
+    ))
 }
 
 pub(crate) fn is_interface_id(text: &str) -> bool {
-    let bare = text.strip_prefix('{').and_then(|t| t.strip_suffix('}')).unwrap_or(text);
+    let bare = text
+        .strip_prefix('{')
+        .and_then(|t| t.strip_suffix('}'))
+        .unwrap_or(text);
     let groups: Vec<&str> = bare.split('-').collect();
     groups.len() == 5
-        && groups.iter().zip([8, 4, 4, 4, 12]).all(|(group, length)| group.len() == length && group.chars().all(|c| c.is_ascii_hexdigit()))
+        && groups.iter().zip([8, 4, 4, 4, 12]).all(|(group, length)| {
+            group.len() == length && group.chars().all(|c| c.is_ascii_hexdigit())
+        })
 }
 
 #[cfg(test)]
@@ -4962,7 +5881,10 @@ mod iid_tests {
     /// three leading fields reverse byte by byte while `Data4` does not.
     #[test]
     fn an_iid_crosses_as_its_memory_words() {
-        assert_eq!(super::iid_words("00000000-0000-0000-C000-000000000046"), Some((0, 0x4600_0000_0000_00C0)));
+        assert_eq!(
+            super::iid_words("00000000-0000-0000-C000-000000000046"),
+            Some((0, 0x4600_0000_0000_00C0))
+        );
         assert_eq!(
             super::iid_words("{AF86E2E0-B12D-4C6A-9C5A-D7AA65101E90}"),
             Some((0x4C6A_B12D_AF86_E2E0, 0x901E_1065_AAD7_5A9C))

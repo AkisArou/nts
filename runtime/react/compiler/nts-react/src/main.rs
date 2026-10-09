@@ -28,9 +28,13 @@ USAGE
 fn main() -> ExitCode {
     // Deeply nested programs recurse deeply in the compiler; upstream's addon
     // runs it on a 64MB stack for the same reason.
-    let run = std::thread::Builder::new().stack_size(64 * 1024 * 1024).spawn(run);
+    let run = std::thread::Builder::new()
+        .stack_size(64 * 1024 * 1024)
+        .spawn(run);
     match run.map_err(anyhow::Error::from).and_then(|handle| {
-        handle.join().unwrap_or_else(|_| bail!("the compiler panicked"))
+        handle
+            .join()
+            .unwrap_or_else(|_| bail!("the compiler panicked"))
     }) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
@@ -45,9 +49,11 @@ fn run() -> Result<()> {
     match args.as_slice() {
         [command, ast, scope, options] if command == "compile-json" => {
             let read = |path: &str| {
-                std::fs::read_to_string(PathBuf::from(path)).with_context(|| format!("cannot read {path}"))
+                std::fs::read_to_string(PathBuf::from(path))
+                    .with_context(|| format!("cannot read {path}"))
             };
-            let result = nts_react::babel::compile_json(&read(ast)?, &read(scope)?, &read(options)?)?;
+            let result =
+                nts_react::babel::compile_json(&read(ast)?, &read(scope)?, &read(options)?)?;
             println!("{result}");
             Ok(())
         }
@@ -64,7 +70,11 @@ fn run() -> Result<()> {
             compile(tsconfig, &read_options(options)?, out, &print)
         }
         [command, tsconfig, out] if command == "stage" => {
-            let print = nts_react::print::PrintOptions { lower_jsx: true, typed_cache: true, ..Default::default() };
+            let print = nts_react::print::PrintOptions {
+                lower_jsx: true,
+                typed_cache: true,
+                ..Default::default()
+            };
             compile(tsconfig, &nts_react::stage::default_options(), out, &print)
         }
         _ => bail!("{USAGE}"),
@@ -72,7 +82,9 @@ fn run() -> Result<()> {
 }
 
 fn convert(tsconfig: &str, out: &str) -> Result<()> {
-    let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
+    let tsconfig = camino::Utf8PathBuf::from(tsconfig)
+        .canonicalize_utf8()
+        .with_context(|| format!("no {tsconfig}"))?;
     let out = camino::Utf8PathBuf::from(out);
     std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
     let mut session = nts_react::project::Session::open(&tsconfig)?;
@@ -86,12 +98,21 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
         match nts_react::convert::convert_file(nodes, nts_semantic_schema::NodeId(0), &text) {
             Ok(file) => {
                 let scope = nts_react::scope::build(&file);
-                std::fs::write(out.join(format!("{name}.ast.json")), serde_json::to_string(&file)?)?;
-                std::fs::write(out.join(format!("{name}.scope.json")), serde_json::to_string(&scope)?)?;
+                std::fs::write(
+                    out.join(format!("{name}.ast.json")),
+                    serde_json::to_string(&file)?,
+                )?;
+                std::fs::write(
+                    out.join(format!("{name}.scope.json")),
+                    serde_json::to_string(&scope)?,
+                )?;
                 converted += 1;
             }
             Err(why) => {
-                std::fs::write(out.join(format!("{name}.unsupported.txt")), format!("node {}: {}\n", why.node.0, why.what))?;
+                std::fs::write(
+                    out.join(format!("{name}.unsupported.txt")),
+                    format!("node {}: {}\n", why.node.0, why.what),
+                )?;
                 unsupported += 1;
             }
         }
@@ -101,11 +122,20 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
 }
 
 fn read_options(path: &str) -> Result<serde_json::Value> {
-    Ok(serde_json::from_str(&std::fs::read_to_string(path).with_context(|| format!("cannot read {path}"))?)?)
+    Ok(serde_json::from_str(
+        &std::fs::read_to_string(path).with_context(|| format!("cannot read {path}"))?,
+    )?)
 }
 
-fn compile(tsconfig: &str, options: &serde_json::Value, out: &str, print: &nts_react::print::PrintOptions) -> Result<()> {
-    let tsconfig = camino::Utf8PathBuf::from(tsconfig).canonicalize_utf8().with_context(|| format!("no {tsconfig}"))?;
+fn compile(
+    tsconfig: &str,
+    options: &serde_json::Value,
+    out: &str,
+    print: &nts_react::print::PrintOptions,
+) -> Result<()> {
+    let tsconfig = camino::Utf8PathBuf::from(tsconfig)
+        .canonicalize_utf8()
+        .with_context(|| format!("no {tsconfig}"))?;
     let out = camino::Utf8PathBuf::from(out);
     std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
     let mut session = nts_react::project::Session::open(&tsconfig)?;
@@ -115,14 +145,30 @@ fn compile(tsconfig: &str, options: &serde_json::Value, out: &str, print: &nts_r
         let code = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
         let name = path.file_name().unwrap_or("source");
         let nodes = nts_react::tsgo::Nodes::new(&tree.nodes);
-        let mut types = SessionTypes { session: &mut session, path: &path, tree: &tree };
-        match nts_react::stage::compile_file(&code, nodes, path.as_str(), options, &mut types, print) {
+        let mut types = SessionTypes {
+            session: &mut session,
+            path: &path,
+            tree: &tree,
+        };
+        match nts_react::stage::compile_file(
+            &code,
+            nodes,
+            path.as_str(),
+            options,
+            &mut types,
+            print,
+        ) {
             Ok(outcome) => {
-                std::fs::write(out.join(format!("{name}.result.json")), serde_json::to_string(&outcome.result)?)?;
+                std::fs::write(
+                    out.join(format!("{name}.result.json")),
+                    serde_json::to_string(&outcome.result)?,
+                )?;
                 std::fs::write(out.join(name), outcome.text)?;
                 compiled += 1;
             }
-            Err(nts_react::stage::Refused::Options(error)) => return Err(error).context("the options are not `PluginOptions`"),
+            Err(nts_react::stage::Refused::Options(error)) => {
+                return Err(error).context("the options are not `PluginOptions`");
+            }
             Err(nts_react::stage::Refused::Unsupported(_)) => unsupported += 1,
         }
     }
@@ -139,6 +185,7 @@ struct SessionTypes<'s> {
 
 impl nts_react::print::TypeOracle for SessionTypes<'_> {
     fn type_at(&mut self, node: u32) -> Option<String> {
-        self.session.type_text(self.path, self.tree, nts_semantic_schema::NodeId(node))
+        self.session
+            .type_text(self.path, self.tree, nts_semantic_schema::NodeId(node))
     }
 }

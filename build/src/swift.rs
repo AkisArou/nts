@@ -31,7 +31,12 @@ fn newest_cached() -> Option<PathBuf> {
         .ok()?
         .flatten()
         .map(|entry| entry.path())
-        .filter(|path| path.join("usr").join("bin").join("swift-frontend").is_file())
+        .filter(|path| {
+            path.join("usr")
+                .join("bin")
+                .join("swift-frontend")
+                .is_file()
+        })
         .collect();
     found.sort();
     found.pop()

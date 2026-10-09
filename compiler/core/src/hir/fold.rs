@@ -192,7 +192,10 @@ fn decide(func: &mut Func) -> usize {
 /// `false` for those would be a claim about coercion rather than a fact about the
 /// values.
 fn same_constant(func: &Func, lhs: ValueId, rhs: ValueId) -> Option<bool> {
-    match (&func.values[lhs.0 as usize].kind, &func.values[rhs.0 as usize].kind) {
+    match (
+        &func.values[lhs.0 as usize].kind,
+        &func.values[rhs.0 as usize].kind,
+    ) {
         (OpKind::ConstString(a), OpKind::ConstString(b)) => Some(a == b),
         _ => None,
     }

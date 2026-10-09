@@ -156,8 +156,7 @@ pub fn analyze(func: &Func) -> Liveness {
         .iter()
         .enumerate()
         .filter_map(|(at, op)| match op.kind {
-            OpKind::Convert(operand) if func.values[operand.0 as usize].ty.counting().is_some() =>
-            {
+            OpKind::Convert(operand) if func.values[operand.0 as usize].ty.counting().is_some() => {
                 Some((ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand))
             }
             _ => None,
@@ -440,17 +439,23 @@ pub(in crate::hir) mod tests {
     /// the one `undominated_names` exists for.
     pub(in crate::hir) fn joining() -> Func {
         let values = vec![
-            op(OpKind::Param(0)),                        // %0
-            op(OpKind::ObjectNew { frame: true }),       // %1  thrown from one arm
-            op(OpKind::Erase { value: ValueId(1) , absent: super::super::Absent::Impossible }),     // %2
+            op(OpKind::Param(0)),                  // %0
+            op(OpKind::ObjectNew { frame: true }), // %1  thrown from one arm
+            op(OpKind::Erase {
+                value: ValueId(1),
+                absent: super::super::Absent::Impossible,
+            }), // %2
             op(OpKind::Binary {
                 op: crate::hir::BinOp::Lt,
                 lhs: ValueId(0),
                 rhs: ValueId(0),
             }), // %3
-            op(OpKind::ObjectNew { frame: true }),       // %4  thrown from the other
-            op(OpKind::Erase { value: ValueId(4) , absent: super::super::Absent::Impossible }),     // %5
-            op(OpKind::Unerase { value: ValueId(6) }),   // %7  read in the handler
+            op(OpKind::ObjectNew { frame: true }), // %4  thrown from the other
+            op(OpKind::Erase {
+                value: ValueId(4),
+                absent: super::super::Absent::Impossible,
+            }), // %5
+            op(OpKind::Unerase { value: ValueId(6) }), // %7  read in the handler
         ];
         let mut values = values;
         values.insert(6, op(OpKind::BlockParam(0))); // %6  the handler's parameter
@@ -515,8 +520,14 @@ pub(in crate::hir) mod tests {
     #[test]
     fn an_erased_value_names_the_object_inside_it() {
         let named = object_names(&joining());
-        assert_eq!(named.get(&ValueId(2)).map(Vec::as_slice), Some(&[ValueId(1)][..]));
-        assert_eq!(named.get(&ValueId(5)).map(Vec::as_slice), Some(&[ValueId(4)][..]));
+        assert_eq!(
+            named.get(&ValueId(2)).map(Vec::as_slice),
+            Some(&[ValueId(1)][..])
+        );
+        assert_eq!(
+            named.get(&ValueId(5)).map(Vec::as_slice),
+            Some(&[ValueId(4)][..])
+        );
     }
 
     /// The half that ordinary liveness cannot supply: a name arrives at a block

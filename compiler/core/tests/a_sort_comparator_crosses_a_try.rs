@@ -90,7 +90,10 @@ fn a_guarded_comparator_dispatches_at_the_raising_entry() {
         .program
         .erased_call_slot
         .expect("and the ordinary uniform entry the raising one is built beside");
-    assert_ne!(raising, ordinary, "two slots, or there is nothing to assert");
+    assert_ne!(
+        raising, ordinary,
+        "two slots, or there is nothing to assert"
+    );
 
     // `throughAMethod` holds no sort of its own: the sort is in `Jar#smallest`, so the
     // guarded dispatch is in that method's **raising copy** and the ordinary one in the

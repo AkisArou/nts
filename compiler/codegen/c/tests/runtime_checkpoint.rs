@@ -40,7 +40,11 @@ fn run_suite_with(name: &str, provider: &[&str], sources: &[&str], link: &[&str]
     let runtime = root.join("runtime/c");
     // Keyed by the provider too: one suite runs under two (`rejections`), and
     // the tests of one process run concurrently.
-    let flavour: String = provider.concat().chars().filter(char::is_ascii_alphanumeric).collect();
+    let flavour: String = provider
+        .concat()
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect();
     let out = std::env::temp_dir().join(format!("nts-{name}{flavour}-{}", std::process::id()));
     std::fs::create_dir_all(&out).expect("a build directory");
     let binary = out.join(name);
@@ -144,7 +148,12 @@ fn promise_join_stops_at_settlement_on_libuv() {
 /// loop returns before the completion.
 #[test]
 fn an_outstanding_operation_holds_the_libuv_loop() {
-    let report = run_suite_with("pending_uv", &["-DNTS_PROVIDER_RC"], &["nts_uv_host.c"], &["-luv"]);
+    let report = run_suite_with(
+        "pending_uv",
+        &["-DNTS_PROVIDER_RC"],
+        &["nts_uv_host.c"],
+        &["-luv"],
+    );
     assert!(checks(&report) >= 4, "{report}");
 }
 
@@ -175,7 +184,12 @@ fn a_rejection_is_released_at_a_host_checkpoints_end() {
 /// suite's own controls are the posts: each must make the descriptor readable.
 #[test]
 fn a_pump_consumes_a_cross_thread_wakeup() {
-    let report = run_suite_with("pump_uv", &["-DNTS_PROVIDER_RC"], &["nts_uv_host.c"], &["-luv"]);
+    let report = run_suite_with(
+        "pump_uv",
+        &["-DNTS_PROVIDER_RC"],
+        &["nts_uv_host.c"],
+        &["-luv"],
+    );
     assert!(checks(&report) >= 9, "{report}");
 }
 
@@ -285,7 +299,10 @@ fn an_erased_value_keeps_its_tag_across_a_promise() {
 fn an_erased_bigint_keeps_value_semantics_and_owned_storage() {
     // Both providers: the boxes are the runtime's under either, and only
     // reference counting gives them back, which the suite checks under it.
-    let counted = run_suite("erased_bigint", &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"]);
+    let counted = run_suite(
+        "erased_bigint",
+        &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"],
+    );
     assert!(checks(&counted) >= 135, "{counted}");
     let never_freed = run_suite("erased_bigint", &["-fsanitize=undefined"]);
     assert!(checks(&never_freed) >= 134, "{never_freed}");
@@ -473,8 +490,10 @@ fn the_runtime_keeps_the_contracts_its_header_states() {
 
 #[test]
 fn bigint_string_ordering_uses_the_integer_grammar_without_rounding() {
-    let report =
-        run_suite("bigint_strings", &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"]);
+    let report = run_suite(
+        "bigint_strings",
+        &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"],
+    );
     assert!(report.contains("666 of 666 comparisons agree"), "{report}");
     assert!(report.contains("no retained bytes"), "{report}");
 }

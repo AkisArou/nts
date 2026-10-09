@@ -21,7 +21,10 @@ use std::collections::BTreeSet;
 use std::process::Command;
 
 fn root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize().expect("root")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize()
+        .expect("root")
 }
 
 fn tool(name: &str) -> Option<std::path::PathBuf> {
@@ -42,7 +45,11 @@ fn published() -> Option<BTreeSet<String>> {
     // jar's contents. It reported sixteen missing methods on its first run,
     // every one of them in a class the list did not mention. The instrument
     // found itself before it found anything else.
-    let listing = Command::new(tool("jar")?).args(["--list", "--file"]).arg(&jar).output().ok()?;
+    let listing = Command::new(tool("jar")?)
+        .args(["--list", "--file"])
+        .arg(&jar)
+        .output()
+        .ok()?;
     let names = String::from_utf8_lossy(&listing.stdout).into_owned();
     let classes: Vec<String> = names
         .lines()
@@ -102,18 +109,27 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
     let resolve = |name: &str| -> Vec<(String, String)> {
         let mut found = Vec::new();
         if let Some((owner, method, descriptor)) = nts_codegen_jvm::ops::external(name) {
-            found.push((format!("{owner}.{method}:{descriptor}"), "external".to_owned()));
+            found.push((
+                format!("{owner}.{method}:{descriptor}"),
+                "external".to_owned(),
+            ));
         }
         for holds in ["D", "Z", "L"] {
             if let Some((owner, method, descriptor)) =
                 nts_codegen_jvm::ops::growable_external(name, holds)
             {
-                found.push((format!("{owner}.{method}:{descriptor}"), format!("growable/{holds}")));
+                found.push((
+                    format!("{owner}.{method}:{descriptor}"),
+                    format!("growable/{holds}"),
+                ));
             }
             if let Some((owner, method, descriptor)) =
                 nts_codegen_jvm::ops::array_external(name, holds)
             {
-                found.push((format!("{owner}.{method}:{descriptor}"), format!("array/{holds}")));
+                found.push((
+                    format!("{owner}.{method}:{descriptor}"),
+                    format!("array/{holds}"),
+                ));
             }
         }
         // A view's helpers are told its class as an array's are told what it
@@ -122,7 +138,8 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
         // array.
         let float64 = nts_core::hir::HirType::Float { bits: 64 };
         if let Some(class) = nts_codegen_jvm::types::view_class(&float64)
-            && let Some((owner, method, descriptor)) = nts_codegen_jvm::ops::view_external(name, class)
+            && let Some((owner, method, descriptor)) =
+                nts_codegen_jvm::ops::view_external(name, class)
         {
             found.push((format!("{owner}.{method}:{descriptor}"), "view".to_owned()));
         }
@@ -154,12 +171,18 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
         // double -- are shapes no lowering emits. Requiring all of them
         // reported eighteen failures, none of them real. A typo, which is what
         // this direction is for, makes *none* of the widths land.
-        let real: Vec<&(String, String)> =
-            found.iter().filter(|(member, _)| published.contains(member)).collect();
+        let real: Vec<&(String, String)> = found
+            .iter()
+            .filter(|(member, _)| published.contains(member))
+            .collect();
         if real.is_empty() {
             typos.push(format!(
                 "{name} -> {}",
-                found.iter().map(|(m, _)| m.as_str()).collect::<Vec<_>>().join(", ")
+                found
+                    .iter()
+                    .map(|(m, _)| m.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
         for (member, _) in real {
@@ -192,7 +215,9 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
     // It may fall and it may not rise, which means a new runtime helper reds
     // this test until this lane maps it. That is deliberate: the alternative is
     // the lane quietly refusing a call it could render.
-    eprintln!("runtime_agrees_with_hir: {rendered} rendered, {inline} inline, {refused} refused by name");
+    eprintln!(
+        "runtime_agrees_with_hir: {rendered} rendered, {inline} inline, {refused} refused by name"
+    );
     assert!(
         rendered >= 1,
         "this lane rendered no runtime names at all, which means `resolve` is broken rather \

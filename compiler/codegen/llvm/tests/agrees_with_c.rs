@@ -583,5 +583,8 @@ int main(void) {
         return;
     };
     assert!(!llvm.is_empty(), "the run produced nothing");
-    assert_eq!(llvm, c, "the backends disagree about bitwise ops on doubles");
+    assert_eq!(
+        llvm, c,
+        "the backends disagree about bitwise ops on doubles"
+    );
 }

@@ -73,7 +73,9 @@ pub fn install(program: &mut super::Program, roots: &super::reachable::RootNames
 
     let mut made = 0;
     for index in candidates {
-        let Some(arguments) = program.funcs[index].complete_parameter_values() else { continue };
+        let Some(arguments) = program.funcs[index].complete_parameter_values() else {
+            continue;
+        };
         // Which parameters need the extra `!= 0`: the ones whose zero's sign
         // something downstream can distinguish.
         let observed = zero_sign::observed(&program.funcs[index]);
@@ -207,7 +209,12 @@ fn clone_for_whole_numbers(func: &Func) -> Func {
 /// The original entry block's contents move to a block of their own and block
 /// zero becomes the test, so nothing is renumbered — a `BlockId` is an index,
 /// and shifting them would mean rewriting every terminator in the function.
-fn rewrite_as_guard(func: &mut Func, whole: &str, observed: &FxHashSet<ValueId>, arguments: &[ValueId]) {
+fn rewrite_as_guard(
+    func: &mut Func,
+    whole: &str,
+    observed: &FxHashSet<ValueId>,
+    arguments: &[ValueId],
+) {
     let origin = func.origin.clone();
     let mut entry = std::mem::replace(
         &mut func.blocks[0],

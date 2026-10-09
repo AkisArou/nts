@@ -40,13 +40,13 @@
 //! erased is refused **by name**. A backend that emits something for every
 //! input is a backend nobody can trust the output of.
 
-pub mod closures;
-mod intcall;
+pub mod body;
 mod builder;
+pub mod closures;
 mod face;
 mod fuse;
-pub mod body;
 pub mod hierarchy;
+mod intcall;
 pub mod ops;
 pub mod types;
 mod unbox;
@@ -54,10 +54,10 @@ pub mod widen;
 
 use nts_core::hir::Program;
 use nts_diagnostics::Diagnostic;
-use rustc_hash::FxHashMap;
 use nts_jvm_emitter::class::access;
 use nts_jvm_emitter::code::Code;
 use nts_jvm_emitter::{Class, ClassBuilder, Kind, Pool, VType};
+use rustc_hash::FxHashMap;
 
 pub use body::{PROGRAM, RUNTIME, program_class};
 pub use types::DEFAULT_PACKAGE;
@@ -100,8 +100,8 @@ pub const RUNTIME_JAR_NAME: &str = "nts-runtime.jar";
 /// production build emits.
 #[must_use]
 pub fn runtime_jar() -> std::borrow::Cow<'static, [u8]> {
-    if let Some(bytes) = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-        .and_then(|path| std::fs::read(path).ok())
+    if let Some(bytes) =
+        std::env::var_os("NTS_JVM_RUNTIME_JAR").and_then(|path| std::fs::read(path).ok())
     {
         return std::borrow::Cow::Owned(bytes);
     }
@@ -162,6 +162,7 @@ fn foreign_classes_refused(program: &Program) -> Vec<Diagnostic> {
 
 /// Emit into a named package.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn emit_into(package: &str, program: &Program) -> Emitted {
     let mut pool = Pool::new();
     let mut diagnostics = foreign_classes_refused(program);
@@ -188,7 +189,9 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
     // exports it, for the reason the C backend makes it `static`: a name
     // outside the program is a name something outside can collide with.
     for global in &program.globals {
-        let Some(descriptor) = types::descriptor(types::Shape::packaged(program, package), &global.ty) else {
+        let Some(descriptor) =
+            types::descriptor(types::Shape::packaged(program, package), &global.ty)
+        else {
             diagnostics.push(Diagnostic::error(
                 "NTS4002",
                 format!(
@@ -200,7 +203,11 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
             ));
             continue;
         };
-        let visibility = if global.exported { access::PUBLIC } else { access::PRIVATE };
+        let visibility = if global.exported {
+            access::PUBLIC
+        } else {
+            access::PRIVATE
+        };
         builder.field(
             visibility | access::STATIC,
             body::method_name(&global.name),
@@ -277,7 +284,16 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
                     0
                 };
                 let access = access::PUBLIC | access::STATIC | synthetic;
-                publish(package, &mut builder, program, func, access, &name, &signature, rendered);
+                publish(
+                    package,
+                    &mut builder,
+                    program,
+                    func,
+                    access,
+                    &name,
+                    &signature,
+                    rendered,
+                );
             }
             Err(diagnostic) => declined.push((func, diagnostic)),
         }
@@ -288,16 +304,26 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
     // instance of a class whose every body lowering had refused -- no method at
     // all, and an `abstract erased_call$raises` it never implements (timers'
     // `Closure59`, built only for a declined `emitDestroy@raises`, 2026-10-04).
-    let skipped: rustc_hash::FxHashSet<&str> = declined.iter().map(|(func, _)| func.name.as_str()).collect();
+    let skipped: rustc_hash::FxHashSet<&str> = declined
+        .iter()
+        .map(|(func, _)| func.name.as_str())
+        .collect();
     if let Err(error) = initialize_statics(package, program, &skipped, &mut builder, &mut pool) {
         diagnostics.push(error);
-        return Emitted { classes: Vec::new(), diagnostics };
+        return Emitted {
+            classes: Vec::new(),
+            diagnostics,
+        };
     }
 
     // Which bound interfaces each closure is handed to; see
     // `closure_interfaces`. Computed once rather than per layout, because it
     // is a walk of every operation in the program.
-    let (handed_to, reactions, mut classes) = (closure_interfaces(program), reaction_types(program), Vec::new());
+    let (handed_to, reactions, mut classes) = (
+        closure_interfaces(program),
+        reaction_types(program),
+        Vec::new(),
+    );
     for layout in &program.layouts {
         // **A bound class is in somebody's jar and we must not write one.**
         // Emitting `com/conv/Conv.class` beside the real one puts a stub with
@@ -309,10 +335,16 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
         // Loud rather than silent, so it is not the worst kind of defect. It
         // is still a class this compiler had no business writing.
         // A layout no value can have is not written either; see `shadowed_layout`.
-        if nts_core::hir::runtime::is_foreign_layout_name(&layout.name) || shadowed_layout(program, layout) {
+        if nts_core::hir::runtime::is_foreign_layout_name(&layout.name)
+            || shadowed_layout(program, layout)
+        {
             continue;
         }
-        collect(&mut classes, &mut diagnostics, object_class(package, program, layout, &plan, &handed_to, &reactions));
+        collect(
+            &mut classes,
+            &mut diagnostics,
+            object_class(package, program, layout, &plan, &handed_to, &reactions),
+        );
         // One empty subclass per class sharing this layout; see
         // `hierarchy::identities`. The fields stay on the layout's own class,
         // so an object is not a byte larger and a parameter declared as either
@@ -325,20 +357,41 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
         }
     }
 
-    collect(&mut classes, &mut diagnostics, callable_root(package, program));
+    collect(
+        &mut classes,
+        &mut diagnostics,
+        callable_root(package, program),
+    );
 
     // **Lambda overloads, last**, because they add methods to the program class
     // and read every exported signature to decide which. Doing it inside the
     // loop above would ask the same question once per function.
-    let (adapters, complaints) = lambda_overloads(package, program, &mut builder, &mut pool, &program_origin(program));
+    let (adapters, complaints) = lambda_overloads(
+        package,
+        program,
+        &mut builder,
+        &mut pool,
+        &program_origin(program),
+    );
     classes.extend(adapters);
     diagnostics.extend(complaints);
 
-    finish_classes(package, program, declined, &mut classes, &mut diagnostics, &mut builder, &mut pool);
+    finish_classes(
+        package,
+        program,
+        declined,
+        &mut classes,
+        &mut diagnostics,
+        &mut builder,
+        &mut pool,
+    );
     match builder.build(pool) {
         Ok(class) => {
             classes.push(class);
-            Emitted { classes, diagnostics }
+            Emitted {
+                classes,
+                diagnostics,
+            }
         }
         Err(error) => {
             diagnostics.push(Diagnostic::error(
@@ -346,7 +399,10 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
                 format!("the program class could not be written: {error}"),
                 program_origin(program).location,
             ));
-            Emitted { classes: Vec::new(), diagnostics }
+            Emitted {
+                classes: Vec::new(),
+                diagnostics,
+            }
         }
     }
 }
@@ -404,10 +460,7 @@ fn declare_fields(
                     "`{}` declares both `{}` and `{}`, which are different properties and \
                      become the same JVM field `{}` -- this backend will not emit a class \
                      the JVM cannot load",
-                    layout.name,
-                    other,
-                    field.name,
-                    name
+                    layout.name, other, field.name, name
                 ),
                 origin.location,
             ));
@@ -428,7 +481,8 @@ fn declare_fields(
                 origin.location,
             ));
         }
-        let Some(descriptor) = types::field_descriptor(types::Shape::packaged(program, package), &field.ty)
+        let Some(descriptor) =
+            types::field_descriptor(types::Shape::packaged(program, package), &field.ty)
         else {
             return Err(Diagnostic::error(
                 "NTS4006",
@@ -445,8 +499,11 @@ fn declare_fields(
         // declaration and every access ask the same plan with the same key, so
         // they cannot disagree about the descriptor.
         let descriptor = if plan.field(&types::class_name(package, layout), name) {
-            types::descriptor(types::Shape::packaged(program, package), &nts_core::hir::HirType::Float { bits: 64 })
-                .unwrap_or(descriptor)
+            types::descriptor(
+                types::Shape::packaged(program, package),
+                &nts_core::hir::HirType::Float { bits: 64 },
+            )
+            .unwrap_or(descriptor)
         } else {
             descriptor
         };
@@ -490,7 +547,9 @@ fn declare_presence(
             format!(
                 "`{}` declares `{}`, which becomes the JVM field `{}` -- the name this \
                  backend gives an object's optional-property presence bits",
-                layout.name, clash.name, types::PRESENCE
+                layout.name,
+                clash.name,
+                types::PRESENCE
             ),
             origin.location,
         ));
@@ -500,19 +559,35 @@ fn declare_presence(
     // And the same bits where `instanceof` can reach them, for the one helper
     // whose receiver has no declared type to name. Five bytes and a method
     // entry on a root that already carries the field.
-    builder.interfaces.push(types::PRESENCE_INTERFACE.to_owned());
+    builder
+        .interfaces
+        .push(types::PRESENCE_INTERFACE.to_owned());
     let mut code = Code::new(vec![VType::Object(types::class_name(package, layout))], 1);
     code.load(origin, Kind::Ref, 0);
-    code.get_field(origin, pool, &types::class_name(package, layout), types::PRESENCE, "I");
+    code.get_field(
+        origin,
+        pool,
+        &types::class_name(package, layout),
+        types::PRESENCE,
+        "I",
+    );
     code.ret(origin, Some(Kind::Int));
     let rendered = code.finish(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4008",
-            format!("the presence reader for `{}` could not be written: {error}", layout.name),
+            format!(
+                "the presence reader for `{}` could not be written: {error}",
+                layout.name
+            ),
             origin.location,
         )
     })?;
-    builder.method(access::PUBLIC, types::PRESENCE_MEMBER, "()I", Some(rendered));
+    builder.method(
+        access::PUBLIC,
+        types::PRESENCE_MEMBER,
+        "()I",
+        Some(rendered),
+    );
     Ok(())
 }
 
@@ -534,24 +609,36 @@ fn identity_class(
     builder.access = access::PUBLIC | access::SUPER | access::FINAL;
     builder.source_file = Some("nts".to_owned());
     let origin = program_origin(program);
-    builder.default_constructor(&origin, &mut pool).map_err(|error| {
-        Diagnostic::error(
-            "NTS4003",
-            format!("the constructor for `{}` could not be written: {error}", class.name),
-            origin.location,
-        )
-    })?;
+    builder
+        .default_constructor(&origin, &mut pool)
+        .map_err(|error| {
+            Diagnostic::error(
+                "NTS4003",
+                format!(
+                    "the constructor for `{}` could not be written: {error}",
+                    class.name
+                ),
+                origin.location,
+            )
+        })?;
     builder.build(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4004",
-            format!("the class for `{}` could not be written: {error}", class.name),
+            format!(
+                "the class for `{}` could not be written: {error}",
+                class.name
+            ),
             origin.location,
         )
     })
 }
 
 /// One emitted class, or the reason it was not: pushed where it belongs.
-fn collect(classes: &mut Vec<Class>, diagnostics: &mut Vec<Diagnostic>, emitted: Result<Option<Class>, Diagnostic>) {
+fn collect(
+    classes: &mut Vec<Class>,
+    diagnostics: &mut Vec<Diagnostic>,
+    emitted: Result<Option<Class>, Diagnostic>,
+) {
     match emitted {
         Ok(Some(class)) => classes.push(class),
         Ok(None) => {}
@@ -565,8 +652,9 @@ fn collect(classes: &mut Vec<Class>, diagnostics: &mut Vec<Diagnostic>, emitted:
 /// base keeps it, and that base, a signature class, extends the root in turn.
 /// See `types::callable_class`.
 fn super_class(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> String {
-    let root = (!hierarchy::is_interface(program, layout) && types::is_callable_storage(program, layout))
-        .then(|| types::callable_class(package));
+    let root = (!hierarchy::is_interface(program, layout)
+        && types::is_callable_storage(program, layout))
+    .then(|| types::callable_class(package));
     crate::hierarchy::jvm_base(program, layout)
         .and_then(|at| program.layouts.get(at))
         .map(|l| types::class_name(package, l))
@@ -586,13 +674,20 @@ fn typed_face(
     pool: &mut Pool,
     origin: &nts_semantic_schema::Origin,
 ) -> Result<(), Diagnostic> {
-    let Some(face) = face::of(package, program, layout)
-        .filter(|face| !builder.methods.iter().any(|m| m.name == "call" && m.descriptor == face.typed))
-    else {
+    let Some(face) = face::of(package, program, layout).filter(|face| {
+        !builder
+            .methods
+            .iter()
+            .any(|m| m.name == "call" && m.descriptor == face.typed)
+    }) else {
         return Ok(());
     };
     let body = face::typed_call(package, layout, &face, pool, origin).map_err(|error| {
-        Diagnostic::error("NTS4003", format!("the typed face of `{}`: {error}", layout.name), origin.location)
+        Diagnostic::error(
+            "NTS4003",
+            format!("the typed face of `{}`: {error}", layout.name),
+            origin.location,
+        )
     })?;
     builder.method(access::PUBLIC, "call".to_owned(), face.typed, Some(body));
     Ok(())
@@ -632,11 +727,15 @@ fn declined_stub(
     builder: &mut ClassBuilder,
     pool: &mut Pool,
 ) {
-    let Some(signature) = body::signature(package, program, func) else { return };
+    let Some(signature) = body::signature(package, program, func) else {
+        return;
+    };
     let ours = format!("{package}/");
     let mut rest = signature.as_str();
     while let Some(at) = rest.find('L') {
-        let Some(end) = rest[at..].find(';') else { break };
+        let Some(end) = rest[at..].find(';') else {
+            break;
+        };
         let class = &rest[at + 1..at + end];
         if class.starts_with(&ours) && !written.contains(class) {
             return;
@@ -644,22 +743,46 @@ fn declined_stub(
         rest = &rest[at + end + 1..];
     }
     let name = body::method_name(&func.name);
-    if builder.methods.iter().any(|m| m.name == name && m.descriptor == signature) {
+    if builder
+        .methods
+        .iter()
+        .any(|m| m.name == name && m.descriptor == signature)
+    {
         return;
     }
     let shape = types::Shape::packaged(program, package);
-    let Some(locals) = func.params.iter().map(|p| types::vtype(shape, &p.ty)).collect::<Option<Vec<_>>>() else {
+    let Some(locals) = func
+        .params
+        .iter()
+        .map(|p| types::vtype(shape, &p.ty))
+        .collect::<Option<Vec<_>>>()
+    else {
         return;
     };
     let slots: u16 = locals.iter().map(VType::slots).sum();
     let origin = func.origin.clone();
     let mut code = Code::new(locals, slots);
-    code.const_string(&origin, pool, &format!("`{}` was declined: {why}", func.name));
-    code.invoke_static(&origin, pool, body::RUNTIME, "refused", "(Ljava/lang/String;)V");
+    code.const_string(
+        &origin,
+        pool,
+        &format!("`{}` was declined: {why}", func.name),
+    );
+    code.invoke_static(
+        &origin,
+        pool,
+        body::RUNTIME,
+        "refused",
+        "(Ljava/lang/String;)V",
+    );
     code.const_null(&origin);
     code.athrow(&origin);
     if let Ok(stub) = code.finish(pool) {
-        builder.method(access::PUBLIC | access::STATIC | access::SYNTHETIC, name, signature, Some(stub));
+        builder.method(
+            access::PUBLIC | access::STATIC | access::SYNTHETIC,
+            name,
+            signature,
+            Some(stub),
+        );
     }
 }
 
@@ -681,7 +804,11 @@ fn declined_stub(
 /// ids an earlier layout holds. None is named by any class that remains.
 fn shadowed_layout(program: &Program, layout: &nts_core::hir::Layout) -> bool {
     !layout.types.is_empty()
-        && layout.types.iter().all(|id| program.layout(*id).is_some_and(|owner| !std::ptr::eq(owner, layout)))
+        && layout.types.iter().all(|id| {
+            program
+                .layout(*id)
+                .is_some_and(|owner| !std::ptr::eq(owner, layout))
+        })
 }
 
 /// The classes that depend on every other one being known: an instance class
@@ -699,11 +826,26 @@ fn finish_classes(
     pool: &mut Pool,
 ) {
     for layout in constructed_interfaces(program) {
-        collect(classes, diagnostics, interface_instance(package, program, layout).map(Some));
+        collect(
+            classes,
+            diagnostics,
+            interface_instance(package, program, layout).map(Some),
+        );
     }
-    let written: rustc_hash::FxHashSet<&str> = classes.iter().map(|class| class.binary_name.as_str()).collect();
+    let written: rustc_hash::FxHashSet<&str> = classes
+        .iter()
+        .map(|class| class.binary_name.as_str())
+        .collect();
     for (func, diagnostic) in declined {
-        declined_stub(package, program, func, &diagnostic.message, &written, builder, pool);
+        declined_stub(
+            package,
+            program,
+            func,
+            &diagnostic.message,
+            &written,
+            builder,
+            pool,
+        );
         diagnostics.push(diagnostic);
     }
 }
@@ -725,19 +867,35 @@ fn constructed_interfaces(program: &Program) -> Vec<&nts_core::hir::Layout> {
 }
 
 /// `X$Object`: the final class implementing interface `X` that `new` allocates.
-fn interface_instance(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> Result<Class, Diagnostic> {
+fn interface_instance(
+    package: &str,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+) -> Result<Class, Diagnostic> {
     let origin = program_origin(program);
     let mut pool = Pool::new();
-    let mut builder =
-        ClassBuilder::new(types::instance_class(package, program, layout), "java/lang/Object".to_owned());
+    let mut builder = ClassBuilder::new(
+        types::instance_class(package, program, layout),
+        "java/lang/Object".to_owned(),
+    );
     builder.access = access::PUBLIC | access::SUPER | access::FINAL;
     builder.source_file = Some("nts".to_owned());
     builder.interfaces.push(types::class_name(package, layout));
-    builder.default_constructor(&origin, &mut pool).map_err(|error| {
-        Diagnostic::error("NTS4003", format!("`{}`'s instance class: {error}", layout.name), origin.location)
-    })?;
+    builder
+        .default_constructor(&origin, &mut pool)
+        .map_err(|error| {
+            Diagnostic::error(
+                "NTS4003",
+                format!("`{}`'s instance class: {error}", layout.name),
+                origin.location,
+            )
+        })?;
     builder.build(pool).map_err(|error| {
-        Diagnostic::error("NTS4004", format!("`{}`'s instance class: {error}", layout.name), origin.location)
+        Diagnostic::error(
+            "NTS4004",
+            format!("`{}`'s instance class: {error}", layout.name),
+            origin.location,
+        )
     })
 }
 
@@ -780,7 +938,11 @@ fn uniform_entries(package: &str, program: &Program) -> Vec<(String, String)> {
         })
     };
     let mut entries = Vec::new();
-    for entry in [program.erased_call_slot, program.raising_call_slot].into_iter().flatten().filter_map(entry_at) {
+    for entry in [program.erased_call_slot, program.raising_call_slot]
+        .into_iter()
+        .flatten()
+        .filter_map(entry_at)
+    {
         if !entries.contains(&entry) {
             entries.push(entry);
         }
@@ -806,16 +968,24 @@ fn unfilled_uniform_stubs(
 ) -> Result<(), Diagnostic> {
     if builder.access & access::ABSTRACT != 0
         || !(types::is_callable_storage(program, layout)
-            || hierarchy::ancestry(program, layout).iter().skip(1).any(|at| types::is_callable_storage(program, at)))
+            || hierarchy::ancestry(program, layout)
+                .iter()
+                .skip(1)
+                .any(|at| types::is_callable_storage(program, at)))
     {
         return Ok(());
     }
     let class = types::class_name(package, layout);
     for (member, descriptor) in uniform_entries(package, program) {
-        if builder.methods.iter().any(|m| m.name == member && m.descriptor == descriptor) {
+        if builder
+            .methods
+            .iter()
+            .any(|m| m.name == member && m.descriptor == descriptor)
+        {
             continue;
         }
-        let width = nts_jvm_emitter::descriptor::parameters(&descriptor).map_or(0, |list| list.len());
+        let width =
+            nts_jvm_emitter::descriptor::parameters(&descriptor).map_or(0, |list| list.len());
         let mut locals = vec![VType::Object(class.clone())];
         locals.extend((0..width).map(|_| VType::Object(types::VALUE.to_owned())));
         let slots = u16::try_from(locals.len()).unwrap_or(u16::MAX);
@@ -824,11 +994,21 @@ fn unfilled_uniform_stubs(
         // a class-value token that was never callable, one raising arm missing.
         let why = format!("`{}` has no `{member}` to call", layout.name);
         code.const_string(origin, pool, &why);
-        code.invoke_static(origin, pool, body::RUNTIME, "refused", "(Ljava/lang/String;)V");
+        code.invoke_static(
+            origin,
+            pool,
+            body::RUNTIME,
+            "refused",
+            "(Ljava/lang/String;)V",
+        );
         code.const_null(origin);
         code.athrow(origin);
         let stub = code.finish(pool).map_err(|error| {
-            Diagnostic::error("NTS4003", format!("the refusing `{member}` of `{}`: {error}", layout.name), origin.location)
+            Diagnostic::error(
+                "NTS4003",
+                format!("the refusing `{member}` of `{}`: {error}", layout.name),
+                origin.location,
+            )
         })?;
         builder.method(access::PUBLIC, member, descriptor, Some(stub));
     }
@@ -837,26 +1017,40 @@ fn unfilled_uniform_stubs(
 
 fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diagnostic> {
     let entries = uniform_entries(package, program);
-    if entries.is_empty() && !program.layouts.iter().any(|layout| types::is_callable_storage(program, layout)) {
+    if entries.is_empty()
+        && !program
+            .layouts
+            .iter()
+            .any(|layout| types::is_callable_storage(program, layout))
+    {
         return Ok(None);
     }
     let origin = program_origin(program);
     let mut pool = Pool::new();
-    let mut builder = ClassBuilder::new(types::callable_class(package), "java/lang/Object".to_owned());
+    let mut builder = ClassBuilder::new(
+        types::callable_class(package),
+        "java/lang/Object".to_owned(),
+    );
     builder.access = access::PUBLIC | access::SUPER | access::ABSTRACT;
     builder.source_file = Some("nts".to_owned());
     for (member, descriptor) in entries {
         builder.method(access::PUBLIC | access::ABSTRACT, member, descriptor, None);
     }
-    builder.default_constructor(&origin, &mut pool).map_err(|error| {
+    builder
+        .default_constructor(&origin, &mut pool)
+        .map_err(|error| {
+            Diagnostic::error(
+                "NTS4003",
+                format!("the callable root's constructor could not be written: {error}"),
+                origin.location,
+            )
+        })?;
+    builder.build(pool).map(Some).map_err(|error| {
         Diagnostic::error(
-            "NTS4003",
-            format!("the callable root's constructor could not be written: {error}"),
+            "NTS4004",
+            format!("the callable root could not be written: {error}"),
             origin.location,
         )
-    })?;
-    builder.build(pool).map(Some).map_err(|error| {
-        Diagnostic::error("NTS4004", format!("the callable root could not be written: {error}"), origin.location)
     })
 }
 
@@ -867,9 +1061,12 @@ fn reaction_types(program: &Program) -> rustc_hash::FxHashSet<nts_semantic_schem
     let mut found = rustc_hash::FxHashSet::default();
     for func in &program.funcs {
         for op in &func.values {
-            let nts_core::hir::OpKind::PromiseSubscribe { reaction, .. } = op.kind else { continue };
+            let nts_core::hir::OpKind::PromiseSubscribe { reaction, .. } = op.kind else {
+                continue;
+            };
             if let Some(held) = func.values.get(reaction.0 as usize)
-                && let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) = held.ty
+                && let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
+                    held.ty
             {
                 found.insert(id);
             }
@@ -900,20 +1097,29 @@ fn reaction_resume(
         let slot = slot? as usize;
         let name = layout.methods.get(slot)?.as_ref()?;
         let func = program.funcs.iter().find(|f| &f.name == name)?;
-        let member = hierarchy::declared_member(program, layout, slot).unwrap_or_else(|| hierarchy::member_name(name));
-        Some((member, instance_descriptor(package, program, func)?, func.params.len()))
+        let member = hierarchy::declared_member(program, layout, slot)
+            .unwrap_or_else(|| hierarchy::member_name(name));
+        Some((
+            member,
+            instance_descriptor(package, program, func)?,
+            func.params.len(),
+        ))
     };
     let (member, descriptor, padding) = if let Some((member, descriptor, _)) =
         entry(program.closure_slot).filter(|(_, _, params)| *params == 1)
     {
         (member, descriptor, 0)
     } else if let Some((member, descriptor, _)) = entry(program.erased_call_slot) {
-        let width = nts_jvm_emitter::descriptor::parameters(&descriptor).map_or(0, |list| list.len());
+        let width =
+            nts_jvm_emitter::descriptor::parameters(&descriptor).map_or(0, |list| list.len());
         (member, descriptor, width)
     } else {
         return Err(Diagnostic::error(
             "NTS4009",
-            format!("`{}` is posted as a promise reaction and has no entry a reaction can call", layout.name),
+            format!(
+                "`{}` is posted as a promise reaction and has no entry a reaction can call",
+                layout.name
+            ),
             origin.location,
         ));
     };
@@ -921,7 +1127,13 @@ fn reaction_resume(
     let mut code = Code::new(vec![VType::Object(class.clone())], 1);
     code.load(origin, Kind::Ref, 0);
     for _ in 0..padding {
-        code.get_static(origin, pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
+        code.get_static(
+            origin,
+            pool,
+            types::VALUE,
+            "UNDEFINED_VALUE",
+            types::VALUE_DESCRIPTOR,
+        );
     }
     code.invoke_virtual(origin, pool, &class, &member, &descriptor);
     match descriptor.rsplit_once(')').map(|(_, result)| result) {
@@ -933,7 +1145,10 @@ fn reaction_resume(
     let body = code.finish(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4008",
-            format!("the reaction `resume()` for `{}` could not be written: {error}", layout.name),
+            format!(
+                "the reaction `resume()` for `{}` could not be written: {error}",
+                layout.name
+            ),
             origin.location,
         )
     })?;
@@ -961,16 +1176,29 @@ fn closure_interfaces(program: &Program) -> FxHashMap<nts_semantic_schema::TypeI
         .foreign
         .iter()
         .filter(|(_, row)| row.kind == nts_core::hir::runtime::ForeignKind::Interface)
-        .filter_map(|(key, _)| key.split_once(':')?.0.rsplit_once('.').map(|(owner, _)| owner))
+        .filter_map(|(key, _)| {
+            key.split_once(':')?
+                .0
+                .rsplit_once('.')
+                .map(|(owner, _)| owner)
+        })
         .collect();
     for func in &program.funcs {
         for op in &func.values {
-            let nts_core::hir::OpKind::Call { callee: nts_core::hir::Callee::External(key), args, .. } = &op.kind
+            let nts_core::hir::OpKind::Call {
+                callee: nts_core::hir::Callee::External(key),
+                args,
+                ..
+            } = &op.kind
             else {
                 continue;
             };
-            let Some(row) = program.foreign.get(key.as_str()) else { continue };
-            let Some((_, descriptor)) = key.split_once(':') else { continue };
+            let Some(row) = program.foreign.get(key.as_str()) else {
+                continue;
+            };
+            let Some((_, descriptor)) = key.split_once(':') else {
+                continue;
+            };
             let Some(parameters) = nts_jvm_emitter::descriptor::parameters(descriptor) else {
                 continue;
             };
@@ -994,7 +1222,9 @@ fn closure_interfaces(program: &Program) -> FxHashMap<nts_semantic_schema::TypeI
                 {
                     value = inner;
                 }
-                let Some(held) = func.values.get(value.0 as usize) else { continue };
+                let Some(held) = func.values.get(value.0 as usize) else {
+                    continue;
+                };
                 if let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
                     held.ty
                 {
@@ -1009,6 +1239,7 @@ fn closure_interfaces(program: &Program) -> FxHashMap<nts_semantic_schema::TypeI
     found
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn object_class(
     package: &str,
     program: &Program,
@@ -1051,8 +1282,24 @@ fn object_class(
         }
     }
     builder.source_file = Some("nts".to_owned());
-    declare_fields(package, program, layout, plan, &mut builder, interface, &origin)?;
-    declare_presence(package, program, layout, interface, &mut builder, &mut pool, &origin)?;
+    declare_fields(
+        package,
+        program,
+        layout,
+        plan,
+        &mut builder,
+        interface,
+        &origin,
+    )?;
+    declare_presence(
+        package,
+        program,
+        layout,
+        interface,
+        &mut builder,
+        &mut pool,
+        &origin,
+    )?;
     // A frame a `Suspend` names implements `NtsResumable`, with `resume()`
     // forwarding to the static body -- the same shape as a dispatch slot's
     // forwarder, and the reason promises are not blocked behind the closure
@@ -1118,7 +1365,10 @@ fn object_class(
         let rendered = code.finish(&pool).map_err(|error| {
             Diagnostic::error(
                 "NTS4008",
-                format!("the resume forwarder for `{}` could not be written: {error}", layout.name),
+                format!(
+                    "the resume forwarder for `{}` could not be written: {error}",
+                    layout.name
+                ),
                 program_origin(program).location,
             )
         })?;
@@ -1144,7 +1394,15 @@ fn object_class(
     unfilled_uniform_stubs(package, program, layout, &mut builder, &mut pool, &origin)?;
     typed_face(package, program, layout, &mut builder, &mut pool, &origin)?;
     // A bound interface declares its own widths; see `foreign_bridges`.
-    foreign_bridges(package, program, layout, handed_to, &mut pool, &mut builder, &origin)?;
+    foreign_bridges(
+        package,
+        program,
+        layout,
+        handed_to,
+        &mut pool,
+        &mut builder,
+        &origin,
+    )?;
     // A field the JVM zeroes to `null` where the language's zero is
     // `undefined`.
     //
@@ -1177,26 +1435,27 @@ fn object_class(
     // is a `ClassFormatError`. Nothing constructs an interface either -- a
     // dispatch root is never the class `ObjectNew` names.
     if !interface {
-        builder.constructor(&origin, &mut pool, &initial).map_err(|error| {
-            Diagnostic::error(
-                "NTS4003",
-                format!("`{}` could not be given a constructor: {error}", layout.name),
-                origin.location,
-            )
-        })?;
+        builder
+            .constructor(&origin, &mut pool, &initial)
+            .map_err(|error| {
+                Diagnostic::error(
+                    "NTS4003",
+                    format!(
+                        "`{}` could not be given a constructor: {error}",
+                        layout.name
+                    ),
+                    origin.location,
+                )
+            })?;
     }
-    builder
-        .build(pool)
-        .map(Some)
-        .map_err(|error| {
-            Diagnostic::error(
-                "NTS4004",
-                format!("`{}` could not be written: {error}", layout.name),
-                origin.location,
-            )
-        })
+    builder.build(pool).map(Some).map_err(|error| {
+        Diagnostic::error(
+            "NTS4004",
+            format!("`{}` could not be written: {error}", layout.name),
+            origin.location,
+        )
+    })
 }
-
 
 fn render(
     package: &str,
@@ -1248,7 +1507,11 @@ fn render(
 /// one that overrides `java.lang.Object.toString` and so the one `ref.toString()`
 /// reaches. A `toString(radix)` is a different method to the JVM and marking its
 /// class would promise a call that resolves elsewhere.
-fn declares_own_to_string(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> bool {
+fn declares_own_to_string(
+    package: &str,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+) -> bool {
     layout.methods.iter().flatten().any(|name| {
         hierarchy::member_name(name) == "toString"
             && program
@@ -1311,6 +1574,7 @@ fn callback_interfaces(
 /// "which methods does this class need" are two questions, and the first is
 /// where every width decision lives.
 #[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn bridge_body(
     package: &str,
     program: &Program,
@@ -1376,7 +1640,13 @@ fn bridge_body(
             "([BDD)V" | "(Ljava/lang/String;)V" => code.load(origin, Kind::Ref, 1),
             _ => code.load(origin, Kind::Double, 1),
         }
-        code.invoke_static(origin, pool, types::FOREIGN, delivery.deliver, delivery.delivers);
+        code.invoke_static(
+            origin,
+            pool,
+            types::FOREIGN,
+            delivery.deliver,
+            delivery.delivers,
+        );
         code.branch_zero(origin, nts_jvm_emitter::Compare::Eq, direct);
         code.ret(origin, None);
         code.bind(direct);
@@ -1388,7 +1658,9 @@ fn bridge_body(
     code.load(origin, Kind::Ref, 0);
     let mut at: u16 = 1;
     for (spelled, param) in parameters.iter().zip(ours.params.iter().skip(1)) {
-        let Some(kind) = types::kind(&param.ty) else { continue };
+        let Some(kind) = types::kind(&param.ty) else {
+            continue;
+        };
         match *spelled {
             "I" | "S" | "B" | "C" | "Z" => {
                 code.load(origin, Kind::Int, at);
@@ -1409,18 +1681,12 @@ fn bridge_body(
             spelled if spelled.starts_with('[') => {
                 code.load(origin, Kind::Ref, at);
                 at += 1;
-                if let Some(want) = types::descriptor(types::Shape::packaged(program, package), &param.ty)
-                    && let Some(view) =
-                        want.strip_prefix('L').and_then(|it| it.strip_suffix(';'))
+                if let Some(want) =
+                    types::descriptor(types::Shape::packaged(program, package), &param.ty)
+                    && let Some(view) = want.strip_prefix('L').and_then(|it| it.strip_suffix(';'))
                     && view.starts_with("nts/rt/NtsView")
                 {
-                    code.invoke_static(
-                        origin,
-                        pool,
-                        view,
-                        "from",
-                        &format!("({spelled}){want}"),
-                    );
+                    code.invoke_static(origin, pool, view, "from", &format!("({spelled}){want}"));
                 }
             }
             _ => {
@@ -1429,7 +1695,13 @@ fn bridge_body(
             }
         }
     }
-    code.invoke_static(origin, pool, &body::program_class(package), &body::method_name(&ours.name), full);
+    code.invoke_static(
+        origin,
+        pool,
+        &body::program_class(package),
+        &body::method_name(&ours.name),
+        full,
+    );
     // The interface's return, from ours. `Z` against `Z` needs nothing;
     // a `double` answering an `I` takes the same `ToInt32` a bound
     // argument takes, because it is the same boundary.
@@ -1452,7 +1724,10 @@ fn bridge_body(
     code.finish(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4008",
-            format!("the bridge for `{}` could not be written: {error}", ours.name),
+            format!(
+                "the bridge for `{}` could not be written: {error}",
+                ours.name
+            ),
             origin.location,
         )
     })
@@ -1472,7 +1747,11 @@ fn bridge_body(
 /// holds a holder for a fixed set of argument shapes, and a `void` member
 /// outside them has nowhere to put its arguments. [`types::deliverable`] is the
 /// set, and is the same function the bridge asks when it emits the post.
-pub(crate) fn carries_env(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> bool {
+pub(crate) fn carries_env(
+    package: &str,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+) -> bool {
     let mut wanted: Vec<String> = hierarchy::implemented(package, program, layout);
     for id in &layout.types {
         for interface in closure_interfaces(program).get(id).into_iter().flatten() {
@@ -1481,8 +1760,10 @@ pub(crate) fn carries_env(package: &str, program: &Program, layout: &nts_core::h
             }
         }
     }
-    wanted.iter().filter(|it| nts_core::hir::runtime::is_foreign_layout_name(it)).any(
-        |interface| {
+    wanted
+        .iter()
+        .filter(|it| nts_core::hir::runtime::is_foreign_layout_name(it))
+        .any(|interface| {
             program.foreign.iter().any(|(key, row)| {
                 row.kind == nts_core::hir::runtime::ForeignKind::Interface
                     && key
@@ -1494,8 +1775,7 @@ pub(crate) fn carries_env(package: &str, program: &Program, layout: &nts_core::h
                             owner == interface && types::deliverable(want).is_some()
                         })
             })
-        },
-    )
+        })
 }
 
 /// The body of a posted closure's callback method.
@@ -1518,7 +1798,12 @@ fn delivered_body(
     let locals = match delivery.method {
         "()V" => vec![this],
         "([BDD)V" => {
-            vec![this, VType::Object("[B".to_owned()), VType::Double, VType::Double]
+            vec![
+                this,
+                VType::Object("[B".to_owned()),
+                VType::Double,
+                VType::Double,
+            ]
         }
         "(D)V" => vec![this, VType::Double],
         _ => vec![this, VType::Object("java/lang/String".to_owned())],
@@ -1550,12 +1835,21 @@ fn delivered_body(
         "(D)V" => code.load(origin, Kind::Double, 1),
         _ => code.load(origin, Kind::Ref, 1),
     }
-    code.invoke_static(origin, pool, &body::program_class(package), &body::method_name(&ours.name), full);
+    code.invoke_static(
+        origin,
+        pool,
+        &body::program_class(package),
+        &body::method_name(&ours.name),
+        full,
+    );
     code.ret(origin, None);
     code.finish(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4008",
-            format!("the delivery for `{}` could not be written: {error}", ours.name),
+            format!(
+                "the delivery for `{}` could not be written: {error}",
+                ours.name
+            ),
             origin.location,
         )
     })
@@ -1588,65 +1882,71 @@ fn lane_accessors(
     builder: &mut ClassBuilder,
     origin: &nts_semantic_schema::Origin,
 ) -> Result<(), Diagnostic> {
-        builder.field(access::PACKAGE, types::ENV_MEMBER, types::ENV_DESCRIPTOR);
-        let mut code = Code::new(
-            vec![
-                VType::Object(types::class_name(package, layout)),
-                VType::Object(types::ENV.to_owned()),
-            ],
-            2,
-        );
-        code.initialize_locals(origin, 2);
-        code.load(origin, Kind::Ref, 0);
-        code.load(origin, Kind::Ref, 1);
-        code.put_field(
-            origin,
-            pool,
-            &types::class_name(package, layout),
-            types::ENV_MEMBER,
-            types::ENV_DESCRIPTOR,
-        );
-        code.ret(origin, None);
-        let body = code.finish(pool).map_err(|error| {
-            Diagnostic::error(
-                "NTS4008",
-                format!("the lane setter for `{}` could not be written: {error}", layout.name),
-                origin.location,
-            )
-        })?;
-        builder.method(
-            access::PUBLIC,
-            "bindLane".to_owned(),
-            format!("({}){}", types::ENV_DESCRIPTOR, "V"),
-            Some(body),
-        );
+    builder.field(access::PACKAGE, types::ENV_MEMBER, types::ENV_DESCRIPTOR);
+    let mut code = Code::new(
+        vec![
+            VType::Object(types::class_name(package, layout)),
+            VType::Object(types::ENV.to_owned()),
+        ],
+        2,
+    );
+    code.initialize_locals(origin, 2);
+    code.load(origin, Kind::Ref, 0);
+    code.load(origin, Kind::Ref, 1);
+    code.put_field(
+        origin,
+        pool,
+        &types::class_name(package, layout),
+        types::ENV_MEMBER,
+        types::ENV_DESCRIPTOR,
+    );
+    code.ret(origin, None);
+    let body = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4008",
+            format!(
+                "the lane setter for `{}` could not be written: {error}",
+                layout.name
+            ),
+            origin.location,
+        )
+    })?;
+    builder.method(
+        access::PUBLIC,
+        "bindLane".to_owned(),
+        format!("({}){}", types::ENV_DESCRIPTOR, "V"),
+        Some(body),
+    );
 
-        // And the reader, so `NtsForeign` can decide delivery without the
-        // emitter naming a generated field from inside the runtime.
-        let mut code = Code::new(vec![VType::Object(types::class_name(package, layout))], 1);
-        code.initialize_locals(origin, 1);
-        code.load(origin, Kind::Ref, 0);
-        code.get_field(
-            origin,
-            pool,
-            &types::class_name(package, layout),
-            types::ENV_MEMBER,
-            types::ENV_DESCRIPTOR,
-        );
-        code.ret(origin, Some(Kind::Ref));
-        let body = code.finish(pool).map_err(|error| {
-            Diagnostic::error(
-                "NTS4008",
-                format!("the lane reader for `{}` could not be written: {error}", layout.name),
-                origin.location,
-            )
-        })?;
-        builder.method(
-            access::PUBLIC,
-            "lane".to_owned(),
-            format!("(){}", types::ENV_DESCRIPTOR),
-            Some(body),
-        );
+    // And the reader, so `NtsForeign` can decide delivery without the
+    // emitter naming a generated field from inside the runtime.
+    let mut code = Code::new(vec![VType::Object(types::class_name(package, layout))], 1);
+    code.initialize_locals(origin, 1);
+    code.load(origin, Kind::Ref, 0);
+    code.get_field(
+        origin,
+        pool,
+        &types::class_name(package, layout),
+        types::ENV_MEMBER,
+        types::ENV_DESCRIPTOR,
+    );
+    code.ret(origin, Some(Kind::Ref));
+    let body = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4008",
+            format!(
+                "the lane reader for `{}` could not be written: {error}",
+                layout.name
+            ),
+            origin.location,
+        )
+    })?;
+    builder.method(
+        access::PUBLIC,
+        "lane".to_owned(),
+        format!("(){}", types::ENV_DESCRIPTOR),
+        Some(body),
+    );
     Ok(())
 }
 
@@ -1683,7 +1983,9 @@ fn deliverable_bridges(
             .collect();
         rows.sort_unstable();
         for (_, want) in rows {
-            let Some(delivery) = types::deliverable(want) else { continue };
+            let Some(delivery) = types::deliverable(want) else {
+                continue;
+            };
             // One class may implement two jar interfaces of the same shape; the
             // method is the shape's, so emitting it twice is a duplicate member
             // the JVM refuses at load.
@@ -1693,8 +1995,12 @@ fn deliverable_bridges(
             seen.push(delivery.interface);
             builder.interfaces.push(delivery.interface.to_owned());
             let closure = format!("{}#call", layout.name);
-            let Some(ours) = program.funcs.iter().find(|f| f.name == closure) else { continue };
-            let Some(full) = body::signature(package, program, ours) else { continue };
+            let Some(ours) = program.funcs.iter().find(|f| f.name == closure) else {
+                continue;
+            };
+            let Some(full) = body::signature(package, program, ours) else {
+                continue;
+            };
             let body = delivered_body(package, layout, ours, &delivery, &full, pool, origin)?;
             builder.method(
                 access::PUBLIC,
@@ -1729,7 +2035,9 @@ fn lambda_overloads(
         if !func.exported || method_of(program, func).is_some() {
             continue;
         }
-        let Some(descriptor) = body::signature(package, program, func) else { continue };
+        let Some(descriptor) = body::signature(package, program, func) else {
+            continue;
+        };
         let Some(parameters) = nts_jvm_emitter::descriptor::parameters(&descriptor) else {
             continue;
         };
@@ -1738,7 +2046,8 @@ fn lambda_overloads(
             .iter()
             .enumerate()
             .filter_map(|(at, param)| {
-                lambda_interface(package, program, &param.ty).map(|(base, i, call)| (at, base, i, call))
+                lambda_interface(package, program, &param.ty)
+                    .map(|(base, i, call)| (at, base, i, call))
             })
             .collect();
         if swaps.is_empty() {
@@ -1747,7 +2056,15 @@ fn lambda_overloads(
         for (_, base, interface, call) in &swaps {
             adapters.insert(base.clone(), (interface, call.clone()));
         }
-        match lambda_forward(package, func, &descriptor, &parameters, &swaps, pool, origin) {
+        match lambda_forward(
+            package,
+            func,
+            &descriptor,
+            &parameters,
+            &swaps,
+            pool,
+            origin,
+        ) {
             Ok((want, body)) => builder.method(
                 access::PUBLIC | access::STATIC,
                 body::method_name(&func.name),
@@ -1817,7 +2134,13 @@ fn lambda_forward(
             code.new_object(origin, pool, &adapter);
             code.dup(origin);
             code.load(origin, Kind::Ref, at);
-            code.invoke_special(origin, pool, &adapter, "<init>", &format!("(L{interface};)V"));
+            code.invoke_special(
+                origin,
+                pool,
+                &adapter,
+                "<init>",
+                &format!("(L{interface};)V"),
+            );
         } else {
             let kind = match local {
                 VType::Double => Kind::Double,
@@ -1830,8 +2153,21 @@ fn lambda_forward(
         }
         at += local.slots();
     }
-    code.invoke_static(origin, pool, &body::program_class(package), &body::method_name(&func.name), descriptor);
-    code.ret(origin, if returns == "V" { None } else { types::kind(&func.return_type) });
+    code.invoke_static(
+        origin,
+        pool,
+        &body::program_class(package),
+        &body::method_name(&func.name),
+        descriptor,
+    );
+    code.ret(
+        origin,
+        if returns == "V" {
+            None
+        } else {
+            types::kind(&func.return_type)
+        },
+    );
     let body = code.finish(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4003",
@@ -1858,10 +2194,16 @@ fn lambda_interface(
     // The layout the parameter's *type* names, and its face: the descriptor
     // spells a signature as the callable root, which no layout is named, and
     // the typed `call` this used to find is not declared since A6.
-    let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else { return None };
+    let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
+        return None;
+    };
     let layout = program.layout(*id)?;
     let face = face::of(package, program, layout)?;
-    Some((types::class_name(package, layout), face.interface, face.typed))
+    Some((
+        types::class_name(package, layout),
+        face.interface,
+        face.typed,
+    ))
 }
 
 /// The class that lets a Java lambda stand in for a closure.
@@ -1893,7 +2235,10 @@ fn lambda_adapter(
 
     // `<init>(I)V`: super(), then store the interface.
     let mut code = Code::new(
-        vec![VType::Object(name.clone()), VType::Object(interface.to_owned())],
+        vec![
+            VType::Object(name.clone()),
+            VType::Object(interface.to_owned()),
+        ],
         2,
     );
     code.initialize_locals(origin, 2);
@@ -1904,7 +2249,11 @@ fn lambda_adapter(
     code.put_field(origin, &mut pool, &name, "it", &held);
     code.ret(origin, None);
     let body = code.finish(&pool).map_err(|error| {
-        Diagnostic::error("NTS4003", format!("the lambda adapter's constructor: {error}"), origin.location)
+        Diagnostic::error(
+            "NTS4003",
+            format!("the lambda adapter's constructor: {error}"),
+            origin.location,
+        )
     })?;
     builder.method(access::PUBLIC, "<init>", format!("({held})V"), Some(body));
 
@@ -1921,7 +2270,11 @@ fn lambda_adapter(
         .and_then(|layout| face::of(package, program, layout))
         .filter(|face| face.typed == call)
         .ok_or_else(|| {
-            Diagnostic::error("NTS4003", format!("the lambda adapter for `{base}` has no typed face"), origin.location)
+            Diagnostic::error(
+                "NTS4003",
+                format!("the lambda adapter for `{base}` has no typed face"),
+                origin.location,
+            )
         })?;
     let width = nts_jvm_emitter::descriptor::parameters(&face.erased).map_or(0, |list| list.len());
     // The ordinary uniform entry, and its raising variant where the root
@@ -1948,16 +2301,30 @@ fn lambda_adapter(
             face::unboxed(&mut code, &mut pool, origin, ty);
         }
         code.invoke_interface(origin, &mut pool, interface, "call", call);
-        code.get_static(origin, &mut pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
+        code.get_static(
+            origin,
+            &mut pool,
+            types::VALUE,
+            "UNDEFINED_VALUE",
+            types::VALUE_DESCRIPTOR,
+        );
         code.ret(origin, Some(Kind::Ref));
         let body = code.finish(&pool).map_err(|error| {
-            Diagnostic::error("NTS4003", format!("the lambda adapter's entry: {error}"), origin.location)
+            Diagnostic::error(
+                "NTS4003",
+                format!("the lambda adapter's entry: {error}"),
+                origin.location,
+            )
         })?;
         builder.method(access::PUBLIC, member, face.erased.clone(), Some(body));
     }
 
     builder.build(pool).map_err(|error| {
-        Diagnostic::error("NTS4003", format!("the lambda adapter `{name}`: {error}"), origin.location)
+        Diagnostic::error(
+            "NTS4003",
+            format!("the lambda adapter `{name}`: {error}"),
+            origin.location,
+        )
     })
 }
 
@@ -1997,7 +2364,12 @@ fn publish(
 /// signature is parameterised, so the attribute appears only where it says
 /// something -- an attribute on every method would be bytes that mean nothing
 /// and one more thing to keep true.
-fn generic_signature(package: &str, program: &Program, func: &nts_core::hir::Func, descriptor: &str) -> Option<String> {
+fn generic_signature(
+    package: &str,
+    program: &Program,
+    func: &nts_core::hir::Func,
+    descriptor: &str,
+) -> Option<String> {
     let shape = types::Shape::packaged(program, package);
     let mut rendered = String::from("(");
     let mut interesting = false;
@@ -2017,7 +2389,11 @@ fn generic_signature(package: &str, program: &Program, func: &nts_core::hir::Fun
             interesting = true;
             rendered.push_str(&generic);
         }
-        None => rendered.push_str(types::return_descriptor(shape, &func.return_type).as_deref().unwrap_or("V")),
+        None => rendered.push_str(
+            types::return_descriptor(shape, &func.return_type)
+                .as_deref()
+                .unwrap_or("V"),
+        ),
     }
     // The erasure has to be the descriptor. If it is not, this lane has built a
     // signature for a shape it does not really emit, and an attribute nobody can
@@ -2094,11 +2470,15 @@ fn foreign_bridges(
             else {
                 continue;
             };
-            let Some(mine) = instance_descriptor(package, program, ours) else { continue };
+            let Some(mine) = instance_descriptor(package, program, ours) else {
+                continue;
+            };
             if mine == want {
                 continue;
             }
-            let Some(full) = body::signature(package, program, ours) else { continue };
+            let Some(full) = body::signature(package, program, ours) else {
+                continue;
+            };
             let rendered = bridge_body(package, program, layout, ours, want, &full, pool, origin)?;
             builder.method(
                 access::PUBLIC | access::BRIDGE | access::SYNTHETIC,
@@ -2131,6 +2511,7 @@ fn foreign_bridges(
     Ok(())
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn dispatch_forwarders(
     package: &str,
     program: &Program,
@@ -2165,7 +2546,10 @@ fn dispatch_forwarders(
             // `AbstractMethodError` at run time.
             return Err(Diagnostic::error(
                 "NTS4008",
-                format!("`{}` dispatches slot {slot} to `{func_name}`, which this program does not define", layout.name),
+                format!(
+                    "`{}` dispatches slot {slot} to `{func_name}`, which this program does not define",
+                    layout.name
+                ),
                 origin.location,
             ));
         };
@@ -2218,7 +2602,16 @@ fn dispatch_forwarders(
         let overridden = base
             .filter(|b| b.methods.get(slot).is_some_and(Option::is_some))
             .or_else(|| hierarchy::declaring_interface(program, layout, slot));
-        let bridge = bridge_for(package, program, layout, overridden, slot, &member, &descriptor, &origin)?;
+        let bridge = bridge_for(
+            package,
+            program,
+            layout,
+            overridden,
+            slot,
+            &member,
+            &descriptor,
+            &origin,
+        )?;
 
         // An abstract declaration gets the method with no `Code`, and the
         // verifier is what makes the absence safe: `invokevirtual` on an
@@ -2241,7 +2634,8 @@ fn dispatch_forwarders(
 
         let mut locals = vec![VType::Object(types::class_name(package, layout))];
         for param in target.params.iter().skip(1) {
-            let Some(vtype) = types::vtype(types::Shape::packaged(program, package), &param.ty) else {
+            let Some(vtype) = types::vtype(types::Shape::packaged(program, package), &param.ty)
+            else {
                 return Err(Diagnostic::error(
                     "NTS4008",
                     format!("`{func_name}` takes a parameter with no representation"),
@@ -2266,7 +2660,13 @@ fn dispatch_forwarders(
             code.load(&origin, kind, at);
             at += kind.words();
         }
-        code.invoke_static(&origin, pool, &body::program_class(package), &body::method_name(func_name), &full);
+        code.invoke_static(
+            &origin,
+            pool,
+            &body::program_class(package),
+            &body::method_name(func_name),
+            &full,
+        );
         code.ret(&origin, types::kind(&target.return_type));
         let rendered = code.finish(pool).map_err(|error| {
             Diagnostic::error(
@@ -2285,7 +2685,8 @@ fn dispatch_forwarders(
             let mut locals = code_locals.clone();
             locals.extend(bridge.dropped);
             let class = types::class_name(package, layout);
-            let body = forwarding_bridge(pool, &class, target, &member, &descriptor, locals, &origin)?;
+            let body =
+                forwarding_bridge(pool, &class, target, &member, &descriptor, locals, &origin)?;
             builder.method(
                 access::PUBLIC | access::BRIDGE | access::SYNTHETIC,
                 member.clone(),
@@ -2297,8 +2698,6 @@ fn dispatch_forwarders(
     }
     Ok(())
 }
-
-
 
 /// The layout this function is a method of, if it is one.
 ///
@@ -2327,7 +2726,9 @@ fn method_of<'a>(
     if receiver.name != "this" {
         return None;
     }
-    let HirType::Managed(ManagedType::Object(owner)) = &receiver.ty else { return None };
+    let HirType::Managed(ManagedType::Object(owner)) = &receiver.ty else {
+        return None;
+    };
     let (declared, member) = func.name.split_once('#')?;
     if member.is_empty() {
         return None;
@@ -2385,14 +2786,20 @@ fn member_forwarders(
     let origin = program_origin(program);
 
     for func in &program.funcs {
-        let Some((owner, member)) = method_of(program, func) else { continue };
+        let Some((owner, member)) = method_of(program, func) else {
+            continue;
+        };
         if owner.name != layout.name {
             continue;
         }
 
-        let Some(signature) = body::signature(package, program, func) else { continue };
+        let Some(signature) = body::signature(package, program, func) else {
+            continue;
+        };
         // The forwarder's own descriptor is the static's minus the receiver.
-        let Some(rest) = signature.strip_prefix(&format!("(L{class};")) else { continue };
+        let Some(rest) = signature.strip_prefix(&format!("(L{class};")) else {
+            continue;
+        };
         let forwarded = format!("({rest}");
 
         let shape = types::Shape::packaged(program, package);
@@ -2400,7 +2807,8 @@ fn member_forwarders(
         let mut slots = 1u16;
         let mut ok = true;
         for param in &func.params[1..] {
-            let (Some(vtype), Some(kind)) = (types::vtype(shape, &param.ty), types::kind(&param.ty))
+            let (Some(vtype), Some(kind)) =
+                (types::vtype(shape, &param.ty), types::kind(&param.ty))
             else {
                 ok = false;
                 break;
@@ -2418,11 +2826,19 @@ fn member_forwarders(
         code.load(&origin, Kind::Ref, 0);
         let mut at = 1u16;
         for param in &func.params[1..] {
-            let Some(kind) = types::kind(&param.ty) else { break };
+            let Some(kind) = types::kind(&param.ty) else {
+                break;
+            };
             code.load(&origin, kind, at);
             at += kind.words();
         }
-        code.invoke_static(&origin, pool, &body::program_class(package), &body::method_name(&func.name), &signature);
+        code.invoke_static(
+            &origin,
+            pool,
+            &body::program_class(package),
+            &body::method_name(&func.name),
+            &signature,
+        );
         code.ret(&origin, types::kind(&func.return_type));
 
         let rendered = code.finish(pool).map_err(|error| {
@@ -2442,7 +2858,11 @@ fn member_forwarders(
         // catches and what cost all eight `awfy-*` rows their JVM column
         // between 2026-09-13 and 2026-09-15 -- every one of those classes has a
         // `benchmark()D` that is an override.
-        if builder.methods.iter().any(|m| m.name == name && m.descriptor == forwarded) {
+        if builder
+            .methods
+            .iter()
+            .any(|m| m.name == name && m.descriptor == forwarded)
+        {
             continue;
         }
         builder.method(access::PUBLIC, name, forwarded, Some(rendered));
@@ -2477,7 +2897,9 @@ fn forwarding_bridge(
     code.load(origin, Kind::Ref, 0);
     let mut at: u16 = 1;
     for param in target.params.iter().skip(1) {
-        let Some(kind) = types::kind(&param.ty) else { break };
+        let Some(kind) = types::kind(&param.ty) else {
+            break;
+        };
         code.load(origin, kind, at);
         at += kind.words();
     }
@@ -2538,9 +2960,10 @@ fn bridge_for(
     // base's descriptor that receives the rest and drops it is that
     // semantics exactly, and it is the one other disagreement this answers:
     // the declared parameters still have to be the base's, in order.
-    let declared = overridden.params.len().min(
-        1 + nts_jvm_emitter::descriptor::parameters(descriptor).map_or(0, |list| list.len()),
-    );
+    let declared = overridden
+        .params
+        .len()
+        .min(1 + nts_jvm_emitter::descriptor::parameters(descriptor).map_or(0, |list| list.len()));
     let dropped: Option<Vec<VType>> = overridden
         .params
         .get(declared..)
@@ -2551,7 +2974,10 @@ fn bridge_for(
     if let Some(dropped) = dropped
         && narrows_return(package, program, descriptor, &inherited, dropped.len())
     {
-        return Ok(Some(Bridge { descriptor: inherited, dropped }));
+        return Ok(Some(Bridge {
+            descriptor: inherited,
+            dropped,
+        }));
     }
     Err(Diagnostic::error(
         "NTS4009",
@@ -2572,16 +2998,28 @@ fn bridge_for(
 /// The parameters it declares must be the base's, in order: a difference
 /// there is an overload, and bridging one to the other would make a call
 /// reach a method that was never written for it.
-fn narrows_return(package: &str, program: &Program, derived: &str, base: &str, dropped: usize) -> bool {
-    let Some((_, derived_result)) = derived.split_once(')') else { return false };
-    let Some((_, base_result)) = base.split_once(')') else { return false };
+fn narrows_return(
+    package: &str,
+    program: &Program,
+    derived: &str,
+    base: &str,
+    dropped: usize,
+) -> bool {
+    let Some((_, derived_result)) = derived.split_once(')') else {
+        return false;
+    };
+    let Some((_, base_result)) = base.split_once(')') else {
+        return false;
+    };
     let (Some(derived_params), Some(base_params)) = (
         nts_jvm_emitter::descriptor::parameters(derived),
         nts_jvm_emitter::descriptor::parameters(base),
     ) else {
         return false;
     };
-    if derived_params.len() + dropped != base_params.len() || base_params[..derived_params.len()] != derived_params[..] {
+    if derived_params.len() + dropped != base_params.len()
+        || base_params[..derived_params.len()] != derived_params[..]
+    {
         return false;
     }
     if derived_result == base_result {
@@ -2590,10 +3028,16 @@ fn narrows_return(package: &str, program: &Program, derived: &str, base: &str, d
     let (Some(from), Some(to)) = (class_of(derived_result), class_of(base_result)) else {
         return false;
     };
-    let Some(layout) = program.layouts.iter().find(|l| types::class_name(package, l) == from) else {
+    let Some(layout) = program
+        .layouts
+        .iter()
+        .find(|l| types::class_name(package, l) == from)
+    else {
         return false;
     };
-    hierarchy::ancestry(program, layout).iter().any(|a| types::class_name(package, a) == to)
+    hierarchy::ancestry(program, layout)
+        .iter()
+        .any(|a| types::class_name(package, a) == to)
 }
 
 /// The internal name inside an object descriptor, or `None` for anything else.
@@ -2615,7 +3059,10 @@ pub(crate) fn instance_descriptor(
 ) -> Option<String> {
     let mut params = Vec::with_capacity(func.params.len());
     for param in func.params.iter().skip(1) {
-        params.push(types::descriptor(types::Shape::packaged(program, package), &param.ty)?);
+        params.push(types::descriptor(
+            types::Shape::packaged(program, package),
+            &param.ty,
+        )?);
     }
     func.params.first()?;
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
@@ -2643,7 +3090,12 @@ fn resumes(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> 
             else {
                 continue;
             };
-            if program.layout(id).map(|l| types::class_name(package, l)).as_deref() == Some(wanted.as_str()) {
+            if program
+                .layout(id)
+                .map(|l| types::class_name(package, l))
+                .as_deref()
+                == Some(wanted.as_str())
+            {
                 return Some(resume.clone());
             }
         }
@@ -2673,7 +3125,11 @@ fn resumes(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> 
 /// Identity is not the reason to do this, but it is a reason it is safe: two
 /// erasures of one closure are now the same `NtsValue` where they were equal
 /// ones.
-fn erased_closures(package: &str, program: &Program, skipped: &rustc_hash::FxHashSet<&str>) -> Vec<(String, String)> {
+fn erased_closures(
+    package: &str,
+    program: &Program,
+    skipped: &rustc_hash::FxHashSet<&str>,
+) -> Vec<(String, String)> {
     // **One per closure singleton, whether or not an `Erase` names it.**
     //
     // This scanned for `Erase { value }` over a `ClosureStatic` and declared a
@@ -2711,9 +3167,17 @@ pub(crate) fn closure_field(class: &str) -> String {
     format!("closure${}", class.rsplit('/').next().unwrap_or(class))
 }
 
-fn closure_singletons(package: &str, program: &Program, skipped: &rustc_hash::FxHashSet<&str>) -> Vec<(String, String)> {
+fn closure_singletons(
+    package: &str,
+    program: &Program,
+    skipped: &rustc_hash::FxHashSet<&str>,
+) -> Vec<(String, String)> {
     let mut found = std::collections::BTreeSet::new();
-    for func in program.funcs.iter().filter(|func| !skipped.contains(func.name.as_str())) {
+    for func in program
+        .funcs
+        .iter()
+        .filter(|func| !skipped.contains(func.name.as_str()))
+    {
         // And only a *live* `ClosureStatic`: one a block holds, read by an
         // operation a block holds or by a terminator. `func.values` is the
         // arena, so it keeps ops a dropped module-scope statement left behind
@@ -2722,15 +3186,25 @@ fn closure_singletons(package: &str, program: &Program, skipped: &rustc_hash::Fx
         // `Closure122`/`123`/`206`/`207`, whose every body lowering had refused
         // and which nothing executable allocates (2026-10-04, traced by the
         // compiler lane's effects worker).
-        let held: Vec<nts_core::hir::ValueId> = func.blocks.iter().flat_map(|block| block.ops.iter().copied()).collect();
+        let held: Vec<nts_core::hir::ValueId> = func
+            .blocks
+            .iter()
+            .flat_map(|block| block.ops.iter().copied())
+            .collect();
         let read: rustc_hash::FxHashSet<nts_core::hir::ValueId> = held
             .iter()
             .filter_map(|value| func.values.get(value.0 as usize))
             .flat_map(|op| nts_core::hir::operands_of(&op.kind))
-            .chain(func.blocks.iter().flat_map(|block| nts_core::hir::operands_of_terminator(&block.terminator)))
+            .chain(
+                func.blocks
+                    .iter()
+                    .flat_map(|block| nts_core::hir::operands_of_terminator(&block.terminator)),
+            )
             .collect();
         for value in &held {
-            let Some(op) = func.values.get(value.0 as usize) else { continue };
+            let Some(op) = func.values.get(value.0 as usize) else {
+                continue;
+            };
             if !matches!(op.kind, nts_core::hir::OpKind::ClosureStatic) || !read.contains(value) {
                 continue;
             }
@@ -2741,7 +3215,10 @@ fn closure_singletons(package: &str, program: &Program, skipped: &rustc_hash::Fx
             }
         }
     }
-    found.into_iter().map(|class| (closure_field(&class), class)).collect()
+    found
+        .into_iter()
+        .map(|class| (closure_field(&class), class))
+        .collect()
 }
 
 /// Declare and initialize source-site caches and closure singletons.
@@ -2782,7 +3259,9 @@ fn initialize_statics(
     Ok(())
 }
 
-pub(crate) fn template_field(site: u32) -> String { format!("template${site}") }
+pub(crate) fn template_field(site: u32) -> String {
+    format!("template${site}")
+}
 
 /// `<clinit>` for nonzero globals and immutable singleton caches.
 /// No method is needed where Java's zeroed static storage suffices.
@@ -2954,16 +3433,13 @@ fn initializer_refusal(program: &Program, detail: &str) -> Diagnostic {
 }
 
 fn program_origin(program: &Program) -> nts_semantic_schema::Origin {
-    program
-        .funcs
-        .first()
-        .map_or_else(
-            || {
-                nts_semantic_schema::Origin::source(nts_diagnostics::Location {
-                    file: nts_diagnostics::SourceId(0),
-                    span: nts_diagnostics::Span::new(0, 0),
-                })
-            },
-            |func| func.origin.clone(),
-        )
+    program.funcs.first().map_or_else(
+        || {
+            nts_semantic_schema::Origin::source(nts_diagnostics::Location {
+                file: nts_diagnostics::SourceId(0),
+                span: nts_diagnostics::Span::new(0, 0),
+            })
+        },
+        |func| func.origin.clone(),
+    )
 }

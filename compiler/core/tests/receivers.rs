@@ -398,7 +398,10 @@ fn the_arm_histogram_covers_exactly_the_sound_population() {
     assert_eq!(total, census.through_possibly_inhabited());
     // And it is a distribution rather than one bucket, or it would answer the
     // same for every program.
-    assert!(rows.len() > 1, "the fixture has receivers of two arm counts");
+    assert!(
+        rows.len() > 1,
+        "the fixture has receivers of two arm counts"
+    );
 }
 
 /// The arm list a chain needs, from the module both the census and the lowering
@@ -410,7 +413,9 @@ fn the_arm_histogram_covers_exactly_the_sound_population() {
 /// different set from the one the cost was measured over.
 #[test]
 fn the_arm_list_and_the_arm_count_are_one_answer() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/receivers/tsconfig.json")
         .canonicalize_utf8()
@@ -428,7 +433,10 @@ fn the_arm_list_and_the_arm_count_are_one_answer() {
             .iter()
             .filter(|record| record.name == want)
             .find_map(|record| {
-                record.declarations.iter().find_map(|at| snapshot.node_types.get(at).copied())
+                record
+                    .declarations
+                    .iter()
+                    .find_map(|at| snapshot.node_types.get(at).copied())
             })
             .unwrap_or_else(|| panic!("the fixture declares `{want}`"))
     };

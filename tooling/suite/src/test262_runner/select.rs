@@ -109,7 +109,7 @@ fn selection_for(record: &TestRecord) -> Selection {
         ),
         ScheduleOutcome::ScopeExcluded { reason } => {
             common("scope-excluded", Some(reason), None, None)
-        },
+        }
         ScheduleOutcome::Unsupported { reason } => common("unsupported", Some(reason), None, None),
     }
 }
@@ -140,7 +140,10 @@ mod tests {
             header: String::new(),
             body: body.to_owned(),
             metadata,
-            flags: flags.iter().map(|flag| (*flag).to_owned()).collect::<BTreeSet<_>>(),
+            flags: flags
+                .iter()
+                .map(|flag| (*flag).to_owned())
+                .collect::<BTreeSet<_>>(),
             includes: Vec::new(),
             features: Vec::new(),
             negative: None,
@@ -149,9 +152,17 @@ mod tests {
 
     #[test]
     fn a_scope_excluded_file_is_emitted_with_its_reason_rather_than_dropped() {
-        let records = vec![record("test/language/expressions/a.js", &["noStrict"], "1;")];
+        let records = vec![record(
+            "test/language/expressions/a.js",
+            &["noStrict"],
+            "1;",
+        )];
         let chosen = select(&records, "test/language/expressions");
-        assert_eq!(chosen.len(), 1, "an exclusion nobody can see is not auditable");
+        assert_eq!(
+            chosen.len(),
+            1,
+            "an exclusion nobody can see is not auditable"
+        );
         assert_eq!(chosen[0].schedule, "scope-excluded");
         assert!(
             chosen[0].reason.as_ref().is_some_and(|it| !it.is_empty()),
@@ -188,14 +199,28 @@ mod tests {
     #[test]
     fn the_function_token_separates_the_two_slices() {
         let records = vec![
-            record("test/language/expressions/a.js", &[], "assert.sameValue(typeof true, \"boolean\");"),
-            record("test/language/expressions/b.js", &[], "function f(x) { return x; }"),
+            record(
+                "test/language/expressions/a.js",
+                &[],
+                "assert.sameValue(typeof true, \"boolean\");",
+            ),
+            record(
+                "test/language/expressions/b.js",
+                &[],
+                "function f(x) { return x; }",
+            ),
             record("test/language/expressions/c.js", &[], "const f = (x) => x;"),
         ];
         let chosen = select(&records, "test/language/expressions");
-        assert!(!chosen[0].function_token, "literals only: no parameter to leave unannotated");
+        assert!(
+            !chosen[0].function_token,
+            "literals only: no parameter to leave unannotated"
+        );
         assert!(chosen[1].function_token);
-        assert!(chosen[2].function_token, "an arrow is a function for this question");
+        assert!(
+            chosen[2].function_token,
+            "an arrow is a function for this question"
+        );
     }
 
     #[test]
@@ -222,7 +247,10 @@ mod tests {
             error_type: "SyntaxError".to_owned(),
         });
         let chosen = select(&[only], "test/language/expressions");
-        let negative = chosen[0].negative.as_ref().expect("the expectation is carried");
+        let negative = chosen[0]
+            .negative
+            .as_ref()
+            .expect("the expectation is carried");
         assert_eq!(negative.error_type, "SyntaxError");
     }
 }

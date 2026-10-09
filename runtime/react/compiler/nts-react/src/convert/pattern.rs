@@ -1,9 +1,13 @@
 //! Binding and assignment targets: parameters, declarators, destructuring.
 
 use nts_semantic_schema::NodeId;
-use react_compiler_ast::expressions::{Expression, Identifier, TSAsExpression, TSNonNullExpression, TSSatisfiesExpression, TSTypeAssertion};
+use react_compiler_ast::expressions::{
+    Expression, Identifier, TSAsExpression, TSNonNullExpression, TSSatisfiesExpression,
+    TSTypeAssertion,
+};
 use react_compiler_ast::patterns::{
-    ArrayPattern, AssignmentPattern, ObjectPattern, ObjectPatternProp, ObjectPatternProperty, PatternLike, RestElement,
+    ArrayPattern, AssignmentPattern, ObjectPattern, ObjectPatternProp, ObjectPatternProperty,
+    PatternLike, RestElement,
 };
 
 use super::expr::SECOND_NODE;
@@ -50,15 +54,29 @@ impl Converter<'_> {
 
     /// A declared name or binding pattern. Babel's identifier spans its
     /// annotation (and a definite `!`), so its end is the annotation's.
-    pub(super) fn binding_target(&self, name: NodeId, annotation: Option<NodeId>) -> Converted<PatternLike> {
+    pub(super) fn binding_target(
+        &self,
+        name: NodeId,
+        annotation: Option<NodeId>,
+    ) -> Converted<PatternLike> {
         let end = annotation.map_or_else(|| self.end(name), |t| self.end(t));
         let base = self.base_span(name, self.start(name), end);
         let type_annotation = annotation.map(|t| self.type_annotation(t));
         Ok(match self.kind(name) {
-            k::IDENTIFIER => PatternLike::Identifier(Identifier { base, name: self.text_of(name), type_annotation, optional: None, decorators: None }),
+            k::IDENTIFIER => PatternLike::Identifier(Identifier {
+                base,
+                name: self.text_of(name),
+                type_annotation,
+                optional: None,
+                decorators: None,
+            }),
             k::OBJECT_BINDING_PATTERN => PatternLike::ObjectPattern(ObjectPattern {
                 base,
-                properties: self.list(name, "elements").into_iter().map(|e| self.object_binding_element(e)).collect::<Converted<_>>()?,
+                properties: self
+                    .list(name, "elements")
+                    .into_iter()
+                    .map(|e| self.object_binding_element(e))
+                    .collect::<Converted<_>>()?,
                 type_annotation,
                 decorators: None,
             }),
@@ -67,7 +85,13 @@ impl Converter<'_> {
                 elements: self
                     .list(name, "elements")
                     .into_iter()
-                    .map(|e| if self.kind(e) == k::OMITTED_EXPRESSION { Ok(None) } else { self.array_binding_element(e).map(Some) })
+                    .map(|e| {
+                        if self.kind(e) == k::OMITTED_EXPRESSION {
+                            Ok(None)
+                        } else {
+                            self.array_binding_element(e).map(Some)
+                        }
+                    })
                     .collect::<Converted<_>>()?,
                 type_annotation,
                 decorators: None,
@@ -77,7 +101,12 @@ impl Converter<'_> {
     }
 
     /// A target with its default, if the element has one.
-    fn with_default(&self, element: NodeId, target: PatternLike, start: u32) -> Converted<PatternLike> {
+    fn with_default(
+        &self,
+        element: NodeId,
+        target: PatternLike,
+        start: u32,
+    ) -> Converted<PatternLike> {
         let Some(initializer) = self.child(element, "initializer") else {
             return Ok(target);
         };
@@ -145,7 +174,9 @@ impl Converter<'_> {
         Ok(match self.kind(id) {
             k::IDENTIFIER => PatternLike::Identifier(self.identifier(id)),
             k::PARENTHESIZED_EXPRESSION => self.assignment_target(self.need(id, "expression")?)?,
-            k::PROPERTY_ACCESS_EXPRESSION | k::ELEMENT_ACCESS_EXPRESSION => match self.expression(id)? {
+            k::PROPERTY_ACCESS_EXPRESSION | k::ELEMENT_ACCESS_EXPRESSION => match self
+                .expression(id)?
+            {
                 Expression::MemberExpression(member) => PatternLike::MemberExpression(member),
                 _ => return Err(self.unsupported(id, "an optional chain as an assignment target")),
             },
@@ -177,7 +208,9 @@ impl Converter<'_> {
                         k::OMITTED_EXPRESSION => Ok(None),
                         k::SPREAD_ELEMENT => Ok(Some(PatternLike::RestElement(RestElement {
                             base: self.base(element),
-                            argument: Box::new(self.assignment_target(self.need(element, "expression")?)?),
+                            argument: Box::new(
+                                self.assignment_target(self.need(element, "expression")?)?,
+                            ),
                             type_annotation: None,
                             decorators: None,
                         }))),
@@ -189,18 +222,28 @@ impl Converter<'_> {
             }),
             k::OBJECT_LITERAL_EXPRESSION => PatternLike::ObjectPattern(ObjectPattern {
                 base,
-                properties: self.list(id, "properties").into_iter().map(|p| self.object_target_member(p)).collect::<Converted<_>>()?,
+                properties: self
+                    .list(id, "properties")
+                    .into_iter()
+                    .map(|p| self.object_target_member(p))
+                    .collect::<Converted<_>>()?,
                 type_annotation: None,
                 decorators: None,
             }),
-            _ => return Err(self.unsupported(id, "an assignment target this converter does not know")),
+            _ => {
+                return Err(
+                    self.unsupported(id, "an assignment target this converter does not know")
+                );
+            }
         })
     }
 
     /// An element of an array or object target: `a = 1` there is a default.
     fn target_with_default(&self, id: NodeId) -> Converted<PatternLike> {
         if self.kind(id) == k::BINARY_EXPRESSION
-            && self.child(id, "operatorToken").is_some_and(|o| self.kind(o) == k::EQUALS_TOKEN)
+            && self
+                .child(id, "operatorToken")
+                .is_some_and(|o| self.kind(o) == k::EQUALS_TOKEN)
         {
             return Ok(PatternLike::AssignmentPattern(AssignmentPattern {
                 base: self.base(id),
@@ -259,7 +302,11 @@ impl Converter<'_> {
                     method: Some(false),
                 })
             }
-            _ => return Err(self.unsupported(id, "a destructuring member this converter does not know")),
+            _ => {
+                return Err(
+                    self.unsupported(id, "a destructuring member this converter does not know")
+                );
+            }
         })
     }
 }

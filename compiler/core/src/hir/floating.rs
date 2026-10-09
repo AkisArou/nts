@@ -37,7 +37,11 @@ pub fn sink(program: &mut Program) -> usize {
             let mut rebuilt = Vec::with_capacity(ops.len());
             for value in ops {
                 let handed: Vec<ValueId> = match &func.values[value.0 as usize].kind {
-                    OpKind::Call { callee: Callee::Native(target), args, .. } => target
+                    OpKind::Call {
+                        callee: Callee::Native(target),
+                        args,
+                        ..
+                    } => target
                         .consumes
                         .iter()
                         .filter_map(|slot| args.get(*slot).copied())
@@ -48,20 +52,34 @@ pub fn sink(program: &mut Program) -> usize {
                 for arg in handed {
                     let origin = func.values[value.0 as usize].origin.clone();
                     let retain = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
-                    func.values.push(Op { kind: OpKind::Retain(arg), ty: HirType::Void, origin });
+                    func.values.push(Op {
+                        kind: OpKind::Retain(arg),
+                        ty: HirType::Void,
+                        origin,
+                    });
                     rebuilt.push(retain);
                     inserted += 1;
                 }
                 rebuilt.push(value);
                 let op = &func.values[value.0 as usize];
-                let answers_a_gobject = matches!(op.kind, OpKind::Call { callee: Callee::Native(_), .. }) && is_gobject(&op.ty);
+                let answers_a_gobject = matches!(
+                    op.kind,
+                    OpKind::Call {
+                        callee: Callee::Native(_),
+                        ..
+                    }
+                ) && is_gobject(&op.ty);
                 if !answers_a_gobject {
                     continue;
                 }
                 let origin = op.origin.clone();
                 let made = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
                 func.values.push(Op {
-                    kind: OpKind::Call { callee: Callee::External("nts_gobject_made".to_owned()), args: vec![value], frame: None },
+                    kind: OpKind::Call {
+                        callee: Callee::External("nts_gobject_made".to_owned()),
+                        args: vec![value],
+                        frame: None,
+                    },
                     ty: HirType::Void,
                     origin,
                 });

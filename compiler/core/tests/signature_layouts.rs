@@ -106,11 +106,17 @@ fn a_closure_extends_its_signature() {
         .collect();
     assert!(!closures.is_empty(), "examples/closures has closures");
 
-    let based = closures.iter().filter(|layout| layout.base.is_some()).count();
+    let based = closures
+        .iter()
+        .filter(|layout| layout.base.is_some())
+        .count();
     assert!(
         based > 0,
         "a closure extends the function type it is a value of: {:?}",
-        closures.iter().map(|l| (&l.name, l.base)).collect::<Vec<_>>(),
+        closures
+            .iter()
+            .map(|l| (&l.name, l.base))
+            .collect::<Vec<_>>(),
     );
 
     // And the base resolves to a signature layout, not to nothing. A base that

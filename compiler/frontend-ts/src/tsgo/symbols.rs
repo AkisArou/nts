@@ -293,16 +293,16 @@ fn exports_of(
         .exports_of_module(ctx.handle, ctx.project, module)?
         .iter()
         .map(|export| {
-                // A re-export yields an *alias* symbol declared at the
-                // re-export site, which says nothing about where the thing came
-                // from. `export { two } from "./base.js"` has to resolve to
-                // `base.ts`'s `two` or the export list names a symbol with no
-                // declaration anyone can use -- and `node:path` is nothing but
-                // `export *` and `export * as`, so this is the flagship module
-                // rather than an edge case.
-                //
-                // The exported *name* is unchanged: `export { two as pair }`
-                // publishes `pair` and resolves to `two`.
+            // A re-export yields an *alias* symbol declared at the
+            // re-export site, which says nothing about where the thing came
+            // from. `export { two } from "./base.js"` has to resolve to
+            // `base.ts`'s `two` or the export list names a symbol with no
+            // declaration anyone can use -- and `node:path` is nothing but
+            // `export *` and `export * as`, so this is the flagship module
+            // rather than an edge case.
+            //
+            // The exported *name* is unchanged: `export { two as pair }`
+            // publishes `pair` and resolves to `two`.
             let declaring = if export.flags & bits::ALIAS == 0 {
                 None
             } else {
@@ -615,5 +615,4 @@ mod tests {
         assert_eq!(bits::MODULE, bit("ValueModule") | bit("NamespaceModule"));
         assert_eq!(bits::ALIAS, bit("Alias"));
     }
-
 }

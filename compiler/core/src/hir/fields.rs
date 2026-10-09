@@ -281,10 +281,10 @@ fn keep_arms_together(program: &Program, layouts: &LayoutIndex, narrowed: &mut F
             let group: Vec<(super::TypeId, u32)> = match &op.kind {
                 OpKind::SharedFieldGet { arms, field, .. } => {
                     arms.iter().map(|ty| (*ty, *field)).collect()
-                },
+                }
                 OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } => {
                     arms.iter().map(|arm| (arm.ty, arm.field)).collect()
-                },
+                }
                 _ => continue,
             };
             let places: Vec<(usize, u32)> = group
@@ -359,7 +359,7 @@ pub fn narrow(program: &mut Program, narrowed: &FieldWidths) -> usize {
                         continue;
                     };
                     by_type.get(&(id, *field)).cloned()
-                },
+                }
                 // **A shared read names its arms, not its operand's type.** Its
                 // operand is erased, so the lookup above finds nothing and the
                 // op kept the width lowering gave it while the layouts moved
@@ -384,12 +384,12 @@ pub fn narrow(program: &mut Program, narrowed: &FieldWidths) -> usize {
                         match by_type.get(&(*arm, *field)) {
                             Some(ty) if agreed.as_ref().is_none_or(|seen| seen == ty) => {
                                 agreed = Some(ty.clone());
-                            },
+                            }
                             _ => all = false,
                         }
                     }
                     if all { agreed } else { None }
-                },
+                }
                 // The same, per arm. An open read's arms disagree about *where*
                 // and must agree about *what*, so narrowing them apart falsifies
                 // the op just as surely -- and here each arm carries its own
@@ -402,12 +402,12 @@ pub fn narrow(program: &mut Program, narrowed: &FieldWidths) -> usize {
                         match by_type.get(&(arm.ty, arm.field)) {
                             Some(ty) if agreed.as_ref().is_none_or(|seen| seen == ty) => {
                                 agreed = Some(ty.clone());
-                            },
+                            }
                             _ => all = false,
                         }
                     }
                     if all { agreed } else { None }
-                },
+                }
                 _ => continue,
             };
             if let Some(ty) = narrowed {
@@ -933,7 +933,11 @@ fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex)
             // counting operations to 1, because a reference cannot be borrowed
             // across a call nothing can name.
             let uniform = Some(*slot) == program.erased_call_slot;
-            let Some(read) = (if uniform { program.closure_slot } else { Some(*slot) }) else {
+            let Some(read) = (if uniform {
+                program.closure_slot
+            } else {
+                Some(*slot)
+            }) else {
                 continue;
             };
             let Some(name) = layouts
@@ -1000,7 +1004,12 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
         if super::call_directly(
             &mut program.funcs[func],
             index,
-            super::Written { name, arity, returns: &returns, result_absent },
+            super::Written {
+                name,
+                arity,
+                returns: &returns,
+                result_absent,
+            },
             uniform,
             Some(receiver),
         ) {
@@ -1009,7 +1018,6 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
     }
     count
 }
-
 
 /// The `(object, field)` a value was read from, seeing through the erasure.
 ///

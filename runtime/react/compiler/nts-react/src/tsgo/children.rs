@@ -21,18 +21,88 @@ pub fn properties(kind: u16) -> &'static [&'static str] {
 /// Sorted by kind.
 static PROPERTIES: &[(u16, &[&str])] = &[
     (167, &["left", "right"]), // QualifiedName
-    (168, &["expression"]), // ComputedPropertyName
-    (169, &["modifiers", "name", "constraint", "expression", "defaultType"]), // TypeParameter
-    (170, &["modifiers", "dotDotDotToken", "name", "questionToken", "type", "initializer"]), // Parameter
-    (171, &["expression"]), // Decorator
-    (172, &["modifiers", "name", "postfixToken", "type", "initializer"]), // PropertySignature
-    (173, &["modifiers", "name", "postfixToken", "type", "initializer"]), // PropertyDeclaration
-    (174, &["modifiers", "name", "postfixToken", "typeParameters", "parameters", "type"]), // MethodSignature
-    (175, &["modifiers", "asteriskToken", "name", "postfixToken", "typeParameters", "parameters", "type", "body"]), // MethodDeclaration
+    (168, &["expression"]),    // ComputedPropertyName
+    (
+        169,
+        &[
+            "modifiers",
+            "name",
+            "constraint",
+            "expression",
+            "defaultType",
+        ],
+    ), // TypeParameter
+    (
+        170,
+        &[
+            "modifiers",
+            "dotDotDotToken",
+            "name",
+            "questionToken",
+            "type",
+            "initializer",
+        ],
+    ), // Parameter
+    (171, &["expression"]),    // Decorator
+    (
+        172,
+        &["modifiers", "name", "postfixToken", "type", "initializer"],
+    ), // PropertySignature
+    (
+        173,
+        &["modifiers", "name", "postfixToken", "type", "initializer"],
+    ), // PropertyDeclaration
+    (
+        174,
+        &[
+            "modifiers",
+            "name",
+            "postfixToken",
+            "typeParameters",
+            "parameters",
+            "type",
+        ],
+    ), // MethodSignature
+    (
+        175,
+        &[
+            "modifiers",
+            "asteriskToken",
+            "name",
+            "postfixToken",
+            "typeParameters",
+            "parameters",
+            "type",
+            "body",
+        ],
+    ), // MethodDeclaration
     (176, &["modifiers", "body"]), // ClassStaticBlockDeclaration
-    (177, &["modifiers", "typeParameters", "parameters", "type", "body"]), // Constructor
-    (178, &["modifiers", "name", "typeParameters", "parameters", "type", "body"]), // GetAccessor
-    (179, &["modifiers", "name", "typeParameters", "parameters", "type", "body"]), // SetAccessor
+    (
+        177,
+        &["modifiers", "typeParameters", "parameters", "type", "body"],
+    ), // Constructor
+    (
+        178,
+        &[
+            "modifiers",
+            "name",
+            "typeParameters",
+            "parameters",
+            "type",
+            "body",
+        ],
+    ), // GetAccessor
+    (
+        179,
+        &[
+            "modifiers",
+            "name",
+            "typeParameters",
+            "parameters",
+            "type",
+            "body",
+        ],
+    ), // SetAccessor
     (180, &["typeParameters", "parameters", "type"]), // CallSignature
     (181, &["typeParameters", "parameters", "type"]), // ConstructSignature
     (182, &["modifiers", "parameters", "type"]), // IndexSignature
@@ -41,130 +111,259 @@ static PROPERTIES: &[(u16, &[&str])] = &[
     (185, &["typeParameters", "parameters", "type"]), // FunctionType
     (186, &["modifiers", "typeParameters", "parameters", "type"]), // ConstructorType
     (187, &["exprName", "typeArguments"]), // TypeQuery
-    (188, &["members"]), // TypeLiteral
-    (189, &["elementType"]), // ArrayType
-    (190, &["elements"]), // TupleType
-    (191, &["type"]), // OptionalType
-    (192, &["type"]), // RestType
-    (193, &["types"]), // UnionType
-    (194, &["types"]), // IntersectionType
+    (188, &["members"]),       // TypeLiteral
+    (189, &["elementType"]),   // ArrayType
+    (190, &["elements"]),      // TupleType
+    (191, &["type"]),          // OptionalType
+    (192, &["type"]),          // RestType
+    (193, &["types"]),         // UnionType
+    (194, &["types"]),         // IntersectionType
     (195, &["checkType", "extendsType", "trueType", "falseType"]), // ConditionalType
     (196, &["typeParameter"]), // InferType
-    (197, &["type"]), // ParenthesizedType
-    (199, &["type"]), // TypeOperator
+    (197, &["type"]),          // ParenthesizedType
+    (199, &["type"]),          // TypeOperator
     (200, &["objectType", "indexType"]), // IndexedAccessType
-    (201, &["readonlyToken", "typeParameter", "nameType", "questionToken", "type", "members"]), // MappedType
-    (202, &["literal"]), // LiteralType
+    (
+        201,
+        &[
+            "readonlyToken",
+            "typeParameter",
+            "nameType",
+            "questionToken",
+            "type",
+            "members",
+        ],
+    ), // MappedType
+    (202, &["literal"]),       // LiteralType
     (203, &["dotDotDotToken", "name", "questionToken", "type"]), // NamedTupleMember
     (204, &["head", "templateSpans"]), // TemplateLiteralType
     (205, &["type", "literal"]), // TemplateLiteralTypeSpan
-    (206, &["argument", "attributes", "qualifier", "typeArguments"]), // ImportType
-    (207, &["elements"]), // ObjectBindingPattern
-    (208, &["elements"]), // ArrayBindingPattern
-    (209, &["dotDotDotToken", "propertyName", "name", "initializer"]), // BindingElement
-    (210, &["elements"]), // ArrayLiteralExpression
-    (211, &["properties"]), // ObjectLiteralExpression
+    (
+        206,
+        &["argument", "attributes", "qualifier", "typeArguments"],
+    ), // ImportType
+    (207, &["elements"]),      // ObjectBindingPattern
+    (208, &["elements"]),      // ArrayBindingPattern
+    (
+        209,
+        &["dotDotDotToken", "propertyName", "name", "initializer"],
+    ), // BindingElement
+    (210, &["elements"]),      // ArrayLiteralExpression
+    (211, &["properties"]),    // ObjectLiteralExpression
     (212, &["expression", "questionDotToken", "name"]), // PropertyAccessExpression
-    (213, &["expression", "questionDotToken", "argumentExpression"]), // ElementAccessExpression
-    (214, &["expression", "questionDotToken", "typeArguments", "arguments"]), // CallExpression
+    (
+        213,
+        &["expression", "questionDotToken", "argumentExpression"],
+    ), // ElementAccessExpression
+    (
+        214,
+        &[
+            "expression",
+            "questionDotToken",
+            "typeArguments",
+            "arguments",
+        ],
+    ), // CallExpression
     (215, &["expression", "typeArguments", "arguments"]), // NewExpression
-    (216, &["tag", "questionDotToken", "typeArguments", "template"]), // TaggedTemplateExpression
+    (
+        216,
+        &["tag", "questionDotToken", "typeArguments", "template"],
+    ), // TaggedTemplateExpression
     (217, &["type", "expression"]), // TypeAssertionExpression
-    (218, &["expression"]), // ParenthesizedExpression
-    (219, &["modifiers", "asteriskToken", "name", "typeParameters", "parameters", "type", "body"]), // FunctionExpression
-    (220, &["modifiers", "typeParameters", "parameters", "type", "equalsGreaterThanToken", "body"]), // ArrowFunction
-    (221, &["expression"]), // DeleteExpression
-    (222, &["expression"]), // TypeOfExpression
-    (223, &["expression"]), // VoidExpression
-    (224, &["expression"]), // AwaitExpression
-    (225, &["operand"]), // PrefixUnaryExpression
-    (226, &["operand"]), // PostfixUnaryExpression
-    (227, &["modifiers", "left", "type", "operatorToken", "right"]), // BinaryExpression
-    (228, &["condition", "questionToken", "whenTrue", "colonToken", "whenFalse"]), // ConditionalExpression
+    (218, &["expression"]),    // ParenthesizedExpression
+    (
+        219,
+        &[
+            "modifiers",
+            "asteriskToken",
+            "name",
+            "typeParameters",
+            "parameters",
+            "type",
+            "body",
+        ],
+    ), // FunctionExpression
+    (
+        220,
+        &[
+            "modifiers",
+            "typeParameters",
+            "parameters",
+            "type",
+            "equalsGreaterThanToken",
+            "body",
+        ],
+    ), // ArrowFunction
+    (221, &["expression"]),    // DeleteExpression
+    (222, &["expression"]),    // TypeOfExpression
+    (223, &["expression"]),    // VoidExpression
+    (224, &["expression"]),    // AwaitExpression
+    (225, &["operand"]),       // PrefixUnaryExpression
+    (226, &["operand"]),       // PostfixUnaryExpression
+    (
+        227,
+        &["modifiers", "left", "type", "operatorToken", "right"],
+    ), // BinaryExpression
+    (
+        228,
+        &[
+            "condition",
+            "questionToken",
+            "whenTrue",
+            "colonToken",
+            "whenFalse",
+        ],
+    ), // ConditionalExpression
     (229, &["head", "templateSpans"]), // TemplateExpression
     (230, &["asteriskToken", "expression"]), // YieldExpression
-    (231, &["expression"]), // SpreadElement
-    (232, &["modifiers", "name", "typeParameters", "heritageClauses", "members"]), // ClassExpression
+    (231, &["expression"]),    // SpreadElement
+    (
+        232,
+        &[
+            "modifiers",
+            "name",
+            "typeParameters",
+            "heritageClauses",
+            "members",
+        ],
+    ), // ClassExpression
     (234, &["expression", "typeArguments"]), // ExpressionWithTypeArguments
     (235, &["expression", "type"]), // AsExpression
-    (236, &["expression"]), // NonNullExpression
-    (237, &["name"]), // MetaProperty
+    (236, &["expression"]),    // NonNullExpression
+    (237, &["name"]),          // MetaProperty
     (238, &["tupleNameSource"]), // SyntheticExpression
     (239, &["expression", "type"]), // SatisfiesExpression
     (240, &["expression", "literal"]), // TemplateSpan
-    (242, &["statements"]), // Block
+    (242, &["statements"]),    // Block
     (244, &["modifiers", "declarationList"]), // VariableStatement
-    (245, &["expression"]), // ExpressionStatement
+    (245, &["expression"]),    // ExpressionStatement
     (246, &["expression", "thenStatement", "elseStatement"]), // IfStatement
     (247, &["statement", "expression"]), // DoStatement
     (248, &["expression", "statement"]), // WhileStatement
-    (249, &["initializer", "condition", "incrementor", "statement"]), // ForStatement
-    (250, &["awaitModifier", "initializer", "expression", "statement"]), // ForInStatement
-    (251, &["awaitModifier", "initializer", "expression", "statement"]), // ForOfStatement
-    (252, &["label"]), // ContinueStatement
-    (253, &["label"]), // BreakStatement
-    (254, &["expression"]), // ReturnStatement
+    (
+        249,
+        &["initializer", "condition", "incrementor", "statement"],
+    ), // ForStatement
+    (
+        250,
+        &["awaitModifier", "initializer", "expression", "statement"],
+    ), // ForInStatement
+    (
+        251,
+        &["awaitModifier", "initializer", "expression", "statement"],
+    ), // ForOfStatement
+    (252, &["label"]),         // ContinueStatement
+    (253, &["label"]),         // BreakStatement
+    (254, &["expression"]),    // ReturnStatement
     (255, &["expression", "statement"]), // WithStatement
     (256, &["expression", "caseBlock"]), // SwitchStatement
     (257, &["label", "statement"]), // LabeledStatement
-    (258, &["expression"]), // ThrowStatement
+    (258, &["expression"]),    // ThrowStatement
     (259, &["tryBlock", "catchClause", "finallyBlock"]), // TryStatement
     (261, &["name", "exclamationToken", "type", "initializer"]), // VariableDeclaration
-    (262, &["declarations"]), // VariableDeclarationList
-    (263, &["modifiers", "asteriskToken", "name", "typeParameters", "parameters", "type", "body"]), // FunctionDeclaration
-    (264, &["modifiers", "name", "typeParameters", "heritageClauses", "members"]), // ClassDeclaration
-    (265, &["modifiers", "name", "typeParameters", "heritageClauses", "members"]), // InterfaceDeclaration
+    (262, &["declarations"]),  // VariableDeclarationList
+    (
+        263,
+        &[
+            "modifiers",
+            "asteriskToken",
+            "name",
+            "typeParameters",
+            "parameters",
+            "type",
+            "body",
+        ],
+    ), // FunctionDeclaration
+    (
+        264,
+        &[
+            "modifiers",
+            "name",
+            "typeParameters",
+            "heritageClauses",
+            "members",
+        ],
+    ), // ClassDeclaration
+    (
+        265,
+        &[
+            "modifiers",
+            "name",
+            "typeParameters",
+            "heritageClauses",
+            "members",
+        ],
+    ), // InterfaceDeclaration
     (266, &["modifiers", "name", "typeParameters", "type"]), // TypeAliasDeclaration
     (267, &["modifiers", "name", "members"]), // EnumDeclaration
     (268, &["modifiers", "name", "body"]), // ModuleDeclaration
-    (269, &["statements"]), // ModuleBlock
-    (270, &["clauses"]), // CaseBlock
+    (269, &["statements"]),    // ModuleBlock
+    (270, &["clauses"]),       // CaseBlock
     (271, &["modifiers", "name"]), // NamespaceExportDeclaration
     (272, &["modifiers", "name", "moduleReference"]), // ImportEqualsDeclaration
-    (273, &["modifiers", "importClause", "moduleSpecifier", "attributes"]), // ImportDeclaration
+    (
+        273,
+        &["modifiers", "importClause", "moduleSpecifier", "attributes"],
+    ), // ImportDeclaration
     (274, &["name", "namedBindings"]), // ImportClause
-    (275, &["name"]), // NamespaceImport
-    (276, &["elements"]), // NamedImports
+    (275, &["name"]),          // NamespaceImport
+    (276, &["elements"]),      // NamedImports
     (277, &["propertyName", "name"]), // ImportSpecifier
     (278, &["modifiers", "type", "expression"]), // ExportAssignment
-    (279, &["modifiers", "exportClause", "moduleSpecifier", "attributes"]), // ExportDeclaration
-    (280, &["elements"]), // NamedExports
-    (281, &["name"]), // NamespaceExport
+    (
+        279,
+        &["modifiers", "exportClause", "moduleSpecifier", "attributes"],
+    ), // ExportDeclaration
+    (280, &["elements"]),      // NamedExports
+    (281, &["name"]),          // NamespaceExport
     (282, &["propertyName", "name"]), // ExportSpecifier
-    (283, &["modifiers"]), // MissingDeclaration
-    (284, &["expression"]), // ExternalModuleReference
+    (283, &["modifiers"]),     // MissingDeclaration
+    (284, &["expression"]),    // ExternalModuleReference
     (285, &["openingElement", "children", "closingElement"]), // JsxElement
     (286, &["tagName", "typeArguments", "attributes"]), // JsxSelfClosingElement
     (287, &["tagName", "typeArguments", "attributes"]), // JsxOpeningElement
-    (288, &["tagName"]), // JsxClosingElement
+    (288, &["tagName"]),       // JsxClosingElement
     (289, &["openingFragment", "children", "closingFragment"]), // JsxFragment
     (292, &["name", "initializer"]), // JsxAttribute
-    (293, &["properties"]), // JsxAttributes
-    (294, &["expression"]), // JsxSpreadAttribute
+    (293, &["properties"]),    // JsxAttributes
+    (294, &["expression"]),    // JsxSpreadAttribute
     (295, &["dotDotDotToken", "expression"]), // JsxExpression
     (296, &["namespace", "name"]), // JsxNamespacedName
     (297, &["expression", "statements"]), // CaseClause
     (298, &["expression", "statements"]), // DefaultClause
-    (299, &["types"]), // HeritageClause
+    (299, &["types"]),         // HeritageClause
     (300, &["variableDeclaration", "block"]), // CatchClause
-    (301, &["attributes"]), // ImportAttributes
+    (301, &["attributes"]),    // ImportAttributes
     (302, &["name", "value"]), // ImportAttribute
-    (303, &["modifiers", "name", "postfixToken", "type", "initializer"]), // PropertyAssignment
-    (304, &["modifiers", "name", "postfixToken", "type", "equalsToken", "objectAssignmentInitializer"]), // ShorthandPropertyAssignment
-    (305, &["expression"]), // SpreadAssignment
+    (
+        303,
+        &["modifiers", "name", "postfixToken", "type", "initializer"],
+    ), // PropertyAssignment
+    (
+        304,
+        &[
+            "modifiers",
+            "name",
+            "postfixToken",
+            "type",
+            "equalsToken",
+            "objectAssignmentInitializer",
+        ],
+    ), // ShorthandPropertyAssignment
+    (305, &["expression"]),    // SpreadAssignment
     (306, &["name", "initializer"]), // EnumMember
-    (308, &["type"]), // JSDocTypeExpression
-    (309, &["name"]), // JSDocNameReference
-    (311, &["type"]), // JSDocNullableType
-    (312, &["type"]), // JSDocNonNullableType
-    (313, &["type"]), // JSDocOptionalType
-    (314, &["type"]), // JSDocVariadicType
+    (308, &["type"]),          // JSDocTypeExpression
+    (309, &["name"]),          // JSDocNameReference
+    (311, &["type"]),          // JSDocNullableType
+    (312, &["type"]),          // JSDocNonNullableType
+    (313, &["type"]),          // JSDocOptionalType
+    (314, &["type"]),          // JSDocVariadicType
     (315, &["comment", "tags"]), // JSDoc
-    (317, &[]), // JSDocTypeLiteral
+    (317, &[]),                // JSDocTypeLiteral
     (318, &["typeParameters", "parameters", "type"]), // JSDocSignature
-    (319, &["name"]), // JSDocLink
-    (320, &["name"]), // JSDocLinkCode
-    (321, &["name"]), // JSDocLinkPlain
+    (319, &["name"]),          // JSDocLink
+    (320, &["name"]),          // JSDocLinkCode
+    (321, &["name"]),          // JSDocLinkPlain
     (322, &["tagName", "comment"]), // JSDocUnknownTag
     (323, &["tagName", "className", "comment"]), // JSDocAugmentsTag
     (324, &["tagName", "className", "comment"]), // JSDocImplementsTag
@@ -186,10 +385,22 @@ static PROPERTIES: &[(u16, &[&str])] = &[
     (340, &["tagName", "name", "typeExpression", "comment"]), // JSDocPropertyTag
     (341, &["tagName", "typeExpression", "comment"]), // JSDocThrowsTag
     (342, &["tagName", "typeExpression", "comment"]), // JSDocSatisfiesTag
-    (343, &["tagName", "importClause", "moduleSpecifier", "attributes", "comment"]), // JSDocImportTag
-    (344, &[]), // SyntaxList
+    (
+        343,
+        &[
+            "tagName",
+            "importClause",
+            "moduleSpecifier",
+            "attributes",
+            "comment",
+        ],
+    ), // JSDocImportTag
+    (344, &[]),                // SyntaxList
     (345, &["modifiers", "name", "typeParameters", "type"]), // JSTypeAliasDeclaration
-    (346, &["modifiers", "importClause", "moduleSpecifier", "attributes"]), // JSImportDeclaration
-    (348, &["expression"]), // PartiallyEmittedExpression
+    (
+        346,
+        &["modifiers", "importClause", "moduleSpecifier", "attributes"],
+    ), // JSImportDeclaration
+    (348, &["expression"]),    // PartiallyEmittedExpression
     (349, &["expression", "thisArg"]), // SyntheticReferenceExpression
 ];

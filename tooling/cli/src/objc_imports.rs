@@ -44,7 +44,11 @@ impl Imports {
                 continue;
             }
             match clause(before) {
-                Clause::Named(names) => self.names.entry(module.to_owned()).or_default().extend(names),
+                Clause::Named(names) => self
+                    .names
+                    .entry(module.to_owned())
+                    .or_default()
+                    .extend(names),
                 Clause::Whole => {
                     self.whole.insert(module.to_owned());
                 }
@@ -63,7 +67,11 @@ fn specifiers(text: &str) -> Vec<(usize, &str)> {
         while let Some(at) = text[from..].find(&opening).map(|at| from + at) {
             let name = &text[at + opening.len()..];
             let end = name.find(quote).unwrap_or(0);
-            if end > 0 && name[..end].chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            if end > 0
+                && name[..end]
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            {
                 found.push((at, &name[..end]));
             }
             from = at + opening.len();
@@ -90,10 +98,14 @@ enum Clause {
 /// string that is no specifier at all).
 fn clause(before: &str) -> Clause {
     let trimmed = before.trim_end();
-    let Some(rest) = trimmed.strip_suffix("from") else { return Clause::Other };
+    let Some(rest) = trimmed.strip_suffix("from") else {
+        return Clause::Other;
+    };
     let rest = rest.trim_end();
     if let Some(inside) = rest.strip_suffix('}') {
-        let Some(open) = inside.rfind('{') else { return Clause::Other };
+        let Some(open) = inside.rfind('{') else {
+            return Clause::Other;
+        };
         let keyword = inside[..open].trim_end();
         let keyword = keyword.strip_suffix("type").map_or(keyword, str::trim_end);
         if !(keyword.ends_with("import") || keyword.ends_with("export")) {
@@ -129,7 +141,10 @@ mod tests {
     }
 
     fn names(module: &str, list: &[&str]) -> (String, BTreeSet<String>) {
-        (module.to_owned(), list.iter().map(|name| (*name).to_owned()).collect())
+        (
+            module.to_owned(),
+            list.iter().map(|name| (*name).to_owned()).collect(),
+        )
     }
 
     /// Named imports across lines, `type` on a name or on the clause, an
@@ -144,13 +159,19 @@ mod tests {
              import type { Int } from \"objc:types\";\n",
         );
         let expected: BTreeMap<String, BTreeSet<String>> = [
-            names("AppKit", &["NSButton", "NSView", "NSWindow", "NSWindowDelegate"]),
+            names(
+                "AppKit",
+                &["NSButton", "NSView", "NSWindow", "NSWindowDelegate"],
+            ),
             names("Foundation", &["Timer"]),
         ]
         .into_iter()
         .collect();
         assert_eq!(imports.names, expected);
-        assert!(imports.whole.is_empty() && imports.declared.is_empty(), "{imports:?}");
+        assert!(
+            imports.whole.is_empty() && imports.declared.is_empty(),
+            "{imports:?}"
+        );
     }
 
     /// A whole-module import names nothing to bind; a module the program
@@ -165,6 +186,9 @@ mod tests {
         );
         assert!(imports.names.is_empty(), "{imports:?}");
         assert_eq!(imports.whole, ["UIKit".to_owned()].into_iter().collect());
-        assert_eq!(imports.declared, ["AppKit".to_owned()].into_iter().collect());
+        assert_eq!(
+            imports.declared,
+            ["AppKit".to_owned()].into_iter().collect()
+        );
     }
 }

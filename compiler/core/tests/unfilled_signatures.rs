@@ -122,7 +122,9 @@ fn a_signature_with_no_closure_still_declares_its_call() {
             .funcs
             .iter()
             .find(|func| &func.name == declared)
-            .unwrap_or_else(|| panic!("`{declared}` is named by a layout and is not in the program"));
+            .unwrap_or_else(|| {
+                panic!("`{declared}` is named by a layout and is not in the program")
+            });
         assert!(
             func.abstract_declaration,
             "`{declared}` is a declaration and must carry no body",

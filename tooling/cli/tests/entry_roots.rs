@@ -108,8 +108,10 @@ fn every_emitter_honours_entry() {
     }
     let project = fixture("entry-roots-honours");
     let all: BTreeSet<String> = NAMES.iter().map(|n| (*n).to_owned()).collect();
-    let narrowed: BTreeSet<String> =
-        ["published", "onlyPublished"].iter().map(|n| (*n).to_owned()).collect();
+    let narrowed: BTreeSet<String> = ["published", "onlyPublished"]
+        .iter()
+        .map(|n| (*n).to_owned())
+        .collect();
 
     for command in ["emit-c", "emit-llvm"] {
         assert_eq!(

@@ -30,10 +30,13 @@ fn check(relative: &str, at_least: usize) {
     let Some(tsgo) = tsgo() else {
         return;
     };
-    let snapshot = TsgoApi::new(tsgo).snapshot(&project(relative)).expect("snapshot");
+    let snapshot = TsgoApi::new(tsgo)
+        .snapshot(&project(relative))
+        .expect("snapshot");
     let mut checked = 0usize;
     for (index, node) in snapshot.nodes.iter().enumerate() {
-        let (NodeKind::Syntax(kind), NodeData::Children { present, .. }) = (&node.kind, &node.data) else {
+        let (NodeKind::Syntax(kind), NodeData::Children { present, .. }) = (&node.kind, &node.data)
+        else {
             continue;
         };
         let properties = children::properties(*kind);
@@ -42,7 +45,9 @@ fn check(relative: &str, at_least: usize) {
             "node {index} (kind {kind}) has presence bits beyond its {} table properties",
             properties.len(),
         );
-        let filled = Nodes::new(&snapshot.nodes).property_children(nts_semantic_schema::NodeId(u32::try_from(index).unwrap())).count();
+        let filled = Nodes::new(&snapshot.nodes)
+            .property_children(nts_semantic_schema::NodeId(u32::try_from(index).unwrap()))
+            .count();
         assert_eq!(
             present.count_ones() as usize,
             filled,
@@ -50,7 +55,10 @@ fn check(relative: &str, at_least: usize) {
         );
         checked += 1;
     }
-    assert!(checked >= at_least, "only {checked} nodes had children: the program did not load");
+    assert!(
+        checked >= at_least,
+        "only {checked} nodes had children: the program did not load"
+    );
 }
 
 #[test]

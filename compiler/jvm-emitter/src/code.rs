@@ -79,7 +79,11 @@ pub enum Error {
     ///
     /// Fields and methods are separate member tables, so a field and a method
     /// of one name are legal and are not this.
-    DuplicateMember { kind: &'static str, name: String, descriptor: String },
+    DuplicateMember {
+        kind: &'static str,
+        name: String,
+        descriptor: String,
+    },
 }
 
 impl std::fmt::Display for Error {
@@ -87,22 +91,38 @@ impl std::fmt::Display for Error {
         match self {
             Self::PoolOverflow => write!(f, "the constant pool exceeded 65,535 entries"),
             Self::CodeTooLong(bytes) => {
-                write!(f, "a method body of {bytes} bytes exceeds the 65,534-byte limit")
+                write!(
+                    f,
+                    "a method body of {bytes} bytes exceeds the 65,534-byte limit"
+                )
             }
             Self::BranchOutOfRange { at, distance } => {
-                write!(f, "a branch at {at} reaches {distance} bytes, past a 16-bit offset")
+                write!(
+                    f,
+                    "a branch at {at} reaches {distance} bytes, past a 16-bit offset"
+                )
             }
             Self::UnboundLabel => write!(f, "a branch names a block that was never emitted"),
-            Self::DuplicateMember { kind, name, descriptor } => write!(
+            Self::DuplicateMember {
+                kind,
+                name,
+                descriptor,
+            } => write!(
                 f,
                 "this class declares the {kind} `{name}{descriptor}` twice, which the JVM \
                  refuses at load as a duplicate member"
             ),
             Self::TooManyLocals(slots) => {
-                write!(f, "{slots} local slots exceeds the 65,535 the format allows")
+                write!(
+                    f,
+                    "{slots} local slots exceeds the 65,535 the format allows"
+                )
             }
             Self::StackNotEmptyAtLabel { at, depth } => {
-                write!(f, "the operand stack held {depth} words at the block starting at {at}")
+                write!(
+                    f,
+                    "the operand stack held {depth} words at the block starting at {at}"
+                )
             }
             Self::StackUnderflow { at } => write!(f, "the operand stack underflowed at {at}"),
             Self::BadDescriptor(text) => write!(f, "malformed descriptor `{text}`"),
@@ -240,7 +260,10 @@ impl Code {
     pub fn bind(&mut self, label: Label) {
         let at = self.offset();
         if self.stack != 0 {
-            self.fail(Error::StackNotEmptyAtLabel { at, depth: self.stack });
+            self.fail(Error::StackNotEmptyAtLabel {
+                at,
+                depth: self.stack,
+            });
         }
         if let Some(slot) = self.labels.get_mut(label.0 as usize) {
             *slot = Some(at);
@@ -283,7 +306,11 @@ impl Code {
         self.stack = 1;
         self.max_stack = self.max_stack.max(1);
         let thrown = VType::Object(catch_type.to_owned());
-        match self.handler_frames.iter_mut().find(|(offset, _)| *offset == at) {
+        match self
+            .handler_frames
+            .iter_mut()
+            .find(|(offset, _)| *offset == at)
+        {
             Some(existing) => existing.1 = thrown,
             None => self.handler_frames.push((at, thrown)),
         }
@@ -323,7 +350,11 @@ impl Code {
         } else {
             (insn::LOAD, insn::LOAD_0)
         };
-        let (pops, pushes) = if storing { (kind.words(), 0) } else { (0, kind.words()) };
+        let (pops, pushes) = if storing {
+            (kind.words(), 0)
+        } else {
+            (0, kind.words())
+        };
         let family = kind as u8;
         if slot < 4 {
             let opcode = short + family * 4 + u8::try_from(slot).unwrap_or(0);
@@ -407,7 +438,8 @@ impl Code {
     pub fn const_int(&mut self, origin: &Origin, pool: &mut Pool, value: i32) {
         match value {
             -1..=5 => {
-                let opcode = u8::try_from(i32::from(insn::ICONST_0) + value).unwrap_or(insn::ICONST_0);
+                let opcode =
+                    u8::try_from(i32::from(insn::ICONST_0) + value).unwrap_or(insn::ICONST_0);
                 self.op(origin, opcode, 0, 1);
             }
             -128..=127 => {
@@ -520,13 +552,17 @@ impl Code {
     }
 
     pub fn arithmetic(&mut self, origin: &Origin, family: u8, kind: Kind) {
-        let Some(index) = self.arithmetic_kind(kind) else { return };
+        let Some(index) = self.arithmetic_kind(kind) else {
+            return;
+        };
         let words = kind.words();
         self.op(origin, family + index, words * 2, words);
     }
 
     pub fn negate(&mut self, origin: &Origin, kind: Kind) {
-        let Some(index) = self.arithmetic_kind(kind) else { return };
+        let Some(index) = self.arithmetic_kind(kind) else {
+            return;
+        };
         let words = kind.words();
         self.op(origin, insn::NEG + index, words, words);
     }
@@ -548,7 +584,12 @@ impl Code {
             return;
         }
         let words = kind.words();
-        self.op(origin, family + u8::from(kind == Kind::Long), words * 2, words);
+        self.op(
+            origin,
+            family + u8::from(kind == Kind::Long),
+            words * 2,
+            words,
+        );
     }
 
     /// `insn::SHL`, `SHR` or `USHR`. The shift *count* is always an `int` even
@@ -558,7 +599,12 @@ impl Code {
             return;
         }
         let words = kind.words();
-        self.op(origin, family + u8::from(kind == Kind::Long), words + 1, words);
+        self.op(
+            origin,
+            family + u8::from(kind == Kind::Long),
+            words + 1,
+            words,
+        );
     }
 
     pub fn convert(&mut self, origin: &Origin, opcode: u8, from: Kind, to: Kind) {
@@ -648,7 +694,11 @@ impl Code {
         let from = self.offset();
         let operand = from.saturating_add(1);
         self.emit(origin, &[opcode, 0, 0], pops, 0);
-        self.fixups.push(Fixup { from, operand, label: target });
+        self.fixups.push(Fixup {
+            from,
+            operand,
+            label: target,
+        });
     }
 
     /// `ifeq`..`ifle`: compare one `int` against zero.
@@ -673,7 +723,16 @@ impl Code {
     /// pops two. Nothing reached for these until a managed value had to become
     /// a boolean, which is why they were in `insn` and not here.
     pub fn branch_present(&mut self, origin: &Origin, present: bool, target: Label) {
-        self.branch(origin, if present { insn::IFNONNULL } else { insn::IFNULL }, target, 1);
+        self.branch(
+            origin,
+            if present {
+                insn::IFNONNULL
+            } else {
+                insn::IFNULL
+            },
+            target,
+            1,
+        );
     }
 
     pub fn goto(&mut self, origin: &Origin, target: Label) {
@@ -695,27 +754,63 @@ impl Code {
 
     // ----- fields and calls ---------------------------------------------
 
-    pub fn get_static(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, ty: &str) {
+    pub fn get_static(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        class: &str,
+        name: &str,
+        ty: &str,
+    ) {
         let index = pool.field_ref(class, name, ty);
         self.op_u2(origin, insn::GETSTATIC, index, 0, descriptor::words(ty));
     }
 
-    pub fn put_static(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, ty: &str) {
+    pub fn put_static(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        class: &str,
+        name: &str,
+        ty: &str,
+    ) {
         let index = pool.field_ref(class, name, ty);
         self.op_u2(origin, insn::PUTSTATIC, index, descriptor::words(ty), 0);
     }
 
-    pub fn get_field(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, ty: &str) {
+    pub fn get_field(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        class: &str,
+        name: &str,
+        ty: &str,
+    ) {
         let index = pool.field_ref(class, name, ty);
         self.op_u2(origin, insn::GETFIELD, index, 1, descriptor::words(ty));
     }
 
-    pub fn put_field(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, ty: &str) {
+    pub fn put_field(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        class: &str,
+        name: &str,
+        ty: &str,
+    ) {
         let index = pool.field_ref(class, name, ty);
         self.op_u2(origin, insn::PUTFIELD, index, 1 + descriptor::words(ty), 0);
     }
 
-    fn invoke(&mut self, origin: &Origin, pool: &mut Pool, opcode: u8, class: &str, name: &str, signature: &str) {
+    fn invoke(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        opcode: u8,
+        class: &str,
+        name: &str,
+        signature: &str,
+    ) {
         // Every invoke but `invokestatic` pops a receiver under the arguments.
         let receiver = u16::from(opcode != insn::INVOKESTATIC);
         let Some((arguments, result)) = descriptor::call_effect(signature) else {
@@ -743,7 +838,14 @@ impl Code {
     /// raises `IncompatibleClassChangeError` there, on the first execution of
     /// that site and not before. So the tag is chosen by which method emits the
     /// instruction, where it cannot be got wrong, rather than by an argument.
-    pub fn invoke_interface(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
+    pub fn invoke_interface(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        class: &str,
+        name: &str,
+        signature: &str,
+    ) {
         let Some((arguments, result)) = descriptor::call_effect(signature) else {
             self.fail(Error::BadDescriptor(signature.to_owned()));
             return;
@@ -756,18 +858,44 @@ impl Code {
         // to say so -- `Class::to_bytes` refuses a method with more than 255
         // argument words before reaching here, which is the same limit.
         let count = u8::try_from(popped).unwrap_or(u8::MAX);
-        self.emit(origin, &[insn::INVOKEINTERFACE, hi, lo, count, 0], popped, result);
+        self.emit(
+            origin,
+            &[insn::INVOKEINTERFACE, hi, lo, count, 0],
+            popped,
+            result,
+        );
     }
 
-    pub fn invoke_static(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
+    pub fn invoke_static(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        class: &str,
+        name: &str,
+        signature: &str,
+    ) {
         self.invoke(origin, pool, insn::INVOKESTATIC, class, name, signature);
     }
 
-    pub fn invoke_virtual(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
+    pub fn invoke_virtual(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        class: &str,
+        name: &str,
+        signature: &str,
+    ) {
         self.invoke(origin, pool, insn::INVOKEVIRTUAL, class, name, signature);
     }
 
-    pub fn invoke_special(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
+    pub fn invoke_special(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        class: &str,
+        name: &str,
+        signature: &str,
+    ) {
         self.invoke(origin, pool, insn::INVOKESPECIAL, class, name, signature);
     }
 
@@ -874,7 +1002,10 @@ impl Code {
             let distance = i64::from(to) - i64::from(fixup.from);
             let Ok(narrow) = i16::try_from(distance) else {
                 if self.error.is_none() {
-                    self.error = Some(Error::BranchOutOfRange { at: fixup.from, distance });
+                    self.error = Some(Error::BranchOutOfRange {
+                        at: fixup.from,
+                        distance,
+                    });
                 }
                 continue;
             };
@@ -896,9 +1027,11 @@ impl Code {
         let mut handlers = Vec::with_capacity(self.handlers.len());
         for pending in &self.handlers {
             let placed = |label: Label| self.labels.get(label.0 as usize).copied().flatten();
-            let (Some(start), Some(end), Some(target)) =
-                (placed(pending.start), placed(pending.end), placed(pending.target))
-            else {
+            let (Some(start), Some(end), Some(target)) = (
+                placed(pending.start),
+                placed(pending.end),
+                placed(pending.target),
+            ) else {
                 return Err(Error::UnboundLabel);
             };
             handlers.push(Handler {

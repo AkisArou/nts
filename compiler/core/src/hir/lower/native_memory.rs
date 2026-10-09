@@ -1,6 +1,8 @@
 //! Native places are addresses. Member access and addrOf share this path so
 //! evaluating a receiver never performs an accidental aggregate copy/load.
-use super::{Branch, Diagnostic, FuncBuilder, HirType, Lent, ManagedType, NodeId, OpKind, Place, ValueId};
+use super::{
+    Branch, Diagnostic, FuncBuilder, HirType, Lent, ManagedType, NodeId, OpKind, Place, ValueId,
+};
 use crate::hir::native::{Encoding, Handle, Pointee, Referenced, Scalar, Type, Written};
 use nts_semantic_schema::{LiteralValue, TypeKind, syntax};
 
@@ -15,14 +17,29 @@ impl FuncBuilder<'_> {
         }
     }
 
-    pub(super) fn native_element_type(&self, id: NodeId, pointer: ValueId) -> Result<HirType, Diagnostic> {
+    pub(super) fn native_element_type(
+        &self,
+        id: NodeId,
+        pointer: ValueId,
+    ) -> Result<HirType, Diagnostic> {
         match &self.values[pointer.0 as usize].ty {
             HirType::NativePointer(element) => element.element_type(),
             _ => None,
-        }.ok_or_else(|| self.unsupported(id, "native memory access without a loadable scalar or pointer layout"))
+        }
+        .ok_or_else(|| {
+            self.unsupported(
+                id,
+                "native memory access without a loadable scalar or pointer layout",
+            )
+        })
     }
 
-    pub(super) fn native_index_address(&mut self, id: NodeId, pointer: ValueId, index: ValueId) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_index_address(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        index: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
         let ty = self.values[pointer.0 as usize].ty.clone();
         // Same reason as the field case: the element address of a `const T *`
         // is a `const T *`, and handing back a writable one would launder the
@@ -33,11 +50,27 @@ impl FuncBuilder<'_> {
         if !matches!(&ty, HirType::NativePointer(p) if !matches!(p, Pointee::Opaque(_))) {
             return Err(self.unsupported(id, "address arithmetic without a native element layout"));
         }
-        let index = self.coerce(index, &HirType::Int { bits: 64, signed: true }, id)?;
-        Ok(self.push(OpKind::NativeIndexAddress { pointer, index }, ty, self.origin(id)))
+        let index = self.coerce(
+            index,
+            &HirType::Int {
+                bits: 64,
+                signed: true,
+            },
+            id,
+        )?;
+        Ok(self.push(
+            OpKind::NativeIndexAddress { pointer, index },
+            ty,
+            self.origin(id),
+        ))
     }
 
-    pub(super) fn native_load(&mut self, id: NodeId, pointer: ValueId, index: ValueId) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_load(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        index: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
         // A record is storage, not a loadable value: reading `p.inner` gives
         // its address, because reading it *as a value* would be an aggregate
         // copy. Through any view of one as well -- a record behind a packed
@@ -56,9 +89,8 @@ impl FuncBuilder<'_> {
         // A flexible array member decays the same way and for the same reason.
         // It differs only in having no extent to state, which nothing on this
         // path reads.
-        if let HirType::NativePointer(
-            Pointee::Array { element, .. } | Pointee::Flexible(element),
-        ) = self.values[pointer.0 as usize].ty.clone()
+        if let HirType::NativePointer(Pointee::Array { element, .. } | Pointee::Flexible(element)) =
+            self.values[pointer.0 as usize].ty.clone()
         {
             let origin = self.origin(id);
             return Ok(self.push(
@@ -69,12 +101,28 @@ impl FuncBuilder<'_> {
         }
         let ty = self.native_element_type(id, pointer)?;
         let number = matches!(ty, HirType::Int { .. } | HirType::Float { .. });
-        let index = self.coerce(index, &HirType::Int { bits: 64, signed: true }, id)?;
+        let index = self.coerce(
+            index,
+            &HirType::Int {
+                bits: 64,
+                signed: true,
+            },
+            id,
+        )?;
         let read = self.push(OpKind::NativeLoad { pointer, index }, ty, self.origin(id));
-        if number { self.coerce(read, &HirType::NUMBER, id) } else { Ok(read) }
+        if number {
+            self.coerce(read, &HirType::NUMBER, id)
+        } else {
+            Ok(read)
+        }
     }
 
-    pub(super) fn native_field_address(&mut self, id: NodeId, pointer: ValueId, name: &str) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_field_address(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        name: &str,
+    ) -> Result<ValueId, Diagnostic> {
         // Named before the general refusal, because "without a native struct
         // layout" is true of a const view and says nothing a reader can act on.
         //
@@ -100,9 +148,19 @@ impl FuncBuilder<'_> {
         let Pointee::Record(layout) = view.viewed() else {
             return Err(self.unsupported(id, "a field address without a native struct layout"));
         };
-        let (field, slot) = layout.fields.iter().enumerate().find(|(_, f)| f.name == name)
-            .ok_or_else(|| self.unsupported(id, &format!("native struct `{}` has no field `{name}`", layout.name)))?;
-        let field = u32::try_from(field).map_err(|_| self.unsupported(id, "too many native fields"))?;
+        let (field, slot) = layout
+            .fields
+            .iter()
+            .enumerate()
+            .find(|(_, f)| f.name == name)
+            .ok_or_else(|| {
+                self.unsupported(
+                    id,
+                    &format!("native struct `{}` has no field `{name}`", layout.name),
+                )
+            })?;
+        let field =
+            u32::try_from(field).map_err(|_| self.unsupported(id, "too many native fields"))?;
         // A member of a packed record sits wherever the packing put it, which
         // is not necessarily an address its own type may be read through. The
         // pointer says so, here, because here is the only place that knows:
@@ -114,7 +172,11 @@ impl FuncBuilder<'_> {
             slot.ty.clone()
         };
         let ty = HirType::NativePointer(slot);
-        Ok(self.push(OpKind::NativeFieldAddress { pointer, field }, ty, self.origin(id)))
+        Ok(self.push(
+            OpKind::NativeFieldAddress { pointer, field },
+            ty,
+            self.origin(id),
+        ))
     }
 
     /// The storage an object literal is written into, where C takes a
@@ -133,7 +195,11 @@ impl FuncBuilder<'_> {
     /// A `StringView` field is lent for the call the literal is written for,
     /// as a `StringView` parameter is: what was lent waits beside the storage
     /// (`copied_lent`) for that call to take, as a `Copied<T>`'s strings do.
-    pub(super) fn native_record_literal(&mut self, id: NodeId, ty: HirType) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_record_literal(
+        &mut self,
+        id: NodeId,
+        ty: HirType,
+    ) -> Result<ValueId, Diagnostic> {
         let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
         let mut lent = Vec::new();
         self.fill_native_record(id, storage, Some(&mut lent))?;
@@ -148,7 +214,11 @@ impl FuncBuilder<'_> {
     /// no object is built -- with each string an `HSTRING` lent for the
     /// call. What was lent waits beside the storage (`copied_lent`) for the
     /// call to take it (`copied_argument`), which gives it back after.
-    pub(super) fn copied_literal(&mut self, id: NodeId, ty: HirType) -> Result<ValueId, Diagnostic> {
+    pub(super) fn copied_literal(
+        &mut self,
+        id: NodeId,
+        ty: HirType,
+    ) -> Result<ValueId, Diagnostic> {
         let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
         let mut lent = Vec::new();
         self.fill_native_record(id, storage, Some(&mut lent))?;
@@ -160,7 +230,13 @@ impl FuncBuilder<'_> {
     /// storage as `copied_literal` wrote it, or an object the program holds
     /// copied field by field into storage in the frame. Either way, the
     /// strings lent for it join the call's `lent`.
-    pub(super) fn copied_argument(&mut self, id: NodeId, value: ValueId, want: HirType, lent: &mut Vec<Lent>) -> Result<ValueId, Diagnostic> {
+    pub(super) fn copied_argument(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        want: HirType,
+        lent: &mut Vec<Lent>,
+    ) -> Result<ValueId, Diagnostic> {
         if let Some(strings) = self.copied_lent.remove(&value) {
             lent.extend(strings);
             return Ok(value);
@@ -172,19 +248,52 @@ impl FuncBuilder<'_> {
 
     /// `body` for each index from 0 below `length` (a number), in order: the
     /// loop the copies of an array of structs are made in.
-    fn count_up(&mut self, length: ValueId, origin: &super::Origin, mut body: impl FnMut(&mut Self, ValueId) -> Result<(), Diagnostic>) -> Result<(), Diagnostic> {
+    fn count_up(
+        &mut self,
+        length: ValueId,
+        origin: &super::Origin,
+        mut body: impl FnMut(&mut Self, ValueId) -> Result<(), Diagnostic>,
+    ) -> Result<(), Diagnostic> {
         let (head, each, done) = (self.new_block(), self.new_block(), self.new_block());
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        self.terminate(super::Terminator::Jump { target: head, args: vec![zero] });
+        self.terminate(super::Terminator::Jump {
+            target: head,
+            args: vec![zero],
+        });
         self.switch_to(head);
         let at = self.push_block_param(head, HirType::NUMBER, origin.clone());
-        let more = self.push(OpKind::Binary { op: super::BinOp::Lt, lhs: at, rhs: length }, HirType::Bool, origin.clone());
-        self.terminate(super::Terminator::Branch { cond: more, then_target: each, then_args: Vec::new(), else_target: done, else_args: Vec::new() });
+        let more = self.push(
+            OpKind::Binary {
+                op: super::BinOp::Lt,
+                lhs: at,
+                rhs: length,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(super::Terminator::Branch {
+            cond: more,
+            then_target: each,
+            then_args: Vec::new(),
+            else_target: done,
+            else_args: Vec::new(),
+        });
         self.switch_to(each);
         body(self, at)?;
         let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
-        let next = self.push(OpKind::Binary { op: super::BinOp::Add, lhs: at, rhs: one }, HirType::NUMBER, origin.clone());
-        self.terminate(super::Terminator::Jump { target: head, args: vec![next] });
+        let next = self.push(
+            OpKind::Binary {
+                op: super::BinOp::Add,
+                lhs: at,
+                rhs: one,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        self.terminate(super::Terminator::Jump {
+            target: head,
+            args: vec![next],
+        });
         self.switch_to(done);
         Ok(())
     }
@@ -192,29 +301,84 @@ impl FuncBuilder<'_> {
     /// An array of plain objects where a call takes a block of the struct
     /// `record` (`Role::Records`): each object copied into a block allocated
     /// for the call, NULL for a `null` array, and the block freed after it.
-    pub(super) fn records_argument(&mut self, id: NodeId, array: ValueId, record: &std::sync::Arc<crate::hir::native::Record>, want: &HirType, lent: &mut Vec<Lent>) -> Result<ValueId, Diagnostic> {
+    pub(super) fn records_argument(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        record: &std::sync::Arc<crate::hir::native::Record>,
+        want: &HirType,
+        lent: &mut Vec<Lent>,
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
-        let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone() else {
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[array.0 as usize].ty.clone()
+        else {
             return Err(self.unsupported(id, "an array of structs that is not an array"));
         };
         let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
-        let null = self.push(OpKind::ConstNull, self.values[array.0 as usize].ty.clone(), origin.clone());
-        let missing = self.push(OpKind::Binary { op: super::BinOp::Eq, lhs: array, rhs: null }, HirType::Bool, origin.clone());
+        let null = self.push(
+            OpKind::ConstNull,
+            self.values[array.0 as usize].ty.clone(),
+            origin.clone(),
+        );
+        let missing = self.push(
+            OpKind::Binary {
+                op: super::BinOp::Eq,
+                lhs: array,
+                rhs: null,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
         let (fill, merge) = (self.new_block(), self.new_block());
         let block = self.push_block_param(merge, want.clone(), origin.clone());
-        self.terminate(super::Terminator::Branch { cond: missing, then_target: merge, then_args: vec![absent], else_target: fill, else_args: Vec::new() });
+        self.terminate(super::Terminator::Branch {
+            cond: missing,
+            then_target: merge,
+            then_args: vec![absent],
+            else_target: fill,
+            else_args: Vec::new(),
+        });
         self.switch_to(fill);
         let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
-        let size = self.push(OpKind::NativeSizeOf(Pointee::Record(record.clone())), HirType::NUMBER, origin.clone());
-        let bytes = self.push(OpKind::Binary { op: super::BinOp::Mul, lhs: length, rhs: size }, HirType::NUMBER, origin.clone());
-        let raw = self.runtime_call("nts_winrt_alloc", vec![bytes], HirType::NativePointer(Pointee::Void), origin.clone());
+        let size = self.push(
+            OpKind::NativeSizeOf(Pointee::Record(record.clone())),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let bytes = self.push(
+            OpKind::Binary {
+                op: super::BinOp::Mul,
+                lhs: length,
+                rhs: size,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let raw = self.runtime_call(
+            "nts_winrt_alloc",
+            vec![bytes],
+            HirType::NativePointer(Pointee::Void),
+            origin.clone(),
+        );
         let storage = self.push(OpKind::Convert(raw), want.clone(), origin.clone());
         self.count_up(length, &origin, |this, at| {
-            let object = this.push(OpKind::ArrayGet { array, index: at, checked: false }, (*element).clone(), origin.clone());
+            let object = this.push(
+                OpKind::ArrayGet {
+                    array,
+                    index: at,
+                    checked: false,
+                },
+                (*element).clone(),
+                origin.clone(),
+            );
             let slot = this.native_index_address(id, storage, at)?;
             this.copy_into_native_record(id, object, slot, None)
         })?;
-        self.terminate(super::Terminator::Jump { target: merge, args: vec![storage] });
+        self.terminate(super::Terminator::Jump {
+            target: merge,
+            args: vec![storage],
+        });
         self.switch_to(merge);
         lent.push(Lent::Block { block });
         Ok(block)
@@ -226,9 +390,17 @@ impl FuncBuilder<'_> {
     /// array's are. Emptied first, so an element it held is given back
     /// rather than overwritten. Its elements must be the interface C writes:
     /// another's pointer would be read through the wrong table.
-    pub(super) fn filled_handles(&mut self, id: NodeId, array: ValueId, want: HirType, lent: &mut Vec<Lent>) -> Result<ValueId, Diagnostic> {
+    pub(super) fn filled_handles(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        want: HirType,
+        lent: &mut Vec<Lent>,
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
-        let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone() else {
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[array.0 as usize].ty.clone()
+        else {
             return Err(self.unsupported(id, "a filled array of objects that is not an array"));
         };
         let HirType::NativePointer(Pointee::Opaque(held)) = &*element else {
@@ -238,12 +410,27 @@ impl FuncBuilder<'_> {
             && let Pointee::Opaque(written) = &**written
             && written.tag != held.tag
         {
-            return Err(self.unsupported(id, &format!("an array of `{}` the callee fills with `{}`", held.tag, written.tag)));
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "an array of `{}` the callee fills with `{}`",
+                    held.tag, written.tag
+                ),
+            ));
         }
         let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
         self.count_up(length, &origin, |this, at| {
             let none = this.push(OpKind::ConstNull, (*element).clone(), origin.clone());
-            this.push(OpKind::ArraySet { array, index: at, value: none, checked: false }, HirType::Void, origin.clone());
+            this.push(
+                OpKind::ArraySet {
+                    array,
+                    index: at,
+                    value: none,
+                    checked: false,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
             Ok(())
         })?;
         let block = self.runtime_call("nts_winrt_array_items", vec![array], want, origin);
@@ -254,10 +441,18 @@ impl FuncBuilder<'_> {
     /// A `boolean[]`'s own elements (`Role::Booleans`), lent in place for
     /// a call to read or fill: one byte each, 0 or 1, as the Windows
     /// Runtime's booleans are. NULL for a `null` array.
-    pub(super) fn lend_booleans(&mut self, id: NodeId, array: ValueId, want: HirType, lent: &mut Vec<Lent>) -> ValueId {
+    pub(super) fn lend_booleans(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        want: HirType,
+        lent: &mut Vec<Lent>,
+    ) -> ValueId {
         let origin = self.origin(id);
         let absent = self.push(OpKind::ConstNull, want.clone(), origin.clone());
-        let block = self.unless_null(array, absent, &origin, |this| this.runtime_call("nts_winrt_array_items", vec![array], want, origin.clone()));
+        let block = self.unless_null(array, absent, &origin, |this| {
+            this.runtime_call("nts_winrt_array_items", vec![array], want, origin.clone())
+        });
         lent.push(Lent::Array { array });
         block
     }
@@ -266,12 +461,36 @@ impl FuncBuilder<'_> {
     /// (`Role::FilledStrings`, `Role::FilledRecords`), from COM's task
     /// allocator: an element the callee leaves unwritten reads as nothing --
     /// a NULL `HSTRING`, which is `""`, or a zeroed struct.
-    pub(super) fn filled_block(&mut self, id: NodeId, array: ValueId, element: Pointee, want: HirType, lent: &mut Vec<Lent>) -> ValueId {
+    pub(super) fn filled_block(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        element: Pointee,
+        want: HirType,
+        lent: &mut Vec<Lent>,
+    ) -> ValueId {
         let origin = self.origin(id);
         let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
-        let size = self.push(OpKind::NativeSizeOf(element), HirType::NUMBER, origin.clone());
-        let bytes = self.push(OpKind::Binary { op: super::BinOp::Mul, lhs: length, rhs: size }, HirType::NUMBER, origin.clone());
-        let raw = self.runtime_call("nts_winrt_alloc", vec![bytes], HirType::NativePointer(Pointee::Void), origin.clone());
+        let size = self.push(
+            OpKind::NativeSizeOf(element),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let bytes = self.push(
+            OpKind::Binary {
+                op: super::BinOp::Mul,
+                lhs: length,
+                rhs: size,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let raw = self.runtime_call(
+            "nts_winrt_alloc",
+            vec![bytes],
+            HirType::NativePointer(Pointee::Void),
+            origin.clone(),
+        );
         let block = self.push(OpKind::Convert(raw), want, origin);
         lent.push(Lent::Filled { array, block });
         block
@@ -281,26 +500,65 @@ impl FuncBuilder<'_> {
     /// `array`, element by element, and the block freed: an `HSTRING` into a
     /// `string`, deleting it, and a struct into a new object, as a
     /// `Copied<T>` result is.
-    pub(super) fn copy_filled(&mut self, id: NodeId, array: ValueId, block: ValueId) -> Result<(), Diagnostic> {
+    pub(super) fn copy_filled(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        block: ValueId,
+    ) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
-        let HirType::Managed(ManagedType::Array(element)) = self.values[array.0 as usize].ty.clone() else {
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[array.0 as usize].ty.clone()
+        else {
             return Err(self.unsupported(id, "a filled array that is not an array"));
         };
         let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
-        let records = matches!(self.values[block.0 as usize].ty, HirType::NativePointer(Pointee::Record(_)));
+        let records = matches!(
+            self.values[block.0 as usize].ty,
+            HirType::NativePointer(Pointee::Record(_))
+        );
         self.count_up(length, &origin, |this, at| {
             let value = if records {
                 let from = this.native_index_address(id, block, at)?;
                 this.object_from_copied(id, from, &element)?
             } else {
-                let read = this.push(OpKind::NativeLoad { pointer: block, index: at }, HirType::NativePointer(Pointee::Void), origin.clone());
-                let handle = this.push(OpKind::Convert(read), Encoding::HString.c_type().representation(), origin.clone());
-                this.runtime_call("nts_string_from_hstring", vec![handle], HirType::Managed(ManagedType::String), origin.clone())
+                let read = this.push(
+                    OpKind::NativeLoad {
+                        pointer: block,
+                        index: at,
+                    },
+                    HirType::NativePointer(Pointee::Void),
+                    origin.clone(),
+                );
+                let handle = this.push(
+                    OpKind::Convert(read),
+                    Encoding::HString.c_type().representation(),
+                    origin.clone(),
+                );
+                this.runtime_call(
+                    "nts_string_from_hstring",
+                    vec![handle],
+                    HirType::Managed(ManagedType::String),
+                    origin.clone(),
+                )
             };
-            this.push(OpKind::ArraySet { array, index: at, value, checked: false }, HirType::Void, origin.clone());
+            this.push(
+                OpKind::ArraySet {
+                    array,
+                    index: at,
+                    value,
+                    checked: false,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
             Ok(())
         })?;
-        let freed = self.push(OpKind::Convert(block), HirType::NativePointer(Pointee::Void), origin.clone());
+        let freed = self.push(
+            OpKind::Convert(block),
+            HirType::NativePointer(Pointee::Void),
+            origin.clone(),
+        );
         self.runtime_call("nts_winrt_free", vec![freed], HirType::Void, origin);
         Ok(())
     }
@@ -309,32 +567,87 @@ impl FuncBuilder<'_> {
     /// (`Written::ReceivedElements`): each struct of the callee's block into
     /// a new object of the program's, as a `Copied<T>` result is, or each
     /// one-byte boolean into a `boolean`; and the block freed.
-    pub(super) fn elements_received(&mut self, id: NodeId, (slot, count): (ValueId, ValueId), ty: HirType) -> Result<ValueId, Diagnostic> {
+    pub(super) fn elements_received(
+        &mut self,
+        id: NodeId,
+        (slot, count): (ValueId, ValueId),
+        ty: HirType,
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let HirType::Managed(ManagedType::Array(element)) = ty.clone() else {
-            return Err(self.unsupported(id, "a received array read as something other than an array"));
+            return Err(
+                self.unsupported(id, "a received array read as something other than an array")
+            );
         };
-        let HirType::NativePointer(Pointee::Pointer(held)) = self.values[slot.0 as usize].ty.clone() else {
-            return Err(self.unsupported(id, "a received array whose slot is not a pointer to its elements"));
+        let HirType::NativePointer(Pointee::Pointer(held)) =
+            self.values[slot.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(
+                id,
+                "a received array whose slot is not a pointer to its elements",
+            ));
         };
         let records = matches!(*held, Pointee::Record(_));
         let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        let block = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(*held), origin.clone());
+        let block = self.push(
+            OpKind::NativeLoad {
+                pointer: slot,
+                index,
+            },
+            HirType::NativePointer(*held),
+            origin.clone(),
+        );
         let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        let length = self.push(OpKind::NativeLoad { pointer: count, index }, HirType::Int { bits: 32, signed: false }, origin.clone());
+        let length = self.push(
+            OpKind::NativeLoad {
+                pointer: count,
+                index,
+            },
+            HirType::Int {
+                bits: 32,
+                signed: false,
+            },
+            origin.clone(),
+        );
         let length = self.coerce(length, &HirType::NUMBER, id)?;
-        let array = self.push(OpKind::ArrayNew { length, zeroed: true }, ty, origin.clone());
+        let array = self.push(
+            OpKind::ArrayNew {
+                length,
+                zeroed: true,
+            },
+            ty,
+            origin.clone(),
+        );
         self.count_up(length, &origin, |this, at| {
             let value = if records {
                 let from = this.native_index_address(id, block, at)?;
                 this.object_from_copied(id, from, &element)?
             } else {
-                this.read_place(id, &Place::NativeElement { pointer: block, index: at })?
+                this.read_place(
+                    id,
+                    &Place::NativeElement {
+                        pointer: block,
+                        index: at,
+                    },
+                )?
             };
-            this.push(OpKind::ArraySet { array, index: at, value, checked: false }, HirType::Void, origin.clone());
+            this.push(
+                OpKind::ArraySet {
+                    array,
+                    index: at,
+                    value,
+                    checked: false,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
             Ok(())
         })?;
-        let freed = self.push(OpKind::Convert(block), HirType::NativePointer(Pointee::Void), origin.clone());
+        let freed = self.push(
+            OpKind::Convert(block),
+            HirType::NativePointer(Pointee::Void),
+            origin.clone(),
+        );
         self.runtime_call("nts_winrt_free", vec![freed], HirType::Void, origin);
         Ok(array)
     }
@@ -344,12 +657,38 @@ impl FuncBuilder<'_> {
     /// otherwise the reference's `get_Value` -- slot 6 of every
     /// `IReference<T>` -- read into a local of the call's as a `T` result is
     /// read, and the reference given back.
-    pub(super) fn read_reference(&mut self, id: NodeId, slot: ValueId, referenced: Referenced, ty: &HirType) -> Result<ValueId, Diagnostic> {
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+    pub(super) fn read_reference(
+        &mut self,
+        id: NodeId,
+        slot: ValueId,
+        referenced: Referenced,
+        ty: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let index = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        let reference = self.push(OpKind::NativeLoad { pointer: slot, index }, HirType::NativePointer(Pointee::Void), origin.clone());
-        let none = self.push(OpKind::ConstNull, HirType::NativePointer(Pointee::Void), origin.clone());
-        let missing = self.push(OpKind::Binary { op: super::BinOp::Eq, lhs: reference, rhs: none }, HirType::Bool, origin.clone());
+        let reference = self.push(
+            OpKind::NativeLoad {
+                pointer: slot,
+                index,
+            },
+            HirType::NativePointer(Pointee::Void),
+            origin.clone(),
+        );
+        let none = self.push(
+            OpKind::ConstNull,
+            HirType::NativePointer(Pointee::Void),
+            origin.clone(),
+        );
+        let missing = self.push(
+            OpKind::Binary {
+                op: super::BinOp::Eq,
+                lhs: reference,
+                rhs: none,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
         let (read, merge) = (self.new_block(), self.new_block());
         // The value is `T | null` whatever the checker narrowed the read to --
         // `toggle.isChecked` right after `toggle.isChecked = true` is `true`
@@ -357,41 +696,77 @@ impl FuncBuilder<'_> {
         // paths meet as an erased value, which the narrowed type is read from.
         let (carrier, absent) = match self.absent_at(OpKind::ConstNull, Some(ty.clone()), id) {
             Ok(absent) => (ty.clone(), absent),
-            Err(_) => (HirType::Erased, self.absent_at(OpKind::ConstNull, Some(HirType::Erased), id)?),
+            Err(_) => (
+                HirType::Erased,
+                self.absent_at(OpKind::ConstNull, Some(HirType::Erased), id)?,
+            ),
         };
         let result = self.push_block_param(merge, carrier.clone(), origin.clone());
-        self.terminate(super::Terminator::Branch { cond: missing, then_target: merge, then_args: vec![absent], else_target: read, else_args: Vec::new() });
+        self.terminate(super::Terminator::Branch {
+            cond: missing,
+            then_target: merge,
+            then_args: vec![absent],
+            else_target: read,
+            else_args: Vec::new(),
+        });
         self.switch_to(read);
         let (held, written, as_read) = match referenced {
             Referenced::Bool => (Pointee::Scalar(Scalar::UInt8), Written::Bool, None),
             Referenced::Scalar(scalar) => (Pointee::Scalar(scalar), Written::Value, None),
-            Referenced::HString => (Pointee::Pointer(Box::new(Pointee::Void)), Written::HString, None),
+            Referenced::HString => (
+                Pointee::Pointer(Box::new(Pointee::Void)),
+                Written::HString,
+                None,
+            ),
             Referenced::Copied => {
                 let HirType::Managed(ManagedType::Object(object)) = *ty else {
-                    return Err(self.unsupported(id, "a referenced struct read as something other than an object"));
+                    return Err(self.unsupported(
+                        id,
+                        "a referenced struct read as something other than an object",
+                    ));
                 };
                 let Some(record) = crate::hir::native::schema::copied(self.snapshot, object) else {
-                    return Err(self.unsupported(id, "a referenced struct whose object type names no struct"));
+                    return Err(self
+                        .unsupported(id, "a referenced struct whose object type names no struct"));
                 };
                 (Pointee::Record(record), Written::Copied, Some(ty.clone()))
             }
         };
-        let local = self.push(OpKind::NativeLocal { count: 1 }, HirType::NativePointer(held.clone()), origin.clone());
+        let local = self.push(
+            OpKind::NativeLocal { count: 1 },
+            HirType::NativePointer(held.clone()),
+            origin.clone(),
+        );
         let get_value = crate::hir::native::Function::vtable_method(
             "get_Value",
             6,
             vec![Type::Pointer(Pointee::Void), Type::Pointer(held)],
         );
         let status = self.push(
-            OpKind::Call { callee: super::Callee::Native(std::sync::Arc::new(get_value)), args: vec![reference, local], frame: None },
-            HirType::Int { bits: 32, signed: true },
+            OpKind::Call {
+                callee: super::Callee::Native(std::sync::Arc::new(get_value)),
+                args: vec![reference, local],
+                frame: None,
+            },
+            HirType::Int {
+                bits: 32,
+                signed: true,
+            },
             origin.clone(),
         );
         self.throw_on_failure(id, status, Vec::new(), &origin)?;
         let value = self.read_written(id, (local, None), written, as_read.as_ref(), &origin)?;
-        self.runtime_call("nts_com_release", vec![reference], HirType::Void, origin.clone());
+        self.runtime_call(
+            "nts_com_release",
+            vec![reference],
+            HirType::Void,
+            origin.clone(),
+        );
         let value = self.coerce(value, &carrier, id)?;
-        self.terminate(super::Terminator::Jump { target: merge, args: vec![value] });
+        self.terminate(super::Terminator::Jump {
+            target: merge,
+            args: vec![value],
+        });
         self.switch_to(merge);
         if carrier == *ty {
             return Ok(result);
@@ -407,6 +782,7 @@ impl FuncBuilder<'_> {
     /// into a local of the call's as `T` and made into a reference of the
     /// instantiation `iid` (`nts_winrt_reference`), given back after the
     /// call -- a NULL given back is nothing.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     pub(super) fn reference_argument(
         &mut self,
         id: NodeId,
@@ -421,46 +797,103 @@ impl FuncBuilder<'_> {
         match self.absence_of(id, given) {
             Some(missing) => {
                 let none = self.push(OpKind::ConstNull, want.clone(), origin.clone());
-                self.terminate(super::Terminator::Branch { cond: missing, then_target: merge, then_args: vec![none], else_target: make, else_args: Vec::new() });
+                self.terminate(super::Terminator::Branch {
+                    cond: missing,
+                    then_target: merge,
+                    then_args: vec![none],
+                    else_target: make,
+                    else_args: Vec::new(),
+                });
             }
-            None => self.terminate(super::Terminator::Jump { target: make, args: Vec::new() }),
+            None => self.terminate(super::Terminator::Jump {
+                target: make,
+                args: Vec::new(),
+            }),
         }
         self.switch_to(make);
         let (held, present) = match referenced {
             Referenced::Bool => (Pointee::Scalar(Scalar::Bool8), HirType::Bool),
-            Referenced::Scalar(scalar) => (Pointee::Scalar(scalar), Type::Scalar(scalar).representation()),
+            Referenced::Scalar(scalar) => (
+                Pointee::Scalar(scalar),
+                Type::Scalar(scalar).representation(),
+            ),
             Referenced::Copied => {
-                let HirType::Managed(ManagedType::Object(object)) = self.values[given.0 as usize].ty else {
-                    return Err(self.unsupported(id, "a struct for a reference that is not a plain object"));
+                let HirType::Managed(ManagedType::Object(object)) =
+                    self.values[given.0 as usize].ty
+                else {
+                    return Err(
+                        self.unsupported(id, "a struct for a reference that is not a plain object")
+                    );
                 };
                 let Some(record) = crate::hir::native::schema::copied(self.snapshot, object) else {
-                    return Err(self.unsupported(id, "a struct for a reference whose object type names no struct"));
+                    return Err(self.unsupported(
+                        id,
+                        "a struct for a reference whose object type names no struct",
+                    ));
                 };
-                (Pointee::Record(record), self.values[given.0 as usize].ty.clone())
+                (
+                    Pointee::Record(record),
+                    self.values[given.0 as usize].ty.clone(),
+                )
             }
-            Referenced::HString => return Err(self.unsupported(id, "a string made into an `IReference<String>`, which is not built")),
+            Referenced::HString => {
+                return Err(self.unsupported(
+                    id,
+                    "a string made into an `IReference<String>`, which is not built",
+                ));
+            }
         };
         // Present on this path: an erased `T | null` read as its `T` -- a
         // number through the number every erased one is.
         let value = if self.values[given.0 as usize].ty == HirType::Erased {
-            let read = if present == HirType::Bool { HirType::Bool } else { HirType::NUMBER };
+            let read = if present == HirType::Bool {
+                HirType::Bool
+            } else {
+                HirType::NUMBER
+            };
             let read = self.push(OpKind::Unerase { value: given }, read, origin.clone());
             self.coerce(read, &present, id)?
         } else {
             self.coerce(given, &present, id)?
         };
-        let local = self.push(OpKind::NativeLocal { count: 1 }, HirType::NativePointer(held.clone()), origin.clone());
+        let local = self.push(
+            OpKind::NativeLocal { count: 1 },
+            HirType::NativePointer(held.clone()),
+            origin.clone(),
+        );
         if matches!(held, Pointee::Record(_)) {
             self.copy_into_native_record(id, value, local, None)?;
         } else {
             let first = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-            self.write_place(id, &Place::NativeElement { pointer: local, index: first }, value)?;
+            self.write_place(
+                id,
+                &Place::NativeElement {
+                    pointer: local,
+                    index: first,
+                },
+                value,
+            )?;
         }
         let size = self.push(OpKind::NativeSizeOf(held), HirType::NUMBER, origin.clone());
-        let kind = self.push(OpKind::ConstInt(i128::from(property_type)), HirType::Int { bits: 32, signed: true }, origin.clone());
+        let kind = self.push(
+            OpKind::ConstInt(i128::from(property_type)),
+            HirType::Int {
+                bits: 32,
+                signed: true,
+            },
+            origin.clone(),
+        );
         let [low, high] = self.iid_arguments(iid, &origin);
-        let created = self.runtime_call("nts_winrt_reference", vec![local, size, kind, low, high], want, origin.clone());
-        self.terminate(super::Terminator::Jump { target: merge, args: vec![created] });
+        let created = self.runtime_call(
+            "nts_winrt_reference",
+            vec![local, size, kind, low, high],
+            want,
+            origin.clone(),
+        );
+        self.terminate(super::Terminator::Jump {
+            target: merge,
+            args: vec![created],
+        });
         self.switch_to(merge);
         lent.push(Lent::Box { object: reference });
         Ok(reference)
@@ -471,23 +904,48 @@ impl FuncBuilder<'_> {
     /// storage at `pointer` -- a nested struct into an object of its own,
     /// an `HSTRING` into a `string`, which deletes it, since the caller owns
     /// a returned struct's strings.
-    pub(super) fn object_from_copied(&mut self, id: NodeId, pointer: ValueId, ty: &HirType) -> Result<ValueId, Diagnostic> {
+    pub(super) fn object_from_copied(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        ty: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let HirType::Managed(ManagedType::Object(type_id)) = ty.clone() else {
-            return Err(self.unsupported(id, "a copied struct read as something other than an object"));
+            return Err(
+                self.unsupported(id, "a copied struct read as something other than an object")
+            );
         };
-        let HirType::NativePointer(Pointee::Record(record)) = self.values[pointer.0 as usize].ty.clone() else {
-            return Err(self.unsupported(id, "a copied struct read from something other than its storage"));
+        let HirType::NativePointer(Pointee::Record(record)) =
+            self.values[pointer.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(
+                id,
+                "a copied struct read from something other than its storage",
+            ));
         };
         let layout = self.layout_of(id, type_id)?;
         // Every field is one of the struct's, and each is written below.
         if layout.fields.len() != record.fields.len() {
-            return Err(self.unsupported(id, "a copied struct whose object type has fields the struct does not"));
+            return Err(self.unsupported(
+                id,
+                "a copied struct whose object type has fields the struct does not",
+            ));
         }
-        let object = self.push(OpKind::ObjectNew { frame: false }, ty.clone(), origin.clone());
+        let object = self.push(
+            OpKind::ObjectNew { frame: false },
+            ty.clone(),
+            origin.clone(),
+        );
         for native in &record.fields {
             let Some(field) = layout.index_of(&native.name) else {
-                return Err(self.unsupported(id, &format!("a copied struct's field `{}` its object type does not declare", native.name)));
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "a copied struct's field `{}` its object type does not declare",
+                        native.name
+                    ),
+                ));
             };
             let want = layout.fields[field as usize].ty.clone();
             let value = if matches!(native.ty, Pointee::Record(_)) {
@@ -497,8 +955,17 @@ impl FuncBuilder<'_> {
                 let place = self.native_field_place(id, pointer, &native.name)?;
                 let read = self.read_place(id, &place)?;
                 if is_hstring_field(&native.ty) {
-                    let handle = self.push(OpKind::Convert(read), Encoding::HString.c_type().representation(), origin.clone());
-                    self.runtime_call("nts_string_from_hstring", vec![handle], HirType::Managed(ManagedType::String), origin.clone())
+                    let handle = self.push(
+                        OpKind::Convert(read),
+                        Encoding::HString.c_type().representation(),
+                        origin.clone(),
+                    );
+                    self.runtime_call(
+                        "nts_string_from_hstring",
+                        vec![handle],
+                        HirType::Managed(ManagedType::String),
+                        origin.clone(),
+                    )
                 } else {
                     read
                 }
@@ -512,9 +979,20 @@ impl FuncBuilder<'_> {
     /// `value` written into the field `key` of the record at `pointer`: an
     /// `HSTRING` field -- only ever a `Copied<T>`'s -- as a string lent for
     /// the call into `lent`, and any other as a store converts it.
-    fn write_native_field(&mut self, id: NodeId, pointer: ValueId, key: &str, value: ValueId, lent: Option<&mut Vec<Lent>>) -> Result<(), Diagnostic> {
+    fn write_native_field(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        key: &str,
+        value: ValueId,
+        lent: Option<&mut Vec<Lent>>,
+    ) -> Result<(), Diagnostic> {
         let place = self.native_field_place(id, pointer, key)?;
-        let Place::NativeElement { pointer: field, index } = place else {
+        let Place::NativeElement {
+            pointer: field,
+            index,
+        } = place
+        else {
             return self.write_place(id, &place, value);
         };
         let HirType::NativePointer(slot) = self.values[field.0 as usize].ty.clone() else {
@@ -526,11 +1004,25 @@ impl FuncBuilder<'_> {
             };
             let origin = self.origin(id);
             let string = self.coerce(value, &HirType::Managed(ManagedType::String), id)?;
-            let view = self.lend_string(string, Encoding::View, Encoding::View.c_type().representation(), lent, origin.clone());
+            let view = self.lend_string(
+                string,
+                Encoding::View,
+                Encoding::View.c_type().representation(),
+                lent,
+                origin.clone(),
+            );
             lent.push(Lent::Borrowed { string });
             let element = self.native_element_type(id, field)?;
             let stored = self.push(OpKind::Convert(view), element, origin.clone());
-            self.push(OpKind::NativeStore { pointer: field, index, value: stored }, HirType::Void, origin);
+            self.push(
+                OpKind::NativeStore {
+                    pointer: field,
+                    index,
+                    value: stored,
+                },
+                HirType::Void,
+                origin,
+            );
             return Ok(());
         }
         if !is_hstring_field(&slot) {
@@ -541,10 +1033,24 @@ impl FuncBuilder<'_> {
         };
         let origin = self.origin(id);
         let string = self.coerce(value, &HirType::Managed(ManagedType::String), id)?;
-        let handle = self.lend_string(string, Encoding::HString, Encoding::HString.c_type().representation(), lent, origin.clone());
+        let handle = self.lend_string(
+            string,
+            Encoding::HString,
+            Encoding::HString.c_type().representation(),
+            lent,
+            origin.clone(),
+        );
         let element = self.native_element_type(id, field)?;
         let stored = self.push(OpKind::Convert(handle), element, origin.clone());
-        self.push(OpKind::NativeStore { pointer: field, index, value: stored }, HirType::Void, origin);
+        self.push(
+            OpKind::NativeStore {
+                pointer: field,
+                index,
+                value: stored,
+            },
+            HirType::Void,
+            origin,
+        );
         Ok(())
     }
 
@@ -552,18 +1058,34 @@ impl FuncBuilder<'_> {
     /// at `pointer`, in the order the literal gives them, which is when
     /// JavaScript evaluates them. A record field written as a literal is
     /// filled in place, and a field left out keeps the zero it has.
-    fn fill_native_record(&mut self, id: NodeId, pointer: ValueId, mut lent: Option<&mut Vec<Lent>>) -> Result<(), Diagnostic> {
+    fn fill_native_record(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        mut lent: Option<&mut Vec<Lent>>,
+    ) -> Result<(), Diagnostic> {
         for property in self.syntax_children_of(id) {
             let parts = self.syntax_children_of(property);
             let (name, value) = match (self.kind_of(property), parts.as_slice()) {
                 (Some(syntax::PROPERTY_ASSIGNMENT), [name, value]) => (*name, Some(*value)),
                 (Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT), [name]) => (*name, None),
-                _ => return Err(self.unsupported(property, "a spread, a method or an accessor in a C record's literal")),
+                _ => {
+                    return Err(self.unsupported(
+                        property,
+                        "a spread, a method or an accessor in a C record's literal",
+                    ));
+                }
             };
-            let key = self.node(name).text.clone().ok_or_else(|| self.unsupported(name, "a C record field whose name is computed"))?;
-            if let Some(value) = value.filter(|value| self.kind_of(*value) == Some(syntax::OBJECT_LITERAL_EXPRESSION)) {
+            let key =
+                self.node(name).text.clone().ok_or_else(|| {
+                    self.unsupported(name, "a C record field whose name is computed")
+                })?;
+            if let Some(value) = value
+                .filter(|value| self.kind_of(*value) == Some(syntax::OBJECT_LITERAL_EXPRESSION))
+            {
                 let field = self.native_field_address(property, pointer, &key)?;
-                if matches!(&self.values[field.0 as usize].ty, HirType::NativePointer(view) if matches!(view.viewed(), Pointee::Record(_))) {
+                if matches!(&self.values[field.0 as usize].ty, HirType::NativePointer(view) if matches!(view.viewed(), Pointee::Record(_)))
+                {
                     self.fill_native_record(value, field, lent.as_deref_mut())?;
                     continue;
                 }
@@ -592,7 +1114,12 @@ impl FuncBuilder<'_> {
     /// delegating wrapper holds the literal as an object and hands it on, so
     /// it arrives here and not at the literal (the Chromium lane's
     /// lib-dom-dictionary-with-a-string-member).
-    pub(super) fn native_record_from_object(&mut self, id: NodeId, object: ValueId, ty: HirType) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_record_from_object(
+        &mut self,
+        id: NodeId,
+        object: ValueId,
+        ty: HirType,
+    ) -> Result<ValueId, Diagnostic> {
         let storage = self.push(OpKind::NativeLocal { count: 1 }, ty, self.origin(id));
         let mut lent = Vec::new();
         self.copy_into_native_record(id, object, storage, Some(&mut lent))?;
@@ -602,15 +1129,32 @@ impl FuncBuilder<'_> {
         Ok(storage)
     }
 
-    fn copy_into_native_record(&mut self, id: NodeId, object: ValueId, pointer: ValueId, mut lent: Option<&mut Vec<Lent>>) -> Result<(), Diagnostic> {
-        let HirType::Managed(ManagedType::Object(type_id)) = self.values[object.0 as usize].ty.clone() else {
-            return Err(self.unsupported(id, "a C record's fields held in something other than an object"));
+    fn copy_into_native_record(
+        &mut self,
+        id: NodeId,
+        object: ValueId,
+        pointer: ValueId,
+        mut lent: Option<&mut Vec<Lent>>,
+    ) -> Result<(), Diagnostic> {
+        let HirType::Managed(ManagedType::Object(type_id)) =
+            self.values[object.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(
+                id,
+                "a C record's fields held in something other than an object",
+            ));
         };
         let HirType::NativePointer(view) = self.values[pointer.0 as usize].ty.clone() else {
-            return Err(self.unsupported(id, "a C record's fields written through something other than its storage"));
+            return Err(self.unsupported(
+                id,
+                "a C record's fields written through something other than its storage",
+            ));
         };
         let Pointee::Record(record) = view.viewed() else {
-            return Err(self.unsupported(id, "a C record's fields written through something other than its storage"));
+            return Err(self.unsupported(
+                id,
+                "a C record's fields written through something other than its storage",
+            ));
         };
         let layout = self.layout_of(id, type_id)?;
         for native in &record.fields {
@@ -622,13 +1166,22 @@ impl FuncBuilder<'_> {
                     Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.name == native.name && !p.kind.is_stored())
                 );
                 if accessor {
-                    return Err(self.unsupported(id, &format!("`{}`, an accessor, as a C record's field", native.name)));
+                    return Err(self.unsupported(
+                        id,
+                        &format!("`{}`, an accessor, as a C record's field", native.name),
+                    ));
                 }
                 continue;
             };
             let ty = layout.fields[field as usize].ty.clone();
-            let value = self.push(OpKind::FieldGet { object, field }, ty.clone(), self.origin(id));
-            if matches!(ty, HirType::Managed(ManagedType::Object(_))) && matches!(native.ty, Pointee::Record(_)) {
+            let value = self.push(
+                OpKind::FieldGet { object, field },
+                ty.clone(),
+                self.origin(id),
+            );
+            if matches!(ty, HirType::Managed(ManagedType::Object(_)))
+                && matches!(native.ty, Pointee::Record(_))
+            {
                 let inner = self.native_field_address(id, pointer, &native.name)?;
                 self.copy_into_native_record(id, value, inner, lent.as_deref_mut())?;
                 continue;
@@ -638,15 +1191,38 @@ impl FuncBuilder<'_> {
         Ok(())
     }
 
-    pub(super) fn native_element_place(&mut self, id: NodeId, pointer: ValueId, index: ValueId) -> Result<Place, Diagnostic> {
-        let index = self.coerce(index, &HirType::Int { bits: 64, signed: true }, id)?;
+    pub(super) fn native_element_place(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        index: ValueId,
+    ) -> Result<Place, Diagnostic> {
+        let index = self.coerce(
+            index,
+            &HirType::Int {
+                bits: 64,
+                signed: true,
+            },
+            id,
+        )?;
         Ok(Place::NativeElement { pointer, index })
     }
 
-    pub(super) fn native_member_place(&mut self, id: NodeId, pointer: ValueId) -> Result<Place, Diagnostic> {
-        let member = *self.children(id).last().ok_or_else(|| self.unsupported(id, "a missing native field name"))?;
-        let name = self.native_member_key(id, member).ok_or_else(|| self.unsupported(id, "a computed native field name"))?;
-        if self.kind_of(id) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) { self.lower_expression(member)?; }
+    pub(super) fn native_member_place(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+    ) -> Result<Place, Diagnostic> {
+        let member = *self
+            .children(id)
+            .last()
+            .ok_or_else(|| self.unsupported(id, "a missing native field name"))?;
+        let name = self
+            .native_member_key(id, member)
+            .ok_or_else(|| self.unsupported(id, "a computed native field name"))?;
+        if self.kind_of(id) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+            self.lower_expression(member)?;
+        }
         self.native_field_place(id, pointer, &name)
     }
 
@@ -680,7 +1256,12 @@ impl FuncBuilder<'_> {
         Ok(unit.representation())
     }
 
-    pub(super) fn native_field_place(&mut self, id: NodeId, pointer: ValueId, name: &str) -> Result<Place, Diagnostic> {
+    pub(super) fn native_field_place(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        name: &str,
+    ) -> Result<Place, Diagnostic> {
         // A bit-field is a place with no address, so it does not go through
         // `native_field_address` at all: that function's whole product is an
         // address, and there is none to give. Decided here, where the member's
@@ -693,15 +1274,21 @@ impl FuncBuilder<'_> {
                 .enumerate()
                 .find(|(_, f)| f.name == name && matches!(f.ty, Pointee::Bits { .. }))
         {
-            let field = u32::try_from(field)
-                .map_err(|_| self.unsupported(id, "too many native fields"))?;
+            let field =
+                u32::try_from(field).map_err(|_| self.unsupported(id, "too many native fields"))?;
             return Ok(Place::NativeBits { pointer, field });
         }
         let pointer = self.native_field_address(id, pointer, name)?;
-        let index = self.push(OpKind::ConstInt(0), HirType::Int { bits: 64, signed: true }, self.origin(id));
+        let index = self.push(
+            OpKind::ConstInt(0),
+            HirType::Int {
+                bits: 64,
+                signed: true,
+            },
+            self.origin(id),
+        );
         Ok(Place::NativeElement { pointer, index })
     }
-
 
     /// `addrOf(p.fd)` and `addrOf(p[i])`, which are `&p->fd` and `&p[i]`.
     ///
@@ -718,7 +1305,11 @@ impl FuncBuilder<'_> {
     /// object's representation belongs to the compiler, and handing out an
     /// interior address would fix a layout that reference counting and
     /// specialization both expect to own.
-    pub(super) fn native_address_of(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_address_of(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
         let [place] = arguments else {
             return Err(self.unsupported(id, "addrOf takes one native place"));
         };
@@ -729,14 +1320,18 @@ impl FuncBuilder<'_> {
             Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
         ) || children.len() < 2
         {
-            return Err(self.unsupported(id, "addrOf needs a field or an element of native storage"));
+            return Err(
+                self.unsupported(id, "addrOf needs a field or an element of native storage")
+            );
         }
         let (receiver, member) = (children[0], children[children.len() - 1]);
         let pointer = self.lower_expression(receiver)?;
         let index_type = self.type_of(member);
         let address = if kind == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
-            && matches!(index_type, Some(HirType::Int { .. } | HirType::Float { .. }))
-        {
+            && matches!(
+                index_type,
+                Some(HirType::Int { .. } | HirType::Float { .. })
+            ) {
             let index = self.lower_expression(member)?;
             self.native_index_address(id, pointer, index)?
         } else {
@@ -756,7 +1351,10 @@ impl FuncBuilder<'_> {
         };
         // A tag cannot authorize lying about the returned pointer's pointee.
         if self.type_of(id).as_ref() != Some(&self.values[address.0 as usize].ty) {
-            return Err(self.unsupported(id, "addrOf result does not match the addressed native storage"));
+            return Err(self.unsupported(
+                id,
+                "addrOf result does not match the addressed native storage",
+            ));
         }
         Ok(address)
     }
@@ -778,13 +1376,22 @@ impl FuncBuilder<'_> {
     /// at an offset the compiler fabricated. Extend this to a laid-out record
     /// and a false `is` becomes a field read from the wrong place, the failure
     /// `blockers/an-intersection-from-an-in-narrowing` exists to stop.
-    pub(super) fn native_downcast(&mut self, id: NodeId, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_downcast(
+        &mut self,
+        id: NodeId,
+        args: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
         let [value, is] = args else {
-            return Err(self.unsupported(id, "unsafeDowncast takes a handle and the check that it is a `T`"));
+            return Err(self.unsupported(
+                id,
+                "unsafeDowncast takes a handle and the check that it is a `T`",
+            ));
         };
         let value = self.lower_expression(*value)?;
         let is = self.lower_expression(*is)?;
-        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a downcast"))?;
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a downcast"))?;
         let handle = |pointee: &Pointee| match pointee {
             Pointee::Opaque(handle) => Some(handle.clone()),
             Pointee::Const(inner) => match &**inner {
@@ -793,11 +1400,17 @@ impl FuncBuilder<'_> {
             },
             _ => None,
         };
-        let (HirType::NativePointer(from), HirType::NativePointer(to)) = (&self.values[value.0 as usize].ty, &ty) else {
-            return Err(self.unsupported(id, "unsafeDowncast between types that are not both handles"));
+        let (HirType::NativePointer(from), HirType::NativePointer(to)) =
+            (&self.values[value.0 as usize].ty, &ty)
+        else {
+            return Err(
+                self.unsupported(id, "unsafeDowncast between types that are not both handles")
+            );
         };
         let (Some(from), Some(to)) = (handle(from), handle(to)) else {
-            return Err(self.unsupported(id, "unsafeDowncast between types that are not both handles"));
+            return Err(
+                self.unsupported(id, "unsafeDowncast between types that are not both handles")
+            );
         };
         if !to.upcasts_to(&from) {
             return Err(self.unsupported(
@@ -819,15 +1432,24 @@ impl FuncBuilder<'_> {
     /// (`nts_string_from_cstring`), for a `char *` that arrives some other
     /// way: out of an out parameter's slot, or a struct's member. The pointer
     /// is neither kept nor freed.
-    pub(super) fn native_string_from(&mut self, id: NodeId, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_string_from(
+        &mut self,
+        id: NodeId,
+        args: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
         let [pointer] = args else {
             return Err(self.unsupported(id, "stringFrom takes one C string"));
         };
         let pointer = self.lower_expression(*pointer)?;
-        if !matches!(self.values[pointer.0 as usize].ty, HirType::NativePointer(_)) {
+        if !matches!(
+            self.values[pointer.0 as usize].ty,
+            HirType::NativePointer(_)
+        ) {
             return Err(self.unsupported(id, "stringFrom of a value that is not a C pointer"));
         }
-        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a string read from C"))?;
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a string read from C"))?;
         let origin = self.origin(id);
         Ok(self.runtime_call("nts_string_from_cstring", vec![pointer], ty, origin))
     }
@@ -836,7 +1458,11 @@ impl FuncBuilder<'_> {
     /// a new `Uint8Array` (`nts_view_from_bytes`) -- a buffer C filled or
     /// handed back, read into the program's own. The pointer is neither kept
     /// nor freed.
-    pub(super) fn native_bytes_from(&mut self, id: NodeId, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
+    pub(super) fn native_bytes_from(
+        &mut self,
+        id: NodeId,
+        args: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
         let [bytes, length] = args else {
             return Err(self.unsupported(id, "bytesFrom takes a C pointer and a length in bytes"));
         };
@@ -846,28 +1472,59 @@ impl FuncBuilder<'_> {
         }
         let length = self.lower_expecting(*length, &HirType::NUMBER)?;
         let length = self.coerce(length, &HirType::NUMBER, id)?;
-        let ty = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "bytes read from C"))?;
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "bytes read from C"))?;
         let origin = self.origin(id);
         let view = self.runtime_call("nts_view_from_bytes", vec![bytes, length], ty, origin);
         self.guard_allocated_view(id, view)?;
         Ok(view)
     }
 
-    pub(super) fn native_storage(&mut self, id: NodeId, operation: &str, args: &[NodeId]) -> Result<ValueId, Diagnostic> {
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+    pub(super) fn native_storage(
+        &mut self,
+        id: NodeId,
+        operation: &str,
+        args: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
         if operation == "sizeof" {
-            if self.type_of(id) != Some(HirType::NUMBER) { return Err(self.unsupported(id, "sizeof must return a number")); }
-            if !args.is_empty() { return Err(self.unsupported(id, "sizeof takes a type argument, not a value")); }
+            if self.type_of(id) != Some(HirType::NUMBER) {
+                return Err(self.unsupported(id, "sizeof must return a number"));
+            }
+            if !args.is_empty() {
+                return Err(self.unsupported(id, "sizeof takes a type argument, not a value"));
+            }
             // Type-argument lists precede argument lists in the raw call AST.
-            let type_node = self.node(id).children.iter()
-                .filter_map(|list| (self.node(*list).kind == nts_semantic_schema::NodeKind::List).then_some(*list))
+            let type_node = self
+                .node(id)
+                .children
+                .iter()
+                .filter_map(|list| {
+                    (self.node(*list).kind == nts_semantic_schema::NodeKind::List).then_some(*list)
+                })
                 .find_map(|list| self.node(list).children.first().copied())
-                .ok_or_else(|| self.unsupported(id, "sizeof needs one explicit native type argument"))?;
-            let ty = *self.snapshot.node_types.get(&type_node).ok_or_else(|| self.unsupported(id, "sizeof type has no semantic type"))?;
-            let storage = crate::hir::native::storage(self.snapshot, ty).ok_or_else(|| self.unsupported(id, "sizeof needs a complete native storage type"))?;
-            if crate::hir::layout::native_shape(&storage, crate::hir::native::NativeAbi::BOUND).is_none() {
+                .ok_or_else(|| {
+                    self.unsupported(id, "sizeof needs one explicit native type argument")
+                })?;
+            let ty = *self
+                .snapshot
+                .node_types
+                .get(&type_node)
+                .ok_or_else(|| self.unsupported(id, "sizeof type has no semantic type"))?;
+            let storage = crate::hir::native::storage(self.snapshot, ty).ok_or_else(|| {
+                self.unsupported(id, "sizeof needs a complete native storage type")
+            })?;
+            if crate::hir::layout::native_shape(&storage, crate::hir::native::NativeAbi::BOUND)
+                .is_none()
+            {
                 return Err(self.unsupported(id, "sizeof needs a complete native layout"));
             }
-            return Ok(self.push(OpKind::NativeSizeOf(storage), HirType::NUMBER, self.origin(id)));
+            return Ok(self.push(
+                OpKind::NativeSizeOf(storage),
+                HirType::NUMBER,
+                self.origin(id),
+            ));
         }
         if operation == "copy" {
             let [destination, source] = args else {
@@ -899,32 +1556,62 @@ impl FuncBuilder<'_> {
             if into.viewed() != from.viewed() {
                 return Err(self.unsupported(id, "a copy between two different native types"));
             }
-            if crate::hir::layout::native_shape(&into, crate::hir::native::NativeAbi::BOUND).is_none() {
+            if crate::hir::layout::native_shape(&into, crate::hir::native::NativeAbi::BOUND)
+                .is_none()
+            {
                 return Err(self.unsupported(id, "a copy of a native type with no size"));
             }
             return Ok(self.push(
-                OpKind::NativeCopy { destination, source },
+                OpKind::NativeCopy {
+                    destination,
+                    source,
+                },
                 HirType::Void,
                 self.origin(id),
             ));
         }
         if operation == "free" {
-            let [arg] = args else { return Err(self.unsupported(id, "free needs one pointer")); };
-            let expecting = self.expecting.replace(HirType::NativePointer(Pointee::Scalar(crate::hir::native::Scalar::UInt8)));
+            let [arg] = args else {
+                return Err(self.unsupported(id, "free needs one pointer"));
+            };
+            let expecting = self
+                .expecting
+                .replace(HirType::NativePointer(Pointee::Scalar(
+                    crate::hir::native::Scalar::UInt8,
+                )));
             let pointer = self.lower_expression(*arg);
             self.expecting = expecting;
             let pointer = pointer?;
-            if !matches!(self.values[pointer.0 as usize].ty, HirType::NativePointer(_)) {
-                return Err(self.unsupported(id, "free needs a typed native pointer (possibly null)"));
+            if !matches!(
+                self.values[pointer.0 as usize].ty,
+                HirType::NativePointer(_)
+            ) {
+                return Err(
+                    self.unsupported(id, "free needs a typed native pointer (possibly null)")
+                );
             }
-            return Ok(self.push(OpKind::NativeFree { pointer }, HirType::Void, self.origin(id)));
+            return Ok(self.push(
+                OpKind::NativeFree { pointer },
+                HirType::Void,
+                self.origin(id),
+            ));
         }
-        let ty = self.type_of(id).ok_or_else(|| self.unsupported(id, "native allocation needs a complete native type argument"))?;
-        let HirType::NativePointer(ref element) = ty else { return Err(self.unsupported(id, "native allocation must return a typed pointer")); };
+        let ty = self.type_of(id).ok_or_else(|| {
+            self.unsupported(
+                id,
+                "native allocation needs a complete native type argument",
+            )
+        })?;
+        let HirType::NativePointer(ref element) = ty else {
+            return Err(self.unsupported(id, "native allocation must return a typed pointer"));
+        };
         // The stack limit below is checked before the target is known, so on
         // the ABI that bounds every target's size: see `NativeAbi::BOUND` for
         // which way that imprecision falls.
-        let shape = crate::hir::layout::native_shape(element, crate::hir::native::NativeAbi::BOUND).ok_or_else(|| self.unsupported(id, "native allocation needs a complete element layout"))?;
+        let shape = crate::hir::layout::native_shape(element, crate::hir::native::NativeAbi::BOUND)
+            .ok_or_else(|| {
+                self.unsupported(id, "native allocation needs a complete element layout")
+            })?;
         let kind = if operation == "local" {
             let count = match args {
                 [] => 1.0,
@@ -932,22 +1619,44 @@ impl FuncBuilder<'_> {
                     let value = self.lower_expression(*arg)?;
                     match self.values[value.0 as usize].kind {
                         OpKind::ConstFloat(n) => n,
-                        OpKind::ConstInt(n) => f64::from(u32::try_from(n).map_err(|_| self.unsupported(id, "local needs a positive fixed count"))?),
-                        _ => self.constant_value(*arg, &rustc_hash::FxHashMap::default())
-                            .ok_or_else(|| self.unsupported(id, "local array count must be a compile-time constant"))?,
+                        OpKind::ConstInt(n) => f64::from(u32::try_from(n).map_err(|_| {
+                            self.unsupported(id, "local needs a positive fixed count")
+                        })?),
+                        _ => self
+                            .constant_value(*arg, &rustc_hash::FxHashMap::default())
+                            .ok_or_else(|| {
+                                self.unsupported(
+                                    id,
+                                    "local array count must be a compile-time constant",
+                                )
+                            })?,
                     }
                 }
-                _ => return Err(self.unsupported(id, "local takes at most one constant element count")),
+                _ => {
+                    return Err(
+                        self.unsupported(id, "local takes at most one constant element count")
+                    );
+                }
             };
-            if !count.is_finite() || count < 1.0 || count.fract() != 0.0 || count * f64::from(shape.size) > f64::from(crate::hir::native_storage::STACK_LIMIT) {
-                return Err(self.unsupported(id, "local needs a positive fixed count and at most 65536 bytes"));
+            if !count.is_finite()
+                || count < 1.0
+                || count.fract() != 0.0
+                || count * f64::from(shape.size)
+                    > f64::from(crate::hir::native_storage::STACK_LIMIT)
+            {
+                return Err(self.unsupported(
+                    id,
+                    "local needs a positive fixed count and at most 65536 bytes",
+                ));
             }
             // Positive, integral and bounded above by STACK_LIMIT above.
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let count = count as u32;
             OpKind::NativeLocal { count }
         } else {
-            let [arg] = args else { return Err(self.unsupported(id, "malloc needs a byte count")); };
+            let [arg] = args else {
+                return Err(self.unsupported(id, "malloc needs a byte count"));
+            };
             let bytes = self.lower_expression(*arg)?;
             let bytes = self.coerce(bytes, &HirType::NUMBER, id)?;
             OpKind::NativeMalloc { bytes }

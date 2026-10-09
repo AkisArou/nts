@@ -115,11 +115,9 @@
 //! rounding an unknown down to the cheaper answer "is how a measurement talks
 //! itself into the representation it was hoping for."
 
-use nts_semantic_schema::schema::{
-    LiteralValue, NodeId, SemanticSnapshot, TypeId, TypeKind,
-};
-use nts_semantic_schema::{syntax, walk};
 use crate::inhabit::Inhabitants;
+use nts_semantic_schema::schema::{LiteralValue, NodeId, SemanticSnapshot, TypeId, TypeKind};
+use nts_semantic_schema::{syntax, walk};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// The checker's `TypeFlagsUniqueESSymbol`, mirrored from `names_one_member`.
@@ -365,7 +363,9 @@ impl Census {
     /// spare. The lower bound of the bracket.
     #[must_use]
     pub fn through_satisfied(&self) -> u32 {
-        self.fields_where(|site| site.shape == Shape::Interface && (site.satisfied || site.implemented))
+        self.fields_where(|site| {
+            site.shape == Shape::Interface && (site.satisfied || site.implemented)
+        })
     }
 
     /// Interface accesses a **sound** narrow rule could not spare.
@@ -567,7 +567,7 @@ pub fn classify(snapshot: &SemanticSnapshot) -> Census {
             syntax::ELEMENT_ACCESS_EXPRESSION => keyed(snapshot, id, &inhabitable, &mut out),
             syntax::BINDING_ELEMENT => destructured(snapshot, id, &inhabitable, &mut out),
             syntax::SPREAD_ASSIGNMENT => spread(snapshot, id, &inhabitable, &mut out),
-            _ => {},
+            _ => {}
         }
     }
 
@@ -594,7 +594,15 @@ fn dotted(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitants, out: &mu
     let Some(name) = walk::text_of(snapshot, member) else {
         return;
     };
-    record(snapshot, id, object, Member::Spelled(name), Form::Dotted, known, out);
+    record(
+        snapshot,
+        id,
+        object,
+        Member::Spelled(name),
+        Form::Dotted,
+        known,
+        out,
+    );
 }
 
 /// `v["name"]`, `v[kRefed]` — but never `v[i]`.
@@ -617,13 +625,13 @@ fn keyed(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitants, out: &mut
         Some(TypeKind::Literal(LiteralValue::Number(value))) => {
             spelled = format!("{value}");
             Member::Spelled(&spelled)
-        },
+        }
         Some(TypeKind::Structured { flags }) if flags & UNIQUE_SYMBOL != 0 => {
             match walk::text_of(snapshot, index) {
                 Some(described) => Member::Described(described),
                 None => return,
             }
-        },
+        }
         _ => return,
     };
     record(snapshot, id, object, named, Form::Keyed, known, out);
@@ -760,7 +768,7 @@ fn record(
                 Some(property) => {
                     member.clone_from(&property.name);
                     Some(property)
-                },
+                }
                 None => None,
             },
         };
@@ -768,12 +776,12 @@ fn record(
             Some(property) if !property.kind.is_stored() => {
                 out.excluded.not_stored += 1;
                 return;
-            },
+            }
             None => {
                 out.excluded.member_not_declared += 1;
                 return;
-            },
-            Some(_) => {},
+            }
+            Some(_) => {}
         }
     }
     let (receiver, implemented, satisfied, unexamined, arms) = receiver_of(snapshot, ty, known);
@@ -846,12 +854,15 @@ fn access_of(snapshot: &SemanticSnapshot, access: NodeId, form: Form) -> Access 
             if parts.first() != Some(&access) {
                 return Access::Read;
             }
-            match parts.get(1).and_then(|token| walk::kind_of(snapshot, *token)) {
+            match parts
+                .get(1)
+                .and_then(|token| walk::kind_of(snapshot, *token))
+            {
                 Some(syntax::EQUALS_TOKEN) => Access::Write,
                 Some(token) if assigns_in_place(token) => Access::ReadModifyWrite,
                 _ => Access::Read,
             }
-        },
+        }
         Some(syntax::POSTFIX_UNARY_EXPRESSION) => Access::ReadModifyWrite,
         Some(syntax::PREFIX_UNARY_EXPRESSION) => {
             if walk::children(snapshot, up)
@@ -862,7 +873,7 @@ fn access_of(snapshot: &SemanticSnapshot, access: NodeId, form: Form) -> Access 
             } else {
                 Access::Read
             }
-        },
+        }
         _ => Access::Read,
     }
 }
@@ -983,7 +994,11 @@ fn through_a_constraint(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
 /// `import * as ns` of a module with a default export, which is most of
 /// `runtime/node`'s internal imports.
 fn denotes_a_module(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
-    let Some(local) = snapshot.nodes.get(id.0 as usize).and_then(|node| node.symbol) else {
+    let Some(local) = snapshot
+        .nodes
+        .get(id.0 as usize)
+        .and_then(|node| node.symbol)
+    else {
         return false;
     };
     let declared_as_a_namespace = snapshot
@@ -1053,7 +1068,7 @@ fn owner_of(snapshot: &SemanticSnapshot, id: NodeId) -> String {
                     .and_then(|name| walk::text_of(snapshot, name))
                     .unwrap_or("<anonymous>")
                     .to_owned();
-            },
+            }
             Some(syntax::ARROW_FUNCTION) => return "<arrow>".to_owned(),
             _ => at = walk::parent(snapshot, node),
         }

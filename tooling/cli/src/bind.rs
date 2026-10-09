@@ -22,8 +22,8 @@
 //! `size_t`, a struct one member short.
 
 use anyhow::{Context, Result, bail};
-use std::fmt::Write as _;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 
 /// What to bind, and from where.
 pub(crate) struct Request {
@@ -256,7 +256,11 @@ pub(crate) fn constants(request: &Request) -> Result<String> {
         // for `epoll_event` becoming `EpollEvent` and wrong for a constant,
         // where `EPOLL_CTL_ADD` came out as `EPOLLCTLADD` -- a name that is
         // neither the header's nor anyone's choice.
-        let local = request.aliases.get(name).cloned().unwrap_or_else(|| name.clone());
+        let local = request
+            .aliases
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.clone());
         if local == *name
             && nodes.iter().any(|n| {
                 matches!(
@@ -324,7 +328,11 @@ pub(crate) fn run(request: &Request) -> Result<String> {
         let spelled = if record.naming == Naming::Typedef {
             record.tag.clone()
         } else {
-            format!("{} {}", if record.union { "union" } else { "struct" }, record.tag)
+            format!(
+                "{} {}",
+                if record.union { "union" } else { "struct" },
+                record.tag
+            )
         };
         let _ = writeln!(
             text,
@@ -431,9 +439,15 @@ fn why_clang_could_not_run(output: &std::process::Output, stderr: &str) -> Optio
     for (marker, why) in [
         ("out of memory", "the machine was out of memory"),
         ("cannot allocate memory", "an allocation failed"),
-        ("resource temporarily unavailable", "the machine could not fork"),
+        (
+            "resource temporarily unavailable",
+            "the machine could not fork",
+        ),
         ("no space left on device", "the filesystem was full"),
-        ("text file busy", "the compiler was being written while it ran"),
+        (
+            "text file busy",
+            "the compiler was being written while it ran",
+        ),
         ("too many open files", "the process ran out of descriptors"),
     ] {
         if said.contains(marker) {
@@ -503,7 +517,9 @@ struct Binding {
 }
 
 fn children(node: &serde_json::Value) -> &[serde_json::Value] {
-    node.get("inner").and_then(serde_json::Value::as_array).map_or(&[], Vec::as_slice)
+    node.get("inner")
+        .and_then(serde_json::Value::as_array)
+        .map_or(&[], Vec::as_slice)
 }
 
 fn walk<'a>(node: &'a serde_json::Value, out: &mut Vec<&'a serde_json::Value>) {
@@ -600,15 +616,12 @@ impl Binding {
             })
             .flatten()
         })?;
-        nodes
-            .iter()
-            .copied()
-            .find(|node| {
-                node.get("kind").and_then(serde_json::Value::as_str) == Some("RecordDecl")
-                    && node.get("id").and_then(serde_json::Value::as_str) == Some(declared)
-                    && node.get("completeDefinition") == Some(&serde_json::Value::Bool(true))
-                    && node.get("name").is_none()
-            })
+        nodes.iter().copied().find(|node| {
+            node.get("kind").and_then(serde_json::Value::as_str) == Some("RecordDecl")
+                && node.get("id").and_then(serde_json::Value::as_str) == Some(declared)
+                && node.get("completeDefinition") == Some(&serde_json::Value::Bool(true))
+                && node.get("name").is_none()
+        })
     }
 
     /// The same, from a declaration already in hand -- which is how an
@@ -786,7 +799,11 @@ impl Binding {
                     }
                 }
             };
-            members.push(Member { name: member.to_owned(), ty, aliases: Vec::new() });
+            members.push(Member {
+                name: member.to_owned(),
+                ty,
+                aliases: Vec::new(),
+            });
         }
         if !problems.is_empty() {
             return Err(problems);
@@ -797,7 +814,13 @@ impl Binding {
             )]);
         }
         Ok((
-            Record { tag: tag.to_owned(), naming: Naming::Tagged, union, packed, members },
+            Record {
+                tag: tag.to_owned(),
+                naming: Naming::Tagged,
+                union,
+                packed,
+                members,
+            },
             nested,
         ))
     }
@@ -948,7 +971,9 @@ impl Binding {
         self.pull_in_nested(&nodes, &typedefs)?;
 
         for node in &nodes {
-            let Some(name) = node.get("name").and_then(serde_json::Value::as_str) else { continue };
+            let Some(name) = node.get("name").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
             if node.get("kind").and_then(serde_json::Value::as_str) != Some("FunctionDecl")
                 || !wanted_functions.contains(name)
                 || self.functions.iter().any(|f| f.name == name)
@@ -960,12 +985,17 @@ impl Binding {
                 .split_once(" (")
                 .map(|(before, _)| before.trim())
                 .ok_or_else(|| anyhow::anyhow!("`{name}` has an unreadable type `{signature}`"))?;
-            let result =
-                if result == "void" { None } else { Some(shape(result, &typedefs)?) };
+            let result = if result == "void" {
+                None
+            } else {
+                Some(shape(result, &typedefs)?)
+            };
             let mut parameters = Vec::new();
             for (at, parameter) in children(node)
                 .iter()
-                .filter(|c| c.get("kind").and_then(serde_json::Value::as_str) == Some("ParmVarDecl"))
+                .filter(|c| {
+                    c.get("kind").and_then(serde_json::Value::as_str) == Some("ParmVarDecl")
+                })
                 .enumerate()
             {
                 let (written, desugared) = qual_type(parameter).unwrap_or_default();
@@ -975,7 +1005,10 @@ impl Binding {
                 let spelled = parameter
                     .get("name")
                     .and_then(serde_json::Value::as_str)
-                    .map_or_else(|| format!("arg{at}"), |n| n.trim_start_matches('_').to_owned());
+                    .map_or_else(
+                        || format!("arg{at}"),
+                        |n| n.trim_start_matches('_').to_owned(),
+                    );
                 parameters.push((
                     spelled,
                     shape_of(written, desugared, &typedefs)
@@ -1080,7 +1113,8 @@ fn qual_type(node: &serde_json::Value) -> Option<(&str, Option<&str>)> {
     let ty = node.get("type")?;
     Some((
         ty.get("qualType")?.as_str()?,
-        ty.get("desugaredQualType").and_then(serde_json::Value::as_str),
+        ty.get("desugaredQualType")
+            .and_then(serde_json::Value::as_str),
     ))
 }
 
@@ -1108,6 +1142,7 @@ fn shape_of(
 /// brand: `uint32_t` is `c_uint32` and `unsigned int` is `c_uint`, and on this
 /// target they are the same type spelled by two declarations that mean
 /// different things to a reader.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
     // `restrict` is dropped, and dropping it takes nothing away.
     //
@@ -1118,7 +1153,11 @@ fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
     // What the obligation is, is unchanged; what is gone is a spelling that
     // would otherwise refuse most of <string.h> and <stdio.h>.
     let without_restrict = c_type.replace("restrict", " ");
-    let c_type = if c_type.contains("restrict") { without_restrict.as_str() } else { c_type };
+    let c_type = if c_type.contains("restrict") {
+        without_restrict.as_str()
+    } else {
+        c_type
+    };
     let c_type = c_type.trim();
     let squeezed;
     let c_type = if c_type.contains("  ") {
@@ -1159,7 +1198,11 @@ fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
         && let Some(parameters) = rest.strip_suffix(')')
     {
         let result = result.trim();
-        let result = if result == "void" { None } else { Some(shape(result, typedefs)?) };
+        let result = if result == "void" {
+            None
+        } else {
+            Some(shape(result, typedefs)?)
+        };
         let parameters = if parameters.trim() == "void" || parameters.trim().is_empty() {
             Vec::new()
         } else {
@@ -1222,10 +1265,12 @@ fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
         // to fall back to and `struct stat` and `struct termios` were both
         // refused for a typedef the parse had already resolved.
         other => {
-            let next = typedefs.get(other).ok_or_else(|| anyhow::anyhow!(
-                "`{other}` is a C type this does not know how to spell in a binding; \
+            let next = typedefs.get(other).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "`{other}` is a C type this does not know how to spell in a binding; \
                  add it to `shape` beside the others rather than letting it be guessed"
-            ))?;
+                )
+            })?;
             // A chain terminates: clang's own typedefs are acyclic, and a name
             // that resolved to itself would be a parse this could not have got.
             if next == other {
@@ -1300,7 +1345,9 @@ fn parse_layouts(text: &str) -> BTreeMap<String, Observed> {
     let mut offsets: Vec<u64> = Vec::new();
     let mut named: BTreeMap<String, (u64, Option<(u32, u32)>)> = BTreeMap::new();
     for line in text.lines() {
-        let Some((left, right)) = line.split_once('|') else { continue };
+        let Some((left, right)) = line.split_once('|') else {
+            continue;
+        };
         // Depth is the run of spaces after the pipe: one for the record's own
         // line and for its `[sizeof=...]`, three for a member, five for a
         // member of a member. Counting it rather than stripping a fixed prefix
@@ -1310,11 +1357,22 @@ fn parse_layouts(text: &str) -> BTreeMap<String, Observed> {
         let depth = right.len() - body.len();
         if let Some(rest) = body.strip_prefix("[sizeof=") {
             let (size, rest) = rest.split_once(',').unwrap_or((rest, ""));
-            let align = rest.trim().trim_start_matches("align=").trim_end_matches(']');
+            let align = rest
+                .trim()
+                .trim_start_matches("align=")
+                .trim_end_matches(']');
             if let (Some(name), Ok(size), Ok(align)) =
                 (tag.take(), size.trim().parse(), align.trim().parse())
             {
-                found.insert(name, Observed { size, align, members: std::mem::take(&mut named), offsets: std::mem::take(&mut offsets) });
+                found.insert(
+                    name,
+                    Observed {
+                        size,
+                        align,
+                        members: std::mem::take(&mut named),
+                        offsets: std::mem::take(&mut offsets),
+                    },
+                );
             }
             offsets.clear();
             named.clear();
@@ -1326,16 +1384,25 @@ fn parse_layouts(text: &str) -> BTreeMap<String, Observed> {
         // clang prints a field that runs past its own byte.
         let (offset, place) = match left.trim().split_once(':') {
             None => {
-                let Ok(offset) = left.trim().parse::<u64>() else { continue };
+                let Ok(offset) = left.trim().parse::<u64>() else {
+                    continue;
+                };
                 (offset, None)
             }
             Some((byte, range)) => {
-                let Ok(byte) = byte.trim().parse::<u64>() else { continue };
-                let Some((lo, hi)) = range.split_once('-') else { continue };
+                let Ok(byte) = byte.trim().parse::<u64>() else {
+                    continue;
+                };
+                let Some((lo, hi)) = range.split_once('-') else {
+                    continue;
+                };
                 let (Ok(lo), Ok(hi)) = (lo.trim().parse::<u32>(), hi.trim().parse::<u32>()) else {
                     continue;
                 };
-                (byte, Some((lo, hi.checked_sub(lo).map_or(0, |span| span + 1))))
+                (
+                    byte,
+                    Some((lo, hi.checked_sub(lo).map_or(0, |span| span + 1))),
+                )
             }
         };
         if depth == 1 {
@@ -1403,7 +1470,11 @@ impl Binding {
             };
             // A record holding a bit-field is checked differently, not less.
             // See `check_bit_widths`.
-            if record.members.iter().any(|m| matches!(m.ty, Shape::Bits(..))) {
+            if record
+                .members
+                .iter()
+                .any(|m| matches!(m.ty, Shape::Bits(..)))
+            {
                 Self::check_bit_widths(record, seen)?;
                 continue;
             }
@@ -1413,8 +1484,12 @@ impl Binding {
                     "the binding for `{}` does not reproduce the layout clang computed:\n  \
                      binding: size {} align {} offsets {:?}\n  clang:   size {} align {} offsets {:?}",
                     record.tag,
-                    computed.size, computed.align, computed.offsets,
-                    seen.size, seen.align, seen.offsets,
+                    computed.size,
+                    computed.align,
+                    computed.offsets,
+                    seen.size,
+                    seen.align,
+                    seen.offsets,
                 );
             }
         }
@@ -1463,14 +1538,14 @@ impl Binding {
         Ok(())
     }
 
-
     /// The layout this binding describes, by the same rules `hir::layout` uses.
     fn place(&self, record: &Record) -> Result<Observed> {
         let mut shapes = Vec::new();
         for member in &record.members {
-            shapes.push(self.size_align(&member.ty).with_context(|| {
-                format!("member `{}` of `{}`", member.name, record.tag)
-            })?);
+            shapes.push(
+                self.size_align(&member.ty)
+                    .with_context(|| format!("member `{}` of `{}`", member.name, record.tag))?,
+            );
         }
         if record.union {
             let align = shapes.iter().map(|(_, a)| *a).max().unwrap_or(1);
@@ -1505,7 +1580,16 @@ impl Binding {
             offsets.push(at);
             at += size;
         }
-        Ok(Observed { members: BTreeMap::new(), size: if record.packed { at } else { at.div_ceil(align) * align }, align, offsets })
+        Ok(Observed {
+            members: BTreeMap::new(),
+            size: if record.packed {
+                at
+            } else {
+                at.div_ceil(align) * align
+            },
+            align,
+            offsets,
+        })
     }
 
     fn size_align(&self, shape: &Shape) -> Result<(u64, u64)> {
@@ -1576,7 +1660,10 @@ impl Shape {
                     .map(|(at, ty)| format!("arg{at}: {}", ty.spell_crossing(aliases)))
                     .collect::<Vec<_>>()
                     .join(", "),
-                result.as_ref().as_ref().map_or_else(|| "void".to_owned(), |ty| ty.spell_crossing(aliases))
+                result
+                    .as_ref()
+                    .as_ref()
+                    .map_or_else(|| "void".to_owned(), |ty| ty.spell_crossing(aliases))
             ),
         }
     }
@@ -1587,7 +1674,9 @@ impl Shape {
     /// inline.
     fn spell_crossing(&self, aliases: &BTreeMap<String, String>) -> String {
         match self {
-            Self::Record(_) | Self::AnonymousRecord(_) => format!("ByValue<{}>", self.spell(aliases)),
+            Self::Record(_) | Self::AnonymousRecord(_) => {
+                format!("ByValue<{}>", self.spell(aliases))
+            }
             _ => self.spell(aliases),
         }
     }
@@ -1709,9 +1798,15 @@ impl Binding {
         let needed = self.imports_needed();
         let mut out = String::new();
         out.push_str("// Generated by `nts bind-c`. Edit the command, not this file.\n//\n");
-        out.push_str("// Derived from one compiler's reading of these headers under these macros,\n");
-        out.push_str("// which makes it a claim like any hand-written binding. `native_witness.c`\n");
-        out.push_str("// is what proves it against the headers a consumer actually compiles with.\n");
+        out.push_str(
+            "// Derived from one compiler's reading of these headers under these macros,\n",
+        );
+        out.push_str(
+            "// which makes it a claim like any hand-written binding. `native_witness.c`\n",
+        );
+        out.push_str(
+            "// is what proves it against the headers a consumer actually compiles with.\n",
+        );
         out.push_str("/**\n");
         for header in &request.headers {
             let _ = writeln!(out, " * @ntsHeader {header}");
@@ -1750,14 +1845,25 @@ impl Binding {
             // type beside the header's and would not compile.
             let body = if record.naming == Naming::Typedef {
                 // The name is a typedef, so C writes it without a keyword.
-                format!("Typedef<{keyword}<{{\n{members}\n  }}, \"{}\">>", record.tag)
+                format!(
+                    "Typedef<{keyword}<{{\n{members}\n  }}, \"{}\">>",
+                    record.tag
+                )
             } else if record.naming == Naming::Anonymous {
                 format!("{keyword}<{{\n{members}\n  }}>")
             } else {
                 format!("{keyword}<{{\n{members}\n  }}, \"{}\">", record.tag)
             };
-            let body = if record.packed { format!("Packed<{body}>") } else { body };
-            let _ = writeln!(out, "  export type {} = {body};", alias_for(&record.tag, &request.aliases));
+            let body = if record.packed {
+                format!("Packed<{body}>")
+            } else {
+                body
+            };
+            let _ = writeln!(
+                out,
+                "  export type {} = {body};",
+                alias_for(&record.tag, &request.aliases)
+            );
         }
         for function in &self.functions {
             let borrowed: Vec<&str> = request
@@ -1790,10 +1896,10 @@ impl Binding {
                 // declaration rather than at a call.
                 parameters.push("...rest: unknown[] /* TODO: the tail's C type */".to_owned());
             }
-            let result = function
-                .result
-                .as_ref()
-                .map_or_else(|| "void".to_owned(), |ty| ty.spell_crossing(&request.aliases));
+            let result = function.result.as_ref().map_or_else(
+                || "void".to_owned(),
+                |ty| ty.spell_crossing(&request.aliases),
+            );
             let _ = writeln!(
                 out,
                 "  export function {}({}): {result};",
@@ -1863,7 +1969,9 @@ mod tests {
             why_clang_could_not_run(&oom, &stderr),
             Some("the machine was out of memory")
         );
-        let forked = ran("echo 'clang: error: unable to execute command: Resource temporarily unavailable' >&2; exit 1");
+        let forked = ran(
+            "echo 'clang: error: unable to execute command: Resource temporarily unavailable' >&2; exit 1",
+        );
         let stderr = String::from_utf8_lossy(&forked.stderr).into_owned();
         assert_eq!(
             why_clang_could_not_run(&forked, &stderr),
@@ -1908,8 +2016,9 @@ mod tests {
     fn c_spellings_map_or_are_refused_by_name() {
         // `cc_t` stands for the case the survey found: a typedef reached
         // through an array, where clang reports no `desugaredQualType` at all.
-        let typedefs: BTreeMap<String, String> =
-            [("cc_t".to_owned(), "unsigned char".to_owned())].into_iter().collect();
+        let typedefs: BTreeMap<String, String> = [("cc_t".to_owned(), "unsigned char".to_owned())]
+            .into_iter()
+            .collect();
         let shape = |c_type: &str| super::shape(c_type, &typedefs);
         assert_eq!(shape("char").unwrap(), Shape::Scalar("c_char"));
         // `char` and `uint8_t` are different types with one representation,
@@ -1926,7 +2035,10 @@ mod tests {
             shape("char[65]").unwrap(),
             Shape::Array(Box::new(Shape::Scalar("c_char")), 65)
         );
-        assert_eq!(shape("struct pollfd").unwrap(), Shape::Record("pollfd".to_owned()));
+        assert_eq!(
+            shape("struct pollfd").unwrap(),
+            Shape::Record("pollfd".to_owned())
+        );
         // A function pointer, which is a member of `struct sigaction` and of
         // every registration table in C.
         assert_eq!(
@@ -1975,7 +2087,11 @@ mod tests {
             packed,
             members: members
                 .iter()
-                .map(|(name, ty)| Member { name: (*name).to_owned(), aliases: Vec::new(), ty: ty.clone() })
+                .map(|(name, ty)| Member {
+                    name: (*name).to_owned(),
+                    aliases: Vec::new(),
+                    ty: ty.clone(),
+                })
                 .collect(),
         }
     }
@@ -2016,8 +2132,14 @@ mod tests {
             // pointer, and a `void *`.
             parameters: vec![
                 ("a".to_owned(), Shape::VoidPointer(true)),
-                ("b".to_owned(), Shape::Pointer(Box::new(Shape::Scalar("c_char")), true)),
-                ("c".to_owned(), Shape::Pointer(Box::new(Shape::Scalar("c_int")), false)),
+                (
+                    "b".to_owned(),
+                    Shape::Pointer(Box::new(Shape::Scalar("c_char")), true),
+                ),
+                (
+                    "c".to_owned(),
+                    Shape::Pointer(Box::new(Shape::Scalar("c_int")), false),
+                ),
             ],
             result: Some(Shape::Scalar("c_int")),
             variadic: false,
@@ -2030,9 +2152,7 @@ mod tests {
         );
         assert!(silent.contains("ConstPtr<unknown>"), "{silent}");
 
-        let authored = binding.render(&request(vec![
-            ("keeps_it".to_owned(), "a".to_owned()),
-        ]));
+        let authored = binding.render(&request(vec![("keeps_it".to_owned(), "a".to_owned())]));
         assert!(authored.contains("@ntsNoEscape a"), "{authored}");
         assert!(
             authored.contains("an authored claim"),
@@ -2081,7 +2201,10 @@ mod tests {
         binding.functions.push(Function {
             name: "stat".to_owned(),
             parameters: vec![
-                ("file".to_owned(), Shape::Pointer(Box::new(Shape::Scalar("c_char")), true)),
+                (
+                    "file".to_owned(),
+                    Shape::Pointer(Box::new(Shape::Scalar("c_char")), true),
+                ),
                 ("buf".to_owned(), Shape::VoidPointer(false)),
             ],
             result: Some(Shape::Scalar("c_int")),
@@ -2093,7 +2216,10 @@ mod tests {
             .unwrap_err()
             .to_string();
         for expected in ["stat", "path", "file", "buf", "underscores"] {
-            assert!(refused.contains(expected), "must name `{expected}`: {refused}");
+            assert!(
+                refused.contains(expected),
+                "must name `{expected}`: {refused}"
+            );
         }
 
         // A function nobody is binding is a different sentence, and says so.
@@ -2101,7 +2227,10 @@ mod tests {
             .check_contracts(&request(vec![("fstat".to_owned(), "buf".to_owned())]))
             .unwrap_err()
             .to_string();
-        assert!(other.contains("not one of the functions being bound"), "{other}");
+        assert!(
+            other.contains("not one of the functions being bound"),
+            "{other}"
+        );
 
         // And the arm that makes both checks: a contract that does name a
         // parameter passes, or this would hold on a tool that refused every
@@ -2116,27 +2245,44 @@ mod tests {
         let mut binding = Binding::default();
         binding.records.insert(
             "epoll_data".to_owned(),
-            record("epoll_data", true, false, &[
-                ("ptr", Shape::VoidPointer(false)),
-                ("fd", Shape::Scalar("c_int")),
-                ("u64", Shape::Scalar("c_uint64")),
-            ]),
+            record(
+                "epoll_data",
+                true,
+                false,
+                &[
+                    ("ptr", Shape::VoidPointer(false)),
+                    ("fd", Shape::Scalar("c_int")),
+                    ("u64", Shape::Scalar("c_uint64")),
+                ],
+            ),
         );
         binding.records.insert(
             "epoll_event".to_owned(),
-            record("epoll_event", false, true, &[
-                ("events", Shape::Scalar("c_uint32")),
-                ("data", Shape::Record("epoll_data".to_owned())),
-            ]),
+            record(
+                "epoll_event",
+                false,
+                true,
+                &[
+                    ("events", Shape::Scalar("c_uint32")),
+                    ("data", Shape::Record("epoll_data".to_owned())),
+                ],
+            ),
         );
         let observed = parse_layouts(DUMP);
         let mut clang = BTreeMap::new();
         clang.insert("epoll_event".to_owned(), observed["epoll_event"].clone());
         clang.insert(
             "epoll_data".to_owned(),
-            Observed { size: 8, align: 8, offsets: vec![0, 0, 0], members: BTreeMap::new() },
+            Observed {
+                size: 8,
+                align: 8,
+                offsets: vec![0, 0, 0],
+                members: BTreeMap::new(),
+            },
         );
-        binding.check(&clang).expect("the packed struct and the union must agree");
+        binding
+            .check(&clang)
+            .expect("the packed struct and the union must agree");
 
         // The arm that makes the one above a check: unpacked, the same members
         // are sixteen bytes with the union at eight. If `check` passed this,
@@ -2174,7 +2320,10 @@ mod tests {
         // is fourteen of these in a row and this is why it describes at all.
         let names: Vec<&str> = record.members.iter().map(|m| m.name.as_str()).collect();
         assert_eq!(names, ["a", "b"], "{record:?}");
-        assert!(nested.is_empty(), "nothing is named that C does not name: {nested:?}");
+        assert!(
+            nested.is_empty(),
+            "nothing is named that C does not name: {nested:?}"
+        );
 
         // The second name for the same bytes. A `Member` carries no offset, so
         // it cannot be a member of its own -- but losing it silently would let

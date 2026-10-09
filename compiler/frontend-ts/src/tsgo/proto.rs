@@ -470,7 +470,10 @@ pub struct GetDiagnosticsParams {
     /// A plain-JS file's diagnostics without tsgo's `plainJSErrors` filter --
     /// the carried patch `typescript-go-plain-js-unfiltered`. Ignored for any
     /// other file, and by a tsgo without the patch.
-    #[serde(rename = "plainJsUnfiltered", skip_serializing_if = "std::ops::Not::not")]
+    #[serde(
+        rename = "plainJsUnfiltered",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
     pub plain_js_unfiltered: bool,
 }
 

@@ -191,7 +191,11 @@ fn the_receiver_is_unerased_to_the_class_it_is_called_as() {
         .find(|layout| layout.types.contains(&class))
         .expect("the class has a layout");
     assert!(
-        layout.methods.iter().flatten().any(|method| method == &name),
+        layout
+            .methods
+            .iter()
+            .flatten()
+            .any(|method| method == &name),
         "`{name}` is {}'s own implementation, not another class's",
         layout.name
     );

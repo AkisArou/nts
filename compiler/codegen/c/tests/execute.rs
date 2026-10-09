@@ -574,10 +574,16 @@ int main(void) {{
 "#
     );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some(result) = build_and_run_with("a-pattern-parameter-before-scalars", &harness, provider) else {
+        let Some(result) =
+            build_and_run_with("a-pattern-parameter-before-scalars", &harness, provider)
+        else {
             return;
         };
-        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
         assert!(String::from_utf8_lossy(&result.stdout).contains("unused(7) = 12"));
     }
 }

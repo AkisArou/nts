@@ -477,8 +477,14 @@ impl Summaries<'_, '_> {
     }
 
     fn call(&self, at: NodeId, kind: Option<u16>, into: &mut Vec<Event>) {
-        if matches!(kind, Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION | syntax::TAGGED_TEMPLATE_EXPRESSION))
-            || self.probe.reads_an_accessor(at)
+        if matches!(
+            kind,
+            Some(
+                syntax::CALL_EXPRESSION
+                    | syntax::NEW_EXPRESSION
+                    | syntax::TAGGED_TEMPLATE_EXPRESSION
+            )
+        ) || self.probe.reads_an_accessor(at)
         {
             let mut bodies = raising_callees_of(self.probe.snapshot, self.probe, at);
             if kind == Some(syntax::NEW_EXPRESSION) {
@@ -758,9 +764,13 @@ pub(super) fn analyze(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Analy
         };
         let at = NodeId(index);
         let throws = match kind {
-            syntax::AS_EXPRESSION | syntax::NON_NULL_EXPRESSION => super::assertions::can_throw(probe, at),
+            syntax::AS_EXPRESSION | syntax::NON_NULL_EXPRESSION => {
+                super::assertions::can_throw(probe, at)
+            }
             syntax::PREFIX_UNARY_EXPRESSION => probe.plus_of_a_bigint(at),
-            syntax::PROPERTY_ACCESS_EXPRESSION => super::assertions::getter_read_can_throw(probe, at),
+            syntax::PROPERTY_ACCESS_EXPRESSION => {
+                super::assertions::getter_read_can_throw(probe, at)
+            }
             _ => false,
         };
         if throws {

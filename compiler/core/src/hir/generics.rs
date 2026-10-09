@@ -145,7 +145,10 @@ fn declared_types(snapshot: &SemanticSnapshot) -> FxHashMap<SymbolId, TypeId> {
         let Some(&ty) = snapshot.node_types.get(&id) else {
             continue;
         };
-        let Some(symbol) = snapshot.types.get(ty.0 as usize).and_then(|record| record.symbol)
+        let Some(symbol) = snapshot
+            .types
+            .get(ty.0 as usize)
+            .and_then(|record| record.symbol)
         else {
             continue;
         };
@@ -249,7 +252,11 @@ pub fn instantiations(snapshot: &SemanticSnapshot) -> FxHashMap<SymbolId, Vec<In
                 let sigma = sigma_of_instance(snapshot, declaration, ty);
                 let substitution =
                     substitution.with_instances(&templates, Owner::Type(symbol), &sigma);
-                instances.push(Instantiation { ty, substitution, sources });
+                instances.push(Instantiation {
+                    ty,
+                    substitution,
+                    sources,
+                });
             }
         }
         // Sorted, so one compiler on one input emits its copies in one order.
@@ -420,15 +427,29 @@ pub(super) fn add_value_fallbacks(
     found: &mut GenericFunctions,
     declarations: impl IntoIterator<Item = NodeId>,
 ) {
-    let source = snapshot.types.iter().enumerate()
+    let source = snapshot
+        .types
+        .iter()
+        .enumerate()
         .find(|(_, record)| matches!(record.kind, TypeKind::Unknown))
-        .or_else(|| snapshot.types.iter().enumerate()
-            .find(|(_, record)| matches!(record.kind, TypeKind::Any)))
-        .and_then(|(at, _)| u32::try_from(at).ok()).map(TypeId);
-    let Some(source) = source else { return; };
+        .or_else(|| {
+            snapshot
+                .types
+                .iter()
+                .enumerate()
+                .find(|(_, record)| matches!(record.kind, TypeKind::Any))
+        })
+        .and_then(|(at, _)| u32::try_from(at).ok())
+        .map(TypeId);
+    let Some(source) = source else {
+        return;
+    };
     for declaration in declarations {
-        let Some(signature) = declared_signature(snapshot, declaration) else { continue; };
-        if signature.type_parameters.is_empty() || found.value_fallbacks.contains_key(&declaration) {
+        let Some(signature) = declared_signature(snapshot, declaration) else {
+            continue;
+        };
+        if signature.type_parameters.is_empty() || found.value_fallbacks.contains_key(&declaration)
+        {
             continue;
         }
         let mut substitution = Substitution::default();
@@ -440,18 +461,28 @@ pub(super) fn add_value_fallbacks(
         // Distinct from a direct call at an erased union: its source membership
         // can authorize different narrowing than this genuinely open kernel.
         let fallback = FunctionInstance {
-            substitution, sources, suffix: "<value-erased>".to_owned(),
+            substitution,
+            sources,
+            suffix: "<value-erased>".to_owned(),
         };
-        found.copies.entry(declaration).or_default().push(fallback.clone());
+        found
+            .copies
+            .entry(declaration)
+            .or_default()
+            .push(fallback.clone());
         found.value_fallbacks.insert(declaration, fallback);
     }
-    if found.value_fallbacks.is_empty() { return; }
+    if found.value_fallbacks.is_empty() {
+        return;
+    }
     let templates = Templates::new(snapshot);
     for _ in 0..PASSES {
         let before = copies_made(found);
         found.unpinned.clear();
         one_pass(snapshot, &templates, found);
-        if copies_made(found) == before { break; }
+        if copies_made(found) == before {
+            break;
+        }
     }
     for copies in found.copies.values_mut() {
         copies.sort_by(|a, b| a.suffix.cmp(&b.suffix));
@@ -468,39 +499,82 @@ pub(super) fn add_value_fallbacks(
 pub const VALUE_CONTEXT_CAP: usize = 8;
 
 pub(super) fn add_value_context(
-    snapshot: &SemanticSnapshot, templates: &Templates, found: &mut GenericFunctions,
-    declaration: NodeId, receiving: TypeId,
+    snapshot: &SemanticSnapshot,
+    templates: &Templates,
+    found: &mut GenericFunctions,
+    declaration: NodeId,
+    receiving: TypeId,
 ) {
-    let Some(TypeKind::Function(signature)) = snapshot.types.get(receiving.0 as usize)
-        .map(|record| &record.kind) else { return; };
-    let Some(actual) = snapshot.signatures.get(signature.0 as usize) else { return; };
-    let Some(generic) = declared_signature(snapshot, declaration) else { return; };
-    if generic.parameters.len() != actual.parameters.len() { return; }
-    let Pinned { substitution, sources, deferred } = pin_down(snapshot, generic, actual);
-    if !deferred.is_empty() || generic.type_parameters.iter()
-        .any(|parameter| !substitution.contains_key(parameter) || !sources.contains_key(parameter)) {
+    let Some(TypeKind::Function(signature)) = snapshot
+        .types
+        .get(receiving.0 as usize)
+        .map(|record| &record.kind)
+    else {
+        return;
+    };
+    let Some(actual) = snapshot.signatures.get(signature.0 as usize) else {
+        return;
+    };
+    let Some(generic) = declared_signature(snapshot, declaration) else {
+        return;
+    };
+    if generic.parameters.len() != actual.parameters.len() {
+        return;
+    }
+    let Pinned {
+        substitution,
+        sources,
+        deferred,
+    } = pin_down(snapshot, generic, actual);
+    if !deferred.is_empty()
+        || generic.type_parameters.iter().any(|parameter| {
+            !substitution.contains_key(parameter) || !sources.contains_key(parameter)
+        })
+    {
         return;
     }
     let contexts = found.value_contexts.entry(declaration).or_default();
-    if let Some(context) = contexts.iter_mut().find(|context|
-        context.instance.sources == sources && generic.type_parameters.iter().all(|parameter|
-            context.instance.substitution.get(parameter) == substitution.get(parameter))) {
-        if !context.receiving.contains(&receiving) { context.receiving.push(receiving); }
+    if let Some(context) = contexts.iter_mut().find(|context| {
+        context.instance.sources == sources
+            && generic.type_parameters.iter().all(|parameter| {
+                context.instance.substitution.get(parameter) == substitution.get(parameter)
+            })
+    }) {
+        if !context.receiving.contains(&receiving) {
+            context.receiving.push(receiving);
+        }
         return;
     }
     // Independent of existing direct-call copies and the always-open fallback.
-    if contexts.len() >= VALUE_CONTEXT_CAP { return; }
-    let identity: Vec<_> = generic.type_parameters.iter().map(|parameter| {
-        format!("{}@{}", spell(substitution.get(parameter).expect("pinned parameter")),
-            sources[parameter].0)
-    }).collect();
+    if contexts.len() >= VALUE_CONTEXT_CAP {
+        return;
+    }
+    let identity: Vec<_> = generic
+        .type_parameters
+        .iter()
+        .map(|parameter| {
+            format!(
+                "{}@{}",
+                spell(substitution.get(parameter).expect("pinned parameter")),
+                sources[parameter].0
+            )
+        })
+        .collect();
     let sigma = sources.iter().map(|(k, v)| (*k, *v)).collect();
     let instance = FunctionInstance {
         substitution: substitution.with_instances(templates, Owner::Function(declaration), &sigma),
-        sources, suffix: format!("<value-{}>", identity.join(",")),
+        sources,
+        suffix: format!("<value-{}>", identity.join(",")),
     };
-    found.copies.entry(declaration).or_default().push(instance.clone());
-    contexts.push(ValueContext { instance, receiving: vec![receiving] });
+    found
+        .copies
+        .entry(declaration)
+        .or_default()
+        .push(instance.clone());
+    contexts.push(ValueContext {
+        instance,
+        receiving: vec![receiving],
+    });
 }
 
 pub(super) fn settle_value_contexts(snapshot: &SemanticSnapshot, found: &mut GenericFunctions) {
@@ -509,12 +583,19 @@ pub(super) fn settle_value_contexts(snapshot: &SemanticSnapshot, found: &mut Gen
         let before = copies_made(found);
         found.unpinned.clear();
         one_pass(snapshot, &templates, found);
-        if copies_made(found) == before { break; }
+        if copies_made(found) == before {
+            break;
+        }
     }
-    for copies in found.copies.values_mut() { copies.sort_by(|a, b| a.suffix.cmp(&b.suffix)); }
+    for copies in found.copies.values_mut() {
+        copies.sort_by(|a, b| a.suffix.cmp(&b.suffix));
+    }
     for contexts in found.value_contexts.values_mut() {
         contexts.sort_by(|a, b| a.instance.suffix.cmp(&b.instance.suffix));
-        for context in contexts { context.receiving.sort(); context.receiving.dedup(); }
+        for context in contexts {
+            context.receiving.sort();
+            context.receiving.dedup();
+        }
     }
 }
 
@@ -531,11 +612,7 @@ fn copies_made(found: &GenericFunctions) -> usize {
 /// One sweep over every call, adding the copies it implies to what is already
 /// found. Idempotent: a call answers the same suffix every pass, and a copy is
 /// pushed only if no copy of that name is there.
-fn one_pass(
-    snapshot: &SemanticSnapshot,
-    templates: &Templates,
-    found: &mut GenericFunctions,
-) {
+fn one_pass(snapshot: &SemanticSnapshot, templates: &Templates, found: &mut GenericFunctions) {
     for (call, target) in &snapshot.call_targets {
         let Some(declaration) = target.callee else {
             continue;
@@ -603,12 +680,12 @@ fn one_pass(
                 .type_parameters
                 .iter()
                 .filter(|parameter| !substitution.contains_key(parameter))
-                .filter_map(|parameter| {
-                    match &snapshot.types.get(parameter.0 as usize)?.kind {
+                .filter_map(
+                    |parameter| match &snapshot.types.get(parameter.0 as usize)?.kind {
                         TypeKind::TypeParameter { name, .. } => Some(name.clone()),
                         _ => None,
-                    }
-                })
+                    },
+                )
                 .collect();
             let seen = found.unpinned.entry(declaration).or_default();
             for name in loose {
@@ -699,12 +776,22 @@ fn unify_through_a_union(
         // positional pairing would bind `S` to whichever member came first -- a
         // wrong copy rather than a missing one, which is the trade this function
         // refuses everywhere else.
-        if let Some(TypeKind::Union(theirs)) =
-            snapshot.types.get(actual_id.0 as usize).map(|record| &record.kind)
+        if let Some(TypeKind::Union(theirs)) = snapshot
+            .types
+            .get(actual_id.0 as usize)
+            .map(|record| &record.kind)
         {
             let (ours, theirs) = (members.to_vec(), theirs.clone());
-            let mut left: Vec<TypeId> = ours.iter().copied().filter(|m| !theirs.contains(m)).collect();
-            let mut right: Vec<TypeId> = theirs.iter().copied().filter(|m| !ours.contains(m)).collect();
+            let mut left: Vec<TypeId> = ours
+                .iter()
+                .copied()
+                .filter(|m| !theirs.contains(m))
+                .collect();
+            let mut right: Vec<TypeId> = theirs
+                .iter()
+                .copied()
+                .filter(|m| !ours.contains(m))
+                .collect();
             // A member whose kind only one member on each side has: the function
             // case, which is the one React's hooks need.
             let is_function = |ty: &TypeId| {
@@ -730,15 +817,26 @@ fn unify_through_a_union(
         let mut agreed: Option<(Substitution, Sources, Sources)> = None;
         let mut disagreed = false;
         for member in members {
-            let (mut mine, mut source, mut later) =
-                (Substitution::default(), Sources::default(), Sources::default());
-            unify(snapshot, *member, actual_id, &mut mine, &mut source, &mut later, depth + 1);
+            let (mut mine, mut source, mut later) = (
+                Substitution::default(),
+                Sources::default(),
+                Sources::default(),
+            );
+            unify(
+                snapshot,
+                *member,
+                actual_id,
+                &mut mine,
+                &mut source,
+                &mut later,
+                depth + 1,
+            );
             if mine.is_empty() && source.is_empty() && later.is_empty() {
                 continue;
             }
             match &agreed {
                 Some((seen, _, _)) if *seen != mine => disagreed = true,
-                Some(_) => {},
+                Some(_) => {}
                 None => agreed = Some((mine, source, later)),
             }
         }
@@ -749,7 +847,7 @@ fn unify_through_a_union(
             sources.extend(source);
             deferred.extend(later);
         }
-        }
+    }
 }
 
 fn unify(
@@ -807,7 +905,15 @@ fn unify(
         return;
     };
     if let (TypeKind::Array(inner), TypeKind::Array(against)) = (&generic.kind, &actual.kind) {
-        unify(snapshot, *inner, *against, into, sources, deferred, depth + 1);
+        unify(
+            snapshot,
+            *inner,
+            *against,
+            into,
+            sources,
+            deferred,
+            depth + 1,
+        );
     }
     // **And through an instantiation's arguments**, which is where the rest of
     // the corpus's unpinned calls were. A parameter `stream:
@@ -885,7 +991,9 @@ fn unify(
     // then.
     if let TypeKind::Union(members) = &generic.kind {
         let members = members.clone();
-        unify_through_a_union(snapshot, &members, actual_id, into, sources, deferred, depth);
+        unify_through_a_union(
+            snapshot, &members, actual_id, into, sources, deferred, depth,
+        );
         return;
     }
     // **Through a tuple's positions**, which is where the rest of React's hook
@@ -916,7 +1024,15 @@ fn unify(
         && declared.parameters.len() == resolved.parameters.len()
     {
         for (declared, resolved) in declared.parameters.iter().zip(&resolved.parameters) {
-            unify(snapshot, declared.ty, resolved.ty, into, sources, deferred, depth + 1);
+            unify(
+                snapshot,
+                declared.ty,
+                resolved.ty,
+                into,
+                sources,
+                deferred,
+                depth + 1,
+            );
         }
         unify(
             snapshot,
@@ -1007,8 +1123,7 @@ fn expand_within_a_generic(
 ) {
     // Whatever declares the first deferred parameter, which is the generic
     // every other one must be bound by too.
-    let mut deferred: Vec<(TypeId, TypeId)> =
-        call.bound_to.iter().map(|(k, v)| (*k, *v)).collect();
+    let mut deferred: Vec<(TypeId, TypeId)> = call.bound_to.iter().map(|(k, v)| (*k, *v)).collect();
     deferred.sort();
     let Some((_, first)) = deferred.first().copied() else {
         return;
@@ -1021,7 +1136,10 @@ fn expand_within_a_generic(
     let Some(owner) = templates.owner_of(first) else {
         return;
     };
-    if deferred.iter().any(|(_, ty)| templates.owner_of(*ty) != Some(owner)) {
+    if deferred
+        .iter()
+        .any(|(_, ty)| templates.owner_of(*ty) != Some(owner))
+    {
         return;
     }
     match owner {
@@ -1128,7 +1246,12 @@ impl Bindings {
 
     /// Bind one deferred parameter to `what`. `false` once anything is unbound,
     /// so the caller stops asking.
-    fn pin(&mut self, snapshot: &SemanticSnapshot, parameter: TypeId, what: Option<TypeId>) -> bool {
+    fn pin(
+        &mut self,
+        snapshot: &SemanticSnapshot,
+        parameter: TypeId,
+        what: Option<TypeId>,
+    ) -> bool {
         let Some(representation) = what.and_then(|what| {
             representation(snapshot, what).map(|representation| (what, representation))
         }) else {
@@ -1234,9 +1357,9 @@ fn suffix_of(
     let spelled: Vec<String> = parameters
         .iter()
         .map(|parameter| {
-            substitution
-                .get(parameter)
-                .map_or_else(|| "?".to_owned(), |ty| {
+            substitution.get(parameter).map_or_else(
+                || "?".to_owned(),
+                |ty| {
                     let spelled = spell(ty);
                     // A tuple's arity is part of what the copy is, because the
                     // copy declares one parameter per position. Appended rather
@@ -1253,7 +1376,8 @@ fn suffix_of(
                         }
                         _ => spelled,
                     }
-                })
+                },
+            )
         })
         .collect();
     format!("<{}>", spelled.join(","))
@@ -1268,26 +1392,44 @@ pub(crate) fn spell(ty: &super::HirType) -> String {
     match ty {
         HirType::Void => "void".to_owned(),
         HirType::Never => "never".to_owned(),
-        HirType::NativePointer(super::native::Pointee::Opaque(name)) => format!("native{}_{}", name.len(), name),
-        HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => format!("native_scalar_{scalar:?}"),
+        HirType::NativePointer(super::native::Pointee::Opaque(name)) => {
+            format!("native{}_{}", name.len(), name)
+        }
+        HirType::NativePointer(super::native::Pointee::Scalar(scalar)) => {
+            format!("native_scalar_{scalar:?}")
+        }
         // No pointer to a bit-field exists in C, so this spelling names a
         // specialization that cannot be reached. Spelled anyway rather than
         // unreachable!(): a name that is wrong is a link error, and a panic in
         // a monomorphizer is a crash with no program to look at.
         HirType::NativePointer(super::native::Pointee::Flexible(element)) => {
-            format!("flex{}", spell(&HirType::NativePointer((**element).clone())))
+            format!(
+                "flex{}",
+                spell(&HirType::NativePointer((**element).clone()))
+            )
         }
         HirType::NativePointer(super::native::Pointee::Bits { unit, width }) => {
             format!("nativebits{}x{width}", unit.c_type().replace(' ', "_"))
         }
-        HirType::NativePointer(super::native::Pointee::Record(layout)) => format!("native_struct_{}_{}", layout.name.len(), layout.name),
-        HirType::NativePointer(super::native::Pointee::Pointer(pointee)) => format!("ptr_{}", spell(&HirType::NativePointer((**pointee).clone()))),
+        HirType::NativePointer(super::native::Pointee::Record(layout)) => {
+            format!("native_struct_{}_{}", layout.name.len(), layout.name)
+        }
+        HirType::NativePointer(super::native::Pointee::Pointer(pointee)) => format!(
+            "ptr_{}",
+            spell(&HirType::NativePointer((**pointee).clone()))
+        ),
         HirType::NativePointer(super::native::Pointee::Void) => "native_void".to_owned(),
         HirType::NativePointer(super::native::Pointee::Array { element, length }) => {
-            format!("arr{length}_{}", spell(&HirType::NativePointer((**element).clone())))
+            format!(
+                "arr{length}_{}",
+                spell(&HirType::NativePointer((**element).clone()))
+            )
         }
         HirType::NativePointer(super::native::Pointee::Const(pointee)) => {
-            format!("const_{}", spell(&HirType::NativePointer((**pointee).clone())))
+            format!(
+                "const_{}",
+                spell(&HirType::NativePointer((**pointee).clone()))
+            )
         }
         // The typedef name, which is already a function of the signature's
         // shape -- so two spellings agree exactly when the signatures do.
@@ -1295,7 +1437,10 @@ pub(crate) fn spell(ty: &super::HirType) -> String {
             format!("fn_{}", signature.name)
         }
         HirType::NativePointer(super::native::Pointee::Unaligned(pointee)) => {
-            format!("unaligned_{}", spell(&HirType::NativePointer((**pointee).clone())))
+            format!(
+                "unaligned_{}",
+                spell(&HirType::NativePointer((**pointee).clone()))
+            )
         }
         HirType::Bool => "bool".to_owned(),
         HirType::Erased => "erased".to_owned(),

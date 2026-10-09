@@ -3,19 +3,23 @@
 use nts_semantic_schema::NodeId;
 use react_compiler_ast::common::RawNode;
 use react_compiler_ast::expressions::{
-    ArrayExpression, ArrowFunctionBody, ArrowFunctionExpression, AssignmentExpression, AwaitExpression,
-    BinaryExpression, CallExpression, ClassExpression, ConditionalExpression, Expression, FunctionExpression,
-    Identifier, Import, LogicalExpression, MemberExpression, MetaProperty, NewExpression, ObjectExpression,
-    ObjectExpressionProperty, ObjectMethod, ObjectMethodKind, ObjectProperty, OptionalCallExpression,
-    OptionalMemberExpression, PrivateName, SequenceExpression, SpreadElement, Super, TSAsExpression,
-    TSInstantiationExpression, TSNonNullExpression, TSSatisfiesExpression, TSTypeAssertion, TaggedTemplateExpression,
-    TemplateLiteral, ThisExpression, UnaryExpression, UpdateExpression, YieldExpression,
+    ArrayExpression, ArrowFunctionBody, ArrowFunctionExpression, AssignmentExpression,
+    AwaitExpression, BinaryExpression, CallExpression, ClassExpression, ConditionalExpression,
+    Expression, FunctionExpression, Identifier, Import, LogicalExpression, MemberExpression,
+    MetaProperty, NewExpression, ObjectExpression, ObjectExpressionProperty, ObjectMethod,
+    ObjectMethodKind, ObjectProperty, OptionalCallExpression, OptionalMemberExpression,
+    PrivateName, SequenceExpression, SpreadElement, Super, TSAsExpression,
+    TSInstantiationExpression, TSNonNullExpression, TSSatisfiesExpression, TSTypeAssertion,
+    TaggedTemplateExpression, TemplateLiteral, ThisExpression, UnaryExpression, UpdateExpression,
+    YieldExpression,
 };
 use react_compiler_ast::literals::{
-    BigIntLiteral, BooleanLiteral, NullLiteral, NumericLiteral, NumericLiteralExtra, RegExpLiteral, StringLiteral,
-    TemplateElement, TemplateElementValue,
+    BigIntLiteral, BooleanLiteral, NullLiteral, NumericLiteral, NumericLiteralExtra, RegExpLiteral,
+    StringLiteral, TemplateElement, TemplateElementValue,
 };
-use react_compiler_ast::operators::{AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator, UpdateOperator};
+use react_compiler_ast::operators::{
+    AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator, UpdateOperator,
+};
 use react_compiler_ast::patterns::PatternLike;
 
 use super::{Converted, Converter, k};
@@ -46,12 +50,22 @@ enum BinaryKind {
 
 impl Converter<'_> {
     pub(super) fn identifier(&self, id: NodeId) -> Identifier {
-        Identifier { base: self.base(id), name: self.text_of(id), type_annotation: None, optional: None, decorators: None }
+        Identifier {
+            base: self.base(id),
+            name: self.text_of(id),
+            type_annotation: None,
+            optional: None,
+            decorators: None,
+        }
     }
 
     pub(super) fn function_parts(&self, id: NodeId) -> Converted<FunctionParts> {
         Ok(FunctionParts {
-            params: self.list(id, "parameters").into_iter().map(|p| self.parameter(p)).collect::<Converted<_>>()?,
+            params: self
+                .list(id, "parameters")
+                .into_iter()
+                .map(|p| self.parameter(p))
+                .collect::<Converted<_>>()?,
             is_async: self.has_modifier(id, k::ASYNC_KEYWORD),
             generator: self.child(id, "asteriskToken").is_some(),
             return_type: self.child(id, "type").map(|t| self.type_annotation(t)),
@@ -60,7 +74,10 @@ impl Converter<'_> {
     }
 
     fn arguments(&self, id: NodeId) -> Converted<Vec<Expression>> {
-        self.list(id, "arguments").into_iter().map(|a| self.expression(a)).collect()
+        self.list(id, "arguments")
+            .into_iter()
+            .map(|a| self.expression(a))
+            .collect()
     }
 
     fn boxed(&self, id: NodeId, property: &str) -> Converted<Box<Expression>> {
@@ -86,15 +103,28 @@ impl Converter<'_> {
                     decorators: None,
                 },
             }),
-            k::STRING_LITERAL => Expression::StringLiteral(StringLiteral { base, value: self.string_value(id) }),
+            k::STRING_LITERAL => Expression::StringLiteral(StringLiteral {
+                base,
+                value: self.string_value(id),
+            }),
             k::NUMERIC_LITERAL => {
                 let raw = self.text.slice(self.start(id), self.end(id));
                 let value = super::literal::numeric_value(&raw);
-                Expression::NumericLiteral(NumericLiteral { base, value, extra: Some(NumericLiteralExtra { raw_value: Some(value), raw }) })
+                Expression::NumericLiteral(NumericLiteral {
+                    base,
+                    value,
+                    extra: Some(NumericLiteralExtra {
+                        raw_value: Some(value),
+                        raw,
+                    }),
+                })
             }
             k::BIG_INT_LITERAL => {
                 let raw = self.text.slice(self.start(id), self.end(id));
-                Expression::BigIntLiteral(BigIntLiteral { base, value: raw.trim_end_matches('n').replace('_', "") })
+                Expression::BigIntLiteral(BigIntLiteral {
+                    base,
+                    value: raw.trim_end_matches('n').replace('_', ""),
+                })
             }
             k::REGULAR_EXPRESSION_LITERAL => {
                 let raw = self.text.slice(self.start(id), self.end(id));
@@ -113,26 +143,43 @@ impl Converter<'_> {
             k::IMPORT_KEYWORD => Expression::Import(Import { base }),
             // Babel does not keep parentheses as nodes.
             k::PARENTHESIZED_EXPRESSION => self.expression(self.need(id, "expression")?)?,
-            k::NO_SUBSTITUTION_TEMPLATE_LITERAL | k::TEMPLATE_EXPRESSION => Expression::TemplateLiteral(self.template(id)?),
-            k::TAGGED_TEMPLATE_EXPRESSION => Expression::TaggedTemplateExpression(TaggedTemplateExpression {
-                base,
-                tag: self.boxed(id, "tag")?,
-                quasi: self.template(self.need(id, "template")?)?,
-                type_parameters: self.type_arguments(id),
-            }),
+            k::NO_SUBSTITUTION_TEMPLATE_LITERAL | k::TEMPLATE_EXPRESSION => {
+                Expression::TemplateLiteral(self.template(id)?)
+            }
+            k::TAGGED_TEMPLATE_EXPRESSION => {
+                Expression::TaggedTemplateExpression(TaggedTemplateExpression {
+                    base,
+                    tag: self.boxed(id, "tag")?,
+                    quasi: self.template(self.need(id, "template")?)?,
+                    type_parameters: self.type_arguments(id),
+                })
+            }
             k::ARRAY_LITERAL_EXPRESSION => Expression::ArrayExpression(ArrayExpression {
                 base,
                 elements: self
                     .list(id, "elements")
                     .into_iter()
-                    .map(|e| if self.kind(e) == k::OMITTED_EXPRESSION { Ok(None) } else { self.expression(e).map(Some) })
+                    .map(|e| {
+                        if self.kind(e) == k::OMITTED_EXPRESSION {
+                            Ok(None)
+                        } else {
+                            self.expression(e).map(Some)
+                        }
+                    })
                     .collect::<Converted<_>>()?,
             }),
             k::OBJECT_LITERAL_EXPRESSION => Expression::ObjectExpression(ObjectExpression {
                 base,
-                properties: self.list(id, "properties").into_iter().map(|p| self.object_member(p)).collect::<Converted<_>>()?,
+                properties: self
+                    .list(id, "properties")
+                    .into_iter()
+                    .map(|p| self.object_member(p))
+                    .collect::<Converted<_>>()?,
             }),
-            k::SPREAD_ELEMENT => Expression::SpreadElement(SpreadElement { base, argument: self.boxed(id, "expression")? }),
+            k::SPREAD_ELEMENT => Expression::SpreadElement(SpreadElement {
+                base,
+                argument: self.boxed(id, "expression")?,
+            }),
             k::PROPERTY_ACCESS_EXPRESSION | k::ELEMENT_ACCESS_EXPRESSION => self.member(id)?,
             k::CALL_EXPRESSION => {
                 let callee = self.boxed(id, "expression")?;
@@ -167,8 +214,18 @@ impl Converter<'_> {
             k::PREFIX_UNARY_EXPRESSION => {
                 let argument = self.boxed(id, "operand")?;
                 match self.small(id) {
-                    4 => Expression::UpdateExpression(UpdateExpression { base, operator: UpdateOperator::Increment, argument, prefix: true }),
-                    5 => Expression::UpdateExpression(UpdateExpression { base, operator: UpdateOperator::Decrement, argument, prefix: true }),
+                    4 => Expression::UpdateExpression(UpdateExpression {
+                        base,
+                        operator: UpdateOperator::Increment,
+                        argument,
+                        prefix: true,
+                    }),
+                    5 => Expression::UpdateExpression(UpdateExpression {
+                        base,
+                        operator: UpdateOperator::Decrement,
+                        argument,
+                        prefix: true,
+                    }),
                     operator => Expression::UnaryExpression(UnaryExpression {
                         base,
                         operator: match operator {
@@ -184,24 +241,36 @@ impl Converter<'_> {
             }
             k::POSTFIX_UNARY_EXPRESSION => Expression::UpdateExpression(UpdateExpression {
                 base,
-                operator: if self.small(id) == 1 { UpdateOperator::Decrement } else { UpdateOperator::Increment },
+                operator: if self.small(id) == 1 {
+                    UpdateOperator::Decrement
+                } else {
+                    UpdateOperator::Increment
+                },
                 argument: self.boxed(id, "operand")?,
                 prefix: false,
             }),
-            k::TYPE_OF_EXPRESSION | k::VOID_EXPRESSION | k::DELETE_EXPRESSION => Expression::UnaryExpression(UnaryExpression {
+            k::TYPE_OF_EXPRESSION | k::VOID_EXPRESSION | k::DELETE_EXPRESSION => {
+                Expression::UnaryExpression(UnaryExpression {
+                    base,
+                    operator: match self.kind(id) {
+                        k::TYPE_OF_EXPRESSION => UnaryOperator::TypeOf,
+                        k::VOID_EXPRESSION => UnaryOperator::Void,
+                        _ => UnaryOperator::Delete,
+                    },
+                    prefix: true,
+                    argument: self.boxed(id, "expression")?,
+                })
+            }
+            k::AWAIT_EXPRESSION => Expression::AwaitExpression(AwaitExpression {
                 base,
-                operator: match self.kind(id) {
-                    k::TYPE_OF_EXPRESSION => UnaryOperator::TypeOf,
-                    k::VOID_EXPRESSION => UnaryOperator::Void,
-                    _ => UnaryOperator::Delete,
-                },
-                prefix: true,
                 argument: self.boxed(id, "expression")?,
             }),
-            k::AWAIT_EXPRESSION => Expression::AwaitExpression(AwaitExpression { base, argument: self.boxed(id, "expression")? }),
             k::YIELD_EXPRESSION => Expression::YieldExpression(YieldExpression {
                 base,
-                argument: self.child(id, "expression").map(|e| self.expression(e).map(Box::new)).transpose()?,
+                argument: self
+                    .child(id, "expression")
+                    .map(|e| self.expression(e).map(Box::new))
+                    .transpose()?,
                 delegate: self.child(id, "asteriskToken").is_some(),
             }),
             k::BINARY_EXPRESSION => self.binary(id)?,
@@ -272,15 +341,26 @@ impl Converter<'_> {
                 expression: self.boxed(id, "expression")?,
                 type_annotation: self.type_node(self.need(id, "type")?),
             }),
-            k::NON_NULL_EXPRESSION => Expression::TSNonNullExpression(TSNonNullExpression { base, expression: self.boxed(id, "expression")? }),
-            k::EXPRESSION_WITH_TYPE_ARGUMENTS => Expression::TSInstantiationExpression(TSInstantiationExpression {
+            k::NON_NULL_EXPRESSION => Expression::TSNonNullExpression(TSNonNullExpression {
                 base,
                 expression: self.boxed(id, "expression")?,
-                type_parameters: self.type_arguments(id).ok_or_else(|| self.unsupported(id, "an instantiation without type arguments"))?,
             }),
+            k::EXPRESSION_WITH_TYPE_ARGUMENTS => {
+                Expression::TSInstantiationExpression(TSInstantiationExpression {
+                    base,
+                    expression: self.boxed(id, "expression")?,
+                    type_parameters: self.type_arguments(id).ok_or_else(|| {
+                        self.unsupported(id, "an instantiation without type arguments")
+                    })?,
+                })
+            }
             k::META_PROPERTY => {
                 let meta_start = self.start(id);
-                let (meta, length) = if self.small(id) == 1 { ("new", 3) } else { ("import", 6) };
+                let (meta, length) = if self.small(id) == 1 {
+                    ("new", 3)
+                } else {
+                    ("import", 6)
+                };
                 Expression::MetaProperty(MetaProperty {
                     base,
                     meta: Identifier {
@@ -293,7 +373,9 @@ impl Converter<'_> {
                     property: self.identifier(self.need(id, "name")?),
                 })
             }
-            k::JSX_ELEMENT | k::JSX_SELF_CLOSING_ELEMENT => Expression::JSXElement(Box::new(self.jsx_element(id)?)),
+            k::JSX_ELEMENT | k::JSX_SELF_CLOSING_ELEMENT => {
+                Expression::JSXElement(Box::new(self.jsx_element(id)?))
+            }
             k::JSX_FRAGMENT => Expression::JSXFragment(self.jsx_fragment(id)?),
             _ => return Err(self.unsupported(id, "an expression this converter does not know")),
         })
@@ -319,7 +401,12 @@ impl Converter<'_> {
                 optional: self.child(id, "questionDotToken").is_some(),
             })
         } else {
-            Expression::MemberExpression(MemberExpression { base, object, property, computed })
+            Expression::MemberExpression(MemberExpression {
+                base,
+                object,
+                property,
+                computed,
+            })
         })
     }
 
@@ -362,7 +449,9 @@ impl Converter<'_> {
             k::ASTERISK_ASTERISK_EQUALS_TOKEN => BinaryKind::Assignment(A::ExpAssign),
             k::LESS_THAN_LESS_THAN_EQUALS_TOKEN => BinaryKind::Assignment(A::ShlAssign),
             k::GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => BinaryKind::Assignment(A::ShrAssign),
-            k::GREATER_THAN_GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => BinaryKind::Assignment(A::UShrAssign),
+            k::GREATER_THAN_GREATER_THAN_GREATER_THAN_EQUALS_TOKEN => {
+                BinaryKind::Assignment(A::UShrAssign)
+            }
             k::BAR_EQUALS_TOKEN => BinaryKind::Assignment(A::BitOrAssign),
             k::CARET_EQUALS_TOKEN => BinaryKind::Assignment(A::BitXorAssign),
             k::AMPERSAND_EQUALS_TOKEN => BinaryKind::Assignment(A::BitAndAssign),
@@ -377,7 +466,9 @@ impl Converter<'_> {
     fn binary(&self, id: NodeId) -> Converted<Expression> {
         let base = self.base(id);
         let operator = self.need(id, "operatorToken")?;
-        let kind = self.binary_kind(operator).ok_or_else(|| self.unsupported(operator, "a binary operator this converter does not know"))?;
+        let kind = self.binary_kind(operator).ok_or_else(|| {
+            self.unsupported(operator, "a binary operator this converter does not know")
+        })?;
         let left = self.need(id, "left")?;
         let right = self.need(id, "right")?;
         Ok(match kind {
@@ -393,16 +484,22 @@ impl Converter<'_> {
                 left: Box::new(self.expression(left)?),
                 right: Box::new(self.expression(right)?),
             }),
-            BinaryKind::Assignment(operator) => Expression::AssignmentExpression(AssignmentExpression {
-                base,
-                operator,
-                left: Box::new(self.assignment_target(left)?),
-                right: Box::new(self.expression(right)?),
-            }),
+            BinaryKind::Assignment(operator) => {
+                Expression::AssignmentExpression(AssignmentExpression {
+                    base,
+                    operator,
+                    left: Box::new(self.assignment_target(left)?),
+                    right: Box::new(self.expression(right)?),
+                })
+            }
             BinaryKind::Comma => {
                 // `a, b, c` nests to the left in tsgo; Babel flattens it.
                 let mut expressions = match self.expression(left)? {
-                    Expression::SequenceExpression(sequence) if self.kind(left) != k::PARENTHESIZED_EXPRESSION => sequence.expressions,
+                    Expression::SequenceExpression(sequence)
+                        if self.kind(left) != k::PARENTHESIZED_EXPRESSION =>
+                    {
+                        sequence.expressions
+                    }
                     other => vec![other],
                 };
                 expressions.push(self.expression(right)?);
@@ -416,7 +513,11 @@ impl Converter<'_> {
     fn template(&self, id: NodeId) -> Converted<TemplateLiteral> {
         let base = self.base(id);
         if self.kind(id) == k::NO_SUBSTITUTION_TEMPLATE_LITERAL {
-            return Ok(TemplateLiteral { base, quasis: vec![self.template_element(id, true)], expressions: Vec::new() });
+            return Ok(TemplateLiteral {
+                base,
+                quasis: vec![self.template_element(id, true)],
+                expressions: Vec::new(),
+            });
         }
         let mut quasis = vec![self.template_element(self.need(id, "head")?, false)];
         let mut expressions = Vec::new();
@@ -425,15 +526,25 @@ impl Converter<'_> {
             let literal = self.need(span, "literal")?;
             quasis.push(self.template_element(literal, self.kind(literal) == k::TEMPLATE_TAIL));
         }
-        Ok(TemplateLiteral { base, quasis, expressions })
+        Ok(TemplateLiteral {
+            base,
+            quasis,
+            expressions,
+        })
     }
 
     fn template_element(&self, id: NodeId, tail: bool) -> TemplateElement {
         let start = self.start(id) + 1;
-        let end = self.end(id).saturating_sub(if tail { 1 } else { 2 }).max(start);
+        let end = self
+            .end(id)
+            .saturating_sub(if tail { 1 } else { 2 })
+            .max(start);
         TemplateElement {
             base: self.base_span(id, start, end),
-            value: TemplateElementValue { raw: self.text.slice(start, end), cooked: Some(self.text_of(id)) },
+            value: TemplateElementValue {
+                raw: self.text.slice(start, end),
+                cooked: Some(self.text_of(id)),
+            },
             tail,
         }
     }
@@ -478,7 +589,10 @@ impl Converter<'_> {
                     method: Some(false),
                 })
             }
-            k::SPREAD_ASSIGNMENT => ObjectExpressionProperty::SpreadElement(SpreadElement { base, argument: self.boxed(id, "expression")? }),
+            k::SPREAD_ASSIGNMENT => ObjectExpressionProperty::SpreadElement(SpreadElement {
+                base,
+                argument: self.boxed(id, "expression")?,
+            }),
             k::METHOD_DECLARATION | k::GET_ACCESSOR | k::SET_ACCESSOR => {
                 let (key, computed) = self.property_key(self.need(id, "name")?)?;
                 let parts = self.function_parts(id)?;

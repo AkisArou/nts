@@ -33,16 +33,27 @@ fn run_whole(name: &str, source: &str) -> Option<(i32, String, String)> {
     let fixtures = common::repository().join("tsconfig.fixtures.json");
     std::fs::write(
         dir.join("tsconfig.json"),
-        format!("{{\"extends\": {:?}, \"include\": [\"src\"]}}\n", fixtures.display().to_string()),
+        format!(
+            "{{\"extends\": {:?}, \"include\": [\"src\"]}}\n",
+            fixtures.display().to_string()
+        ),
     )
     .expect("write tsconfig");
     std::fs::write(dir.join("src/main.ts"), source).expect("write the program");
 
     let tsconfig = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).expect("a UTF-8 path");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).expect("snapshot");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot");
     assert!(!snapshot.has_errors(), "{name} should typecheck");
-    let prepared = hir::prepare_with(&snapshot, &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() })
-        .expect("prepared HIR should verify");
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Provider::NoGc,
+            ..hir::Options::default()
+        },
+    )
+    .expect("prepared HIR should verify");
     let emitted = nts_codegen_jvm::emit(&prepared.program);
 
     let out = dir.join("out");
@@ -77,14 +88,18 @@ fn a_clean_run_evaluates_the_module_then_drains_the_loop() {
         return;
     };
     assert_eq!(status, 0, "a clean run exits 0: {stderr}");
-    assert_eq!(stdout, "total 6\nend of module\ntimer 12\n", "node's order: the module, then the timer");
+    assert_eq!(
+        stdout, "total 6\nend of module\ntimer 12\n",
+        "node's order: the module, then the timer"
+    );
 }
 
 #[test]
 fn an_uncaught_throw_at_module_scope_exits_one() {
-    let Some((status, stdout, stderr)) =
-        run_whole("throw", "console.log(\"before\");\nthrow new RangeError(\"at module scope\");\n")
-    else {
+    let Some((status, stdout, stderr)) = run_whole(
+        "throw",
+        "console.log(\"before\");\nthrow new RangeError(\"at module scope\");\n",
+    ) else {
         return;
     };
     assert_eq!(status, 1, "C and node both exit 1: {stderr}");
@@ -145,7 +160,10 @@ fn an_unhandled_rejection_is_reported_after_the_turn() {
         return;
     };
     assert_eq!(status, 1, "node and C exit 1: {stderr}");
-    assert_eq!(stdout, "after\n", "reported after the module, not at the throw");
+    assert_eq!(
+        stdout, "after\n",
+        "reported after the module, not at the throw"
+    );
     assert_eq!(stderr.trim(), "nts: uncaught RangeError");
 }
 

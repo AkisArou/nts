@@ -23,8 +23,8 @@ use nts_core::hir::facts;
 
 #[test]
 fn the_analysis_and_the_runtime_agree_on_the_longest_array() {
-    let header = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../runtime/c/nts_runtime.h");
+    let header =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/c/nts_runtime.h");
     let text = std::fs::read_to_string(header).expect("runtime/c/nts_runtime.h is checked in");
     let line = text
         .lines()

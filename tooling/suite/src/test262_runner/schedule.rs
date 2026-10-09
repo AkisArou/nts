@@ -66,9 +66,17 @@ pub fn schedule_strict_script(record: &TestRecord) -> ScheduleOutcome {
     let module = record.flags.contains("module");
     ScheduleOutcome::Planned {
         plan: VariantPlan {
-            id: format!("{}#{}", record.path, if module { "module" } else { "strict" }),
+            id: format!(
+                "{}#{}",
+                record.path,
+                if module { "module" } else { "strict" }
+            ),
             test_path: record.path.clone(),
-            strict_prefix: if module { String::new() } else { "\"use strict\";\n".to_owned() },
+            strict_prefix: if module {
+                String::new()
+            } else {
+                "\"use strict\";\n".to_owned()
+            },
             includes: record.includes.clone(),
             features: record.features.clone(),
             negative: record.negative.clone(),
@@ -160,7 +168,10 @@ mod tests {
     fn schedules_ecma_402_as_an_implementation_gap() {
         let mut record = record(&[]);
         record.path = "test/intl402/NumberFormat/example.js".to_owned();
-        assert!(matches!(schedule_strict_script(&record), ScheduleOutcome::Planned { .. }));
+        assert!(matches!(
+            schedule_strict_script(&record),
+            ScheduleOutcome::Planned { .. }
+        ));
     }
 
     #[test]

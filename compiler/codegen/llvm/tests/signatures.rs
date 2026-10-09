@@ -62,11 +62,18 @@ const ARM64: Table = Table {
 /// builds with (`NTS_APPLE_SDK`, or where `tooling/apple/sync-sdk.sh` puts
 /// it). `None` without it.
 fn arm64_flags() -> Option<Vec<String>> {
-    let sdk = std::env::var_os("NTS_APPLE_SDK").map(std::path::PathBuf::from).or_else(|| {
-        std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".cache/nts/apple/MacOSX.sdk"))
-    })?;
+    let sdk = std::env::var_os("NTS_APPLE_SDK")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(|home| std::path::PathBuf::from(home).join(".cache/nts/apple/MacOSX.sdk"))
+        })?;
     sdk.join("usr/include").is_dir().then(|| {
-        vec!["--target=arm64-apple-macos13".to_owned(), "-isysroot".to_owned(), sdk.to_string_lossy().into_owned()]
+        vec![
+            "--target=arm64-apple-macos13".to_owned(),
+            "-isysroot".to_owned(),
+            sdk.to_string_lossy().into_owned(),
+        ]
     })
 }
 
@@ -75,14 +82,29 @@ fn arm64_flags() -> Option<Vec<String>> {
 fn win64_flags() -> Option<Vec<String>> {
     let env = std::process::Command::new("zig").arg("env").output().ok()?;
     let text = String::from_utf8_lossy(&env.stdout);
-    let lib = text.lines().find_map(|line| line.trim().strip_prefix(".lib_dir = \"")?.strip_suffix("\","))?;
+    let lib = text.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(".lib_dir = \"")?
+            .strip_suffix("\",")
+    })?;
     let headers = std::path::Path::new(lib).join("libc/include");
-    let mut flags = vec!["--target=x86_64-w64-windows-gnu".to_owned(), "-nostdlibinc".to_owned()];
-    for directory in ["x86_64-windows-gnu", "generic-mingw", "x86_64-windows-any", "any-windows-any"] {
+    let mut flags = vec![
+        "--target=x86_64-w64-windows-gnu".to_owned(),
+        "-nostdlibinc".to_owned(),
+    ];
+    for directory in [
+        "x86_64-windows-gnu",
+        "generic-mingw",
+        "x86_64-windows-any",
+        "any-windows-any",
+    ] {
         flags.push("-isystem".to_owned());
         flags.push(headers.join(directory).to_string_lossy().into_owned());
     }
-    flags.extend(["-D__MSVCRT_VERSION__=0xE00".to_owned(), "-D_WIN32_WINNT=0x0a00".to_owned()]);
+    flags.extend([
+        "-D__MSVCRT_VERSION__=0xE00".to_owned(),
+        "-D_WIN32_WINNT=0x0a00".to_owned(),
+    ]);
     Some(flags)
 }
 
@@ -152,7 +174,11 @@ fn declared_names(dir: &std::path::Path, flags: &[String]) -> Option<Vec<String>
     // compiler sees. Read as text, the System V probe named the Windows
     // helpers and failed to compile, on the one box that cannot build them.
     // Comments go too, so one mentioning `nts_foo(` is no longer a candidate.
-    std::fs::write(dir.join("names.c"), "#include \"nts_runtime.h\"\n#include \"nts_unicode.h\"\n").ok()?;
+    std::fs::write(
+        dir.join("names.c"),
+        "#include \"nts_runtime.h\"\n#include \"nts_unicode.h\"\n",
+    )
+    .ok()?;
     let preprocessed = std::process::Command::new("clang")
         .args(flags)
         .args(["-E", "-P", "-w", "-I"])
@@ -236,7 +262,11 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
     std::fs::create_dir_all(&dir).ok()?;
     std::fs::copy(&header, dir.join("nts_runtime.h")).ok()?;
     std::fs::copy(&unicode, dir.join("nts_unicode.h")).ok()?;
-    std::fs::copy(root.join("runtime/c/nts_string_view.h"), dir.join("nts_string_view.h")).ok()?;
+    std::fs::copy(
+        root.join("runtime/c/nts_string_view.h"),
+        dir.join("nts_string_view.h"),
+    )
+    .ok()?;
     let names = declared_names(&dir, flags)?;
     if names.is_empty() {
         return None;
@@ -270,7 +300,8 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
     let ir = String::from_utf8_lossy(&output.stdout);
 
     // Attribute groups are printed after the declarations that reference them.
-    let mut groups: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut groups: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
     for line in ir.lines() {
         let Some(rest) = line.strip_prefix("attributes #") else {
             continue;
@@ -290,9 +321,13 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
         let Some(at) = rest.find('@') else { continue };
         let returns = tidy(&rest[..at]);
         let after = &rest[at + 1..];
-        let Some(open) = after.find('(') else { continue };
+        let Some(open) = after.find('(') else {
+            continue;
+        };
         let name = after[..open].to_owned();
-        let Some(close) = after.rfind(')') else { continue };
+        let Some(close) = after.rfind(')') else {
+            continue;
+        };
         let params: Vec<String> = after[open + 1..close]
             .split(',')
             .map(tidy)
@@ -306,7 +341,12 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
             .find(|word| word.starts_with('#'))
             .and_then(|reference| groups.get(reference).cloned())
             .unwrap_or_default();
-        found.push(Declared { name, returns, params, attributes });
+        found.push(Declared {
+            name,
+            returns,
+            params,
+            attributes,
+        });
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
     Some(found)
@@ -327,7 +367,9 @@ fn regenerate(root: &std::path::Path, fresh: &[Declared], table: &Table) {
     // are the same on every target, so System V's list is every table's.
     let mut rows: Vec<String> = SIGNATURES
         .iter()
-        .filter(|known| !known.name.starts_with("nts_") && !fresh.iter().any(|f| f.name == known.name))
+        .filter(|known| {
+            !known.name.starts_with("nts_") && !fresh.iter().any(|f| f.name == known.name)
+        })
         .map(|known| row(known.name, known.returns, known.params, known.attributes))
         .collect();
     for declared in fresh {
@@ -336,7 +378,13 @@ fn regenerate(root: &std::path::Path, fresh: &[Declared], table: &Table) {
         rows.push(row(&declared.name, &declared.returns, &params, &attributes));
     }
     rows.sort_by_key(|line| {
-        line.split("name: \"").nth(1).unwrap_or("").split('"').next().unwrap_or("").to_owned()
+        line.split("name: \"")
+            .nth(1)
+            .unwrap_or("")
+            .split('"')
+            .next()
+            .unwrap_or("")
+            .to_owned()
     });
 
     let mut out = String::new();
@@ -354,7 +402,14 @@ fn row(name: &str, returns: &str, params: &[&str], attributes: &[&str]) -> Strin
         if items.is_empty() {
             "&[]".to_owned()
         } else {
-            format!("&[{}]", items.iter().map(|i| format!("\"{i}\"")).collect::<Vec<_>>().join(", "))
+            format!(
+                "&[{}]",
+                items
+                    .iter()
+                    .map(|i| format!("\"{i}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
     };
     format!(
@@ -375,7 +430,11 @@ fn the_table_still_matches_the_header() {
 #[test]
 fn no_win64_helper_takes_more_indirect_arguments_than_there_are_slots() {
     for row in SIGNATURES_WIN64 {
-        let indirect = row.params.iter().filter(|param| param.starts_with("ptr dead_on_return")).count();
+        let indirect = row
+            .params
+            .iter()
+            .filter(|param| param.starts_with("ptr dead_on_return"))
+            .count();
         assert!(
             indirect <= nts_codegen_llvm::WIN64_INDIRECT_SLOTS,
             "`{}` takes {indirect} sixteen-byte values by copy; raise `indirect::SLOTS`",
@@ -452,7 +511,11 @@ fn check(table: &Table, flags: &[String]) {
     // symbol whose signature nothing checks any more -- which is how three
     // hand-added rows outlived their declarations, and why regenerating would
     // have deleted two the backend calls.
-    for known in table.rows.iter().filter(|known| known.name.starts_with("nts_")) {
+    for known in table
+        .rows
+        .iter()
+        .filter(|known| known.name.starts_with("nts_"))
+    {
         assert!(
             fresh.iter().any(|declared| declared.name == known.name),
             "`{}` is in {} but the header no longer declares it; declare it or rerun with NTS_REGENERATE=1",

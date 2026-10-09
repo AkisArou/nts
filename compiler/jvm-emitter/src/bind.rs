@@ -35,7 +35,6 @@ use crate::class::access;
 use crate::read::ClassFile;
 use std::fmt::Write as _;
 
-
 /// Whether a member is left out of a curated binding, counting it if so.
 ///
 /// Two questions with one answer: the caller named which members it wants
@@ -333,8 +332,13 @@ fn reference(binary: &str) -> String {
         //
         // `null` is not lost: `returns` adds `| null` to an unannotated
         // reference return, and a boxed type is still a reference here.
-        "java/lang/Integer" | "java/lang/Double" | "java/lang/Short" | "java/lang/Byte"
-        | "java/lang/Float" | "java/lang/Character" | "java/lang/Number" => "number".to_owned(),
+        "java/lang/Integer"
+        | "java/lang/Double"
+        | "java/lang/Short"
+        | "java/lang/Byte"
+        | "java/lang/Float"
+        | "java/lang/Character"
+        | "java/lang/Number" => "number".to_owned(),
         "java/lang/Boolean" => "boolean".to_owned(),
         "java/lang/Long" => "bigint".to_owned(),
         // Refuse rather than miscompile: `any` would silence every later error.
@@ -343,7 +347,10 @@ fn reference(binary: &str) -> String {
         // in a namespace, which is how `Catalog.Entry` reads at a call site.
         other => {
             let owner = package_of(other);
-            let simple = other.rsplit_once('/').map_or(other, |(_, it)| it).replace('$', ".");
+            let simple = other
+                .rsplit_once('/')
+                .map_or(other, |(_, it)| it)
+                .replace('$', ".");
             PACKAGE.with(|package| {
                 let package = package.borrow().replace('.', "/");
                 // A class in the package being generated is in scope unqualified.
@@ -430,7 +437,9 @@ fn nullable(annotations: &[String]) -> bool {
 /// there is non-null, which is the asymmetry `nullability_is_asymmetric_between
 /// _returns_and_arguments` covers, so only returns lost the guarantee.
 fn nonnull(annotations: &[String]) -> bool {
-    annotations.iter().any(|it| it.ends_with("/NonNull") || it.ends_with("/NotNull"))
+    annotations
+        .iter()
+        .any(|it| it.ends_with("/NonNull") || it.ends_with("/NotNull"))
 }
 
 /// Is this type one a `null` can inhabit?
@@ -510,7 +519,11 @@ fn descriptor_is_reference(descriptor: &str) -> bool {
 
 fn simple_name(binary: &str) -> String {
     let after_package = binary.rsplit('/').next().unwrap_or(binary);
-    after_package.rsplit('$').next().unwrap_or(after_package).to_owned()
+    after_package
+        .rsplit('$')
+        .next()
+        .unwrap_or(after_package)
+        .to_owned()
 }
 
 /// How the generator finds a class it does not hold.
@@ -549,7 +562,9 @@ impl Resolve for FromDirectory {
 #[must_use]
 pub fn classes_under(root: &std::path::Path) -> Vec<String> {
     fn walk(root: &std::path::Path, at: &std::path::Path, found: &mut Vec<String>) {
-        let Ok(entries) = std::fs::read_dir(at) else { return };
+        let Ok(entries) = std::fs::read_dir(at) else {
+            return;
+        };
         for entry in entries.filter_map(Result::ok) {
             let path = entry.path();
             if path.is_dir() {
@@ -557,7 +572,12 @@ pub fn classes_under(root: &std::path::Path) -> Vec<String> {
             } else if path.extension().is_some_and(|it| it == "class")
                 && let Ok(relative) = path.strip_prefix(root)
             {
-                found.push(relative.with_extension("").to_string_lossy().replace('\\', "/"));
+                found.push(
+                    relative
+                        .with_extension("")
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
             }
         }
     }
@@ -606,7 +626,8 @@ fn collapsed_of(class: &ClassFile) -> Vec<(String, String)> {
         .iter()
         .filter(|m| visible(m.access) && is_api(m))
         .filter_map(|m| {
-            signature_of(&m.descriptor).map(|(parameters, _)| (m.name.clone(), parameters.join(",")))
+            signature_of(&m.descriptor)
+                .map(|(parameters, _)| (m.name.clone(), parameters.join(",")))
         })
         .collect()
 }
@@ -632,7 +653,9 @@ fn collapsed_of(class: &ClassFile) -> Vec<(String, String)> {
 /// complete.
 fn bindings_on_supertypes(class: &ClassFile) -> std::collections::BTreeMap<String, String> {
     let mut map = std::collections::BTreeMap::new();
-    let Some(signature) = class.signature.as_deref() else { return map };
+    let Some(signature) = class.signature.as_deref() else {
+        return map;
+    };
     // Skip this class's own parameters: what follows is the superclass and then
     // each interface, each possibly with type arguments.
     let (rest, _) = split_type_parameters(signature);
@@ -651,7 +674,9 @@ fn bindings_on_supertypes(class: &ClassFile) -> std::collections::BTreeMap<Strin
         let semi = at.find(';');
         let (owner_end, arguments, after) = match (open, semi) {
             (Some(open), Some(semi)) if open < semi => {
-                let Some(close) = matching_angle(&at[open..]) else { break };
+                let Some(close) = matching_angle(&at[open..]) else {
+                    break;
+                };
                 (open, Some(&at[open + 1..open + close]), open + close + 2)
             }
             (_, Some(semi)) => (semi, None, semi + 1),
@@ -713,7 +738,9 @@ fn arguments_of(inside: &str) -> Vec<String> {
 
 /// Replace a parent's type variables with what the child bound them to.
 fn substitute(signature: &str, parent: &ClassFile, arguments: &str) -> String {
-    let Some(declared) = parent.signature.as_deref() else { return signature.to_owned() };
+    let Some(declared) = parent.signature.as_deref() else {
+        return signature.to_owned();
+    };
     let (_, names) = split_type_parameters(declared);
     if names.is_empty() {
         return signature.to_owned();
@@ -721,7 +748,9 @@ fn substitute(signature: &str, parent: &ClassFile, arguments: &str) -> String {
     let actual: Vec<String> = arguments_of(arguments);
     let mut out = signature.to_owned();
     for (index, name) in names.iter().enumerate() {
-        let Some(replacement) = actual.get(index) else { continue };
+        let Some(replacement) = actual.get(index) else {
+            continue;
+        };
         out = out.replace(&format!("T{name};"), replacement);
     }
     out
@@ -765,8 +794,10 @@ fn inherited(class: &ClassFile, resolve: &dyn Resolve) -> Vec<(ClassFile, crate:
             // rather than a name with nothing behind it.
             let mut method = method.clone();
             if let Some(arguments) = bound.get(&parent.binary_name) {
-                method.signature =
-                    method.signature.as_deref().map(|it| substitute(it, &parent, arguments));
+                method.signature = method
+                    .signature
+                    .as_deref()
+                    .map(|it| substitute(it, &parent, arguments));
             }
             found.push((parent.clone(), method));
         }
@@ -802,7 +833,9 @@ fn lossiness(descriptor: &str) -> u8 {
 /// compiler change, and says at the call site which one you meant -- which is
 /// exactly the job the brand was doing, done with a mechanism that lowers.
 fn suffix(descriptor: &str) -> String {
-    let Some(split) = crate::descriptor::parameters(descriptor) else { return String::new() };
+    let Some(split) = crate::descriptor::parameters(descriptor) else {
+        return String::new();
+    };
     let mut names = Vec::with_capacity(split.len());
     for part in split {
         names.push(match part.as_bytes()[0] {
@@ -824,7 +857,9 @@ fn suffix(descriptor: &str) -> String {
 /// reference type. Needed because the *rendered* type has already lost it.
 fn parameter_binary(descriptor: &str, index: usize) -> Option<String> {
     let part = *crate::descriptor::parameters(descriptor)?.get(index)?;
-    part.strip_prefix('L').and_then(|it| it.strip_suffix(';')).map(str::to_owned)
+    part.strip_prefix('L')
+        .and_then(|it| it.strip_suffix(';'))
+        .map(str::to_owned)
 }
 
 /// A Java **functional interface** as a TypeScript function type.
@@ -888,7 +923,9 @@ fn emitted_name(
     public_inherited: &std::collections::BTreeSet<String>,
 ) -> String {
     let key = |descriptor: &str| {
-        signature_of(descriptor).map(|(parameters, _)| parameters.join(",")).unwrap_or_default()
+        signature_of(descriptor)
+            .map(|(parameters, _)| parameters.join(","))
+            .unwrap_or_default()
     };
     let mine = key(&method.descriptor);
 
@@ -934,8 +971,10 @@ fn emitted_name(
         return format!("{}{}", method.name, suffix(&method.descriptor));
     }
 
-    let twins =
-        collapsed.iter().filter(|(name, other)| name == &method.name && other == &mine).count();
+    let twins = collapsed
+        .iter()
+        .filter(|(name, other)| name == &method.name && other == &mine)
+        .count();
     if twins <= 1 {
         return method.name.clone();
     }
@@ -943,7 +982,9 @@ fn emitted_name(
         .methods
         .iter()
         .filter(|other| {
-            other.access & access::PUBLIC != 0 && other.name == method.name && key(&other.descriptor) == mine
+            other.access & access::PUBLIC != 0
+                && other.name == method.name
+                && key(&other.descriptor) == mine
         })
         .min_by_key(|other| lossiness(&other.descriptor[1..]))
         .map(|other| other.descriptor.clone());
@@ -990,7 +1031,12 @@ fn render_fields_into(
         .collect();
 
     for field in class.fields.iter().filter(|f| visible(f.access)) {
-        if omit(&class.binary_name, &field.name, &field.descriptor, field.signature.as_deref()) {
+        if omit(
+            &class.binary_name,
+            &field.name,
+            &field.descriptor,
+            field.signature.as_deref(),
+        ) {
             continue;
         }
         let Some((rendered, _)) = field
@@ -999,7 +1045,10 @@ fn render_fields_into(
             .and_then(|it| generic_type(it).map(|(rendered, _)| (rendered, 0)))
             .or_else(|| type_of(&field.descriptor))
         else {
-            return Err(format!("{}.{}: {}", class.binary_name, field.name, field.descriptor));
+            return Err(format!(
+                "{}.{}: {}",
+                class.binary_name, field.name, field.descriptor
+            ));
         };
         let is_static = field.access & access::STATIC != 0;
         let is_final = field.access & access::FINAL != 0;
@@ -1017,7 +1066,8 @@ fn render_fields_into(
         // string literal, and every use of it needs a null check that can
         // never fire. That is the kind of noise that makes a generated binding
         // unpleasant enough to hand-edit.
-        let provably_present = field.constant || (is_enum_class && field.access & access::ENUM != 0);
+        let provably_present =
+            field.constant || (is_enum_class && field.access & access::ENUM != 0);
         // `ConstantValue` is what decides `ldc` against `getstatic`, and it is
         // worth saying at the declaration because it decides whether touching
         // the member loads the class at all.
@@ -1034,16 +1084,28 @@ fn render_fields_into(
         // An interface's fields cannot be members; they become the merged
         // namespace's constants instead.
         let interface = class.access & access::INTERFACE != 0;
-        let into = if interface { &mut *constants } else { &mut *out };
+        let into = if interface {
+            &mut *constants
+        } else {
+            &mut *out
+        };
         into.push_str(note);
         mark(
-            if interface { &mut *constants_table } else { &mut *table },
+            if interface {
+                &mut *constants_table
+            } else {
+                &mut *table
+            },
             into,
             5,
             &class.binary_name,
             &field.name,
             &field.descriptor,
-            if is_static { Call::StaticField } else { Call::Field },
+            if is_static {
+                Call::StaticField
+            } else {
+                Call::Field
+            },
         );
         let emitted = if shadowed.contains(field.name.as_str()) {
             format!("{}$field", field.name)
@@ -1080,7 +1142,12 @@ fn render_fields_into(
             match field.constant_value.as_deref().filter(|it| spellable(it)) {
                 Some(value) => value.to_owned(),
                 None if provably_present => rendered.clone(),
-                None => returns(&rendered, &field.annotations, &field.descriptor, &key(field)),
+                None => returns(
+                    &rendered,
+                    &field.annotations,
+                    &field.descriptor,
+                    &key(field)
+                ),
             },
         );
     }
@@ -1263,7 +1330,9 @@ pub fn keep_members(members: Option<std::collections::BTreeSet<String>>) {
 fn kept(owner: &str, member: &str) -> bool {
     MEMBERS.with(|list| {
         let list = list.borrow();
-        let Some(list) = list.as_ref() else { return true };
+        let Some(list) = list.as_ref() else {
+            return true;
+        };
         list.contains(&format!("{owner}#{member}"))
     })
 }
@@ -1289,7 +1358,9 @@ pub fn pruned() -> usize {
 fn within_known(signature: &str) -> bool {
     KNOWN.with(|known| {
         let known = known.borrow();
-        let Some(known) = known.as_ref() else { return true };
+        let Some(known) = known.as_ref() else {
+            return true;
+        };
         let bytes = signature.as_bytes();
         let mut at = 0;
         while at < bytes.len() {
@@ -1358,7 +1429,11 @@ pub fn declarations_with(
     } else {
         ""
     };
-    let _ = writeln!(out, "  /** {}{note} */", class.binary_name.replace('/', "."));
+    let _ = writeln!(
+        out,
+        "  /** {}{note} */",
+        class.binary_name.replace('/', ".")
+    );
     // **An interface is emitted as an interface, so it can be implemented.**
     // Without this a Java callback type is not nameable at all -- it only ever
     // appeared inlined at a parameter as a function type -- and a TypeScript
@@ -1401,7 +1476,13 @@ pub fn declarations_with(
     let _ = writeln!(out, "  export {kind} {name}{parameters} {{");
 
     let mut out_constants = String::new();
-    render_fields_into(&mut out, &mut out_constants, class, &mut table, &mut constants_table)?;
+    render_fields_into(
+        &mut out,
+        &mut out_constants,
+        class,
+        &mut table,
+        &mut constants_table,
+    )?;
 
     // Which methods collapse onto one TypeScript signature. Computed before
     // rendering, because the decision is about the *set*: a name is only
@@ -1468,6 +1549,7 @@ pub fn declarations_with(
 /// separate things and the clippy line limit is a fair proxy for it: fields,
 /// methods, and what is inherited each answer a different question, and each
 /// has its own reason for choosing a buffer.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn render_methods_into(
     into: (&mut String, &mut Vec<Bound>),
     constants: (&mut String, &mut Vec<Bound>),
@@ -1482,8 +1564,17 @@ fn render_methods_into(
     let (out, table) = into;
     let (out_constants, constants_table) = constants;
     let is_interface = class.access & access::INTERFACE != 0;
-    for method in class.methods.iter().filter(|m| visible(m.access) && is_api(m)) {
-        if omit(&class.binary_name, &method.name, &method.descriptor, method.signature.as_deref()) {
+    for method in class
+        .methods
+        .iter()
+        .filter(|m| visible(m.access) && is_api(m))
+    {
+        if omit(
+            &class.binary_name,
+            &method.name,
+            &method.descriptor,
+            method.signature.as_deref(),
+        ) {
             continue;
         }
         // The `Signature` attribute first, because it is the one that still has
@@ -1495,9 +1586,12 @@ fn render_methods_into(
             .and_then(generic_signature)
             .or_else(|| signature_of(&method.descriptor))
         else {
-            return Err(format!("{}.{}: {}", class.binary_name, method.name, method.descriptor));
+            return Err(format!(
+                "{}.{}: {}",
+                class.binary_name, method.name, method.descriptor
+            ));
         };
-    let rendered_arguments = arguments(method, &parameters, resolve);
+        let rendered_arguments = arguments(method, &parameters, resolve);
 
         if method.name == "<init>" {
             if !is_interface {
@@ -1532,7 +1626,12 @@ fn render_methods_into(
                 out,
                 "    /** Throws {}. Propagates as the Java exception itself, terminating the \
                  program; not catchable by a TypeScript `try` yet. */",
-                method.throws.iter().map(|it| it.replace('/', ".")).collect::<Vec<_>>().join(", ")
+                method
+                    .throws
+                    .iter()
+                    .map(|it| it.replace('/', "."))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
         // **A static method on an interface goes to the namespace too.**
@@ -1554,8 +1653,12 @@ fn render_methods_into(
                 &mut *out_constants,
                 "    function {emitted}{}({rendered_arguments}): {};",
                 type_parameters(method.signature.as_deref()),
-                returns(&result, &method.annotations, &method.descriptor,
-                &member_key(&method.name, &method.descriptor)),
+                returns(
+                    &result,
+                    &method.annotations,
+                    &method.descriptor,
+                    &member_key(&method.name, &method.descriptor)
+                ),
             );
             continue;
         }
@@ -1577,12 +1680,20 @@ fn render_methods_into(
         let _ = writeln!(
             out,
             "    {}{}{}{}({rendered_arguments}): {};",
-            if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
+            if method.access & ACC_PROTECTED != 0 {
+                "protected "
+            } else {
+                ""
+            },
             if is_static { "static " } else { "" },
             emitted,
             type_parameters(method.signature.as_deref()),
-            returns(&result, &method.annotations, &method.descriptor,
-                &member_key(&method.name, &method.descriptor)),
+            returns(
+                &result,
+                &method.annotations,
+                &method.descriptor,
+                &member_key(&method.name, &method.descriptor)
+            ),
         );
     }
     Ok(())
@@ -1660,7 +1771,10 @@ fn is_api(member: &crate::read::Member) -> bool {
 /// `java/lang/Object` is skipped: `toString` and `wait` on every generated type
 /// is noise nobody is reaching for.
 fn supertypes(class: &ClassFile, resolve: &dyn Resolve) -> Vec<ClassFile> {
-    supertypes_bound(class, resolve).into_iter().map(|(parent, _)| parent).collect()
+    supertypes_bound(class, resolve)
+        .into_iter()
+        .map(|(parent, _)| parent)
+        .collect()
 }
 
 /// Every supertype, each with the type arguments this class binds on it --
@@ -1690,18 +1804,29 @@ fn supertypes_bound(
     // A bound rather than a visited set: the verifier rejects a cyclic
     // hierarchy at load, so this only guards a malformed jar.
     for _ in 0..64 {
-        let Some((name, inherited)) = queue.pop() else { break };
+        let Some((name, inherited)) = queue.pop() else {
+            break;
+        };
         if name == "java/lang/Object" || found.iter().any(|(it, _)| it.binary_name == name) {
             continue;
         }
-        let Some(parent) = resolve.find(&name) else { continue };
+        let Some(parent) = resolve.find(&name) else {
+            continue;
+        };
         // What `parent` binds on its own supertypes, rewritten through what we
         // already know about `parent`'s variables.
         let mine = bindings_on_supertypes(&parent);
         let carried: std::collections::BTreeMap<String, String> = mine
             .iter()
             .map(|(owner, arguments)| {
-                (owner.clone(), substitute(arguments, &parent, inherited.get(&name).map_or("", |it| it.as_str())))
+                (
+                    owner.clone(),
+                    substitute(
+                        arguments,
+                        &parent,
+                        inherited.get(&name).map_or("", |it| it.as_str()),
+                    ),
+                )
             })
             .chain(inherited.clone())
             .collect();
@@ -1814,8 +1939,8 @@ fn arguments(method: &crate::read::Member, parameters: &[String], resolve: &dyn 
                     // type of a numeric typed array is `number` -- the
                     // width lives in the typed array, and a spread has no
                     // typed array to live in.
-                    "Int32Array" | "Uint8Array" | "Int16Array" | "Uint16Array"
-                    | "Float32Array" | "Float64Array" => "number[]".to_owned(),
+                    "Int32Array" | "Uint8Array" | "Int16Array" | "Uint16Array" | "Float32Array"
+                    | "Float64Array" => "number[]".to_owned(),
                     "BigInt64Array" => "bigint[]".to_owned(),
                     other => other.to_owned(),
                 };
@@ -1841,7 +1966,10 @@ fn arguments(method: &crate::read::Member, parameters: &[String], resolve: &dyn 
 fn visible_method_names(
     class: &ClassFile,
     resolve: &dyn Resolve,
-) -> (std::collections::BTreeSet<String>, std::collections::BTreeSet<String>) {
+) -> (
+    std::collections::BTreeSet<String>,
+    std::collections::BTreeSet<String>,
+) {
     // Every method name visible on this class, declared or inherited -- the
     // same question `render_fields_into` asks, asked from the other path.
     // Without it `Calendar` rendered `isSet$field` and `GregorianCalendar`
@@ -1873,6 +2001,7 @@ fn visible_method_names(
     (shadowed, public_names)
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn render_inherited(
     out: &mut String,
     class: &ClassFile,
@@ -1886,25 +2015,39 @@ fn render_inherited(
         if omit_type(&field.descriptor, field.signature.as_deref()) {
             continue;
         }
-        let Some((rendered, _)) = type_of(&field.descriptor) else { continue };
+        let Some((rendered, _)) = type_of(&field.descriptor) else {
+            continue;
+        };
         // An inherited interface constant is still static -- `Pressable.KIND`
         // is the same constant `Task.KIND` is -- so it goes to the namespace
         // too, and on a class it keeps its `static`.
         let is_interface = class.access & access::INTERFACE != 0;
-        let into = if is_interface { &mut *constants } else { &mut *out };
+        let into = if is_interface {
+            &mut *constants
+        } else {
+            &mut *out
+        };
         into.push_str("    /** Inherited. */\n");
         // The owner is **this** class, not the one that declared the field.
         // `getfield` names the static type the call site had, and the JVM walks
         // the hierarchy -- which is what `javac` emits and is why an inherited
         // member needs no separate resolution step here.
         mark(
-            if is_interface { &mut *constants_table } else { &mut *table },
+            if is_interface {
+                &mut *constants_table
+            } else {
+                &mut *table
+            },
             into,
             5,
             &class.binary_name,
             &field.name,
             &field.descriptor,
-            if field.access & access::STATIC != 0 { Call::StaticField } else { Call::Field },
+            if field.access & access::STATIC != 0 {
+                Call::StaticField
+            } else {
+                Call::Field
+            },
         );
         let _ = writeln!(
             into,
@@ -1914,8 +2057,16 @@ fn render_inherited(
             } else {
                 format!(
                     "{}{}",
-                    if field.access & access::STATIC != 0 { "static " } else { "" },
-                    if field.access & access::FINAL != 0 { "readonly " } else { "" }
+                    if field.access & access::STATIC != 0 {
+                        "static "
+                    } else {
+                        ""
+                    },
+                    if field.access & access::FINAL != 0 {
+                        "readonly "
+                    } else {
+                        ""
+                    }
                 )
             },
             if shadowed.contains(&field.name) {
@@ -1926,7 +2077,12 @@ fn render_inherited(
             if field.constant {
                 rendered.clone()
             } else {
-                returns(&rendered, &field.annotations, &field.descriptor, &key(&field))
+                returns(
+                    &rendered,
+                    &field.annotations,
+                    &field.descriptor,
+                    &key(&field),
+                )
             },
         );
     }
@@ -1980,15 +2136,28 @@ fn render_inherited(
             // inherited `Widget`'s protected `onDraw` as a *public* one --
             // widening the visibility of something Java keeps to the
             // hierarchy, which is the same class of error as the bridge.
-            if method.access & ACC_PROTECTED != 0 { "protected " } else { "" },
-            if method.access & access::STATIC != 0 { "static " } else { "" },
+            if method.access & ACC_PROTECTED != 0 {
+                "protected "
+            } else {
+                ""
+            },
+            if method.access & access::STATIC != 0 {
+                "static "
+            } else {
+                ""
+            },
             // **This class's public method names, not an empty set.** Two
             // *inherited* members can be a mixed-visibility overload set
             // between themselves -- `TabActivity` inherits `protected
             // onCreate(Bundle)` from `Activity` and the public two-argument one
             // from further up -- and passing nothing here meant neither was
             // renamed. The last two `TS2385` in 141,367 lines were this.
-            emitted_name(&declaring, &method, &collapsed_of(&declaring), &public_names),
+            emitted_name(
+                &declaring,
+                &method,
+                &collapsed_of(&declaring),
+                &public_names
+            ),
             // **The method's own type parameters, which this path dropped.**
             // `<T> T[] toArray(IntFunction<T[]>)` is declared on `Collection`
             // and inherited by `AbstractCollection`, and the inherited copy
@@ -2002,8 +2171,12 @@ fn render_inherited(
             // one was not, because the fixture had no method with a type
             // parameter of its own until the test below added one.
             type_parameters(method.signature.as_deref()),
-            returns(&result, &method.annotations, &method.descriptor,
-                &member_key(&method.name, &method.descriptor)),
+            returns(
+                &result,
+                &method.annotations,
+                &method.descriptor,
+                &member_key(&method.name, &method.descriptor)
+            ),
         );
     }
 }
@@ -2058,9 +2231,7 @@ fn emit_tree(
     let prefix = format!("{binary}$");
     let children: Vec<&(String, String, Vec<Bound>)> = classes
         .iter()
-        .filter(|(inner, _, _)| {
-            inner.starts_with(&prefix) && !inner[prefix.len()..].contains('$')
-        })
+        .filter(|(inner, _, _)| inner.starts_with(&prefix) && !inner[prefix.len()..].contains('$'))
         .collect();
     if children.is_empty() {
         out.push('\n');
@@ -2070,7 +2241,15 @@ fn emit_tree(
     // TypeScript, which is what makes `Outer.Inner` read as it does in Java.
     let _ = writeln!(out, "\n{pad}  export namespace {} {{", simple_name(binary));
     for (inner, inner_body, inner_rows) in children {
-        emit_tree(out, bound, classes, inner, inner_body, inner_rows, depth + 1);
+        emit_tree(
+            out,
+            bound,
+            classes,
+            inner,
+            inner_body,
+            inner_rows,
+            depth + 1,
+        );
     }
     let _ = writeln!(out, "{pad}  }}");
     out.push('\n');
@@ -2096,7 +2275,10 @@ fn emit_tree(
 /// `java.util.concurrent` are separate calls and separate declarations, which
 /// TypeScript merges because a namespace is open.
 #[must_use]
-pub fn namespace_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (String, Vec<Bound>) {
+pub fn namespace_of(
+    package: &str,
+    classes: &[(String, String, Vec<Bound>)],
+) -> (String, Vec<Bound>) {
     let mut out = String::new();
     out.push_str("// GENERATED by `nts bind`. Do not edit.\n//\n");
     out.push_str("// The prelude, as a **global namespace**: no top-level import anywhere in\n");
@@ -2111,11 +2293,18 @@ pub fn namespace_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> 
     // it does not leak into the next module generated in this process.
     let leaked = IMPORTS.with(|it| std::mem::take(&mut *it.borrow_mut()));
     for owner in &leaked {
-        let _ = writeln!(out, "  // references {} , which a prelude cannot import", owner.replace('/', "."));
+        let _ = writeln!(
+            out,
+            "  // references {} , which a prelude cannot import",
+            owner.replace('/', ".")
+        );
     }
 
     let mut bound: Vec<Bound> = Vec::new();
-    for (binary, body, rows) in classes.iter().filter(|(binary, _, _)| !binary.contains('$')) {
+    for (binary, body, rows) in classes
+        .iter()
+        .filter(|(binary, _, _)| !binary.contains('$'))
+    {
         emit_tree(&mut out, &mut bound, classes, binary, body, rows, 0);
     }
     out.push_str("}\n");
@@ -2140,8 +2329,12 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     let mut bound: Vec<Bound> = Vec::new();
     let mut out = String::new();
     out.push_str("// GENERATED by `nts bind`. Do not edit.\n//\n");
-    out.push_str("// Every comment below is emitted, not written by hand: where a member costs an\n");
-    out.push_str("// allocation or loads a class, the declaration is where a reader is looking.\n//\n");
+    out.push_str(
+        "// Every comment below is emitted, not written by hand: where a member costs an\n",
+    );
+    out.push_str(
+        "// allocation or loads a class, the declaration is where a reader is looking.\n//\n",
+    );
     // **No top-level `import` here, and that is load-bearing rather than
     // stylistic.** A `.d.ts` containing a top-level import or export is a
     // *module*, and a `declare module "x"` inside a module file is a module
@@ -2164,8 +2357,12 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     // generator. Two false claims, emitted into the header of every binding this
     // command has ever produced, telling a reader to look for a file that does
     // not exist.
-    out.push_str("// The `java.*` namespace comes from the generated preludes, which are global --\n");
-    out.push_str("// this file must NOT import them, or it becomes a module and declares nothing.\n\n");
+    out.push_str(
+        "// The `java.*` namespace comes from the generated preludes, which are global --\n",
+    );
+    out.push_str(
+        "// this file must NOT import them, or it becomes a module and declares nothing.\n\n",
+    );
     let _ = writeln!(out, "declare module \"java:{package}\" {{");
 
     // **The imports, and they go inside the block.** A top-level import would
@@ -2197,7 +2394,10 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     // Outer classes first, each followed by a namespace holding whatever nests
     // inside it -- TypeScript wants the class before the namespace that merges
     // with it.
-    for (binary, body, rows) in classes.iter().filter(|(binary, _, _)| !binary.contains('$')) {
+    for (binary, body, rows) in classes
+        .iter()
+        .filter(|(binary, _, _)| !binary.contains('$'))
+    {
         emit_tree(&mut out, &mut bound, classes, binary, body, rows, 0);
     }
 
@@ -2226,7 +2426,6 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     }
     (out, bound)
 }
-
 
 // ---------------------------------------------------------------------------
 // Generic signatures
@@ -2340,8 +2539,11 @@ fn generic_type(signature: &str) -> Option<(String, usize)> {
             // a namespace that shadows it, so the mapping belongs at the call
             // sites outside.
             if let Some(mapped) = mapped_collection(&name).filter(|it| *it != base) {
-                let rendered =
-                    if arguments.is_empty() { String::new() } else { format!("<{}>", arguments.join(", ")) };
+                let rendered = if arguments.is_empty() {
+                    String::new()
+                } else {
+                    format!("<{}>", arguments.join(", "))
+                };
                 // **Only when an `NtsMap` can actually satisfy the declaration.**
                 // Offering the union unconditionally type-checked on both sides
                 // and then threw `ClassCastException` *inside the Java method*,
@@ -2422,7 +2624,9 @@ fn split_type_parameters(signature: &str) -> (&str, Vec<String>) {
 
 /// The type parameters a method declares, as a rendered `<T, U>` or empty.
 fn type_parameters(signature: Option<&str>) -> String {
-    let Some(signature) = signature else { return String::new() };
+    let Some(signature) = signature else {
+        return String::new();
+    };
     let (_, names) = split_type_parameters(signature);
     if names.is_empty() {
         String::new()
@@ -2492,7 +2696,10 @@ pub fn read_table(text: &str) -> Result<Vec<Bound>, String> {
         }
         let mut parts = line.splitn(6, ' ');
         let mut next = |what: &str| {
-            parts.next().ok_or_else(|| format!("line {}: no {what}", at + 1)).map(str::to_owned)
+            parts
+                .next()
+                .ok_or_else(|| format!("line {}: no {what}", at + 1))
+                .map(str::to_owned)
         };
         let end = next("end offset")?;
         let line_no = next("line")?;
@@ -2506,7 +2713,8 @@ pub fn read_table(text: &str) -> Result<Vec<Bound>, String> {
         let keeps = next("keeps")?;
         let key = next("member key")?;
         let number = |text: &str, what: &str| {
-            text.parse::<usize>().map_err(|_| format!("line {}: {what} is not a number: {text}", at + 1))
+            text.parse::<usize>()
+                .map_err(|_| format!("line {}: {what} is not a number: {text}", at + 1))
         };
         rows.push(Bound {
             end: number(&end, "the end offset")?,
@@ -2552,7 +2760,10 @@ pub fn read_table(text: &str) -> Result<Vec<Bound>, String> {
 #[must_use]
 pub fn write_table(package: &str, rows: &[Bound]) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "# GENERATED by `nts bind`. The binding table for java:{package}.");
+    let _ = writeln!(
+        out,
+        "# GENERATED by `nts bind`. The binding table for java:{package}."
+    );
     out.push_str("# Keyed by the byte offset of a declaration's end, which is what\n");
     out.push_str("# `location.span.end` carries: the checker picks the overload, and the\n");
     out.push_str("# declaration it picked selects the row.\n");
@@ -2571,9 +2782,11 @@ pub fn write_table(package: &str, rows: &[Bound]) -> String {
         let keeps = match &row.keeps {
             None => "-".to_owned(),
             Some(indices) if indices.is_empty() => ".".to_owned(),
-            Some(indices) => {
-                indices.iter().map(ToString::to_string).collect::<Vec<_>>().join(",")
-            }
+            Some(indices) => indices
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
         };
         let _ = writeln!(
             out,

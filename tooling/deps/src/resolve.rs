@@ -37,10 +37,7 @@ pub fn find_package(from: &Utf8Path, name: &str) -> Option<Utf8PathBuf> {
     while let Some(dir) = at {
         let candidate = dir.join("node_modules").join(name);
         if candidate.join("package.json").is_file() {
-            return candidate
-                .canonicalize_utf8()
-                .ok()
-                .or(Some(candidate));
+            return candidate.canonicalize_utf8().ok().or(Some(candidate));
         }
         at = dir.parent();
     }
@@ -133,7 +130,10 @@ pub fn relative_import(from_file: &Utf8Path, specifier: &str) -> Option<Utf8Path
     let stem = base.as_str();
 
     let swapped: Vec<String> = match () {
-        () if stem.ends_with(".js") => vec![stem.replace_suffix(".js", ".ts"), stem.replace_suffix(".js", ".tsx")],
+        () if stem.ends_with(".js") => vec![
+            stem.replace_suffix(".js", ".ts"),
+            stem.replace_suffix(".js", ".tsx"),
+        ],
         () if stem.ends_with(".mjs") => vec![stem.replace_suffix(".mjs", ".mts")],
         () if stem.ends_with(".cjs") => vec![stem.replace_suffix(".cjs", ".cts")],
         () => Vec::new(),
@@ -154,7 +154,10 @@ pub fn relative_import(from_file: &Utf8Path, specifier: &str) -> Option<Utf8Path
                 .map(|leaf| base.join(leaf)),
         );
 
-    candidates.into_iter().find(|path| path.is_file()).map(|path| normalize(&path))
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .map(|path| normalize(&path))
 }
 
 /// Fold `.` and `..` away, so one file has one spelling.

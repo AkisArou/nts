@@ -145,7 +145,10 @@ impl Summaries {
 /// is reached through a table whose caller cannot see which body ran, and a
 /// suspension's resume is called by the runtime. Those keep the owned
 /// convention -- `lent`, the set `hands_back` and `consumes` already exclude.
-fn returning_from_the_stack(program: &Program, lent: &rustc_hash::FxHashSet<&str>) -> rustc_hash::FxHashSet<String> {
+fn returning_from_the_stack(
+    program: &Program,
+    lent: &rustc_hash::FxHashSet<&str>,
+) -> rustc_hash::FxHashSet<String> {
     let resumed: rustc_hash::FxHashSet<&str> = program
         .funcs
         .iter()
@@ -162,7 +165,10 @@ fn returning_from_the_stack(program: &Program, lent: &rustc_hash::FxHashSet<&str
             !func.exported
                 && !lent.contains(func.name.as_str())
                 && !resumed.contains(func.name.as_str())
-                && func.return_type.counted_family().is_some_and(super::native::Family::stack_rooted)
+                && func
+                    .return_type
+                    .counted_family()
+                    .is_some_and(super::native::Family::stack_rooted)
         })
         .map(|func| func.name.clone())
         .collect()
@@ -533,7 +539,10 @@ fn classify(
                 } else {
                     Ownership::Copied
                 }
-            } else if let OpKind::Call { callee: super::Callee::Native(target), .. } = kind
+            } else if let OpKind::Call {
+                callee: super::Callee::Native(target),
+                ..
+            } = kind
                 && func.values[value.0 as usize].ty.counting().is_some()
             {
                 // A counted handle a foreign function returns is +1 only when
@@ -673,7 +682,6 @@ pub fn analyze(
         hands_over,
     }
 }
-
 
 /// Insert retains and releases across a program.
 /// Which functions can overwrite a slot, directly or through anything they call.
@@ -976,7 +984,10 @@ fn held_to_the_end(func: &Func) -> Vec<(ValueId, rustc_hash::FxHashSet<usize>)> 
                 // `rebuilt` arm is the witness: the button went before its
                 // automation peer, which holds it weakly, could press it.
                 super::Callee::External(name) => match super::runtime::keeps(name) {
-                    Some(kept) => kept.iter().filter_map(|at| args.get(*at).copied()).collect(),
+                    Some(kept) => kept
+                        .iter()
+                        .filter_map(|at| args.get(*at).copied())
+                        .collect(),
                     None => args.clone(),
                 },
                 _ => args.clone(),
@@ -1029,7 +1040,11 @@ fn held_to_the_end(func: &Func) -> Vec<(ValueId, rustc_hash::FxHashSet<usize>)> 
                 queue.extend(func.blocks[at.0 as usize].terminator.successors());
             }
         }
-        if exits.iter().filter(|exit| reached.contains(&(exit.0 as usize))).all(|exit| dominates(block, *exit)) {
+        if exits
+            .iter()
+            .filter(|exit| reached.contains(&(exit.0 as usize)))
+            .all(|exit| dominates(block, *exit))
+        {
             reached.retain(|at| dominates(block, BlockId(u32::try_from(*at).unwrap_or(0))));
             found.push((value, reached));
         }
@@ -1096,7 +1111,6 @@ fn housed_safely(
     })
 }
 
-
 /// Whether a slot goes on holding what it holds, everywhere this can reach.
 #[allow(clippy::too_many_arguments)]
 fn slot_survives(
@@ -1151,22 +1165,22 @@ fn slot_survives(
             return false;
         }
         match &op.kind {
-        OpKind::Call {
-            callee: super::Callee::Direct(name),
-            ..
-        } => !settled && mutates.contains(name) && !standing.harmless.contains(name),
-        OpKind::Call { .. } => !settled,
-        OpKind::FieldSet { object, field, .. } => match (ours, from_field) {
-            // An element borrow is never a field, and a field slot is named.
-            (_, None) => false,
-            // A layout this cannot find is a slot it cannot rule out.
-            (None, Some(_)) => true,
-            (Some(ours), Some(_)) => {
-                field_name(func, layouts, *object, *field).is_none_or(|theirs| ours == theirs)
-            }
-        },
-        OpKind::ArraySet { .. } => from_field.is_none(),
-        _ => false,
+            OpKind::Call {
+                callee: super::Callee::Direct(name),
+                ..
+            } => !settled && mutates.contains(name) && !standing.harmless.contains(name),
+            OpKind::Call { .. } => !settled,
+            OpKind::FieldSet { object, field, .. } => match (ours, from_field) {
+                // An element borrow is never a field, and a field slot is named.
+                (_, None) => false,
+                // A layout this cannot find is a slot it cannot rule out.
+                (None, Some(_)) => true,
+                (Some(ours), Some(_)) => {
+                    field_name(func, layouts, *object, *field).is_none_or(|theirs| ours == theirs)
+                }
+            },
+            OpKind::ArraySet { .. } => from_field.is_none(),
+            _ => false,
         }
     })
 }
@@ -1375,9 +1389,9 @@ fn inert_slots(
                 // concatenates two strings. Two string arguments, and the
                 // blanket rule gave up the entire function for them.
                 OpKind::Call { args, .. }
-                    if args
-                        .iter()
-                        .all(|argument| !leads_to_an_object(&func.values[argument.0 as usize].ty)) => {}
+                    if args.iter().all(|argument| {
+                        !leads_to_an_object(&func.values[argument.0 as usize].ty)
+                    }) => {}
                 OpKind::GlobalSet { .. } | OpKind::Call { .. } => {
                     return rustc_hash::FxHashSet::default();
                 }
@@ -1404,7 +1418,9 @@ fn inert_slots(
     loop {
         let mut doomed = Vec::new();
         for slot in &inert {
-            let Some(puts) = stored.get(slot) else { continue };
+            let Some(puts) = stored.get(slot) else {
+                continue;
+            };
             if !puts.iter().all(|put| costs_nothing(func, &inert, *put)) {
                 doomed.push(*slot);
             }
@@ -1725,25 +1741,41 @@ fn anchors(
 /// round a loop -- is carried by its edges without a count, as a loaded
 /// cursor is. Not one declared `Owned`, which arrives with a reference that
 /// must be given back.
-fn stack_borrowed_results<'a>(func: &'a Func, summaries: &'a Summaries) -> impl Iterator<Item = ValueId> + 'a {
-    func.values.iter().enumerate().filter_map(move |(index, op)| {
-        let value = ValueId(u32::try_from(index).ok()?);
-        let handed_back = match &op.kind {
-            OpKind::Call { callee: super::Callee::Native(target), .. } => !target.returns_owned,
-            OpKind::Call { callee: super::Callee::Direct(name), .. } => summaries.stack_returns.contains(name),
-            _ => false,
-        };
-        (handed_back && stack_rooted(func, value)).then_some(value)
-    })
+fn stack_borrowed_results<'a>(
+    func: &'a Func,
+    summaries: &'a Summaries,
+) -> impl Iterator<Item = ValueId> + 'a {
+    func.values
+        .iter()
+        .enumerate()
+        .filter_map(move |(index, op)| {
+            let value = ValueId(u32::try_from(index).ok()?);
+            let handed_back = match &op.kind {
+                OpKind::Call {
+                    callee: super::Callee::Native(target),
+                    ..
+                } => !target.returns_owned,
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } => summaries.stack_returns.contains(name),
+                _ => false,
+            };
+            (handed_back && stack_rooted(func, value)).then_some(value)
+        })
 }
 
 /// Whether `value` is a handle its host keeps alive on the native stack
 /// (`native::Family::stack_rooted`): one that needs no count while it is in
 /// the frame, whatever lets go of it elsewhere.
 fn stack_rooted(func: &Func, value: ValueId) -> bool {
-    func.values[value.0 as usize].ty.counted_family().is_some_and(super::native::Family::stack_rooted)
+    func.values[value.0 as usize]
+        .ty
+        .counted_family()
+        .is_some_and(super::native::Family::stack_rooted)
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn crossing_borrows(
     func: &Func,
     layouts: &[Layout],
@@ -1834,7 +1866,14 @@ fn crossing_borrows(
             };
             if !anchored(func, &standing, container)
                 || !slot_survives(
-                    func, layouts, mutates, &standing, &unobserved, container, field, value,
+                    func,
+                    layouts,
+                    mutates,
+                    &standing,
+                    &unobserved,
+                    container,
+                    field,
+                    value,
                 )
             {
                 doomed.push(value);
@@ -1900,9 +1939,7 @@ struct Surroundings<'a> {
     mutating_slots: &'a rustc_hash::FxHashSet<u32>,
 }
 
-fn mutating(
-    program: &Program,
-) -> (rustc_hash::FxHashSet<String>, rustc_hash::FxHashSet<u32>) {
+fn mutating(program: &Program) -> (rustc_hash::FxHashSet<String>, rustc_hash::FxHashSet<u32>) {
     let mut slots: rustc_hash::FxHashSet<u32> = rustc_hash::FxHashSet::default();
     let mut mutates: rustc_hash::FxHashSet<String> = program
         .funcs
@@ -2270,17 +2307,17 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
         func.blocks.iter().all(|block| match block.terminator {
             super::Terminator::Return(Some(value)) => !counted(func, layouts, value),
             _ => true,
+        }) && func.values.iter().all(|op| match &op.kind {
+            OpKind::FieldSet { value: stored, .. } | OpKind::ArraySet { value: stored, .. } => {
+                !counted(func, layouts, *stored)
+            }
+            OpKind::GlobalSet { .. } => false,
+            OpKind::Call {
+                callee: super::Callee::Direct(name),
+                ..
+            } => harmless.contains(name),
+            other => quiet(other),
         })
-            && func.values.iter().all(|op| match &op.kind {
-                OpKind::FieldSet { value: stored, .. }
-                | OpKind::ArraySet { value: stored, .. } => !counted(func, layouts, *stored),
-                OpKind::GlobalSet { .. } => false,
-                OpKind::Call {
-                    callee: super::Callee::Direct(name),
-                    ..
-                } => harmless.contains(name),
-                other => quiet(other),
-            })
     }
 
     let mut harmless = rustc_hash::FxHashSet::default();
@@ -2449,7 +2486,9 @@ fn arriving_at(
     // nothing, and starting from it lost the take on every path that did carry
     // one.
     let agreed = |slot: &Slot, pending: &ValueId| {
-        ways_in.iter().all(|(carried, absent)| carried.get(slot) == Some(pending) || absent.contains(pending))
+        ways_in
+            .iter()
+            .all(|(carried, absent)| carried.get(slot) == Some(pending) || absent.contains(pending))
     };
     ways_in
         .iter()
@@ -2521,75 +2560,82 @@ fn taking(
         // branch. See `arriving_at`.
         let mut held = arriving_at(func, at, &incoming, &rank, &leaving, &known_absent);
         for &value in &block.ops {
-        // A borrow may not also take. `crossing` says nothing releases this
-        // value and no edge retains for it; taking would make it owned, and
-        // three rules disagreeing about one value is how a reference gets
-        // consumed twice.
-        let takeable = counted(func, layouts, value) && !crossing.contains(&value);
-        match &func.values[value.0 as usize].kind {
-            OpKind::FieldGet { object, field, .. } => {
-                if takeable {
-                    held.insert(Slot::Field(*object, *field), value);
+            // A borrow may not also take. `crossing` says nothing releases this
+            // value and no edge retains for it; taking would make it owned, and
+            // three rules disagreeing about one value is how a reference gets
+            // consumed twice.
+            let takeable = counted(func, layouts, value) && !crossing.contains(&value);
+            match &func.values[value.0 as usize].kind {
+                OpKind::FieldGet { object, field, .. } => {
+                    if takeable {
+                        held.insert(Slot::Field(*object, *field), value);
+                    }
                 }
-            }
-            OpKind::ArrayGet { array, index, .. } => {
-                if takeable {
-                    held.insert(element(func, *array, *index), value);
+                OpKind::ArrayGet { array, index, .. } => {
+                    if takeable {
+                        held.insert(element(func, *array, *index), value);
+                    }
                 }
-            }
-            OpKind::FieldSet {
-                object,
-                field,
-                value: stored,
-                ..
-            } => {
-                pair(&mut held, &mut takes, &mut settled, Slot::Field(*object, *field), value, *stored);
-            }
-            OpKind::ArraySet {
-                array,
-                index,
-                value: stored,
-                ..
-            } => {
-                let slot = element(func, *array, *index);
-                pair(&mut held, &mut takes, &mut settled, slot, value, *stored);
-                // Every element read so far gives up, whatever array it came
-                // from. Two arrays are told apart here by the *value* naming
-                // them, and two loads of `this.slots` are two values naming one
-                // array -- so a store through either can overwrite a slot read
-                // through the other, and taking from it afterwards would give
-                // away a reference the store had already given up.
-                //
-                // The old code kept slots of other arrays for exactly this
-                // reason and was wrong about it too, at constant indices; the
-                // hazard was just rarer. A field store cannot reach an element,
-                // so fields stay.
-                held.retain(|held_slot, _| !held_slot.is_element());
-            }
-            // A call that only initializes cannot reach a slot this is
-            // watching. Clearing for one lost the take in every constructor
-            // shaped like `x = o.f; o.f = new T(...)`, which is most of them:
-            // the allocation is fine and the constructor call between the load
-            // and the store is what threw the pairing away.
-            OpKind::Call {
-                callee: super::Callee::Direct(name),
-                ..
-            } if harmless.contains(name) => {}
-            other => {
-                // `quiet` is the wrong question here, and asking it cost every
-                // take in `x = o.f; o.f = new T(...)` -- the commonest shape
-                // there is. `quiet` means "cannot store, call, allocate or
-                // suspend", because `inert` needs a function that makes no
-                // garbage. What this needs is narrower: cannot write a *slot*.
-                // An allocation writes nothing that already exists, and a
-                // repackaging is one pointer under another name.
-                let cannot_write = quiet(other)
-                    || repackages(other)
-                    || matches!(other, OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. });
-                if !cannot_write {
-                    held.clear();
+                OpKind::FieldSet {
+                    object,
+                    field,
+                    value: stored,
+                    ..
+                } => {
+                    pair(
+                        &mut held,
+                        &mut takes,
+                        &mut settled,
+                        Slot::Field(*object, *field),
+                        value,
+                        *stored,
+                    );
                 }
-            }
+                OpKind::ArraySet {
+                    array,
+                    index,
+                    value: stored,
+                    ..
+                } => {
+                    let slot = element(func, *array, *index);
+                    pair(&mut held, &mut takes, &mut settled, slot, value, *stored);
+                    // Every element read so far gives up, whatever array it came
+                    // from. Two arrays are told apart here by the *value* naming
+                    // them, and two loads of `this.slots` are two values naming one
+                    // array -- so a store through either can overwrite a slot read
+                    // through the other, and taking from it afterwards would give
+                    // away a reference the store had already given up.
+                    //
+                    // The old code kept slots of other arrays for exactly this
+                    // reason and was wrong about it too, at constant indices; the
+                    // hazard was just rarer. A field store cannot reach an element,
+                    // so fields stay.
+                    held.retain(|held_slot, _| !held_slot.is_element());
+                }
+                // A call that only initializes cannot reach a slot this is
+                // watching. Clearing for one lost the take in every constructor
+                // shaped like `x = o.f; o.f = new T(...)`, which is most of them:
+                // the allocation is fine and the constructor call between the load
+                // and the store is what threw the pairing away.
+                OpKind::Call {
+                    callee: super::Callee::Direct(name),
+                    ..
+                } if harmless.contains(name) => {}
+                other => {
+                    // `quiet` is the wrong question here, and asking it cost every
+                    // take in `x = o.f; o.f = new T(...)` -- the commonest shape
+                    // there is. `quiet` means "cannot store, call, allocate or
+                    // suspend", because `inert` needs a function that makes no
+                    // garbage. What this needs is narrower: cannot write a *slot*.
+                    // An allocation writes nothing that already exists, and a
+                    // repackaging is one pointer under another name.
+                    let cannot_write = quiet(other)
+                        || repackages(other)
+                        || matches!(other, OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. });
+                    if !cannot_write {
+                        held.clear();
+                    }
+                }
             }
         }
         leaving[at] = held;
@@ -2699,7 +2745,11 @@ fn zeroed_parameters(
             if !direct_only.contains(func.name.as_str()) {
                 return (func.name.clone(), slots);
             }
-            for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate()
+            for (slot, parameter) in func
+                .parameter_values()
+                .unwrap_or_default()
+                .into_iter()
+                .enumerate()
                 .filter_map(|(slot, parameter)| parameter.map(|parameter| (slot, parameter)))
             {
                 let Ok(slot) = u32::try_from(slot) else {
@@ -2716,7 +2766,12 @@ fn zeroed_parameters(
     loop {
         let mut doomed: Vec<(String, (u32, u32))> = Vec::new();
         for caller in &program.funcs {
-            let mut fresh = Fresh::entering(caller, layouts, BlockId(0), &rustc_hash::FxHashSet::default());
+            let mut fresh = Fresh::entering(
+                caller,
+                layouts,
+                BlockId(0),
+                &rustc_hash::FxHashSet::default(),
+            );
             for block in &caller.blocks {
                 for value in &block.ops {
                     let kind = caller.values[value.0 as usize].kind.clone();
@@ -2769,7 +2824,10 @@ fn zeroed_parameters(
 /// reaches it through a slot. Not a suspension's resume, because the runtime
 /// calls that. And called directly at least once: an assumption over no callers
 /// is true of every caller only because there are none to check.
-fn invoked_only_directly<'a>(program: &'a Program, layouts: &'a [Layout]) -> rustc_hash::FxHashSet<&'a str> {
+fn invoked_only_directly<'a>(
+    program: &'a Program,
+    layouts: &'a [Layout],
+) -> rustc_hash::FxHashSet<&'a str> {
     let mut indirect: rustc_hash::FxHashSet<&str> = layouts
         .iter()
         .flat_map(|layout| layout.methods.iter().flatten())
@@ -2856,10 +2914,16 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
         false
     };
 
-    for (slot, parameter) in func.parameter_values().unwrap_or_default().into_iter().enumerate()
-                .filter_map(|(slot, parameter)| parameter.map(|parameter| (slot, parameter)))
-            {
-        let Ok(slot) = u32::try_from(slot) else { continue };
+    for (slot, parameter) in func
+        .parameter_values()
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(slot, parameter)| parameter.map(|parameter| (slot, parameter)))
+    {
+        let Ok(slot) = u32::try_from(slot) else {
+            continue;
+        };
         if !counted(func, layouts, parameter) {
             continue;
         }
@@ -3013,10 +3077,7 @@ const RUNTIME_LENDS_A_SLOT: &[&str] = &[
     "nts_promise_reason",
 ];
 
-fn hands_back_a_parameter(
-    program: &Program,
-    layouts: &[Layout],
-) -> rustc_hash::FxHashSet<String> {
+fn hands_back_a_parameter(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHashSet<String> {
     program
         .funcs
         .iter()
@@ -3090,7 +3151,9 @@ fn views_borrow(func: &Func, value: ValueId, crossing: &rustc_hash::FxHashSet<Va
     let mut at = value;
     // Bounded: a chain of views is as long as a class hierarchy.
     for _ in 0..64 {
-        let OpKind::Convert(operand) = func.values[at.0 as usize].kind else { break };
+        let OpKind::Convert(operand) = func.values[at.0 as usize].kind else {
+            break;
+        };
         if !counted(operand) {
             return false;
         }
@@ -3102,7 +3165,11 @@ fn views_borrow(func: &Func, value: ValueId, crossing: &rustc_hash::FxHashSet<Va
     crossing.contains(&at)
         || matches!(
             func.values[at.0 as usize].kind,
-            OpKind::Param(_) | OpKind::Call { callee: super::Callee::Native(_), .. }
+            OpKind::Param(_)
+                | OpKind::Call {
+                    callee: super::Callee::Native(_),
+                    ..
+                }
         )
 }
 
@@ -3283,7 +3350,6 @@ struct Fresh {
     escaped: rustc_hash::FxHashSet<ValueId>,
 }
 
-
 /// What is known on entry to every block, as a forward must-analysis.
 ///
 /// A base is fresh on entry only where it is fresh on *every* path in, and a
@@ -3368,7 +3434,9 @@ impl Fresh {
         if block == BlockId(0) {
             let parameters = func.parameter_values().unwrap_or_default();
             for (slot, _) in zeroed {
-                let Some(parameter) = parameters.get(*slot as usize).copied().flatten() else { continue };
+                let Some(parameter) = parameters.get(*slot as usize).copied().flatten() else {
+                    continue;
+                };
                 fresh.bases.insert(parameter);
                 for field in reference_fields(func, layouts, parameter) {
                     if !zeroed.contains(&(*slot, field)) {
@@ -3381,7 +3449,9 @@ impl Fresh {
         // block: a later block may be reached by a path that already wrote.
         if func.initializes_receiver
             && block == BlockId(0)
-            && let Some(receiver) = func.parameter_values().and_then(|values| values.first().copied().flatten())
+            && let Some(receiver) = func
+                .parameter_values()
+                .and_then(|values| values.first().copied().flatten())
         {
             fresh.bases.insert(receiver);
         }
@@ -3585,7 +3655,6 @@ pub(super) fn slot_of(func: &Func, index: ValueId) -> Option<u64> {
     }
 }
 
-
 /// The indices of a value's reference fields, in layout order.
 pub(super) fn reference_fields(func: &Func, layouts: &[Layout], value: ValueId) -> Vec<u32> {
     let HirType::Managed(ManagedType::Object(id)) = &func.values[value.0 as usize].ty else {
@@ -3610,11 +3679,26 @@ mod tests {
     /// Helpers that return a parameter and are rightly not in
     /// [`super::RUNTIME_HANDS_BACK`], each for its reason.
     const NOT_HANDED_BACK: &[(&str, &str)] = &[
-        ("nts_str_place", "writes into the frame buffer it is given, which holds no count"),
-        ("nts_str_append", "takes its left side's reference (a move) and hands that back"),
-        ("nts_array_same", "the helper the listed array ones return through"),
-        ("nts_map_same", "the helper the listed table ones return through"),
-        ("nts_array_fill_counted", "the body `nts_array_fill_ref` and `_foreign` share, both listed"),
+        (
+            "nts_str_place",
+            "writes into the frame buffer it is given, which holds no count",
+        ),
+        (
+            "nts_str_append",
+            "takes its left side's reference (a move) and hands that back",
+        ),
+        (
+            "nts_array_same",
+            "the helper the listed array ones return through",
+        ),
+        (
+            "nts_map_same",
+            "the helper the listed table ones return through",
+        ),
+        (
+            "nts_array_fill_counted",
+            "the body `nts_array_fill_ref` and `_foreign` share, both listed",
+        ),
     ];
 
     /// The runtime's pointer-returning `nts_*` definitions that return one of
@@ -3626,7 +3710,9 @@ mod tests {
         let mut at = 0;
         while at < lines.len() {
             let line = lines[at];
-            let starts = line.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) && line.contains("nts_") && line.contains('(');
+            let starts = line.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+                && line.contains("nts_")
+                && line.contains('(');
             if !starts || line.starts_with("typedef") {
                 at += 1;
                 continue;
@@ -3639,19 +3725,29 @@ mod tests {
                 signature.push_str(lines[end].trim());
             }
             at = end + 1;
-            let Some(open) = signature.find('(') else { continue };
+            let Some(open) = signature.find('(') else {
+                continue;
+            };
             if !signature.ends_with('{') {
                 continue;
             }
             let head = &signature[..open];
-            let Some(name) = head.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).rfind(|w| w.starts_with("nts_")) else { continue };
+            let Some(name) = head
+                .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .rfind(|w| w.starts_with("nts_"))
+            else {
+                continue;
+            };
             if !head.contains('*') {
                 continue;
             }
             let close = signature.rfind(')').unwrap_or(signature.len());
             let parameters: Vec<&str> = signature[open + 1..close]
                 .split(',')
-                .filter_map(|p| p.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).rfind(|w| !w.is_empty()))
+                .filter_map(|p| {
+                    p.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                        .rfind(|w| !w.is_empty())
+                })
                 .filter(|p| *p != "void")
                 .collect();
             let mut body = String::new();
@@ -3663,8 +3759,11 @@ mod tests {
             let compact: String = body.chars().filter(|c| !c.is_whitespace()).collect();
             for parameter in parameters {
                 let direct = compact.contains(&format!("return{parameter};"));
-                let through = ["array", "map"].iter().any(|kind| compact.contains(&format!("returnnts_{kind}_same({parameter});")));
-                let retained = compact.contains(&format!("nts_retain({parameter}")) || compact.contains(&format!("nts_retain((NtsHeader*){parameter}"));
+                let through = ["array", "map"]
+                    .iter()
+                    .any(|kind| compact.contains(&format!("returnnts_{kind}_same({parameter});")));
+                let retained = compact.contains(&format!("nts_retain({parameter}"))
+                    || compact.contains(&format!("nts_retain((NtsHeader*){parameter}"));
                 if (direct || through) && !retained {
                     found.push(name.to_owned());
                 }
@@ -3683,12 +3782,18 @@ mod tests {
     fn every_helper_that_hands_back_an_argument_is_listed() {
         let source = include_str!("../../../../runtime/c/nts_runtime.c");
         let found = handing_back(source);
-        assert!(found.iter().any(|name| name == "nts_array_sort_str"), "the scan finds nothing: {found:?}");
+        assert!(
+            found.iter().any(|name| name == "nts_array_sort_str"),
+            "the scan finds nothing: {found:?}"
+        );
         let unlisted: Vec<&String> = found
             .iter()
             .filter(|name| !super::RUNTIME_HANDS_BACK.contains(&name.as_str()))
             .filter(|name| !NOT_HANDED_BACK.iter().any(|(exempt, _)| exempt == name))
             .collect();
-        assert!(unlisted.is_empty(), "these return an argument unretained and are not in RUNTIME_HANDS_BACK: {unlisted:?}");
+        assert!(
+            unlisted.is_empty(),
+            "these return an argument unretained and are not in RUNTIME_HANDS_BACK: {unlisted:?}"
+        );
     }
 }

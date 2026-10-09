@@ -133,7 +133,12 @@ fn callback_targets<'p>(
         .into_iter()
         .filter_map(|ty| hierarchy.layouts.of(ty))
         .flat_map(|at| hierarchy.implementations(at))
-        .flat_map(|at| program.layouts[at].methods.iter().filter_map(Option::as_deref))
+        .flat_map(|at| {
+            program.layouts[at]
+                .methods
+                .iter()
+                .filter_map(Option::as_deref)
+        })
         .collect()
 }
 
@@ -158,7 +163,11 @@ fn callback_targets<'p>(
 #[must_use]
 pub fn called_back(kind: &OpKind) -> &[super::ValueId] {
     match kind {
-        OpKind::Call { callee: Callee::External(_) | Callee::Native(_), args, .. } => args,
+        OpKind::Call {
+            callee: Callee::External(_) | Callee::Native(_),
+            args,
+            ..
+        } => args,
         OpKind::NativeBridge { closure, .. } => std::slice::from_ref(closure),
         OpKind::PromiseSubscribe { reaction, .. } => std::slice::from_ref(reaction),
         _ => &[],
@@ -401,7 +410,10 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
     if !matches!(roots, Roots::Entry(_)) {
         for generator in &program.generators {
             if names.contains(&generator.constructor.as_str())
-                && program.funcs.iter().any(|func| func.name == generator.resume)
+                && program
+                    .funcs
+                    .iter()
+                    .any(|func| func.name == generator.resume)
             {
                 names.push(&generator.resume);
             }
@@ -409,7 +421,13 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
     }
     // What a host calls, which nothing in the program does: rejecting a
     // promise a foreign function answered (`lower::REJECT_ERROR`).
-    names.extend(program.funcs.iter().filter(|func| func.name == super::lower::REJECT_ERROR).map(|func| func.name.as_str()));
+    names.extend(
+        program
+            .funcs
+            .iter()
+            .filter(|func| func.name == super::lower::REJECT_ERROR)
+            .map(|func| func.name.as_str()),
+    );
     names
 }
 
@@ -438,20 +456,34 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             // What the runtime calls back is reached, whether or not anything here
             // calls it: see [`called_back`].
             let handed = called_back(&op.kind);
-            let mut targets =
-                if handed.is_empty() { Vec::new() } else { callback_targets(program, &hierarchy, func, handed) };
+            let mut targets = if handed.is_empty() {
+                Vec::new()
+            } else {
+                callback_targets(program, &hierarchy, func, handed)
+            };
             // A virtual call reaches *every* implementation of its slot, because
             // which one runs is decided by a receiver this cannot see. Keeping
             // only the one the static type names would prune an override that a
             // table still points at, and a table entry the linker cannot resolve
             // is a link error at best.
             match &op.kind {
-                OpKind::Call { callee: Callee::Direct(target), .. } => targets.push(target.as_str()),
+                OpKind::Call {
+                    callee: Callee::Direct(target),
+                    ..
+                } => targets.push(target.as_str()),
                 // What a bridge calls to make an array of a sequence C passes.
                 OpKind::NativeBridge { bridging, .. } => {
-                    targets.extend(bridging.sequences.iter().map(|sequence| sequence.function.as_str()));
+                    targets.extend(
+                        bridging
+                            .sequences
+                            .iter()
+                            .map(|sequence| sequence.function.as_str()),
+                    );
                 }
-                OpKind::Call { callee: Callee::Virtual { slot, .. } | Callee::Closure { slot }, .. } => targets.extend(
+                OpKind::Call {
+                    callee: Callee::Virtual { slot, .. } | Callee::Closure { slot },
+                    ..
+                } => targets.extend(
                     program
                         .layouts
                         .iter()

@@ -167,10 +167,7 @@ impl Inhabitants {
             let Some(kind) = walk::kind_of(snapshot, id) else {
                 continue;
             };
-            if !matches!(
-                kind,
-                syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION
-            ) {
+            if !matches!(kind, syntax::CLASS_DECLARATION | syntax::CLASS_EXPRESSION) {
                 continue;
             }
             let mut mine: FxHashSet<u32> = FxHashSet::default();
@@ -195,7 +192,7 @@ impl Inhabitants {
                     class_members.push(properties.iter().map(|p| p.name.as_str()).collect());
                     class_heritage.push(mine);
                     class_types.push(instance);
-                },
+                }
                 _ => classes_unexamined += 1,
             }
         }
@@ -301,4 +298,3 @@ fn named_symbols(snapshot: &SemanticSnapshot, id: NodeId, out: &mut FxHashSet<u3
         named_symbols(snapshot, child, out);
     }
 }
-

@@ -15,8 +15,9 @@ use std::fmt::Write as _;
 use react_compiler_ast::common::BaseNode;
 use react_compiler_ast::expressions::Expression;
 use react_compiler_ast::jsx::{
-    JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXChild, JSXElement, JSXElementName,
-    JSXExpressionContainerExpr, JSXFragment, JSXMemberExprObject, JSXMemberExpression,
+    JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXChild, JSXElement,
+    JSXElementName, JSXExpressionContainerExpr, JSXFragment, JSXMemberExprObject,
+    JSXMemberExpression,
 };
 
 use crate::jsx_text::{fixup_whitespace, is_formatting};
@@ -47,7 +48,11 @@ impl JsxImports {
         }
         if !runtime.is_empty() {
             let names: Vec<&str> = runtime.iter().copied().collect();
-            let _ = writeln!(out, "import {{ {} }} from \"react/jsx-runtime\";", names.join(", "));
+            let _ = writeln!(
+                out,
+                "import {{ {} }} from \"react/jsx-runtime\";",
+                names.join(", ")
+            );
         }
         if self.create_element {
             out.push_str("import { createElement as _createElement } from \"react\";\n");
@@ -87,8 +92,13 @@ impl Printer<'_> {
             JSXAttributeItem::JSXAttribute(a) => Some(a),
             JSXAttributeItem::JSXSpreadAttribute(_) => None,
         });
-        let attributes: Vec<&JSXAttributeItem> =
-            opening.attributes.iter().enumerate().filter(|(at, _)| Some(*at) != key_at).map(|(_, attribute)| attribute).collect();
+        let attributes: Vec<&JSXAttributeItem> = opening
+            .attributes
+            .iter()
+            .enumerate()
+            .filter(|(at, _)| Some(*at) != key_at)
+            .map(|(_, attribute)| attribute)
+            .collect();
         let children = self.jsx_children_lowered(&element.children);
         self.jsx_call(&children);
         self.jsx_tag(&opening.name, &element.base);
@@ -128,7 +138,8 @@ impl Printer<'_> {
         self.write("_createElement(");
         self.jsx_tag(&element.opening_element.name, &element.base);
         self.write(", ");
-        let attributes: Vec<&JSXAttributeItem> = element.opening_element.attributes.iter().collect();
+        let attributes: Vec<&JSXAttributeItem> =
+            element.opening_element.attributes.iter().collect();
         if attributes.is_empty() {
             self.write("null");
         } else {
@@ -145,7 +156,9 @@ impl Printer<'_> {
     /// as the expression it names.
     fn jsx_tag(&mut self, name: &JSXElementName, element: &BaseNode) {
         match name {
-            JSXElementName::JSXIdentifier(i) if is_intrinsic(&i.name) => self.write(&quote(&i.name.encode_utf16().collect::<Vec<_>>())),
+            JSXElementName::JSXIdentifier(i) if is_intrinsic(&i.name) => {
+                self.write(&quote(&i.name.encode_utf16().collect::<Vec<_>>()));
+            }
             JSXElementName::JSXIdentifier(i) => {
                 if let Some(host) = self.jsx_host_type(self.original_id(&i.base)) {
                     self.write(&quote(&host.encode_utf16().collect::<Vec<_>>()));
@@ -156,7 +169,9 @@ impl Printer<'_> {
                 self.jsx_class_type(self.original_id(&i.base));
             }
             JSXElementName::JSXMemberExpression(m) => {
-                let node = self.original_id(&m.base).or_else(|| self.original_tag_id(element));
+                let node = self
+                    .original_id(&m.base)
+                    .or_else(|| self.original_tag_id(element));
                 if let Some(host) = self.jsx_host_type(node) {
                     self.write(&quote(&host.encode_utf16().collect::<Vec<_>>()));
                     return;
@@ -177,7 +192,12 @@ impl Printer<'_> {
     fn original_tag_id(&self, element: &BaseNode) -> Option<u32> {
         self.originals_at(element)
             .iter()
-            .find_map(|node| node.get("openingElement")?.get("name")?.get("_nodeId")?.as_u64())
+            .find_map(|node| {
+                node.get("openingElement")?
+                    .get("name")?
+                    .get("_nodeId")?
+                    .as_u64()
+            })
             .and_then(|id| u32::try_from(id).ok())
     }
 
@@ -186,14 +206,21 @@ impl Printer<'_> {
     /// as React knows a host element, and no component of its own.
     fn jsx_host_type(&mut self, node: Option<u32>) -> Option<String> {
         let printed = self.types.type_at(node?)?;
-        let rest = printed.strip_prefix("HostComponent<\"").or_else(|| printed.split_once(").HostComponent<\"").map(|(_, rest)| rest))?;
+        let rest = printed.strip_prefix("HostComponent<\"").or_else(|| {
+            printed
+                .split_once(").HostComponent<\"")
+                .map(|(_, rest)| rest)
+        })?;
         rest.split_once('"').map(|(host, _)| host.to_owned())
     }
 
     /// A tag that is a class names its descriptor, the class's `$$type`
     /// ([`super::class`]): the checker types a class value as `typeof C`.
     fn jsx_class_type(&mut self, node: Option<u32>) {
-        if node.and_then(|node| self.types.type_at(node)).is_some_and(|ty| ty.starts_with("typeof ")) {
+        if node
+            .and_then(|node| self.types.type_at(node))
+            .is_some_and(|ty| ty.starts_with("typeof "))
+        {
             self.write(".$$type");
         }
     }
@@ -269,7 +296,9 @@ impl Printer<'_> {
     fn jsx_attribute_name(&mut self, name: &JSXAttributeName) {
         match name {
             JSXAttributeName::JSXIdentifier(i) if is_identifier(&i.name) => self.write(&i.name),
-            JSXAttributeName::JSXIdentifier(i) => self.write(&quote(&i.name.encode_utf16().collect::<Vec<_>>())),
+            JSXAttributeName::JSXIdentifier(i) => {
+                self.write(&quote(&i.name.encode_utf16().collect::<Vec<_>>()));
+            }
             JSXAttributeName::JSXNamespacedName(n) => {
                 let text = format!("{}:{}", n.namespace.name, n.name.name);
                 self.write(&quote(&text.encode_utf16().collect::<Vec<_>>()));
@@ -304,7 +333,9 @@ impl Printer<'_> {
             .iter()
             .filter_map(|child| match child {
                 JSXChild::JSXText(t) => {
-                    let (text, decode) = self.jsx_spelling(&t.base, &t.value).map_or_else(|| (t.value.clone(), false), |spelling| (spelling, true));
+                    let (text, decode) = self
+                        .jsx_spelling(&t.base, &t.value)
+                        .map_or_else(|| (t.value.clone(), false), |spelling| (spelling, true));
                     (!is_formatting(&text)).then(|| Child::Text(fixup_whitespace(&text, decode)))
                 }
                 JSXChild::JSXExpressionContainer(c) => match &c.expression {
@@ -344,7 +375,12 @@ fn key_after_spread(attributes: &[JSXAttributeItem]) -> bool {
                     spread = true;
                 }
             }
-            JSXAttributeItem::JSXAttribute(a) if spread && matches!(&a.name, JSXAttributeName::JSXIdentifier(n) if n.name == "key") => return true,
+            JSXAttributeItem::JSXAttribute(a)
+                if spread
+                    && matches!(&a.name, JSXAttributeName::JSXIdentifier(n) if n.name == "key") =>
+            {
+                return true;
+            }
             JSXAttributeItem::JSXAttribute(_) => {}
         }
     }
@@ -369,5 +405,8 @@ fn is_intrinsic(name: &str) -> bool {
 
 fn is_identifier(name: &str) -> bool {
     let mut chars = name.chars();
-    chars.next().is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$') && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+    chars
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
 }

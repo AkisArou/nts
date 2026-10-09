@@ -117,10 +117,20 @@ fn invalid_cooked_entries_and_writable_casts_remain_named_boundaries() {
         .find(|f| f.name == "mutable")
         .expect("writable-cast subject");
     assert!(
-        mutable.blocks.iter().flat_map(|b| &b.ops).any(|value| matches!(
-            (&mutable.values[value.0 as usize].kind, &mutable.values[value.0 as usize].ty),
-            (hir::OpKind::Unerase { .. }, hir::HirType::Managed(hir::ManagedType::Array(_)))
-        )),
+        mutable
+            .blocks
+            .iter()
+            .flat_map(|b| &b.ops)
+            .any(|value| matches!(
+                (
+                    &mutable.values[value.0 as usize].kind,
+                    &mutable.values[value.0 as usize].ty
+                ),
+                (
+                    hir::OpKind::Unerase { .. },
+                    hir::HirType::Managed(hir::ManagedType::Array(_))
+                )
+            )),
         "the template is read back as array storage, which the backends check for writability"
     );
 }

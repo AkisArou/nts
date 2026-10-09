@@ -14,19 +14,41 @@ fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
     prepare_with_provider(name, source, hir::Provider::NoGc)
 }
 
-fn prepare_with_provider(name: &str, source: &str, provider: hir::Provider) -> Option<(Utf8PathBuf, hir::Prepared)> {
+fn prepare_with_provider(
+    name: &str,
+    source: &str,
+    provider: hir::Provider,
+) -> Option<(Utf8PathBuf, hir::Prepared)> {
     prepare_with_files(name, source, provider, &[])
 }
 
-fn prepare_with_files(name: &str, source: &str, provider: hir::Provider, declarations: &[(&str, &str)]) -> Option<(Utf8PathBuf, hir::Prepared)> {
+fn prepare_with_files(
+    name: &str,
+    source: &str,
+    provider: hir::Provider,
+    declarations: &[(&str, &str)],
+) -> Option<(Utf8PathBuf, hir::Prepared)> {
     let (dir, snapshot) = snapshot_of(name, source, declarations)?;
-    let prepared = hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() });
-    Some((dir, prepared.unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider,
+            ..hir::Options::default()
+        },
+    );
+    Some((
+        dir,
+        prepared.unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
+    ))
 }
 
 /// `source` written beside `declarations` and read by the checker, for a test
 /// that prepares it with options of its own.
-fn snapshot_of(name: &str, source: &str, declarations: &[(&str, &str)]) -> Option<(Utf8PathBuf, nts_semantic_schema::SemanticSnapshot)> {
+fn snapshot_of(
+    name: &str,
+    source: &str,
+    declarations: &[(&str, &str)],
+) -> Option<(Utf8PathBuf, nts_semantic_schema::SemanticSnapshot)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -60,11 +82,23 @@ fn snapshot_of(name: &str, source: &str, declarations: &[(&str, &str)]) -> Optio
 /// the same program, prepared both ways.
 #[test]
 fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
-    let dir = root.join(format!("target/native-llvm-tests/{}-async-callback", std::process::id()));
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir = root.join(format!(
+        "target/native-llvm-tests/{}-async-callback",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("closures.d.ts"), include_str!("../../../../examples/interop/native-closure/types/closures.d.ts")).unwrap();
+    std::fs::write(
+        dir.join("closures.d.ts"),
+        include_str!("../../../../examples/interop/native-closure/types/closures.d.ts"),
+    )
+    .unwrap();
     std::fs::write(dir.join("tsconfig.json"), format!(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts","closures.d.ts"]}}"#
     )).unwrap();
@@ -73,29 +107,62 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
         "import { each_upto } from \"c:closures\";\nimport type { c_int } from \"c:types\";\nlet seen = 0;\nexport function count(): number {\n  each_upto(async (n) => {\n    await 0;\n    seen += n;\n  }, 3 as c_int);\n  return seen;\n}\n",
     )
     .unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let refused = |callbacks_checkpoint: bool| {
-        let prepared = hir::prepare_with(&snapshot, &hir::Options { callbacks_checkpoint, ..hir::Options::default() }).unwrap();
-        prepared.diagnostics.iter().any(|d| d.code == "NTS2006" && d.message.contains("an `async` callback cannot be bridged to C"))
+        let prepared = hir::prepare_with(
+            &snapshot,
+            &hir::Options {
+                callbacks_checkpoint,
+                ..hir::Options::default()
+            },
+        )
+        .unwrap();
+        prepared.diagnostics.iter().any(|d| {
+            d.code == "NTS2006"
+                && d.message
+                    .contains("an `async` callback cannot be bridged to C")
+        })
     };
-    assert!(refused(false), "an async callback was bridged where nothing resumes it");
-    assert!(!refused(true), "an async callback was refused where the loop checkpoints after it");
+    assert!(
+        refused(false),
+        "an async callback was bridged where nothing resumes it"
+    );
+    assert!(
+        !refused(true),
+        "an async callback was refused where the loop checkpoints after it"
+    );
 }
 
 /// What the checker says of `source`, for an arm whose refusal is the
 /// checker's rather than lowering's -- which `prepare` asserts never happens.
 fn checker_messages(name: &str, source: &str) -> Option<Vec<String>> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
-    let dir = root.join(format!("target/native-llvm-tests/{}-{name}", std::process::id()));
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir = root.join(format!(
+        "target/native-llvm-tests/{}-{name}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("tsconfig.json"), format!(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
     )).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
-    Some(snapshot.diagnostics.iter().map(|d| d.message.clone()).collect())
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
+    Some(
+        snapshot
+            .diagnostics
+            .iter()
+            .map(|d| d.message.clone())
+            .collect(),
+    )
 }
 
 /// The runtime a program links, written beside it and compiled: a number
@@ -148,7 +215,11 @@ fn managed_declarations_execute_with_the_nts_abi_on_c_and_llvm() {
         include_str!("../../common/test-support/managed-abi/native.h"),
     )
     .unwrap();
-    std::fs::write(dir.join("native.c"), include_str!("../../common/test-support/managed-abi/native.c")).unwrap();
+    std::fs::write(
+        dir.join("native.c"),
+        include_str!("../../common/test-support/managed-abi/native.c"),
+    )
+    .unwrap();
     std::fs::write(
         dir.join("caller.c"),
         include_str!("../../common/test-support/managed-abi/caller.c"),
@@ -240,7 +311,11 @@ fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
     ) else {
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -256,19 +331,50 @@ fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
     )
     .unwrap();
     for source in ["caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+        clang(
+            &dir,
+            &[
+                "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source,
+            ],
+        );
     }
     // The witness is compiled for its assertions, not linked. It carries the
     // record's `sizeof` and `_Alignof` and the offsets of the members that have
     // them -- a bit-field has neither an `offsetof` nor an address, so those
     // two lines are the only static check a run of them gets.
-    clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "native_witness.c"]);
+    clang(
+        &dir,
+        &[
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fsyntax-only",
+            "native_witness.c",
+        ],
+    );
     for (source, object, binary) in [
         ("program.c", "c.o", "c-run"),
         ("program.ll", "llvm.o", "llvm-run"),
     ] {
-        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
+        clang(
+            &dir,
+            &[
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wno-override-module",
+                "-c",
+                source,
+                "-o",
+                object,
+            ],
+        );
+        clang(
+            &dir,
+            &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary],
+        );
         assert!(
             Command::new(dir.join(binary)).status().unwrap().success(),
             "{binary}"
@@ -297,7 +403,11 @@ fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
     ) else {
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -313,19 +423,50 @@ fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
     )
     .unwrap();
     for source in ["caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+        clang(
+            &dir,
+            &[
+                "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source,
+            ],
+        );
     }
     // `offsetof` and `_Generic` both work on a flexible array member --
     // `unsigned char (*)[]` is a type C has -- so the witness checks it like
     // any other, which was verified against the real header before it was
     // written.
-    clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "native_witness.c"]);
+    clang(
+        &dir,
+        &[
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fsyntax-only",
+            "native_witness.c",
+        ],
+    );
     for (source, object, binary) in [
         ("program.c", "c.o", "c-run"),
         ("program.ll", "llvm.o", "llvm-run"),
     ] {
-        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
+        clang(
+            &dir,
+            &[
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wno-override-module",
+                "-c",
+                source,
+                "-o",
+                object,
+            ],
+        );
+        clang(
+            &dir,
+            &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary],
+        );
         assert!(
             Command::new(dir.join(binary)).status().unwrap().success(),
             "{binary}"
@@ -353,7 +494,11 @@ fn a_record_named_only_by_a_typedef_is_spelled_without_the_keyword() {
     ) else {
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -369,17 +514,48 @@ fn a_record_named_only_by_a_typedef_is_spelled_without_the_keyword() {
     )
     .unwrap();
     for source in ["caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+        clang(
+            &dir,
+            &[
+                "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source,
+            ],
+        );
     }
     // The witness names the type in every assertion it makes, so it is the file
     // that stops compiling first if the keyword comes back.
-    clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "native_witness.c"]);
+    clang(
+        &dir,
+        &[
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fsyntax-only",
+            "native_witness.c",
+        ],
+    );
     for (source, object, binary) in [
         ("program.c", "c.o", "c-run"),
         ("program.ll", "llvm.o", "llvm-run"),
     ] {
-        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
+        clang(
+            &dir,
+            &[
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wno-override-module",
+                "-c",
+                source,
+                "-o",
+                object,
+            ],
+        );
+        clang(
+            &dir,
+            &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary],
+        );
         assert!(
             Command::new(dir.join(binary)).status().unwrap().success(),
             "{binary}"
@@ -393,7 +569,8 @@ fn aggregate_arguments_respect_register_exhaustion() {
     let mut c = "#include \"nts_runtime.h\"\n".to_owned();
     let mut caller = "#include \"program.h\"\nint main(void) {\n".to_owned();
     for count in 0..8 {
-        let (mut ts_params, mut c_params, mut ignore) = (String::new(), String::new(), String::new());
+        let (mut ts_params, mut c_params, mut ignore) =
+            (String::new(), String::new(), String::new());
         for i in 0..count {
             write!(ts_params, "p{i}: string, ").unwrap();
             write!(c_params, "NtsString *p{i}, ").unwrap();
@@ -410,26 +587,60 @@ fn aggregate_arguments_respect_register_exhaustion() {
             }}").unwrap();
         writeln!(c, "double tagged_{count}({c_params}NtsValue v, NtsString *tail) {{ {ignore}return v.as.number + tail->length; }}
             __int128 wide_{count}({c_params}__int128 v, NtsString *tail) {{ {ignore}return v + tail->length; }}").unwrap();
-        writeln!(caller, "if (run_{count}(3.75) != 6.75) return {};", count + 1).unwrap();
+        writeln!(
+            caller,
+            "if (run_{count}(3.75) != 6.75) return {};",
+            count + 1
+        )
+        .unwrap();
     }
     caller.push_str("return 0; }\n");
-    let Some((dir, prepared)) = prepare("aggregate-registers", &ts) else { return };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("aggregate-registers", &ts) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c_program = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c_program.is_complete(), "{:?}", c_program.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(llvm.text.contains("ptr byval({ i32, i64 }) align 8"));
-    for file in c_program.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    for (file, source) in [("native.c", c), ("caller.c", caller), ("program.c", c_program.writer.text().to_owned()), ("program.ll", llvm.text)] {
+    for file in c_program.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    for (file, source) in [
+        ("native.c", c),
+        ("caller.c", caller),
+        ("program.c", c_program.writer.text().to_owned()),
+        ("program.ll", llvm.text),
+    ] {
         std::fs::write(dir.join(file), source).unwrap();
     }
     for source in ["native.c", "caller.c", "nts_runtime.c"] {
         clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
     }
     for (source, binary) in [("program.c", "c-run"), ("program.ll", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", source, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
-        assert!(Command::new(dir.join(binary)).status().unwrap().success(), "{binary}");
+        clang(
+            &dir,
+            &[
+                "-O2",
+                "-Wno-override-module",
+                source,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                binary,
+            ],
+        );
+        assert!(
+            Command::new(dir.join(binary)).status().unwrap().success(),
+            "{binary}"
+        );
     }
 }
 
@@ -444,53 +655,112 @@ fn aggregate_arguments_respect_register_exhaustion() {
 /// backend refuses on arm64 Windows.
 #[test]
 fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
-    let Some((dir, prepared)) = prepare("refused-boolean", r"
+    let Some((dir, prepared)) = prepare(
+        "refused-boolean",
+        r"
         export function pick(flag: boolean, n: bigint): bigint {
             return flag ? n : 0n;
         }
         export function first(): bigint {
             return pick(true, 1n);
         }
-    ") else { return };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let arm64_windows = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::Win64, arch: nts_codegen_llvm::Arch::Aarch64 };
+    ",
+    ) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let arm64_windows = nts_codegen_llvm::Platform {
+        abi: nts_core::hir::native::NativeAbi::Win64,
+        arch: nts_codegen_llvm::Arch::Aarch64,
+    };
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64_windows);
-    let declared = llvm.text.lines().find(|line| line.starts_with("declare") && line.contains("@pick(")).unwrap_or_else(|| panic!("`pick` was not refused and declared: {:?}", llvm.diagnostics));
+    let declared = llvm
+        .text
+        .lines()
+        .find(|line| line.starts_with("declare") && line.contains("@pick("))
+        .unwrap_or_else(|| {
+            panic!(
+                "`pick` was not refused and declared: {:?}",
+                llvm.diagnostics
+            )
+        });
     assert!(declared.contains("(i1 zeroext, "), "{declared}");
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    clang(&dir, &["--target=aarch64-w64-windows-gnu", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"]);
+    clang(
+        &dir,
+        &[
+            "--target=aarch64-w64-windows-gnu",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ],
+    );
 }
 
 #[test]
 fn a_program_with_every_function_refused_still_emits() {
-    let Some((_, prepared)) = prepare("all-refused", r#"
+    let Some((_, prepared)) = prepare(
+        "all-refused",
+        r#"
         import { local } from "c:memory";
         import type { c_int } from "c:types";
         const slot = local<c_int>();
-    "#) else { return };
+    "#,
+    ) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("native local address escapes")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("native local address escapes")),
         "{:?}",
         prepared.diagnostics
     );
-    assert!(prepared.program.funcs.is_empty(), "a function survived: the arm no longer reaches the case");
+    assert!(
+        prepared.program.funcs.is_empty(),
+        "a function survived: the arm no longer reaches the case"
+    );
     // The C backend never indexed a function for a global; it too returns.
     let _ = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
-    assert!(llvm.text.contains("@nts_closure_call_slot"), "{}", llvm.text);
+    assert!(
+        llvm.text.contains("@nts_closure_call_slot"),
+        "{}",
+        llvm.text
+    );
 }
 
 #[test]
 fn intrinsic_annotations_do_not_authorize_arbitrary_foreign_symbols() {
-    let Some((_, prepared)) = prepare("unknown-intrinsic", r"
+    let Some((_, prepared)) = prepare(
+        "unknown-intrinsic",
+        r"
         /** @ntsAbi intrinsic */
         declare function abs(n: number): number;
         export function run(n: number): number { return abs(n); }
-    ") else { return };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    ",
+    ) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(!c.is_complete());
-    assert!(c.diagnostics.iter().any(|d| d.message.contains("abs") && d.message.contains("no declared C ABI")));
+    assert!(
+        c.diagnostics
+            .iter()
+            .any(|d| d.message.contains("abs") && d.message.contains("no declared C ABI"))
+    );
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.iter().any(|d| d.message.contains("abs")));
 }
@@ -518,7 +788,8 @@ fn managed_runtime_declarations_must_agree_with_the_header() {
             "{:?}",
             prepared.diagnostics
         );
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         if valid {
             assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
             assert_eq!(
@@ -557,6 +828,7 @@ fn managed_runtime_declarations_must_agree_with_the_header() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn every_scalar_and_libm_cross_the_real_c_abi() {
     let brands = CASES
         .iter()
@@ -602,15 +874,16 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
         )
         .unwrap();
     }
-    ts.push_str("import { abs } from \"c:stdlib\"; import * as math from \"c:math\";
+    ts.push_str(
+        "import { abs } from \"c:stdlib\"; import * as math from \"c:math\";
         declare function native_not(v: boolean): boolean;
         export function library(n: c_int): number { return abs(n) + math.sqrt(4 as c_double); }
-        export function toggle(v: boolean): boolean { return native_not(v); }");
+        export function toggle(v: boolean): boolean { return native_not(v); }",
+    );
     header.push_str("bool native_not(bool);\n");
     implementation.push_str("bool native_not(bool v) { return !v; }\n");
     prototypes.push_str("double library(int);\n_Bool toggle(_Bool);\n");
-    caller
-        .push_str("if (library(-3) != 5 || toggle(1) || !toggle(0)) return 99;\nreturn 0; }\n");
+    caller.push_str("if (library(-3) != 5 || toggle(1) || !toggle(0)) return 99;\nreturn 0; }\n");
     let Some((dir, prepared)) = prepare("scalar-abi", &ts) else {
         return;
     };
@@ -619,7 +892,8 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
         "{:?}",
         prepared.diagnostics
     );
-    let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+    let emitted =
+        nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     assert!(emitted.text.contains("declare double @sqrt(double)"));
     assert!(
@@ -654,7 +928,15 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
     clang(&dir, &["-O2", "-c", "program.ll", "-o", "program.o"]);
     clang(
         &dir,
-        &["program.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "caller"],
+        &[
+            "program.o",
+            "native.o",
+            "caller.o",
+            "nts_runtime.o",
+            "-lm",
+            "-o",
+            "caller",
+        ],
     );
     assert!(Command::new(dir.join("caller")).status().unwrap().success());
 
@@ -723,11 +1005,25 @@ fn assert_unsigned_return_control(dir: &Utf8Path, ir: &str) {
     // `uitofp` too, earlier in the module, and LLVM folds that one's round
     // trip whichever way it is spelled.
     let returned = ir.find("@result_1(").expect("`result_1` is defined");
-    let at = returned + ir[returned..].find("uitofp i32").expect("`result_1` widens an unsigned result");
+    let at = returned
+        + ir[returned..]
+            .find("uitofp i32")
+            .expect("`result_1` widens an unsigned result");
     let bad = format!("{}sitofp i32{}", &ir[..at], &ir[at + "uitofp i32".len()..]);
     std::fs::write(dir.join("bad.ll"), bad).unwrap();
     clang(dir, &["-O2", "-c", "bad.ll", "-o", "bad.o"]);
-    clang(dir, &["bad.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "bad"]);
+    clang(
+        dir,
+        &[
+            "bad.o",
+            "native.o",
+            "caller.o",
+            "nts_runtime.o",
+            "-lm",
+            "-o",
+            "bad",
+        ],
+    );
     assert!(!Command::new(dir.join("bad")).status().unwrap().success());
 }
 
@@ -793,7 +1089,18 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
     clang(&dir, &["-std=c11", "-O2", "-c", "nts_runtime.c"]);
     for source in ["program.c", "program.ll"] {
         clang(&dir, &["-O2", "-c", source, "-o", "program.o"]);
-        clang(&dir, &["program.o", "native.o", "nts_runtime.o", "caller.c", "-lm", "-o", "caller"]);
+        clang(
+            &dir,
+            &[
+                "program.o",
+                "native.o",
+                "nts_runtime.o",
+                "caller.c",
+                "-lm",
+                "-o",
+                "caller",
+            ],
+        );
         assert!(Command::new(dir.join("caller")).status().unwrap().success());
     }
 }
@@ -821,17 +1128,30 @@ export function run(): number {
     return widget_is(b) + object_is(b) * 10 + widget_or_null_is(b) * 100;
 }
 "#;
-    let Some((dir, prepared)) = prepare("class-upcast", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("class-upcast", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    assert!(c.writer.text().contains("(struct _GtkWidget *)"), "no conversion to the ancestor was emitted");
+    assert!(
+        c.writer.text().contains("(struct _GtkWidget *)"),
+        "no conversion to the ancestor was emitted"
+    );
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    std::fs::write(dir.join("native.c"), r"
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("native.c"),
+        r"
 struct _GObject { int kind; };
 struct _GtkWidget { struct _GObject parent; };
 struct _GtkButton { struct _GtkWidget parent; };
@@ -840,18 +1160,50 @@ struct _GtkButton *button_new(void) { return &the_button; }
 int widget_is(struct _GtkWidget *w) { return (void *)w == (void *)&the_button; }
 int object_is(struct _GObject *o) { return (void *)o == (void *)&the_button; }
 int widget_or_null_is(struct _GtkWidget *w) { return (void *)w == (void *)&the_button; }
-").unwrap();
-    std::fs::write(dir.join("caller.c"), r#"
+",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        r#"
 #include "program.h"
 int main(void) { return run() == 111.0 ? 0 : 1; }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     for file in ["native.c", "caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        clang(
+            &dir,
+            &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+        );
     }
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
-        assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}");
+    for (source, object, executable) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                executable,
+            ],
+        );
+        assert!(
+            Command::new(dir.join(executable))
+                .status()
+                .unwrap()
+                .success(),
+            "{executable}"
+        );
     }
 }
 
@@ -865,6 +1217,7 @@ int main(void) { return run() == 111.0 ? 0 : 1; }
 /// false and a null value yield null, and a sideways cast or an upcast is
 /// refused however `is` was computed.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn an_unsafe_downcast_follows_its_check_and_refuses_what_no_check_can_fix() {
     let source = r#"
 import type { Class, c_int } from "c:types";
@@ -883,16 +1236,26 @@ export function run(kind: c_int): number {
     return b === null ? -1 : box_items(b);
 }
 "#;
-    let Some((dir, prepared)) = prepare("downcast", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("downcast", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    std::fs::write(dir.join("native.c"), r"
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("native.c"),
+        r"
 #include <stddef.h>
 struct _Obj { int kind; };
 struct _Widget { struct _Obj parent; };
@@ -904,8 +1267,12 @@ struct _Widget *make(int kind) {
 }
 int kind_of(struct _Obj *o) { return o->kind; }
 int box_items(struct _Box *b) { return b->items; }
-").unwrap();
-    std::fs::write(dir.join("caller.c"), r#"
+",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        r#"
 #include "program.h"
 int main(void) {
     if (run(1) != 42.0) return 1;  /* a box, read through as one */
@@ -913,13 +1280,35 @@ int main(void) {
     if (run(3) != -1.0) return 3;  /* null is not a box */
     return 0;
 }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     for file in ["native.c", "caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        clang(
+            &dir,
+            &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+        );
     }
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+    for (source, object, executable) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                executable,
+            ],
+        );
         let status = Command::new(dir.join(executable)).status().unwrap();
         assert!(status.success(), "{executable}: arm {:?}", status.code());
     }
@@ -943,9 +1332,14 @@ export function run(): boolean {{
 }}
 "#
         );
-        let Some((_, prepared)) = prepare(&format!("downcast-{label}"), &refused) else { return; };
+        let Some((_, prepared)) = prepare(&format!("downcast-{label}"), &refused) else {
+            return;
+        };
         assert!(
-            prepared.diagnostics.iter().any(|d| d.message.contains("not below it on its declared chain")),
+            prepared
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("not below it on its declared chain")),
             "{label}: {:?}",
             prepared.diagnostics
         );
@@ -960,6 +1354,7 @@ export function run(): boolean {{
 /// It also accepts `{}`, whose heap address C must never be handed; lowering
 /// refuses that at the call, which is the arm that makes this a check.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn an_object_parameter_takes_any_handle_as_void_and_refuses_a_managed_value() {
     let source = r#"
 import type { Class, c_int } from "c:types";
@@ -972,16 +1367,27 @@ export function run(): number {
     return same(w, w) * 10 + same(w, null);
 }
 "#;
-    let Some((dir, prepared)) = prepare("object-void", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("object-void", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    assert!(c.writer.text().contains("int same(void *, void *)"), "`object` did not become `void *`");
+    assert!(
+        c.writer.text().contains("int same(void *, void *)"),
+        "`object` did not become `void *`"
+    );
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
     std::fs::write(dir.join("native.c"), r"
 #include <stddef.h>
 struct _Widget { int kind; };
@@ -989,23 +1395,57 @@ static struct _Widget the_widget;
 struct _Widget *a_widget(void) { return &the_widget; }
 int same(void *p, void *q) { return p == (void *)&the_widget ? (q == NULL ? 2 : q == p ? 1 : 3) : 9; }
 ").unwrap();
-    std::fs::write(dir.join("caller.c"), "#include \"program.h\"\nint main(void) { return run() == 12.0 ? 0 : 1; }\n").unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        "#include \"program.h\"\nint main(void) { return run() == 12.0 ? 0 : 1; }\n",
+    )
+    .unwrap();
     for file in ["native.c", "caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        clang(
+            &dir,
+            &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+        );
     }
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
-        assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}");
+    for (source, object, executable) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                executable,
+            ],
+        );
+        assert!(
+            Command::new(dir.join(executable))
+                .status()
+                .unwrap()
+                .success(),
+            "{executable}"
+        );
     }
 
     let managed = r"
 declare function takes(p: object): void;
 export function run(): void { takes({ x: 1 }); }
 ";
-    let Some((_, prepared)) = prepare("object-managed", managed) else { return; };
+    let Some((_, prepared)) = prepare("object-managed", managed) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("a managed value where C takes a pointer")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("a managed value where C takes a pointer")),
         "a managed object reached a `void *`: {:?}",
         prepared.diagnostics
     );
@@ -1018,8 +1458,14 @@ interface Hook { init(resource: object): number }
 class Counter implements Hook { init(resource: object): number { return resource === null ? 0 : 1; } }
 export function run(): number { const hook: Hook = new Counter(); return hook.init({ x: 1 }); }
 ";
-    let Some((_, prepared)) = prepare("object-interface", interface) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "a TypeScript method taking `object` was read as C: {:?}", prepared.diagnostics);
+    let Some((_, prepared)) = prepare("object-interface", interface) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "a TypeScript method taking `object` was read as C: {:?}",
+        prepared.diagnostics
+    );
 
     // Nor under `@ntsAbi managed`, whose convention passes the object itself:
     // `async_hooks.registerDestroyHook` hands one to `nts_on_collected`.
@@ -1028,8 +1474,14 @@ export function run(): number { const hook: Hook = new Counter(); return hook.in
 declare function keep(value: object): void;
 export function run(): void { keep({ x: 1 }); }
 ";
-    let Some((_, prepared)) = prepare("object-managed-abi", managed_abi) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "an `@ntsAbi managed` object parameter was read as C: {:?}", prepared.diagnostics);
+    let Some((_, prepared)) = prepare("object-managed-abi", managed_abi) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "an `@ntsAbi managed` object parameter was read as C: {:?}",
+        prepared.diagnostics
+    );
 }
 
 /// A downcast written as an assertion is refused by lowering.
@@ -1052,9 +1504,14 @@ export function run(): void {
     button_label(widget_new() as GtkButton);
 }
 "#;
-    let Some((_, prepared)) = prepare("class-downcast", source) else { return; };
+    let Some((_, prepared)) = prepare("class-downcast", source) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("asserted to be an opaque C pointer")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("asserted to be an opaque C pointer")),
         "a downcast by assertion was not refused: {:?}",
         prepared.diagnostics
     );
@@ -1075,46 +1532,129 @@ export function run(): void {
 /// library told to forget without calling the destroy function, which must
 /// leave every cycle's closure and the box it captured alive.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_capturing_closure_crosses_to_c_on_both_backends() {
     let source = include_str!("../../../../examples/interop/native-closure/src/main.ts");
-    let declarations = [("closures.d.ts", include_str!("../../../../examples/interop/native-closure/types/closures.d.ts"))];
-    for (label, provider) in [("nogc", hir::Provider::NoGc), ("rc", hir::Provider::ReferenceCounting)] {
-        let Some((dir, prepared)) = prepare_with_files(&format!("closure-{label}"), source, provider, &declarations) else { return; };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let declarations = [(
+        "closures.d.ts",
+        include_str!("../../../../examples/interop/native-closure/types/closures.d.ts"),
+    )];
+    for (label, provider) in [
+        ("nogc", hir::Provider::NoGc),
+        ("rc", hir::Provider::ReferenceCounting),
+    ] {
+        let Some((dir, prepared)) =
+            prepare_with_files(&format!("closure-{label}"), source, provider, &declarations)
+        else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-        std::fs::write(dir.join("closures.h"), include_str!("../../../../examples/interop/native-closure/native/closures.h")).unwrap();
-        std::fs::write(dir.join("closures.c"), include_str!("../../../../examples/interop/native-closure/native/closures.c")).unwrap();
-        std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-closure/consumer/caller.c")).unwrap();
-        std::fs::write(dir.join("cycles.c"), SIGNAL_CYCLES).unwrap();
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
-        for file in ["closures.c", "caller.c", "cycles.c"] {
-            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
         }
-        clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
-        for (source, object, executable) in [("program.c", "c.o", "c"), ("program.ll", "llvm.o", "llvm")] {
-            clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
-            clang(&dir, &[object, "closures.o", "caller.o", "nts_runtime.o", "-lm", "-o", &format!("{executable}-run")]);
-            let run = Command::new(dir.join(format!("{executable}-run"))).output().unwrap();
-            assert!(run.status.success(), "{label}/{executable}: {}", String::from_utf8_lossy(&run.stdout));
+        std::fs::write(
+            dir.join("closures.h"),
+            include_str!("../../../../examples/interop/native-closure/native/closures.h"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("closures.c"),
+            include_str!("../../../../examples/interop/native-closure/native/closures.c"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("caller.c"),
+            include_str!("../../../../examples/interop/native-closure/consumer/caller.c"),
+        )
+        .unwrap();
+        std::fs::write(dir.join("cycles.c"), SIGNAL_CYCLES).unwrap();
+        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+            &["-DNTS_PROVIDER_RC"]
+        } else {
+            &[]
+        };
+        for file in ["closures.c", "caller.c", "cycles.c"] {
+            clang(
+                &dir,
+                &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+            );
+        }
+        clang(
+            &dir,
+            &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat(),
+        );
+        for (source, object, executable) in
+            [("program.c", "c.o", "c"), ("program.ll", "llvm.o", "llvm")]
+        {
+            clang(
+                &dir,
+                &[
+                    &["-O2", "-Wno-override-module", "-c", source, "-o", object][..],
+                    counted,
+                ]
+                .concat(),
+            );
+            clang(
+                &dir,
+                &[
+                    object,
+                    "closures.o",
+                    "caller.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-o",
+                    &format!("{executable}-run"),
+                ],
+            );
+            let run = Command::new(dir.join(format!("{executable}-run")))
+                .output()
+                .unwrap();
+            assert!(
+                run.status.success(),
+                "{label}/{executable}: {}",
+                String::from_utf8_lossy(&run.stdout)
+            );
             if provider != hir::Provider::ReferenceCounting {
                 continue;
             }
-            clang(&dir, &[object, "closures.o", "cycles.o", "nts_runtime.o", "-lm", "-o", &format!("{executable}-cycles")]);
+            clang(
+                &dir,
+                &[
+                    object,
+                    "closures.o",
+                    "cycles.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-o",
+                    &format!("{executable}-cycles"),
+                ],
+            );
             let counts = |args: &[&str]| -> (u64, u64) {
-                let run = Command::new(dir.join(format!("{executable}-cycles"))).args(args).output().unwrap();
+                let run = Command::new(dir.join(format!("{executable}-cycles")))
+                    .args(args)
+                    .output()
+                    .unwrap();
                 assert!(run.status.success(), "{label}/{executable} cycles");
                 let text = String::from_utf8_lossy(&run.stdout).into_owned();
                 let mut numbers = text.split_whitespace().map(|n| n.parse::<u64>().unwrap());
                 (numbers.next().unwrap(), numbers.next().unwrap())
             };
             let (before, after) = counts(&[]);
-            assert_eq!(before, after, "{executable}: fifty released cycles left objects alive");
+            assert_eq!(
+                before, after,
+                "{executable}: fifty released cycles left objects alive"
+            );
             let (before, after) = counts(&["skip-notify"]);
             assert!(
                 after >= before + 50,
@@ -1132,6 +1672,7 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
 /// boundary, the same way a static one's does -- the trampoline dispatches to
 /// the plain compiled function, never to a raising copy.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_closure_to_c_keeps_its_refusals_and_its_boundary() {
     let plain = r#"
 import type { c_int } from "c:types";
@@ -1140,9 +1681,13 @@ export function run(k: number): number {
     return apply_twice((n) => ((n + k) | 0) as c_int, 1 as c_int);
 }
 "#;
-    let Some((_, prepared)) = prepare("closure-plain", plain) else { return; };
+    let Some((_, prepared)) = prepare("closure-plain", plain) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("a C function pointer needs a function declared with `function`")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("a C function pointer needs a function declared with `function`")),
         "a capturing arrow reached a plain function pointer: {:?}",
         prepared.diagnostics
     );
@@ -1159,32 +1704,77 @@ export function run(limit: number): number {
     return seen;
 }
 "#;
-    let Some((dir, prepared)) = prepare("closure-throw", throwing) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("closure-throw", throwing) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
     std::fs::write(dir.join("native.c"), "void each_upto(void (*f)(int, void *), void *data, int upto) { for (int n = 1; n <= upto; n++) f(n, data); }\n").unwrap();
-    std::fs::write(dir.join("caller.c"), r#"
+    std::fs::write(
+        dir.join("caller.c"),
+        r#"
 #include <stdlib.h>
 #include "program.h"
 int main(int argc, char **argv) { (void)argv; return run(argc > 1 ? 1 : 10) == 6.0 ? 0 : 1; }
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     for file in ["native.c", "caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        clang(
+            &dir,
+            &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+        );
     }
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
-        assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}: no throw");
-        let thrown = Command::new(dir.join(executable)).arg("throw").output().unwrap();
-        assert!(!thrown.status.success(), "{executable}: a throw inside a lent closure returned normally");
+    for (source, object, executable) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                executable,
+            ],
+        );
         assert!(
-            String::from_utf8_lossy(&thrown.stderr).contains("a callback threw across a C boundary"),
+            Command::new(dir.join(executable))
+                .status()
+                .unwrap()
+                .success(),
+            "{executable}: no throw"
+        );
+        let thrown = Command::new(dir.join(executable))
+            .arg("throw")
+            .output()
+            .unwrap();
+        assert!(
+            !thrown.status.success(),
+            "{executable}: a throw inside a lent closure returned normally"
+        );
+        assert!(
+            String::from_utf8_lossy(&thrown.stderr)
+                .contains("a callback threw across a C boundary"),
             "{executable}: {}",
             String::from_utf8_lossy(&thrown.stderr)
         );
@@ -1201,38 +1791,115 @@ int main(int argc, char **argv) { (void)argv; return run(argc > 1 ? 1 : 10) == 6
 /// lowering's, so both backends only call the runtime -- which is the claim a
 /// second backend is here to test rather than to assume.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_string_parameter_crosses_as_utf8_on_both_backends() {
     let source = include_str!("../../../../examples/interop/native-string/src/main.ts");
-    let declarations = [("text.d.ts", include_str!("../../../../examples/interop/native-string/types/text.d.ts"))];
-    for (label, provider) in [("nogc", hir::Provider::NoGc), ("rc", hir::Provider::ReferenceCounting)] {
-        let Some((dir, prepared)) = prepare_with_files(&format!("string-{label}"), source, provider, &declarations) else { return; };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let declarations = [(
+        "text.d.ts",
+        include_str!("../../../../examples/interop/native-string/types/text.d.ts"),
+    )];
+    for (label, provider) in [
+        ("nogc", hir::Provider::NoGc),
+        ("rc", hir::Provider::ReferenceCounting),
+    ] {
+        let Some((dir, prepared)) =
+            prepare_with_files(&format!("string-{label}"), source, provider, &declarations)
+        else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-        assert!(llvm.text.contains("@nts_string_to_cstring("), "the conversion is not in the LLVM program");
-        assert!(llvm.text.contains("@nts_cstring_release("), "the release is not in the LLVM program");
+        assert!(
+            llvm.text.contains("@nts_string_to_cstring("),
+            "the conversion is not in the LLVM program"
+        );
+        assert!(
+            llvm.text.contains("@nts_cstring_release("),
+            "the release is not in the LLVM program"
+        );
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-        std::fs::write(dir.join("text.h"), include_str!("../../../../examples/interop/native-string/native/text.h")).unwrap();
-        std::fs::write(dir.join("text.c"), include_str!("../../../../examples/interop/native-string/native/text.c")).unwrap();
-        std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-string/consumer/caller.c")).unwrap();
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(
+            dir.join("text.h"),
+            include_str!("../../../../examples/interop/native-string/native/text.h"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("text.c"),
+            include_str!("../../../../examples/interop/native-string/native/text.c"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("caller.c"),
+            include_str!("../../../../examples/interop/native-string/consumer/caller.c"),
+        )
+        .unwrap();
         // Both halves counted or neither: the provider decides what the
         // program emits, and the runtime has to agree with it.
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
+        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+            &["-DNTS_PROVIDER_RC"]
+        } else {
+            &[]
+        };
         for file in ["text.c", "caller.c"] {
-            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+            clang(
+                &dir,
+                &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+            );
         }
-        clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
-        for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-            clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
-            clang(&dir, &[object, "text.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+        clang(
+            &dir,
+            &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat(),
+        );
+        for (source, object, executable) in [
+            ("program.c", "c.o", "c-run"),
+            ("program.ll", "llvm.o", "llvm-run"),
+        ] {
+            clang(
+                &dir,
+                &[
+                    &["-O2", "-Wno-override-module", "-c", source, "-o", object][..],
+                    counted,
+                ]
+                .concat(),
+            );
+            clang(
+                &dir,
+                &[
+                    object,
+                    "text.o",
+                    "caller.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-o",
+                    executable,
+                ],
+            );
             let run = Command::new(dir.join(executable)).output().unwrap();
-            assert!(run.status.success(), "{label}/{executable}: {}", String::from_utf8_lossy(&run.stdout));
-            let nul = Command::new(dir.join(executable)).arg("nul").output().unwrap();
-            assert!(!nul.status.success(), "{label}/{executable}: U+0000 reached C");
+            assert!(
+                run.status.success(),
+                "{label}/{executable}: {}",
+                String::from_utf8_lossy(&run.stdout)
+            );
+            let nul = Command::new(dir.join(executable))
+                .arg("nul")
+                .output()
+                .unwrap();
+            assert!(
+                !nul.status.success(),
+                "{label}/{executable}: U+0000 reached C"
+            );
             assert!(
                 String::from_utf8_lossy(&nul.stderr).contains("containing U+0000 at index 1"),
                 "{label}/{executable}: {}",
@@ -1243,6 +1910,7 @@ fn a_string_parameter_crosses_as_utf8_on_both_backends() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn opaque_handles_keep_pointer_bits_and_manual_lifetime_on_both_backends() {
     let source = r#"
 import type { Opaque, c_int } from "c:types";
@@ -1267,30 +1935,63 @@ export function run(n: c_int): number {
 export function wide(): boolean { return wide_valid(wide_new()); }
 export function identity(c: Counter | null): Counter | null { return c; }
 "#;
-    for (label, provider) in [("nogc", hir::Provider::NoGc), ("rc", hir::Provider::ReferenceCounting)] {
-        let Some((dir, prepared)) = prepare_with_provider(&format!("opaque-{label}"), source, provider) else { return; };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    for (label, provider) in [
+        ("nogc", hir::Provider::NoGc),
+        ("rc", hir::Provider::ReferenceCounting),
+    ] {
+        let Some((dir, prepared)) =
+            prepare_with_provider(&format!("opaque-{label}"), source, provider)
+        else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         for func in &prepared.program.funcs {
             for op in &func.values {
-                if let hir::OpKind::Retain(value) | hir::OpKind::Release(value) | hir::OpKind::Erase { value, .. } = op.kind {
-                    assert!(!matches!(func.values[value.0 as usize].ty, hir::HirType::NativePointer(_)));
+                if let hir::OpKind::Retain(value)
+                | hir::OpKind::Release(value)
+                | hir::OpKind::Erase { value, .. } = op.kind
+                {
+                    assert!(!matches!(
+                        func.values[value.0 as usize].ty,
+                        hir::HirType::NativePointer(_)
+                    ));
                 }
             }
         }
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         assert!(c.writer.text().contains("struct Counter *"));
         assert!(c.writer.text().contains("struct _Wide *"));
         assert!(llvm.text.contains("declare ptr @wide_new()"));
-        assert!(!llvm.text.contains("ptrtoint"), "pointer bits must never travel through numbers");
+        assert!(
+            !llvm.text.contains("ptrtoint"),
+            "pointer bits must never travel through numbers"
+        );
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-        std::fs::write(dir.join("counter.h"), include_str!("../../../../examples/interop/c-from-ts/native/counter.h")).unwrap();
-        std::fs::write(dir.join("counter.c"), include_str!("../../../../examples/interop/c-from-ts/native/counter.c")).unwrap();
-        std::fs::write(dir.join("native.c"), r#"
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(
+            dir.join("counter.h"),
+            include_str!("../../../../examples/interop/c-from-ts/native/counter.h"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("counter.c"),
+            include_str!("../../../../examples/interop/c-from-ts/native/counter.c"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("native.c"),
+            r#"
 #include "nts_runtime.h"
 #include "counter.h"
 struct _Wide;
@@ -1299,8 +2000,12 @@ bool wide_valid(struct _Wide *p) { return (uintptr_t)p == UINT64_C(0x00200000000
 double invoke(NtsHeader *cb) {
     return ((double (*)(NtsHeader *))cb->descriptor->methods[nts_closure_call_slot])(cb);
 }
-"#).unwrap();
-        std::fs::write(dir.join("caller.c"), r#"
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("caller.c"),
+            r#"
 #include "program.h"
 #include "counter.h"
 int main(void) {
@@ -1311,32 +2016,70 @@ int main(void) {
     counter_destroy(c);
     return counter_live() != 0;
 }
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         for file in ["counter.c", "native.c", "caller.c", "nts_runtime.c"] {
-            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+            clang(
+                &dir,
+                &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+            );
         }
-        for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-            clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-            clang(&dir, &[object, "counter.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
-            assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{label}/{executable}");
+        for (source, object, executable) in [
+            ("program.c", "c.o", "c-run"),
+            ("program.ll", "llvm.o", "llvm-run"),
+        ] {
+            clang(
+                &dir,
+                &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+            );
+            clang(
+                &dir,
+                &[
+                    object,
+                    "counter.o",
+                    "native.o",
+                    "caller.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-o",
+                    executable,
+                ],
+            );
+            assert!(
+                Command::new(dir.join(executable))
+                    .status()
+                    .unwrap()
+                    .success(),
+                "{label}/{executable}"
+            );
         }
     }
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
-    let brands = CASES.iter().map(|case| case.0).collect::<Vec<_>>().join(", ");
+    let brands = CASES
+        .iter()
+        .map(|case| case.0)
+        .collect::<Vec<_>>()
+        .join(", ");
     let mut source = format!("import type {{ Ptr, {brands} }} from \"c:types\";\n");
     let mut caller = "#include \"program.h\"\nint main(void) {\n".to_owned();
     for (i, (brand, ctype, input, expected)) in CASES.iter().enumerate() {
-        writeln!(source, "export function memory_{i}(p: Ptr<{brand}>, q: Ptr<{brand}>, n: {brand}): number {{
+        writeln!(
+            source,
+            "export function memory_{i}(p: Ptr<{brand}>, q: Ptr<{brand}>, n: {brand}): number {{
             p[1] = n;
             const before = q[1];
             let index = 1;
             p[index++] += 0;
             p[2] = 7;
             return before + q[index] + index;
-        }}").unwrap();
+        }}"
+        )
+        .unwrap();
         writeln!(caller, "{{ {ctype} data[4] = {{11, 0, 0, 23}};
             if (memory_{i}(data, data, ({ctype})({input})) != (double)({expected}) + 9) return {};
             if (data[0] != 11 || data[1] != ({ctype})({expected}) || data[2] != 7 || data[3] != 23) return {};
@@ -1347,31 +2090,55 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
     // and the bigint separately, and a widening that read the destination's
     // signedness instead of the source's would turn UINT64_MAX into -1 here
     // while the C backend stayed right.
-    let wide_brands = WIDE_CASES.iter().map(|case| case.0).collect::<std::collections::BTreeSet<_>>();
+    let wide_brands = WIDE_CASES
+        .iter()
+        .map(|case| case.0)
+        .collect::<std::collections::BTreeSet<_>>();
     let wide_brands = wide_brands.into_iter().collect::<Vec<_>>().join(", ");
     writeln!(source, "import type {{ {wide_brands} }} from \"c:types\";").unwrap();
     for (i, (brand, ctype, literal, c_literal)) in WIDE_CASES.iter().enumerate() {
-        writeln!(source, "export function wide_mem_{i}(p: Ptr<{brand}>): void {{
+        writeln!(
+            source,
+            "export function wide_mem_{i}(p: Ptr<{brand}>): void {{
             p[1] = {literal} as {brand};
-        }}").unwrap();
-        writeln!(caller, "{{ {ctype} slot[2] = {{0, 0}};
+        }}"
+        )
+        .unwrap();
+        writeln!(
+            caller,
+            "{{ {ctype} slot[2] = {{0, 0}};
             wide_mem_{i}(slot);
             if (slot[1] != ({ctype})({c_literal})) return {};
-        }}", 200 + i).unwrap();
+        }}",
+            200 + i
+        )
+        .unwrap();
     }
-    source.push_str("declare function mutate(p: Ptr<c_uint8>): void;
+    source.push_str(
+        "declare function mutate(p: Ptr<c_uint8>): void;
         export function acrossCall(p: Ptr<c_uint8>, alias: Ptr<c_uint8>): number {
             const before = alias[0]; mutate(p); return before * 100 + alias[0];
-        }");
+        }",
+    );
     // Compile the checked-in example as part of this same two-backend fixture.
-    source.push_str(include_str!("../../../../examples/interop/native-buffer/src/main.ts")
-        .split_once('\n').unwrap().1);
+    source.push_str(
+        include_str!("../../../../examples/interop/native-buffer/src/main.ts")
+            .split_once('\n')
+            .unwrap()
+            .1,
+    );
     caller.push_str("uint8_t shared = 2; if (acrossCall(&shared, &shared) != 295) return 40;\n");
     caller.push_str("uint8_t text[] = {'a', 0, 'z', 195, 'Q'};
         if (uppercaseAscii(text, 5) != 2 || text[0] != 'A' || text[1] != 0 || text[2] != 'Z' || text[3] != 195 || text[4] != 'Q') return 41;
         return 0; }\n");
-    let Some((dir, prepared)) = prepare("pointer-memory", &source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("pointer-memory", &source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -1380,69 +2147,175 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
     assert!(!c.writer.text().contains("nts_array_"));
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
     std::fs::write(dir.join("caller.c"), caller).unwrap();
-    std::fs::write(dir.join("native.h"), "#include <stdint.h>\nvoid mutate(uint8_t *p);\n").unwrap();
-    std::fs::write(dir.join("native.c"), "#include \"native.h\"\nvoid mutate(uint8_t *p) { p[0] = 95; }\n").unwrap();
+    std::fs::write(
+        dir.join("native.h"),
+        "#include <stdint.h>\nvoid mutate(uint8_t *p);\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("native.c"),
+        "#include \"native.h\"\nvoid mutate(uint8_t *p) { p[0] = 95; }\n",
+    )
+    .unwrap();
     clang(&dir, &["-O2", "-c", "native.c", "-o", "native.o"]);
     clang(&dir, &["-O2", "-c", "nts_runtime.c", "-o", "runtime.o"]);
-    clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", "caller.c", "-o", "caller.o"]);
-    for (input, output) in [("program.c", "c-program.o"), ("program.ll", "llvm-program.o")] {
+    clang(
+        &dir,
+        &[
+            "-O2", "-Wall", "-Wextra", "-Werror", "-c", "caller.c", "-o", "caller.o",
+        ],
+    );
+    for (input, output) in [
+        ("program.c", "c-program.o"),
+        ("program.ll", "llvm-program.o"),
+    ] {
         clang(&dir, &["-O2", "-c", input, "-o", output]);
-        clang(&dir, &[output, "caller.o", "native.o", "runtime.o", "-lm", "-o", "caller"]);
-        assert!(Command::new(dir.join("caller")).status().unwrap().success(), "{input}");
+        clang(
+            &dir,
+            &[
+                output,
+                "caller.o",
+                "native.o",
+                "runtime.o",
+                "-lm",
+                "-o",
+                "caller",
+            ],
+        );
+        assert!(
+            Command::new(dir.join("caller")).status().unwrap().success(),
+            "{input}"
+        );
     }
 }
 
 #[test]
 fn native_struct_fields_addresses_and_aliases_agree_with_c() {
     let source = include_str!("../../common/test-support/native-structs/main.ts");
-    let Some((dir, prepared)) = prepare("native-structs", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("native-structs", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    std::fs::write(dir.join("native.c"), include_str!("../../common/test-support/native-structs/native.c")).unwrap();
-    std::fs::write(dir.join("caller.c"), include_str!("../../common/test-support/native-structs/caller.c")).unwrap();
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("native.c"),
+        include_str!("../../common/test-support/native-structs/native.c"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("caller.c"),
+        include_str!("../../common/test-support/native-structs/caller.c"),
+    )
+    .unwrap();
     for source in ["native.c", "caller.c", "nts_runtime.c"] {
         clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
     }
     for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "caller"]);
-        assert!(Command::new(dir.join("caller")).status().unwrap().success(), "{source}");
+        clang(
+            &dir,
+            &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                "caller",
+            ],
+        );
+        assert!(
+            Command::new(dir.join("caller")).status().unwrap().success(),
+            "{source}"
+        );
     }
     // Corrupt only the address given to stamp: public layouts, C caller and
     // C implementation remain the identical objects used by the passing arm.
     let good = "getelementptr i8, ptr %v0, i64 16";
     assert!(llvm.text.contains(good));
-    let bad = llvm.text.replacen(good, "getelementptr i8, ptr %v0, i64 20", 1);
+    let bad = llvm
+        .text
+        .replacen(good, "getelementptr i8, ptr %v0, i64 20", 1);
     std::fs::write(dir.join("bad.ll"), bad).unwrap();
-    clang(&dir, &["-O2", "-Wno-override-module", "-c", "bad.ll", "-o", "bad.o"]);
-    clang(&dir, &["bad.o", "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", "bad"]);
-    assert_eq!(Command::new(dir.join("bad")).status().unwrap().code(), Some(2));
+    clang(
+        &dir,
+        &["-O2", "-Wno-override-module", "-c", "bad.ll", "-o", "bad.o"],
+    );
+    clang(
+        &dir,
+        &[
+            "bad.o",
+            "native.o",
+            "caller.o",
+            "nts_runtime.o",
+            "-lm",
+            "-o",
+            "bad",
+        ],
+    );
+    assert_eq!(
+        Command::new(dir.join("bad")).status().unwrap().code(),
+        Some(2)
+    );
 }
 
 #[test]
 fn native_poll_calls_libc_and_matches_the_platform_header() {
     let source = include_str!("../../../../examples/interop/native-poll/src/main.ts");
-    let declarations = [("poll.d.ts", include_str!("../../../../examples/interop/native-poll/types/poll.d.ts"))];
+    let declarations = [(
+        "poll.d.ts",
+        include_str!("../../../../examples/interop/native-poll/types/poll.d.ts"),
+    )];
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) = prepare_with_files("native-poll", source, provider, &declarations) else { return; };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let Some((dir, prepared)) =
+            prepare_with_files("native-poll", source, provider, &declarations)
+        else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-        std::fs::write(dir.join("caller.c"), include_str!("../../../../examples/interop/native-poll/consumer/caller.c")).unwrap();
-        std::fs::write(dir.join("layout.c"), include_str!("../../../../examples/interop/native-poll/native/layout.c")).unwrap();
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(
+            dir.join("caller.c"),
+            include_str!("../../../../examples/interop/native-poll/consumer/caller.c"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("layout.c"),
+            include_str!("../../../../examples/interop/native-poll/native/layout.c"),
+        )
+        .unwrap();
         // The check, compiled and never linked. It used to live inside
         // `layout.c`, which also defines the functions `caller.c` prints from;
         // that file supplied the `#include <poll.h>` the witness was compared
@@ -1450,15 +2323,38 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
         // rather than one the binding did.
         clang(
             &dir,
-            &["-Wall", "-Wextra", "-Werror", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME],
+            &[
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fsyntax-only",
+                nts_codegen_c::NATIVE_WITNESS_NAME,
+            ],
         );
         for source in ["caller.c", "layout.c", "nts_runtime.c"] {
             clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
         }
         for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
-            clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-            clang(&dir, &[object, "caller.o", "layout.o", "nts_runtime.o", "-lm", "-o", "caller"]);
-            assert!(Command::new(dir.join("caller")).status().unwrap().success(), "{source} {provider:?}");
+            clang(
+                &dir,
+                &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+            );
+            clang(
+                &dir,
+                &[
+                    object,
+                    "caller.o",
+                    "layout.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-o",
+                    "caller",
+                ],
+            );
+            assert!(
+                Command::new(dir.join("caller")).status().unwrap().success(),
+                "{source} {provider:?}"
+            );
         }
     }
 }
@@ -1471,14 +2367,20 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
         include_str!("../../../../examples/interop/native-fd/types/unistd.d.ts"),
     )];
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) = prepare_with_files("native-fd", source, provider, &declarations)
+        let Some((dir, prepared)) =
+            prepare_with_files("native-fd", source, provider, &declarations)
         else {
             return;
         };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1496,13 +2398,22 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
         // linked -- it declares no symbol and defines no function.
         clang(
             &dir,
-            &["-Wall", "-Wextra", "-Werror", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME],
+            &[
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fsyntax-only",
+                nts_codegen_c::NATIVE_WITNESS_NAME,
+            ],
         );
         for source in ["caller.c", "nts_runtime.c"] {
             clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
         }
         for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
-            clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
+            clang(
+                &dir,
+                &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+            );
             clang(
                 &dir,
                 &[object, "caller.o", "nts_runtime.o", "-lm", "-o", "caller"],
@@ -1542,13 +2453,20 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
          const buf = local<c_uint8>(8);\n\
          return Number(read(fd, buf, 8n as Count));\n\
          }\n";
-    let Some((dir, prepared)) =
-        prepare_with_files("native-fd-typed", source, hir::Provider::NoGc, &declarations)
-    else {
+    let Some((dir, prepared)) = prepare_with_files(
+        "native-fd-typed",
+        source,
+        hir::Provider::NoGc,
+        &declarations,
+    ) else {
         return;
     };
     // The point of the control: lowering is happy with the wrong declaration.
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     for file in c.support_files() {
@@ -1569,7 +2487,10 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
         .status()
         .unwrap()
         .success();
-    assert!(refused, "the real <unistd.h> accepted `read` with a uint8_t * buffer");
+    assert!(
+        refused,
+        "the real <unistd.h> accepted `read` with a uint8_t * buffer"
+    );
 }
 
 /// A struct stored inline in another, checked against the header that declares
@@ -1603,7 +2524,11 @@ fn an_inline_struct_member_agrees_with_the_system_header() {
     let Some((dir, prepared)) = prepare("inline-struct-member", source) else {
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
@@ -1612,9 +2537,26 @@ fn an_inline_struct_member_agrees_with_the_system_header() {
     }
     // The program's own translation unit: an inline member the definitions were
     // emitted out of order for would fail here and nowhere earlier.
-    clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", "program.c"]);
+    clang(
+        &dir,
+        &[
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-fsyntax-only",
+            "program.c",
+        ],
+    );
     // And the witness, where the real <sys/time.h> is the one answering.
-    clang(&dir, &["-std=c11", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME]);
+    clang(
+        &dir,
+        &[
+            "-std=c11",
+            "-fsyntax-only",
+            nts_codegen_c::NATIVE_WITNESS_NAME,
+        ],
+    );
     let witness = std::fs::read_to_string(dir.join(nts_codegen_c::NATIVE_WITNESS_NAME)).unwrap();
     assert!(
         witness.contains("struct timeval *: 1"),
@@ -1645,10 +2587,15 @@ fn c_calls_a_typescript_function_through_a_bridge() {
         else {
             return;
         };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
@@ -1676,16 +2623,33 @@ fn c_calls_a_typescript_function_through_a_bridge() {
         .unwrap();
         clang(
             &dir,
-            &["-Wall", "-Wextra", "-Werror", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME],
+            &[
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fsyntax-only",
+                nts_codegen_c::NATIVE_WITNESS_NAME,
+            ],
         );
         for source in ["caller.c", "library.c", "nts_runtime.c"] {
             clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
         }
         for (source, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
-            clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
             clang(
                 &dir,
-                &[object, "caller.o", "library.o", "nts_runtime.o", "-lm", "-o", "caller"],
+                &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+            );
+            clang(
+                &dir,
+                &[
+                    object,
+                    "caller.o",
+                    "library.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-o",
+                    "caller",
+                ],
             );
             assert!(
                 Command::new(dir.join("caller")).status().unwrap().success(),
@@ -1698,30 +2662,75 @@ fn c_calls_a_typescript_function_through_a_bridge() {
 #[test]
 fn native_struct_rejections_preserve_the_valid_arm() {
     for (name, bad) in [
-        ("aggregate-store", "export function bad(p: Ptr<State>): void { p[0] = p[1]; }"),
-        ("spread", "export function bad(p: Ptr<State>): number { const copy = {...p}; return copy.count; }"),
-        ("managed-address", "export function bad(): number { const p = {count: 1}; return addrOf(p.count)[0]; }"),
-        ("plain-field", "type Bad = Struct<{count: number}>; export function bad(p: Ptr<Bad>): number { return p.count; }"),
-        ("optional-field", "type Bad = Struct<{count?: c_int32}>; export function bad(p: Ptr<Bad>): number { return p.count ?? 0; }"),
+        (
+            "aggregate-store",
+            "export function bad(p: Ptr<State>): void { p[0] = p[1]; }",
+        ),
+        (
+            "spread",
+            "export function bad(p: Ptr<State>): number { const copy = {...p}; return copy.count; }",
+        ),
+        (
+            "managed-address",
+            "export function bad(): number { const p = {count: 1}; return addrOf(p.count)[0]; }",
+        ),
+        (
+            "plain-field",
+            "type Bad = Struct<{count: number}>; export function bad(p: Ptr<Bad>): number { return p.count; }",
+        ),
+        (
+            "optional-field",
+            "type Bad = Struct<{count?: c_int32}>; export function bad(p: Ptr<Bad>): number { return p.count ?? 0; }",
+        ),
         // A struct stored inline is supported; a struct that contains *itself*
         // by value is not a type C can lay out, and is the limit that replaced
         // this arm when nested members landed.
-        ("self-nested", "type Loop = Struct<{n: c_int32; self: Loop}, 'loopy'>; export function bad(p: Ptr<Loop>): void { void p; }"),
-        ("mutually-nested", "type L = Struct<{n: c_int32; r: R}, 'l'>; type R = Struct<{n: c_int32; l: L}, 'r'>; export function bad(p: Ptr<L>): void { void p; }"),
-        ("schema-value", "export function bad(p: State): void { void p; }"),
-        ("lying-address", "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<c_double>; export function bad(p: Ptr<State>): number { return addrOf(p.count)[0]; }"),
+        (
+            "self-nested",
+            "type Loop = Struct<{n: c_int32; self: Loop}, 'loopy'>; export function bad(p: Ptr<Loop>): void { void p; }",
+        ),
+        (
+            "mutually-nested",
+            "type L = Struct<{n: c_int32; r: R}, 'l'>; type R = Struct<{n: c_int32; l: L}, 'r'>; export function bad(p: Ptr<L>): void { void p; }",
+        ),
+        (
+            "schema-value",
+            "export function bad(p: State): void { void p; }",
+        ),
+        (
+            "lying-address",
+            "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<c_double>; export function bad(p: Ptr<State>): number { return addrOf(p.count)[0]; }",
+        ),
     ] {
         // The managed-address case must reach lowering without a TS error;
         // a false intrinsic declaration cannot authorize addressing a TS object.
         let bad = if name == "managed-address" {
             "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<c_int32>; export function bad(): number { const o = {count: 1}; return addrOf(o.count)[0]; }"
-        } else { bad };
-        let import = if matches!(name, "lying-address" | "managed-address") { "" } else { "import {addrOf} from 'c:memory';" };
-        let source = format!("import type {{Ptr, Struct, c_int32, c_double}} from 'c:types'; {import}\n type State = Struct<{{count: c_int32}}>; export function good(p: Ptr<State>): number {{ return p.count; }} {bad}");
-        let Some((_, prepared)) = prepare(name, &source) else { return; };
+        } else {
+            bad
+        };
+        let import = if matches!(name, "lying-address" | "managed-address") {
+            ""
+        } else {
+            "import {addrOf} from 'c:memory';"
+        };
+        let source = format!(
+            "import type {{Ptr, Struct, c_int32, c_double}} from 'c:types'; {import}\n type State = Struct<{{count: c_int32}}>; export function good(p: Ptr<State>): number {{ return p.count; }} {bad}"
+        );
+        let Some((_, prepared)) = prepare(name, &source) else {
+            return;
+        };
         assert!(!prepared.diagnostics.is_empty(), "{name} was accepted");
-        assert!(prepared.program.funcs.iter().any(|f| f.name == "good"), "{name}: {:?}", prepared.diagnostics);
-        assert!(!prepared.program.funcs.iter().any(|f| f.name == "bad"), "{name}: {:?}", prepared.diagnostics);
+        assert!(
+            prepared.program.funcs.iter().any(|f| f.name == "good"),
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
+        assert!(
+            !prepared.program.funcs.iter().any(|f| f.name == "bad"),
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
     }
 }
 
@@ -1732,12 +2741,23 @@ fn conflicting_native_struct_tags_refuse_in_both_backends() {
         type B = Struct<{x:c_double}, 'Collision'>;
         export function a(p:Ptr<A>):number {return p.x;}
         export function b(p:Ptr<B>):number {return p.x;}";
-    let Some((_, prepared)) = prepare("struct-collision", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((_, prepared)) = prepare("struct-collision", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     for diagnostics in [&c.diagnostics, &llvm.diagnostics] {
-        assert!(diagnostics.iter().any(|d| d.message.contains("conflicting native layouts")), "{diagnostics:?}");
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.message.contains("conflicting native layouts")),
+            "{diagnostics:?}"
+        );
     }
 }
 
@@ -1750,8 +2770,14 @@ fn native_address_verifier_rejects_wrong_field_type_and_index() {
         // An element of a block of structs is already an address, so this is
         // `p + i` and not `&(p + i)`; `addrOf` here would be a Ptr<Ptr<S>>.
         export function item(p:Ptr<S>, i:number):Ptr<S> {return p[i];}";
-    let Some((_, prepared)) = prepare("verify-native-address", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((_, prepared)) = prepare("verify-native-address", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     assert!(hir::verify::verify(&prepared.program).is_ok());
     for corruption in 0..3 {
         let mut program = prepared.program.clone();
@@ -1760,7 +2786,11 @@ fn native_address_verifier_rejects_wrong_field_type_and_index() {
             for value in &mut func.values {
                 match &mut value.kind {
                     hir::OpKind::NativeFieldAddress { field, .. } if corruption < 2 => {
-                        if corruption == 0 { *field = u32::MAX; } else { value.ty = hir::HirType::NUMBER; }
+                        if corruption == 0 {
+                            *field = u32::MAX;
+                        } else {
+                            value.ty = hir::HirType::NUMBER;
+                        }
                         changed = true;
                     }
                     hir::OpKind::NativeIndexAddress { .. } if corruption == 2 => {
@@ -1772,7 +2802,10 @@ fn native_address_verifier_rejects_wrong_field_type_and_index() {
             }
         }
         assert!(changed);
-        assert!(hir::verify::verify(&program).is_err(), "corruption {corruption}");
+        assert!(
+            hir::verify::verify(&program).is_err(),
+            "corruption {corruption}"
+        );
     }
 }
 
@@ -1784,15 +2817,41 @@ fn native_header_alias_survives_an_unrelated_layout_declaration() {
         function addrOf(n:number):number {return n+2;}
         export function inspectState(p:Ptr<State>):number {return addrOf(address(p.count)[0]);}";
     let caller = "#include \"program.h\"\nint main(void) {inspectState_p_t s={17}; return inspectState(&s)==19 ? 0 : 1;}\n";
-    for (case, prefix) in [("alone", ""), ("perturbed", "type Unrelated = {first:number; second:string};\n")] {
-        let Some((dir, prepared)) = prepare(case, &format!("{prefix}{source}")) else { return; };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    for (case, prefix) in [
+        ("alone", ""),
+        (
+            "perturbed",
+            "type Unrelated = {first:number; second:string};\n",
+        ),
+    ] {
+        let Some((dir, prepared)) = prepare(case, &format!("{prefix}{source}")) else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("caller.c"), caller).unwrap();
-        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "program.c", "caller.c", "-o", "caller"]);
+        clang(
+            &dir,
+            &[
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "program.c",
+                "caller.c",
+                "-o",
+                "caller",
+            ],
+        );
         assert!(Command::new(dir.join("caller")).status().unwrap().success());
     }
 }
@@ -1801,34 +2860,104 @@ fn native_header_alias_survives_an_unrelated_layout_declaration() {
 fn native_owned_storage_executes_on_c_and_llvm() {
     let source = include_str!("../../common/test-support/native-storage/main.ts");
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) = prepare_with_provider("native-storage", source, provider) else { return; };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let Some((dir, prepared)) = prepare_with_provider("native-storage", source, provider)
+        else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-        std::fs::write(dir.join("caller.c"), include_str!("../../common/test-support/native-storage/caller.c")).unwrap();
-        std::fs::write(dir.join("native.c"), include_str!("../../common/test-support/native-storage/native.c")).unwrap();
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(
+            dir.join("caller.c"),
+            include_str!("../../common/test-support/native-storage/caller.c"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("native.c"),
+            include_str!("../../common/test-support/native-storage/native.c"),
+        )
+        .unwrap();
         for file in ["caller.c", "native.c", "nts_runtime.c"] {
-            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+            clang(
+                &dir,
+                &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+            );
         }
         for (file, object) in [("program.c", "c.o"), ("program.ll", "llvm.o")] {
-            clang(&dir, &["-O2", "-Wno-override-module", "-Wall", "-Wextra", "-Werror", "-c", file, "-o", object]);
-            clang(&dir, &[object, "caller.o", "native.o", "nts_runtime.o", "-lm", "-Wl,--wrap=malloc", "-Wl,--wrap=free", "-o", "caller"]);
+            clang(
+                &dir,
+                &[
+                    "-O2",
+                    "-Wno-override-module",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    "-c",
+                    file,
+                    "-o",
+                    object,
+                ],
+            );
+            clang(
+                &dir,
+                &[
+                    object,
+                    "caller.o",
+                    "native.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-Wl,--wrap=malloc",
+                    "-Wl,--wrap=free",
+                    "-o",
+                    "caller",
+                ],
+            );
             let result = Command::new(dir.join("caller")).status().unwrap();
             assert!(result.success(), "{file} {provider:?}: {result}");
         }
         // The caller and allocator objects are unchanged: removing ONLY the
         // integer check must let heap(4.5) reach the allocator and fail.
-        let bad = llvm.text.replacen("%valid = and i1 %range, %integral", "%valid = and i1 %range, true", 1);
+        let bad = llvm.text.replacen(
+            "%valid = and i1 %range, %integral",
+            "%valid = and i1 %range, true",
+            1,
+        );
         assert_ne!(bad, llvm.text);
         std::fs::write(dir.join("bad.ll"), bad).unwrap();
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", "bad.ll", "-o", "bad.o"]);
-        clang(&dir, &["bad.o", "caller.o", "native.o", "nts_runtime.o", "-lm", "-Wl,--wrap=malloc", "-Wl,--wrap=free", "-o", "bad"]);
-        assert_eq!(Command::new(dir.join("bad")).status().unwrap().code(), Some(2));
+        clang(
+            &dir,
+            &["-O2", "-Wno-override-module", "-c", "bad.ll", "-o", "bad.o"],
+        );
+        clang(
+            &dir,
+            &[
+                "bad.o",
+                "caller.o",
+                "native.o",
+                "nts_runtime.o",
+                "-lm",
+                "-Wl,--wrap=malloc",
+                "-Wl,--wrap=free",
+                "-o",
+                "bad",
+            ],
+        );
+        assert_eq!(
+            Command::new(dir.join("bad")).status().unwrap().code(),
+            Some(2)
+        );
     }
 }
 
@@ -1846,12 +2975,23 @@ fn authored_allocator_symbols_cannot_redefine_storage_operations() {
             return 1;
         }
     ";
-    let Some((_, prepared)) = prepare("allocator-collision", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((_, prepared)) = prepare("allocator-collision", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     for diagnostics in [&c.diagnostics, &llvm.diagnostics] {
-        assert!(diagnostics.iter().any(|d| d.message.contains("collides with the compiler's memory operations")), "{diagnostics:?}");
+        assert!(
+            diagnostics.iter().any(|d| d
+                .message
+                .contains("collides with the compiler's memory operations")),
+            "{diagnostics:?}"
+        );
     }
 }
 
@@ -1928,6 +3068,7 @@ int main(int argc, char **argv) {
 /// Fifty connect/emit/release cycles under reference counting must leave the
 /// live count where it was; the control skips the notify and must not.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_typed_signal_view_calls_through_an_erased_callback_on_both_backends() {
     let source = r#"
 import type { Class, Erased, ErasedClosure, Ptr, c_int, c_uint, c_ulong } from "c:types";
@@ -1948,18 +3089,34 @@ export function wire(k: number): void {
 }
 export function tally(): number { return total; }
 "#;
-    for (label, provider) in [("nogc", hir::Provider::NoGc), ("rc", hir::Provider::ReferenceCounting)] {
-        let Some((dir, prepared)) = prepare_with_provider(&format!("signal-{label}"), source, provider) else { return; };
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    for (label, provider) in [
+        ("nogc", hir::Provider::NoGc),
+        ("rc", hir::Provider::ReferenceCounting),
+    ] {
+        let Some((dir, prepared)) =
+            prepare_with_provider(&format!("signal-{label}"), source, provider)
+        else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
         std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
         std::fs::write(dir.join("signals.c"), SIGNAL_REGISTRY).unwrap();
-        std::fs::write(dir.join("cycles.c"), r#"
+        std::fs::write(
+            dir.join("cycles.c"),
+            r#"
 #include <stdio.h>
 #include "program.h"
 extern int skip_notify;
@@ -1978,30 +3135,75 @@ int main(int argc, char **argv) {
     printf("%zu %zu %.0f\n", before, nts_live_count(), tally());
     return 0;
 }
-"#).unwrap();
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
+"#,
+        )
+        .unwrap();
+        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+            &["-DNTS_PROVIDER_RC"]
+        } else {
+            &[]
+        };
         for file in ["signals.c", "cycles.c"] {
-            clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+            clang(
+                &dir,
+                &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+            );
         }
-        clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
-        for (source, object, executable) in [("program.c", "c.o", "c"), ("program.ll", "llvm.o", "llvm")] {
-            clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
-            clang(&dir, &[object, "signals.o", "cycles.o", "nts_runtime.o", "-lm", "-o", &format!("{executable}-run")]);
+        clang(
+            &dir,
+            &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat(),
+        );
+        for (source, object, executable) in
+            [("program.c", "c.o", "c"), ("program.ll", "llvm.o", "llvm")]
+        {
+            clang(
+                &dir,
+                &[
+                    &["-O2", "-Wno-override-module", "-c", source, "-o", object][..],
+                    counted,
+                ]
+                .concat(),
+            );
+            clang(
+                &dir,
+                &[
+                    object,
+                    "signals.o",
+                    "cycles.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-o",
+                    &format!("{executable}-run"),
+                ],
+            );
             let counts = |args: &[&str]| -> (u64, u64, u64) {
-                let run = Command::new(dir.join(format!("{executable}-run"))).args(args).output().unwrap();
+                let run = Command::new(dir.join(format!("{executable}-run")))
+                    .args(args)
+                    .output()
+                    .unwrap();
                 assert!(run.status.success(), "{label}/{executable}");
                 let text = String::from_utf8_lossy(&run.stdout).into_owned();
-                let numbers: Vec<u64> = text.split_whitespace().map(|n| n.parse().unwrap()).collect();
+                let numbers: Vec<u64> = text
+                    .split_whitespace()
+                    .map(|n| n.parse().unwrap())
+                    .collect();
                 (numbers[0], numbers[1], numbers[2])
             };
             // Per cycle: `poke` adds 7 * 3 * 2 through the instance C passed,
             // `ping` adds 1000 * 2 through the captured `k` alone.
             let (before, after, total) = counts(&[]);
-            assert_eq!(total, 50 * (7 * 3 * 2 + 1000 * 2), "{label}/{executable}: the handlers did not run as connected");
+            assert_eq!(
+                total,
+                50 * (7 * 3 * 2 + 1000 * 2),
+                "{label}/{executable}: the handlers did not run as connected"
+            );
             if provider != hir::Provider::ReferenceCounting {
                 continue;
             }
-            assert_eq!(before, after, "{executable}: fifty released signal handlers left objects alive");
+            assert_eq!(
+                before, after,
+                "{executable}: fifty released signal handlers left objects alive"
+            );
             let (before, after, _) = counts(&["skip-notify"]);
             assert!(
                 after >= before + 100,
@@ -2039,17 +3241,30 @@ export function attempt(ok: c_int): number {
     return (r as number) * 100 + (n[0] as number);
 }
 ";
-    let Some((dir, prepared)) = prepare("out-parameter", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("out-parameter", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
-    assert!(c.writer.text().contains("struct _GError * *"), "the error slot's address is not a `GError **`");
+    assert!(
+        c.writer.text().contains("struct _GError * *"),
+        "the error slot's address is not a `GError **`"
+    );
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
-    std::fs::write(dir.join("native.c"), r"
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
+    std::fs::write(
+        dir.join("native.c"),
+        r"
 struct _GError { int code; };
 static struct _GError failure = { 42 };
 int might(int ok, int *out, struct _GError **error) {
@@ -2057,15 +3272,43 @@ int might(int ok, int *out, struct _GError **error) {
     *error = &failure;
     return 0;
 }
-").unwrap();
+",
+    )
+    .unwrap();
     std::fs::write(dir.join("caller.c"), "#include \"program.h\"\nint main(void) { return attempt(1) == 107.0 && attempt(0) == -1.0 ? 0 : 1; }\n").unwrap();
     for file in ["native.c", "caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file]);
+        clang(
+            &dir,
+            &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+        );
     }
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
-        assert!(Command::new(dir.join(executable)).status().unwrap().success(), "{executable}");
+    for (source, object, executable) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &["-O2", "-Wno-override-module", "-c", source, "-o", object],
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                executable,
+            ],
+        );
+        assert!(
+            Command::new(dir.join(executable))
+                .status()
+                .unwrap()
+                .success(),
+            "{executable}"
+        );
     }
 }
 
@@ -2083,34 +3326,93 @@ fn run_on_both_backends(
     library: &str,
     caller: &str,
 ) -> Option<(String, Vec<String>)> {
-    let label = if provider == hir::Provider::ReferenceCounting { "rc" } else { "nogc" };
+    let label = if provider == hir::Provider::ReferenceCounting {
+        "rc"
+    } else {
+        "nogc"
+    };
     let (dir, prepared) = prepare_with_provider(&format!("{name}-{label}"), source, provider)?;
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
     std::fs::write(dir.join("native.c"), library).unwrap();
     std::fs::write(dir.join("caller.c"), caller).unwrap();
     // The witness `nts build` compiles beside the program, which names no
     // header here: each prototype must still be a declaration C accepts.
     if dir.join(nts_codegen_c::NATIVE_WITNESS_NAME).exists() {
-        clang(&dir, &["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", nts_codegen_c::NATIVE_WITNESS_NAME]);
+        clang(
+            &dir,
+            &[
+                "-std=c11",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fsyntax-only",
+                nts_codegen_c::NATIVE_WITNESS_NAME,
+            ],
+        );
     }
-    let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
+    let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+        &["-DNTS_PROVIDER_RC"]
+    } else {
+        &[]
+    };
     for file in ["native.c", "caller.c"] {
-        clang(&dir, &[&["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file][..], counted].concat());
+        clang(
+            &dir,
+            &[
+                &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file][..],
+                counted,
+            ]
+            .concat(),
+        );
     }
-    clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
+    clang(
+        &dir,
+        &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat(),
+    );
     let mut outputs = Vec::new();
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
-        clang(&dir, &[object, "native.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+    for (source, object, executable) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &[
+                &["-O2", "-Wno-override-module", "-c", source, "-o", object][..],
+                counted,
+            ]
+            .concat(),
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "native.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                executable,
+            ],
+        );
         let run = Command::new(dir.join(executable)).output().unwrap();
-        assert!(run.status.success(), "{name}/{executable}: {}", String::from_utf8_lossy(&run.stderr));
+        assert!(
+            run.status.success(),
+            "{name}/{executable}: {}",
+            String::from_utf8_lossy(&run.stderr)
+        );
         outputs.push(String::from_utf8_lossy(&run.stdout).trim().to_owned());
     }
     Some((c.writer.text().to_owned(), outputs))
@@ -2129,7 +3431,11 @@ fn counted_caller(line: &str, repeat: &str) -> String {
 
 /// The expected output, with ` leak=0` under reference counting.
 fn expect(values: &str, provider: hir::Provider) -> String {
-    if provider == hir::Provider::ReferenceCounting { format!("{values} leak=0") } else { values.to_owned() }
+    if provider == hir::Provider::ReferenceCounting {
+        format!("{values} leak=0")
+    } else {
+        values.to_owned()
+    }
 }
 
 /// An ASCII `string` is lent to C in place, not copied: a narrow string's
@@ -2163,7 +3469,11 @@ int length(const char *a) { return (int)strlen(a); }
             r#"printf("%.0f %.0f %.0f %.0f", ascii(), latin(), wide(), built());"#,
             "ascii(); latin(); wide(); built();",
         );
-        let Some((_, outputs)) = run_on_both_backends("lent-string", source, provider, library, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("lent-string", source, provider, library, &caller)
+        else {
+            return;
+        };
         for output in outputs {
             assert_eq!(output, expect("1 0 0 30", provider), "{provider:?}");
         }
@@ -2230,13 +3540,27 @@ export function many(): number {
             r#"printf("%.0f %.0f %.0f %.0f %.0f", empty(), absent(), text(), counted(), many());"#,
             "empty(); absent(); text(); counted(); many();",
         );
-        let Some((text, outputs)) = run_on_both_backends("strings", source, provider, STRINGS_LIBRARY, &caller) else { return; };
-        assert!(text.contains("int walked(const char * const *)"), "`CStrings` is not `const char * const *`");
-        assert!(text.contains("int joined(int, char * *)"), "the length is not the slot before the array");
+        let Some((text, outputs)) =
+            run_on_both_backends("strings", source, provider, STRINGS_LIBRARY, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("int walked(const char * const *)"),
+            "`CStrings` is not `const char * const *`"
+        );
+        assert!(
+            text.contains("int joined(int, char * *)"),
+            "the length is not the slot before the array"
+        );
         // `absent`: NULL for `null` (-1), `(0, NULL)` for a counted `null`
         // (-2), and a counted array that is present (1001).
         for output in outputs {
-            assert_eq!(output, expect("0 100088 2006 3007 100190", provider), "{provider:?}");
+            assert_eq!(
+                output,
+                expect("0 100088 2006 3007 100190", provider),
+                "{provider:?}"
+            );
         }
     }
 
@@ -2245,9 +3569,13 @@ import type { CStrings, c_int } from "c:types";
 declare function walked(values: CStrings): c_int;
 export function run(): number { return walked(["a"]); }
 "#;
-    let Some((_, prepared)) = prepare("strings-kept", kept) else { return; };
+    let Some((_, prepared)) = prepare("strings-kept", kept) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("a `CStrings`, `CBytes` or `CHandles` parameter without `@ntsNoEscape`")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("a `CStrings`, `CBytes` or `CHandles` parameter without `@ntsNoEscape`")),
         "a `CStrings` parameter C may keep was lowered: {:?}",
         prepared.diagnostics
     );
@@ -2301,12 +3629,23 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((text, outputs)) = run_on_both_backends("returned-strings", source, provider, RETURNED_STRINGS_LIBRARY, &caller)
-        else {
+        let Some((text, outputs)) = run_on_both_backends(
+            "returned-strings",
+            source,
+            provider,
+            RETURNED_STRINGS_LIBRARY,
+            &caller,
+        ) else {
             return;
         };
-        assert!(text.contains("char * * owned(void)"), "an owned array is not `char **`");
-        assert!(text.contains("const char * const * borrowed(int)"), "a borrowed array is not `const char * const *`");
+        assert!(
+            text.contains("char * * owned(void)"),
+            "an owned array is not `char **`"
+        );
+        assert!(
+            text.contains("const char * const * borrowed(int)"),
+            "a borrowed array is not `const char * const *`"
+        );
         // Two elements; "βeta" is 4 units; freed twice; one borrowed "one";
         // an empty array; NULL for `null`.
         for output in outputs {
@@ -2359,11 +3698,25 @@ export function run(): string {
             // `run` hands back a string the caller owns.
             "nts_release((NtsHeader *)run());",
         );
-        let Some((text, outputs)) = run_on_both_backends("bytes", source, provider, BYTES_LIBRARY, &caller) else { return; };
-        assert!(text.contains("int bytes_sum(const uint8_t *, size_t)"), "`CBytes` is not `const uint8_t *` with its length after");
-        assert!(text.contains("void bytes_fill(uint8_t *, int)"), "`CBytes<\"uint8_t\">` is not writable");
+        let Some((text, outputs)) =
+            run_on_both_backends("bytes", source, provider, BYTES_LIBRARY, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("int bytes_sum(const uint8_t *, size_t)"),
+            "`CBytes` is not `const uint8_t *` with its length after"
+        );
+        assert!(
+            text.contains("void bytes_fill(uint8_t *, int)"),
+            "`CBytes<\"uint8_t\">` is not writable"
+        );
         for output in outputs {
-            assert_eq!(output, expect("25604 25302 0 -1 390", provider), "{provider:?}");
+            assert_eq!(
+                output,
+                expect("25604 25302 0 -1 390", provider),
+                "{provider:?}"
+            );
         }
     }
 }
@@ -2408,11 +3761,25 @@ export function run(): string {
             "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
             "nts_release((NtsHeader *)run());",
         );
-        let Some((text, outputs)) = run_on_both_backends("elements", source, provider, ELEMENTS_LIBRARY, &caller) else { return; };
-        assert!(text.contains("int i32_sum(const int32_t *, uint32_t)"), "`CElements` is not `const int32_t *` with its count after");
-        assert!(text.contains("void f64_fill(double *, uint32_t)"), "`CElements<A, \"double\">` is not writable");
+        let Some((text, outputs)) =
+            run_on_both_backends("elements", source, provider, ELEMENTS_LIBRARY, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("int i32_sum(const int32_t *, uint32_t)"),
+            "`CElements` is not `const int32_t *` with its count after"
+        );
+        assert!(
+            text.contains("void f64_fill(double *, uint32_t)"),
+            "`CElements<A, \"double\">` is not writable"
+        );
         for output in outputs {
-            assert_eq!(output, expect("66529 66536 0:1.5:3", provider), "{provider:?}");
+            assert_eq!(
+                output,
+                expect("66529 66536 0:1.5:3", provider),
+                "{provider:?}"
+            );
         }
     }
 }
@@ -2451,9 +3818,17 @@ export function run(): string {
             "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
             "nts_release((NtsHeader *)run());",
         );
-        let Some((_, outputs)) = run_on_both_backends("flags", source, provider, FLAGS_LIBRARY, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("flags", source, provider, FLAGS_LIBRARY, &caller)
+        else {
+            return;
+        };
         for output in outputs {
-            assert_eq!(output, expect("true false false true 52", provider), "{provider:?}");
+            assert_eq!(
+                output,
+                expect("true false false true 52", provider),
+                "{provider:?}"
+            );
         }
     }
 }
@@ -2511,13 +3886,27 @@ export function fired(): void { fire_all(); }
             r#"printf("%.0f", run()); started(); printf(" owed=%zu", nts_closures_owed()); fired(); printf(" then=%zu", nts_closures_owed());"#,
             "run();",
         );
-        let Some((text, outputs)) = run_on_both_backends("once", source, provider, ASYNC_LIBRARY, &caller) else { return; };
-        assert!(text.contains("NtsBridgeOnce_"), "the bridge does not give the closure back");
-        assert!(text.contains("nts_closure_unlend_once(a1)"), "the once-bridge does not release its context");
+        let Some((text, outputs)) =
+            run_on_both_backends("once", source, provider, ASYNC_LIBRARY, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("NtsBridgeOnce_"),
+            "the bridge does not give the closure back"
+        );
+        assert!(
+            text.contains("nts_closure_unlend_once(a1)"),
+            "the once-bridge does not release its context"
+        );
         // 1 * 2 * 1 + 10 * 2 * 10, each exactly once: a second `fire_all`
         // finds nothing pending.
         for output in outputs {
-            assert_eq!(output, expect("202 owed=2 then=0", provider), "{provider:?}");
+            assert_eq!(
+                output,
+                expect("202 owed=2 then=0", provider),
+                "{provider:?}"
+            );
         }
     }
 }
@@ -2548,9 +3937,19 @@ export function run(): number {
 }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f owed=%zu", run(), nts_closures_owed());"#, "run();");
-        let Some((text, outputs)) = run_on_both_backends("dispatched", source, provider, ASYNC_LIBRARY, &caller) else { return; };
-        assert!(text.contains("->header.descriptor->methods["), "the bridge does not dispatch through the closure's table");
+        let caller = counted_caller(
+            r#"printf("%.0f owed=%zu", run(), nts_closures_owed());"#,
+            "run();",
+        );
+        let Some((text, outputs)) =
+            run_on_both_backends("dispatched", source, provider, ASYNC_LIBRARY, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("->header.descriptor->methods["),
+            "the bridge does not dispatch through the closure's table"
+        );
         // 1 * 2 from the first body, 2 * 2 * 100 from the second.
         for output in outputs {
             assert_eq!(output, expect("402 owed=0", provider), "{provider:?}");
@@ -2598,12 +3997,26 @@ export function held(): number {
         struct rect { struct point origin; struct point size; int tag; };\n\
         double describe(struct rect r) { return r.tag * 10000 + r.origin.x * 1000 + r.origin.y * 100 + r.size.x * 10 + r.size.y; }\n";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f %.0f %.0f %.0f", full(), partial(), ordered(), held());"#, "full(); partial(); ordered(); held();");
-        let Some((text, outputs)) = run_on_both_backends("fields", source, provider, library, &caller) else { return; };
-        assert!(text.contains("describe(*v"), "the literal is not passed as the record its storage holds:\n{text}");
+        let caller = counted_caller(
+            r#"printf("%.0f %.0f %.0f %.0f", full(), partial(), ordered(), held());"#,
+            "full(); partial(); ordered(); held();",
+        );
+        let Some((text, outputs)) =
+            run_on_both_backends("fields", source, provider, library, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("describe(*v"),
+            "the literal is not passed as the record its storage holds:\n{text}"
+        );
         // 5, 1, 2, 3, 4 by field; 9 alone; and y, then x, then origin.x.
         for output in outputs {
-            assert_eq!(output, expect("51234 9 3021 7001", provider), "{provider:?}");
+            assert_eq!(
+                output,
+                expect("51234 9 3021 7001", provider),
+                "{provider:?}"
+            );
         }
     }
 }
@@ -2666,8 +4079,15 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((text, outputs)) = run_on_both_backends("methods", source, provider, METHODS_LIBRARY, &caller) else { return; };
-        assert!(text.contains("button_set_label(v"), "the method is not the C function");
+        let Some((text, outputs)) =
+            run_on_both_backends("methods", source, provider, METHODS_LIBRARY, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("button_set_label(v"),
+            "the method is not the C function"
+        );
         // 42 from the parent's method, "héllo" read back as 5 units, and two
         // names counted to the terminator.
         for output in outputs {
@@ -2711,10 +4131,23 @@ unsigned flipped(unsigned orientation) { return orientation ^ 1u; }
 int orient_last(int spacing, unsigned orientation) { return (int)orientation * 10 + spacing; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f %.0f", run(), defaulted());"#, "run(); defaulted();");
-        let Some((text, outputs)) = run_on_both_backends("enums", source, provider, library, &caller) else { return; };
-        assert!(text.contains("int orient(unsigned int, int)"), "the enum is not C's unsigned int");
-        assert!(text.contains("int signed_of(int)"), "the signed enum is not C's int");
+        let caller = counted_caller(
+            r#"printf("%.0f %.0f", run(), defaulted());"#,
+            "run(); defaulted();",
+        );
+        let Some((text, outputs)) =
+            run_on_both_backends("enums", source, provider, library, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("int orient(unsigned int, int)"),
+            "the enum is not C's unsigned int"
+        );
+        assert!(
+            text.contains("int signed_of(int)"),
+            "the signed enum is not C's int"
+        );
         // 14 * 1000, 12 * 100, -3 * 10, and the flipped member compared.
         for output in outputs {
             // And 13 with the default, 3 with HORIZONTAL written.
@@ -2722,9 +4155,13 @@ int orient_last(int spacing, unsigned orientation) { return (int)orientation * 1
         }
     }
     let other = source.replace("orient(n, 2 as c_int)", "orient(Sign.POSITIVE, 2 as c_int)");
-    let Some(messages) = checker_messages("enums-other", &other) else { return; };
+    let Some(messages) = checker_messages("enums-other", &other) else {
+        return;
+    };
     assert!(
-        messages.iter().any(|m| m.contains("'Sign.POSITIVE' is not assignable to parameter of type 'CEnum<Orientation, c_uint>'")),
+        messages.iter().any(|m| m.contains(
+            "'Sign.POSITIVE' is not assignable to parameter of type 'CEnum<Orientation, c_uint>'"
+        )),
         "another enum's member was accepted: {messages:?}"
     );
 }
@@ -2814,16 +4251,19 @@ export function live(): number { return live_objects(); }
   printf(" live=%.0f", live());"#,
         "",
     );
-    let Some((_, outputs)) =
-        run_on_both_backends("gobject", source, hir::Provider::ReferenceCounting, GOBJECT_LIBRARY, &caller)
-    else {
+    let Some((_, outputs)) = run_on_both_backends(
+        "gobject",
+        source,
+        hir::Provider::ReferenceCounting,
+        GOBJECT_LIBRARY,
+        &caller,
+    ) else {
         return;
     };
     for output in outputs {
         assert_eq!(output, "9 7 5 6 live=0 leak=0");
     }
 }
-
 
 /// A fake host for `HostClass`: nodes it owns and never frees, a pair that
 /// roots and unroots one, and counts of both, so a test reads how many
@@ -2930,14 +4370,24 @@ export function errors(): number { return errors_seen(); }
   printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
         "local(); walk(); helper(); listed(); captured();",
     );
-    let Some((text, outputs)) =
-        run_on_both_backends("host-handle", source, hir::Provider::ReferenceCounting, HOST_LIBRARY, &caller)
-    else {
+    let Some((text, outputs)) = run_on_both_backends(
+        "host-handle",
+        source,
+        hir::Provider::ReferenceCounting,
+        HOST_LIBRARY,
+        &caller,
+    ) else {
         return;
     };
-    assert!(text.contains("host_retain"), "nothing was ever rooted: the escapes went uncounted");
+    assert!(
+        text.contains("host_retain"),
+        "nothing was ever rooted: the escapes went uncounted"
+    );
     for output in outputs {
-        assert_eq!(output, "local=30/0 walk=100/0 helper=60/1 maybe=20/0 keep=1 drop=0 listed=30 captured=20 given=1 across=301 roots=0 errors=0 leak=0");
+        assert_eq!(
+            output,
+            "local=30/0 walk=100/0 helper=60/1 maybe=20/0 keep=1 drop=0 listed=30 captured=20 given=1 across=301 roots=0 errors=0 leak=0"
+        );
     }
 }
 
@@ -2953,13 +4403,23 @@ declare function node_at(i: c_int): Node;
 declare function node_value(n: Node): c_int;
 export function local(): number { return node_value(node_at(0 as c_int)); }
 "#;
-    let Some((_, prepared)) = prepare_with_provider("host-handle-nogc", source, hir::Provider::NoGc) else { return; };
+    let Some((_, prepared)) =
+        prepare_with_provider("host-handle-nogc", source, hir::Provider::NoGc)
+    else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("needs the reference-counting provider")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("needs the reference-counting provider")),
         "{:?}",
         prepared.diagnostics
     );
-    assert!(!prepared.program.funcs.iter().any(|f| f.name == "local"), "a never-free program kept a host handle");
+    assert!(
+        !prepared.program.funcs.iter().any(|f| f.name == "local"),
+        "a never-free program kept a host handle"
+    );
 }
 /// A promise of a counted `GObject`: `await file.query_info_async(…)` under
 /// reference counting. The promise's own slot for a C handle holds no
@@ -3003,12 +4463,19 @@ export function errors(): number { return errors_seen(); }
   printf(" live=%.0f errors=%.0f", live(), errors());"#,
         "",
     );
-    let Some((text, outputs)) =
-        run_on_both_backends("promised-gobject", source, hir::Provider::ReferenceCounting, GOBJECT_LIBRARY, &caller)
-    else {
+    let Some((text, outputs)) = run_on_both_backends(
+        "promised-gobject",
+        source,
+        hir::Provider::ReferenceCounting,
+        GOBJECT_LIBRARY,
+        &caller,
+    ) else {
         return;
     };
-    assert!(text.contains("HandleBoxGObject"), "the handle did not settle boxed");
+    assert!(
+        text.contains("HandleBoxGObject"),
+        "the handle did not settle boxed"
+    );
     for output in outputs {
         assert_eq!(output, "427 live=0 errors=0 leak=0");
     }
@@ -3052,9 +4519,13 @@ export function errors(): number { return errors_seen(); }
   printf(" live=%.0f errors=%.0f", live(), errors());"#,
         "",
     );
-    let Some((_, outputs)) =
-        run_on_both_backends("consumed", source, hir::Provider::ReferenceCounting, GOBJECT_LIBRARY, &caller)
-    else {
+    let Some((_, outputs)) = run_on_both_backends(
+        "consumed",
+        source,
+        hir::Provider::ReferenceCounting,
+        GOBJECT_LIBRARY,
+        &caller,
+    ) else {
         return;
     };
     for output in outputs {
@@ -3125,8 +4596,15 @@ int label_width(struct _Label *self) { return self->width; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((text, outputs)) = run_on_both_backends("accessors", source, provider, library, &caller) else { return; };
-        assert!(text.contains("label_set_text("), "the write is not the setter");
+        let Some((text, outputs)) =
+            run_on_both_backends("accessors", source, provider, library, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("label_set_text("),
+            "the write is not the setter"
+        );
         // "héllo" read back (5), `true` read back, `false` after, "ab" as the
         // assignment's value, and 7 written through a set-only property.
         for output in outputs {
@@ -3134,9 +4612,13 @@ int label_width(struct _Label *self) { return self->width; }
         }
     }
     let unreadable = source.replace("(label_width(label) as number)", "(label.width as number)");
-    let Some((_, prepared)) = prepare("accessors-unreadable", &unreadable) else { return; };
+    let Some((_, prepared)) = prepare("accessors-unreadable", &unreadable) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("a read of a native property no @ntsGet names a method for")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("a read of a native property no @ntsGet names a method for")),
         "a set-only property was read: {:?}",
         prepared.diagnostics
     );
@@ -3183,9 +4665,19 @@ int toggle(int on) { return on; }
 int ask(int (*callback)(int)) { return (callback(2) == 0) * 10 + (callback(0) == 1); }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f %.0f %.0f", run(), narrowed(), asked());"#, "run(); narrowed(); asked();");
-        let Some((text, outputs)) = run_on_both_backends("cbool", source, provider, library, &caller) else { return; };
-        assert!(text.contains("void remember(int)"), "a `CBool<c_int>` is not C's int");
+        let caller = counted_caller(
+            r#"printf("%.0f %.0f %.0f", run(), narrowed(), asked());"#,
+            "run(); narrowed(); asked();",
+        );
+        let Some((text, outputs)) =
+            run_on_both_backends("cbool", source, provider, library, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("void remember(int)"),
+            "a `CBool<c_int>` is not C's int"
+        );
         // 1 and 0 arrive; 2 is true; 0 is false; the default is true and a
         // written `false` is false; the callback reads 2 as true and answers
         // 0 for it, and 1 for 0.
@@ -3272,14 +4764,21 @@ int thing_record(struct _Thing *t) { return t->record; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((c, outputs)) = run_on_both_backends("construct", source, provider, library, &caller) else { return; };
+        let Some((c, outputs)) =
+            run_on_both_backends("construct", source, provider, library, &caller)
+        else {
+            return;
+        };
         // And not by luck of the constant: the type reaches C with no double
         // between, which an exact round trip of a smaller value would hide.
         let typed = c
             .lines()
             .find_map(|line| line.trim().strip_suffix(" = thing_get_type();"))
             .expect("thing_get_type is called");
-        assert!(!c.contains(&format!("(double){typed};")), "the type went through a double:\n{c}");
+        assert!(
+            !c.contains(&format!("(double){typed};")),
+            "the type went through a double:\n{c}"
+        );
         // width (2, then its value 1), then label (1), and no height: 211;
         // the plain one set nothing: 0; the other was made by its type (7)
         // and given a height (3): 73.
@@ -3291,12 +4790,23 @@ int thing_record(struct _Thing *t) { return t->record; }
     // type rather than by how it was written: each property the type declares,
     // in that order, set where it was given. label (1), then width (2, then its
     // value 1), and no height: 121, where the literal above wrote 211.
-    let bag = source.replace("new Thing({ width: next(), label, })", "new Thing(({ width: next(), label } as ThingProps))");
+    let bag = source.replace(
+        "new Thing({ width: next(), label, })",
+        "new Thing(({ width: next(), label } as ThingProps))",
+    );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) = run_on_both_backends("construct-bag", &bag, provider, library, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("construct-bag", &bag, provider, library, &caller)
+        else {
+            return;
+        };
         for output in outputs {
-            assert_eq!(output, expect("121073", provider), "a props object passed through, {provider:?}");
+            assert_eq!(
+                output,
+                expect("121073", provider),
+                "a props object passed through, {provider:?}"
+            );
         }
     }
 }
@@ -3363,8 +4873,15 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", total());"#, "total();");
-        let Some((text, outputs)) = run_on_both_backends("defaults", source, provider, DEFAULTS_LIBRARY, &caller) else { return; };
-        assert!(text.contains("flagged("), "the call is not in the C program");
+        let Some((text, outputs)) =
+            run_on_both_backends("defaults", source, provider, DEFAULTS_LIBRARY, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("flagged("),
+            "the call is not in the C program"
+        );
         // 107 and the method's 17.
         for output in outputs {
             assert_eq!(output, expect("124", provider), "{provider:?}");
@@ -3374,26 +4891,63 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
     // the written 2, 0, false, a handle and 5; and 10707, the outer call's 7
     // after an inner call that took its own.
     let caller = "#include \"program.h\"\n#include <stdio.h>\nint main(void) { NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i)); putchar('\\n'); return 0; }\n";
-    let Some((_, outputs)) = run_on_both_backends("defaults-arms", source, hir::Provider::NoGc, DEFAULTS_LIBRARY, caller) else { return; };
+    let Some((_, outputs)) = run_on_both_backends(
+        "defaults-arms",
+        source,
+        hir::Provider::NoGc,
+        DEFAULTS_LIBRARY,
+        caller,
+    ) else {
+        return;
+    };
     for output in outputs {
         assert_eq!(output, "307 302 300 300 11 22 -1 1 17 15 10707");
     }
 
     // What a default cannot be given to, each refused with its reason.
     for (label, declaration, reason) in [
-        ("misnamed", "/** @ntsDefault flag=7 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;", "@ntsDefault names no parameter `flag`"),
-        ("required", "/** @ntsDefault value=7 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;", "@ntsDefault for `value`, which is not optional"),
-        ("absent", "declare function f(value: c_int, flags?: c_uint): c_int;", "optional parameter `flags` that no @ntsDefault gives a value"),
-        ("string", "/** @ntsDefault flags=null */\ndeclare function f(value: c_int, flags?: string | null): c_int;", "gives `flags` null, which only a C pointer parameter"),
-        ("range", "/** @ntsDefault flags=-1 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;", "gives `flags` -1, outside its C type"),
-        ("malformed", "/** @ntsDefault flags */\ndeclare function f(value: c_int, flags?: c_uint): c_int;", "`flags` that is not `parameter=value`"),
+        (
+            "misnamed",
+            "/** @ntsDefault flag=7 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;",
+            "@ntsDefault names no parameter `flag`",
+        ),
+        (
+            "required",
+            "/** @ntsDefault value=7 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;",
+            "@ntsDefault for `value`, which is not optional",
+        ),
+        (
+            "absent",
+            "declare function f(value: c_int, flags?: c_uint): c_int;",
+            "optional parameter `flags` that no @ntsDefault gives a value",
+        ),
+        (
+            "string",
+            "/** @ntsDefault flags=null */\ndeclare function f(value: c_int, flags?: string | null): c_int;",
+            "gives `flags` null, which only a C pointer parameter",
+        ),
+        (
+            "range",
+            "/** @ntsDefault flags=-1 */\ndeclare function f(value: c_int, flags?: c_uint): c_int;",
+            "gives `flags` -1, outside its C type",
+        ),
+        (
+            "malformed",
+            "/** @ntsDefault flags */\ndeclare function f(value: c_int, flags?: c_uint): c_int;",
+            "`flags` that is not `parameter=value`",
+        ),
     ] {
         let refused = format!(
             "import type {{ c_int, c_uint }} from \"c:types\";\n{declaration}\nexport function run(): number {{ return f(1 as c_int); }}\n"
         );
-        let Some((_, prepared)) = prepare(&format!("defaults-{label}"), &refused) else { return; };
+        let Some((_, prepared)) = prepare(&format!("defaults-{label}"), &refused) else {
+            return;
+        };
         assert!(
-            prepared.diagnostics.iter().any(|d| d.message.contains(reason)),
+            prepared
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(reason)),
             "{label}: {:?}",
             prepared.diagnostics
         );
@@ -3450,12 +5004,17 @@ export function maybe(): number {
     );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f %.0f", run(), maybe());"#, "run(); maybe();");
-        let Some((text, outputs)) = run_on_both_backends("declared", source, provider, &library, &caller) else { return; };
+        let Some((text, outputs)) =
+            run_on_both_backends("declared", source, provider, &library, &caller)
+        else {
+            return;
+        };
         // What each prototype says is the only observable here: C's two
         // translation units agree on the address whatever either declares.
         for prototype in ["button_as_widget(void)", "maybe_button(int)"] {
             assert!(
-                text.contains(&format!("struct _Widget * {prototype}")) || text.contains(&format!("struct _Widget *{prototype}")),
+                text.contains(&format!("struct _Widget * {prototype}"))
+                    || text.contains(&format!("struct _Widget *{prototype}")),
                 "`{prototype}` is not declared as C declares it: {text}"
             );
         }
@@ -3469,9 +5028,13 @@ export function maybe(): number {
         "    const button = button_as_widget();\n    button.set_label(\"declared\");\n    return button.get_width() * 100 + button.dup_label().length;",
         "    return button_as_widget().get_width();",
     );
-    let Some((_, prepared)) = prepare("declared-lie", &lie) else { return; };
+    let Some((_, prepared)) = prepare("declared-lie", &lie) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("declares its result `_Button` for a `_Widget`, which is not among its ancestors")),
+        prepared.diagnostics.iter().any(|d| d.message.contains(
+            "declares its result `_Button` for a `_Widget`, which is not among its ancestors"
+        )),
         "a result declared off the chain was accepted: {:?}",
         prepared.diagnostics
     );
@@ -3599,7 +5162,11 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) = run_on_both_backends("throws", source, provider, THROWS_LIBRARY, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("throws", source, provider, THROWS_LIBRARY, &caller)
+        else {
+            return;
+        };
         // 12; "not a number: x1" (16) caught; the caller's own slot written,
         // nothing thrown; the same for a method's; a method without one
         // thrown; a failing string result thrown rather than read; and a
@@ -3621,9 +5188,14 @@ type Err = Class<"_Err">;
 declare function parse_number(text: string, error?: Ptr<Err | null> | null): c_int;
 export function run(): number { return parse_number("1"); }
 "#;
-    let Some((_, prepared)) = prepare("throws-misnamed", misnamed) else { return; };
+    let Some((_, prepared)) = prepare("throws-misnamed", misnamed) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("@ntsThrows names no parameter `err`")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("@ntsThrows names no parameter `err`")),
         "an @ntsThrows naming no parameter was accepted: {:?}",
         prepared.diagnostics
     );
@@ -3671,7 +5243,11 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) = run_on_both_backends("ntscall", source, provider, METHODS_LIBRARY, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("ntscall", source, provider, METHODS_LIBRARY, &caller)
+        else {
+            return;
+        };
         for output in outputs {
             // 4205; 42 * 7 with `other` null; 42 * 3 + 1.
             assert_eq!(output, expect("420794127", provider), "{provider:?}");
@@ -3684,9 +5260,13 @@ export function run(): number {
     let computed = source
         .replace("by: c_int = 7 as c_int", "by: c_int = seven()")
         .replace("export function run()", "let calls = 0;\nfunction seven(): c_int { calls++; return 7 as c_int; }\nexport function run()");
-    let Some((_, prepared)) = prepare("ntscall-computed", &computed) else { return; };
+    let Some((_, prepared)) = prepare("ntscall-computed", &computed) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("an @ntsCall default that is not a constant")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("an @ntsCall default that is not a constant")),
         "a computed default was accepted: {:?}",
         prepared.diagnostics
     );
@@ -3732,10 +5312,27 @@ export function start(): void {
 export function settled(): number { return total; }
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"start(); nts_checkpoint(); printf("%.0f", settled());"#, "start(); nts_checkpoint();");
-        let Some((text, outputs)) = run_on_both_backends("promised-handle", source, provider, METHODS_LIBRARY, &caller) else { return; };
-        assert!(text.contains("nts_promise_fulfill_pointer("), "the handle did not settle into the promise's slot");
-        assert!(text.contains("nts_promise_pointer("), "the await did not read the handle from its slot");
+        let caller = counted_caller(
+            r#"start(); nts_checkpoint(); printf("%.0f", settled());"#,
+            "start(); nts_checkpoint();",
+        );
+        let Some((text, outputs)) = run_on_both_backends(
+            "promised-handle",
+            source,
+            provider,
+            METHODS_LIBRARY,
+            &caller,
+        ) else {
+            return;
+        };
+        assert!(
+            text.contains("nts_promise_fulfill_pointer("),
+            "the handle did not settle into the promise's slot"
+        );
+        assert!(
+            text.contains("nts_promise_pointer("),
+            "the await did not read the handle from its slot"
+        );
         for output in outputs {
             assert_eq!(output, expect("424242", provider), "{provider:?}");
         }
@@ -3754,9 +5351,14 @@ export async function both(): Promise<void> {
     void pair;
 }
 "#;
-    let Some((_, prepared)) = prepare("promised-handle-all", all) else { return; };
+    let Some((_, prepared)) = prepare("promised-handle-all", all) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("over promises of C handles")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("over promises of C handles")),
         "`Promise.all` over handle promises was not refused where it is lowered: {:?}",
         prepared.diagnostics
     );
@@ -3789,6 +5391,7 @@ export async function both(): Promise<void> {
 ///   nothing truncates there, so the truncation check fails and the bitmask
 ///   differs. That shows the ABI decided the answer.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_c_long_with_bit_31_set_crosses_the_win64_slot_on_both_backends() {
     let source = r#"
 import { local } from "c:memory";
@@ -3832,74 +5435,191 @@ export function probe(seed: number): number {
     let sysv = nts_core::hir::native::NativeAbi::SysV;
     // Prepared for both: a value past Win64's 32-bit `long` is refused where
     // it is claimed, so there is no truncation at the slot left to observe.
-    let Some((dir, snapshot)) = snapshot_of("win64-long", source, &[]) else { return; };
-    let prepared = hir::prepare_with(&snapshot, &hir::Options { targets: &[sysv, win64], ..hir::Options::default() })
-        .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, snapshot)) = snapshot_of("win64-long", source, &[]) else {
+        return;
+    };
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            targets: &[sysv, win64],
+            ..hir::Options::default()
+        },
+    )
+    .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
 
     let run = |abi, helpers: &str, name: &str| -> String {
-        let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi, arch: nts_codegen_llvm::Arch::X86_64 });
-        assert!(llvm.diagnostics.is_empty(), "{name}: {:?}", llvm.diagnostics);
+        let llvm = nts_codegen_llvm::emit(
+            &prepared.program,
+            nts_codegen_llvm::Platform {
+                abi,
+                arch: nts_codegen_llvm::Arch::X86_64,
+            },
+        );
+        assert!(
+            llvm.diagnostics.is_empty(),
+            "{name}: {:?}",
+            llvm.diagnostics
+        );
         let c = nts_codegen_c::emit(&prepared.program, abi);
         assert!(c.is_complete(), "{name}: {:?}", c.diagnostics);
         std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-        for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
         std::fs::write(dir.join("helpers.c"), helpers).unwrap();
         std::fs::write(dir.join("caller.c"), caller).unwrap();
         for file in ["helpers.c", "caller.c", "nts_runtime.c"] {
             clang(&dir, &["-std=c11", "-O2", "-c", file]);
         }
-        clang(&dir, &["-O2", "-Wno-override-module", "-c", "program.ll", "-o", "llvm.o"]);
-        clang(&dir, &["llvm.o", "helpers.o", "caller.o", "nts_runtime.o", "-lm", "-o", name]);
+        clang(
+            &dir,
+            &[
+                "-O2",
+                "-Wno-override-module",
+                "-c",
+                "program.ll",
+                "-o",
+                "llvm.o",
+            ],
+        );
+        clang(
+            &dir,
+            &[
+                "llvm.o",
+                "helpers.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                name,
+            ],
+        );
         let out = Command::new(dir.join(name)).output().unwrap();
-        assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "{name}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         String::from_utf8_lossy(&out.stdout).trim().to_owned()
     };
-    assert_eq!(run(sysv, sysv_helpers, "llvm-sysv"), "27", "a value at the edge of Win64's slot did not round-trip on SysV");
+    assert_eq!(
+        run(sysv, sysv_helpers, "llvm-sysv"),
+        "27",
+        "a value at the edge of Win64's slot did not round-trip on SysV"
+    );
 
-    let zig = Command::new("zig").arg("env").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
-    let Some(lib) = zig.as_deref().and_then(|env| env.split_once("lib_dir")).and_then(|(_, rest)| rest.split('"').nth(1).map(str::to_owned)) else {
+    let zig = Command::new("zig")
+        .arg("env")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+    let Some(lib) = zig
+        .as_deref()
+        .and_then(|env| env.split_once("lib_dir"))
+        .and_then(|(_, rest)| rest.split('"').nth(1).map(str::to_owned))
+    else {
         eprintln!("skipping the Win64 arms: no zig for mingw headers");
         return;
     };
 
     // LLVM's Win64 program, with the runtime it calls, on Windows.
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
-    assert!(llvm.diagnostics.is_empty(), "llvm-win64: {:?}", llvm.diagnostics);
+    assert!(
+        llvm.diagnostics.is_empty(),
+        "llvm-win64: {:?}",
+        llvm.diagnostics
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let c = nts_codegen_c::emit(&prepared.program, win64);
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
     std::fs::write(dir.join("helpers.c"), win64_helpers).unwrap();
     let built = Command::new("zig")
         .current_dir(&dir)
-        .args(["cc", "-target", "x86_64-windows-gnu", "-O2", "-Wno-override-module", "program.ll", "helpers.c", "caller.c", "nts_runtime.c", "-o", "llvm-win64.exe"])
+        .args([
+            "cc",
+            "-target",
+            "x86_64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "program.ll",
+            "helpers.c",
+            "caller.c",
+            "nts_runtime.c",
+            "-o",
+            "llvm-win64.exe",
+        ])
         .output()
         .unwrap();
-    assert!(built.status.success(), "llvm-win64: {}", String::from_utf8_lossy(&built.stderr));
-    let runner = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tooling/windows/run.sh");
-    let ran = Command::new(runner).arg(dir.join("llvm-win64.exe")).output().unwrap();
+    assert!(
+        built.status.success(),
+        "llvm-win64: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let runner =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tooling/windows/run.sh");
+    let ran = Command::new(runner)
+        .arg(dir.join("llvm-win64.exe"))
+        .output()
+        .unwrap();
     if ran.status.code() == Some(77) {
         eprintln!("llvm-win64: not run -- no Windows reachable (tooling/windows/vm.md)");
     } else {
-        assert!(ran.status.success(), "llvm-win64 on Windows: {}", String::from_utf8_lossy(&ran.stderr));
-        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "27", "the Win64 slot did not round-trip on Windows");
+        assert!(
+            ran.status.success(),
+            "llvm-win64 on Windows: {}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&ran.stdout).trim(),
+            "27",
+            "the Win64 slot did not round-trip on Windows"
+        );
     }
 
     // C's Win64 program, checked by an LLP64 compiler. Its assertions state
     // `sizeof(long) == 4` and the slot's offsets (`after` at 8, not 16).
     let c = nts_codegen_c::emit(&prepared.program, win64);
     let text = c.writer.text();
-    assert!(text.contains("sizeof(long) == 4"), "the C program does not assert the LLP64 model");
-    assert!(text.contains("offsetof(struct slot, after) == 8u"), "the C program placed `after` for LP64");
+    assert!(
+        text.contains("sizeof(long) == 4"),
+        "the C program does not assert the LLP64 model"
+    );
+    assert!(
+        text.contains("offsetof(struct slot, after) == 8u"),
+        "the C program placed `after` for LP64"
+    );
     std::fs::write(dir.join("program.c"), text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
     let headers = format!("{lib}/libc/include");
-    clang(&dir, &[
-        "--target=x86_64-w64-windows-gnu", "-nostdlibinc",
-        "-isystem", &format!("{headers}/x86_64-windows-gnu"), "-isystem", &format!("{headers}/generic-mingw"),
-        "-isystem", &format!("{headers}/x86_64-windows-any"), "-isystem", &format!("{headers}/any-windows-any"),
-        "-D__MSVCRT_VERSION__=0xE00", "-D_WIN32_WINNT=0x0a00", "-std=c11", "-fsyntax-only", "program.c",
-    ]);
+    clang(
+        &dir,
+        &[
+            "--target=x86_64-w64-windows-gnu",
+            "-nostdlibinc",
+            "-isystem",
+            &format!("{headers}/x86_64-windows-gnu"),
+            "-isystem",
+            &format!("{headers}/generic-mingw"),
+            "-isystem",
+            &format!("{headers}/x86_64-windows-any"),
+            "-isystem",
+            &format!("{headers}/any-windows-any"),
+            "-D__MSVCRT_VERSION__=0xE00",
+            "-D_WIN32_WINNT=0x0a00",
+            "-std=c11",
+            "-fsyntax-only",
+            "program.c",
+        ],
+    );
 }
 
 /// A constant that does not fit Win64's 32-bit `long` is refused, and not on
@@ -3920,32 +5640,85 @@ export function fits(): void { take_long(-2147483648n as c_long); take_ulong(429
 export function wide(): void { take_long(2147483648n as c_long); }
 "#;
     let win64 = nts_core::hir::native::NativeAbi::Win64;
-    let rejected = |name: &str, source: &str, targets: &[nts_core::hir::native::NativeAbi]| -> Vec<String> {
-        let (_, snapshot) = snapshot_of(name, source, &[]).unwrap();
-        match hir::prepare_with(&snapshot, &hir::Options { targets, ..hir::Options::default() }) {
-            Err(hir::Unprepared::Rejected(errors)) => errors.into_iter().map(|error| format!("{} {}", error.code, error.message)).collect(),
-            Ok(_) => Vec::new(),
-            Err(invalid) => panic!("{}", invalid.render(&snapshot.sources)),
-        }
+    let rejected =
+        |name: &str, source: &str, targets: &[nts_core::hir::native::NativeAbi]| -> Vec<String> {
+            let (_, snapshot) = snapshot_of(name, source, &[]).unwrap();
+            match hir::prepare_with(
+                &snapshot,
+                &hir::Options {
+                    targets,
+                    ..hir::Options::default()
+                },
+            ) {
+                Err(hir::Unprepared::Rejected(errors)) => errors
+                    .into_iter()
+                    .map(|error| format!("{} {}", error.code, error.message))
+                    .collect(),
+                Ok(_) => Vec::new(),
+                Err(invalid) => panic!("{}", invalid.render(&snapshot.sources)),
+            }
+        };
+    let Some((_, prepared)) = prepare("win64-constants", source) else {
+        return;
     };
-    let Some((_, prepared)) = prepare("win64-constants", source) else { return; };
     let for_win64 = rejected("win64-constants-checked", source, &[win64]);
-    assert!(for_win64.len() == 1 && for_win64[0].starts_with("NTS5001") && for_win64[0].contains("`long`"), "{for_win64:?}");
+    assert!(
+        for_win64.len() == 1
+            && for_win64[0].starts_with("NTS5001")
+            && for_win64[0].contains("`long`"),
+        "{for_win64:?}"
+    );
     let negative = "import type { c_ulong } from \"c:types\";\ndeclare function take_ulong(value: c_ulong): void;\nexport function negative(): void { take_ulong(-1n as c_ulong); }\n";
     let refused_negative = rejected("win64-constants-negative", negative, &[]);
-    assert!(refused_negative.len() == 1 && refused_negative[0].starts_with("NTS5001"), "{refused_negative:?}");
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        refused_negative.len() == 1 && refused_negative[0].starts_with("NTS5001"),
+        "{refused_negative:?}"
+    );
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let sysv = nts_core::hir::native::NativeAbi::SysV;
     let refused = |diagnostics: &[nts_diagnostics::Diagnostic]| -> Vec<String> {
-        diagnostics.iter().filter(|d| d.message.contains("does not fit")).map(|d| d.message.clone()).collect()
+        diagnostics
+            .iter()
+            .filter(|d| d.message.contains("does not fit"))
+            .map(|d| d.message.clone())
+            .collect()
     };
     let c = refused(&nts_codegen_c::emit(&prepared.program, win64).diagnostics);
-    let llvm = refused(&nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: win64, arch: nts_codegen_llvm::Arch::X86_64 }).diagnostics);
+    let llvm = refused(
+        &nts_codegen_llvm::emit(
+            &prepared.program,
+            nts_codegen_llvm::Platform {
+                abi: win64,
+                arch: nts_codegen_llvm::Arch::X86_64,
+            },
+        )
+        .diagnostics,
+    );
     assert_eq!(c.len(), 1, "C refused {c:?}");
     assert_eq!(c, llvm, "the two backends refused different constants");
     assert!(c[0].contains("2147483648"), "{c:?}");
-    assert!(refused(&nts_codegen_c::emit(&prepared.program, sysv).diagnostics).is_empty(), "SysV refused a constant that fits");
-    assert!(refused(&nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: sysv, arch: nts_codegen_llvm::Arch::X86_64 }).diagnostics).is_empty(), "SysV refused a constant that fits");
+    assert!(
+        refused(&nts_codegen_c::emit(&prepared.program, sysv).diagnostics).is_empty(),
+        "SysV refused a constant that fits"
+    );
+    assert!(
+        refused(
+            &nts_codegen_llvm::emit(
+                &prepared.program,
+                nts_codegen_llvm::Platform {
+                    abi: sysv,
+                    arch: nts_codegen_llvm::Arch::X86_64
+                }
+            )
+            .diagnostics
+        )
+        .is_empty(),
+        "SysV refused a constant that fits"
+    );
 }
 
 /// `F | null` passes NULL for `null` and a bridge for a function, and
@@ -3979,7 +5752,11 @@ export function realPointer(): number { return is_null(some_address()); }
         "withCallback(); withNull();",
     );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((_, outputs)) = run_on_both_backends("nullable-callback", source, provider, library, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("nullable-callback", source, provider, library, &caller)
+        else {
+            return;
+        };
         for output in outputs {
             assert_eq!(output, expect("15 -1 1 0", provider), "{provider:?}");
         }
@@ -4027,14 +5804,24 @@ export function nothing(): number { return is_null(null); }
     // "AB" = 65+66 = 131 over 2 units; "αβ" = 945+946 = 1891 over 2; a lone
     // high surrogate is 55296 over 1.
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((text, outputs)) = run_on_both_backends("utf16-string", source, provider, library, &caller) else { return; };
-        assert!(text.contains("nts_string_to_utf16(") && text.contains("nts_utf16_release("), "the UTF-16 pair is not in the C program");
+        let Some((text, outputs)) =
+            run_on_both_backends("utf16-string", source, provider, library, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("nts_string_to_utf16(") && text.contains("nts_utf16_release("),
+            "the UTF-16 pair is not in the C program"
+        );
         for output in outputs {
-            assert_eq!(output, expect("1312 18912 552961 1 0 1", provider), "{provider:?}");
+            assert_eq!(
+                output,
+                expect("1312 18912 552961 1 0 1", provider),
+                "{provider:?}"
+            );
         }
     }
 }
-
 
 /// A `StringView` crosses as the string itself, on both backends: C reads the
 /// units where the string stores them, through `nts_string_view`.
@@ -4090,15 +5877,28 @@ export function nothing(): number { return is_null(null); }
     // 97+0+98 = 195 over 3 units; 0xE9 = 233, narrow and fresh; 0xD800 =
     // 55296, wide and fresh; "abc" immortal (2), "αβ" immortal and wide (3).
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((text, outputs)) = run_on_both_backends("string-view", source, provider, library, &caller) else { return; };
+        let Some((text, outputs)) =
+            run_on_both_backends("string-view", source, provider, library, &caller)
+        else {
+            return;
+        };
         assert!(
-            !["nts_string_to_cstring(", "nts_string_to_utf16(", "nts_cstring_release(", "nts_utf16_release("]
-                .iter()
-                .any(|helper| text.contains(helper)),
+            ![
+                "nts_string_to_cstring(",
+                "nts_string_to_utf16(",
+                "nts_cstring_release(",
+                "nts_utf16_release("
+            ]
+            .iter()
+            .any(|helper| text.contains(helper)),
             "a view converted the string: {text}"
         );
         for output in outputs {
-            assert_eq!(output, expect("1953 2330 552961 23 1 1", provider), "{provider:?}");
+            assert_eq!(
+                output,
+                expect("1953 2330 552961 23 1 1", provider),
+                "{provider:?}"
+            );
         }
     }
 }
@@ -4144,8 +5944,16 @@ export function nulls(): number { return (maybe(0 as c_int) === null ? 10 : 0) +
     );
     // 4 units: 65 + 0 + 55296 + 945.
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((text, outputs)) = run_on_both_backends("string-view-result", source, provider, library, &caller) else { return; };
-        assert!(text.contains("nts_string_from_required_view(") && text.contains("nts_string_from_view("), "the view was not copied");
+        let Some((text, outputs)) =
+            run_on_both_backends("string-view-result", source, provider, library, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("nts_string_from_required_view(")
+                && text.contains("nts_string_from_view("),
+            "the view was not copied"
+        );
         for output in outputs {
             assert_eq!(output, expect("1 456306 11", provider), "{provider:?}");
         }
@@ -4162,11 +5970,16 @@ import type { c_int } from "c:types";
 declare function take(s: string & { real: number }): c_int;
 export function go(s: string & { real: number }): number { return take(s); }
 "#;
-    let Some((_, prepared)) = prepare("utf16-not-a-brand", source) else { return; };
+    let Some((_, prepared)) = prepare("utf16-not-a-brand", source) else {
+        return;
+    };
     assert!(
         // Refused where the value's type is read: `representation_of`'s
         // intersection arm did not take it.
-        prepared.diagnostics.iter().any(|d| d.message.contains("unrepresentable type (an intersection)")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("unrepresentable type (an intersection)")),
         "`string & {{ real: number }}` crossed as a string: {:?}",
         prepared.diagnostics
     );
@@ -4189,9 +6002,14 @@ export function go(s: string & { real: number }): number { return take(s); }
 /// here against `int32_t`/`uint32_t` helpers, the slot a Win64 `long` is; C's
 /// is checked by an LLP64 clang, as the `c_long` test does.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_c_long32_is_a_number_on_win64_and_refused_where_long_is_64_bits() {
     // The brands this test is the case for, read from the shared list.
-    assert_eq!(WINDOWS_ONLY, ["c_long32", "c_ulong32"], "a Windows-only brand without a case here");
+    assert_eq!(
+        WINDOWS_ONLY,
+        ["c_long32", "c_ulong32"],
+        "a Windows-only brand without a case here"
+    );
     let source = r#"
 import type { c_long32, c_ulong32 } from "c:types";
 declare function echo_dword(value: c_ulong32): c_ulong32;
@@ -4199,37 +6017,98 @@ declare function echo_long(value: c_long32): c_long32;
 export function dword(): number { return echo_dword(4294967295 as c_ulong32); }
 export function negative(): number { return echo_long(-5 as c_long32); }
 "#;
-    let Some((dir, prepared)) = prepare("long32", source) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare("long32", source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let win64 = nts_core::hir::native::NativeAbi::Win64;
     let sysv = nts_core::hir::native::NativeAbi::SysV;
 
-    let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: win64, arch: nts_codegen_llvm::Arch::X86_64 });
+    let llvm = nts_codegen_llvm::emit(
+        &prepared.program,
+        nts_codegen_llvm::Platform {
+            abi: win64,
+            arch: nts_codegen_llvm::Arch::X86_64,
+        },
+    );
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     let c = nts_codegen_c::emit(&prepared.program, win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
-    for file in c.support_files() { file.write(dir.as_std_path()).unwrap(); }
+    for file in c.support_files() {
+        file.write(dir.as_std_path()).unwrap();
+    }
     std::fs::write(dir.join("helpers.c"), "#include <stdint.h>\nuint32_t echo_dword(uint32_t v) { return v; }\nint32_t echo_long(int32_t v) { return v; }\n").unwrap();
     std::fs::write(dir.join("caller.c"), "#include <stdio.h>\ndouble dword(void);\ndouble negative(void);\nint main(void) { printf(\"%.0f %.0f\\n\", dword(), negative()); return 0; }\n").unwrap();
     for file in ["helpers.c", "caller.c", "nts_runtime.c"] {
         clang(&dir, &["-std=c11", "-O2", "-c", file]);
     }
-    clang(&dir, &["-O2", "-Wno-override-module", "-c", "program.ll", "-o", "llvm.o"]);
-    clang(&dir, &["llvm.o", "helpers.o", "caller.o", "nts_runtime.o", "-lm", "-o", "run"]);
+    clang(
+        &dir,
+        &[
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "llvm.o",
+        ],
+    );
+    clang(
+        &dir,
+        &[
+            "llvm.o",
+            "helpers.o",
+            "caller.o",
+            "nts_runtime.o",
+            "-lm",
+            "-o",
+            "run",
+        ],
+    );
     let out = Command::new(dir.join("run")).output().unwrap();
-    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "4294967295 -5", "the Win64 slot did not round-trip");
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        "4294967295 -5",
+        "the Win64 slot did not round-trip"
+    );
     let text = c.writer.text();
-    assert!(text.contains("unsigned long echo_dword(unsigned long);"), "C does not call through `unsigned long`:\n{text}");
-    assert!(text.contains("long echo_long(long);"), "C does not call through `long`:\n{text}");
+    assert!(
+        text.contains("unsigned long echo_dword(unsigned long);"),
+        "C does not call through `unsigned long`:\n{text}"
+    );
+    assert!(
+        text.contains("long echo_long(long);"),
+        "C does not call through `long`:\n{text}"
+    );
 
     let refused = |diagnostics: &[nts_diagnostics::Diagnostic]| -> Vec<String> {
-        diagnostics.iter().filter(|d| d.message.contains("32-bit C `long`")).map(|d| d.message.clone()).collect()
+        diagnostics
+            .iter()
+            .filter(|d| d.message.contains("32-bit C `long`"))
+            .map(|d| d.message.clone())
+            .collect()
     };
     let c_refused = refused(&nts_codegen_c::emit(&prepared.program, sysv).diagnostics);
-    let llvm_refused = refused(&nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform { abi: sysv, arch: nts_codegen_llvm::Arch::X86_64 }).diagnostics);
+    let llvm_refused = refused(
+        &nts_codegen_llvm::emit(
+            &prepared.program,
+            nts_codegen_llvm::Platform {
+                abi: sysv,
+                arch: nts_codegen_llvm::Arch::X86_64,
+            },
+        )
+        .diagnostics,
+    );
     assert_eq!(c_refused.len(), 2, "C on SysV refused {c_refused:?}");
-    assert_eq!(c_refused, llvm_refused, "the two backends refused different functions");
+    assert_eq!(
+        c_refused, llvm_refused,
+        "the two backends refused different functions"
+    );
 }
 
 /// A cycle through a `GObject`: a signal handler capturing its own instance,
@@ -4249,12 +6128,23 @@ export function negative(): number { return echo_long(-5 as c_long32); }
 /// releases of its own never collects `kept`, which the library let go of on
 /// `GObject`'s side. The repeat asserts the closures are freed too (`leak=0`).
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_cycle_through_a_gobject_is_collected_on_both_backends() {
     let pkg = |what: &str| -> Option<Vec<String>> {
-        let output = Command::new("pkg-config").args([what, "gobject-2.0"]).output().ok()?;
-        output.status.success().then(|| String::from_utf8_lossy(&output.stdout).split_whitespace().map(str::to_owned).collect())
+        let output = Command::new("pkg-config")
+            .args([what, "gobject-2.0"])
+            .output()
+            .ok()?;
+        output.status.success().then(|| {
+            String::from_utf8_lossy(&output.stdout)
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect()
+        })
     };
-    let (Some(cflags), Some(libs)) = (pkg("--cflags"), pkg("--libs")) else { return; };
+    let (Some(cflags), Some(libs)) = (pkg("--cflags"), pkg("--libs")) else {
+        return;
+    };
     let cflags: Vec<&str> = cflags.iter().map(String::as_str).collect();
     let libs: Vec<&str> = libs.iter().map(String::as_str).collect();
     let source = r#"
@@ -4324,8 +6214,14 @@ int finalized(void) { return gone; }
 void collect(void) { nts_checkpoint(); }
 ";
     let provider = hir::Provider::ReferenceCounting;
-    let Some((dir, prepared)) = prepare_with_provider("gobject-cycle-rc", source, provider) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((dir, prepared)) = prepare_with_provider("gobject-cycle-rc", source, provider) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -4333,28 +6229,92 @@ void collect(void) { nts_checkpoint(); }
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let support = c.support_files();
-    assert!(support.iter().any(|file| file.name == nts_codegen_c::GOBJECT_SOURCE_NAME && file.compiled), "a program that connects does not bring nts_gobject.c");
-    for file in &support { file.write(dir.as_std_path()).unwrap(); }
+    assert!(
+        support
+            .iter()
+            .any(|file| file.name == nts_codegen_c::GOBJECT_SOURCE_NAME && file.compiled),
+        "a program that connects does not bring nts_gobject.c"
+    );
+    for file in &support {
+        file.write(dir.as_std_path()).unwrap();
+    }
     std::fs::write(dir.join("native.c"), library).unwrap();
     let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
     std::fs::write(dir.join("caller.c"), caller).unwrap();
     let rc = ["-DNTS_PROVIDER_RC"];
     for file in ["native.c", "nts_gobject.c"] {
-        clang(&dir, &[&["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file][..], &rc, &cflags].concat());
+        clang(
+            &dir,
+            &[
+                &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file][..],
+                &rc,
+                &cflags,
+            ]
+            .concat(),
+        );
     }
-    clang(&dir, &[&["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", "caller.c"][..], &rc].concat());
-    clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], &rc].concat());
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], &rc].concat());
-        clang(&dir, &[&[object, "native.o", "caller.o", "nts_runtime.o", "nts_gobject.o", "-lm", "-o", executable][..], &libs].concat());
-        let run = Command::new(dir.join(executable)).env("G_DEBUG", "fatal-criticals").output().unwrap();
-        assert!(run.status.success(), "{executable}: {}", String::from_utf8_lossy(&run.stderr));
+    clang(
+        &dir,
+        &[
+            &[
+                "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", "caller.c",
+            ][..],
+            &rc,
+        ]
+        .concat(),
+    );
+    clang(
+        &dir,
+        &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], &rc].concat(),
+    );
+    for (source, object, executable) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &[
+                &["-O2", "-Wno-override-module", "-c", source, "-o", object][..],
+                &rc,
+            ]
+            .concat(),
+        );
+        clang(
+            &dir,
+            &[
+                &[
+                    object,
+                    "native.o",
+                    "caller.o",
+                    "nts_runtime.o",
+                    "nts_gobject.o",
+                    "-lm",
+                    "-o",
+                    executable,
+                ][..],
+                &libs,
+            ]
+            .concat(),
+        );
+        let run = Command::new(dir.join(executable))
+            .env("G_DEBUG", "fatal-criticals")
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "{executable}: {}",
+            String::from_utf8_lossy(&run.stderr)
+        );
         // Running totals: `itself` 1; `other` 2 more (its instance, freed
         // outright, released the handler that was the last to hold the
         // keeper); `kept` none while the library holds it, and 1 at the
         // checkpoint after it lets go -- a release on GObject's side, which
         // only the revisit sees.
-        assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "1334 leak=0", "{executable}");
+        assert_eq!(
+            String::from_utf8_lossy(&run.stdout).trim(),
+            "1334 leak=0",
+            "{executable}"
+        );
     }
 }
 
@@ -4420,13 +6380,24 @@ export function live(): number { return live_objects() as number; }
   printf(" errors=%.0f live=%.0f", errors(), live());"#,
         "",
     );
-    let Some((c, outputs)) =
-        run_on_both_backends("upcast", source, hir::Provider::ReferenceCounting, &library, &caller)
-    else {
+    let Some((c, outputs)) = run_on_both_backends(
+        "upcast",
+        source,
+        hir::Provider::ReferenceCounting,
+        &library,
+        &caller,
+    ) else {
         return;
     };
-    let body = c.split("inherited(").nth(2).and_then(|rest| rest.split("\n}\n").next()).expect("inherited is emitted");
-    assert!(!body.contains("ref_sink") && !body.contains("unref"), "the loop still counts its receiver:\n{body}");
+    let body = c
+        .split("inherited(")
+        .nth(2)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("inherited is emitted");
+    assert!(
+        !body.contains("ref_sink") && !body.contains("unref"),
+        "the loop still counts its receiver:\n{body}"
+    );
     for output in outputs {
         assert_eq!(output, "6 8 6 8 5 9 errors=0 live=0 leak=0");
     }
@@ -4464,8 +6435,15 @@ size_t doubled(size_t n) { return 2 * n + 1; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.2f %.2f", run(), wide());"#, "run(); wide();");
-        let Some((text, outputs)) = run_on_both_backends("cnumber", source, provider, library, &caller) else { return; };
-        assert!(text.contains("int add(int, double)"), "a `CNumber` is not C's type");
+        let Some((text, outputs)) =
+            run_on_both_backends("cnumber", source, provider, library, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("int add(int, double)"),
+            "a `CNumber` is not C's type"
+        );
         // add: 2 + 3 = 5 (the double 3.5 truncates in C), + 0.25 kept;
         // halve(5) = 2.5; twice: 40 -> 41 -> 42, minus 40 = 2. wide:
         // 2 * 3 + 1 = 7, / 2 = 3.5, + 0.5 = 4.
@@ -4480,15 +6458,27 @@ size_t doubled(size_t n) { return 2 * n + 1; }
     let settled = format!(
         "{source}\nexport function later(): Promise<CNumber<\"size_t\">> {{ return new Promise<CNumber<\"size_t\">>((resolve) => {{ resolve(doubled(3)); }}); }}\n"
     );
-    let Some((_, prepared)) = prepare("cnumber-promise", &settled) else { return; };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((_, prepared)) = prepare("cnumber-promise", &settled) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     // A fraction into C's `int` is refused where it is passed.
     let fraction = source.replace("add(2, 3.5)", "add(2.9, 3.5)");
     let (_, snapshot) = snapshot_of("cnumber-fraction", &fraction, &[]).unwrap();
     let Err(hir::Unprepared::Rejected(errors)) = hir::prepare(&snapshot) else {
         panic!("`add(2.9, …)` must be refused");
     };
-    assert!(errors.iter().all(|error| error.code == "NTS5001") && errors.iter().any(|error| error.message.contains("a fraction")), "{errors:?}");
+    assert!(
+        errors.iter().all(|error| error.code == "NTS5001")
+            && errors
+                .iter()
+                .any(|error| error.message.contains("a fraction")),
+        "{errors:?}"
+    );
 }
 
 /// A `GObject` interface as a handle type: `GObjectInterface<Tag, Prerequisite>`
@@ -4543,23 +6533,44 @@ void nts_gobject_made(void *o) { (void)o; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.1f", run());"#, "run();");
-        let Some((text, outputs)) = run_on_both_backends("interface", source, provider, library, &caller) else { return; };
-        assert!(text.contains("editable_value(struct _Editable *)"), "an interface parameter is not its own tag in C");
-        assert!(text.contains("cell_value(struct _Cell *)"), "a sub-interface parameter is not its own tag in C");
+        let Some((text, outputs)) =
+            run_on_both_backends("interface", source, provider, library, &caller)
+        else {
+            return;
+        };
+        assert!(
+            text.contains("editable_value(struct _Editable *)"),
+            "an interface parameter is not its own tag in C"
+        );
+        assert!(
+            text.contains("cell_value(struct _Cell *)"),
+            "a sub-interface parameter is not its own tag in C"
+        );
         for output in outputs {
             assert_eq!(output, expect("27223.2", provider), "{provider:?}");
         }
     }
     let wrong = source.replace("const editable: Editable = entry;", "const editable: Editable = entry;\n    const label = null as unknown as Label;\n    editable_value(label);");
-    let Some(messages) = checker_messages("interface-wrong", &wrong) else { return; };
+    let Some(messages) = checker_messages("interface-wrong", &wrong) else {
+        return;
+    };
     assert!(
-        messages.iter().any(|m| m.contains("'Label' is not assignable to parameter of type 'Editable'")),
+        messages
+            .iter()
+            .any(|m| m.contains("'Label' is not assignable to parameter of type 'Editable'")),
         "a class not implementing the interface was accepted: {messages:?}"
     );
-    let upward = source.replace("const cell: Cell = entry;", "const cell: Cell = entry;\n    cell_value(editable);");
-    let Some(messages) = checker_messages("interface-upward", &upward) else { return; };
+    let upward = source.replace(
+        "const cell: Cell = entry;",
+        "const cell: Cell = entry;\n    cell_value(editable);",
+    );
+    let Some(messages) = checker_messages("interface-upward", &upward) else {
+        return;
+    };
     assert!(
-        messages.iter().any(|m| m.contains("'Editable' is not assignable to parameter of type 'Cell'")),
+        messages
+            .iter()
+            .any(|m| m.contains("'Editable' is not assignable to parameter of type 'Cell'")),
         "an interface was taken for one requiring it: {messages:?}"
     );
 }
@@ -4594,28 +6605,56 @@ export async function suspended(): Promise<number> {
 "#;
     let library = "void fill(int *out, int value) { *out = value; }\n";
     let caller = counted_caller(r#"printf("%.0f", looped());"#, "looped();");
-    let Some((_, outputs)) = run_on_both_backends("confined", source, hir::Provider::NoGc, library, &caller) else { return; };
+    let Some((_, outputs)) =
+        run_on_both_backends("confined", source, hir::Provider::NoGc, library, &caller)
+    else {
+        return;
+    };
     for output in outputs {
         assert_eq!(output, "100");
     }
     // The address across an `await` is still refused, and so is one carried
     // to the next iteration.
     for (name, shape) in [
-        ("confined-across-await", "const before = slot[0];\n    await Promise.resolve();\n    return before;"),
-        ("confined-across-await", "await Promise.resolve();\n    return slot[0];"),
+        (
+            "confined-across-await",
+            "const before = slot[0];\n    await Promise.resolve();\n    return before;",
+        ),
+        (
+            "confined-across-await",
+            "await Promise.resolve();\n    return slot[0];",
+        ),
     ] {
-        let edited = source.replace("const before = slot[0];\n    await Promise.resolve();\n    return before;", shape);
-        let Some((_, prepared)) = prepare(name, &edited) else { return; };
-        let refused = prepared.diagnostics.iter().any(|d| d.message.contains("native local storage in a suspending function"));
-        assert_eq!(refused, shape.starts_with("await"), "{shape}: {:?}", prepared.diagnostics);
+        let edited = source.replace(
+            "const before = slot[0];\n    await Promise.resolve();\n    return before;",
+            shape,
+        );
+        let Some((_, prepared)) = prepare(name, &edited) else {
+            return;
+        };
+        let refused = prepared.diagnostics.iter().any(|d| {
+            d.message
+                .contains("native local storage in a suspending function")
+        });
+        assert_eq!(
+            refused,
+            shape.starts_with("await"),
+            "{shape}: {:?}",
+            prepared.diagnostics
+        );
     }
     let carried = source.replace(
         "    for (let i = 1; i <= 4; i++) {\n        const slot = local<CNumber<\"int\">>();",
         "    let kept = local<CNumber<\"int\">>();\n    for (let i = 1; i <= 4; i++) {\n        const slot = local<CNumber<\"int\">>();\n        sum += kept[0];\n        kept = slot;",
     );
-    let Some((_, prepared)) = prepare("confined-carried", &carried) else { return; };
+    let Some((_, prepared)) = prepare("confined-carried", &carried) else {
+        return;
+    };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("inside a loop")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("inside a loop")),
         "an address carried to the next iteration was accepted: {:?}",
         prepared.diagnostics
     );
@@ -4650,7 +6689,15 @@ export function looped(): number {
 "#;
     let library = "void fill(int *out, int value) { *out = value; }\n";
     let caller = counted_caller(r#"printf("%.0f", looped());"#, "looped();");
-    let Some((_, outputs)) = run_on_both_backends("iteration-local", source, hir::Provider::NoGc, library, &caller) else { return; };
+    let Some((_, outputs)) = run_on_both_backends(
+        "iteration-local",
+        source,
+        hir::Provider::NoGc,
+        library,
+        &caller,
+    ) else {
+        return;
+    };
     // 20 + 40 read inside the branch, 1 + 1 beside it, and every
     // iteration's own 10..40 after the merge: 62 + 100 * 100.
     for output in outputs {
@@ -4678,17 +6725,28 @@ export function run(): number { const t = thing_any(); return (instance_value(t)
 export function errors(): number { return errors_seen() as number; }
 export function live(): number { return live_objects() as number; }
 "#;
-    let library = format!("{GOBJECT_LIBRARY}\nstatic Thing *any;\nvoid *thing_any(void) {{ if (any == NULL) any = thing_new_owned(4); return any; }}\n");
+    let library = format!(
+        "{GOBJECT_LIBRARY}\nstatic Thing *any;\nvoid *thing_any(void) {{ if (any == NULL) any = thing_new_owned(4); return any; }}\n"
+    );
     let caller = counted_caller(
         r#"printf("%.0f", run());
   for (int i = 0; i < 50; i++) run();
   printf(" errors=%.0f live=%.0f", errors(), live());"#,
         "",
     );
-    let Some((c, outputs)) = run_on_both_backends("erased-result", source, hir::Provider::ReferenceCounting, &library, &caller) else {
+    let Some((c, outputs)) = run_on_both_backends(
+        "erased-result",
+        source,
+        hir::Provider::ReferenceCounting,
+        &library,
+        &caller,
+    ) else {
         return;
     };
-    assert!(c.contains("void * thing_any(void)") || c.contains("void *thing_any(void)"), "an erased result is not `void *` in C");
+    assert!(
+        c.contains("void * thing_any(void)") || c.contains("void *thing_any(void)"),
+        "an erased result is not `void *` in C"
+    );
     for output in outputs {
         assert_eq!(output, "8 errors=0 live=1 leak=0");
     }
@@ -4729,7 +6787,11 @@ int thing_record(struct _Thing *t) { return t->record; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) = run_on_both_backends("construct-only", source, provider, library, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("construct-only", source, provider, library, &caller)
+        else {
+            return;
+        };
         // The constructor's 7, then the label's length: 72.
         for output in outputs {
             assert_eq!(output, expect("72", provider), "{provider:?}");
@@ -4746,7 +6808,9 @@ int thing_record(struct _Thing *t) { return t->record; }
 /// `class Counter extends GtkButton` did before subclasses were registered.
 #[test]
 fn a_class_over_an_unregistered_handle_is_refused_with_its_new() {
-    let Some((_, prepared)) = prepare("unregistered-subclass", r#"
+    let Some((_, prepared)) = prepare(
+        "unregistered-subclass",
+        r#"
 import type { Class } from "c:types";
 type Thing = Class<"_Thing">;
 declare const Thing: {
@@ -4763,10 +6827,19 @@ export function run(): void {
     const made = new Sub({});
     void made;
 }
-"#) else { return; };
+"#,
+    ) else {
+        return;
+    };
     let text = format!("{:?}", prepared.diagnostics);
-    assert!(text.contains("a class extending a C handle's class that nothing registers"), "{text}");
-    assert!(text.contains("`new` of a class extending a C handle's class that nothing registers"), "{text}");
+    assert!(
+        text.contains("a class extending a C handle's class that nothing registers"),
+        "{text}"
+    );
+    assert!(
+        text.contains("`new` of a class extending a C handle's class that nothing registers"),
+        "{text}"
+    );
 }
 
 /// A virtual function (`@ntsVfunc`) is a class struct's slot a subclass
@@ -4774,7 +6847,9 @@ export function run(): void {
 /// lowered to a call of a symbol named after the method.
 #[test]
 fn a_direct_call_of_a_virtual_function_is_refused_by_name() {
-    let Some((_, prepared)) = prepare("vfunc-direct", r#"
+    let Some((_, prepared)) = prepare(
+        "vfunc-direct",
+        r#"
 import type { GObjectClass } from "c:types";
 type Knob = GObjectClass<"_Knob"> & {
     /**
@@ -4786,9 +6861,15 @@ declare function knob_new(): Knob;
 export function run(): void {
     knob_new().vfunc_turned();
 }
-"#) else { return; };
+"#,
+    ) else {
+        return;
+    };
     let text = format!("{:?}", prepared.diagnostics);
-    assert!(text.contains("a direct call of a GObject virtual function (`KnobClass turned`)"), "{text}");
+    assert!(
+        text.contains("a direct call of a GObject virtual function (`KnobClass turned`)"),
+        "{text}"
+    );
 }
 
 /// `stringFrom(p)`: a `char *` read out of a slot into a program string, on
@@ -4823,8 +6904,14 @@ void name_into(char **out, int which) {
 "#;
     let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((_, outputs)) = run_on_both_backends("string-from-probe", source, provider, library, &caller) else { return; };
-        for output in outputs { assert_eq!(output, expect("5023365533", provider)); }
+        let Some((_, outputs)) =
+            run_on_both_backends("string-from-probe", source, provider, library, &caller)
+        else {
+            return;
+        };
+        for output in outputs {
+            assert_eq!(output, expect("5023365533", provider));
+        }
     }
 }
 
@@ -4855,10 +6942,19 @@ static unsigned char data[] = { 1, 200, 3, 44 };
 const unsigned char *bytes_at(void) { return data; }
 double byte_zero(void) { return data[0]; }
 ";
-    let caller = counted_caller(r#"double byte_zero(void); printf("%.0f byte0=%.0f", run(), byte_zero());"#, "run();");
+    let caller = counted_caller(
+        r#"double byte_zero(void); printf("%.0f byte0=%.0f", run(), byte_zero());"#,
+        "run();",
+    );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((_, outputs)) = run_on_both_backends("bytes-from-probe", source, provider, library, &caller) else { return; };
-        for output in outputs { assert_eq!(output, expect("120000304440 byte0=1", provider)); }
+        let Some((_, outputs)) =
+            run_on_both_backends("bytes-from-probe", source, provider, library, &caller)
+        else {
+            return;
+        };
+        for output in outputs {
+            assert_eq!(output, expect("120000304440 byte0=1", provider));
+        }
     }
 }
 
@@ -4889,8 +6985,18 @@ struct _Thing *thing_sized(int width) { Thing *t = &things[made++ % 2]; t->recor
 int thing_record(struct _Thing *t) { return t->record; }
 ";
     let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-    let Some((_, outputs)) = run_on_both_backends("static-probe", source, hir::Provider::NoGc, library, &caller) else { return; };
-    for output in outputs { assert_eq!(output, "53"); }
+    let Some((_, outputs)) = run_on_both_backends(
+        "static-probe",
+        source,
+        hir::Provider::NoGc,
+        library,
+        &caller,
+    ) else {
+        return;
+    };
+    for output in outputs {
+        assert_eq!(output, "53");
+    }
 }
 
 /// An exported generator, walked from C by the generated header's
@@ -4909,7 +7015,11 @@ fn an_exported_generators_resumption_links_from_c_on_both_backends() {
     ) else {
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -4932,12 +7042,39 @@ fn an_exported_generators_resumption_links_from_c_on_both_backends() {
     )
     .unwrap();
     for source in ["caller.c", "nts_runtime.c"] {
-        clang(&dir, &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source]);
+        clang(
+            &dir,
+            &[
+                "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", source,
+            ],
+        );
     }
-    for (source, object, binary) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &["-O2", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-c", source, "-o", object]);
-        clang(&dir, &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary]);
-        assert!(Command::new(dir.join(binary)).status().unwrap().success(), "{binary}");
+    for (source, object, binary) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &[
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-Wno-override-module",
+                "-c",
+                source,
+                "-o",
+                object,
+            ],
+        );
+        clang(
+            &dir,
+            &[object, "caller.o", "nts_runtime.o", "-lm", "-o", binary],
+        );
+        assert!(
+            Command::new(dir.join(binary)).status().unwrap().success(),
+            "{binary}"
+        );
     }
 }
 
@@ -5020,7 +7157,8 @@ const struct NtsStringView *node_get_value(struct _Node *self) { (void)self; ret
 void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) { (void)self; (void)value; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let caller = counted_caller(r#"printf("%.0f %.0f %.0f %.0f", run(), dereferenced(), caughtByTheCaller(), asserted()); nts_collect_cycles();"#,
+        let caller = counted_caller(
+            r#"printf("%.0f %.0f %.0f %.0f", run(), dereferenced(), caughtByTheCaller(), asserted()); nts_collect_cycles();"#,
             // A TypeError raised out of a callee is released to zero from the
             // cycle collector's candidate buffer (the raising frame retains the
             // erased view, then releases the object), so it is reclaimed at the
@@ -5028,7 +7166,11 @@ void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) {
             // would still count.
             "run(); dereferenced(); caughtByTheCaller(); asserted(); nts_collect_cycles();",
         );
-        let Some((_, outputs)) = run_on_both_backends("getter-null", source, provider, library, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("getter-null", source, provider, library, &caller)
+        else {
+            return;
+        };
         for output in outputs {
             // "null" through the class's getter (4) and the binding's (4), the
             // comparison true, and the default taken: JavaScript's 4412. And
@@ -5073,7 +7215,11 @@ double seen_u16(uint16_t v) { return v; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run(-5));"#, "run(-5);");
-        let Some((_, outputs)) = run_on_both_backends("c-integer-storage", source, provider, library, &caller) else { return; };
+        let Some((_, outputs)) =
+            run_on_both_backends("c-integer-storage", source, provider, library, &caller)
+        else {
+            return;
+        };
         for output in outputs {
             assert_eq!(output, expect("31", provider), "{provider:?}");
         }
@@ -5109,9 +7255,13 @@ export function errors(): number { return errors_seen() as number; }
   printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
         "",
     );
-    let Some((_, outputs)) =
-        run_on_both_backends("dropped-host", source, hir::Provider::ReferenceCounting, HOST_LIBRARY, &caller)
-    else {
+    let Some((_, outputs)) = run_on_both_backends(
+        "dropped-host",
+        source,
+        hir::Provider::ReferenceCounting,
+        HOST_LIBRARY,
+        &caller,
+    ) else {
         return;
     };
     for output in outputs {
@@ -5159,9 +7309,13 @@ export function errors(): number { return errors_seen() as number; }
   printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
         "",
     );
-    let Some((_, outputs)) =
-        run_on_both_backends("owned-handle-loop", source, hir::Provider::ReferenceCounting, HOST_LIBRARY, &caller)
-    else {
+    let Some((_, outputs)) = run_on_both_backends(
+        "owned-handle-loop",
+        source,
+        hir::Provider::ReferenceCounting,
+        HOST_LIBRARY,
+        &caller,
+    ) else {
         return;
     };
     for output in outputs {

@@ -637,8 +637,14 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
             let kind = func.values[value.0 as usize].kind.clone();
             let produced = func.values[value.0 as usize].ty.clone();
             let updated = match kind {
-                kind @ (OpKind::NativeMalloc { .. } | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. } | OpKind::NativeBitStore { .. } | OpKind::NativeIndexAddress { .. } | OpKind::ArraySet { .. }) =>
-                    memory_operands(func, &mut rewritten, &mut count, &kind),
+                kind @ (OpKind::NativeMalloc { .. }
+                | OpKind::NativeLoad { .. }
+                | OpKind::NativeStore { .. }
+                | OpKind::NativeBitStore { .. }
+                | OpKind::NativeIndexAddress { .. }
+                | OpKind::ArraySet { .. }) => {
+                    memory_operands(func, &mut rewritten, &mut count, &kind)
+                }
                 // Both operands of an operator at one type, which C picks for
                 // itself with its usual arithmetic conversions and never
                 // mentions. The LLVM backend had to name a type for the
@@ -682,7 +688,10 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
                 {
                     let want = HirType::Float { bits: 64 };
                     let erased = convert(func, &mut rewritten, &mut count, erased, &want);
-                    Some(OpKind::Erase { value: erased, absent: Absent::Impossible })
+                    Some(OpKind::Erase {
+                        value: erased,
+                        absent: Absent::Impossible,
+                    })
                 }
                 OpKind::GlobalSet {
                     global,
@@ -739,45 +748,66 @@ fn memory_operands(
     count: &mut usize,
     kind: &OpKind,
 ) -> Option<OpKind> {
-    let native_index = HirType::Int { bits: 64, signed: true };
+    let native_index = HirType::Int {
+        bits: 64,
+        signed: true,
+    };
     match *kind {
-        OpKind::NativeMalloc { bytes } => Some(OpKind::NativeMalloc { bytes: convert(func, rewritten, count, bytes, &HirType::NUMBER) }),
+        OpKind::NativeMalloc { bytes } => Some(OpKind::NativeMalloc {
+            bytes: convert(func, rewritten, count, bytes, &HirType::NUMBER),
+        }),
         OpKind::NativeLoad { pointer, index } | OpKind::NativeIndexAddress { pointer, index } => {
             let index = convert(func, rewritten, count, index, &native_index);
-            Some(if matches!(kind, OpKind::NativeLoad { .. }) { OpKind::NativeLoad { pointer, index } }
-                else { OpKind::NativeIndexAddress { pointer, index } })
+            Some(if matches!(kind, OpKind::NativeLoad { .. }) {
+                OpKind::NativeLoad { pointer, index }
+            } else {
+                OpKind::NativeIndexAddress { pointer, index }
+            })
         }
         // The same narrowing a `NativeStore` gets, for the op that has no
         // address. Without it the value arrives as an `f64` and the assignment
         // `p->ihl = v` is C converting a double to a four-bit field silently --
         // undefined where it does not fit, and invisible in a C-only test for
         // exactly the reason the `ArraySet` comment below records.
-        OpKind::NativeBitStore { pointer, field, value: stored } => {
+        OpKind::NativeBitStore {
+            pointer,
+            field,
+            value: stored,
+        } => {
             let HirType::NativePointer(pointee) = &func.value(pointer).ty else {
                 return None;
             };
             let super::native::Pointee::Record(layout) = pointee.viewed() else {
                 return None;
             };
-            let super::native::Pointee::Bits { unit, .. } =
-                layout.fields.get(field as usize)?.ty
+            let super::native::Pointee::Bits { unit, .. } = layout.fields.get(field as usize)?.ty
             else {
                 return None;
             };
             let stored = convert(func, rewritten, count, stored, &unit.representation());
-            Some(OpKind::NativeBitStore { pointer, field, value: stored })
+            Some(OpKind::NativeBitStore {
+                pointer,
+                field,
+                value: stored,
+            })
         }
-        OpKind::NativeStore { pointer, index, value: stored } => {
-            match &func.value(pointer).ty {
-                HirType::NativePointer(pointee) => {
-                    let element = pointee.element_type()?;
-                    let index = convert(func, rewritten, count, index, &native_index);
-                    let stored = convert(func, rewritten, count, stored, &element);
-                    Some(OpKind::NativeStore { pointer, index, value: stored })
-                }
-                _ => None,
+        OpKind::NativeStore {
+            pointer,
+            index,
+            value: stored,
+        } => match &func.value(pointer).ty {
+            HirType::NativePointer(pointee) => {
+                let element = pointee.element_type()?;
+                let index = convert(func, rewritten, count, index, &native_index);
+                let stored = convert(func, rewritten, count, stored, &element);
+                Some(OpKind::NativeStore {
+                    pointer,
+                    index,
+                    value: stored,
+                })
             }
-        }
+            _ => None,
+        },
         OpKind::ArraySet {
             array,
             index,
@@ -832,11 +862,9 @@ fn call_arguments(
                     // converted exactly as a fixed argument is -- without it
                     // the arguments C promotes reached the call as whatever
                     // TypeScript had, which is a double for every number.
-                    target
-                        .argument(at)
-                        .map_or(*arg, |ty| {
-                            convert(func, rewritten, count, *arg, &ty.representation())
-                        })
+                    target.argument(at).map_or(*arg, |ty| {
+                        convert(func, rewritten, count, *arg, &ty.representation())
+                    })
                 })
                 .collect();
             Some(OpKind::Call {
@@ -1034,12 +1062,13 @@ fn reconcile_fixed_results<S: std::hash::BuildHasher>(
         // numeric one, because they are different operations on different
         // representations and only `Convert` is a cast.
         let kind = match (&declared, &produced) {
-            (concrete, HirType::Erased) if *concrete != HirType::Erased => {
-                OpKind::Erase { value: call, absent: Absent::Impossible }
+            (concrete, HirType::Erased) if *concrete != HirType::Erased => OpKind::Erase {
+                value: call,
+                absent: Absent::Impossible,
             },
             (HirType::Erased, concrete) if *concrete != HirType::Erased => {
                 OpKind::Unerase { value: call }
-            },
+            }
             _ => OpKind::Convert(call),
         };
         func.values.push(Op {
@@ -1094,7 +1123,8 @@ fn reconcile_edges(func: &mut Func) -> usize {
                 *arg = convert(func, &mut rewritten, &mut count, *arg, want);
             }
         };
-        let mut terminator = std::mem::replace(&mut block.terminator, super::Terminator::Unreachable);
+        let mut terminator =
+            std::mem::replace(&mut block.terminator, super::Terminator::Unreachable);
         match &mut terminator {
             super::Terminator::Jump { target, args } => fit(func, *target, args),
             super::Terminator::Branch {
@@ -1153,6 +1183,7 @@ fn argument_conversion(func: &Func, arg: ValueId, target: Option<&HirType>) -> O
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn insert_conversions(
     func: &mut Func,
     analysis: &Analysis,
@@ -1196,7 +1227,8 @@ fn insert_conversions(
                 // the whole of what this fallback was for.
                 OpKind::Binary { op: bin, lhs, rhs }
                     if bin.is_comparison()
-                        && !(compares_as_a_number(func, lhs) && compares_as_a_number(func, rhs)) =>
+                        && !(compares_as_a_number(func, lhs)
+                            && compares_as_a_number(func, rhs)) =>
                 {
                     None
                 }
@@ -1270,7 +1302,7 @@ fn insert_conversions(
                     let wanted = match &callee {
                         Callee::Direct(name) | Callee::Virtual { declared: name, .. } => {
                             expected.get(name)
-                        },
+                        }
                         _ => None,
                     };
                     // **A callee whose arguments are converted exactly is not
@@ -1497,7 +1529,6 @@ fn unsigned_classes(
     unsigned
 }
 
-
 /// A value of the wanted type, converting if it is not already.
 fn convert(
     func: &mut Func,
@@ -1580,7 +1611,10 @@ fn convert(
         // Reached wherever a width was asked for and the value had none: a
         // block edge whose parameter is erased, a field store, a call argument.
         // Five sites in `events`, five in `stream`, six in `fs`.
-        _ if *wanted == HirType::Erased => OpKind::Erase { value: operand, absent: Absent::Impossible },
+        _ if *wanted == HirType::Erased => OpKind::Erase {
+            value: operand,
+            absent: Absent::Impossible,
+        },
         _ if func.values[operand.0 as usize].ty == HirType::Erased => {
             OpKind::Unerase { value: operand }
         }
@@ -1615,18 +1649,35 @@ mod tests {
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
 
-    const U64: HirType = HirType::Int { bits: 64, signed: false };
+    const U64: HirType = HirType::Int {
+        bits: 64,
+        signed: false,
+    };
 
     fn op(kind: OpKind, ty: HirType) -> Op {
-        Op { kind, ty, origin: Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) }) }
+        Op {
+            kind,
+            ty,
+            origin: Origin::source(Location {
+                file: SourceId(0),
+                span: Span::new(0, 1),
+            }),
+        }
     }
 
     /// `n: u64 => helper(n, n, n)`, specialized: what the call's second
     /// argument is afterwards.
     fn second_argument_after_specialize(helper: &str) -> (OpKind, HirType) {
-        let origin = Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) });
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
         let n = ValueId(0);
-        let call = OpKind::Call { callee: Callee::External(helper.to_owned()), args: vec![n, n, n], frame: None };
+        let call = OpKind::Call {
+            callee: Callee::External(helper.to_owned()),
+            args: vec![n, n, n],
+            frame: None,
+        };
         let mut func = Func {
             name: "f".to_owned(),
             params: vec![Param {
@@ -1638,8 +1689,18 @@ mod tests {
                 shape: crate::hir::ParamShape::Ordinary,
             }],
             return_type: HirType::Void,
-            values: vec![op(OpKind::Param(0), U64), op(call, HirType::NativePointer(crate::hir::native::Pointee::Void))],
-            blocks: vec![Block { params: Vec::new(), ops: vec![n, ValueId(1)], terminator: Terminator::Return(None) }],
+            values: vec![
+                op(OpKind::Param(0), U64),
+                op(
+                    call,
+                    HirType::NativePointer(crate::hir::native::Pointee::Void),
+                ),
+            ],
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: vec![n, ValueId(1)],
+                terminator: Terminator::Return(None),
+            }],
             origin,
             exported: true,
             initializes_receiver: false,
@@ -1651,9 +1712,19 @@ mod tests {
             written_return_elements: Vec::new(),
         };
         let analysis = crate::hir::flow::analyze(&func);
-        super::specialize(&mut func, &analysis, &crate::hir::signatures::Expected::default());
-        let call = func.blocks[0].ops.iter().map(|value| &func.values[value.0 as usize]).find(|op| matches!(op.kind, OpKind::Call { .. }));
-        let Some(OpKind::Call { args, .. }) = call.map(|op| &op.kind) else { panic!("the call is gone") };
+        super::specialize(
+            &mut func,
+            &analysis,
+            &crate::hir::signatures::Expected::default(),
+        );
+        let call = func.blocks[0]
+            .ops
+            .iter()
+            .map(|value| &func.values[value.0 as usize])
+            .find(|op| matches!(op.kind, OpKind::Call { .. }));
+        let Some(OpKind::Call { args, .. }) = call.map(|op| &op.kind) else {
+            panic!("the call is gone")
+        };
         let second = &func.values[args[1].0 as usize];
         (second.kind.clone(), second.ty.clone())
     }
@@ -1669,14 +1740,26 @@ mod tests {
         // ever undeclared, both arms below would be the control and the test
         // would test nothing while passing.
         assert_eq!(
-            crate::hir::runtime::parameters("nts_com_query").and_then(|params| params.get(1).cloned().flatten()),
+            crate::hir::runtime::parameters("nts_com_query")
+                .and_then(|params| params.get(1).cloned().flatten()),
             Some(U64),
             "`nts_com_query` no longer declares a u64 second parameter; pick another declared helper"
         );
-        assert!(crate::hir::runtime::parameters("nts_no_such_helper").is_none(), "the control helper is declared");
+        assert!(
+            crate::hir::runtime::parameters("nts_no_such_helper").is_none(),
+            "the control helper is declared"
+        );
         let (kind, ty) = second_argument_after_specialize("nts_com_query");
-        assert_eq!((kind, ty), (OpKind::Param(0), U64), "the declared helper's u64 argument was converted");
+        assert_eq!(
+            (kind, ty),
+            (OpKind::Param(0), U64),
+            "the declared helper's u64 argument was converted"
+        );
         let (_, ty) = second_argument_after_specialize("nts_no_such_helper");
-        assert_eq!(ty, HirType::NUMBER, "an undeclared helper's integer argument no longer widens");
+        assert_eq!(
+            ty,
+            HirType::NUMBER,
+            "an undeclared helper's integer argument no longer widens"
+        );
     }
 }

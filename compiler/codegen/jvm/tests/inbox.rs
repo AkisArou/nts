@@ -39,10 +39,16 @@ fn repository() -> PathBuf {
 fn runtime_jar() -> PathBuf {
     static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
+            || repository().join("runtime/jvm/nts-runtime.jar"),
+            PathBuf::from,
+        );
         let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+        if std::fs::copy(&source, &mine).is_ok() {
+            mine
+        } else {
+            source
+        }
     })
     .clone()
 }
@@ -54,7 +60,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -63,7 +73,9 @@ fn tool(name: &str) -> Option<PathBuf> {
 
 #[test]
 fn every_producer_publishes_and_every_credit_returns() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-inbox-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

@@ -218,7 +218,11 @@ pub fn native_place(layout: &crate::hir::native::Record, abi: NativeAbi) -> Opti
             align,
         });
     }
-    if layout.fields.iter().any(|f| matches!(f.ty, Pointee::Bits { .. })) {
+    if layout
+        .fields
+        .iter()
+        .any(|f| matches!(f.ty, Pointee::Bits { .. }))
+    {
         // MS bit-field placement (a new unit whenever the declared type
         // changes, among other rules) is not `place_bit_fields`, which is
         // System V's. No layout, rather than System V's answer on Windows.
@@ -237,7 +241,12 @@ pub fn native_place(layout: &crate::hir::native::Record, abi: NativeAbi) -> Opti
         // Alignment 1 and *no* final rounding: that pair is what makes
         // `struct epoll_event` 12 bytes rather than 16, and an array of them
         // contiguous rather than padded.
-        return Some(Placement { offsets, bits: Vec::new(), size: at, align: 1 });
+        return Some(Placement {
+            offsets,
+            bits: Vec::new(),
+            size: at,
+            align: 1,
+        });
     }
     place_shapes(shapes.into_iter().map(Some), Shape { size: 0, align: 1 })
 }
@@ -249,7 +258,10 @@ pub fn native_place(layout: &crate::hir::native::Record, abi: NativeAbi) -> Opti
 pub fn native_shape(pointee: &crate::hir::native::Pointee, abi: NativeAbi) -> Option<Shape> {
     use crate::hir::native::Pointee;
     match pointee {
-        Pointee::Record(layout) => native_place(layout, abi).map(|p| Shape { size: p.size, align: p.align }),
+        Pointee::Record(layout) => native_place(layout, abi).map(|p| Shape {
+            size: p.size,
+            align: p.align,
+        }),
         Pointee::Opaque(_) => None,
         // `T[N]` is N elements with the element's alignment, and named here
         // rather than left to the catch-all below: `element_type` decays an
@@ -271,13 +283,17 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee, abi: NativeAbi) -> Op
         // itself contributes nothing. Named here rather than left to the
         // catch-all below, which would size it as the *pointer* its read decays
         // to and make every record holding one eight bytes too long.
-        Pointee::Flexible(element) => {
-            Some(Shape { size: 0, align: native_shape(element, abi)?.align })
-        }
+        Pointee::Flexible(element) => Some(Shape {
+            size: 0,
+            align: native_shape(element, abi)?.align,
+        }),
         // The same bytes, with no alignment to promise. Naming it here rather
         // than letting it fall through matters for a packed record inside
         // another: the inner one's alignment must not raise the outer's.
-        Pointee::Unaligned(inner) => native_shape(inner, abi).map(|s| Shape { size: s.size, align: 1 }),
+        Pointee::Unaligned(inner) => native_shape(inner, abi).map(|s| Shape {
+            size: s.size,
+            align: 1,
+        }),
         _ => shape_of(&pointee.abi_element_type(abi)?),
     }
 }
@@ -301,10 +317,7 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee, abi: NativeAbi) -> Op
 ///
 /// An ordinary member still begins on a byte, at its own alignment, after
 /// whatever bits precede it.
-fn place_bit_fields(
-    layout: &crate::hir::native::Record,
-    shapes: &[Shape],
-) -> Option<Placement> {
+fn place_bit_fields(layout: &crate::hir::native::Record, shapes: &[Shape]) -> Option<Placement> {
     use crate::hir::native::Pointee;
     let mut at = 0u64; // bits from the start of the record
     let mut align = 1u32;
@@ -340,7 +353,11 @@ fn place_bit_fields(
         // An ordinary member still begins on a byte, and on its own alignment
         // unless the record is packed.
         let byte = u32::try_from(at.div_ceil(8)).ok()?;
-        let byte = if packed { byte } else { round_up(byte, shape.align)? };
+        let byte = if packed {
+            byte
+        } else {
+            round_up(byte, shape.align)?
+        };
         offsets.push(byte);
         bits.push(None);
         at = u64::from(byte.checked_add(shape.size)?).checked_mul(8)?;
@@ -354,7 +371,10 @@ fn place_bit_fields(
     })
 }
 
-fn place_shapes(shapes: impl IntoIterator<Item = Option<Shape>>, prefix: Shape) -> Option<Placement> {
+fn place_shapes(
+    shapes: impl IntoIterator<Item = Option<Shape>>,
+    prefix: Shape,
+) -> Option<Placement> {
     let mut at = prefix.size;
     let mut align = prefix.align;
     let mut offsets = Vec::new();
@@ -379,13 +399,15 @@ fn place_shapes(shapes: impl IntoIterator<Item = Option<Shape>>, prefix: Shape) 
 /// written as arithmetic anyway, because the one case that is not a power of
 /// two would be silently wrong under the mask and merely wrong here.
 fn round_up(value: u32, align: u32) -> Option<u32> {
-    if align == 0 { return None; }
+    if align == 0 {
+        return None;
+    }
     value.checked_add(align - 1).map(|n| n / align * align)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{place, shape_of, Placement, HEADER, POINTER};
+    use super::{HEADER, POINTER, Placement, place, shape_of};
     use crate::hir::{Field, HirType, ManagedType};
 
     fn field(name: &str, ty: HirType) -> Field {
@@ -435,11 +457,8 @@ mod tests {
     /// object's alignment with it.
     #[test]
     fn a_bigint_aligns_the_object_to_sixteen() {
-        let placed = place(&[
-            field("small", HirType::Bool),
-            field("big", HirType::BigInt),
-        ])
-        .expect("a shape");
+        let placed = place(&[field("small", HirType::Bool), field("big", HirType::BigInt)])
+            .expect("a shape");
         assert_eq!(placed.offsets, vec![24, 32]);
         assert_eq!(placed.align, 16);
         assert_eq!(placed.size, 48);

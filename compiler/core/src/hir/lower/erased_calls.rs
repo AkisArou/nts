@@ -528,7 +528,10 @@ pub(super) fn produced(
     // null its caller passed -- where node throws a TypeError reading `x` of
     // `null`. Asked of what the argument can produce, which for a getter read
     // is its declaration ([`FuncBuilder::read_type`]).
-    if probe.absences_of(argument).is_some_and(|absent| !absent.is_empty()) {
+    if probe
+        .absences_of(argument)
+        .is_some_and(|absent| !absent.is_empty())
+    {
         return None;
     }
     if kind == syntax::IDENTIFIER {
@@ -592,7 +595,8 @@ pub(super) fn produced(
 fn recoverable(probe: &FuncBuilder<'_>, ty: &HirType) -> bool {
     match ty {
         HirType::Managed(super::ManagedType::Object(class)) => {
-            !super::super::is_closure_type(*class) && super::assertions::is_nominal_class(probe, *class)
+            !super::super::is_closure_type(*class)
+                && super::assertions::is_nominal_class(probe, *class)
         }
         HirType::Managed(super::ManagedType::Array(element)) => recoverable(probe, element),
         _ => primitive(ty),
@@ -601,7 +605,10 @@ fn recoverable(probe: &FuncBuilder<'_>, ty: &HirType) -> bool {
 
 /// Recovered representations whose methods lower inline as primitive methods.
 fn primitive(ty: &HirType) -> bool {
-    matches!(ty, HirType::Bool | HirType::Managed(super::ManagedType::String)) || *ty == HirType::NUMBER
+    matches!(
+        ty,
+        HirType::Bool | HirType::Managed(super::ManagedType::String)
+    ) || *ty == HirType::NUMBER
 }
 
 /// A primitive receiver changed by this copy is lowered inline by the

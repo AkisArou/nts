@@ -12,22 +12,56 @@ use super::map::{Binding, TypeDecl};
 
 /// Every name of `c:types` a binding may use.
 const BRANDS: &[&str] = &[
-    "ByValue", "CArray", "CEnum", "Class", "ConstPtr", "Erased", "Opaque", "Ptr", "Struct", "Typedef", "Union", "Utf16String",
-    "c_char", "c_double", "c_float", "c_int", "c_int16", "c_int64", "c_int8", "c_long", "c_long32", "c_uint",
-    "c_uint16", "c_uint64", "c_uint8", "c_ulong", "c_ulong32",
+    "ByValue",
+    "CArray",
+    "CEnum",
+    "Class",
+    "ConstPtr",
+    "Erased",
+    "Opaque",
+    "Ptr",
+    "Struct",
+    "Typedef",
+    "Union",
+    "Utf16String",
+    "c_char",
+    "c_double",
+    "c_float",
+    "c_int",
+    "c_int16",
+    "c_int64",
+    "c_int8",
+    "c_long",
+    "c_long32",
+    "c_uint",
+    "c_uint16",
+    "c_uint64",
+    "c_uint8",
+    "c_ulong",
+    "c_ulong32",
 ];
 
 /// The identifiers `text` uses, which decides what it imports.
 fn identifiers(text: &str) -> BTreeSet<&str> {
-    text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|w| !w.is_empty()).collect()
+    text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .filter(|w| !w.is_empty())
+        .collect()
 }
 
 fn imports(body: &str, own: &str, owners: &BTreeMap<String, String>) -> String {
     let used = identifiers(body);
     let mut out = String::new();
-    let brands: Vec<&str> = BRANDS.iter().copied().filter(|brand| used.contains(brand)).collect();
+    let brands: Vec<&str> = BRANDS
+        .iter()
+        .copied()
+        .filter(|brand| used.contains(brand))
+        .collect();
     if !brands.is_empty() {
-        let _ = writeln!(out, "  import type {{ {} }} from \"c:types\";", brands.join(", "));
+        let _ = writeln!(
+            out,
+            "  import type {{ {} }} from \"c:types\";",
+            brands.join(", ")
+        );
     }
     let mut foreign: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for name in &used {
@@ -38,7 +72,11 @@ fn imports(body: &str, own: &str, owners: &BTreeMap<String, String>) -> String {
         }
     }
     for (namespace, names) in foreign {
-        let _ = writeln!(out, "  import type {{ {} }} from \"c:{namespace}\";", names.join(", "));
+        let _ = writeln!(
+            out,
+            "  import type {{ {} }} from \"c:{namespace}\";",
+            names.join(", ")
+        );
     }
     out
 }
@@ -58,7 +96,12 @@ pub(crate) struct Rendered {
 }
 
 /// [`render`]ed into `out`: `<namespace>.d.ts` and `.refused.txt`.
-pub(crate) fn write(binding: &Binding, out: &Utf8Path, command: &str, owners: &BTreeMap<String, String>) -> Result<()> {
+pub(crate) fn write(
+    binding: &Binding,
+    out: &Utf8Path,
+    command: &str,
+    owners: &BTreeMap<String, String>,
+) -> Result<()> {
     let rendered = render(binding, command, owners);
     let stem = &rendered.namespace;
     write_file(&out.join(format!("{stem}.d.ts")), &rendered.declarations)?;
@@ -72,7 +115,11 @@ pub(crate) fn write(binding: &Binding, out: &Utf8Path, command: &str, owners: &B
 }
 
 /// One binding's module, as text.
-pub(crate) fn render(binding: &Binding, command: &str, owners: &BTreeMap<String, String>) -> Rendered {
+pub(crate) fn render(
+    binding: &Binding,
+    command: &str,
+    owners: &BTreeMap<String, String>,
+) -> Rendered {
     let stem = &binding.namespace;
     let mut body = String::new();
     for decl in &binding.types {
@@ -97,7 +144,11 @@ pub(crate) fn render(binding: &Binding, command: &str, owners: &BTreeMap<String,
     // read of it is the number, folded where it is read. So a module needs no
     // values file, and one from the platform store needs no path.
     for constant in &binding.constants {
-        let _ = writeln!(body, "  /** @ntsConstant {} */\n  export const {}: {};", constant.value, constant.name, constant.ts);
+        let _ = writeln!(
+            body,
+            "  /** @ntsConstant {} */\n  export const {}: {};",
+            constant.value, constant.name, constant.ts
+        );
     }
     if !binding.constants.is_empty() {
         body.push('\n');
@@ -107,21 +158,43 @@ pub(crate) fn render(binding: &Binding, command: &str, owners: &BTreeMap<String,
         if let Some(page) = &function.documentation {
             let _ = writeln!(body, "   * {page}");
         }
-        let header = header_of(function.documentation.as_deref()).unwrap_or_else(|| "windows.h".into());
-        let _ = writeln!(body, "   * Imported from `{}`; declared in `<{header}>`.", function.library);
+        let header =
+            header_of(function.documentation.as_deref()).unwrap_or_else(|| "windows.h".into());
+        let _ = writeln!(
+            body,
+            "   * Imported from `{}`; declared in `<{header}>`.",
+            function.library
+        );
         // The import library mingw names after the DLL: `USER32.dll` is
         // `-luser32`. A program links it only if it calls this.
         let library = function.library.to_ascii_lowercase();
-        let _ = writeln!(body, "   * @ntsLibrary {}", library.strip_suffix(".dll").unwrap_or(&library));
+        let _ = writeln!(
+            body,
+            "   * @ntsLibrary {}",
+            library.strip_suffix(".dll").unwrap_or(&library)
+        );
         for parameter in &function.no_escape {
             let _ = writeln!(body, "   * @ntsNoEscape {parameter}");
         }
         body.push_str("   */\n");
-        let parameters: Vec<String> = function.parameters.iter().map(|(name, ts)| format!("{}: {ts}", safe(name))).collect();
-        let _ = writeln!(body, "  export function {}({}): {};", function.name, parameters.join(", "), function.result);
+        let parameters: Vec<String> = function
+            .parameters
+            .iter()
+            .map(|(name, ts)| format!("{}: {ts}", safe(name)))
+            .collect();
+        let _ = writeln!(
+            body,
+            "  export function {}({}): {};",
+            function.name,
+            parameters.join(", "),
+            function.result
+        );
     }
     let mut declarations = String::new();
-    let _ = writeln!(declarations, "// Generated by `{command}`. Edit the command, not this file.");
+    let _ = writeln!(
+        declarations,
+        "// Generated by `{command}`. Edit the command, not this file."
+    );
     declarations.push_str(
         "//\n// Each declaration's meaning is from Windows metadata and its C type from the\n\
          // Windows headers, and every one compiled against those headers before it\n\
@@ -136,13 +209,46 @@ pub(crate) fn render(binding: &Binding, command: &str, owners: &BTreeMap<String,
     for (name, why) in &binding.refused {
         let _ = writeln!(refused, "{name}\t{why}");
     }
-    Rendered { namespace: stem.clone(), declarations, refused }
+    Rendered {
+        namespace: stem.clone(),
+        declarations,
+        refused,
+    }
 }
 
 /// A parameter name TypeScript reserves, renamed.
 pub(crate) fn safe(name: &str) -> String {
-    const RESERVED: &[&str] = &["function", "default", "in", "new", "class", "var", "this", "delete", "void", "with", "case", "enum", "export", "import", "switch", "typeof", "yield", "package", "interface", "private", "protected", "public", "static", "let"];
-    if RESERVED.contains(&name) { format!("{name}_") } else { name.to_owned() }
+    const RESERVED: &[&str] = &[
+        "function",
+        "default",
+        "in",
+        "new",
+        "class",
+        "var",
+        "this",
+        "delete",
+        "void",
+        "with",
+        "case",
+        "enum",
+        "export",
+        "import",
+        "switch",
+        "typeof",
+        "yield",
+        "package",
+        "interface",
+        "private",
+        "protected",
+        "public",
+        "static",
+        "let",
+    ];
+    if RESERVED.contains(&name) {
+        format!("{name}_")
+    } else {
+        name.to_owned()
+    }
 }
 
 fn write_file(path: &Utf8Path, text: &str) -> Result<()> {

@@ -13,7 +13,10 @@
 //! may be one where it may not call (`refuse_reaching_initializers` looks
 //! through it). Recognised by the tag's value, never by the function's name,
 //! and refused by name anywhere but such a field.
-use super::{Diagnostic, FuncBuilder, HirType, ManagedType, NodeId, OpKind, ValueId, instance_type_of, is_static_member};
+use super::{
+    Diagnostic, FuncBuilder, HirType, ManagedType, NodeId, OpKind, ValueId, instance_type_of,
+    is_static_member,
+};
 use nts_semantic_schema::syntax;
 
 /// A `GObject` intrinsic a call names.
@@ -58,7 +61,12 @@ impl FuncBuilder<'_> {
         if self.has_a_body(decl) {
             return None;
         }
-        self.node(decl).native.as_ref()?.intrinsic.as_deref().and_then(GObjectIntrinsic::named)
+        self.node(decl)
+            .native
+            .as_ref()?
+            .intrinsic
+            .as_deref()
+            .and_then(GObjectIntrinsic::named)
     }
 
     /// A `property(...)` or `signal(...)`, as the initialiser of the field it
@@ -78,7 +86,9 @@ impl FuncBuilder<'_> {
                 ),
             ));
         }
-        let want = self.type_of(id).ok_or_else(|| self.unrepresentable(id, "a `GObject` declaration"))?;
+        let want = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `GObject` declaration"))?;
         match (intrinsic, arguments) {
             // The field holds its default, and is a property by its type.
             (GObjectIntrinsic::Property, [default]) => {
@@ -89,12 +99,14 @@ impl FuncBuilder<'_> {
             // give: its type's zero until it does. And a signal's field, which
             // holds nothing at all.
             (GObjectIntrinsic::Property | GObjectIntrinsic::Signal, []) => self.zero_of(id, want),
-            (GObjectIntrinsic::Property, _) => {
-                Err(self.unsupported(id, "a `property` given options, which this compiler does not read yet"))
-            }
-            (GObjectIntrinsic::Signal, _) => {
-                Err(self.unsupported(id, "a `signal` given options, which this compiler does not read yet"))
-            }
+            (GObjectIntrinsic::Property, _) => Err(self.unsupported(
+                id,
+                "a `property` given options, which this compiler does not read yet",
+            )),
+            (GObjectIntrinsic::Signal, _) => Err(self.unsupported(
+                id,
+                "a `signal` given options, which this compiler does not read yet",
+            )),
         }
     }
 
@@ -106,7 +118,11 @@ impl FuncBuilder<'_> {
             HirType::Bool => OpKind::ConstBool(false),
             HirType::Managed(ManagedType::String) => OpKind::ConstString(String::new()),
             HirType::NativePointer(_) | HirType::Managed(_) => OpKind::ConstNull,
-            _ => return Err(self.unsupported(id, "a `GObject` declaration of a type with no zero here")),
+            _ => {
+                return Err(
+                    self.unsupported(id, "a `GObject` declaration of a type with no zero here")
+                );
+            }
         };
         let origin = self.origin(id);
         Ok(self.push(zero, want, origin))
@@ -115,11 +131,17 @@ impl FuncBuilder<'_> {
     /// Whether `call` initialises an instance field of a class whose instances
     /// are `GObject` handles: where a `GObject` intrinsic declares something.
     fn initialises_a_gobject_field(&self, call: NodeId) -> bool {
-        let Some(field) = self.node(call).parent else { return false };
-        if self.kind_of(field) != Some(syntax::PROPERTY_DECLARATION) || is_static_member(self.snapshot, field) {
+        let Some(field) = self.node(call).parent else {
+            return false;
+        };
+        if self.kind_of(field) != Some(syntax::PROPERTY_DECLARATION)
+            || is_static_member(self.snapshot, field)
+        {
             return false;
         }
-        let Some(class) = self.enclosing_class(field) else { return false };
+        let Some(class) = self.enclosing_class(field) else {
+            return false;
+        };
         matches!(
             instance_type_of(self.snapshot, class).and_then(|ty| crate::hir::native::pointer(self.snapshot, ty)),
             Some(crate::hir::native::Pointee::Opaque(handle)) if handle.family == crate::hir::native::Family::GObject

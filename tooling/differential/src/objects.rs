@@ -70,7 +70,12 @@ static PARTIALS: AtomicU64 = AtomicU64::new(0);
 /// # Errors
 ///
 /// If clang cannot run, or rejects the source; the message is clang's.
-pub(crate) fn object(source: &Utf8Path, flags: &[&str], includes: &[&Utf8Path], scratch: &Utf8Path) -> Result<Utf8PathBuf> {
+pub(crate) fn object(
+    source: &Utf8Path,
+    flags: &[&str],
+    includes: &[&Utf8Path],
+    scratch: &Utf8Path,
+) -> Result<Utf8PathBuf> {
     let Some(cache) = cache_dir() else {
         let object = scratch.join(format!("{}.o", source.file_name().unwrap_or("source")));
         compile(source, flags, includes, &object)?;
@@ -93,12 +98,18 @@ pub(crate) fn object(source: &Utf8Path, flags: &[&str], includes: &[&Utf8Path], 
         PARTIALS.fetch_add(1, Ordering::Relaxed)
     ));
     compile(source, flags, includes, &partial)?;
-    std::fs::rename(&partial, &object).with_context(|| format!("renaming {partial} to {object}"))?;
+    std::fs::rename(&partial, &object)
+        .with_context(|| format!("renaming {partial} to {object}"))?;
     prune(&cache);
     Ok(object)
 }
 
-fn compile(source: &Utf8Path, flags: &[&str], includes: &[&Utf8Path], object: &Utf8Path) -> Result<()> {
+fn compile(
+    source: &Utf8Path,
+    flags: &[&str],
+    includes: &[&Utf8Path],
+    object: &Utf8Path,
+) -> Result<()> {
     let mut command = std::process::Command::new("clang");
     command.args(flags);
     for dir in includes {
@@ -129,7 +140,11 @@ fn cache_dir() -> Option<Utf8PathBuf> {
         .ok()
         .filter(|dir| !dir.is_empty())
         .map(Utf8PathBuf::from)
-        .or_else(|| std::env::var("HOME").ok().map(|home| Utf8PathBuf::from(home).join(".cache")))?;
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|home| Utf8PathBuf::from(home).join(".cache"))
+        })?;
     Some(base.join("nts/differential-objects"))
 }
 
@@ -138,8 +153,13 @@ fn compiler_identity() -> Result<&'static str> {
     static IDENTITY: OnceLock<Option<String>> = OnceLock::new();
     IDENTITY
         .get_or_init(|| {
-            let run = std::process::Command::new("clang").arg("--version").output().ok()?;
-            run.status.success().then(|| String::from_utf8_lossy(&run.stdout).into_owned())
+            let run = std::process::Command::new("clang")
+                .arg("--version")
+                .output()
+                .ok()?;
+            run.status
+                .success()
+                .then(|| String::from_utf8_lossy(&run.stdout).into_owned())
         })
         .as_deref()
         .context("running `clang --version`")
@@ -161,7 +181,10 @@ fn key(source: &Utf8Path, flags: &[&str], includes: &[&Utf8Path]) -> Result<u128
     // Named by its file name, never its path: every check builds in a
     // directory of its own, and a key holding that path never hits. The
     // first version did, and a full run left 1,392 objects and no speedup.
-    let mut pending = vec![(source.file_name().unwrap_or_default().to_owned(), Some(source.to_owned()))];
+    let mut pending = vec![(
+        source.file_name().unwrap_or_default().to_owned(),
+        Some(source.to_owned()),
+    )];
     // Depth-first in include order, so the stream is deterministic.
     while let Some((name, path)) = pending.pop() {
         field(name.as_bytes());
@@ -192,7 +215,11 @@ fn key(source: &Utf8Path, flags: &[&str], includes: &[&Utf8Path]) -> Result<u128
 fn quoted_includes(text: &str) -> Vec<String> {
     text.lines()
         .filter_map(|line| {
-            let rest = line.trim_start().strip_prefix('#')?.trim_start().strip_prefix("include")?;
+            let rest = line
+                .trim_start()
+                .strip_prefix('#')?
+                .trim_start()
+                .strip_prefix("include")?;
             let rest = rest.trim_start().strip_prefix('"')?;
             Some(rest[..rest.find('"')?].to_owned())
         })
@@ -202,7 +229,9 @@ fn quoted_includes(text: &str) -> Vec<String> {
 /// When the cache holds more than [`KEEP`] objects, remove those unused for a
 /// week, and any partial object a killed run left behind for as long.
 fn prune(cache: &Utf8Path) {
-    let Ok(entries) = std::fs::read_dir(cache) else { return };
+    let Ok(entries) = std::fs::read_dir(cache) else {
+        return;
+    };
     let entries: Vec<_> = entries.filter_map(Result::ok).collect();
     if entries.len() <= KEEP {
         return;
@@ -237,19 +266,30 @@ mod tests {
     #[test]
     fn the_same_files_in_another_directory_have_the_same_key() {
         let scratch = |name: &str| {
-            let dir = std::env::temp_dir().join(format!("nts-objects-same-{name}-{}", std::process::id()));
+            let dir = std::env::temp_dir()
+                .join(format!("nts-objects-same-{name}-{}", std::process::id()));
             let dir = Utf8PathBuf::from_path_buf(dir).expect("utf-8 temp dir");
             std::fs::create_dir_all(&dir).expect("temp dir");
             std::fs::write(dir.join("r.h"), "#define R 1\n").expect("temp file");
-            std::fs::write(dir.join("r.c"), "#include \"r.h\"\nint r(void) { return R; }\n").expect("temp file");
+            std::fs::write(
+                dir.join("r.c"),
+                "#include \"r.h\"\nint r(void) { return R; }\n",
+            )
+            .expect("temp file");
             dir
         };
         let (one, two) = (scratch("one"), scratch("two"));
-        let keys = (key(&one.join("r.c"), &["-O1"], &[&one]), key(&two.join("r.c"), &["-O1"], &[&two]));
+        let keys = (
+            key(&one.join("r.c"), &["-O1"], &[&one]),
+            key(&two.join("r.c"), &["-O1"], &[&two]),
+        );
         std::fs::remove_dir_all(&one).expect("temp dir");
         std::fs::remove_dir_all(&two).expect("temp dir");
         if let (Ok(first), Ok(second)) = keys {
-            assert_eq!(first, second, "a check in another directory would never hit");
+            assert_eq!(
+                first, second,
+                "a check in another directory would never hit"
+            );
         }
     }
 
@@ -260,7 +300,11 @@ mod tests {
         std::fs::create_dir_all(dir.join("sub")).expect("temp dir");
         let include = dir.join("inc");
         std::fs::create_dir_all(&include).expect("temp dir");
-        std::fs::write(dir.join("main.c"), "#include \"sub/a.h\"\nint main(void) { return B; }\n").expect("temp file");
+        std::fs::write(
+            dir.join("main.c"),
+            "#include \"sub/a.h\"\nint main(void) { return B; }\n",
+        )
+        .expect("temp file");
         std::fs::write(dir.join("sub/a.h"), "#include \"b.h\"\n").expect("temp file");
         std::fs::write(include.join("b.h"), "#define B 1\n").expect("temp file");
         let source = dir.join("main.c");
@@ -271,18 +315,40 @@ mod tests {
             std::fs::remove_dir_all(&dir).expect("temp file");
             return;
         };
-        assert_eq!(key(&source, &flags, &[&include]).expect("key"), first, "the key is not deterministic");
+        assert_eq!(
+            key(&source, &flags, &[&include]).expect("key"),
+            first,
+            "the key is not deterministic"
+        );
         std::fs::write(include.join("b.h"), "#define B 2\n").expect("temp file");
         let changed = key(&source, &flags, &[&include]).expect("key");
-        assert_ne!(changed, first, "a header reached through `-I` from an included header changed and the key did not");
-        assert_ne!(key(&source, &["-O1", "-DNTS_PROVIDER_RC"], &[&include]).expect("key"), changed, "a define is not in the key");
+        assert_ne!(
+            changed, first,
+            "a header reached through `-I` from an included header changed and the key did not"
+        );
+        assert_ne!(
+            key(&source, &["-O1", "-DNTS_PROVIDER_RC"], &[&include]).expect("key"),
+            changed,
+            "a define is not in the key"
+        );
         // The runtime reaches clang as bytes a binary wrote from its own copy,
         // at the same path for every binary: the path must not be the key.
-        std::fs::write(&source, "#include \"sub/a.h\"\nint main(void) { return B + 1; }\n").expect("temp file");
+        std::fs::write(
+            &source,
+            "#include \"sub/a.h\"\nint main(void) { return B + 1; }\n",
+        )
+        .expect("temp file");
         let rewritten = key(&source, &flags, &[&include]).expect("key");
-        assert_ne!(rewritten, changed, "the same path with different bytes kept its key");
+        assert_ne!(
+            rewritten, changed,
+            "the same path with different bytes kept its key"
+        );
         std::fs::remove_file(include.join("b.h")).expect("temp file");
-        assert_ne!(key(&source, &flags, &[&include]).expect("key"), rewritten, "a header that disappeared kept its key");
+        assert_ne!(
+            key(&source, &flags, &[&include]).expect("key"),
+            rewritten,
+            "a header that disappeared kept its key"
+        );
         std::fs::remove_dir_all(&dir).expect("temp file");
     }
 }

@@ -25,10 +25,8 @@
 //!   symbol resolution had to land before this.
 
 pub mod bounds;
-pub mod builtin;
 mod boxing;
-pub mod obligations;
-pub mod written_roots;
+pub mod builtin;
 pub mod dce;
 pub mod elements;
 pub mod escape;
@@ -45,12 +43,16 @@ pub mod interprocedural;
 pub mod layout;
 pub mod liveness;
 pub mod loops;
+pub mod obligations;
 pub mod presence;
 pub mod suspend;
 pub mod tags;
 pub mod templates;
 pub mod unerase;
+pub mod written_roots;
 
+mod bridges;
+mod dispatch;
 pub mod floating;
 mod initialized;
 pub mod inline;
@@ -58,8 +60,6 @@ pub mod lower;
 pub mod monomorphize;
 pub mod narrow;
 pub mod native;
-mod dispatch;
-mod bridges;
 mod native_callback;
 mod native_storage;
 /// Who owns what, and for how long: one answer per value, which the counting
@@ -494,7 +494,9 @@ impl HirType {
     /// as "a module-scope variable holding a reference", which a bigint is not.
     #[must_use]
     pub const fn can_be_global(&self) -> bool {
-        self.is_scalar() || self.may_hold_a_reference() || matches!(self, Self::BigInt | Self::NativePointer(_))
+        self.is_scalar()
+            || self.may_hold_a_reference()
+            || matches!(self, Self::BigInt | Self::NativePointer(_))
     }
 }
 
@@ -669,7 +671,9 @@ impl Func {
             if let OpKind::Param(at) = op.kind {
                 let slot = values.get_mut(at as usize)?;
                 let value = ValueId(u32::try_from(index).ok()?);
-                if slot.replace(value).is_some() { return None; }
+                if slot.replace(value).is_some() {
+                    return None;
+                }
             }
         }
         Some(values)
@@ -926,13 +930,21 @@ impl Bridging {
         if self.arrays.iter().any(|array| length(array) == at) {
             return None;
         }
-        Some(at - self.arrays.iter().filter(|array| length(array) < at).count())
+        Some(
+            at - self
+                .arrays
+                .iter()
+                .filter(|array| length(array) < at)
+                .count(),
+        )
     }
 
     /// The boxed record C's argument `at` is, if it is one.
     #[must_use]
     pub fn boxed(&self, at: usize) -> Option<&BoxedParameter> {
-        self.boxed.iter().find(|parameter| parameter.at as usize == at)
+        self.boxed
+            .iter()
+            .find(|parameter| parameter.at as usize == at)
     }
 
     /// The array of objects C's argument `at` is, if it is one.
@@ -944,7 +956,9 @@ impl Bridging {
     /// The sequence C's argument `at` is, made an array, if it is one.
     #[must_use]
     pub fn sequence(&self, at: usize) -> Option<&SequenceParameter> {
-        self.sequences.iter().find(|sequence| sequence.at as usize == at)
+        self.sequences
+            .iter()
+            .find(|sequence| sequence.at as usize == at)
     }
 
     #[must_use]
@@ -959,20 +973,34 @@ pub enum OpKind {
     /// Access native storage. The pointer's pointee is the memory type;
     /// conversions to/from source values are separate HIR operations.
     /// Indices count elements and must be signed native-width integers.
-    NativeLoad { pointer: ValueId, index: ValueId },
-    NativeStore { pointer: ValueId, index: ValueId, value: ValueId },
+    NativeLoad {
+        pointer: ValueId,
+        index: ValueId,
+    },
+    NativeStore {
+        pointer: ValueId,
+        index: ValueId,
+        value: ValueId,
+    },
     /// Fixed function-local zeroed storage. Count is positive and layout checked.
-    NativeLocal { count: u32 },
+    NativeLocal {
+        count: u32,
+    },
     /// An Objective-C class object, by name: what a constant typed
     /// `ObjcMeta<Tag>` in an `objc:` module is. Each backend reads it through
     /// the same cached, required lookup a class send uses. `frameworks` are
     /// the declaring module's, so a program that only names a class still
     /// links what defines it.
-    ObjcClass { name: String, frameworks: Vec<String> },
+    ObjcClass {
+        name: String,
+        frameworks: Vec<String>,
+    },
     /// An Objective-C selector, by name: `selector(Notes, "add")`, Swift's
     /// `#selector(Notes.add(_:))`. Each backend reads it through the same
     /// cached lookup a send to it uses.
-    ObjcSelector { name: String },
+    ObjcSelector {
+        name: String,
+    },
     /// `sizeof<T>()`: the byte size of native storage, as a `number`.
     ///
     /// **An op and not a constant, because the size is the target's.** A
@@ -983,11 +1011,21 @@ pub enum OpKind {
     /// its own target and emits a literal, exactly as it already places fields.
     NativeSizeOf(native::Pointee),
     /// Byte count is a TS number, checked before conversion/allocation. Failure is null.
-    NativeMalloc { bytes: ValueId },
-    NativeFree { pointer: ValueId },
+    NativeMalloc {
+        bytes: ValueId,
+    },
+    NativeFree {
+        pointer: ValueId,
+    },
     /// Form an address, without reading storage or changing its lifetime.
-    NativeIndexAddress { pointer: ValueId, index: ValueId },
-    NativeFieldAddress { pointer: ValueId, field: u32 },
+    NativeIndexAddress {
+        pointer: ValueId,
+        index: ValueId,
+    },
+    NativeFieldAddress {
+        pointer: ValueId,
+        field: u32,
+    },
     /// Read a bit-field member as a value.
     ///
     /// Separate from `NativeFieldAddress` + `NativeLoad` because a bit-field
@@ -1000,10 +1038,17 @@ pub enum OpKind {
     /// [`Self::NativeFieldAddress`] does, and the width and position come from
     /// the layout rather than from the op: two ops carrying the same fact is
     /// how they come to disagree.
-    NativeBitLoad { pointer: ValueId, field: u32 },
+    NativeBitLoad {
+        pointer: ValueId,
+        field: u32,
+    },
     /// Write a bit-field member. The counterpart of [`Self::NativeBitLoad`],
     /// and separate for the same reason: there is no address to store through.
-    NativeBitStore { pointer: ValueId, field: u32, value: ValueId },
+    NativeBitStore {
+        pointer: ValueId,
+        field: u32,
+        value: ValueId,
+    },
     /// `*destination = *source` -- one whole element, copied.
     ///
     /// A distinct operation and not a load followed by a store, because there
@@ -1012,7 +1057,10 @@ pub enum OpKind {
     /// its address. Both operands point at the same pointee, checked.
     ///
     /// Overlap is undefined, as it is for `memcpy`, and nothing checks it.
-    NativeCopy { destination: ValueId, source: ValueId },
+    NativeCopy {
+        destination: ValueId,
+        source: ValueId,
+    },
     /// The address of a **bridge**: a generated C function with `signature`
     /// that calls the compiled function `function`.
     ///
@@ -1050,7 +1098,13 @@ pub enum OpKind {
     /// -- the bridge boxes each, a copy by the record's `GType`, as a result
     /// is boxed -- and those it passes as an array of objects and its length
     /// (`GFile **files, gint n_files`), which it takes as one array.
-    NativeBridge { closure: ValueId, signature: std::sync::Arc<native::FnPointer>, context: bool, once: bool, bridging: Bridging },
+    NativeBridge {
+        closure: ValueId,
+        signature: std::sync::Arc<native::FnPointer>,
+        context: bool,
+        once: bool,
+        bridging: Bridging,
+    },
     /// An Objective-C block in this function's frame, which is what clang
     /// passes for `^{ ... }`: the address is the value, and it is valid until
     /// the function returns. A callee that keeps it copies it (`_Block_copy`),
@@ -1061,13 +1115,19 @@ pub enum OpKind {
     /// `signature` the block's own, which names its invoke adapter and its
     /// type encoding. The block carries both words, so the adapter is one per
     /// signature, not one per closure.
-    NativeBlock { invoke: ValueId, context: ValueId, signature: std::sync::Arc<native::FnPointer> },
+    NativeBlock {
+        invoke: ValueId,
+        context: ValueId,
+        signature: std::sync::Arc<native::FnPointer>,
+    },
     /// The address of the Windows Runtime `Invoke` adapter for `signature`:
     /// `HRESULT (*)(void *self, A...)`, one per signature, which calls the
     /// bridge a delegate object holds with the context it holds and answers
     /// `S_OK`. What `nts_com_delegate` puts in the object's table; the object
     /// is a runtime call's result, so this is a constant and nothing more.
-    DelegateInvoke { signature: std::sync::Arc<native::FnPointer> },
+    DelegateInvoke {
+        signature: std::sync::Arc<native::FnPointer>,
+    },
     /// The nth parameter of the function, materialized as a value.
     Param(u32),
     /// The nth parameter of the block that defines it.
@@ -1085,7 +1145,10 @@ pub enum OpKind {
     /// One immortal object per original source site, shared by every copy of
     /// the containing body. Backends cache by `site`, never by emitted name or
     /// equal contents: different sites must have different identities.
-    ConstTemplate { site: u32, cooked: Vec<String> },
+    ConstTemplate {
+        site: u32,
+        cooked: Vec<String>,
+    },
     /// A concrete value becomes an erased one, tagged with what it was.
     ///
     /// The tag is not stored here: it is a function of the operand's type,
@@ -2045,11 +2108,9 @@ impl Layout {
         // agree, and "two places that must agree" has cost this project a week.
         self.base == base
             && self.fields.len() == fields.len()
-            && self
-                .fields
-                .iter()
-                .zip(fields)
-                .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty && mine.written == theirs.written)
+            && self.fields.iter().zip(fields).all(|(mine, theirs)| {
+                mine.name == theirs.name && mine.ty == theirs.ty && mine.written == theirs.written
+            })
             && self.methods == methods
     }
 
@@ -2227,7 +2288,12 @@ pub const FIXED_FROM_THE_TOP: u32 = BOXED_RECORD;
 // band, and end at `FIXED_FROM_THE_TOP` -- a checked fact, so one inserted
 // between two of them without moving the rest fails to compile.
 const _: () = {
-    let fixed = [HANDLE_BOX_GOBJECT, HANDLE_BOX_OBJC, HANDLE_BOX_COM, BOXED_RECORD];
+    let fixed = [
+        HANDLE_BOX_GOBJECT,
+        HANDLE_BOX_OBJC,
+        HANDLE_BOX_COM,
+        BOXED_RECORD,
+    ];
     let mut at = 1;
     while at < fixed.len() {
         assert!(fixed[at] + 1 == fixed[at - 1]);
@@ -2254,7 +2320,10 @@ pub const SYNTHETIC_OBJC_STATES: u32 = SYNTHETIC_CELLS + (1 << 17);
 #[must_use]
 pub fn objc_state_type(index: usize) -> TypeId {
     let id = SYNTHETIC_OBJC_STATES + u32::try_from(index).unwrap_or(0);
-    debug_assert!(id < FIXED_FROM_THE_TOP, "more Objective-C classes with fields than the band holds");
+    debug_assert!(
+        id < FIXED_FROM_THE_TOP,
+        "more Objective-C classes with fields than the band holds"
+    );
     TypeId(id)
 }
 pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);
@@ -2599,15 +2668,28 @@ impl ForeignClass {
             .chain(self.state.as_deref())
             // A property's accessors, which `get_property` and `set_property`
             // call with borrowed arguments.
-            .chain(self.properties.iter().flat_map(|property| [property.getter.as_str(), property.setter.as_str()]))
+            .chain(
+                self.properties
+                    .iter()
+                    .flat_map(|property| [property.getter.as_str(), property.setter.as_str()]),
+            )
             // A template's handlers, which its signals call.
-            .chain(self.template.iter().flat_map(|template| template.callbacks.iter().map(|callback| callback.function.as_str())))
+            .chain(self.template.iter().flat_map(|template| {
+                template
+                    .callbacks
+                    .iter()
+                    .map(|callback| callback.function.as_str())
+            }))
             // The reader of a template known only at run time, which
             // `class_init` calls.
-            .chain(self.template.iter().filter_map(|template| match &template.text {
-                TemplateText::Read(reader) => Some(reader.as_str()),
-                TemplateText::Literal(_) => None,
-            }))
+            .chain(
+                self.template
+                    .iter()
+                    .filter_map(|template| match &template.text {
+                        TemplateText::Read(reader) => Some(reader.as_str()),
+                        TemplateText::Literal(_) => None,
+                    }),
+            )
     }
 }
 
@@ -3095,9 +3177,9 @@ impl Program {
     pub fn global_is_settled(&self, global: u32) -> bool {
         !self.funcs.iter().any(|func| {
             func.name != lower::MODULE_INIT
-                && func.values.iter().any(|op| {
-                    matches!(op.kind, OpKind::GlobalSet { global: at, .. } if at == global)
-                })
+                && func.values.iter().any(
+                    |op| matches!(op.kind, OpKind::GlobalSet { global: at, .. } if at == global),
+                )
         })
     }
 
@@ -3123,12 +3205,15 @@ impl Program {
     #[must_use]
     pub fn global_is_initialized(&self, global: u32) -> bool {
         self.funcs.iter().any(|func| {
-            func.blocks.iter().flat_map(|block| block.ops.iter()).any(|value| {
-                matches!(
-                    func.values[value.0 as usize].kind,
-                    OpKind::GlobalSet { global: at, .. } if at == global
-                )
-            })
+            func.blocks
+                .iter()
+                .flat_map(|block| block.ops.iter())
+                .any(|value| {
+                    matches!(
+                        func.values[value.0 as usize].kind,
+                        OpKind::GlobalSet { global: at, .. } if at == global
+                    )
+                })
         })
     }
 
@@ -3393,7 +3478,11 @@ impl Program {
             // costs is candidacy: measured on gtk-gir, 10 candidates became 19,
             // and a loop storing 1000 label-holding rows 20M times buffered
             // 1000 more -- once per object, as buffering is.
-            HirType::NativePointer(_) if ty.counted_family().is_some_and(native::Family::holds_closures) => {
+            HirType::NativePointer(_)
+                if ty
+                    .counted_family()
+                    .is_some_and(native::Family::holds_closures) =>
+            {
                 into.extend(0..self.layouts.len());
             }
             // Nothing that can lead to an object. Spelled out rather than `_`,
@@ -3476,7 +3565,9 @@ impl Program {
         let signatures: Vec<usize> = (0..self.layouts.len())
             .filter(|&at| {
                 self.layouts.iter().any(|layout| {
-                    layout.base.is_some_and(|base| self.layouts[at].types.contains(&base))
+                    layout
+                        .base
+                        .is_some_and(|base| self.layouts[at].types.contains(&base))
                         && layout.types.iter().copied().any(is_closure_type)
                 })
             })
@@ -3488,7 +3579,11 @@ impl Program {
             for (source, held) in self.layouts.iter().enumerate() {
                 if source != target
                     && wanted.fields.len() <= held.fields.len()
-                    && wanted.fields.iter().zip(&held.fields).all(|(want, have)| lower::same_slot(want, have))
+                    && wanted
+                        .fields
+                        .iter()
+                        .zip(&held.fields)
+                        .all(|(want, have)| lower::same_slot(want, have))
                 {
                     pairs.push((target, source));
                 }
@@ -3502,7 +3597,10 @@ impl Program {
     fn cast_pairs(&self, from: &HirType, to: &HirType, into: &mut Vec<(usize, usize)>) {
         let position = |id: &TypeId| self.layouts.iter().position(|l| l.types.contains(id));
         match (from, to) {
-            (HirType::Managed(ManagedType::Object(source)), HirType::Managed(ManagedType::Object(target))) => {
+            (
+                HirType::Managed(ManagedType::Object(source)),
+                HirType::Managed(ManagedType::Object(target)),
+            ) => {
                 // A target with no layout already reaches everything.
                 let Some(target) = position(target) else {
                     return;
@@ -3528,8 +3626,12 @@ impl Program {
                 ),
             ) => self.cast_pairs(source, target, into),
             (
-                HirType::Managed(ManagedType::Map(source_key, source) | ManagedType::Table(source_key, source)),
-                HirType::Managed(ManagedType::Map(target_key, target) | ManagedType::Table(target_key, target)),
+                HirType::Managed(
+                    ManagedType::Map(source_key, source) | ManagedType::Table(source_key, source),
+                ),
+                HirType::Managed(
+                    ManagedType::Map(target_key, target) | ManagedType::Table(target_key, target),
+                ),
             ) => {
                 self.cast_pairs(source_key, target_key, into);
                 self.cast_pairs(source, target, into);
@@ -4077,7 +4179,12 @@ pub(super) fn call_directly(
     uniform: bool,
     receiver: Option<Op>,
 ) -> bool {
-    let Written { name, arity, returns, result_absent } = written;
+    let Written {
+        name,
+        arity,
+        returns,
+        result_absent,
+    } = written;
     let id = |at: usize| ValueId(u32::try_from(at).unwrap_or(u32::MAX));
     let OpKind::Call { args, .. } = &func.values[index].kind else {
         return false;
@@ -4172,7 +4279,10 @@ pub(super) fn call_directly(
     // call into that slot would hand a `Float` to a consumer reading an
     // `NtsValue`. So the slot becomes the erasure and the call is appended behind
     // it: the same three faces the entry itself has, at the other end of the wire.
-    if reads_back.is_none() && func.values[target].ty == HirType::Erased && *returns != HirType::Erased {
+    if reads_back.is_none()
+        && func.values[target].ty == HirType::Erased
+        && *returns != HirType::Erased
+    {
         let moved = id(func.values.len());
         let mut op = func.values[target].clone();
         op.kind = call;
@@ -4241,7 +4351,12 @@ pub(super) fn erased_entry_absent(program: &Program, class: TypeId) -> Absent {
 pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item = ValueId> {
     if !matches!(
         func.values.get(value.0 as usize).map(|op| &op.kind),
-        Some(OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::Convert(_) | OpKind::BlockParam(_))
+        Some(
+            OpKind::Erase { .. }
+                | OpKind::Unerase { .. }
+                | OpKind::Convert(_)
+                | OpKind::BlockParam(_)
+        )
     ) {
         return std::iter::once(value).chain(Vec::new());
     }
@@ -4481,8 +4596,7 @@ pub fn unaccounted(
         // so reporting it here contradicted a decision the lowering makes
         // deliberately, and did it for a third of everything this reported.
         let id = nts_semantic_schema::NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        if generics::declared_type_parameters(snapshot, id) > 0
-            && !generic.copies.contains_key(&id)
+        if generics::declared_type_parameters(snapshot, id) > 0 && !generic.copies.contains_key(&id)
         {
             continue;
         }
@@ -4591,15 +4705,23 @@ impl Unprepared {
             Self::Rejected(errors) => errors
                 .iter()
                 .flat_map(|error| {
-                    std::iter::once(nts_diagnostics::diagnostic_line(sources, error)).chain(error.labels.iter().map(|label| {
-                        format!("  {}: {}", nts_diagnostics::where_it_is(sources, &label.location), label.message)
-                    }))
+                    std::iter::once(nts_diagnostics::diagnostic_line(sources, error)).chain(
+                        error.labels.iter().map(|label| {
+                            format!(
+                                "  {}: {}",
+                                nts_diagnostics::where_it_is(sources, &label.location),
+                                label.message
+                            )
+                        }),
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            Self::Invalid(problems) => {
-                problems.iter().map(|problem| format!("invalid HIR: {problem:?}")).collect::<Vec<_>>().join("\n")
-            }
+            Self::Invalid(problems) => problems
+                .iter()
+                .map(|problem| format!("invalid HIR: {problem:?}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
         }
     }
 }
@@ -4683,9 +4805,8 @@ impl Default for Options<'_> {
             // no worse off than before this existed.
             entry_files: &[],
             foreign: {
-                static EMPTY: std::sync::OnceLock<
-                    runtime::ForeignTable,
-                > = std::sync::OnceLock::new();
+                static EMPTY: std::sync::OnceLock<runtime::ForeignTable> =
+                    std::sync::OnceLock::new();
                 EMPTY.get_or_init(rustc_hash::FxHashMap::default)
             },
             // The host, until a build names its targets.
@@ -4696,8 +4817,11 @@ impl Default for Options<'_> {
 
 /// The C ABI of the machine the compiler runs on: what a build targets unless
 /// it names its targets.
-pub const HOST: &[native::NativeAbi] =
-    if cfg!(windows) { &[native::NativeAbi::Win64] } else { &[native::NativeAbi::SysV] };
+pub const HOST: &[native::NativeAbi] = if cfg!(windows) {
+    &[native::NativeAbi::Win64]
+} else {
+    &[native::NativeAbi::SysV]
+};
 
 /// As [`prepare`], with specialization optional.
 ///
@@ -4894,13 +5018,19 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
         // Over the ops the blocks still hold, as `drop_callers_of_refused`
         // scans: an excised read stays in `func.values` and is in no block, so
         // it cannot run.
-        let read = func.blocks.iter().flat_map(|block| block.ops.iter()).find_map(|value| {
-            let op = &func.values[value.0 as usize];
-            match op.kind {
-                OpKind::GlobalGet(at) if unwritten.contains(&at) => Some((at, op.origin.clone())),
-                _ => None,
-            }
-        });
+        let read = func
+            .blocks
+            .iter()
+            .flat_map(|block| block.ops.iter())
+            .find_map(|value| {
+                let op = &func.values[value.0 as usize];
+                match op.kind {
+                    OpKind::GlobalGet(at) if unwritten.contains(&at) => {
+                        Some((at, op.origin.clone()))
+                    }
+                    _ => None,
+                }
+            });
         if let Some((at, origin)) = read {
             refused.push((func.name.clone(), at, origin));
         }
@@ -4932,7 +5062,10 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
                 global.name
             )
         } else {
-            format!("it reads `{}`, whose initializer was not compiled", global.name)
+            format!(
+                "it reads `{}`, whose initializer was not compiled",
+                global.name
+            )
         };
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1003",
@@ -4983,14 +5116,11 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
 /// prefix.
 fn put_bases_first(program: &mut Program) {
     let moved = reorder_to_base_first(program);
-    if moved
-        .iter()
-        .all(|map| {
-            map.iter()
-                .enumerate()
-                .all(|(at, to)| u32::try_from(at).unwrap_or(u32::MAX) == *to)
-        })
-    {
+    if moved.iter().all(|map| {
+        map.iter()
+            .enumerate()
+            .all(|(at, to)| u32::try_from(at).unwrap_or(u32::MAX) == *to)
+    }) {
         return;
     }
     remap_field_accesses(program, &moved);
@@ -5160,7 +5290,6 @@ enum Moved {
 /// reason, and it is where a future change that makes reorders real will be
 /// caught -- rather than in a program, silently, by an index still in range.
 fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
-
     // **An op keyed on its operand's type, and an op keyed on its arms.** A
     // `FieldGet` names the type it reads through; a shared or open read's operand
     // is *erased* and names nothing, so its layouts come from the arms instead.
@@ -5183,14 +5312,15 @@ fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
                     else {
                         continue;
                     };
-                    let Some(to) = where_of(ty).and_then(|at| moved[at].get(*field as usize).copied())
+                    let Some(to) =
+                        where_of(ty).and_then(|at| moved[at].get(*field as usize).copied())
                     else {
                         continue;
                     };
                     if to != *field {
                         edits.push((at, index, Moved::One(to)));
                     }
-                },
+                }
                 // Every arm agrees about this index by the op's precondition, so
                 // they must still agree *after* the reorder -- and a reorder is
                 // per layout, so it can move one arm and not another and quietly
@@ -5208,7 +5338,8 @@ fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
                     let mut agreed = None;
                     let mut all = true;
                     for arm in arms {
-                        match where_of(*arm).and_then(|at| moved[at].get(*field as usize).copied()) {
+                        match where_of(*arm).and_then(|at| moved[at].get(*field as usize).copied())
+                        {
                             Some(to) if agreed.is_none_or(|seen| seen == to) => agreed = Some(to),
                             _ => all = false,
                         }
@@ -5216,10 +5347,10 @@ fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
                     match agreed {
                         Some(to) if all && to != *field => {
                             edits.push((at, index, Moved::One(to)));
-                        },
-                        _ => {},
+                        }
+                        _ => {}
                     }
-                },
+                }
                 // Per arm, because the arms are *allowed* to disagree here --
                 // that is the op. Every arm must still resolve, or the rewrite
                 // would leave some arms moved and some not, which is worse than
@@ -5227,21 +5358,19 @@ fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
                 OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } => {
                     let mut each = Vec::with_capacity(arms.len());
                     for arm in arms {
-                        let Some(to) =
-                            where_of(arm.ty).and_then(|at| moved[at].get(arm.field as usize).copied())
+                        let Some(to) = where_of(arm.ty)
+                            .and_then(|at| moved[at].get(arm.field as usize).copied())
                         else {
                             each.clear();
                             break;
                         };
                         each.push(to);
                     }
-                    if !each.is_empty()
-                        && each.iter().zip(arms).any(|(to, arm)| *to != arm.field)
-                    {
+                    if !each.is_empty() && each.iter().zip(arms).any(|(to, arm)| *to != arm.field) {
                         edits.push((at, index, Moved::Each(each)));
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
     }
@@ -5260,8 +5389,8 @@ fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
                 for (arm, to) in arms.iter_mut().zip(each) {
                     arm.field = to;
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 }
@@ -5331,15 +5460,16 @@ fn relate_tokens_to_the_slot_they_reach(program: &mut Program) {
 
     // Every declared slot a token value reaches, by the token's layout.
     let mut reaches: rustc_hash::FxHashMap<usize, Vec<TypeId>> = rustc_hash::FxHashMap::default();
-    let note = |token: usize, declared: &HirType, into: &mut rustc_hash::FxHashMap<usize, Vec<TypeId>>| {
-        let HirType::Managed(ManagedType::Object(id)) = declared else {
-            return;
+    let note =
+        |token: usize, declared: &HirType, into: &mut rustc_hash::FxHashMap<usize, Vec<TypeId>>| {
+            let HirType::Managed(ManagedType::Object(id)) = declared else {
+                return;
+            };
+            let seen = into.entry(token).or_default();
+            if !seen.contains(id) {
+                seen.push(*id);
+            }
         };
-        let seen = into.entry(token).or_default();
-        if !seen.contains(id) {
-            seen.push(*id);
-        }
-    };
     for func in &program.funcs {
         for op in &func.values {
             match &op.kind {
@@ -5348,8 +5478,8 @@ fn relate_tokens_to_the_slot_they_reach(program: &mut Program) {
                     field,
                     value,
                 } => {
-                    let Some(token) = layout_of(&func.values[value.0 as usize].ty)
-                        .filter(|at| is_token[*at])
+                    let Some(token) =
+                        layout_of(&func.values[value.0 as usize].ty).filter(|at| is_token[*at])
                     else {
                         continue;
                     };
@@ -5370,8 +5500,8 @@ fn relate_tokens_to_the_slot_they_reach(program: &mut Program) {
                         continue;
                     };
                     for (at, arg) in args.iter().enumerate() {
-                        let Some(token) = layout_of(&func.values[arg.0 as usize].ty)
-                            .filter(|at| is_token[*at])
+                        let Some(token) =
+                            layout_of(&func.values[arg.0 as usize].ty).filter(|at| is_token[*at])
                         else {
                             continue;
                         };
@@ -5394,7 +5524,9 @@ fn relate_tokens_to_the_slot_they_reach(program: &mut Program) {
             // Exactly one, and not the token's own layout -- a token stored
             // into a slot declared as itself needs no relation, and giving it
             // one would be a layout that is its own base.
-            let [only] = slots.as_slice() else { return None };
+            let [only] = slots.as_slice() else {
+                return None;
+            };
             let names_itself =
                 layout_of(&HirType::Managed(ManagedType::Object(*only))) == Some(token);
             (!names_itself).then_some((token, *only))
@@ -5415,11 +5547,22 @@ fn refuse_host_handles(lowered: &mut lower::Lowered) {
     const WHY: &str = "a handle its host keeps alive on the stack (`HostClass`) needs the reference-counting provider (`--rc`): a never-free program roots nothing it keeps";
     let mut refused = rustc_hash::FxHashSet::default();
     for func in &lowered.program.funcs {
-        let Some(op) = func.values.iter().find(|op| op.ty.counted_family().is_some_and(native::Family::stack_rooted)) else {
+        let Some(op) = func.values.iter().find(|op| {
+            op.ty
+                .counted_family()
+                .is_some_and(native::Family::stack_rooted)
+        }) else {
             continue;
         };
-        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error("NTS2006", WHY, op.origin.location));
-        lowered.program.uncompiled.push((func.name.clone(), WHY.to_owned()));
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            "NTS2006",
+            WHY,
+            op.origin.location,
+        ));
+        lowered
+            .program
+            .uncompiled
+            .push((func.name.clone(), WHY.to_owned()));
         refused.insert(func.name.clone());
     }
     lowered.program.funcs.retain(|f| !refused.contains(&f.name));
@@ -5475,7 +5618,9 @@ fn check_host_pairs(lowered: &mut lower::Lowered) {
     let mut refused = Vec::new();
     for func in &lowered.program.funcs {
         for op in &func.values {
-            let Some(pair) = crossing(func, op) else { continue };
+            let Some(pair) = crossing(func, op) else {
+                continue;
+            };
             let first = *family.get_or_insert(pair);
             if pair != first {
                 refused.push((func.name.clone(), pair, first, op.origin.location));
@@ -5490,12 +5635,19 @@ fn check_host_pairs(lowered: &mut lower::Lowered) {
              host handles are counted by `{first_retain}`/`{first_release}`: one tag \
              (`NTS_TAG_HANDLE_HOST`) carries one pair"
         );
-        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error("NTS2006", why.clone(), at));
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            "NTS2006",
+            why.clone(),
+            at,
+        ));
         lowered.program.uncompiled.push((name.clone(), why));
         names.insert(name);
     }
     if !names.is_empty() {
-        lowered.program.funcs.retain(|func| !names.contains(&func.name));
+        lowered
+            .program
+            .funcs
+            .retain(|func| !names.contains(&func.name));
         drop_callers_of_refused(lowered);
     }
 }
@@ -5542,7 +5694,10 @@ fn settle(lowered: &mut lower::Lowered) {
     // about, which the JVM has refused as `NTS4009` since it was written while
     // C and LLVM read the pointer and trust it.
     let mut unreachable_calls = rustc_hash::FxHashSet::default();
-    for (at, value, why) in dispatch::check(&lowered.program).into_iter().chain(bridges::check(&lowered.program)) {
+    for (at, value, why) in dispatch::check(&lowered.program)
+        .into_iter()
+        .chain(bridges::check(&lowered.program))
+    {
         let func = &lowered.program.funcs[at];
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1001",
@@ -5672,7 +5827,9 @@ impl Doom {
         match self {
             Self::Calls(callee) => format!("calls `{callee}`, which was refused above"),
             Self::Reads(global) => {
-                format!("reads `{global}`, which a module statement evaluation skips would have assigned")
+                format!(
+                    "reads `{global}`, which a module statement evaluation skips would have assigned"
+                )
             }
         }
     }
@@ -5700,7 +5857,14 @@ fn doomed_values(
     unwritten: &rustc_hash::FxHashSet<u32>,
     global_names: &[String],
 ) -> rustc_hash::FxHashMap<ValueId, Doom> {
-    let read = |global: u32| Doom::Reads(global_names.get(global as usize).cloned().unwrap_or_else(|| global.to_string()));
+    let read = |global: u32| {
+        Doom::Reads(
+            global_names
+                .get(global as usize)
+                .cloned()
+                .unwrap_or_else(|| global.to_string()),
+        )
+    };
     let mut doomed: rustc_hash::FxHashMap<ValueId, Doom> = rustc_hash::FxHashMap::default();
     for (index, op) in func.values.iter().enumerate() {
         // Two ways to name a function that is gone: calling it, and *being* it.
@@ -5762,12 +5926,26 @@ fn doomed_values(
         // its constructor, the store is cut and `held` is a stale global whose
         // readers are refused. Re-derived from Codex 3e0d29f34.
         for (index, op) in func.values.iter().enumerate() {
-            let OpKind::Call { callee: Callee::Direct(name), args, .. } = &op.kind else { continue };
-            let Some(&receiver) = args.first() else { continue };
-            let Some(cause) = doomed.get(&ValueId(u32::try_from(index).unwrap_or(u32::MAX))) else { continue };
+            let OpKind::Call {
+                callee: Callee::Direct(name),
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            let Some(&receiver) = args.first() else {
+                continue;
+            };
+            let Some(cause) = doomed.get(&ValueId(u32::try_from(index).unwrap_or(u32::MAX))) else {
+                continue;
+            };
             if name.ends_with("#constructor")
                 && !doomed.contains_key(&receiver)
-                && matches!(func.values[receiver.0 as usize].kind, OpKind::ObjectNew { .. })
+                && matches!(
+                    func.values[receiver.0 as usize].kind,
+                    OpKind::ObjectNew { .. }
+                )
             {
                 doomed.insert(receiver, cause.clone());
                 grew = true;
@@ -5825,112 +6003,114 @@ struct Cuts {
 }
 
 fn cuts_to_report(func: &Func, doomed: &rustc_hash::FxHashMap<ValueId, Doom>) -> Cuts {
-// The globals that lose their assignment, named before the ops go.
-let mut lost: Vec<(u32, Doom, nts_semantic_schema::Origin)> = Vec::new();
-let mut lost_values: Vec<ValueId> = Vec::new();
-for block in &func.blocks {
-    for value in &block.ops {
-        let Some(cause) = doomed.get(value) else {
-            continue;
-        };
-        if let OpKind::GlobalSet { global, .. } = func.values[value.0 as usize].kind {
-            lost.push((
-                global,
-                cause.clone(),
-                func.values[value.0 as usize].origin.clone(),
-            ));
-            lost_values.push(*value);
-        }
-    }
-}
-
-// **And the statements that were *only* effects, which said nothing at all.**
-//
-// The report above is per **global**, so a statement whose value nothing
-// stores was cut in silence. `console.log("before"); main(); console.log(
-// "after")` with `main` refused built an artefact that printed `before` and
-// `after` and exited 0, where node prints the middle line too -- a program
-// that does less than its source says, with no diagnostic anywhere and a
-// zero exit code. The Assistant lane reduced it; the React lane had met the
-// same thing twice through a refused entry point, where the only sign was a
-// function missing from the emitted C.
-//
-// Excising a call is a *behaviour* change either way -- a dropped
-// initializer loses its effects too -- so the honest rule is that every cut
-// call is named, and the per-global message is the special case that can say
-// which binding went unwritten. A call whose result a lost global stores is
-// already covered by that line, transitively: `doomed` propagates forward
-// from the missing callee, so the `GlobalSet` is doomed *because* it reads
-// the call, and reporting both would be two lines about one statement.
-let mut covered: rustc_hash::FxHashSet<ValueId> = lost_values.iter().copied().collect();
-let mut frontier = lost_values;
-while let Some(value) = frontier.pop() {
-    for operand in verify::operands(&func.values[value.0 as usize].kind) {
-        if doomed.contains_key(&operand) && covered.insert(operand) {
-            frontier.push(operand);
-        }
-    }
-}
-// **One statement, one line.** The rule above -- that a call whose result a lost
-// global stores is covered by the global's line -- leaves the case where nothing
-// is stored at all. `observe("...", arraysDestructured())` is two doomed calls in
-// one statement, the outer reading the inner, and it printed the same cause twice,
-// at `140:1` and again at `140:46`. `main();`, one call, printed once.
-//
-// So a doomed call whose result another doomed **call** reads is the inner half of
-// one statement and the outer one speaks for it. Keyed on the consumer being a
-// *call* rather than any doomed op, which is what keeps this from silencing a
-// statement: the survivor of the chain is then something this loop reports. A
-// doomed op between two doomed calls is walked through for the same reason.
-//
-// **And only where the cause is the same**, which is the difference between
-// deduplicating and losing a cause. `takesTwo(refused(), refusedAgain())` is one
-// statement with *two* refused callees, and the outer call carries only one of
-// them: suppressing by position would leave the other named nowhere, which is
-// what `integrity`'s `top-level-kept` rule asks about -- every call the
-// initializer lost is reported. So one statement can still print two lines, and
-// they say different things.
-let mut inner: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
-for block in &func.blocks {
-    for value in &block.ops {
-        if !matches!(func.values[value.0 as usize].kind, OpKind::Call { .. }) {
-            continue;
-        }
-        let Some(cause) = doomed.get(value) else {
-            continue;
-        };
-        let mut frontier: Vec<ValueId> =
-            verify::operands(&func.values[value.0 as usize].kind);
-        let mut seen: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
-        while let Some(operand) = frontier.pop() {
-            let Some(reason) = doomed.get(&operand) else {
+    // The globals that lose their assignment, named before the ops go.
+    let mut lost: Vec<(u32, Doom, nts_semantic_schema::Origin)> = Vec::new();
+    let mut lost_values: Vec<ValueId> = Vec::new();
+    for block in &func.blocks {
+        for value in &block.ops {
+            let Some(cause) = doomed.get(value) else {
                 continue;
             };
-            if !seen.insert(operand) {
+            if let OpKind::GlobalSet { global, .. } = func.values[value.0 as usize].kind {
+                lost.push((
+                    global,
+                    cause.clone(),
+                    func.values[value.0 as usize].origin.clone(),
+                ));
+                lost_values.push(*value);
+            }
+        }
+    }
+
+    // **And the statements that were *only* effects, which said nothing at all.**
+    //
+    // The report above is per **global**, so a statement whose value nothing
+    // stores was cut in silence. `console.log("before"); main(); console.log(
+    // "after")` with `main` refused built an artefact that printed `before` and
+    // `after` and exited 0, where node prints the middle line too -- a program
+    // that does less than its source says, with no diagnostic anywhere and a
+    // zero exit code. The Assistant lane reduced it; the React lane had met the
+    // same thing twice through a refused entry point, where the only sign was a
+    // function missing from the emitted C.
+    //
+    // Excising a call is a *behaviour* change either way -- a dropped
+    // initializer loses its effects too -- so the honest rule is that every cut
+    // call is named, and the per-global message is the special case that can say
+    // which binding went unwritten. A call whose result a lost global stores is
+    // already covered by that line, transitively: `doomed` propagates forward
+    // from the missing callee, so the `GlobalSet` is doomed *because* it reads
+    // the call, and reporting both would be two lines about one statement.
+    let mut covered: rustc_hash::FxHashSet<ValueId> = lost_values.iter().copied().collect();
+    let mut frontier = lost_values;
+    while let Some(value) = frontier.pop() {
+        for operand in verify::operands(&func.values[value.0 as usize].kind) {
+            if doomed.contains_key(&operand) && covered.insert(operand) {
+                frontier.push(operand);
+            }
+        }
+    }
+    // **One statement, one line.** The rule above -- that a call whose result a lost
+    // global stores is covered by the global's line -- leaves the case where nothing
+    // is stored at all. `observe("...", arraysDestructured())` is two doomed calls in
+    // one statement, the outer reading the inner, and it printed the same cause twice,
+    // at `140:1` and again at `140:46`. `main();`, one call, printed once.
+    //
+    // So a doomed call whose result another doomed **call** reads is the inner half of
+    // one statement and the outer one speaks for it. Keyed on the consumer being a
+    // *call* rather than any doomed op, which is what keeps this from silencing a
+    // statement: the survivor of the chain is then something this loop reports. A
+    // doomed op between two doomed calls is walked through for the same reason.
+    //
+    // **And only where the cause is the same**, which is the difference between
+    // deduplicating and losing a cause. `takesTwo(refused(), refusedAgain())` is one
+    // statement with *two* refused callees, and the outer call carries only one of
+    // them: suppressing by position would leave the other named nowhere, which is
+    // what `integrity`'s `top-level-kept` rule asks about -- every call the
+    // initializer lost is reported. So one statement can still print two lines, and
+    // they say different things.
+    let mut inner: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
+    for block in &func.blocks {
+        for value in &block.ops {
+            if !matches!(func.values[value.0 as usize].kind, OpKind::Call { .. }) {
                 continue;
             }
-            if reason == cause {
-                inner.insert(operand);
+            let Some(cause) = doomed.get(value) else {
+                continue;
+            };
+            let mut frontier: Vec<ValueId> = verify::operands(&func.values[value.0 as usize].kind);
+            let mut seen: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
+            while let Some(operand) = frontier.pop() {
+                let Some(reason) = doomed.get(&operand) else {
+                    continue;
+                };
+                if !seen.insert(operand) {
+                    continue;
+                }
+                if reason == cause {
+                    inner.insert(operand);
+                }
+                frontier.extend(verify::operands(&func.values[operand.0 as usize].kind));
             }
-            frontier.extend(verify::operands(&func.values[operand.0 as usize].kind));
         }
     }
-}
-let mut dropped: Vec<(Doom, nts_semantic_schema::Origin)> = Vec::new();
-for block in &func.blocks {
-    for value in &block.ops {
-        let Some(cause) = doomed.get(value) else {
-            continue;
-        };
-        if covered.contains(value) || inner.contains(value) {
-            continue;
-        }
-        if matches!(func.values[value.0 as usize].kind, OpKind::Call { .. }) {
-            dropped.push((cause.clone(), func.values[value.0 as usize].origin.clone()));
+    let mut dropped: Vec<(Doom, nts_semantic_schema::Origin)> = Vec::new();
+    for block in &func.blocks {
+        for value in &block.ops {
+            let Some(cause) = doomed.get(value) else {
+                continue;
+            };
+            if covered.contains(value) || inner.contains(value) {
+                continue;
+            }
+            if matches!(func.values[value.0 as usize].kind, OpKind::Call { .. }) {
+                dropped.push((cause.clone(), func.values[value.0 as usize].origin.clone()));
+            }
         }
     }
-}
-    Cuts { globals: lost, statements: dropped }
+    Cuts {
+        globals: lost,
+        statements: dropped,
+    }
 }
 
 fn excise_from_initializer(
@@ -5939,7 +6119,12 @@ fn excise_from_initializer(
     uncallable: &rustc_hash::FxHashMap<TypeId, String>,
     unwritten: &rustc_hash::FxHashSet<u32>,
 ) -> bool {
-    let global_names: Vec<String> = lowered.program.globals.iter().map(|global| global.name.clone()).collect();
+    let global_names: Vec<String> = lowered
+        .program
+        .globals
+        .iter()
+        .map(|global| global.name.clone())
+        .collect();
     let Some(func) = lowered
         .program
         .funcs
@@ -6091,9 +6276,7 @@ fn why_a_callee_is_missing(program: &Program, callee: &str) -> String {
     let instantiated: Vec<&str> = program
         .funcs
         .iter()
-        .filter(|func| {
-            func.name.starts_with(callee) && func.name[callee.len()..].starts_with('<')
-        })
+        .filter(|func| func.name.starts_with(callee) && func.name[callee.len()..].starts_with('<'))
         .map(|func| func.name.as_str())
         .take(3)
         .collect();
@@ -6359,7 +6542,10 @@ fn provide(program: &mut Program, provider: Provider) -> rc::Report {
 /// Numbers proven into integers across the whole program: folding, bounds,
 /// storage, signatures and then bodies, each on a fresh analysis. Answers how
 /// many values were specialized, conversions inserted and checks removed.
-fn specialize_numbers_of(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, usize, usize) {
+fn specialize_numbers_of(
+    program: &mut Program,
+    roots: reachable::Roots<'_>,
+) -> (usize, usize, usize) {
     let (mut specialized, mut conversions, mut checks_removed) = (0, 0, 0);
     // Analyzed as a program rather than a function at a time: a parameter is
     // written by callers and a call's result by the callee, and neither is
@@ -6425,7 +6611,11 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
     // On the program the lowering produced, before any pass renumbers a value
     // the lowering recorded an obligation about.
-    let rejected = obligations::take_checked(&mut lowered.program, &lowered.arrivals.at_signature, options.targets);
+    let rejected = obligations::take_checked(
+        &mut lowered.program,
+        &lowered.arrivals.at_signature,
+        options.targets,
+    );
     // Before `settle`, whose callback check reads it.
     lowered.program.callbacks_checkpoint = options.callbacks_checkpoint;
     // Re-keyed by the foreign key as lowering finishes: same rows, indexed for
@@ -6451,9 +6641,11 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let unions_split = split_unions(&mut program);
     written_roots::narrow(&mut program, options.roots, options.targets);
 
-    let (specialized, mut conversions, mut checks_removed) =
-        if specialize_numbers { specialize_numbers_of(&mut program, options.roots) } else { (0, 0, 0) };
-
+    let (specialized, mut conversions, mut checks_removed) = if specialize_numbers {
+        specialize_numbers_of(&mut program, options.roots)
+    } else {
+        (0, 0, 0)
+    };
 
     // Identities become visible only once specialization has decided
     // representations: `x | 0` is a coercion until `x` is known to be an `i32`,
@@ -6477,7 +6669,11 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // Counted with the simplifications: a substring answered from its
     // endpoints is an operation that turned out to be its own operands, which
     // is what that number means.
-    simplified += program.funcs.iter_mut().map(substring::elide).sum::<usize>();
+    simplified += program
+        .funcs
+        .iter_mut()
+        .map(substring::elide)
+        .sum::<usize>();
 
     conversions += reconcile(&mut program);
 
@@ -6516,7 +6712,11 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // `undefined` out of range rather than trapping. After that pass, so a
     // proven read keeps its load; before escape and counting, which have to see
     // the call that replaces it.
-    let erased_reads_answered = program.funcs.iter_mut().map(bounds::answer_erased_reads).sum();
+    let erased_reads_answered = program
+        .funcs
+        .iter_mut()
+        .map(bounds::answer_erased_reads)
+        .sum();
 
     // A scalar survives erasure only when optimization could not recover its
     // concrete representation. Materialize its owned payload now, as ordinary
@@ -6920,7 +7120,9 @@ mod tests {
     #[allow(clippy::unwrap_used, clippy::expect_used)]
     fn awaited_catch_reasons_are_read_only_on_rejected_edges() {
         use nts_frontend_ts::{SemanticSource, TsgoApi};
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return; };
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
         let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/caught-await-reasons/tsconfig.json");
         let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
@@ -6930,22 +7132,53 @@ mod tests {
         for func in &prepared.program.funcs {
             for (index, block) in func.blocks.iter().enumerate() {
                 for value in &block.ops {
-                    let OpKind::Call { callee: Callee::External(name), args, .. } = &func.value(*value).kind else { continue; };
-                    if name != "nts_promise_reason" { continue; }
+                    let OpKind::Call {
+                        callee: Callee::External(name),
+                        args,
+                        ..
+                    } = &func.value(*value).kind
+                    else {
+                        continue;
+                    };
+                    if name != "nts_promise_reason" {
+                        continue;
+                    }
                     tested += 1;
                     let target = BlockId(u32::try_from(index).unwrap());
                     let mut guarded = 0;
                     for predecessor in &func.blocks {
-                        assert!(!matches!(&predecessor.terminator,
+                        assert!(
+                            !matches!(&predecessor.terminator,
                             Terminator::Jump { target: jumped, .. } if *jumped == target),
-                            "a reason read cannot have an unchecked incoming edge");
-                        let Terminator::Branch { cond, then_target, else_target, .. } = &predecessor.terminator else { continue; };
-                        if *then_target != target { continue; }
+                            "a reason read cannot have an unchecked incoming edge"
+                        );
+                        let Terminator::Branch {
+                            cond,
+                            then_target,
+                            else_target,
+                            ..
+                        } = &predecessor.terminator
+                        else {
+                            continue;
+                        };
+                        if *then_target != target {
+                            continue;
+                        }
                         assert_ne!(*else_target, target);
-                        let OpKind::Call { callee: Callee::External(check), args: checked, .. } = &func.value(*cond).kind else { panic!("unguarded rejection read"); };
+                        let OpKind::Call {
+                            callee: Callee::External(check),
+                            args: checked,
+                            ..
+                        } = &func.value(*cond).kind
+                        else {
+                            panic!("unguarded rejection read");
+                        };
                         assert_eq!(check, "nts_promise_is_rejected");
-                        assert_eq!(func.value(args[0]).kind, func.value(checked[0]).kind,
-                            "the branch tests the same awaited frame slot");
+                        assert_eq!(
+                            func.value(args[0]).kind,
+                            func.value(checked[0]).kind,
+                            "the branch tests the same awaited frame slot"
+                        );
                         assert!(!predecessor.ops.contains(value));
                         guarded += 1;
                     }
@@ -6953,7 +7186,10 @@ mod tests {
                 }
             }
         }
-        assert_eq!(tested, 2, "both actual catch consumers must survive production");
+        assert_eq!(
+            tested, 2,
+            "both actual catch consumers must survive production"
+        );
     }
 
     /// Every `nts_array_` helper is classified for whether it changes a length.
@@ -7237,7 +7473,10 @@ mod tests {
     /// rewrite that happens to agree.
     #[test]
     fn a_reorder_moves_every_arm_of_an_open_read() {
-        let integer = HirType::Int { bits: 32, signed: true };
+        let integer = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
         let program = |arms: Vec<FieldArm>| {
             let values = vec![
                 Op {
@@ -7246,7 +7485,10 @@ mod tests {
                     origin: origin(),
                 },
                 Op {
-                    kind: OpKind::OpenFieldGet { object: ValueId(0), arms },
+                    kind: OpKind::OpenFieldGet {
+                        object: ValueId(0),
+                        arms,
+                    },
                     ty: integer.clone(),
                     origin: origin(),
                 },
@@ -7298,21 +7540,36 @@ mod tests {
         // goes 0 -> 1 in the first and 1 -> 0 in the second.
         let moved = vec![vec![1, 0], vec![1, 0]];
         let mut subject = program(vec![
-            FieldArm { ty: TypeId(1), field: 0 },
-            FieldArm { ty: TypeId(2), field: 1 },
+            FieldArm {
+                ty: TypeId(1),
+                field: 0,
+            },
+            FieldArm {
+                ty: TypeId(2),
+                field: 1,
+            },
         ]);
         remap_field_accesses(&mut subject, &moved);
         let OpKind::OpenFieldGet { arms, .. } = &subject.funcs[0].values[1].kind else {
             panic!("the op is still an open read");
         };
-        assert_eq!(arms[0].field, 1, "the first arm's index moved with its layout");
+        assert_eq!(
+            arms[0].field, 1,
+            "the first arm's index moved with its layout"
+        );
         assert_eq!(arms[1].field, 0, "and the second arm's moved the other way");
 
         // **The control.** An identity permutation must leave the op alone, or
         // the assertions above would pass over a rewrite that always fires.
         let mut untouched = program(vec![
-            FieldArm { ty: TypeId(1), field: 0 },
-            FieldArm { ty: TypeId(2), field: 1 },
+            FieldArm {
+                ty: TypeId(1),
+                field: 0,
+            },
+            FieldArm {
+                ty: TypeId(2),
+                field: 1,
+            },
         ]);
         remap_field_accesses(&mut untouched, &[vec![0, 1], vec![0, 1]]);
         let OpKind::OpenFieldGet { arms, .. } = &untouched.funcs[0].values[1].kind else {
@@ -7478,9 +7735,16 @@ mod tests {
     fn capturing() -> Program {
         let numbers = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
         let values = vec![
-            Op { kind: OpKind::ConstFloat(4.0), ty: HirType::NUMBER, origin: origin() },
             Op {
-                kind: OpKind::ArrayNew { length: ValueId(0), zeroed: true },
+                kind: OpKind::ConstFloat(4.0),
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::ArrayNew {
+                    length: ValueId(0),
+                    zeroed: true,
+                },
                 ty: numbers.clone(),
                 origin: origin(),
             },
@@ -7490,7 +7754,11 @@ mod tests {
                 origin: origin(),
             },
             Op {
-                kind: OpKind::FieldSet { object: ValueId(2), field: 0, value: ValueId(1) },
+                kind: OpKind::FieldSet {
+                    object: ValueId(2),
+                    field: 0,
+                    value: ValueId(1),
+                },
                 ty: HirType::Void,
                 origin: origin(),
             },
@@ -7504,20 +7772,31 @@ mod tests {
                 ty: HirType::Void,
                 origin: origin(),
             },
-            Op { kind: OpKind::Length(ValueId(1)), ty: HirType::NUMBER, origin: origin() },
+            Op {
+                kind: OpKind::Length(ValueId(1)),
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
         ];
         let mut program = one_function(values, numbers.clone());
         // The closure's own body: it reads the array back out of the frame and
         // pushes. Nothing here is in the caller's `values`, which is the point.
         let pushes = vec![
-            Op { kind: OpKind::ConstFloat(1.0), ty: HirType::NUMBER, origin: origin() },
+            Op {
+                kind: OpKind::ConstFloat(1.0),
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
             Op {
                 kind: OpKind::ObjectNew { frame: true },
                 ty: HirType::Erased,
                 origin: origin(),
             },
             Op {
-                kind: OpKind::FieldGet { object: ValueId(1), field: 0 },
+                kind: OpKind::FieldGet {
+                    object: ValueId(1),
+                    field: 0,
+                },
                 ty: numbers,
                 origin: origin(),
             },
@@ -7543,24 +7822,46 @@ mod tests {
     fn only_read() -> Program {
         let numbers = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
         let values = vec![
-            Op { kind: OpKind::ConstFloat(4.0), ty: HirType::NUMBER, origin: origin() },
             Op {
-                kind: OpKind::ArrayNew { length: ValueId(0), zeroed: true },
-                ty: numbers.clone(),
-                origin: origin(),
-            },
-            Op {
-                kind: OpKind::ArrayNew { length: ValueId(0), zeroed: true },
-                ty: numbers.clone(),
-                origin: origin(),
-            },
-            Op {
-                kind: OpKind::ArrayGet { array: ValueId(1), index: ValueId(0), checked: false },
+                kind: OpKind::ConstFloat(4.0),
                 ty: HirType::NUMBER,
                 origin: origin(),
             },
-            Op { kind: OpKind::Length(ValueId(1)), ty: HirType::NUMBER, origin: origin() },
-            Op { kind: OpKind::Retain(ValueId(1)), ty: HirType::Void, origin: origin() },
+            Op {
+                kind: OpKind::ArrayNew {
+                    length: ValueId(0),
+                    zeroed: true,
+                },
+                ty: numbers.clone(),
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::ArrayNew {
+                    length: ValueId(0),
+                    zeroed: true,
+                },
+                ty: numbers.clone(),
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::ArrayGet {
+                    array: ValueId(1),
+                    index: ValueId(0),
+                    checked: false,
+                },
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::Length(ValueId(1)),
+                ty: HirType::NUMBER,
+                origin: origin(),
+            },
+            Op {
+                kind: OpKind::Retain(ValueId(1)),
+                ty: HirType::Void,
+                origin: origin(),
+            },
             Op {
                 kind: OpKind::Call {
                     callee: Callee::External("nts_array_push".to_owned()),
@@ -7655,8 +7956,14 @@ mod tests {
         };
         assert_eq!(program.cyclic_layouts(), vec![true]);
         let mut scalar_targets = Vec::new();
-        program.reaches(&HirType::Managed(ManagedType::BoxedBigInt), &mut scalar_targets);
-        assert!(scalar_targets.is_empty(), "a boxed integer cannot retain an object");
+        program.reaches(
+            &HirType::Managed(ManagedType::BoxedBigInt),
+            &mut scalar_targets,
+        );
+        assert!(
+            scalar_targets.is_empty(),
+            "a boxed integer cannot retain an object"
+        );
     }
 
     #[test]

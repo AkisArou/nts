@@ -70,11 +70,19 @@ pub enum Answer {
 pub fn interfaces(class: &nts_core::hir::ForeignClass) -> Vec<Interface> {
     let mut found: Vec<Interface> = Vec::new();
     let mut answer = |iid: &String, slot: u32, answer: Answer| {
-        let index = found.iter().position(|interface| interface.iid == *iid).unwrap_or_else(|| {
-            let (low, high) = nts_core::hir::native::iid_words(iid).unwrap_or_default();
-            found.push(Interface { iid: iid.clone(), low, high, slots: Vec::new() });
-            found.len() - 1
-        });
+        let index = found
+            .iter()
+            .position(|interface| interface.iid == *iid)
+            .unwrap_or_else(|| {
+                let (low, high) = nts_core::hir::native::iid_words(iid).unwrap_or_default();
+                found.push(Interface {
+                    iid: iid.clone(),
+                    low,
+                    high,
+                    slots: Vec::new(),
+                });
+                found.len() - 1
+            });
         found[index].slots.push((slot, answer));
     };
     for (at, method) in class.methods.iter().enumerate() {
@@ -82,7 +90,10 @@ pub fn interfaces(class: &nts_core::hir::ForeignClass) -> Vec<Interface> {
             answer(iid, *slot, Answer::Override(at));
         }
     }
-    let forwarded = class.composition.iter().flat_map(|composition| composition.forwarded.iter());
+    let forwarded = class
+        .composition
+        .iter()
+        .flat_map(|composition| composition.forwarded.iter());
     for (at, forward) in forwarded.enumerate() {
         answer(&forward.iid, forward.slot, Answer::Forward(at));
     }

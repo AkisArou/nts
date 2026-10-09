@@ -36,7 +36,9 @@ pub fn counter(ty: &HirType) -> Result<Counter, &'static str> {
     match ty {
         HirType::Erased => Ok(Counter::Tagged),
         HirType::Managed(_) => Ok(Counter::Runtime),
-        HirType::NativePointer(_) => Err("a retain or release of a C handle, which the program does not count"),
+        HirType::NativePointer(_) => {
+            Err("a retain or release of a C handle, which the program does not count")
+        }
         _ => Err("a retain or release of a value with no count"),
     }
 }
@@ -118,7 +120,11 @@ pub fn array_families(program: &Program) -> Vec<(Counting, Family)> {
 /// counts itself, and for everything else.
 #[must_use]
 pub fn counted_element(element: &HirType) -> Option<Counting> {
-    if matches!(element, HirType::Managed(_)) { None } else { element.counting() }
+    if matches!(element, HirType::Managed(_)) {
+        None
+    } else {
+        element.counting()
+    }
 }
 
 /// The descriptor of an array of `counting`'s objects, one per family: it

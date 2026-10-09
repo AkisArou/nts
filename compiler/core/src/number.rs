@@ -112,7 +112,11 @@ pub fn to_js_string(value: f64) -> String {
 #[must_use]
 pub fn parse_literal(text: &str) -> Option<f64> {
     // Separators are a spelling, not a value: `1_000` is `1000`.
-    let text = if text.contains('_') { text.replace('_', "") } else { text.to_owned() };
+    let text = if text.contains('_') {
+        text.replace('_', "")
+    } else {
+        text.to_owned()
+    };
     let radix = match text.as_bytes() {
         [b'0', b'x' | b'X', ..] => 16,
         [b'0', b'o' | b'O', ..] => 8,
@@ -126,7 +130,9 @@ pub fn parse_literal(text: &str) -> Option<f64> {
     // behaviour rather than an accepted risk, which is why this is allowed rather
     // than worked around.
     #[allow(clippy::cast_precision_loss)]
-    u128::from_str_radix(&text[2..], radix).ok().map(|value| value as f64)
+    u128::from_str_radix(&text[2..], radix)
+        .ok()
+        .map(|value| value as f64)
 }
 
 #[cfg(test)]
@@ -166,7 +172,13 @@ mod tests {
     /// Every non-decimal spelling in the report names the same member.
     #[test]
     fn a_spelling_is_not_a_name() {
-        for value in [16.0, f64::from(0x10), f64::from(0b1_0000), f64::from(0o20), 1.6e1] {
+        for value in [
+            16.0,
+            f64::from(0x10),
+            f64::from(0b1_0000),
+            f64::from(0o20),
+            1.6e1,
+        ] {
             assert_eq!(to_js_string(value), "16");
         }
         assert_eq!(to_js_string(9_007_199_254_740_992.0), "9007199254740992");
@@ -176,16 +188,28 @@ mod tests {
     /// be asked about -- and the ones it has no answer for on a static member.
     #[test]
     fn every_spelling_of_sixteen_parses_without_the_checker() {
-        for text in ["16", "0x10", "0X10", "0b10000", "0B10000", "0o20", "0O20", "1.6e1", "16.0"] {
-            assert_eq!(parse_literal(text).map(to_js_string), Some("16".to_owned()), "{text}");
+        for text in [
+            "16", "0x10", "0X10", "0b10000", "0B10000", "0o20", "0O20", "1.6e1", "16.0",
+        ] {
+            assert_eq!(
+                parse_literal(text).map(to_js_string),
+                Some("16".to_owned()),
+                "{text}"
+            );
         }
-        assert_eq!(parse_literal("1_000").map(to_js_string), Some("1000".to_owned()));
+        assert_eq!(
+            parse_literal("1_000").map(to_js_string),
+            Some("1000".to_owned())
+        );
         // And the ones whose *value* the checker rounds.
         assert_eq!(
             parse_literal("0.9999999999999999").map(to_js_string),
             Some("0.9999999999999999".to_owned())
         );
-        assert_eq!(parse_literal("1e21").map(to_js_string), Some("1e+21".to_owned()));
+        assert_eq!(
+            parse_literal("1e21").map(to_js_string),
+            Some("1e+21".to_owned())
+        );
         assert_eq!(parse_literal("not a number"), None);
     }
 

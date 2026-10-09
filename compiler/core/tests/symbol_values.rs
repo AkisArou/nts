@@ -73,10 +73,9 @@ fn a_symbol_is_not_an_object() {
 
     let made = func(&lowered, "freshSymbolsDiffer");
     assert!(
-        made.values.iter().any(|op| matches!(
-            op.ty,
-            HirType::Managed(ManagedType::Symbol)
-        )),
+        made.values
+            .iter()
+            .any(|op| matches!(op.ty, HirType::Managed(ManagedType::Symbol))),
         "`Symbol(\"tag\")` produces a value of symbol type"
     );
 
@@ -138,10 +137,10 @@ fn a_symbol_keys_an_ordinary_map() {
     for export in ["twoSymbolsAreTwoKeys", "aMixedKeyMap"] {
         let built = func(&lowered, export);
         assert!(
-            built.values.iter().any(|op| matches!(
-                &op.ty,
-                HirType::Managed(ManagedType::Map(_, _))
-            )),
+            built
+                .values
+                .iter()
+                .any(|op| matches!(&op.ty, HirType::Managed(ManagedType::Map(_, _)))),
             "`{export}` builds a map"
         );
     }
@@ -186,10 +185,10 @@ fn a_symbol_member_name_is_still_a_field() {
             continue;
         }
         assert!(
-            !func.values.iter().any(|op| matches!(
-                op.ty,
-                HirType::Managed(ManagedType::Symbol)
-            )),
+            !func
+                .values
+                .iter()
+                .any(|op| matches!(op.ty, HirType::Managed(ManagedType::Symbol))),
             "`{}` never makes a symbol at run time -- the name is resolved at \
              compile time",
             func.name
@@ -197,14 +196,10 @@ fn a_symbol_member_name_is_still_a_field() {
     }
     // And the members are still ordinary field accesses.
     assert!(
-        lowered
-            .program
-            .funcs
+        lowered.program.funcs.iter().any(|func| func
+            .values
             .iter()
-            .any(|func| func.values.iter().any(|op| matches!(
-                op.kind,
-                OpKind::FieldGet { .. } | OpKind::FieldSet { .. }
-            ))),
+            .any(|op| matches!(op.kind, OpKind::FieldGet { .. } | OpKind::FieldSet { .. }))),
         "a symbol-keyed member is a field"
     );
 }

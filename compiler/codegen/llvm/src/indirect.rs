@@ -38,7 +38,9 @@ pub(crate) fn scratch(platform: Platform) -> Vec<String> {
     }
     (0..SLOTS)
         .map(|at| format!("%win64.a{at} = alloca [16 x i8], align 16"))
-        .chain(std::iter::once("%win64.r = alloca [16 x i8], align 16".to_owned()))
+        .chain(std::iter::once(
+            "%win64.r = alloca [16 x i8], align 16".to_owned(),
+        ))
         .collect()
 }
 
@@ -50,7 +52,9 @@ pub(crate) fn is_indirect(ty: &HirType) -> bool {
 /// An argument passed as a pointer to its copy in slot `at`, which `spelled`
 /// (`{ i32, i64 }` or `i128`) is stored into first.
 pub(crate) fn argument(spelled: &str, value: &str, at: usize, before: &mut Vec<String>) -> String {
-    before.push(format!("store {spelled} {value}, ptr %win64.a{at}, align 16"));
+    before.push(format!(
+        "store {spelled} {value}, ptr %win64.a{at}, align 16"
+    ));
     format!("ptr %win64.a{at}")
 }
 
@@ -65,10 +69,21 @@ pub(crate) fn erased_result(out: &str) -> String {
 /// A call into C returning sixteen bytes on Win64: an erased value through the
 /// hidden pointer, read back from its slot, or an `i128` as `<2 x i64>` in
 /// XMM0, which is the same 128 bits.
-pub(crate) fn call_returning(out: &str, callable: &str, arguments: Vec<String>, result: &HirType) -> String {
+pub(crate) fn call_returning(
+    out: &str,
+    callable: &str,
+    arguments: Vec<String>,
+    result: &HirType,
+) -> String {
     if *result == HirType::Erased {
-        let with_result: Vec<String> = std::iter::once(RESULT.to_owned()).chain(arguments).collect();
-        format!("call void {callable}({})\n  {}", with_result.join(", "), erased_result(out))
+        let with_result: Vec<String> = std::iter::once(RESULT.to_owned())
+            .chain(arguments)
+            .collect();
+        format!(
+            "call void {callable}({})\n  {}",
+            with_result.join(", "),
+            erased_result(out)
+        )
     } else {
         format!(
             "{out}.v = call <2 x i64> {callable}({})\n  {out} = bitcast <2 x i64> {out}.v to i128",
@@ -85,7 +100,9 @@ pub(crate) fn call_returning(out: &str, callable: &str, arguments: Vec<String>, 
 /// as `[2 x i64]`. The body is internal (`body_symbol`), and the exported name
 /// is the entry that calls it (`c_entry` in `lib.rs`).
 pub(crate) fn behind_entry(func: &Func, platform: Platform, public: bool) -> bool {
-    let crosses = |test: &dyn Fn(&HirType) -> bool| func.params.iter().any(|param| test(&param.ty)) || test(&func.return_type);
+    let crosses = |test: &dyn Fn(&HirType) -> bool| {
+        func.params.iter().any(|param| test(&param.ty)) || test(&func.return_type)
+    };
     public
         && match (applies(platform), platform.arch) {
             (true, crate::Arch::X86_64) => crosses(&is_indirect),
@@ -98,7 +115,8 @@ pub(crate) fn behind_entry(func: &Func, platform: Platform, public: bool) -> boo
 /// on arm64 Windows, where C passes a sixteen-byte value in two registers
 /// and not as the pointer x86-64 Windows passes, no entry is written.
 pub(crate) fn unexportable(func: &Func, platform: Platform, public: bool) -> Option<&'static str> {
-    let crosses = func.params.iter().any(|param| is_indirect(&param.ty)) || is_indirect(&func.return_type);
+    let crosses =
+        func.params.iter().any(|param| is_indirect(&param.ty)) || is_indirect(&func.return_type);
     (public && applies(platform) && platform.arch == crate::Arch::Aarch64 && crosses).then_some(
         "an exported function taking or returning an erased value or a bigint on arm64 Windows, whose convention this backend does not implement; the C backend builds it",
     )
@@ -114,11 +132,14 @@ pub(crate) fn body_symbol(exported: &str) -> String {
 /// where it is `public` (`nts_codegen_common::symbols::is_public`) -- the name
 /// its body is defined under, and whether an entry of C's shape is exported
 /// beside it ([`behind_entry`]), which makes the body internal.
-pub(crate) fn definition(func: &Func, platform: Platform, (symbol, public): (String, bool)) -> (&'static str, String, bool) {
+pub(crate) fn definition(
+    func: &Func,
+    platform: Platform,
+    (symbol, public): (String, bool),
+) -> (&'static str, String, bool) {
     if behind_entry(func, platform, public) {
         ("internal ", body_symbol(&symbol), true)
     } else {
         (if public { "" } else { "internal " }, symbol, false)
     }
 }
-

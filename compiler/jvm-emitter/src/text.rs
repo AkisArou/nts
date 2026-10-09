@@ -127,7 +127,10 @@ pub fn listing(body: &Body) -> String {
     let mut at = 0usize;
     while at < body.code.len() {
         let opcode = body.code[at];
-        let name = MNEMONIC.get(opcode as usize).copied().unwrap_or("<unknown>");
+        let name = MNEMONIC
+            .get(opcode as usize)
+            .copied()
+            .unwrap_or("<unknown>");
         let shape = operands(opcode);
         let size = width(shape);
         if at + 1 + size > body.code.len() {

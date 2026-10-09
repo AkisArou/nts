@@ -88,7 +88,9 @@ fn run_main(
 
     let mut class = ClassBuilder::new(name, "java/lang/Object");
     class.source_file = Some(format!("{name}.ts"));
-    class.default_constructor(&origin, &mut pool).expect("<init>");
+    class
+        .default_constructor(&origin, &mut pool)
+        .expect("<init>");
     class.method(
         access::PUBLIC | access::STATIC,
         "main",
@@ -132,18 +134,28 @@ fn println(code: &mut Code, pool: &mut Pool, origin: &Origin, descriptor: &str) 
 }
 
 fn out(code: &mut Code, pool: &mut Pool, origin: &Origin) {
-    code.get_static(origin, pool, "java/lang/System", "out", "Ljava/io/PrintStream;");
+    code.get_static(
+        origin,
+        pool,
+        "java/lang/System",
+        "out",
+        "Ljava/io/PrintStream;",
+    );
 }
 
 const ARGS: &str = "[Ljava/lang/String;";
 
 #[test]
 fn prints_a_constant() {
-    let Some(stdout) = run_main("Constant", vec![VType::Object(ARGS.into())], |code, pool, o| {
-        out(code, pool, o);
-        code.const_int(o, pool, 7);
-        println(code, pool, o, "I");
-    }) else {
+    let Some(stdout) = run_main(
+        "Constant",
+        vec![VType::Object(ARGS.into())],
+        |code, pool, o| {
+            out(code, pool, o);
+            code.const_int(o, pool, 7);
+            println(code, pool, o, "I");
+        },
+    ) else {
         return;
     };
     assert_eq!(stdout, "7");
@@ -151,15 +163,19 @@ fn prints_a_constant() {
 
 #[test]
 fn arithmetic_on_doubles() {
-    let Some(stdout) = run_main("Arith", vec![VType::Object(ARGS.into())], |code, pool, o| {
-        out(code, pool, o);
-        code.const_double(o, pool, 2.5);
-        code.const_double(o, pool, 4.0);
-        code.arithmetic(o, insn::MUL, Kind::Double);
-        code.const_double(o, pool, 1.0);
-        code.arithmetic(o, insn::SUB, Kind::Double);
-        println(code, pool, o, "D");
-    }) else {
+    let Some(stdout) = run_main(
+        "Arith",
+        vec![VType::Object(ARGS.into())],
+        |code, pool, o| {
+            out(code, pool, o);
+            code.const_double(o, pool, 2.5);
+            code.const_double(o, pool, 4.0);
+            code.arithmetic(o, insn::MUL, Kind::Double);
+            code.const_double(o, pool, 1.0);
+            code.arithmetic(o, insn::SUB, Kind::Double);
+            println(code, pool, o, "D");
+        },
+    ) else {
         return;
     };
     assert_eq!(stdout, "9.0");
@@ -264,13 +280,17 @@ fn negative_zero_is_not_zero() {
     // `dconst_0` pushes `+0.0`, and `-0.0 == 0.0` is true in Rust as in
     // JavaScript -- so a value comparison in `const_double` would emit the
     // wrong constant and `1 / -0` would print `Infinity`.
-    let Some(stdout) = run_main("NegZero", vec![VType::Object(ARGS.into())], |code, pool, o| {
-        out(code, pool, o);
-        code.const_double(o, pool, 1.0);
-        code.const_double(o, pool, -0.0);
-        code.arithmetic(o, insn::DIV, Kind::Double);
-        println(code, pool, o, "D");
-    }) else {
+    let Some(stdout) = run_main(
+        "NegZero",
+        vec![VType::Object(ARGS.into())],
+        |code, pool, o| {
+            out(code, pool, o);
+            code.const_double(o, pool, 1.0);
+            code.const_double(o, pool, -0.0);
+            code.arithmetic(o, insn::DIV, Kind::Double);
+            println(code, pool, o, "D");
+        },
+    ) else {
         return;
     };
     assert_eq!(stdout, "-Infinity");
@@ -282,24 +302,35 @@ fn nan_comparisons_take_the_form_that_answers_false() {
     // Each needs a different `dcmp` form, which is why `branch_float` picks it
     // rather than leaving the pairing to a caller -- the first version of this
     // crate left it to the caller and had the rule backwards.
-    let Some(stdout) = run_main("NanCmp", vec![VType::Object(ARGS.into())], |code, pool, o| {
-        for compare in [Compare::Lt, Compare::Le, Compare::Gt, Compare::Ge, Compare::Eq, Compare::Ne] {
-            let taken = code.label();
-            let done = code.label();
-            code.const_double(o, pool, f64::NAN);
-            code.const_double(o, pool, 1.0);
-            code.branch_float(o, compare, Kind::Double, taken);
-            out(code, pool, o);
-            code.const_int(o, pool, 0);
-            println(code, pool, o, "I");
-            code.goto(o, done);
-            code.bind(taken);
-            out(code, pool, o);
-            code.const_int(o, pool, 1);
-            println(code, pool, o, "I");
-            code.bind(done);
-        }
-    }) else {
+    let Some(stdout) = run_main(
+        "NanCmp",
+        vec![VType::Object(ARGS.into())],
+        |code, pool, o| {
+            for compare in [
+                Compare::Lt,
+                Compare::Le,
+                Compare::Gt,
+                Compare::Ge,
+                Compare::Eq,
+                Compare::Ne,
+            ] {
+                let taken = code.label();
+                let done = code.label();
+                code.const_double(o, pool, f64::NAN);
+                code.const_double(o, pool, 1.0);
+                code.branch_float(o, compare, Kind::Double, taken);
+                out(code, pool, o);
+                code.const_int(o, pool, 0);
+                println(code, pool, o, "I");
+                code.goto(o, done);
+                code.bind(taken);
+                out(code, pool, o);
+                code.const_int(o, pool, 1);
+                println(code, pool, o, "I");
+                code.bind(done);
+            }
+        },
+    ) else {
         return;
     };
     assert_eq!(
@@ -315,11 +346,15 @@ fn a_string_literal_survives_modified_utf8() {
     // places Java's encoding is not UTF-8. A round trip through the class file
     // and out of `println` checks all three at once.
     let text = "a\u{0}b\u{00e9}c\u{1F600}";
-    let Some(stdout) = run_main("Literal", vec![VType::Object(ARGS.into())], |code, pool, o| {
-        out(code, pool, o);
-        code.const_string(o, pool, text);
-        println(code, pool, o, "Ljava/lang/String;");
-    }) else {
+    let Some(stdout) = run_main(
+        "Literal",
+        vec![VType::Object(ARGS.into())],
+        |code, pool, o| {
+            out(code, pool, o);
+            code.const_string(o, pool, text);
+            println(code, pool, o, "Ljava/lang/String;");
+        },
+    ) else {
         return;
     };
     assert_eq!(stdout.chars().count(), text.chars().count());
@@ -455,7 +490,10 @@ fn a_handler_catches_an_out_of_range_access() {
     }) else {
         return;
     };
-    assert_eq!(stdout, "42", "the handler ran, so the frame and the table verified");
+    assert_eq!(
+        stdout, "42",
+        "the handler ran, so the frame and the table verified"
+    );
 }
 
 #[test]
@@ -469,7 +507,9 @@ fn a_generated_class_with_a_field() {
     // The value class: one double field, a default constructor, nothing else.
     let mut point = ClassBuilder::new("Point", "java/lang/Object");
     point.field(access::PUBLIC, "x", "D");
-    point.default_constructor(&origin, &mut pool).expect("<init>");
+    point
+        .default_constructor(&origin, &mut pool)
+        .expect("<init>");
     // Two classes cannot share a pool -- indices are per class file -- so the
     // second gets its own.
     let point = point.build(pool).expect("build Point");
@@ -494,7 +534,8 @@ fn a_generated_class_with_a_field() {
     let body = code.finish(&pool).expect("finish main");
 
     let mut main = ClassBuilder::new("UsePoint", "java/lang/Object");
-    main.default_constructor(&origin, &mut pool).expect("<init>");
+    main.default_constructor(&origin, &mut pool)
+        .expect("<init>");
     main.method(
         access::PUBLIC | access::STATIC,
         "main",
@@ -559,7 +600,9 @@ fn the_listing_agrees_with_javap() {
     let ours = text::listing(&body);
 
     let mut class = ClassBuilder::new("Listing", "java/lang/Object");
-    class.default_constructor(&origin, &mut pool).expect("<init>");
+    class
+        .default_constructor(&origin, &mut pool)
+        .expect("<init>");
     class.method(
         access::PUBLIC | access::STATIC,
         "main",
@@ -642,9 +685,10 @@ fn a_call_through_an_interface_reaches_two_implementations() {
     // Two implementers whose answers differ, because a dispatch with one
     // implementation is indistinguishable from a direct call.
     let mut implementers = Vec::new();
-    for (name, family, operand) in
-        [("Counting", insn::ADD, 1.0f64), ("Doubling", insn::MUL, 2.0f64)]
-    {
+    for (name, family, operand) in [
+        ("Counting", insn::ADD, 1.0f64),
+        ("Doubling", insn::MUL, 2.0f64),
+    ] {
         let mut pool = Pool::new();
         let locals = vec![VType::Object(name.into()), VType::Double];
         let max_locals = locals.iter().map(VType::slots).sum();
@@ -657,7 +701,9 @@ fn a_call_through_an_interface_reaches_two_implementations() {
 
         let mut class = ClassBuilder::new(name, "java/lang/Object");
         class.interfaces.push("Sink".into());
-        class.default_constructor(&origin, &mut pool).expect("<init>");
+        class
+            .default_constructor(&origin, &mut pool)
+            .expect("<init>");
         class.method(access::PUBLIC, "write", "(D)D", Some(body));
         implementers.push(class.build(pool).expect("build implementer"));
     }
@@ -696,9 +742,20 @@ fn a_call_through_an_interface_reaches_two_implementations() {
     let body = code.finish(&pool).expect("finish main");
 
     let mut main = ClassBuilder::new("Main", "java/lang/Object");
-    main.default_constructor(&origin, &mut pool).expect("<init>");
-    main.method(access::PUBLIC | access::STATIC, "through", "(LSink;)D", Some(through));
-    main.method(access::PUBLIC | access::STATIC, "main", "([Ljava/lang/String;)V", Some(body));
+    main.default_constructor(&origin, &mut pool)
+        .expect("<init>");
+    main.method(
+        access::PUBLIC | access::STATIC,
+        "through",
+        "(LSink;)D",
+        Some(through),
+    );
+    main.method(
+        access::PUBLIC | access::STATIC,
+        "main",
+        "([Ljava/lang/String;)V",
+        Some(body),
+    );
     let main = main.build(pool).expect("build Main");
 
     let dir = work_dir("InterfaceDispatch");
@@ -713,7 +770,11 @@ fn a_call_through_an_interface_reaches_two_implementations() {
         .arg("Main")
         .output()
         .expect("run java");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "3.25\n4.5");
 }
 
@@ -751,7 +812,12 @@ fn a_class_file_may_implement_both_map_and_set() {
         "(Ljava/lang/Object;)Ljava/lang/Object;",
         None,
     );
-    both.method(access::PUBLIC | access::ABSTRACT, "remove", "(Ljava/lang/Object;)Z", None);
+    both.method(
+        access::PUBLIC | access::ABSTRACT,
+        "remove",
+        "(Ljava/lang/Object;)Z",
+        None,
+    );
     let built = both.build(pool).expect("a class the emitter could build");
 
     // A `main` that forces `Both` to be loaded *and linked*. Writing the file
@@ -768,14 +834,26 @@ fn a_class_file_may_implement_both_map_and_set() {
         "forName",
         "(Ljava/lang/String;)Ljava/lang/Class;",
     );
-    code.invoke_virtual(&origin, &mut pool, "java/lang/Class", "getName", "()Ljava/lang/String;");
+    code.invoke_virtual(
+        &origin,
+        &mut pool,
+        "java/lang/Class",
+        "getName",
+        "()Ljava/lang/String;",
+    );
     println(&mut code, &mut pool, &origin, "Ljava/lang/String;");
     code.ret(&origin, None);
     let body = code.finish(&pool).expect("a body");
 
     let mut main = ClassBuilder::new("LoadsBoth", "java/lang/Object");
-    main.default_constructor(&origin, &mut pool).expect("<init>");
-    main.method(access::PUBLIC | access::STATIC, "main", "([Ljava/lang/String;)V", Some(body));
+    main.default_constructor(&origin, &mut pool)
+        .expect("<init>");
+    main.method(
+        access::PUBLIC | access::STATIC,
+        "main",
+        "([Ljava/lang/String;)V",
+        Some(body),
+    );
     let runner = main.build(pool).expect("a class");
 
     let dir = work_dir("both-map-and-set");
@@ -809,6 +887,7 @@ fn a_class_file_may_implement_both_map_and_set() {
 /// used for the *interfaces*, which it compiles happily -- it only objects to a
 /// class implementing both, which is exactly the objection under test.
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn both_clashing_methods_are_callable_through_their_own_interfaces() {
     let (Some(java), Some(javac)) = (java_home_bin("java"), java_home_bin("javac")) else {
         eprintln!("SKIP runs: no JDK");
@@ -829,30 +908,57 @@ fn both_clashing_methods_are_callable_through_their_own_interfaces() {
         .arg(dir.join("Pair.java"))
         .output()
         .expect("javac runs");
-    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+    assert!(
+        built.status.success(),
+        "javac: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
 
     let origin = origin();
     let mut pool = Pool::new();
     let mut both = ClassBuilder::new("Clash", "java/lang/Object");
     both.interfaces = vec!["Pair$Mapish".to_owned(), "Pair$Setish".to_owned()];
-    both.default_constructor(&origin, &mut pool).expect("<init>");
+    both.default_constructor(&origin, &mut pool)
+        .expect("<init>");
 
     // `Object remove(Object)` returns the string "from-map".
-    let mut code = Code::new(vec![VType::Object("Clash".into()), VType::Object("java/lang/Object".into())], 2);
+    let mut code = Code::new(
+        vec![
+            VType::Object("Clash".into()),
+            VType::Object("java/lang/Object".into()),
+        ],
+        2,
+    );
     code.initialize_locals(&origin, 2);
     code.const_string(&origin, &mut pool, "from-map");
     code.ret(&origin, Some(Kind::Ref));
     let map_body = code.finish(&pool).expect("a body");
-    both.method(access::PUBLIC, "remove", "(Ljava/lang/Object;)Ljava/lang/Object;", Some(map_body));
+    both.method(
+        access::PUBLIC,
+        "remove",
+        "(Ljava/lang/Object;)Ljava/lang/Object;",
+        Some(map_body),
+    );
 
     // `boolean remove(Object)` returns true. Same name, same argument, and the
     // JVM keeps them apart because the descriptors differ.
-    let mut code = Code::new(vec![VType::Object("Clash".into()), VType::Object("java/lang/Object".into())], 2);
+    let mut code = Code::new(
+        vec![
+            VType::Object("Clash".into()),
+            VType::Object("java/lang/Object".into()),
+        ],
+        2,
+    );
     code.initialize_locals(&origin, 2);
     code.const_int(&origin, &mut pool, 1);
     code.ret(&origin, Some(Kind::Int));
     let set_body = code.finish(&pool).expect("a body");
-    both.method(access::PUBLIC, "remove", "(Ljava/lang/Object;)Z", Some(set_body));
+    both.method(
+        access::PUBLIC,
+        "remove",
+        "(Ljava/lang/Object;)Z",
+        Some(set_body),
+    );
     let clash = both.build(pool).expect("a class");
 
     // A caller that reaches each through its own interface type.
@@ -860,7 +966,10 @@ fn both_clashing_methods_are_callable_through_their_own_interfaces() {
     // The receiver goes to a local rather than being juggled on the stack: the
     // point here is which method each `invokeinterface` reaches, not stack
     // gymnastics.
-    let mut code = Code::new(vec![VType::Object(ARGS.into()), VType::Object("Clash".into())], 2);
+    let mut code = Code::new(
+        vec![VType::Object(ARGS.into()), VType::Object("Clash".into())],
+        2,
+    );
     code.initialize_locals(&origin, 1);
     code.new_object(&origin, &mut pool, "Clash");
     code.dup(&origin);
@@ -870,20 +979,56 @@ fn both_clashing_methods_are_callable_through_their_own_interfaces() {
     out(&mut code, &mut pool, &origin);
     code.load(&origin, Kind::Ref, 1);
     code.const_null(&origin);
-    code.invoke_interface(&origin, &mut pool, "Pair$Mapish", "remove", "(Ljava/lang/Object;)Ljava/lang/Object;");
-    code.invoke_virtual(&origin, &mut pool, "java/lang/Object", "toString", "()Ljava/lang/String;");
+    code.invoke_interface(
+        &origin,
+        &mut pool,
+        "Pair$Mapish",
+        "remove",
+        "(Ljava/lang/Object;)Ljava/lang/Object;",
+    );
+    code.invoke_virtual(
+        &origin,
+        &mut pool,
+        "java/lang/Object",
+        "toString",
+        "()Ljava/lang/String;",
+    );
     code.load(&origin, Kind::Ref, 1);
     code.const_null(&origin);
-    code.invoke_interface(&origin, &mut pool, "Pair$Setish", "remove", "(Ljava/lang/Object;)Z");
-    code.invoke_static(&origin, &mut pool, "java/lang/String", "valueOf", "(Z)Ljava/lang/String;");
-    code.invoke_virtual(&origin, &mut pool, "java/lang/String", "concat", "(Ljava/lang/String;)Ljava/lang/String;");
+    code.invoke_interface(
+        &origin,
+        &mut pool,
+        "Pair$Setish",
+        "remove",
+        "(Ljava/lang/Object;)Z",
+    );
+    code.invoke_static(
+        &origin,
+        &mut pool,
+        "java/lang/String",
+        "valueOf",
+        "(Z)Ljava/lang/String;",
+    );
+    code.invoke_virtual(
+        &origin,
+        &mut pool,
+        "java/lang/String",
+        "concat",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+    );
     println(&mut code, &mut pool, &origin, "Ljava/lang/String;");
     code.ret(&origin, None);
     let body = code.finish(&pool).expect("a body");
 
     let mut main = ClassBuilder::new("CallsBoth", "java/lang/Object");
-    main.default_constructor(&origin, &mut pool).expect("<init>");
-    main.method(access::PUBLIC | access::STATIC, "main", "([Ljava/lang/String;)V", Some(body));
+    main.default_constructor(&origin, &mut pool)
+        .expect("<init>");
+    main.method(
+        access::PUBLIC | access::STATIC,
+        "main",
+        "([Ljava/lang/String;)V",
+        Some(body),
+    );
     let runner = main.build(pool).expect("a class");
 
     std::fs::write(dir.join(clash.path()), &clash.bytes).expect("write Clash");
@@ -899,5 +1044,8 @@ fn both_clashing_methods_are_callable_through_their_own_interfaces() {
         "dispatch through one of the two failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "from-maptrue");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "from-maptrue"
+    );
 }

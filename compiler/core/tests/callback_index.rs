@@ -94,10 +94,7 @@ fn the_index_the_body_reads_is_not_a_constant() {
         };
         checked += 1;
         assert!(
-            !matches!(
-                function.values[other as usize].kind,
-                OpKind::ConstFloat(_)
-            ),
+            !matches!(function.values[other as usize].kind, OpKind::ConstFloat(_)),
             "the body multiplies the element by the counter, not by a constant",
         );
         // And it is the very value the load indexed with.
@@ -129,12 +126,7 @@ fn naming_the_index_allocates_nothing_extra() {
         func(&lowered, name)
             .values
             .iter()
-            .filter(|op| {
-                matches!(
-                    op.kind,
-                    OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-                )
-            })
+            .filter(|op| matches!(op.kind, OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }))
             .count()
     };
     // Against `forEachWithoutIndex`, which walks the *same literal* with a
@@ -153,7 +145,8 @@ fn naming_the_index_allocates_nothing_extra() {
         allocations("forEachWithIndex"),
         allocations("forEachWithoutIndex"),
         "the index costs no allocation: {:?} vs {:?}",
-        kinds("forEachWithIndex"), kinds("total"),
+        kinds("forEachWithIndex"),
+        kinds("total"),
     );
     assert_eq!(
         allocations("onlyTheIndex"),

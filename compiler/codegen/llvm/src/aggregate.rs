@@ -49,10 +49,10 @@
 //! - a record whose eightbytes do not all fit in the registers left goes to
 //!   memory whole, as an erased value does.
 
+use crate::{Arch, Platform};
+use nts_core::hir::HirType;
 use nts_core::hir::layout::{native_place, native_shape};
 use nts_core::hir::native::{NativeAbi, Pointee, Record, RecordKind, Scalar, Type};
-use nts_core::hir::HirType;
-use crate::{Arch, Platform};
 
 /// How one record crosses a call.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,7 +98,12 @@ const SSE_REGISTERS: usize = 8;
 /// an Objective-C send's receiver and selector -- and whose declared
 /// parameters and result are these. `None` when a record in it cannot be
 /// classified here.
-pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, platform: Platform) -> Option<Plan> {
+pub(crate) fn plan(
+    leading: usize,
+    parameters: &[Type],
+    result_type: &Type,
+    platform: Platform,
+) -> Option<Plan> {
     if convention(platform) == Some(Convention::Aapcs64) {
         return aapcs64_plan(parameters, result_type, platform);
     }
@@ -110,11 +115,19 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, plat
         // arm64 Windows: a scalar or a pointer crosses as itself, whatever
         // the convention. A record or an erased value is placed by rules
         // this backend does not implement there, so the call is refused.
-        let placed_by_convention = |ty: &Type| matches!(ty, Type::Record(_)) || ty.representation() == HirType::Erased;
-        if parameters.iter().chain(std::iter::once(result_type)).any(placed_by_convention) {
+        let placed_by_convention =
+            |ty: &Type| matches!(ty, Type::Record(_)) || ty.representation() == HirType::Erased;
+        if parameters
+            .iter()
+            .chain(std::iter::once(result_type))
+            .any(placed_by_convention)
+        {
             return None;
         }
-        return Some(Plan { arguments: vec![Crossing::Scalar; parameters.len()], result: None });
+        return Some(Plan {
+            arguments: vec![Crossing::Scalar; parameters.len()],
+            result: None,
+        });
     };
     if convention == Convention::Win64 {
         let arguments = parameters
@@ -122,7 +135,9 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, plat
             .map(|parameter| match parameter {
                 Type::Record(record) => classify(record, platform).map(Crossing::Record),
                 // Sixteen bytes: a pointer to a copy, which `byval` is here.
-                other if other.representation() == HirType::Erased => Some(Crossing::ErasedInMemory),
+                other if other.representation() == HirType::Erased => {
+                    Some(Crossing::ErasedInMemory)
+                }
                 _ => Some(Crossing::Scalar),
             })
             .collect::<Option<Vec<_>>>()?;
@@ -150,7 +165,9 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, plat
                     }
                 }
                 // Only AAPCS64 classifies one of these, and it has its own plan.
-                other @ (Passing::Memory { .. } | Passing::Homogeneous { .. }) => Crossing::Record(other),
+                other @ (Passing::Memory { .. } | Passing::Homogeneous { .. }) => {
+                    Crossing::Record(other)
+                }
             },
             other => {
                 let ty = other.representation();
@@ -166,7 +183,11 @@ pub(crate) fn plan(leading: usize, parameters: &[Type], result_type: &Type, plat
                 if integer >= words {
                     integer -= words;
                 }
-                if memory { Crossing::ErasedInMemory } else { Crossing::Scalar }
+                if memory {
+                    Crossing::ErasedInMemory
+                } else {
+                    Crossing::Scalar
+                }
             }
         };
         arguments.push(crossing);
@@ -203,8 +224,13 @@ enum Role {
 /// AAPCS64's plan: each record classified for where it is, and an erased
 /// value refused, since no native declaration here passes one.
 fn aapcs64_plan(parameters: &[Type], result_type: &Type, platform: Platform) -> Option<Plan> {
-    let erased = |ty: &Type| !matches!(ty, Type::Record(_)) && ty.representation() == HirType::Erased;
-    if parameters.iter().chain(std::iter::once(result_type)).any(erased) {
+    let erased =
+        |ty: &Type| !matches!(ty, Type::Record(_)) && ty.representation() == HirType::Erased;
+    if parameters
+        .iter()
+        .chain(std::iter::once(result_type))
+        .any(erased)
+    {
         return None;
     }
     let result = match result_type {
@@ -228,7 +254,12 @@ fn aapcs64(record: &Record, platform: Platform, role: Role) -> Option<Passing> {
     }
     let (size, align) = extent(record, platform)?;
     let mut leaves = Vec::new();
-    if !walk(&Pointee::Record(std::sync::Arc::new(record.clone())), 0, platform, &mut leaves)? {
+    if !walk(
+        &Pointee::Record(std::sync::Arc::new(record.clone())),
+        0,
+        platform,
+        &mut leaves,
+    )? {
         return None;
     }
     if let Some(element) = homogeneous(&leaves, size) {
@@ -236,7 +267,10 @@ fn aapcs64(record: &Record, platform: Platform, role: Role) -> Option<Passing> {
         if element == "float" && role == Role::Argument {
             return None;
         }
-        return Some(Passing::Homogeneous { element, count: u32::try_from(leaves.len()).ok()? });
+        return Some(Passing::Homogeneous {
+            element,
+            count: u32::try_from(leaves.len()).ok()?,
+        });
     }
     let integer = |ty: String| Some(Passing::Registers(vec![Eightbyte { ty, sse: false }]));
     match (role, size) {
@@ -256,9 +290,12 @@ fn homogeneous(leaves: &[Leaf], size: u32) -> Option<&'static str> {
     let first = leaves.first()?;
     let count = u32::try_from(leaves.len()).ok()?;
     let packed = leaves.iter().enumerate().all(|(at, leaf)| {
-        leaf.float && leaf.size == first.size && u32::try_from(at).is_ok_and(|at| leaf.offset == at * first.size)
+        leaf.float
+            && leaf.size == first.size
+            && u32::try_from(at).is_ok_and(|at| leaf.offset == at * first.size)
     });
-    (packed && (1..=4).contains(&count) && size == first.size * count).then_some(if first.size == 8 { "double" } else { "float" })
+    (packed && (1..=4).contains(&count) && size == first.size * count)
+        .then_some(if first.size == 8 { "double" } else { "float" })
 }
 
 /// Whether this backend knows how a record or an erased value crosses a call
@@ -282,7 +319,10 @@ pub(crate) fn classify(record: &Record, platform: Platform) -> Option<Passing> {
 fn win64(record: &Record, platform: Platform) -> Option<Passing> {
     let (size, align) = extent(record, platform)?;
     Some(match size {
-        1 | 2 | 4 | 8 => Passing::Registers(vec![Eightbyte { ty: format!("i{}", size * 8), sse: false }]),
+        1 | 2 | 4 | 8 => Passing::Registers(vec![Eightbyte {
+            ty: format!("i{}", size * 8),
+            sse: false,
+        }]),
         _ => Passing::Memory { size, align },
     })
 }
@@ -296,7 +336,12 @@ fn sysv(record: &Record, platform: Platform) -> Option<Passing> {
         return Some(Passing::Memory { size, align });
     }
     let mut leaves = Vec::new();
-    if !walk(&Pointee::Record(std::sync::Arc::new(record.clone())), 0, platform, &mut leaves)? {
+    if !walk(
+        &Pointee::Record(std::sync::Arc::new(record.clone())),
+        0,
+        platform,
+        &mut leaves,
+    )? {
         return Some(Passing::Memory { size, align });
     }
     let eightbytes = (0..size.div_ceil(8))
@@ -349,8 +394,15 @@ fn walk(pointee: &Pointee, base: u32, platform: Platform, leaves: &mut Vec<Leaf>
             if shape.align == 0 || !base.is_multiple_of(shape.align) {
                 return Some(false);
             }
-            let float = matches!(scalar_or_pointer, Pointee::Scalar(Scalar::Float | Scalar::Double));
-            leaves.push(Leaf { offset: base, size: shape.size, float });
+            let float = matches!(
+                scalar_or_pointer,
+                Pointee::Scalar(Scalar::Float | Scalar::Double)
+            );
+            leaves.push(Leaf {
+                offset: base,
+                size: shape.size,
+                float,
+            });
             Some(true)
         }
     }
@@ -359,7 +411,10 @@ fn walk(pointee: &Pointee, base: u32, platform: Platform, leaves: &mut Vec<Leaf>
 /// The eightbyte at `start` of a record `size` bytes long.
 fn eightbyte(leaves: &[Leaf], start: u32, size: u32) -> Option<Eightbyte> {
     let end = start + 8;
-    let inside: Vec<&Leaf> = leaves.iter().filter(|leaf| leaf.offset >= start && leaf.offset < end).collect();
+    let inside: Vec<&Leaf> = leaves
+        .iter()
+        .filter(|leaf| leaf.offset >= start && leaf.offset < end)
+        .collect();
     if inside.is_empty() || inside.iter().any(|leaf| leaf.offset + leaf.size > end) {
         return None;
     }
@@ -371,14 +426,24 @@ fn eightbyte(leaves: &[Leaf], start: u32, size: u32) -> Option<Eightbyte> {
             (Some(first), Some(second)) if first.size == 4 && second.size == 4 => "<2 x float>",
             _ => return None,
         };
-        return Some(Eightbyte { ty: ty.to_owned(), sse: true });
+        return Some(Eightbyte {
+            ty: ty.to_owned(),
+            sse: true,
+        });
     }
     // INTEGER: the member at the start when nothing else is in the eightbyte,
     // which clang keeps at its own width; otherwise the bytes the record still
     // has here.
     let first = inside.iter().find(|leaf| leaf.offset == start)?;
-    let bytes = if inside.len() == 1 && !first.float { first.size } else { (size - start).min(8) };
-    Some(Eightbyte { ty: format!("i{}", bytes * 8), sse: false })
+    let bytes = if inside.len() == 1 && !first.float {
+        first.size
+    } else {
+        (size - start).min(8)
+    };
+    Some(Eightbyte {
+        ty: format!("i{}", bytes * 8),
+        sse: false,
+    })
 }
 
 /// The parameter spelling of one record argument, as a declaration writes it.
@@ -396,17 +461,28 @@ pub(crate) fn result_type(passing: &Passing) -> String {
     match passing {
         Passing::Registers(eightbytes) if eightbytes.len() == 1 => eightbytes[0].ty.clone(),
         Passing::Registers(eightbytes) => {
-            format!("{{ {} }}", eightbytes.iter().map(|e| e.ty.as_str()).collect::<Vec<_>>().join(", "))
+            format!(
+                "{{ {} }}",
+                eightbytes
+                    .iter()
+                    .map(|e| e.ty.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
         Passing::Memory { .. } => "void".to_owned(),
-        Passing::Homogeneous { element, count } => format!("{{ {} }}", vec![*element; *count as usize].join(", ")),
+        Passing::Homogeneous { element, count } => {
+            format!("{{ {} }}", vec![*element; *count as usize].join(", "))
+        }
     }
 }
 
 /// The hidden first parameter of a call whose record result is in memory.
 pub(crate) fn sret(passing: &Passing, pointer: &str) -> Option<String> {
     match passing {
-        Passing::Memory { size, align } => Some(format!("ptr sret([{size} x i8]) align {align} {pointer}")),
+        Passing::Memory { size, align } => {
+            Some(format!("ptr sret([{size} x i8]) align {align} {pointer}"))
+        }
         Passing::Registers(_) | Passing::Homogeneous { .. } => None,
     }
 }
@@ -419,7 +495,13 @@ fn eightbyte_align(align: u32) -> u32 {
 
 /// The argument list entries for a record read from `pointer`: each eightbyte
 /// loaded, or the pointer itself passed `byval`.
-pub(crate) fn load_argument(passing: &Passing, align: u32, pointer: &str, temp: &str, before: &mut Vec<String>) -> Vec<String> {
+pub(crate) fn load_argument(
+    passing: &Passing,
+    align: u32,
+    pointer: &str,
+    temp: &str,
+    before: &mut Vec<String>,
+) -> Vec<String> {
     match passing {
         Passing::Registers(eightbytes) => eightbytes
             .iter()
@@ -428,7 +510,10 @@ pub(crate) fn load_argument(passing: &Passing, align: u32, pointer: &str, temp: 
                 let address = if at == 0 {
                     pointer.to_owned()
                 } else {
-                    before.push(format!("{temp}.e{at}.at = getelementptr inbounds i8, ptr {pointer}, i64 {}", at * 8));
+                    before.push(format!(
+                        "{temp}.e{at}.at = getelementptr inbounds i8, ptr {pointer}, i64 {}",
+                        at * 8
+                    ));
                     format!("{temp}.e{at}.at")
                 };
                 before.push(format!(
@@ -442,7 +527,10 @@ pub(crate) fn load_argument(passing: &Passing, align: u32, pointer: &str, temp: 
         Passing::Memory { .. } => vec![format!("{} {pointer}", parameter_types(passing)[0])],
         Passing::Homogeneous { .. } => {
             let ty = &parameter_types(passing)[0];
-            before.push(format!("{temp}.e0 = load {ty}, ptr {pointer}, align {}", eightbyte_align(align)));
+            before.push(format!(
+                "{temp}.e0 = load {ty}, ptr {pointer}, align {}",
+                eightbyte_align(align)
+            ));
             vec![format!("{ty} {temp}.e0")]
         }
     }
@@ -450,26 +538,48 @@ pub(crate) fn load_argument(passing: &Passing, align: u32, pointer: &str, temp: 
 
 /// Store a record result returned in registers, `returned`, into
 /// `destination`. Nothing to do for one returned through `sret`.
-pub(crate) fn store_result(passing: &Passing, align: u32, returned: &str, destination: &str, before: &mut Vec<String>) {
+pub(crate) fn store_result(
+    passing: &Passing,
+    align: u32,
+    returned: &str,
+    destination: &str,
+    before: &mut Vec<String>,
+) {
     if let Passing::Homogeneous { .. } = passing {
-        before.push(format!("store {} {returned}, ptr {destination}, align {}", result_type(passing), eightbyte_align(align)));
+        before.push(format!(
+            "store {} {returned}, ptr {destination}, align {}",
+            result_type(passing),
+            eightbyte_align(align)
+        ));
         return;
     }
-    let Passing::Registers(eightbytes) = passing else { return };
+    let Passing::Registers(eightbytes) = passing else {
+        return;
+    };
     for (at, eightbyte) in eightbytes.iter().enumerate() {
         let value = if eightbytes.len() == 1 {
             returned.to_owned()
         } else {
-            before.push(format!("{returned}.e{at} = extractvalue {} {returned}, {at}", result_type(passing)));
+            before.push(format!(
+                "{returned}.e{at} = extractvalue {} {returned}, {at}",
+                result_type(passing)
+            ));
             format!("{returned}.e{at}")
         };
         let address = if at == 0 {
             destination.to_owned()
         } else {
-            before.push(format!("{returned}.e{at}.at = getelementptr inbounds i8, ptr {destination}, i64 {}", at * 8));
+            before.push(format!(
+                "{returned}.e{at}.at = getelementptr inbounds i8, ptr {destination}, i64 {}",
+                at * 8
+            ));
             format!("{returned}.e{at}.at")
         };
-        before.push(format!("store {} {value}, ptr {address}, align {}", eightbyte.ty, eightbyte_align(align)));
+        before.push(format!(
+            "store {} {value}, ptr {address}, align {}",
+            eightbyte.ty,
+            eightbyte_align(align)
+        ));
     }
 }
 
@@ -477,15 +587,27 @@ pub(crate) fn store_result(passing: &Passing, align: u32, returned: &str, destin
 /// in, named after `name`, and the statements that put it in memory: the
 /// address is what the compiled function reads, as it reads every `ByValue`.
 /// A copy in memory is already one -- a `byval` pointer on System V.
-pub(crate) fn receive(passing: &Passing, record: &Record, platform: Platform, name: &str, body: &mut Vec<String>) -> Option<(Vec<String>, String)> {
+pub(crate) fn receive(
+    passing: &Passing,
+    record: &Record,
+    platform: Platform,
+    name: &str,
+    body: &mut Vec<String>,
+) -> Option<(Vec<String>, String)> {
     let (size, align) = extent(record, platform)?;
     let store = format!("{name}.store");
     match passing {
-        Passing::Memory { .. } => Some((vec![format!("{} {name}", parameter_types(passing)[0])], name.to_owned())),
+        Passing::Memory { .. } => Some((
+            vec![format!("{} {name}", parameter_types(passing)[0])],
+            name.to_owned(),
+        )),
         Passing::Homogeneous { .. } => {
             let ty = &parameter_types(passing)[0];
             body.push(format!("{store} = alloca [{size} x i8], align {align}"));
-            body.push(format!("store {ty} {name}, ptr {store}, align {}", eightbyte_align(align)));
+            body.push(format!(
+                "store {ty} {name}, ptr {store}, align {}",
+                eightbyte_align(align)
+            ));
             Some((vec![format!("{ty} {name}")], store))
         }
         Passing::Registers(eightbytes) => {
@@ -497,10 +619,17 @@ pub(crate) fn receive(passing: &Passing, record: &Record, platform: Platform, na
                 let address = if at == 0 {
                     store.clone()
                 } else {
-                    body.push(format!("{part}.at = getelementptr inbounds i8, ptr {store}, i64 {}", at * 8));
+                    body.push(format!(
+                        "{part}.at = getelementptr inbounds i8, ptr {store}, i64 {}",
+                        at * 8
+                    ));
                     format!("{part}.at")
                 };
-                body.push(format!("store {} {part}, ptr {address}, align {}", eightbyte.ty, eightbyte_align(align)));
+                body.push(format!(
+                    "store {} {part}, ptr {address}, align {}",
+                    eightbyte.ty,
+                    eightbyte_align(align)
+                ));
             }
             Some((parameters, store))
         }

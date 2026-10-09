@@ -140,14 +140,27 @@ fn symbol_resolution_stays_linear_in_files() {
 /// one comes first decided it.
 #[test]
 fn a_symbol_declared_in_two_files_keeps_both_declarations() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
-    for (order, files) in [("class-first", ["a.d.ts", "b.d.ts"]), ("interface-first", ["b.d.ts", "a.d.ts"])] {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    for (order, files) in [
+        ("class-first", ["a.d.ts", "b.d.ts"]),
+        ("interface-first", ["b.d.ts", "a.d.ts"]),
+    ] {
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
             .unwrap()
             .join(format!("nts-symbols-merged-{}-{order}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("a.d.ts"), "declare module \"m\" {\n  export class Box {\n    a(): number;\n  }\n}\n").unwrap();
-        std::fs::write(dir.join("b.d.ts"), "declare module \"m\" {\n  interface Box {\n    b(): number;\n  }\n}\n").unwrap();
+        std::fs::write(
+            dir.join("a.d.ts"),
+            "declare module \"m\" {\n  export class Box {\n    a(): number;\n  }\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("b.d.ts"),
+            "declare module \"m\" {\n  interface Box {\n    b(): number;\n  }\n}\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("main.ts"), "import { Box } from \"m\";\nexport function both(box: Box): number {\n  return box.a() + box.b();\n}\n").unwrap();
         std::fs::write(
             dir.join("tsconfig.json"),
@@ -158,7 +171,9 @@ fn a_symbol_declared_in_two_files_keeps_both_declarations() {
         )
         .unwrap();
         let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
-        let snapshot = TsgoApi::new(tsgo.clone()).snapshot(&tsconfig).expect("snapshot should succeed");
+        let snapshot = TsgoApi::new(tsgo.clone())
+            .snapshot(&tsconfig)
+            .expect("snapshot should succeed");
         let kinds: Vec<u16> = snapshot
             .symbols
             .iter()
@@ -169,8 +184,17 @@ fn a_symbol_declared_in_two_files_keeps_both_declarations() {
                 nts_semantic_schema::NodeKind::List => None,
             })
             .collect();
-        for (kind, what) in [(nts_semantic_schema::syntax::CLASS_DECLARATION, "class"), (nts_semantic_schema::syntax::INTERFACE_DECLARATION, "interface")] {
-            assert!(kinds.contains(&kind), "{order}: `Box` lost its {what} declaration: {kinds:?}");
+        for (kind, what) in [
+            (nts_semantic_schema::syntax::CLASS_DECLARATION, "class"),
+            (
+                nts_semantic_schema::syntax::INTERFACE_DECLARATION,
+                "interface",
+            ),
+        ] {
+            assert!(
+                kinds.contains(&kind),
+                "{order}: `Box` lost its {what} declaration: {kinds:?}"
+            );
         }
     }
 }

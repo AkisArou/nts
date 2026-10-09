@@ -56,16 +56,19 @@ fn one_declared_parent_is_recorded_and_two_are_not() {
     };
     let rows = named(&lowered);
     assert!(
-        rows.iter().any(|(child, parent)| child.contains("DetailJSON")
-            && !child.contains("Timed")
-            && parent.contains("EntryJSON")),
+        rows.iter()
+            .any(|(child, parent)| child.contains("DetailJSON")
+                && !child.contains("Timed")
+                && parent.contains("EntryJSON")),
         "an interface extending exactly one interface is the case this exists for: {rows:?}",
     );
     // **Two parents is not "pick the first".** Which one a consumer would take is
     // the guess `relate_closures_to_signatures` declines to make for closures, on
     // reasoning that transfers word for word.
     assert!(
-        !rows.iter().any(|(child, _)| child.contains("TimedDetailJSON")),
+        !rows
+            .iter()
+            .any(|(child, _)| child.contains("TimedDetailJSON")),
         "two declared parents records nothing: {rows:?}",
     );
     assert!(

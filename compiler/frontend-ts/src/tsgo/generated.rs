@@ -34,5 +34,10 @@ pub trait Generated: std::fmt::Debug {
     ///
     /// # Errors
     /// Why the files could not be generated, said to the person building.
-    fn files(&mut self, tsconfig: &Utf8Path, roots: &[String], complaints: &[Complaint]) -> Result<Option<Vec<Utf8PathBuf>>, String>;
+    fn files(
+        &mut self,
+        tsconfig: &Utf8Path,
+        roots: &[String],
+        complaints: &[Complaint],
+    ) -> Result<Option<Vec<Utf8PathBuf>>, String>;
 }

@@ -24,7 +24,8 @@ fn from_json<'de, T: Deserialize<'de>>(text: &'de str) -> serde_json::Result<T> 
 pub fn compile_json(ast: &str, scope: &str, options: &str) -> Result<String> {
     let ast: File = from_json(ast).context("the AST is not a Babel `File`")?;
     let scope: ScopeInfo = from_json(scope).context("the scope is not a `ScopeInfo`")?;
-    let options: PluginOptions = from_json(options).context("the options are not `PluginOptions`")?;
+    let options: PluginOptions =
+        from_json(options).context("the options are not `PluginOptions`")?;
     let result = compile_program(ast, scope, options);
     serde_json::to_string(&result).context("the compile result does not serialize")
 }

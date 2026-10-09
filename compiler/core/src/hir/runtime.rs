@@ -39,232 +39,1221 @@ type Declared = (&'static str, &'static [Option<HirType>], Option<HirType>);
 
 /// Every helper, sorted by name so a lookup is a binary search.
 static SIGNATURES: &[Declared] = &[
-    ("nts_alloc", &[Some(HirType::Int { bits: 64, signed: false })], None),
-    ("nts_array_at", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_array_at_foreign", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_at_ref", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_at_value", &[None, Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_alloc",
+        &[Some(HirType::Int {
+            bits: 64,
+            signed: false,
+        })],
+        None,
+    ),
+    (
+        "nts_array_at",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_at_foreign",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_array_at_ref",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_array_at_value",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_array_concat", &[None, None], None),
     ("nts_array_concat_foreign", &[None, None], None),
     ("nts_array_concat_ref", &[None, None], None),
     ("nts_array_concat_value", &[None, None], None),
-    ("nts_array_element", &[None, Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_array_element",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_array_extend", &[None, None], None),
     ("nts_array_extend_foreign", &[None, None], None),
     ("nts_array_extend_ref", &[None, None], None),
-    ("nts_array_fill", &[None, Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_array_fill",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_array_fill_bool", &[None, Some(HirType::Bool)], None),
-    ("nts_array_from_handles", &[None, Some(HirType::Int { bits: 32, signed: false }), None], None),
+    (
+        "nts_array_from_handles",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            None,
+        ],
+        None,
+    ),
     ("nts_array_handles", &[None], None),
-    ("nts_array_includes", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Bool)),
+    (
+        "nts_array_includes",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Bool),
+    ),
     ("nts_array_includes_ref", &[None, None], Some(HirType::Bool)),
     ("nts_array_includes_str", &[None, None], Some(HirType::Bool)),
-    ("nts_array_includes_str_value", &[None, None], Some(HirType::Bool)),
-    ("nts_array_index_of", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_array_index_of_ref", &[None, None], Some(HirType::Float { bits: 64 })),
-    ("nts_array_index_of_str", &[None, None], Some(HirType::Float { bits: 64 })),
-    ("nts_array_index_of_str_value", &[None, None], Some(HirType::Float { bits: 64 })),
-    ("nts_array_last_index_of", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_array_length", &[None], Some(HirType::Int { bits: 32, signed: false })),
-    ("nts_array_new", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_new_uninitialized", &[None, Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_array_includes_str_value",
+        &[None, None],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_array_index_of",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_index_of_ref",
+        &[None, None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_index_of_str",
+        &[None, None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_index_of_str_value",
+        &[None, None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_last_index_of",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_length",
+        &[None],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_array_new",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_array_new_uninitialized",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_array_pop", &[None], Some(HirType::Float { bits: 64 })),
-    ("nts_array_push", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_array_push_ref", &[None, None], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_array_push",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_push_ref",
+        &[None, None],
+        Some(HirType::Float { bits: 64 }),
+    ),
     // `push` on an array whose *elements* are erased. `unknown[]` and an array of
     // a union are the shapes; the element is a sixteen-byte `NtsValue`, which is
     // why it needs a row of its own rather than the widths above.
-    ("nts_array_push_value", &[None, None], Some(HirType::Float { bits: 64 })),
-    ("nts_array_set_length", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_set_length_foreign", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_set_length_ref", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_set_length_value", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_shift", &[None], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_array_push_value",
+        &[None, None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_set_length",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_array_set_length_foreign",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_array_set_length_ref",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_array_set_length_value",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_array_shift",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_array_shift_ref", &[None], None),
     ("nts_array_shift_value", &[None], None),
-    ("nts_array_slice", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_slice_foreign", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_slice_ref", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_splice", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_array_splice_ref", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_array_slice",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_array_slice_foreign",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_array_slice_ref",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_array_splice",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_array_splice_ref",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
     ("nts_array_unlend", &[None], None),
-    ("nts_array_unshift", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_array_unshift_ref", &[None, None], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_array_unshift",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_array_unshift_ref",
+        &[None, None],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_array_writable", &[None], None),
-    ("nts_bigint_as_intn", &[Some(HirType::Float { bits: 64 }), Some(HirType::BigInt)], Some(HirType::BigInt)),
-    ("nts_bigint_as_uintn", &[Some(HirType::Float { bits: 64 }), Some(HirType::BigInt)], Some(HirType::BigInt)),
+    (
+        "nts_bigint_as_intn",
+        &[Some(HirType::Float { bits: 64 }), Some(HirType::BigInt)],
+        Some(HirType::BigInt),
+    ),
+    (
+        "nts_bigint_as_uintn",
+        &[Some(HirType::Float { bits: 64 }), Some(HirType::BigInt)],
+        Some(HirType::BigInt),
+    ),
     ("nts_bigint_box", &[Some(HirType::BigInt)], None),
-    ("nts_bigint_compare_string", &[Some(HirType::BigInt), None], Some(HirType::Float { bits: 64 })),
-    ("nts_bigint_from_number", &[Some(HirType::Float { bits: 64 })], Some(HirType::BigInt)),
-    ("nts_bigint_shl", &[Some(HirType::BigInt), Some(HirType::BigInt)], Some(HirType::BigInt)),
-    ("nts_bigint_shr", &[Some(HirType::BigInt), Some(HirType::BigInt)], Some(HirType::BigInt)),
+    (
+        "nts_bigint_compare_string",
+        &[Some(HirType::BigInt), None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_bigint_from_number",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::BigInt),
+    ),
+    (
+        "nts_bigint_shl",
+        &[Some(HirType::BigInt), Some(HirType::BigInt)],
+        Some(HirType::BigInt),
+    ),
+    (
+        "nts_bigint_shr",
+        &[Some(HirType::BigInt), Some(HirType::BigInt)],
+        Some(HirType::BigInt),
+    ),
     ("nts_bigint_to_string", &[Some(HirType::BigInt)], None),
     ("nts_bigint_unbox", &[None], Some(HirType::BigInt)),
-    ("nts_block_carry", &[None, None, Some(HirType::Int { bits: 64, signed: false }), None, Some(HirType::Int { bits: 32, signed: false }), None], None),
+    (
+        "nts_block_carry",
+        &[
+            None,
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            None,
+        ],
+        None,
+    ),
     ("nts_bool_to_string", &[Some(HirType::Bool)], None),
-    ("nts_bounds", &[Some(HirType::Float { bits: 64 }), Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_boxed_new", &[None, None, Some(HirType::Int { bits: 64, signed: false })], None),
+    (
+        "nts_bounds",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_boxed_new",
+        &[
+            None,
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
     ("nts_boxed_unlend", &[None], None),
-    ("nts_buffer_byte_length", &[None], Some(HirType::Float { bits: 64 })),
-    ("nts_buffer_max_byte_length", &[None], Some(HirType::Float { bits: 64 })),
-    ("nts_callback_task", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Bool)], None),
-    ("nts_check", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Int { bits: 32, signed: false })),
-    ("nts_check_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Int { bits: 32, signed: false })),
-    ("nts_checkpoint_after_callbacks", &[Some(HirType::Bool)], None),
-    ("nts_clear_timeout", &[Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_buffer_byte_length",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_buffer_max_byte_length",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_callback_task",
+        &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Bool)],
+        None,
+    ),
+    (
+        "nts_check",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_check_fn",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_checkpoint_after_callbacks",
+        &[Some(HirType::Bool)],
+        None,
+    ),
+    (
+        "nts_clear_timeout",
+        &[Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_closure_lend", &[None], None),
     ("nts_closure_lend_once", &[None], None),
     ("nts_closure_notify", &[], None),
     ("nts_closure_unlend", &[None], None),
     ("nts_closure_unlend_once", &[None], None),
-    ("nts_com_base", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
-    ("nts_com_carry", &[None, None, Some(HirType::Int { bits: 64, signed: false }), None, Some(HirType::Int { bits: 32, signed: false }), None], None),
+    (
+        "nts_com_base",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_com_carry",
+        &[
+            None,
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            None,
+        ],
+        None,
+    ),
     ("nts_com_compose_named", &[None], None),
-    ("nts_com_delegate", &[None, None, None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
-    ("nts_com_query", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
-    ("nts_com_query_array", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    (
+        "nts_com_delegate",
+        &[
+            None,
+            None,
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_com_query",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_com_query_array",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
     ("nts_com_release_array", &[None, None], None),
     ("nts_com_unlend", &[None], None),
     ("nts_console_write", &[None, Some(HirType::Bool)], None),
     ("nts_cstring_release", &[None, None], None),
     ("nts_cstrings_release", &[None], None),
-    ("nts_cycle_candidates", &[], Some(HirType::Int { bits: 64, signed: false })),
-    ("nts_dataview_byte_length", &[None], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_cycle_candidates",
+        &[],
+        Some(HirType::Int {
+            bits: 64,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_dataview_byte_length",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_date_new", &[Some(HirType::Float { bits: 64 })], None),
     ("nts_date_value", &[None], Some(HirType::Float { bits: 64 })),
-    ("nts_delay", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_enqueue_job", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_gobject_boxed", &[None, Some(HirType::Int { bits: 64, signed: false })], None),
-    ("nts_gobject_boxed_copy", &[None, Some(HirType::Int { bits: 64, signed: false })], None),
-    ("nts_gobject_boxed_new", &[Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
-    ("nts_gobject_is_boxed", &[None, Some(HirType::Int { bits: 64, signed: false })], Some(HirType::Bool)),
-    ("nts_handle_check", &[Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_handle_family_register", &[Some(HirType::Int { bits: 32, signed: false }), None, None, None], None),
+    (
+        "nts_delay",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_enqueue_job",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_gobject_boxed",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_gobject_boxed_copy",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_gobject_boxed_new",
+        &[
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_gobject_is_boxed",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_handle_check",
+        &[
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_handle_family_register",
+        &[
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            None,
+            None,
+            None,
+        ],
+        None,
+    ),
     ("nts_has_pending_work", &[], Some(HirType::Bool)),
-    ("nts_hresult_message", &[Some(HirType::Int { bits: 32, signed: true })], None),
+    (
+        "nts_hresult_message",
+        &[Some(HirType::Int {
+            bits: 32,
+            signed: true,
+        })],
+        None,
+    ),
     ("nts_hstrings_release", &[None, None], None),
-    ("nts_index", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
-    ("nts_index_fn", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
+    (
+        "nts_index",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_index_fn",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
     ("nts_is_array", &[None], Some(HirType::Bool)),
     ("nts_is_buffer", &[None], Some(HirType::Bool)),
     ("nts_is_data_view", &[None], Some(HirType::Bool)),
     ("nts_is_date", &[None], Some(HirType::Bool)),
-    ("nts_is_finite", &[Some(HirType::Float { bits: 64 })], Some(HirType::Bool)),
-    ("nts_is_integer", &[Some(HirType::Float { bits: 64 })], Some(HirType::Bool)),
+    (
+        "nts_is_finite",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_is_integer",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Bool),
+    ),
     ("nts_is_map", &[None], Some(HirType::Bool)),
     ("nts_is_owner_thread", &[], Some(HirType::Bool)),
     ("nts_is_promise", &[None], Some(HirType::Bool)),
-    ("nts_is_safe_integer", &[Some(HirType::Float { bits: 64 })], Some(HirType::Bool)),
+    (
+        "nts_is_safe_integer",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Bool),
+    ),
     ("nts_is_set", &[None], Some(HirType::Bool)),
-    ("nts_is_view_kind", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Bool)),
-    ("nts_live_bytes", &[], Some(HirType::Int { bits: 64, signed: false })),
-    ("nts_live_count", &[], Some(HirType::Int { bits: 64, signed: false })),
+    (
+        "nts_is_view_kind",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_live_bytes",
+        &[],
+        Some(HirType::Int {
+            bits: 64,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_live_count",
+        &[],
+        Some(HirType::Int {
+            bits: 64,
+            signed: false,
+        }),
+    ),
     ("nts_map_delete", &[None, None], Some(HirType::Bool)),
     ("nts_map_has", &[None, None], Some(HirType::Bool)),
-    ("nts_map_key_at", &[None, Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_map_key_at",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_map_new", &[Some(HirType::Float { bits: 64 })], None),
-    ("nts_map_next", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_map_value_at", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_math_acos", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_asin", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_atan", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_atan2", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_cbrt", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_cos", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_cosh", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_exp", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_expm1", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_fround", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_hypot", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_imul", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_log", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_log10", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_log1p", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_log2", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_pow", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_sign", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_sin", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_sinh", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_tan", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_math_tanh", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_max", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_max_fn", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_min", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_min_fn", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_number_to_fixed", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_number_to_string", &[Some(HirType::Float { bits: 64 })], None),
-    ("nts_number_to_string_into", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_number_to_string_radix", &[Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_post_delayed", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Bool)], None),
-    ("nts_presence_clear", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_presence_clear_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_presence_has", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
-    ("nts_presence_has_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
-    ("nts_presence_has_value", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
-    ("nts_presence_init", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_presence_init_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_presence_set", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_presence_set_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_promise_claim", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Bool)),
-    ("nts_promise_fulfill_number", &[None, Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_map_next",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_map_value_at",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_math_acos",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_asin",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_atan",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_atan2",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_cbrt",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_cos",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_cosh",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_exp",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_expm1",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_fround",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_hypot",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_imul",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_log",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_log10",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_log1p",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_log2",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_pow",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_sign",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_sin",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_sinh",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_tan",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_math_tanh",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_max",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_max_fn",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_min",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_min_fn",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_number_to_fixed",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_number_to_string",
+        &[Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_number_to_string_into",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_number_to_string_radix",
+        &[
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_post_delayed",
+        &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Bool)],
+        None,
+    ),
+    (
+        "nts_presence_clear",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_presence_clear_fn",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_presence_has",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_presence_has_fn",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_presence_has_value",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_presence_init",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_presence_init_fn",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_presence_set",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_presence_set_fn",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_promise_claim",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_promise_fulfill_number",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_promise_fulfill_pointer", &[None, None], None),
-    ("nts_promise_fulfill_tagged", &[None, None, Some(HirType::Int { bits: 32, signed: false })], None),
+    (
+        "nts_promise_fulfill_tagged",
+        &[
+            None,
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
     ("nts_promise_is_rejected", &[None], Some(HirType::Bool)),
-    ("nts_promise_number", &[None], Some(HirType::Float { bits: 64 })),
-    ("nts_promise_pair", &[None], Some(HirType::Int { bits: 32, signed: false })),
+    (
+        "nts_promise_number",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_promise_pair",
+        &[None],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
     ("nts_promise_pointer", &[None], None),
-    ("nts_round", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_round_fn", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_round",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_round_fn",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_set_new", &[Some(HirType::Float { bits: 64 })], None),
-    ("nts_set_timeout", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 }), Some(HirType::Bool)], Some(HirType::Float { bits: 64 })),
-    ("nts_shl", &[Some(HirType::Int { bits: 32, signed: true }), Some(HirType::Int { bits: 32, signed: true })], Some(HirType::Int { bits: 32, signed: true })),
-    ("nts_shr", &[Some(HirType::Int { bits: 32, signed: true }), Some(HirType::Int { bits: 32, signed: true })], Some(HirType::Int { bits: 32, signed: true })),
+    (
+        "nts_set_timeout",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Bool),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_shl",
+        &[
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+        ],
+        Some(HirType::Int {
+            bits: 32,
+            signed: true,
+        }),
+    ),
+    (
+        "nts_shr",
+        &[
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+        ],
+        Some(HirType::Int {
+            bits: 32,
+            signed: true,
+        }),
+    ),
     ("nts_str_append", &[None, None], None),
-    ("nts_str_at", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_at_into", &[None, None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_char_at", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_char_at_into", &[None, None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_char_code_at", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_str_char_code_at_fn", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_str_char_code_at_int", &[None, Some(HirType::Int { bits: 64, signed: true })], Some(HirType::Float { bits: 64 })),
-    ("nts_str_char_code_at_int_fn", &[None, Some(HirType::Int { bits: 64, signed: true })], Some(HirType::Float { bits: 64 })),
-    ("nts_str_code_point_at", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_str_at",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_at_into",
+        &[None, None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_char_at",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_char_at_into",
+        &[None, None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_char_code_at",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_str_char_code_at_fn",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_str_char_code_at_int",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: true,
+            }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_str_char_code_at_int_fn",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: true,
+            }),
+        ],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_str_code_point_at",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_str_ends_with", &[None, None], Some(HirType::Bool)),
     ("nts_str_includes", &[None, None], Some(HirType::Bool)),
-    ("nts_str_index_of", &[None, None], Some(HirType::Float { bits: 64 })),
-    ("nts_str_index_of_from", &[None, None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_str_index_of",
+        &[None, None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_str_index_of_from",
+        &[None, None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_str_is_well_formed", &[None], Some(HirType::Bool)),
-    ("nts_str_last_index_of", &[None, None], Some(HirType::Float { bits: 64 })),
-    ("nts_str_pad_end", &[None, Some(HirType::Float { bits: 64 }), None], None),
-    ("nts_str_pad_start", &[None, Some(HirType::Float { bits: 64 }), None], None),
-    ("nts_str_point_width", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_str_repeat", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_slice", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_slice_into", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_str_last_index_of",
+        &[None, None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_str_pad_end",
+        &[None, Some(HirType::Float { bits: 64 }), None],
+        None,
+    ),
+    (
+        "nts_str_pad_start",
+        &[None, Some(HirType::Float { bits: 64 }), None],
+        None,
+    ),
+    (
+        "nts_str_point_width",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_str_repeat",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_slice",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_str_slice_into",
+        &[
+            None,
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
     ("nts_str_starts_with", &[None, None], Some(HirType::Bool)),
-    ("nts_str_substring", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_substring_general", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_substring_into", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_str_substring_into_fn", &[None, None, Some(HirType::Float { bits: 64 }), Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_str_substring",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_str_substring_general",
+        &[
+            None,
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_str_substring_into",
+        &[
+            None,
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_str_substring_into_fn",
+        &[
+            None,
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
     ("nts_str_to_lower_case", &[None], None),
-    ("nts_str_to_number", &[None], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_str_to_number",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_str_to_upper_case", &[None], None),
     ("nts_str_to_well_formed", &[None], None),
     ("nts_string_eq", &[None, None], Some(HirType::Bool)),
-    ("nts_string_from_char_code", &[Some(HirType::Float { bits: 64 })], None),
-    ("nts_string_from_char_code_into", &[None, Some(HirType::Float { bits: 64 })], None),
-    ("nts_string_from_code_point", &[Some(HirType::Float { bits: 64 })], None),
-    ("nts_string_from_code_point_into", &[None, Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_string_from_char_code",
+        &[Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_string_from_char_code_into",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_string_from_code_point",
+        &[Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_string_from_code_point_into",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_string_from_cstring", &[None], None),
     ("nts_string_from_required_cstring", &[None], None),
     ("nts_string_from_required_view", &[None], None),
-    ("nts_string_from_utf8", &[None, Some(HirType::Int { bits: 64, signed: false })], None),
+    (
+        "nts_string_from_utf8",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
     ("nts_string_from_view", &[None], None),
     ("nts_string_to_cstring", &[None], None),
     ("nts_string_to_utf16", &[None], None),
     ("nts_string_truthy", &[None], Some(HirType::Bool)),
     ("nts_string_unlend", &[None], None),
-    ("nts_strings_from_cstrings", &[None, Some(HirType::Bool)], None),
+    (
+        "nts_strings_from_cstrings",
+        &[None, Some(HirType::Bool)],
+        None,
+    ),
     ("nts_strings_to_cstrings", &[None], None),
     ("nts_strings_to_hstrings", &[None], None),
     ("nts_symbol_description", &[None], None),
@@ -272,57 +1261,375 @@ static SIGNATURES: &[Declared] = &[
     ("nts_symbol_key_for", &[None], None),
     ("nts_symbol_new", &[None], None),
     ("nts_symbol_to_string", &[None], None),
-    ("nts_tag_name", &[Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_tag_of_reference", &[None], Some(HirType::Int { bits: 32, signed: false })),
+    (
+        "nts_tag_name",
+        &[Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        })],
+        None,
+    ),
+    (
+        "nts_tag_of_reference",
+        &[None],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
     ("nts_template_reflection", &[Some(HirType::Erased)], None),
-    ("nts_to_int16", &[Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 16, signed: true })),
-    ("nts_to_int32", &[Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: true })),
-    ("nts_to_int32_fn", &[Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: true })),
-    ("nts_to_int8", &[Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 8, signed: true })),
-    ("nts_to_integer", &[Some(HirType::Float { bits: 64 })], Some(HirType::Float { bits: 64 })),
-    ("nts_to_uint16", &[Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 16, signed: false })),
-    ("nts_to_uint32", &[Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
-    ("nts_to_uint32_fn", &[Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 32, signed: false })),
-    ("nts_to_uint8", &[Some(HirType::Float { bits: 64 })], Some(HirType::Int { bits: 8, signed: false })),
-    ("nts_unit", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Int { bits: 16, signed: false })),
-    ("nts_unit_fn", &[None, Some(HirType::Int { bits: 32, signed: false })], Some(HirType::Int { bits: 16, signed: false })),
-    ("nts_ushr", &[Some(HirType::Int { bits: 32, signed: true }), Some(HirType::Int { bits: 32, signed: true })], Some(HirType::Int { bits: 32, signed: false })),
+    (
+        "nts_to_int16",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 16,
+            signed: true,
+        }),
+    ),
+    (
+        "nts_to_int32",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 32,
+            signed: true,
+        }),
+    ),
+    (
+        "nts_to_int32_fn",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 32,
+            signed: true,
+        }),
+    ),
+    (
+        "nts_to_int8",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 8,
+            signed: true,
+        }),
+    ),
+    (
+        "nts_to_integer",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_to_uint16",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 16,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_to_uint32",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_to_uint32_fn",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_to_uint8",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Int {
+            bits: 8,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_unit",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Int {
+            bits: 16,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_unit_fn",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Int {
+            bits: 16,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_ushr",
+        &[
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+        ],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
     ("nts_utf16_release", &[None, None], None),
     ("nts_value_boolean", &[None], Some(HirType::Bool)),
-    ("nts_value_eq_boolean", &[None, Some(HirType::Bool)], Some(HirType::Bool)),
-    ("nts_value_eq_boolean_fn", &[None, Some(HirType::Bool)], Some(HirType::Bool)),
-    ("nts_value_eq_number", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Bool)),
-    ("nts_value_eq_number_fn", &[None, Some(HirType::Float { bits: 64 })], Some(HirType::Bool)),
+    (
+        "nts_value_eq_boolean",
+        &[None, Some(HirType::Bool)],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_value_eq_boolean_fn",
+        &[None, Some(HirType::Bool)],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_value_eq_number",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_value_eq_number_fn",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Bool),
+    ),
     ("nts_value_eq_reference", &[None, None], Some(HirType::Bool)),
     ("nts_value_eq_string", &[None, None], Some(HirType::Bool)),
     ("nts_value_is_view", &[None], Some(HirType::Bool)),
-    ("nts_value_number", &[None], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_value_number",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_value_of_boolean", &[Some(HirType::Bool)], None),
-    ("nts_value_of_number", &[Some(HirType::Float { bits: 64 })], None),
-    ("nts_value_of_reference", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
+    (
+        "nts_value_of_number",
+        &[Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_value_of_reference",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
     ("nts_value_strict_eq", &[None, None], Some(HirType::Bool)),
-    ("nts_value_tag", &[None], Some(HirType::Int { bits: 32, signed: false })),
-    ("nts_value_to_number", &[None], Some(HirType::Float { bits: 64 })),
-    ("nts_value_to_number_explicit", &[None], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_value_tag",
+        &[None],
+        Some(HirType::Int {
+            bits: 32,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_value_to_number",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_value_to_number_explicit",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_value_truthy", &[None], Some(HirType::Bool)),
     ("nts_value_truthy_fn", &[None], Some(HirType::Bool)),
-    ("nts_view_byte_length", &[None], Some(HirType::Float { bits: 64 })),
-    ("nts_view_length", &[None], Some(HirType::Float { bits: 64 })),
+    (
+        "nts_view_byte_length",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_view_length",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
     ("nts_view_unlend", &[None], None),
-    ("nts_winrt_activate", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
-    ("nts_winrt_alloc", &[Some(HirType::Float { bits: 64 })], None),
+    (
+        "nts_winrt_activate",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_winrt_alloc",
+        &[Some(HirType::Float { bits: 64 })],
+        None,
+    ),
     ("nts_winrt_array_items", &[None], None),
     ("nts_winrt_box", &[None], None),
-    ("nts_winrt_factory", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    (
+        "nts_winrt_factory",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
     ("nts_winrt_free", &[None], None),
-    ("nts_winrt_is", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], Some(HirType::Bool)),
-    ("nts_winrt_listen", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
-    ("nts_winrt_received", &[None, Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Float { bits: 64 })], None),
-    ("nts_winrt_received_handles", &[None, None, Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_winrt_received_strings", &[None, Some(HirType::Int { bits: 32, signed: false })], None),
-    ("nts_winrt_reference", &[None, Some(HirType::Float { bits: 64 }), Some(HirType::Int { bits: 32, signed: true }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false })], None),
+    (
+        "nts_winrt_is",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        Some(HirType::Bool),
+    ),
+    (
+        "nts_winrt_listen",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            None,
+        ],
+        Some(HirType::Int {
+            bits: 32,
+            signed: true,
+        }),
+    ),
+    (
+        "nts_winrt_received",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_winrt_received_handles",
+        &[
+            None,
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_winrt_received_strings",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
+        "nts_winrt_reference",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
     ("nts_winrt_unbox", &[None], None),
-    ("nts_winrt_unlisten", &[None, Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 64, signed: false }), Some(HirType::Int { bits: 32, signed: false }), Some(HirType::Int { bits: 32, signed: false }), None], Some(HirType::Int { bits: 32, signed: true })),
+    (
+        "nts_winrt_unlisten",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+            None,
+        ],
+        Some(HirType::Int {
+            bits: 32,
+            signed: true,
+        }),
+    ),
 ];
 
 #[must_use]
@@ -507,8 +1814,13 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
     }
     match name {
         // Both read, neither kept: the result is a fresh string.
-        "nts_concat" | "nts_string_eq" | "nts_str_index_of" | "nts_str_last_index_of"
-        | "nts_str_includes" | "nts_str_starts_with" | "nts_str_ends_with" => Some(&[]),
+        "nts_concat"
+        | "nts_string_eq"
+        | "nts_str_index_of"
+        | "nts_str_last_index_of"
+        | "nts_str_includes"
+        | "nts_str_starts_with"
+        | "nts_str_ends_with" => Some(&[]),
         // The left is consumed and the result may *be* it, so it is kept; the
         // right is only read.
         "nts_str_append" => Some(&[0]),
@@ -534,7 +1846,17 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // never-free program and does nothing under counting: read, not held.
         // `nts_winrt_reference` copies the value it is handed into the
         // reference it makes, and keeps nothing of the caller's storage.
-        "nts_com_take" | "nts_com_query" | "nts_com_query_array" | "nts_com_release_array" | "nts_com_unlend" | "nts_winrt_listen" | "nts_winrt_unlisten" | "nts_winrt_box" | "nts_winrt_is" | "nts_winrt_reference" | "nts_gobject_made" => Some(&[]),
+        "nts_com_take"
+        | "nts_com_query"
+        | "nts_com_query_array"
+        | "nts_com_release_array"
+        | "nts_com_unlend"
+        | "nts_winrt_listen"
+        | "nts_winrt_unlisten"
+        | "nts_winrt_box"
+        | "nts_winrt_is"
+        | "nts_winrt_reference"
+        | "nts_gobject_made" => Some(&[]),
         _ => None,
     }
 }

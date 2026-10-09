@@ -36,7 +36,11 @@ pub fn cook_string(raw: &str) -> Vec<u16> {
                 out.push(u16::from_str_radix(&hex, 16).unwrap_or(0));
             }
             'u' if body.get(at) == Some(&'{') => {
-                let digits: String = body.iter().skip(at + 1).take_while(|c| **c != '}').collect();
+                let digits: String = body
+                    .iter()
+                    .skip(at + 1)
+                    .take_while(|c| **c != '}')
+                    .collect();
                 at += digits.len() + 2;
                 let code = u32::from_str_radix(&digits, 16).unwrap_or(0xFFFD);
                 match char::from_u32(code) {
@@ -79,12 +83,21 @@ pub fn numeric_value(raw: &str) -> f64 {
     let text: String = raw.chars().filter(|c| *c != '_').collect();
     let lower = text.to_ascii_lowercase();
     let radix = |prefix: &str, radix: u32| {
-        lower.strip_prefix(prefix).map(|digits| u128::from_str_radix(digits, radix).map_or(f64::NAN, |value| value as f64))
+        lower.strip_prefix(prefix).map(|digits| {
+            u128::from_str_radix(digits, radix).map_or(f64::NAN, |value| value as f64)
+        })
     };
-    if let Some(value) = radix("0x", 16).or_else(|| radix("0o", 8)).or_else(|| radix("0b", 2)) {
+    if let Some(value) = radix("0x", 16)
+        .or_else(|| radix("0o", 8))
+        .or_else(|| radix("0b", 2))
+    {
         return value;
     }
-    if lower.len() > 1 && lower.starts_with('0') && lower.chars().all(|c| c.is_ascii_digit()) && !lower.contains(['8', '9']) {
+    if lower.len() > 1
+        && lower.starts_with('0')
+        && lower.chars().all(|c| c.is_ascii_digit())
+        && !lower.contains(['8', '9'])
+    {
         return u128::from_str_radix(&lower[1..], 8).map_or(f64::NAN, |value| value as f64);
     }
     lower.parse().unwrap_or(f64::NAN)

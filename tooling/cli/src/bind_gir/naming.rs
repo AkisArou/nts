@@ -28,14 +28,19 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::map::{Accessor, Binding, Cast, Constructed, Constructor, Function, Mapped, Reason, Shape, TypeDecl, Vfunc};
+use super::map::{
+    Accessor, Binding, Cast, Constructed, Constructor, Function, Mapped, Reason, Shape, TypeDecl,
+    Vfunc,
+};
 use super::model::{Namespace, Repository};
 
 /// Names a program already has from JavaScript, which an imported class would
 /// shadow in every module that imports it: `GObject.Object` keeps its C name,
 /// `GObject`, as `GLib.Error` keeps `GError`.
-const GLOBALS: [&str; 13] =
-    ["Object", "Error", "String", "Array", "Date", "Map", "Set", "Promise", "Function", "Symbol", "Number", "Boolean", "RegExp"];
+const GLOBALS: [&str; 13] = [
+    "Object", "Error", "String", "Array", "Date", "Map", "Set", "Promise", "Function", "Symbol",
+    "Number", "Boolean", "RegExp",
+];
 
 /// A `gi:` module's name: GIR's namespace, lowercased -- `gi:gtk`, `gi:gio`.
 #[must_use]
@@ -54,10 +59,19 @@ impl Names {
     pub(crate) fn of(repository: &Repository) -> Self {
         let mut types = BTreeMap::new();
         for namespace in repository.namespaces.values() {
-            let classes = namespace.classes.iter().filter_map(|c| Some((c.c_type.clone()?, c.name.clone())));
-            let records = namespace.records.iter().filter(|r| !r.class_struct).filter_map(|r| Some((r.c_type.clone()?, r.name.clone())));
+            let classes = namespace
+                .classes
+                .iter()
+                .filter_map(|c| Some((c.c_type.clone()?, c.name.clone())));
+            let records = namespace
+                .records
+                .iter()
+                .filter(|r| !r.class_struct)
+                .filter_map(|r| Some((r.c_type.clone()?, r.name.clone())));
             for (c_type, name) in classes.chain(records) {
-                types.entry(c_type).or_insert_with(|| (namespace.name.clone(), name));
+                types
+                    .entry(c_type)
+                    .or_insert_with(|| (namespace.name.clone(), name));
             }
         }
         // An enum two namespaces declare -- GObject's GIR registers GLib's
@@ -67,7 +81,10 @@ impl Names {
         for namespace in repository.namespaces.values() {
             for e in &namespace.enums {
                 if let Some(c_type) = &e.c_type {
-                    enums.entry(c_type.clone()).or_default().push((namespace, e.name.clone()));
+                    enums
+                        .entry(c_type.clone())
+                        .or_default()
+                        .push((namespace, e.name.clone()));
                 }
             }
         }
@@ -76,11 +93,15 @@ impl Names {
                 .iter()
                 .find(|(namespace, _)| {
                     let included = includes(repository, namespace);
-                    !declared.iter().any(|(other, _)| other.name != namespace.name && included.contains(other.name.as_str()))
+                    !declared.iter().any(|(other, _)| {
+                        other.name != namespace.name && included.contains(other.name.as_str())
+                    })
                 })
                 .or_else(|| declared.first());
             if let Some((namespace, name)) = owner {
-                types.entry(c_type).or_insert_with(|| (namespace.name.clone(), name.clone()));
+                types
+                    .entry(c_type)
+                    .or_insert_with(|| (namespace.name.clone(), name.clone()));
             }
         }
         Self { types }
@@ -90,8 +111,16 @@ impl Names {
     /// declares it.
     fn spelled(&self, namespace: &str, c_type: &str) -> Option<String> {
         let (declaring, name) = self.types.get(c_type)?;
-        let name = if GLOBALS.contains(&name.as_str()) { c_type.to_owned() } else { name.clone() };
-        Some(if declaring == namespace { name } else { format!("{declaring}.{name}") })
+        let name = if GLOBALS.contains(&name.as_str()) {
+            c_type.to_owned()
+        } else {
+            name.clone()
+        };
+        Some(if declaring == namespace {
+            name
+        } else {
+            format!("{declaring}.{name}")
+        })
     }
 
     /// The namespaces `text`, spelled for `namespace`, names another's types
@@ -108,7 +137,11 @@ impl Names {
 /// Every namespace `namespace` includes, however indirectly.
 fn includes<'a>(repository: &'a Repository, namespace: &'a Namespace) -> BTreeSet<&'a str> {
     let mut seen = BTreeSet::new();
-    let mut pending: Vec<&str> = namespace.includes.iter().map(|(name, _)| name.as_str()).collect();
+    let mut pending: Vec<&str> = namespace
+        .includes
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect();
     while let Some(name) = pending.pop() {
         if !seen.insert(name) {
             continue;
@@ -142,7 +175,9 @@ fn identifiers(text: &str) -> impl Iterator<Item = (usize, &str)> {
                 continue;
             }
             let start = at;
-            while at < bytes.len() && (bytes[at].is_ascii_alphanumeric() || bytes[at] == b'_' || bytes[at] == b'$') {
+            while at < bytes.len()
+                && (bytes[at].is_ascii_alphanumeric() || bytes[at] == b'_' || bytes[at] == b'$')
+            {
                 at += 1;
             }
             if start > 0 && bytes[start - 1] == b'.' {
@@ -189,8 +224,12 @@ fn parameter(name: &str) -> String {
 /// `binding`, the namespace `namespace`'s, as the `gi:` surface spells it.
 /// What would collide once renamed is refused, by name.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Binding {
-    let rename = Renamer { names, namespace: &namespace.name };
+    let rename = Renamer {
+        names,
+        namespace: &namespace.name,
+    };
     let mut out = Binding {
         module: module_of(&namespace.name),
         headers: binding.headers.clone(),
@@ -201,20 +240,42 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
         ..Binding::default()
     };
     out.types = binding.types.iter().map(|decl| rename.decl(decl)).collect();
-    out.enums = binding.enums.iter().map(|decl| super::map::EnumDecl { c_type: None, ..decl.clone() }).collect();
+    out.enums = binding
+        .enums
+        .iter()
+        .map(|decl| super::map::EnumDecl {
+            c_type: None,
+            ..decl.clone()
+        })
+        .collect();
     out.constants = binding
         .constants
         .iter()
-        .map(|constant| super::map::ConstantDecl { name: constant.gir_name.clone(), ts: rename.text(&constant.ts), ..constant.clone() })
+        .map(|constant| super::map::ConstantDecl {
+            name: constant.gir_name.clone(),
+            ts: rename.text(&constant.ts),
+            ..constant.clone()
+        })
         .collect();
-    out.casts = binding.casts.iter().map(|cast| Cast { class: rename.class(&cast.class), get_type: cast.get_type.clone() }).collect();
+    out.casts = binding
+        .casts
+        .iter()
+        .map(|cast| Cast {
+            class: rename.class(&cast.class),
+            get_type: cast.get_type.clone(),
+        })
+        .collect();
     out.properties = binding
         .properties
         .iter()
         .map(|(class, all)| {
             let all = all
                 .iter()
-                .map(|p| Accessor { name: camel(&p.name), getter: p.getter.as_deref().map(camel), setter: p.setter.as_deref().map(camel) })
+                .map(|p| Accessor {
+                    name: camel(&p.name),
+                    getter: p.getter.as_deref().map(camel),
+                    setter: p.setter.as_deref().map(camel),
+                })
                 .collect();
             (rename.class(class), all)
         })
@@ -224,8 +285,20 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
         .iter()
         .map(|(class, c)| {
             let from = |from: &[String]| from.iter().map(|p| parameter(p)).collect::<Vec<_>>();
-            let alternatives = c.alternatives.iter().map(|(function, taken)| (function.clone(), from(taken))).collect();
-            (rename.class(class), Constructor { function: c.function.clone(), get_type: c.get_type.clone(), from: from(&c.from), alternatives })
+            let alternatives = c
+                .alternatives
+                .iter()
+                .map(|(function, taken)| (function.clone(), from(taken)))
+                .collect();
+            (
+                rename.class(class),
+                Constructor {
+                    function: c.function.clone(),
+                    get_type: c.get_type.clone(),
+                    from: from(&c.from),
+                    alternatives,
+                },
+            )
         })
         .collect();
     // A construct-only property's thunk is found by name: the view's, less
@@ -236,13 +309,30 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
         .iter()
         .map(|(class, c)| {
             for name in &c.names {
-                thunks.insert(format!("{class}_with_{name}"), format!("{class}_with_{}", camel(name)));
+                thunks.insert(
+                    format!("{class}_with_{name}"),
+                    format!("{class}_with_{}", camel(name)),
+                );
             }
-            let own = c.own.iter().map(|(name, ts)| (camel(name), rename.text(ts))).collect();
-            (rename.class(class), Constructed { own, names: c.names.iter().map(|name| camel(name)).collect() })
+            let own = c
+                .own
+                .iter()
+                .map(|(name, ts)| (camel(name), rename.text(ts)))
+                .collect();
+            (
+                rename.class(class),
+                Constructed {
+                    own,
+                    names: c.names.iter().map(|name| camel(name)).collect(),
+                },
+            )
         })
         .collect();
-    let mut taken: BTreeSet<String> = out.types.iter().map(|TypeDecl::Class { name, .. }| name.clone()).collect();
+    let mut taken: BTreeSet<String> = out
+        .types
+        .iter()
+        .map(|TypeDecl::Class { name, .. }| name.clone())
+        .collect();
     taken.extend(out.enums.iter().map(|e| e.name.clone()));
     taken.extend(out.constants.iter().map(|c| c.name.clone()));
     for function in &binding.functions {
@@ -253,7 +343,10 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
         // Exported under GIR's name, which nothing else of the module may
         // already have.
         if function.gir_name.is_some() && !taken.insert(function.name.clone()) {
-            out.refused.push((function.symbol.clone(), Reason::NameClash(function.name.clone())));
+            out.refused.push((
+                function.symbol.clone(),
+                Reason::NameClash(function.name.clone()),
+            ));
             continue;
         }
         out.functions.push(function);
@@ -264,17 +357,36 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
     let texts = binding
         .functions
         .iter()
-        .flat_map(|f| f.parameters.iter().map(|(_, m)| m.ts.as_str()).chain([f.result.ts.as_str()]))
+        .flat_map(|f| {
+            f.parameters
+                .iter()
+                .map(|(_, m)| m.ts.as_str())
+                .chain([f.result.ts.as_str()])
+        })
         .chain(binding.constants.iter().map(|c| c.ts.as_str()))
-        .chain(binding.constructed.values().flat_map(|c| c.own.iter().map(|(_, ts)| ts.as_str())));
+        .chain(
+            binding
+                .constructed
+                .values()
+                .flat_map(|c| c.own.iter().map(|(_, ts)| ts.as_str())),
+        );
     for text in texts {
         qualifiers.extend(names.qualifiers(&namespace.name, text));
     }
-    for TypeDecl::Class { parent, implements, .. } in &binding.types {
-        let bases = parent.iter().map(|(_, name)| name).chain(implements.iter().map(|(name, _)| name));
+    for TypeDecl::Class {
+        parent, implements, ..
+    } in &binding.types
+    {
+        let bases = parent
+            .iter()
+            .map(|(_, name)| name)
+            .chain(implements.iter().map(|(name, _)| name));
         qualifiers.extend(bases.flat_map(|base| names.qualifiers(&namespace.name, base)));
     }
-    out.namespaces = qualifiers.into_iter().map(|qualifier| (module_of(&qualifier), qualifier)).collect();
+    out.namespaces = qualifiers
+        .into_iter()
+        .map(|qualifier| (module_of(&qualifier), qualifier))
+        .collect();
     // What a class the program writes declares itself with, beside the class
     // it extends: `import { GObject, property } from "gi:gobject"`.
     if namespace.name == "GObject" {
@@ -295,7 +407,9 @@ struct Renamer<'a> {
 
 impl Renamer<'_> {
     fn class(&self, c_type: &str) -> String {
-        self.names.spelled(self.namespace, c_type).unwrap_or_else(|| c_type.to_owned())
+        self.names
+            .spelled(self.namespace, c_type)
+            .unwrap_or_else(|| c_type.to_owned())
     }
 
     /// Type text with each type it names renamed.
@@ -315,50 +429,106 @@ impl Renamer<'_> {
 
     fn mapped(&self, mapped: &Mapped) -> Mapped {
         let shape = match &mapped.shape {
-            Shape::Handle { class, nullable } => Shape::Handle { class: self.class(class), nullable: *nullable },
-            Shape::Lent { program } => Shape::Lent { program: self.text(program) },
-            Shape::Out { value } => Shape::Out { value: self.text(value) },
-            Shape::Filled { class } => Shape::Filled { class: self.text(class) },
-            Shape::Length { value } => Shape::Length { value: self.text(value) },
-            Shape::Bytes { length, owned } => Shape::Bytes { length: parameter(length), owned: *owned },
+            Shape::Handle { class, nullable } => Shape::Handle {
+                class: self.class(class),
+                nullable: *nullable,
+            },
+            Shape::Lent { program } => Shape::Lent {
+                program: self.text(program),
+            },
+            Shape::Out { value } => Shape::Out {
+                value: self.text(value),
+            },
+            Shape::Filled { class } => Shape::Filled {
+                class: self.text(class),
+            },
+            Shape::Length { value } => Shape::Length {
+                value: self.text(value),
+            },
+            Shape::Bytes { length, owned } => Shape::Bytes {
+                length: parameter(length),
+                owned: *owned,
+            },
             other @ (Shape::Other | Shape::Once) => other.clone(),
         };
-        Mapped { ts: self.text(&mapped.ts), c: mapped.c.clone(), shape }
+        Mapped {
+            ts: self.text(&mapped.ts),
+            c: mapped.c.clone(),
+            shape,
+        }
     }
 
     fn decl(&self, decl: &TypeDecl) -> TypeDecl {
-        let TypeDecl::Class { name, tag, parent, counted, interface, implements, boxed } = decl;
+        let TypeDecl::Class {
+            name,
+            tag,
+            parent,
+            counted,
+            interface,
+            implements,
+            boxed,
+        } = decl;
         TypeDecl::Class {
             name: self.class(name),
             tag: tag.clone(),
             // Qualified where it is another namespace's, so no module is
             // needed beside it: the namespace is imported whole.
-            parent: parent.as_ref().map(|(_, parent)| (String::new(), self.class(parent))),
+            parent: parent
+                .as_ref()
+                .map(|(_, parent)| (String::new(), self.class(parent))),
             counted: *counted,
             interface: *interface,
-            implements: implements.iter().map(|(name, tag)| (self.class(name), tag.clone())).collect(),
+            implements: implements
+                .iter()
+                .map(|(name, tag)| (self.class(name), tag.clone()))
+                .collect(),
             boxed: boxed.clone(),
         }
     }
 
     fn function(&self, function: &Function) -> Function {
-        let parameters = function.parameters.iter().map(|(name, mapped)| (parameter(name), self.mapped(mapped))).collect();
+        let parameters = function
+            .parameters
+            .iter()
+            .map(|(name, mapped)| (parameter(name), self.mapped(mapped)))
+            .collect();
         let vfunc = function.vfunc.as_ref().map(|vfunc| Vfunc {
-            outs: vfunc.outs.iter().map(|(name, nullable)| (parameter(name), *nullable)).collect(),
+            outs: vfunc
+                .outs
+                .iter()
+                .map(|(name, nullable)| (parameter(name), *nullable))
+                .collect(),
             ..vfunc.clone()
         });
         Function {
             // GIR's own name for a function of the namespace, which is how a
             // program calls it; a view or a thunk keeps its name, which a tag
             // or the compiler finds it by.
-            name: function.gir_name.as_deref().map_or_else(|| function.name.clone(), camel),
+            name: function
+                .gir_name
+                .as_deref()
+                .map_or_else(|| function.name.clone(), camel),
             parameters,
             result: self.mapped(&function.result),
-            omissible: function.omissible.iter().map(|(name, value)| (parameter(name), *value)).collect(),
-            no_escape: function.no_escape.iter().map(|name| parameter(name)).collect(),
+            omissible: function
+                .omissible
+                .iter()
+                .map(|(name, value)| (parameter(name), *value))
+                .collect(),
+            no_escape: function
+                .no_escape
+                .iter()
+                .map(|name| parameter(name))
+                .collect(),
             throws: function.throws.as_deref().map(parameter),
-            method: function.method.as_ref().map(|(class, name)| (self.class(class), camel(name))),
-            statics: function.statics.as_ref().map(|(class, name)| (self.class(class), camel(name))),
+            method: function
+                .method
+                .as_ref()
+                .map(|(class, name)| (self.class(class), camel(name))),
+            statics: function
+                .statics
+                .as_ref()
+                .map(|(class, name)| (self.class(class), camel(name))),
             finish: function.finish.as_deref().map(camel),
             // A method is a method only: `gi:` exports no free function
             // beside it, as GJS has none.
@@ -380,7 +550,10 @@ mod tests {
         assert_eq!(camel("get_2d"), "get2d");
         assert_eq!(camel("new"), "new");
         assert_eq!(camel("_private"), "_private");
-        assert_eq!(camel("$ntsPropGet_width_request"), "$ntsPropGetWidthRequest");
+        assert_eq!(
+            camel("$ntsPropGet_width_request"),
+            "$ntsPropGetWidthRequest"
+        );
         assert_eq!(parameter("for_size"), "forSize");
         assert_eq!(parameter("in_"), "in_");
         assert_eq!(parameter("delete_"), "delete_");
@@ -388,7 +561,10 @@ mod tests {
 
     #[test]
     fn a_token_is_an_identifier_outside_a_string_and_not_after_a_dot() {
-        let tokens: Vec<&str> = identifiers(r#"CNumber<"int"> | Gio.ListModel | (self: GtkButton) => void"#).map(|(_, t)| t).collect();
+        let tokens: Vec<&str> =
+            identifiers(r#"CNumber<"int"> | Gio.ListModel | (self: GtkButton) => void"#)
+                .map(|(_, t)| t)
+                .collect();
         assert_eq!(tokens, ["CNumber", "Gio", "self", "GtkButton", "void"]);
     }
 }

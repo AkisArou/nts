@@ -18,37 +18,94 @@ fn tsgo() -> Option<Utf8PathBuf> {
 }
 
 fn fixtures() -> Utf8PathBuf {
-    Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/jsx-lowering/tsconfig.json").canonicalize_utf8().expect("checked in")
+    Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../fixtures/jsx-lowering/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("checked in")
 }
 
 /// tsgo's `JsxElement`, `JsxSelfClosingElement` and `JsxFragment` kinds.
 fn is_jsx(kind: u16) -> bool {
     use nts_react::tsgo::kinds as k;
-    matches!(kind, k::JSX_ELEMENT | k::JSX_SELF_CLOSING_ELEMENT | k::JSX_FRAGMENT)
+    matches!(
+        kind,
+        k::JSX_ELEMENT | k::JSX_SELF_CLOSING_ELEMENT | k::JSX_FRAGMENT
+    )
 }
 
 #[test]
 fn nts_reads_the_project_compiled_and_without_jsx() {
     let Some(tsgo) = tsgo() else { return };
     let plain = TsgoApi::new(&tsgo).snapshot(&fixtures()).unwrap();
-    assert!(plain.nodes.iter().any(|n| matches!(n.kind, NodeKind::Syntax(kind) if is_jsx(kind))), "the control: the fixtures are JSX");
+    assert!(
+        plain
+            .nodes
+            .iter()
+            .any(|n| matches!(n.kind, NodeKind::Syntax(kind) if is_jsx(kind))),
+        "the control: the fixtures are JSX"
+    );
 
     let (transform, report) = ReactTransform::new(stage::default_options());
-    let snapshot = TsgoApi::new(&tsgo).with_transform(Box::new(transform)).snapshot(&fixtures()).unwrap();
-    assert!(!snapshot.nodes.iter().any(|n| matches!(n.kind, NodeKind::Syntax(kind) if is_jsx(kind))), "every file nts read had its JSX lowered");
+    let snapshot = TsgoApi::new(&tsgo)
+        .with_transform(Box::new(transform))
+        .snapshot(&fixtures())
+        .unwrap();
+    assert!(
+        !snapshot
+            .nodes
+            .iter()
+            .any(|n| matches!(n.kind, NodeKind::Syntax(kind) if is_jsx(kind))),
+        "every file nts read had its JSX lowered"
+    );
 
     // The compiler's bailout on `Conditional` is a warning in the snapshot,
     // on the file, naming the function by its line.
-    let bailout = snapshot.diagnostics.iter().find(|d| d.code == "NTS0005").expect("the bailout is reported");
-    assert_eq!(snapshot.sources[bailout.primary.file.0 as usize].display_path.file_name(), Some("bailout.tsx"));
-    assert!(bailout.message.contains("left the function at ") && bailout.message.contains("/fixtures/jsx-lowering/bailout.tsx:5 as written") && bailout.message.contains("Hooks"), "{}", bailout.message);
-    assert_eq!(snapshot.diagnostics.iter().filter(|d| d.code == "NTS0005").count(), 1, "and nothing else bailed out");
+    let bailout = snapshot
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "NTS0005")
+        .expect("the bailout is reported");
+    assert_eq!(
+        snapshot.sources[bailout.primary.file.0 as usize]
+            .display_path
+            .file_name(),
+        Some("bailout.tsx")
+    );
+    assert!(
+        bailout.message.contains("left the function at ")
+            && bailout
+                .message
+                .contains("/fixtures/jsx-lowering/bailout.tsx:5 as written")
+            && bailout.message.contains("Hooks"),
+        "{}",
+        bailout.message
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "NTS0005")
+            .count(),
+        1,
+        "and nothing else bailed out"
+    );
 
     let report = report.lock().unwrap();
-    let keys = report.iter().find(|(path, _)| path.file_name() == Some("keys.tsx")).map(|(_, r)| r).expect("keys.tsx was offered");
-    let component = keys.functions.iter().find(|f| f.name.as_deref() == Some("Keys")).expect("Keys is reported");
+    let keys = report
+        .iter()
+        .find(|(path, _)| path.file_name() == Some("keys.tsx"))
+        .map(|(_, r)| r)
+        .expect("keys.tsx was offered");
+    let component = keys
+        .functions
+        .iter()
+        .find(|f| f.name.as_deref() == Some("Keys"))
+        .expect("Keys is reported");
     assert_eq!(component.state, FunctionState::Compiled);
-    assert!(keys.fell_back.is_empty() && keys.refused.is_none(), "{keys:?}");
+    assert!(
+        keys.fell_back.is_empty() && keys.refused.is_none(),
+        "{keys:?}"
+    );
 }
 
 /// No checker: a revision re-prints from what the first print learned.
@@ -66,14 +123,36 @@ fn an_error_inside_a_compiled_function_gives_it_back_as_written() {
         return;
     }
     let mut session = Session::open(&fixtures()).unwrap();
-    let path = session.own_sources().unwrap().into_iter().find(|p| p.file_name() == Some("keys.tsx")).unwrap();
+    let path = session
+        .own_sources()
+        .unwrap()
+        .into_iter()
+        .find(|p| p.file_name() == Some("keys.tsx"))
+        .unwrap();
     let tree = session.file(&path).unwrap();
     let code = std::fs::read_to_string(&path).unwrap();
 
     let (mut transform, report) = ReactTransform::new(stage::default_options());
-    assert!(transform.diagnostics(&path).is_empty(), "nothing to say before the file is offered");
-    let compiled = transform.transform(&TransformInput { path: &path, text: &code, tree: &tree }, &mut NoTypes).expect("keys.tsx is rewritten");
-    let keys = report.lock().unwrap()[&path].functions.iter().find(|f| f.name.as_deref() == Some("Keys")).cloned().unwrap();
+    assert!(
+        transform.diagnostics(&path).is_empty(),
+        "nothing to say before the file is offered"
+    );
+    let compiled = transform
+        .transform(
+            &TransformInput {
+                path: &path,
+                text: &code,
+                tree: &tree,
+            },
+            &mut NoTypes,
+        )
+        .expect("keys.tsx is rewritten");
+    let keys = report.lock().unwrap()[&path]
+        .functions
+        .iter()
+        .find(|f| f.name.as_deref() == Some("Keys"))
+        .cloned()
+        .unwrap();
     let (start, end) = keys.output.expect("compiled");
     assert!(compiled.encode_utf16().count() >= end as usize);
 
@@ -81,18 +160,34 @@ fn an_error_inside_a_compiled_function_gives_it_back_as_written() {
     // to give anything back.
     assert_eq!(transform.revise(&path, &[(0, 1)]), None);
 
-    let revised = transform.revise(&path, &[(start + 1, start + 2)]).expect("Keys is given back");
+    let revised = transform
+        .revise(&path, &[(start + 1, start + 2)])
+        .expect("Keys is given back");
     let written: Vec<u16> = code.encode_utf16().collect();
-    let keys_as_written = String::from_utf16_lossy(&written[keys.span.0 as usize..keys.span.1 as usize]);
+    let keys_as_written =
+        String::from_utf16_lossy(&written[keys.span.0 as usize..keys.span.1 as usize]);
     // As written, with its JSX still lowered: the text between `function
     // Keys(` and its first JSX is the user's.
     let head = keys_as_written.split('<').next().unwrap();
-    assert!(revised.contains(head) && !revised.contains("$[0]"), "Keys as the user wrote it");
+    assert!(
+        revised.contains(head) && !revised.contains("$[0]"),
+        "Keys as the user wrote it"
+    );
     assert_eq!(report.lock().unwrap()[&path].fell_back, vec![keys.span]);
-    let said: Vec<_> = transform.diagnostics(&path).into_iter().map(|d| (d.code, d.message)).collect();
+    let said: Vec<_> = transform
+        .diagnostics(&path)
+        .into_iter()
+        .map(|d| (d.code, d.message))
+        .collect();
     assert_eq!(said.len(), 1, "{said:?}");
     assert_eq!(said[0].0, "NTS0004");
-    assert!(said[0].1.starts_with(&format!("`Keys` ({path}:6) is built as written")), "{}", said[0].1);
+    assert!(
+        said[0]
+            .1
+            .starts_with(&format!("`Keys` ({path}:6) is built as written")),
+        "{}",
+        said[0].1
+    );
     // Nothing more to give back.
     assert_eq!(transform.revise(&path, &[(start + 1, start + 2)]), None);
 }
@@ -118,34 +213,74 @@ fn a_typed_cache_that_does_not_typecheck_steps_down_to_the_array_before_giving_t
     // The TSX probe: it resolves our React, so its JSX is typed and so are
     // its caches. (The JSX fixtures do not resolve `react`: their caches hold
     // `any`, and stay the compiler's array.)
-    let probe = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../native/compiled/tsconfig.json").canonicalize_utf8().expect("checked in");
+    let probe = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../native/compiled/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("checked in");
     let mut session = Session::open(&probe).unwrap();
-    let path = session.own_sources().unwrap().into_iter().find(|p| p.file_name() == Some("main.tsx")).unwrap();
+    let path = session
+        .own_sources()
+        .unwrap()
+        .into_iter()
+        .find(|p| p.file_name() == Some("main.tsx"))
+        .unwrap();
     let tree = session.file(&path).unwrap();
     let code = std::fs::read_to_string(&path).unwrap();
 
     let (mut transform, report) = ReactTransform::new(stage::default_options());
     let typed = {
-        let mut types = SessionTypes { session: &mut session, path: &path, tree: &tree };
-        transform.transform(&TransformInput { path: &path, text: &code, tree: &tree }, &mut types).expect("rewritten")
+        let mut types = SessionTypes {
+            session: &mut session,
+            path: &path,
+            tree: &tree,
+        };
+        transform
+            .transform(
+                &TransformInput {
+                    path: &path,
+                    text: &code,
+                    tree: &tree,
+                },
+                &mut types,
+            )
+            .expect("rewritten")
     };
-    let item = |report: &nts_react::transform::Report| report.lock().unwrap()[&path].functions.iter().find(|f| f.name.as_deref() == Some("Item")).cloned().unwrap();
+    let item = |report: &nts_react::transform::Report| {
+        report.lock().unwrap()[&path]
+            .functions
+            .iter()
+            .find(|f| f.name.as_deref() == Some("Item"))
+            .cloned()
+            .unwrap()
+    };
     let first = item(&report);
-    assert!(first.typed_cache && typed.contains("_cacheOf("), "with the checker, Item's cache is typed");
+    assert!(
+        first.typed_cache && typed.contains("_cacheOf("),
+        "with the checker, Item's cache is typed"
+    );
 
     // An error inside it: the array cache, still memoized, and not given back.
     let (start, _) = first.output.unwrap();
-    let array = transform.revise(&path, &[(start + 1, start + 2)]).expect("revised");
+    let array = transform
+        .revise(&path, &[(start + 1, start + 2)])
+        .expect("revised");
     let second = item(&report);
-    assert!(!second.typed_cache && second.output.is_some(), "Item is compiled, on the array cache");
-    assert!(array.contains("_c(") && report.lock().unwrap()[&path].fell_back.is_empty(), "memoized, not given back");
+    assert!(
+        !second.typed_cache && second.output.is_some(),
+        "Item is compiled, on the array cache"
+    );
+    assert!(
+        array.contains("_c(") && report.lock().unwrap()[&path].fell_back.is_empty(),
+        "memoized, not given back"
+    );
 
     // An error inside it again: now it is given back as written.
     let (start, _) = second.output.unwrap();
-    transform.revise(&path, &[(start + 1, start + 2)]).expect("revised again");
+    transform
+        .revise(&path, &[(start + 1, start + 2)])
+        .expect("revised again");
     assert_eq!(report.lock().unwrap()[&path].fell_back, vec![first.span]);
 }
-
 
 #[test]
 fn a_member_tag_lowers_to_its_own_host_type() {
@@ -156,25 +291,65 @@ fn a_member_tag_lowers_to_its_own_host_type() {
     // intersection, `HostComponent<"GtkPaned", ...> & PanedSlots`, and each
     // element as a member of it: both the widget and `Paned.StartChild` lower
     // to host types.
-    let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/host-components/tsconfig.json").canonicalize_utf8().expect("checked in");
+    let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../fixtures/host-components/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("checked in");
     let mut session = Session::open(&project).unwrap();
-    let path = session.own_sources().unwrap().into_iter().find(|p| p.file_name() == Some("members.tsx")).unwrap();
+    let path = session
+        .own_sources()
+        .unwrap()
+        .into_iter()
+        .find(|p| p.file_name() == Some("members.tsx"))
+        .unwrap();
     let tree = session.file(&path).unwrap();
     let code = std::fs::read_to_string(&path).unwrap();
-    let input = TransformInput { path: &path, text: &code, tree: &tree };
+    let input = TransformInput {
+        path: &path,
+        text: &code,
+        tree: &tree,
+    };
 
     let (mut transform, _) = ReactTransform::new(stage::default_options());
-    let lowered = transform.transform(&input, &mut SessionTypes { session: &mut session, path: &path, tree: &tree }).expect("members.tsx is rewritten");
-    for host in ["GtkPaned", "GtkPaned.StartChild", "GtkPaned.EndChild", "GtkGrid", "GtkGrid.Child", "GtkLabel"] {
-        assert!(lowered.contains(&format!("_jsx(\"{host}\"")) || lowered.contains(&format!("_jsxs(\"{host}\"")), "{host} in {lowered}");
+    let lowered = transform
+        .transform(
+            &input,
+            &mut SessionTypes {
+                session: &mut session,
+                path: &path,
+                tree: &tree,
+            },
+        )
+        .expect("members.tsx is rewritten");
+    for host in [
+        "GtkPaned",
+        "GtkPaned.StartChild",
+        "GtkPaned.EndChild",
+        "GtkGrid",
+        "GtkGrid.Child",
+        "GtkLabel",
+    ] {
+        assert!(
+            lowered.contains(&format!("_jsx(\"{host}\""))
+                || lowered.contains(&format!("_jsxs(\"{host}\"")),
+            "{host} in {lowered}"
+        );
     }
-    assert!(!lowered.contains("Paned.StartChild,") && !lowered.contains("Grid.Child,"), "no member tag is a component: {lowered}");
+    assert!(
+        !lowered.contains("Paned.StartChild,") && !lowered.contains("Grid.Child,"),
+        "no member tag is a component: {lowered}"
+    );
 
     // The control: without the checker's answer a member tag is the member
     // expression it was written as.
     let (mut blind, _) = ReactTransform::new(stage::default_options());
-    let written = blind.transform(&input, &mut NoTypes).expect("members.tsx is rewritten");
-    assert!(written.contains("Paned.StartChild") && !written.contains("\"GtkPaned.StartChild\""), "{written}");
+    let written = blind
+        .transform(&input, &mut NoTypes)
+        .expect("members.tsx is rewritten");
+    assert!(
+        written.contains("Paned.StartChild") && !written.contains("\"GtkPaned.StartChild\""),
+        "{written}"
+    );
 }
 
 #[test]
@@ -186,19 +361,49 @@ fn text_outside_ascii_keeps_every_span() {
     // Greek and an astral emoji before the component shift every later span
     // by a different amount in UTF-8 bytes than in UTF-16 units, so a span
     // counted in the wrong unit would cut the printed text or miss a tag.
-    let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/host-components/tsconfig.json").canonicalize_utf8().expect("checked in");
+    let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../fixtures/host-components/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("checked in");
     let mut session = Session::open(&project).unwrap();
-    let path = session.own_sources().unwrap().into_iter().find(|p| p.file_name() == Some("unicode.tsx")).unwrap();
+    let path = session
+        .own_sources()
+        .unwrap()
+        .into_iter()
+        .find(|p| p.file_name() == Some("unicode.tsx"))
+        .unwrap();
     let tree = session.file(&path).unwrap();
     let code = std::fs::read_to_string(&path).unwrap();
-    let input = TransformInput { path: &path, text: &code, tree: &tree };
+    let input = TransformInput {
+        path: &path,
+        text: &code,
+        tree: &tree,
+    };
 
     let (mut transform, _) = ReactTransform::new(stage::default_options());
-    let lowered = transform.transform(&input, &mut SessionTypes { session: &mut session, path: &path, tree: &tree }).expect("unicode.tsx is rewritten");
-    for text in ["\"Καλημέρα κόσμε 🌍\"", "`Μετρητής 🌍 ${count}`", "\"Πρόσθεσε\"", "\"Γειά σου 🌍 κόσμε\""] {
+    let lowered = transform
+        .transform(
+            &input,
+            &mut SessionTypes {
+                session: &mut session,
+                path: &path,
+                tree: &tree,
+            },
+        )
+        .expect("unicode.tsx is rewritten");
+    for text in [
+        "\"Καλημέρα κόσμε 🌍\"",
+        "`Μετρητής 🌍 ${count}`",
+        "\"Πρόσθεσε\"",
+        "\"Γειά σου 🌍 κόσμε\"",
+    ] {
         assert!(lowered.contains(text), "{text} in {lowered}");
     }
-    for host in ["_jsxs(\"GtkBox\"", "_jsx(\"GtkLabel\"", "_jsx(\"GtkButton\""] {
+    for host in [
+        "_jsxs(\"GtkBox\"",
+        "_jsx(\"GtkLabel\"",
+        "_jsx(\"GtkButton\"",
+    ] {
         assert!(lowered.contains(host), "{host} in {lowered}");
     }
 }
@@ -208,23 +413,56 @@ fn a_host_component_tag_lowers_to_its_host_type() {
     if tsgo().is_none() {
         return;
     }
-    let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/host-components/tsconfig.json").canonicalize_utf8().expect("checked in");
+    let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../fixtures/host-components/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("checked in");
     let mut session = Session::open(&project).unwrap();
-    let path = session.own_sources().unwrap().into_iter().find(|p| p.file_name() == Some("app.tsx")).unwrap();
+    let path = session
+        .own_sources()
+        .unwrap()
+        .into_iter()
+        .find(|p| p.file_name() == Some("app.tsx"))
+        .unwrap();
     let tree = session.file(&path).unwrap();
     let code = std::fs::read_to_string(&path).unwrap();
-    let input = TransformInput { path: &path, text: &code, tree: &tree };
+    let input = TransformInput {
+        path: &path,
+        text: &code,
+        tree: &tree,
+    };
 
     let (mut transform, _) = ReactTransform::new(stage::default_options());
-    let lowered = transform.transform(&input, &mut SessionTypes { session: &mut session, path: &path, tree: &tree }).expect("app.tsx is rewritten");
+    let lowered = transform
+        .transform(
+            &input,
+            &mut SessionTypes {
+                session: &mut session,
+                path: &path,
+                tree: &tree,
+            },
+        )
+        .expect("app.tsx is rewritten");
     for host in ["\"GtkBox\"", "\"GtkLabel\"", "\"GtkButton\""] {
-        assert!(lowered.contains(&format!("_jsx(\"{}", &host[1..])) || lowered.contains(&format!("_jsxs({host}")), "{host} in {lowered}");
+        assert!(
+            lowered.contains(&format!("_jsx(\"{}", &host[1..]))
+                || lowered.contains(&format!("_jsxs({host}")),
+            "{host} in {lowered}"
+        );
     }
-    assert!(!lowered.contains("_jsx(Button") && !lowered.contains("_jsxs(Box"), "no tag is a component: {lowered}");
+    assert!(
+        !lowered.contains("_jsx(Button") && !lowered.contains("_jsxs(Box"),
+        "no tag is a component: {lowered}"
+    );
 
     // The control: without the checker's answer a tag is the name it was
     // written as.
     let (mut blind, _) = ReactTransform::new(stage::default_options());
-    let written = blind.transform(&input, &mut NoTypes).expect("app.tsx is rewritten");
-    assert!(written.contains("_jsx(Button") && !written.contains("\"GtkButton\""), "{written}");
+    let written = blind
+        .transform(&input, &mut NoTypes)
+        .expect("app.tsx is rewritten");
+    assert!(
+        written.contains("_jsx(Button") && !written.contains("\"GtkButton\""),
+        "{written}"
+    );
 }

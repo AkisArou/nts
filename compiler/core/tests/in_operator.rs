@@ -428,5 +428,9 @@ fn a_function_is_answered_by_its_tag_and_a_class_is_not() {
     // `name`, `call` and `bind`, asked of a closure and of an object: six sites.
     assert_eq!(tags("functionNames"), 6, "a function is its tag");
     assert_eq!(tags("declaredByAClass"), 0, "a class is a descriptor");
-    assert_eq!(tags("declaredByNothing"), 0, "and a name nothing has is neither");
+    assert_eq!(
+        tags("declaredByNothing"),
+        0,
+        "and a name nothing has is neither"
+    );
 }

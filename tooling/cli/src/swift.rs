@@ -44,22 +44,48 @@ pub(crate) struct Toolchain {
 pub(crate) fn toolchain() -> Result<Toolchain> {
     let root = nts_build::swift::toolchain_root()?;
     let bin = root.join("usr").join("bin");
-    let (frontend, extract) = (bin.join("swift-frontend"), bin.join("swift-symbolgraph-extract"));
+    let (frontend, extract) = (
+        bin.join("swift-frontend"),
+        bin.join("swift-symbolgraph-extract"),
+    );
     if !frontend.is_file() || !extract.is_file() {
-        bail!("{} has no usr/bin/swift-frontend: NTS_SWIFT_TOOLCHAIN names the directory a Swift release unpacks to", root.display());
+        bail!(
+            "{} has no usr/bin/swift-frontend: NTS_SWIFT_TOOLCHAIN names the directory a Swift release unpacks to",
+            root.display()
+        );
     }
     let cache = kept(&root)?;
-    let resource = apple_resource(&cache.join("resource"), &root.join("usr").join("lib").join("swift"))?;
-    Ok(Toolchain { frontend, extract, resource, modules: cache.join("modules") })
+    let resource = apple_resource(
+        &cache.join("resource"),
+        &root.join("usr").join("lib").join("swift"),
+    )?;
+    Ok(Toolchain {
+        frontend,
+        extract,
+        resource,
+        modules: cache.join("modules"),
+    })
 }
 
 /// What is kept for one toolchain, under `~/.cache/nts/swift-kept`, since the
 /// toolchain's own directory may not be this user's to write.
 fn kept(root: &Path) -> Result<PathBuf> {
-    let home = std::env::var_os("HOME").context("HOME is not set, and what the Swift toolchain keeps is kept under it")?;
-    let name = root.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-    let hash = root.to_string_lossy().bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3));
-    Ok(Path::new(&home).join(".cache").join("nts").join("swift-kept").join(format!("{name}-{hash:016x}")))
+    let home = std::env::var_os("HOME")
+        .context("HOME is not set, and what the Swift toolchain keeps is kept under it")?;
+    let name = root
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    let hash = root
+        .to_string_lossy()
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        });
+    Ok(Path::new(&home)
+        .join(".cache")
+        .join("nts")
+        .join("swift-kept")
+        .join(format!("{name}-{hash:016x}")))
 }
 
 /// The toolchain's `shims` and `clang`, and not its Linux module maps.
@@ -69,9 +95,11 @@ fn apple_resource(resource: &Path, swift: &Path) -> Result<PathBuf> {
         if link.exists() {
             continue;
         }
-        std::fs::create_dir_all(resource).with_context(|| format!("creating {}", resource.display()))?;
+        std::fs::create_dir_all(resource)
+            .with_context(|| format!("creating {}", resource.display()))?;
         #[cfg(unix)]
-        std::os::unix::fs::symlink(swift.join(part), &link).with_context(|| format!("linking {}", link.display()))?;
+        std::os::unix::fs::symlink(swift.join(part), &link)
+            .with_context(|| format!("linking {}", link.display()))?;
         #[cfg(not(unix))]
         bail!("the Swift toolchain is not supported on this host");
     }
@@ -126,25 +154,47 @@ impl Toolchain {
     /// What a cache of this toolchain's output is keyed by: its frontend,
     /// by where it is and which build of it.
     pub(crate) fn identity(&self) -> String {
-        let stamp = std::fs::metadata(&self.frontend).map(|meta| format!("{}{:?}", meta.len(), meta.modified().ok())).unwrap_or_default();
+        let stamp = std::fs::metadata(&self.frontend)
+            .map(|meta| format!("{}{:?}", meta.len(), meta.modified().ok()))
+            .unwrap_or_default();
         format!("{} {stamp}", self.frontend.display())
     }
 
     /// The arguments every command for `target` takes.
     fn for_target(&self, command: &mut Command, target: Target<'_>) {
-        command.args(["-target", target.triple]).arg("-sdk").arg(target.sdk);
-        command.arg("-resource-dir").arg(&self.resource).arg("-I").arg(self.resource.join("shims"));
+        command
+            .args(["-target", target.triple])
+            .arg("-sdk")
+            .arg(target.sdk);
+        command
+            .arg("-resource-dir")
+            .arg(&self.resource)
+            .arg("-I")
+            .arg(self.resource.join("shims"));
         command.arg("-module-cache-path").arg(&self.modules);
     }
 
     /// `<module>.symbols.json` for `header`, into `out`: the header as a
     /// Clang module of its own, through a module map written there too,
     /// since a project's source tree is not the build's to write.
-    pub(crate) fn extract(&self, header: &Header<'_>, target: Target<'_>, out: &Path) -> Result<PathBuf> {
+    pub(crate) fn extract(
+        &self,
+        header: &Header<'_>,
+        target: Target<'_>,
+        out: &Path,
+    ) -> Result<PathBuf> {
         let map = out.join("modulemap");
         std::fs::create_dir_all(&map).with_context(|| format!("creating {}", map.display()))?;
-        let file = std::fs::canonicalize(header.path).with_context(|| format!("reading {}", header.path.display()))?;
-        std::fs::write(map.join("module.modulemap"), format!("module {} {{\n  header {:?}\n  export *\n}}\n", header.module, file.display().to_string()))?;
+        let file = std::fs::canonicalize(header.path)
+            .with_context(|| format!("reading {}", header.path.display()))?;
+        std::fs::write(
+            map.join("module.modulemap"),
+            format!(
+                "module {} {{\n  header {:?}\n  export *\n}}\n",
+                header.module,
+                file.display().to_string()
+            ),
+        )?;
         let mut command = Command::new(&self.extract);
         command.args(["-module-name", header.module]);
         self.for_target(&mut command, target);
@@ -155,44 +205,88 @@ impl Toolchain {
         for directory in header.frameworks {
             command.arg("-F").arg(directory);
         }
-        command.arg("-output-dir").arg(out).args(["-minimum-access-level", "private"]);
+        command
+            .arg("-output-dir")
+            .arg(out)
+            .args(["-minimum-access-level", "private"]);
         let graph = out.join(format!("{}.symbols.json", header.module));
-        run(command, &graph, &format!("Swift could not read {} as module `{}`", header.path.display(), header.module))?;
+        run(
+            command,
+            &graph,
+            &format!(
+                "Swift could not read {} as module `{}`",
+                header.path.display(),
+                header.module
+            ),
+        )?;
         Ok(graph)
     }
 
     /// The Objective-C header Swift writes for `module`'s `@objc`
     /// declarations, `<Module>-Swift.h`: what the program's binding is read
     /// from, as another Objective-C client of the module reads it.
-    pub(crate) fn objc_header(&self, module: &Module<'_>, target: Target<'_>, out: &Path) -> Result<()> {
+    pub(crate) fn objc_header(
+        &self,
+        module: &Module<'_>,
+        target: Target<'_>,
+        out: &Path,
+    ) -> Result<()> {
         let mut command = self.frontend_for(module, target, out)?;
-        command.arg("-typecheck").arg("-emit-objc-header-path").arg(out);
-        run(command, out, &format!("Swift could not typecheck module `{}`", module.name))
+        command
+            .arg("-typecheck")
+            .arg("-emit-objc-header-path")
+            .arg(out);
+        run(
+            command,
+            out,
+            &format!("Swift could not typecheck module `{}`", module.name),
+        )
     }
 
     /// `module` compiled into one object, as a whole module.
-    pub(crate) fn compile(&self, module: &Module<'_>, target: Target<'_>, out: &Path) -> Result<()> {
+    pub(crate) fn compile(
+        &self,
+        module: &Module<'_>,
+        target: Target<'_>,
+        out: &Path,
+    ) -> Result<()> {
         let mut command = self.frontend_for(module, target, out)?;
         command.arg("-c").arg("-O").arg("-o").arg(out);
-        run(command, out, &format!("Swift could not compile module `{}` for {}", module.name, target.triple))
+        run(
+            command,
+            out,
+            &format!(
+                "Swift could not compile module `{}` for {}",
+                module.name, target.triple
+            ),
+        )
     }
 
     /// The frontend for `module`, and the module map of its Objective-C
     /// half beside `out` where it has one.
     fn frontend_for(&self, module: &Module<'_>, target: Target<'_>, out: &Path) -> Result<Command> {
         let mut command = Command::new(&self.frontend);
-        command.arg("-frontend").args(["-module-name", module.name, "-parse-as-library"]);
+        command
+            .arg("-frontend")
+            .args(["-module-name", module.name, "-parse-as-library"]);
         self.for_target(&mut command, target);
         if !module.headers.is_empty() {
             let map = module_map(out, module.name, module.headers)?;
-            command.arg("-import-underlying-module").arg("-Xcc").arg(format!("-fmodule-map-file={}", map.display()));
+            command
+                .arg("-import-underlying-module")
+                .arg("-Xcc")
+                .arg(format!("-fmodule-map-file={}", map.display()));
         }
         for import in module.imports {
             let map = module_map(out, import.name, import.headers)?;
-            command.arg("-Xcc").arg(format!("-fmodule-map-file={}", map.display()));
+            command
+                .arg("-Xcc")
+                .arg(format!("-fmodule-map-file={}", map.display()));
         }
         for directory in module.search {
-            command.arg("-Xcc").arg(format!("-I{}", directory.display()));
+            command
+                .arg("-Xcc")
+                .arg(format!("-I{}", directory.display()));
         }
         command.args(module.sources);
         Ok(command)
@@ -205,7 +299,8 @@ fn module_map(out: &Path, name: &str, headers: &[PathBuf]) -> Result<PathBuf> {
     let map = out.with_extension(format!("{name}.modulemap"));
     let mut text = format!("module {name} {{\n");
     for header in headers {
-        let file = std::fs::canonicalize(header).with_context(|| format!("reading {}", header.display()))?;
+        let file = std::fs::canonicalize(header)
+            .with_context(|| format!("reading {}", header.display()))?;
         let _ = writeln!(text, "  header {:?}", file.display().to_string());
     }
     text.push_str("  export *\n}\n");
@@ -216,9 +311,16 @@ fn module_map(out: &Path, name: &str, headers: &[PathBuf]) -> Result<PathBuf> {
 /// Runs `command`, which must write `made`; its errors, where it does not.
 fn run(mut command: Command, made: &Path, failed: &str) -> Result<()> {
     let _ = std::fs::remove_file(made);
-    let output = command.output().with_context(|| format!("running {}", command.get_program().to_string_lossy()))?;
+    let output = command
+        .output()
+        .with_context(|| format!("running {}", command.get_program().to_string_lossy()))?;
     if !output.status.success() || !made.exists() {
-        let errors: Vec<&str> = std::str::from_utf8(&output.stderr).unwrap_or_default().lines().filter(|line| line.contains("error")).take(12).collect();
+        let errors: Vec<&str> = std::str::from_utf8(&output.stderr)
+            .unwrap_or_default()
+            .lines()
+            .filter(|line| line.contains("error"))
+            .take(12)
+            .collect();
         bail!("{failed}:\n{}", errors.join("\n"));
     }
     Ok(())

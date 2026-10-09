@@ -21,9 +21,7 @@
 
 use nts_codegen_common::symbols::jvm_member_name;
 use nts_codegen_common::{Copy, block_order, destruct, edge_copies};
-use nts_core::hir::{
-    BinOp, BlockId, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
-};
+use nts_core::hir::{BinOp, BlockId, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId};
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
 use nts_jvm_emitter::{Body, Compare, Kind, Pool, VType};
@@ -73,11 +71,16 @@ fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), 
         if types::descriptor(types::Shape::packaged(program, package), &param.ty).is_none() {
             return Err(refuse(
                 func,
-                &format!("a parameter of unrepresentable type: {}", types::describe(&param.ty)),
+                &format!(
+                    "a parameter of unrepresentable type: {}",
+                    types::describe(&param.ty)
+                ),
             ));
         }
     }
-    if types::return_descriptor(types::Shape::packaged(program, package), &func.return_type).is_none() {
+    if types::return_descriptor(types::Shape::packaged(program, package), &func.return_type)
+        .is_none()
+    {
         return Err(refuse(
             func,
             &format!(
@@ -103,9 +106,10 @@ fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), 
 fn puts_label(func: &Func, value: ValueId) -> bool {
     match &func.values[value.0 as usize].kind {
         OpKind::Binary { op, .. } => comparison(*op).is_some(),
-        OpKind::Unary { op: UnOp::Truthy, operand } => {
-            !matches!(&func.values[operand.0 as usize].ty, HirType::Bool)
-        }
+        OpKind::Unary {
+            op: UnOp::Truthy,
+            operand,
+        } => !matches!(&func.values[operand.0 as usize].ty, HirType::Bool),
         // Anything converted to a boolean is truthiness, which
         // branches and rejoins and so needs the slot -- `Code`
         // counts one linear depth, and an arm that pushes on both
@@ -216,7 +220,9 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
                     | OpKind::OpenFieldSet { .. }
             ) {
                 crosses.insert(value);
-                crosses.extend(nts_core::hir::operands_of(&func.values[value.0 as usize].kind));
+                crosses.extend(nts_core::hir::operands_of(
+                    &func.values[value.0 as usize].kind,
+                ));
             }
         }
         // A branch that carries block arguments emits a label of its own --
@@ -236,7 +242,11 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
         // by which one falls through, the cost is a declared slot, and a rule
         // that depends on emission order is a rule that breaks when the order
         // does.
-        if let Terminator::Branch { then_args, else_args, .. } = &block.terminator
+        if let Terminator::Branch {
+            then_args,
+            else_args,
+            ..
+        } = &block.terminator
             && !(then_args.is_empty() && else_args.is_empty())
         {
             crosses.extend(nts_core::hir::operands_of_terminator(&block.terminator));
@@ -353,7 +363,10 @@ fn held_differently(plans: &Held, value: ValueId) -> Option<nts_jvm_emitter::VTy
         .or_else(|| crate::builder::held_as(&plans.accumulated, value))
         .or_else(|| crate::closures::held_as(&plans.joined, value))
         .or_else(|| {
-            plans.widened.contains(&value).then_some(nts_jvm_emitter::VType::Double)
+            plans
+                .widened
+                .contains(&value)
+                .then_some(nts_jvm_emitter::VType::Double)
         })
 }
 
@@ -418,6 +431,7 @@ pub struct Emitter<'a> {
 
 impl<'a> Emitter<'a> {
     /// Lay out storage, or refuse a type this slice has no representation for.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     pub fn new(
         package: &'a str,
         program: &'a Program,
@@ -440,7 +454,8 @@ impl<'a> Emitter<'a> {
         let plans = held_values(package, program, func, plan);
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
-            let Some(vtype) = types::vtype(types::Shape::packaged(program, package), &param.ty) else {
+            let Some(vtype) = types::vtype(types::Shape::packaged(program, package), &param.ty)
+            else {
                 return Err(refuse(func, "a parameter with no verification type"));
             };
             param_slot.push(u16::try_from(next).unwrap_or(u16::MAX));
@@ -485,14 +500,19 @@ impl<'a> Emitter<'a> {
                 continue;
             }
             let held = held_differently(&plans, value);
-            let Some(vtype) = held.or_else(|| types::vtype(types::Shape::packaged(program, package), ty)) else {
+            let Some(vtype) =
+                held.or_else(|| types::vtype(types::Shape::packaged(program, package), ty))
+            else {
                 return Err(refuse(
                     func,
                     &format!("a value of unrepresentable type: {}", types::describe(ty)),
                 ));
             };
             let Ok(slot) = u16::try_from(next) else {
-                return Err(refuse(func, "more local slots than the 65,535 a method allows"));
+                return Err(refuse(
+                    func,
+                    "more local slots than the 65,535 a method allows",
+                ));
             };
             slots[at] = Some(slot);
             next += u32::from(vtype.slots());
@@ -626,7 +646,8 @@ impl<'a> Emitter<'a> {
     fn reserve_scratch(&mut self, materializes: bool) -> Result<(), Diagnostic> {
         let mut needed: Vec<(u32, u8)> = Vec::new();
         for &block in &self.order {
-            for (target, args) in destruct::outgoing(&self.func.blocks[block.0 as usize].terminator) {
+            for (target, args) in destruct::outgoing(&self.func.blocks[block.0 as usize].terminator)
+            {
                 let params = &self.func.blocks[target.0 as usize].params;
                 for copy in edge_copies(params, &args) {
                     if let Copy::Save { temp, from } = copy {
@@ -747,13 +768,15 @@ impl<'a> Emitter<'a> {
         }
         let kind = self.kind_of(value)?;
         let Some(slot) = self.slot(value) else {
-            return Err(refuse(self.func, "a value read before it was given storage"));
+            return Err(refuse(
+                self.func,
+                "a value read before it was given storage",
+            ));
         };
         code.load(&origin, kind, slot);
         Ok(())
     }
 }
-
 
 /// The comparison a `BinOp` is, where it is one.
 pub(crate) const fn comparison(op: BinOp) -> Option<Compare> {
@@ -779,7 +802,10 @@ pub fn method_name(raw: &str) -> String {
 pub fn signature(package: &str, program: &Program, func: &Func) -> Option<String> {
     let mut params = Vec::with_capacity(func.params.len());
     for param in &func.params {
-        params.push(types::descriptor(types::Shape::packaged(program, package), &param.ty)?);
+        params.push(types::descriptor(
+            types::Shape::packaged(program, package),
+            &param.ty,
+        )?);
     }
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
@@ -796,7 +822,10 @@ mod tests {
     use nts_semantic_schema::Origin;
 
     fn op(kind: OpKind, ty: HirType) -> Op {
-        let origin = Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) });
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
         Op { kind, ty, origin }
     }
 
@@ -808,7 +837,14 @@ mod tests {
             op(OpKind::ObjectNew { frame: false }, object.clone()),
             op(OpKind::ConstFloat(80.0), HirType::Float { bits: 64 }),
             op(to_bool, HirType::Bool),
-            op(OpKind::FieldSet { object: ValueId(0), field: 0, value: ValueId(2) }, HirType::Void),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(2),
+                },
+                HirType::Void,
+            ),
         ];
         let origin = values[0].origin.clone();
         let func = Func {

@@ -47,7 +47,10 @@ pub(crate) fn resolve(
     }
     probe.push_str("  return 0;\n}\n");
     let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("nts-bind-gir-prerequisites-{}-{call}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "nts-bind-gir-prerequisites-{}-{call}",
+        std::process::id()
+    ));
     let answer = run(&dir, &probe, cflags, libs).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&dir);
     parse(&answer, interfaces)
@@ -59,19 +62,22 @@ fn run(dir: &std::path::Path, probe: &str, cflags: &[String], libs: &[String]) -
     let source = dir.join("prerequisites.c");
     let program = dir.join("prerequisites");
     std::fs::write(&source, probe).ok()?;
-    let built = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
-        .args(["-std=c11", "-w", "-o"])
-        .arg(&program)
-        .args(cflags)
-        .arg(&source)
-        .args(libs)
-        .output()
-        .ok()?;
+    let built =
+        std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
+            .args(["-std=c11", "-w", "-o"])
+            .arg(&program)
+            .args(cflags)
+            .arg(&source)
+            .args(libs)
+            .output()
+            .ok()?;
     if !built.status.success() {
         return None;
     }
     let ran = std::process::Command::new(&program).output().ok()?;
-    ran.status.success().then(|| String::from_utf8_lossy(&ran.stdout).into_owned())
+    ran.status
+        .success()
+        .then(|| String::from_utf8_lossy(&ran.stdout).into_owned())
 }
 
 /// `<interface C type> <prerequisite type name>` per line, kept only for an
@@ -92,7 +98,10 @@ mod tests {
     /// Only the interfaces asked about, and the first answer for each.
     #[test]
     fn an_answer_names_an_interface_that_was_asked_about() {
-        let answered = parse("GFile GObject\nGStray GObject\n", &[("GFile", "g_file_get_type")]);
+        let answered = parse(
+            "GFile GObject\nGStray GObject\n",
+            &[("GFile", "g_file_get_type")],
+        );
         assert_eq!(answered.get("GFile").map(String::as_str), Some("GObject"));
         assert!(!answered.contains_key("GStray"));
     }

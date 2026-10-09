@@ -38,7 +38,11 @@ pub(crate) struct Questions<'a> {
 
 /// One clang run over `headers` and `declarations`, answering with each probe's
 /// `(name, qualType, desugaredQualType)`.
-fn ask(headers: &[String], clang_args: &[String], declarations: &str) -> Result<Vec<(String, String, Option<String>)>> {
+fn ask(
+    headers: &[String],
+    clang_args: &[String],
+    declarations: &str,
+) -> Result<Vec<(String, String, Option<String>)>> {
     let dir = std::env::temp_dir().join(format!(
         "nts-bind-winmd-{}-{}",
         std::process::id(),
@@ -56,7 +60,14 @@ fn ask(headers: &[String], clang_args: &[String], declarations: &str) -> Result<
     // that did, which is the answer. `-ferror-limit=0` lets all of them try.
     let output = std::process::Command::new("clang")
         .args(clang_args)
-        .args(["-fsyntax-only", "-ferror-limit=0", "-w", "-Xclang", "-ast-dump=json", "-Xclang"])
+        .args([
+            "-fsyntax-only",
+            "-ferror-limit=0",
+            "-w",
+            "-Xclang",
+            "-ast-dump=json",
+            "-Xclang",
+        ])
         .arg(format!("-ast-dump-filter={PREFIX}"))
         .arg(&probe)
         .output()
@@ -66,10 +77,17 @@ fn ask(headers: &[String], clang_args: &[String], declarations: &str) -> Result<
     let mut answers = Vec::new();
     let mut decoder = serde_json::Deserializer::from_str(&text).into_iter::<serde_json::Value>();
     while let Some(Ok(node)) = decoder.next() {
-        let Some(name) = node.get("name").and_then(serde_json::Value::as_str) else { continue };
+        let Some(name) = node.get("name").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
         let Some(ty) = node.get("type") else { continue };
-        let Some(qual) = ty.get("qualType").and_then(serde_json::Value::as_str) else { continue };
-        let desugared = ty.get("desugaredQualType").and_then(serde_json::Value::as_str).map(str::to_owned);
+        let Some(qual) = ty.get("qualType").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let desugared = ty
+            .get("desugaredQualType")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
         answers.push((name.to_owned(), qual.to_owned(), desugared));
     }
     Ok(answers)
@@ -78,13 +96,20 @@ fn ask(headers: &[String], clang_args: &[String], declarations: &str) -> Result<
 static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// Ask, then keep asking about the typedef names the answers mention.
-pub(crate) fn resolve(headers: &[String], clang_args: &[String], questions: &Questions) -> Result<Facts> {
+pub(crate) fn resolve(
+    headers: &[String],
+    clang_args: &[String],
+    questions: &Questions,
+) -> Result<Facts> {
     let mut probes = String::new();
     for name in &questions.functions {
         let _ = writeln!(probes, "__typeof__({name}) {PREFIX}fn_{name};");
     }
     for (at, (record, field)) in questions.fields.iter().enumerate() {
-        let _ = writeln!(probes, "__typeof__((({record} *)0)->{field}) {PREFIX}field_{at};");
+        let _ = writeln!(
+            probes,
+            "__typeof__((({record} *)0)->{field}) {PREFIX}field_{at};"
+        );
     }
     let mut spellings: BTreeMap<String, String> = BTreeMap::new();
     let mut function_text: BTreeMap<String, String> = BTreeMap::new();
@@ -95,12 +120,19 @@ pub(crate) fn resolve(headers: &[String], clang_args: &[String], questions: &Que
         let spelled = desugared.unwrap_or(qual);
         if let Some(function) = name.strip_prefix(&format!("{PREFIX}fn_")) {
             function_text.insert(function.to_owned(), spelled);
-        } else if let Some(at) = name.strip_prefix(&format!("{PREFIX}field_")).and_then(|at| at.parse().ok()) {
+        } else if let Some(at) = name
+            .strip_prefix(&format!("{PREFIX}field_"))
+            .and_then(|at| at.parse().ok())
+        {
             field_text.insert(at, spelled);
         }
     }
     // The typedef chain, one round per level.
-    let mut pending: BTreeSet<String> = questions.typedefs.iter().map(|name| (*name).to_owned()).collect();
+    let mut pending: BTreeSet<String> = questions
+        .typedefs
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect();
     for text in function_text.values().chain(field_text.values()) {
         pending.extend(ctype::typedef_names(text));
     }
@@ -117,7 +149,9 @@ pub(crate) fn resolve(headers: &[String], clang_args: &[String], questions: &Que
         asked.extend(pending.iter().cloned());
         let mut next = BTreeSet::new();
         for (probe, qual, desugared) in ask(headers, clang_args, &probes)? {
-            let Some(name) = probe.strip_prefix(&format!("{PREFIX}td_")) else { continue };
+            let Some(name) = probe.strip_prefix(&format!("{PREFIX}td_")) else {
+                continue;
+            };
             let resolved = desugared.unwrap_or(qual);
             next.extend(ctype::typedef_names(&resolved));
             spellings.insert(name.to_owned(), resolved);
@@ -139,10 +173,14 @@ pub(crate) fn resolve(headers: &[String], clang_args: &[String], questions: &Que
         let (record, field) = questions.fields[at];
         match ctype::parse(&text, &spellings) {
             Ok(ty) => {
-                facts.fields.insert((record.to_owned(), field.to_owned()), ty);
+                facts
+                    .fields
+                    .insert((record.to_owned(), field.to_owned()), ty);
             }
             Err(why) => {
-                facts.unanswered.insert(format!("{record}.{field}"), why.to_string());
+                facts
+                    .unanswered
+                    .insert(format!("{record}.{field}"), why.to_string());
             }
         }
     }

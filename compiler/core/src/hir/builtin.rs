@@ -357,12 +357,30 @@ pub(super) fn typed_array_element(name: &str) -> Option<HirType> {
 #[must_use]
 pub(super) fn element_kind(element: &HirType) -> Option<u32> {
     Some(match element {
-        HirType::Int { bits: 8, signed: true } => 0,
-        HirType::Int { bits: 8, signed: false } => 1,
-        HirType::Int { bits: 16, signed: true } => 3,
-        HirType::Int { bits: 16, signed: false } => 4,
-        HirType::Int { bits: 32, signed: true } => 5,
-        HirType::Int { bits: 32, signed: false } => 6,
+        HirType::Int {
+            bits: 8,
+            signed: true,
+        } => 0,
+        HirType::Int {
+            bits: 8,
+            signed: false,
+        } => 1,
+        HirType::Int {
+            bits: 16,
+            signed: true,
+        } => 3,
+        HirType::Int {
+            bits: 16,
+            signed: false,
+        } => 4,
+        HirType::Int {
+            bits: 32,
+            signed: true,
+        } => 5,
+        HirType::Int {
+            bits: 32,
+            signed: false,
+        } => 6,
         HirType::Float { bits: 32 } => 7,
         HirType::Float { bits: 64 } => 8,
         _ => return None,

@@ -4,7 +4,7 @@
 //! on the same declaration, not derived from the ABI document. The probe
 //! structs exist to separate cases the document states together, and the
 //! comment beside each records what clang printed.
-use nts_core::hir::layout::{native_place, BitPlace};
+use nts_core::hir::layout::{BitPlace, native_place};
 use nts_core::hir::native::{Naming, Pointee, Record, RecordKind, Scalar};
 
 fn bits(unit: Scalar, width: u32) -> Pointee {
@@ -24,14 +24,17 @@ fn record(fields: &[(&str, Pointee)]) -> Record {
         kind: RecordKind::Struct,
         // `Some` of some module: these tests are about the layout rule, and
         // what the identity *is* only decides which header a program carries.
-        naming: Naming::Tagged { from_header: Some(nts_semantic_schema::NodeId(0)) },
+        naming: Naming::Tagged {
+            from_header: Some(nts_semantic_schema::NodeId(0)),
+        },
         packed: false,
     }
 }
 
 /// Each row is `(byte, lo, width)` as clang prints `byte:lo-hi`.
 fn placed(record: &Record) -> (Vec<(u32, Option<BitPlace>)>, u32, u32) {
-    let place = native_place(record, nts_core::hir::native::NativeAbi::SysV).expect("a record of bit-fields has a layout");
+    let place = native_place(record, nts_core::hir::native::NativeAbi::SysV)
+        .expect("a record of bit-fields has a layout");
     let rows = place
         .offsets
         .iter()
@@ -191,10 +194,8 @@ fn a_packed_bit_field_is_never_bumped_and_may_straddle_its_unit() {
         record.packed = true;
         placed(&record)
     };
-    let (rows, size, align) = packed(&[
-        ("x", bits(Scalar::UInt, 30)),
-        ("y", bits(Scalar::UInt, 5)),
-    ]);
+    let (rows, size, align) =
+        packed(&[("x", bits(Scalar::UInt, 30)), ("y", bits(Scalar::UInt, 5))]);
     assert_eq!(
         rows,
         vec![
@@ -204,10 +205,8 @@ fn a_packed_bit_field_is_never_bumped_and_may_straddle_its_unit() {
     );
     assert_eq!((size, align), (5, 1));
 
-    let (rows, size, align) = packed(&[
-        ("p", bits(Scalar::UInt8, 6)),
-        ("q", bits(Scalar::UInt, 30)),
-    ]);
+    let (rows, size, align) =
+        packed(&[("p", bits(Scalar::UInt8, 6)), ("q", bits(Scalar::UInt, 30))]);
     assert_eq!(
         rows,
         vec![
@@ -224,7 +223,10 @@ fn a_packed_bit_field_is_never_bumped_and_may_straddle_its_unit() {
         ("m", bits(Scalar::UInt, 4)),
         ("n", Pointee::Scalar(Scalar::UInt8)),
     ]);
-    assert_eq!(rows, vec![(0, Some(BitPlace { lo: 0, width: 4 })), (1, None)]);
+    assert_eq!(
+        rows,
+        vec![(0, Some(BitPlace { lo: 0, width: 4 })), (1, None)]
+    );
     assert_eq!((size, align), (2, 1));
 }
 

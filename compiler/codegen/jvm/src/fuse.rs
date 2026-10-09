@@ -73,7 +73,13 @@ pub(crate) fn scalar_form(name: &str) -> Option<&'static str> {
 pub(crate) fn fused(func: &Func) -> FxHashSet<ValueId> {
     let mut candidates = FxHashSet::default();
     for (at, op) in func.values.iter().enumerate() {
-        let OpKind::Call { callee: Callee::External(name), .. } = &op.kind else { continue };
+        let OpKind::Call {
+            callee: Callee::External(name),
+            ..
+        } = &op.kind
+        else {
+            continue;
+        };
         if scalar_form(name).is_some() && matches!(op.ty, HirType::Erased) {
             candidates.insert(ValueId(u32::try_from(at).unwrap_or(0)));
         }
@@ -121,7 +127,10 @@ pub(crate) fn fused(func: &Func) -> FxHashSet<ValueId> {
 #[must_use]
 pub(crate) fn object_key_form(name: &str) -> Option<(&'static str, &'static str)> {
     Some(match name {
-        "nts_map_get" => ("getObject", "(Lnts/rt/NtsTable;Ljava/lang/Object;)Lnts/rt/NtsValue;"),
+        "nts_map_get" => (
+            "getObject",
+            "(Lnts/rt/NtsTable;Ljava/lang/Object;)Lnts/rt/NtsValue;",
+        ),
         "nts_map_has" => ("hasObject", "(Lnts/rt/NtsTable;Ljava/lang/Object;)Z"),
         _ => return None,
     })
@@ -150,7 +159,11 @@ pub(crate) fn object_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, ValueId
         // operand the tag is the *only* thing that says whether a null pointer
         // is `null` or `undefined`. Silently permissive here would be a wrong
         // answer rather than a missed optimisation.
-        let OpKind::Erase { value, absent: nts_core::hir::Absent::Impossible } = op.kind else {
+        let OpKind::Erase {
+            value,
+            absent: nts_core::hir::Absent::Impossible,
+        } = op.kind
+        else {
             continue;
         };
         let source = func.values.get(value.0 as usize);
@@ -169,7 +182,11 @@ pub(crate) fn object_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, ValueId
     // built, so a use that wants one has nothing to want.
     let mut refused = FxHashSet::default();
     for op in &func.values {
-        if let OpKind::Call { callee: Callee::External(name), args, .. } = &op.kind
+        if let OpKind::Call {
+            callee: Callee::External(name),
+            args,
+            ..
+        } = &op.kind
             && object_key_form(name).is_some()
         {
             for (at, operand) in args.iter().enumerate() {

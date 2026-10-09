@@ -29,7 +29,10 @@ pub fn lookups(program: &Program) -> Lookups<'_> {
     let mut found = Lookups::default();
     for func in &program.funcs {
         for op in &func.values {
-            if let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind
+            if let OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } = &op.kind
                 && let Some(send) = &target.send
             {
                 found.selectors.push(send.selector.as_str());
@@ -126,7 +129,11 @@ pub fn method_encoding(signature: &FnPointer) -> String {
     let mut offset = 0usize;
     let mut arguments = String::new();
     for (at, parameter) in signature.parameters.iter().enumerate() {
-        let (code, size) = if at == 1 { (":".to_owned(), 8) } else { encoding(parameter) };
+        let (code, size) = if at == 1 {
+            (":".to_owned(), 8)
+        } else {
+            encoding(parameter)
+        };
         let code = code.as_str();
         let _ = write!(arguments, "{code}{offset}");
         offset += size;
@@ -158,7 +165,12 @@ pub fn methods_symbol(class: &str) -> String {
 /// runtime must register them.
 #[must_use]
 pub fn classes_in_order(program: &Program) -> Vec<&nts_core::hir::ForeignClass> {
-    let objc = || program.foreign_classes.iter().filter(|class| class.family == nts_core::hir::native::Family::Objc);
+    let objc = || {
+        program
+            .foreign_classes
+            .iter()
+            .filter(|class| class.family == nts_core::hir::native::Family::Objc)
+    };
     let mut ordered: Vec<&nts_core::hir::ForeignClass> = Vec::new();
     let mut pending: Vec<&nts_core::hir::ForeignClass> = objc().collect();
     while !pending.is_empty() {
@@ -184,7 +196,9 @@ fn encoding(ty: &Type) -> (String, usize) {
     if let Type::Record(record) = ty {
         // `{CGRect={CGPoint=dd}{CGSize=dd}}`, as clang writes a struct by
         // value, and its size, as Apple's LP64 lays it out.
-        let size = nts_core::hir::layout::native_place(record, nts_core::hir::native::NativeAbi::SysV).map_or(0, |placed| placed.size);
+        let size =
+            nts_core::hir::layout::native_place(record, nts_core::hir::native::NativeAbi::SysV)
+                .map_or(0, |placed| placed.size);
         return (record_encoding(record), usize::try_from(size).unwrap_or(0));
     }
     let (code, size) = scalar_encoding(ty);
@@ -193,7 +207,11 @@ fn encoding(ty: &Type) -> (String, usize) {
 
 /// A record's encoding: its tag, then each member's.
 fn record_encoding(record: &nts_core::hir::native::Record) -> String {
-    let members: String = record.fields.iter().map(|field| pointee_encoding(&field.ty)).collect();
+    let members: String = record
+        .fields
+        .iter()
+        .map(|field| pointee_encoding(&field.ty))
+        .collect();
     format!("{{{}={members}}}", record.name)
 }
 
@@ -232,7 +250,11 @@ fn scalar_encoding(ty: &Type) -> (&'static str, usize) {
         },
         Type::BigInt => ("q", 8),
         Type::Pointer(pointee) if pointee.counting().is_some() => ("@", 8),
-        Type::Pointer(Pointee::Const(inner)) if matches!(**inner, Pointee::Scalar(Scalar::Char)) => ("r*", 8),
+        Type::Pointer(Pointee::Const(inner))
+            if matches!(**inner, Pointee::Scalar(Scalar::Char)) =>
+        {
+            ("r*", 8)
+        }
         Type::FnPointer(_) => ("^?", 8),
         Type::Pointer(_) | Type::Managed(_) | Type::Erased => ("^v", 8),
         // Handled by `encoding`, which builds the record's spelling.
@@ -262,13 +284,24 @@ mod tests {
     #[test]
     fn block_encodings_are_the_ones_clang_writes() {
         use nts_core::hir::native::{FnPointer, Scalar, Type};
-        let block = |parameters: Vec<Type>, result: Type| super::block_encoding(&FnPointer::spell(parameters, result));
+        let block = |parameters: Vec<Type>, result: Type| {
+            super::block_encoding(&FnPointer::spell(parameters, result))
+        };
         // Each is what clang wrote into the descriptor of the same block,
         // read back with libclosure's `_Block_signature` on the lane's Mac
         // (x86_64-apple-macos13), 2026-09-24.
         assert_eq!(block(vec![], Type::Void), "v8@?0");
-        assert_eq!(block(vec![Type::Scalar(Scalar::Int)], Type::Void), "v12@?0i8");
-        assert_eq!(block(vec![Type::Scalar(Scalar::Double), Type::Bool], Type::Scalar(Scalar::Int)), "i20@?0d8B16");
+        assert_eq!(
+            block(vec![Type::Scalar(Scalar::Int)], Type::Void),
+            "v12@?0i8"
+        );
+        assert_eq!(
+            block(
+                vec![Type::Scalar(Scalar::Double), Type::Bool],
+                Type::Scalar(Scalar::Int)
+            ),
+            "i20@?0d8B16"
+        );
     }
 
     #[test]
@@ -304,9 +337,9 @@ pub fn hop_arguments(signature: &FnPointer) -> Option<Vec<Carried>> {
         .map(|ty| match ty {
             nts_core::hir::native::Type::Record(_) => Some(Carried::Copied),
             _ => match ty.representation() {
-                nts_core::hir::HirType::Int { .. } | nts_core::hir::HirType::Float { .. } | nts_core::hir::HirType::Bool => {
-                    Some(Carried::Copied)
-                }
+                nts_core::hir::HirType::Int { .. }
+                | nts_core::hir::HirType::Float { .. }
+                | nts_core::hir::HirType::Bool => Some(Carried::Copied),
                 other => other.counting().map(Carried::Counted),
             },
         })

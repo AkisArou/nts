@@ -33,7 +33,10 @@ pub enum Route {
     EntryMissing,
     /// Not recovered this run: the lock already described it and its vendor
     /// tree is intact, so the route is the one a previous run recorded.
-    Recorded { description: String, recovered: bool },
+    Recorded {
+        description: String,
+        recovered: bool,
+    },
     /// The source was recovered and cannot be built: it imports something the
     /// package does not install. Almost always a `paths` alias from the
     /// package's own tsconfig, which is not published — `drizzle-orm` writes
@@ -48,7 +51,12 @@ impl Route {
     pub const fn recovered(&self) -> bool {
         matches!(
             self,
-            Self::ShippedTypeScript | Self::SourceMap | Self::Recorded { recovered: true, .. }
+            Self::ShippedTypeScript
+                | Self::SourceMap
+                | Self::Recorded {
+                    recovered: true,
+                    ..
+                }
         )
     }
 
@@ -61,9 +69,9 @@ impl Route {
                 format!("source map has holes — {have} of {want} sources embedded")
             }
             Self::MapOfJavaScript => "source map, but its sources are JavaScript".to_owned(),
-            Self::MapAmbiguous { sources } => format!(
-                "source map bundles {sources} sources and names no entry among them"
-            ),
+            Self::MapAmbiguous { sources } => {
+                format!("source map bundles {sources} sources and names no entry among them")
+            }
             Self::JavaScriptOnly => "published JavaScript only".to_owned(),
             Self::EntryMissing => "the entry its package.json names is not installed".to_owned(),
             Self::Recorded { description, .. } => description.clone(),
@@ -139,7 +147,9 @@ fn is_typescript(path: &str) -> bool {
 }
 
 fn is_javascript(path: &str) -> bool {
-    [".js", ".mjs", ".cjs", ".jsx"].iter().any(|ext| path.ends_with(ext))
+    [".js", ".mjs", ".cjs", ".jsx"]
+        .iter()
+        .any(|ext| path.ends_with(ext))
 }
 
 /// Recover every specifier a package publishes.
@@ -184,7 +194,13 @@ fn entry_file(package_dir: &Utf8Path, target: &str) -> Option<String> {
             return Some(candidate);
         }
     }
-    for leaf in ["index.ts", "index.mts", "index.js", "index.mjs", "index.cjs"] {
+    for leaf in [
+        "index.ts",
+        "index.mts",
+        "index.js",
+        "index.mjs",
+        "index.cjs",
+    ] {
         let candidate = format!("{}/{leaf}", target.trim_end_matches('/'));
         if package_dir.join(&candidate).is_file() {
             return Some(candidate);
@@ -192,7 +208,6 @@ fn entry_file(package_dir: &Utf8Path, target: &str) -> Option<String> {
     }
     None
 }
-
 
 /// Recover the specifiers a program actually imported, as the checker resolved
 /// them.
@@ -204,10 +219,7 @@ fn entry_file(package_dir: &Utf8Path, target: &str) -> Option<String> {
 /// solved problem. What is left is the half resolution cannot answer: a
 /// checker resolves to declarations, and declarations have no bodies.
 #[must_use]
-pub fn recover_resolved(
-    installed: &Installed,
-    resolved: &[(String, Utf8PathBuf)],
-) -> Recovery {
+pub fn recover_resolved(installed: &Installed, resolved: &[(String, Utf8PathBuf)]) -> Recovery {
     let offered = installed.manifest.entry_points();
     let mut recovery = Recovery::default();
     let mut written: FxHashMap<Utf8PathBuf, String> = FxHashMap::default();
@@ -347,7 +359,9 @@ fn recover_one(
         };
         match harvest(&map, &absolute, &installed.dir, index, written) {
             Harvest::Recovered(entry) => return (Route::SourceMap, Some(entry)),
-            Harvest::Holes { have, want } => best = worse(best, Route::MapIncomplete { have, want }),
+            Harvest::Holes { have, want } => {
+                best = worse(best, Route::MapIncomplete { have, want });
+            }
             Harvest::Ambiguous { sources } => best = worse(best, Route::MapAmbiguous { sources }),
             Harvest::JavaScript => best = worse(best, Route::MapOfJavaScript),
             Harvest::Nothing => {}
@@ -494,7 +508,6 @@ fn word_boundary(text: &str, at: usize, len: usize) -> bool {
     !ident(before) && !ident(after)
 }
 
-
 /// Every TypeScript source any map in a package embeds, by where it belongs.
 ///
 /// # Why a package-wide index
@@ -586,7 +599,11 @@ fn resolve_in_index(from: &Utf8Path, specifier: &str, index: &MapIndex) -> Optio
 }
 
 /// The same resolution, against files the package actually ships.
-fn resolve_on_disk(from: &Utf8Path, specifier: &str, package_dir: &Utf8Path) -> Option<Utf8PathBuf> {
+fn resolve_on_disk(
+    from: &Utf8Path,
+    specifier: &str,
+    package_dir: &Utf8Path,
+) -> Option<Utf8PathBuf> {
     let base = crate::resolve::normalize(&from.parent()?.join(specifier));
     let stem = base.as_str();
     let swapped = [
@@ -661,7 +678,6 @@ fn walk_recovered(
     }
 }
 
-
 /// Whether recovered source can actually be built.
 ///
 /// Recovering files and recovering a *package* are different things, and the
@@ -703,16 +719,44 @@ fn package_name_of(specifier: &str) -> String {
     if specifier.starts_with('@') && parts.len() >= 2 {
         format!("{}/{}", parts[0], parts[1])
     } else {
-        parts.first().map_or_else(String::new, |head| (*head).to_owned())
+        parts
+            .first()
+            .map_or_else(String::new, |head| (*head).to_owned())
     }
 }
 
 /// Node's own modules, which are imported without being installed.
 const BUILTINS: [&str; 30] = [
-    "assert", "async_hooks", "buffer", "child_process", "cluster", "console", "constants",
-    "crypto", "dgram", "diagnostics_channel", "dns", "events", "fs", "http", "http2", "https",
-    "net", "os", "path", "process", "querystring", "readline", "stream", "string_decoder",
-    "timers", "tls", "tty", "url", "util", "zlib",
+    "assert",
+    "async_hooks",
+    "buffer",
+    "child_process",
+    "cluster",
+    "console",
+    "constants",
+    "crypto",
+    "dgram",
+    "diagnostics_channel",
+    "dns",
+    "events",
+    "fs",
+    "http",
+    "http2",
+    "https",
+    "net",
+    "os",
+    "path",
+    "process",
+    "querystring",
+    "readline",
+    "stream",
+    "string_decoder",
+    "timers",
+    "tls",
+    "tty",
+    "url",
+    "util",
+    "zlib",
 ];
 
 // ---- source maps ---------------------------------------------------------
@@ -781,7 +825,9 @@ fn flatten(value: &serde_json::Value, into: &mut SourceMap) {
         .and_then(serde_json::Value::as_array);
     let Some(sources) = sources else { return };
     for (index, source) in sources.iter().enumerate() {
-        let Some(source) = source.as_str() else { continue };
+        let Some(source) = source.as_str() else {
+            continue;
+        };
         into.sources.push(source.to_owned());
         into.contents.push(
             contents

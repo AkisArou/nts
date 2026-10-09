@@ -68,8 +68,14 @@ fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
 
 fn prepare_with(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
-    let dir = root.join(format!("target/com-classes-tests/{}-{name}", std::process::id()));
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir = root.join(format!(
+        "target/com-classes-tests/{}-{name}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -80,9 +86,15 @@ fn prepare_with(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf,
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
     assert!(!snapshot.has_errors(), "{name}: {:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)))))
+    Some((
+        dir,
+        hir::prepare(&snapshot)
+            .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
+    ))
 }
 
 const PROGRAM: &str = r#"import { Application } from "winrt:Test.Xaml";
@@ -115,46 +127,105 @@ fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_App_2(")).unwrap_or_else(|| panic!("no adapter for Second:\n{text}"));
-    assert!(adapter.contains("nts_com_outer_instance(a0)") && adapter.contains("nts_callback_enter();"), "{adapter}");
+    let adapter = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_adapter_App_2("))
+        .unwrap_or_else(|| panic!("no adapter for Second:\n{text}"));
+    assert!(
+        adapter.contains("nts_com_outer_instance(a0)") && adapter.contains("nts_callback_enter();"),
+        "{adapter}"
+    );
     // `OnLaunched()` takes none of the slot's parameters: the adapter is
     // still called with them, and passes on only the instance.
-    let launched = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_App_0(")).unwrap();
-    assert!(launched.contains("(void * a0, void * a1)") && launched.contains("nts_com_outer_instance(a0)); nts_callback_leave();"), "{launched}");
-    let tables: Vec<&str> = text.lines().filter(|line| line.starts_with("static const void *const nts_com_table_App_")).collect();
-    assert_eq!(tables.len(), 2, "one table per overridable interface:\n{text}");
+    let launched = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_adapter_App_0("))
+        .unwrap();
+    assert!(
+        launched.contains("(void * a0, void * a1)")
+            && launched.contains("nts_com_outer_instance(a0)); nts_callback_leave();"),
+        "{launched}"
+    );
+    let tables: Vec<&str> = text
+        .lines()
+        .filter(|line| line.starts_with("static const void *const nts_com_table_App_"))
+        .collect();
+    assert_eq!(
+        tables.len(),
+        2,
+        "one table per overridable interface:\n{text}"
+    );
     assert!(
         tables[1].contains("(const void *)nts_com_outer_trust, (const void *)nts_com_adapter_App_1, (const void *)nts_com_adapter_App_2 }"),
         "the second interface's slots 6 and 7 are not First and Second:\n{}",
         tables[1]
     );
-    assert!(text.contains("static NtsComClass nts_com_class_App = { \"App\", \"Test.Xaml.Application\", "), "{text}");
-    assert!(text.contains(", 6u, nts_com_interfaces_App, 2u, true, 0, 0 };"), "the slot, the interfaces, the xaml flag or the maker:\n{text}");
-    assert!(text.contains("nts_com_register(&nts_com_class_App);"), "{text}");
-    assert!(text.contains("nts_com_compose_named("), "`new App()` does not compose:\n{text}");
+    assert!(
+        text.contains(
+            "static NtsComClass nts_com_class_App = { \"App\", \"Test.Xaml.Application\", "
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(", 6u, nts_com_interfaces_App, 2u, true, 0, 0 };"),
+        "the slot, the interfaces, the xaml flag or the maker:\n{text}"
+    );
+    assert!(
+        text.contains("nts_com_register(&nts_com_class_App);"),
+        "{text}"
+    );
+    assert!(
+        text.contains("nts_com_compose_named("),
+        "`new App()` does not compose:\n{text}"
+    );
     windows_syntax(&dir, &c);
 
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     let ir = &llvm.text;
-    assert!(ir.contains("define internal i32 @nts_com_adapter_App_2(ptr %a0, i32 %a1, i1 zeroext %a2)"), "{ir}");
-    assert!(ir.contains("[8 x ptr] [ptr @nts_com_outer_query,"), "the two-override table:\n{ir}");
+    assert!(
+        ir.contains("define internal i32 @nts_com_adapter_App_2(ptr %a0, i32 %a1, i1 zeroext %a2)"),
+        "{ir}"
+    );
+    assert!(
+        ir.contains("[8 x ptr] [ptr @nts_com_outer_query,"),
+        "the two-override table:\n{ir}"
+    );
     // The `int32` converted to the `number` the compiled method takes.
     assert!(ir.contains("%p1 = sitofp i32 %a1 to double"), "{ir}");
-    assert!(ir.contains("i32 6, ptr @nts_com_interfaces_App, i32 2, i8 1, ptr null, ptr null }"), "{ir}");
+    assert!(
+        ir.contains("i32 6, ptr @nts_com_interfaces_App, i32 2, i8 1, ptr null, ptr null }"),
+        "{ir}"
+    );
     assert_eq!(ir.matches("@llvm.global_ctors").count(), 1, "{ir}");
     assert!(ir.contains("ptr @nts_com_register_classes"), "{ir}");
     std::fs::write(dir.join("program.ll"), ir).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// A parameter's extension follows its type in LLVM (`i1 zeroext %a0`); a
@@ -179,17 +250,37 @@ fn a_delegate_taking_a_boolean_is_ir() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("(ptr %self, i1 zeroext %a0)"), "{}", llvm.text);
+    assert!(
+        llvm.text.contains("(ptr %self, i1 zeroext %a0)"),
+        "{}",
+        llvm.text
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// Layout overrides as `bind-winmd` writes `FrameworkElement`'s, cut down.
@@ -251,26 +342,65 @@ fn a_forwarded_record_is_passed_as_win64_passes_it() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.contains("static int32_t nts_com_forward_Panel_0(void * a0, struct Test_Size a1, void * a2)"), "{text}");
-    assert!(text.contains("static int32_t nts_com_forward_Panel_1(void * a0, struct Test_Rect a1)"), "{text}");
+    assert!(
+        text.contains(
+            "static int32_t nts_com_forward_Panel_0(void * a0, struct Test_Size a1, void * a2)"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("static int32_t nts_com_forward_Panel_1(void * a0, struct Test_Rect a1)"),
+        "{text}"
+    );
     // A string is its `HSTRING` handle, and the `boolean` result its pointer.
-    assert!(text.contains("static int32_t nts_com_forward_Panel_2(void * a0, void * a1, bool a2, void * a3)"), "{text}");
+    assert!(
+        text.contains(
+            "static int32_t nts_com_forward_Panel_2(void * a0, void * a1, bool a2, void * a3)"
+        ),
+        "{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("@nts_com_forward_Panel_0(ptr %a0, i64 %a1, ptr %a2)"), "{}", llvm.text);
-    assert!(llvm.text.contains("@nts_com_forward_Panel_1(ptr %a0, ptr %a1)"), "{}", llvm.text);
+    assert!(
+        llvm.text
+            .contains("@nts_com_forward_Panel_0(ptr %a0, i64 %a1, ptr %a2)"),
+        "{}",
+        llvm.text
+    );
+    assert!(
+        llvm.text
+            .contains("@nts_com_forward_Panel_1(ptr %a0, ptr %a1)"),
+        "{}",
+        llvm.text
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// An override answering a value, as C# writes `MeasureOverride`: the record
@@ -286,26 +416,66 @@ fn an_override_answers_through_the_result_pointer() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    let measure = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0(")).unwrap_or_else(|| panic!("{text}"));
-    assert!(measure.contains("(void * a0, struct Test_Size a1, struct Test_Size *out)") && measure.contains("&a1") && measure.contains(")out);"), "{measure}");
-    let allowed = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_1(")).unwrap_or_else(|| panic!("{text}"));
-    assert!(allowed.contains("(void * a0, int32_t a1, bool *out)") && allowed.contains("*out = (bool)"), "{allowed}");
+    let measure = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0("))
+        .unwrap_or_else(|| panic!("{text}"));
+    assert!(
+        measure.contains("(void * a0, struct Test_Size a1, struct Test_Size *out)")
+            && measure.contains("&a1")
+            && measure.contains(")out);"),
+        "{measure}"
+    );
+    let allowed = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_1("))
+        .unwrap_or_else(|| panic!("{text}"));
+    assert!(
+        allowed.contains("(void * a0, int32_t a1, bool *out)") && allowed.contains("*out = (bool)"),
+        "{allowed}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("@nts_com_adapter_Panel_0(ptr %a0, i64 %a1, ptr %out)"), "{}", llvm.text);
-    assert!(llvm.text.contains("%byte = zext i1 %r to i8\n  store i8 %byte, ptr %out"), "{}", llvm.text);
+    assert!(
+        llvm.text
+            .contains("@nts_com_adapter_Panel_0(ptr %a0, i64 %a1, ptr %out)"),
+        "{}",
+        llvm.text
+    );
+    assert!(
+        llvm.text
+            .contains("%byte = zext i1 %r to i8\n  store i8 %byte, ptr %out"),
+        "{}",
+        llvm.text
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// Fields, as C#'s `App` has them: the object holding them is made by the
@@ -320,24 +490,53 @@ fn a_composed_class_keeps_its_fields_in_its_outer_object() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.contains("static void *nts_com_state_App(void) { nts_callback_enter();"), "no maker entry:\n{text}");
-    assert!(text.contains(", 0, nts_com_state_App };"), "the descriptor does not name the maker:\n{text}");
-    assert!(text.matches("nts_com_state(").count() >= 3, "a field is not read through the outer object:\n{text}");
+    assert!(
+        text.contains("static void *nts_com_state_App(void) { nts_callback_enter();"),
+        "no maker entry:\n{text}"
+    );
+    assert!(
+        text.contains(", 0, nts_com_state_App };"),
+        "the descriptor does not name the maker:\n{text}"
+    );
+    assert!(
+        text.matches("nts_com_state(").count() >= 3,
+        "a field is not read through the outer object:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("ptr null, ptr @nts_com_state_App }"), "{}", llvm.text);
+    assert!(
+        llvm.text.contains("ptr null, ptr @nts_com_state_App }"),
+        "{}",
+        llvm.text
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// A string the Windows Runtime lends an override arrives as its `HSTRING`
@@ -351,24 +550,52 @@ fn a_string_argument_is_the_text_of_the_lent_hstring() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0(")).unwrap_or_else(|| panic!("{text}"));
-    assert!(adapter.contains("(void * a0, void * a1, bool a2, bool *out)"), "{adapter}");
-    assert!(text.contains("nts_string_copy_hstring("), "the lent HSTRING is not copied:\n{text}");
-    assert!(!text.contains("nts_string_from_hstring("), "the lent HSTRING is taken, and deleted:\n{text}");
+    let adapter = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0("))
+        .unwrap_or_else(|| panic!("{text}"));
+    assert!(
+        adapter.contains("(void * a0, void * a1, bool a2, bool *out)"),
+        "{adapter}"
+    );
+    assert!(
+        text.contains("nts_string_copy_hstring("),
+        "the lent HSTRING is not copied:\n{text}"
+    );
+    assert!(
+        !text.contains("nts_string_from_hstring("),
+        "the lent HSTRING is taken, and deleted:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// A constructor, as C#'s `public App(string name) { ... }`: `new App("ada")`
@@ -381,25 +608,58 @@ fn a_composed_class_constructor_runs_after_its_composition() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    let start = text.lines().position(|line| line.contains(" App__new(") && line.ends_with('{')).unwrap_or_else(|| panic!("no App#new:\n{text}"));
-    let body = text.lines().skip(start + 1).take_while(|line| *line != "}").collect::<Vec<_>>().join("\n");
-    assert!(body.contains("nts_com_compose_named("), "the constructor does not compose:\n{body}");
-    assert!(body.contains("nts_com_state("), "the body does not write a field:\n{body}");
-    assert!(text.contains("App__new("), "`new App(...)` does not call the constructor:\n{text}");
+    let start = text
+        .lines()
+        .position(|line| line.contains(" App__new(") && line.ends_with('{'))
+        .unwrap_or_else(|| panic!("no App#new:\n{text}"));
+    let body = text
+        .lines()
+        .skip(start + 1)
+        .take_while(|line| *line != "}")
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        body.contains("nts_com_compose_named("),
+        "the constructor does not compose:\n{body}"
+    );
+    assert!(
+        body.contains("nts_com_state("),
+        "the body does not write a field:\n{body}"
+    );
+    assert!(
+        text.contains("App__new("),
+        "`new App(...)` does not call the constructor:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// An override answering an object, as `OnCreateAutomationPeer` does: the
@@ -413,23 +673,51 @@ fn an_override_answers_an_object_the_caller_owns() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_1(")).unwrap_or_else(|| panic!("{text}"));
-    assert!(adapter.contains("(void * a0, void **out)") && adapter.contains("*out = nts_com_answer((void *)"), "{adapter}");
+    let adapter = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_1("))
+        .unwrap_or_else(|| panic!("{text}"));
+    assert!(
+        adapter.contains("(void * a0, void **out)")
+            && adapter.contains("*out = nts_com_answer((void *)"),
+        "{adapter}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("%answered = call ptr @nts_com_answer(ptr %r)"), "{}", llvm.text);
+    assert!(
+        llvm.text
+            .contains("%answered = call ptr @nts_com_answer(ptr %r)"),
+        "{}",
+        llvm.text
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// An override answering a string: the slot writes an `HSTRING` of its own,
@@ -443,23 +731,51 @@ fn an_override_answers_a_string_as_an_hstring_of_its_own() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    let adapter = text.lines().find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0(")).unwrap_or_else(|| panic!("{text}"));
-    assert!(adapter.contains("(void * a0, void **out)") && adapter.contains("*out = nts_com_answer_string((NtsString *)"), "{adapter}");
+    let adapter = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0("))
+        .unwrap_or_else(|| panic!("{text}"));
+    assert!(
+        adapter.contains("(void * a0, void **out)")
+            && adapter.contains("*out = nts_com_answer_string((NtsString *)"),
+        "{adapter}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("%answered = call ptr @nts_com_answer_string(ptr %r)"), "{}", llvm.text);
+    assert!(
+        llvm.text
+            .contains("%answered = call ptr @nts_com_answer_string(ptr %r)"),
+        "{}",
+        llvm.text
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// A method that overrides nothing is the program's own: a function taking
@@ -472,11 +788,18 @@ fn a_composed_class_has_methods_of_its_own() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.matches("App__bump(").count() >= 3, "the method is not defined and called twice:\n{text}");
+    assert!(
+        text.matches("App__bump(").count() >= 3,
+        "the method is not defined and called twice:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
@@ -521,31 +844,66 @@ fn a_surface_member_is_called_through_its_interface() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let body = |name: &str| {
-        let start = text.lines().position(|line| line.contains(&format!(" {name}(")) && line.ends_with('{')).unwrap_or_else(|| panic!("no {name}:\n{text}"));
-        text.lines().skip(start + 1).take_while(|line| *line != "}").collect::<Vec<_>>().join("\n")
+        let start = text
+            .lines()
+            .position(|line| line.contains(&format!(" {name}(")) && line.ends_with('{'))
+            .unwrap_or_else(|| panic!("no {name}:\n{text}"));
+        text.lines()
+            .skip(start + 1)
+            .take_while(|line| *line != "}")
+            .collect::<Vec<_>>()
+            .join("\n")
     };
     let own = body("own");
-    assert!(!own.contains("nts_com_query("), "the class's own handle is asked for its default interface:\n{own}");
-    assert!(own.contains("[7])(") && own.contains("[6])("), "the setter and getter slots are not called:\n{own}");
+    assert!(
+        !own.contains("nts_com_query("),
+        "the class's own handle is asked for its default interface:\n{own}"
+    );
+    assert!(
+        own.contains("[7])(") && own.contains("[6])("),
+        "the setter and getter slots are not called:\n{own}"
+    );
     let other = body("other");
-    assert!(other.contains("nts_com_query(") && other.contains("nts_com_release("), "another interface's member is not asked for and given back:\n{other}");
+    assert!(
+        other.contains("nts_com_query(") && other.contains("nts_com_release("),
+        "another interface's member is not asked for and given back:\n{other}"
+    );
     let inherited = body("inherited");
-    assert!(inherited.contains("nts_com_query("), "a subclass's instance is not asked for the base's interface:\n{inherited}");
+    assert!(
+        inherited.contains("nts_com_query("),
+        "a subclass's instance is not asked for the base's interface:\n{inherited}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// The camelCase name is the one other a slot's method may be declared
@@ -559,9 +917,15 @@ fn a_surface_name_other_than_the_slots_is_refused() {
         return;
     };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("@ntsVtable 6 Refresh on a declaration of another name")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("@ntsVtable 6 Refresh on a declaration of another name")),
         "{:?}",
-        prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
     );
 }
 
@@ -576,12 +940,22 @@ fn a_bindings_composable_class_is_made_by_its_factory() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.contains("nts_winrt_factory(") && text.contains("[6])("), "not the factory's slot 6:\n{text}");
-    assert!(!text.contains("nts_com_compose_named("), "composed as a class of the program's:\n{text}");
+    assert!(
+        text.contains("nts_winrt_factory(") && text.contains("[6])("),
+        "not the factory's slot 6:\n{text}"
+    );
+    assert!(
+        !text.contains("nts_com_compose_named("),
+        "composed as a class of the program's:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
@@ -599,27 +973,64 @@ fn super_in_an_override_calls_the_base_through_its_slot() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    let start = text.lines().position(|line| line.contains(" App__OnLaunched(") && line.ends_with('{')).unwrap_or_else(|| panic!("no definition:\n{text}"));
-    let body = text.lines().skip(start + 1).take_while(|line| *line != "}").collect::<Vec<_>>().join("\n");
-    assert!(body.contains("nts_com_base("), "the base's implementation is not asked for:\n{body}");
+    let start = text
+        .lines()
+        .position(|line| line.contains(" App__OnLaunched(") && line.ends_with('{'))
+        .unwrap_or_else(|| panic!("no definition:\n{text}"));
+    let body = text
+        .lines()
+        .skip(start + 1)
+        .take_while(|line| *line != "}")
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        body.contains("nts_com_base("),
+        "the base's implementation is not asked for:\n{body}"
+    );
     assert!(body.contains("[6])("), "no call through slot 6:\n{body}");
-    assert!(body.contains("nts_hresult_message("), "the HRESULT is not checked:\n{body}");
-    assert!(!body.contains("App__OnLaunched("), "the override calls itself:\n{body}");
+    assert!(
+        body.contains("nts_hresult_message("),
+        "the HRESULT is not checked:\n{body}"
+    );
+    assert!(
+        !body.contains("App__OnLaunched("),
+        "the override calls itself:\n{body}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("call ptr @nts_com_base("), "{}", llvm.text);
+    assert!(
+        llvm.text.contains("call ptr @nts_com_base("),
+        "{}",
+        llvm.text
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// The C with mingw's headers, checked by clang: `-fsyntax-only` is ignored
@@ -629,7 +1040,11 @@ fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
         file.write(dir.as_std_path()).unwrap();
     }
     std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
-    let zig = Command::new("zig").arg("env").output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+    let zig = Command::new("zig")
+        .arg("env")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
     let Some(lib) = zig
         .as_deref()
         .and_then(|env| env.split_once("lib_dir"))
@@ -642,14 +1057,30 @@ fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
     let checked = Command::new("clang")
         .current_dir(dir)
         .args([
-            "--target=x86_64-w64-windows-gnu", "-nostdlibinc", "-isystem", &format!("{headers}/x86_64-windows-gnu"),
-            "-isystem", &format!("{headers}/generic-mingw"), "-isystem", &format!("{headers}/x86_64-windows-any"),
-            "-isystem", &format!("{headers}/any-windows-any"), "-std=c11", "-Wall", "-Werror", "-fsyntax-only",
-            "program.c", "nts_winrt.c",
+            "--target=x86_64-w64-windows-gnu",
+            "-nostdlibinc",
+            "-isystem",
+            &format!("{headers}/x86_64-windows-gnu"),
+            "-isystem",
+            &format!("{headers}/generic-mingw"),
+            "-isystem",
+            &format!("{headers}/x86_64-windows-any"),
+            "-isystem",
+            &format!("{headers}/any-windows-any"),
+            "-std=c11",
+            "-Wall",
+            "-Werror",
+            "-fsyntax-only",
+            "program.c",
+            "nts_winrt.c",
         ])
         .output()
         .unwrap();
-    assert!(checked.status.success(), "{}", String::from_utf8_lossy(&checked.stderr));
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
 }
 
 /// A class overriding part of an interface, as C# lets it: each slot it
@@ -663,32 +1094,70 @@ fn a_slot_the_class_leaves_is_forwarded_to_its_base() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    let forward = text.lines().find(|line| line.starts_with("static int32_t nts_com_forward_App_0(")).unwrap_or_else(|| panic!("no forwarder:\n{text}"));
+    let forward = text
+        .lines()
+        .find(|line| line.starts_with("static int32_t nts_com_forward_App_0("))
+        .unwrap_or_else(|| panic!("no forwarder:\n{text}"));
     assert!(
         forward.contains("(void * a0, int32_t a1, bool a2)")
             && forward.contains("nts_com_outer_base(a0)")
             && forward.contains("[7])(base, a1, a2);"),
         "{forward}"
     );
-    let table = text.lines().find(|line| line.starts_with("static const void *const nts_com_table_App_0[]")).unwrap();
-    assert!(table.ends_with("(const void *)nts_com_adapter_App_0, (const void *)nts_com_forward_App_0 };"), "{table}");
+    let table = text
+        .lines()
+        .find(|line| line.starts_with("static const void *const nts_com_table_App_0[]"))
+        .unwrap();
+    assert!(
+        table.ends_with(
+            "(const void *)nts_com_adapter_App_0, (const void *)nts_com_forward_App_0 };"
+        ),
+        "{table}"
+    );
     windows_syntax(&dir, &c);
 
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("define internal i32 @nts_com_forward_App_0(ptr %a0, i32 %a1, i1 zeroext %a2)"), "{}", llvm.text);
-    assert!(llvm.text.contains("call i32 %base.fn(ptr %base, i32 %a1, i1 zeroext %a2)"), "{}", llvm.text);
+    assert!(
+        llvm.text.contains(
+            "define internal i32 @nts_com_forward_App_0(ptr %a0, i32 %a1, i1 zeroext %a2)"
+        ),
+        "{}",
+        llvm.text
+    );
+    assert!(
+        llvm.text
+            .contains("call i32 %base.fn(ptr %base, i32 %a1, i1 zeroext %a2)"),
+        "{}",
+        llvm.text
+    );
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
-        .args(["--target=x86_64-w64-windows-gnu", "-O2", "-Wno-override-module", "-c", "program.ll", "-o", "program.o"])
+        .args([
+            "--target=x86_64-w64-windows-gnu",
+            "-O2",
+            "-Wno-override-module",
+            "-c",
+            "program.ll",
+            "-o",
+            "program.o",
+        ])
         .output()
         .unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// What a composed class cannot be yet, refused where it is written, naming
@@ -700,9 +1169,21 @@ fn what_a_composed_class_cannot_hold_is_refused_by_name() {
     let head = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\n";
     let tail = "export function start(): void {\n  new App();\n}\n";
     for (name, body, refusal) in [
-        ("unforwardable", "  Fourth(): void {}\n", "`Third`, whose base's is forwarded to and cannot be: a result the binding spells as `out` parameters' fields"),
-        ("late-super", "  constructor() {\n    const early = 1;\n    super();\n    void early;\n  }\n  OnLaunched(_args: IInspectable | null): void {}\n", "does not open with its `super()`"),
-        ("reaching-initializer", "  me = this;\n  OnLaunched(_args: IInspectable | null): void {}\n", "a field initialiser of a class extending a foreign class"),
+        (
+            "unforwardable",
+            "  Fourth(): void {}\n",
+            "`Third`, whose base's is forwarded to and cannot be: a result the binding spells as `out` parameters' fields",
+        ),
+        (
+            "late-super",
+            "  constructor() {\n    const early = 1;\n    super();\n    void early;\n  }\n  OnLaunched(_args: IInspectable | null): void {}\n",
+            "does not open with its `super()`",
+        ),
+        (
+            "reaching-initializer",
+            "  me = this;\n  OnLaunched(_args: IInspectable | null): void {}\n",
+            "a field initialiser of a class extending a foreign class",
+        ),
     ] {
         let source = format!("{head}class App extends Application {{\n{body}}}\n{tail}");
         let Some((_, prepared)) = prepare(name, &source) else {
@@ -753,17 +1234,28 @@ fn a_handle_passed_as_its_base_is_asked_for_the_base_interface() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     // The IID's first word, `Data1 | Data2 << 32 | Data3 << 48`.
     let first = 0x0B0B_0B0B_u64 | (0x1111 << 32) | (0x2222 << 48);
-    assert!(text.contains("nts_com_query(") && text.contains(&first.to_string()), "not asked for the base's IID:\n{text}");
+    assert!(
+        text.contains("nts_com_query(") && text.contains(&first.to_string()),
+        "not asked for the base's IID:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("nts_com_query"), "the IR does not ask:\n{}", llvm.text);
+    assert!(
+        llvm.text.contains("nts_com_query"),
+        "the IR does not ask:\n{}",
+        llvm.text
+    );
 }
 
 /// A class's events as `bind-winmd` writes them: a map from each event's
@@ -801,22 +1293,43 @@ fn an_event_listener_is_added_and_removed_by_the_runtime() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.contains("nts_winrt_listen(") && text.contains("nts_winrt_unlisten("), "not the runtime's:\n{text}");
+    assert!(
+        text.contains("nts_winrt_listen(") && text.contains("nts_winrt_unlisten("),
+        "not the runtime's:\n{text}"
+    );
     // The event's interface as two words, the first `Data1 | Data2 << 32 |
     // Data3 << 48`.
     let first = 0x0B0B_0B0B_u64 | (0x1111 << 32) | (0x2222 << 48);
-    assert!(text.contains(&first.to_string()), "not the event the type names:\n{text}");
+    assert!(
+        text.contains(&first.to_string()),
+        "not the event the type names:\n{text}"
+    );
     // One delegate, the addition's: a removal passes the function.
-    assert_eq!(text.matches("nts_com_delegate(").count(), 1, "a removal made a delegate:\n{text}");
-    assert!(text.contains("nts_com_delegate("), "the listener is not made a delegate:\n{text}");
+    assert_eq!(
+        text.matches("nts_com_delegate(").count(),
+        1,
+        "a removal made a delegate:\n{text}"
+    );
+    assert!(
+        text.contains("nts_com_delegate("),
+        "the listener is not made a delegate:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("@nts_winrt_listen("), "the IR does not listen:\n{}", llvm.text);
+    assert!(
+        llvm.text.contains("@nts_winrt_listen("),
+        "the IR does not listen:\n{}",
+        llvm.text
+    );
 }
 
 /// A listener whose type is a plain function, naming no event, is refused
@@ -833,9 +1346,15 @@ fn a_listener_naming_no_event_is_refused() {
         return;
     };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("an event listener whose type names no event")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("an event listener whose type names no event")),
         "{:?}",
-        prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
     );
 }
 
@@ -885,12 +1404,26 @@ fn a_generic_interfaces_surface_is_called_on_its_own_table() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.contains("[7])(") && text.contains("[6])("), "not the slots:\n{text}");
-    assert!(!text.contains("nts_com_query("), "an instantiation is asked for itself:\n{text}");
+    assert!(
+        text.contains("[7])(") && text.contains("[6])("),
+        "not the slots:\n{text}"
+    );
+    assert!(
+        !text.contains("nts_com_query("),
+        "an instantiation is asked for itself:\n{text}"
+    );
     windows_syntax(&dir, &c);
 }
 
@@ -905,12 +1438,26 @@ fn a_vector_is_walked_by_count_through_its_own_table() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.contains("[7])(") && text.contains("[6])("), "not get_Size and GetAt:\n{text}");
-    assert!(!text.contains("nts_com_query("), "a vector is asked for another interface to be walked:\n{text}");
+    assert!(
+        text.contains("[7])(") && text.contains("[6])("),
+        "not get_Size and GetAt:\n{text}"
+    );
+    assert!(
+        !text.contains("nts_com_query("),
+        "a vector is asked for another interface to be walked:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
@@ -941,12 +1488,26 @@ fn a_static_property_is_called_on_its_factory() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.contains("nts_winrt_factory("), "not on the factory:\n{text}");
-    assert!(text.contains("[6])(") && text.contains("[7])("), "not the getter's and setter's slots:\n{text}");
+    assert!(
+        text.contains("nts_winrt_factory("),
+        "not on the factory:\n{text}"
+    );
+    assert!(
+        text.contains("[6])(") && text.contains("[7])("),
+        "not the getter's and setter's slots:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
@@ -993,16 +1554,35 @@ fn a_primitive_where_an_object_is_taken_is_boxed() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert_eq!(text.matches("nts_winrt_box(").count(), 3, "not the string, the number and the property's string boxed:\n{text}");
-    assert!(text.matches("nts_com_release(").count() >= 3, "a box is not given back:\n{text}");
+    assert_eq!(
+        text.matches("nts_winrt_box(").count(),
+        3,
+        "not the string, the number and the property's string boxed:\n{text}"
+    );
+    assert!(
+        text.matches("nts_com_release(").count() >= 3,
+        "a box is not given back:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-    assert!(llvm.text.contains("@nts_winrt_box("), "the IR does not box:\n{}", llvm.text);
+    assert!(
+        llvm.text.contains("@nts_winrt_box("),
+        "the IR does not box:\n{}",
+        llvm.text
+    );
 }
 
 /// What a getter answering any object reads back: the runtime unboxes it
@@ -1015,11 +1595,22 @@ fn an_object_read_back_is_unboxed() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
-    assert!(text.contains("nts_winrt_unbox("), "the getter's object is not unboxed:\n{text}");
+    assert!(
+        text.contains("nts_winrt_unbox("),
+        "the getter's object is not unboxed:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
@@ -1079,13 +1670,27 @@ fn an_instanceof_narrows_a_com_value_to_its_interface() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>());
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared
+            .diagnostics
+            .iter()
+            .map(|d| &d.message)
+            .collect::<Vec<_>>()
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::Win64);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let first = 0x0C0C_0C0C_u64 | (0x1111 << 32) | (0x2222 << 48);
-    assert!(text.contains("nts_winrt_is(") && text.contains(&first.to_string()), "not asked for the class's interface:\n{text}");
-    assert!(text.contains("nts_com_query("), "the narrowed value is not asked for its interface before the call:\n{text}");
+    assert!(
+        text.contains("nts_winrt_is(") && text.contains(&first.to_string()),
+        "not asked for the class's interface:\n{text}"
+    );
+    assert!(
+        text.contains("nts_com_query("),
+        "the narrowed value is not asked for its interface before the call:\n{text}"
+    );
     windows_syntax(&dir, &c);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);

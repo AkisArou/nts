@@ -47,7 +47,11 @@ impl FuncBuilder<'_> {
         let missing = if absences.as_deref() == Some(&[super::super::tags::NULL]) {
             let zero = self.push(OpKind::ConstInt(0), HirType::BigInt, origin.clone());
             Some(self.push(
-                OpKind::Binary { op, lhs: integer, rhs: zero },
+                OpKind::Binary {
+                    op,
+                    lhs: integer,
+                    rhs: zero,
+                },
                 HirType::Bool,
                 origin.clone(),
             ))
@@ -80,7 +84,11 @@ impl FuncBuilder<'_> {
         );
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         self.push(
-            OpKind::Binary { op, lhs: ordering, rhs: zero },
+            OpKind::Binary {
+                op,
+                lhs: ordering,
+                rhs: zero,
+            },
             HirType::Bool,
             origin,
         )

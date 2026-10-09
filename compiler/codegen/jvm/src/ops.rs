@@ -11,7 +11,9 @@
 //! anyway, or writes 0 or 1 through a scratch slot.
 
 use nts_codegen_common::Copy;
-use nts_core::hir::{BinOp, BlockId, Callee, HirType, ManagedType, OpKind, Terminator, UnOp, ValueId};
+use nts_core::hir::{
+    BinOp, BlockId, Callee, HirType, ManagedType, OpKind, Terminator, UnOp, ValueId,
+};
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
 use nts_jvm_emitter::{Compare, Kind, Pool, insn};
@@ -22,7 +24,6 @@ use crate::types;
 /// A map call re-spelled to take its key unboxed: the arguments to push, and
 /// the owner, member and descriptor to invoke. See `Body::object_key`.
 type ObjectKeyCall = (Vec<ValueId>, (&'static str, &'static str, String));
-
 
 /// The runtime helpers this backend can call, and how each is spelled on the JVM.
 ///
@@ -157,9 +158,7 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
         // need not be one object.
         "index_of" | "index_of_ref" => ("indexOf", format!("(L{class};{element})D")),
         "index_of_str" => ("indexOfStr", format!("(L{class};{element})D")),
-        "last_index_of" | "last_index_of_ref" => {
-            ("lastIndexOf", format!("(L{class};{element})D"))
-        }
+        "last_index_of" | "last_index_of_ref" => ("lastIndexOf", format!("(L{class};{element})D")),
         "last_index_of_str" => ("lastIndexOfStr", format!("(L{class};{element})D")),
         "includes" | "includes_ref" => ("includes", format!("(L{class};{element})Z")),
         "includes_str" => ("includesStr", format!("(L{class};{element})Z")),
@@ -219,9 +218,10 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
         // entry points because the element width changes what it reads; here
         // the receiver's class already carries that, so `NtsArrayD.joinStr` and
         // `NtsArrayL.joinStr` are the two and the stem picks neither.
-        "join_str" | "join_num" => {
-            ("joinStr", format!("(L{class};Ljava/lang/String;)Ljava/lang/String;"))
-        }
+        "join_str" | "join_num" => (
+            "joinStr",
+            format!("(L{class};Ljava/lang/String;)Ljava/lang/String;"),
+        ),
         "new" | "new_uninitialized" => ("of", format!("(D)L{class};")),
         _ => return None,
     };
@@ -278,22 +278,32 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
         // a local `any` with a concrete initialiser narrows to that initialiser
         // -- so it takes two branches of different types in one local, which no
         // example in this corpus writes.
-        "nts_array_index_of_str_value" => {
-            (RUNTIME, "arrayIndexOfStrValue", format!("({array}Lnts/rt/NtsValue;)D"))
-        }
-        "nts_array_includes_str_value" => {
-            (RUNTIME, "arrayIncludesStrValue", format!("({array}Lnts/rt/NtsValue;)Z"))
-        }
-        "nts_array_join_num" => {
-            (RUNTIME, "arrayJoinNum", format!("({array}Ljava/lang/String;)Ljava/lang/String;"))
-        }
+        "nts_array_index_of_str_value" => (
+            RUNTIME,
+            "arrayIndexOfStrValue",
+            format!("({array}Lnts/rt/NtsValue;)D"),
+        ),
+        "nts_array_includes_str_value" => (
+            RUNTIME,
+            "arrayIncludesStrValue",
+            format!("({array}Lnts/rt/NtsValue;)Z"),
+        ),
+        "nts_array_join_num" => (
+            RUNTIME,
+            "arrayJoinNum",
+            format!("({array}Ljava/lang/String;)Ljava/lang/String;"),
+        ),
         "nts_array_at" => (RUNTIME, "arrayAt", format!("({array}D)D")),
-        "nts_array_at_value" => {
-            (RUNTIME, "arrayAtValue", format!("({array}D)Lnts/rt/NtsValue;"))
-        }
-        "nts_array_at_ref" => {
-            (RUNTIME, "arrayAtRef", format!("({array}D)Ljava/lang/Object;"))
-        }
+        "nts_array_at_value" => (
+            RUNTIME,
+            "arrayAtValue",
+            format!("({array}D)Lnts/rt/NtsValue;"),
+        ),
+        "nts_array_at_ref" => (
+            RUNTIME,
+            "arrayAtRef",
+            format!("({array}D)Ljava/lang/Object;"),
+        ),
         // **The `_ref` spelling too, which is the same Java method.** C has one
         // entry point per element width and names the reference one
         // `nts_array_slice_ref`; this table picks the method by reading the
@@ -352,8 +362,7 @@ const CURSOR_KEY: &str = "(Lnts/rt/NtsTable;I)Lnts/rt/NtsValue;";
 const BIGINT_BINARY: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const BIGINT_BITS: &str = "(DLnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const STRING_STRING_TO_D: &str = "(Ljava/lang/String;Ljava/lang/String;)D";
-const STRING_STRING_TO_STRING: &str =
-    "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;";
+const STRING_STRING_TO_STRING: &str = "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;";
 const STRING_STRING_TO_Z: &str = "(Ljava/lang/String;Ljava/lang/String;)Z";
 const STRING_DD_TO_STRING: &str = "(Ljava/lang/String;DD)Ljava/lang/String;";
 const STRING_STRING_STRING_TO_STRING: &str =
@@ -391,12 +400,16 @@ fn global_external(name: &str) -> Option<(&'static str, &'static str, &'static s
         // `component` is 1 for the `*URIComponent` pair and 0 for the bare one,
         // a `double` because that is the argument shape the tables already
         // carry. `null` is a `URIError` the lowering raises, so neither throws.
-        "nts_encode_uri" => {
-            (RUNTIME, "encodeURI", "(Ljava/lang/String;D)Ljava/lang/String;")
-        }
-        "nts_decode_uri" => {
-            (RUNTIME, "decodeURI", "(Ljava/lang/String;D)Ljava/lang/String;")
-        }
+        "nts_encode_uri" => (
+            RUNTIME,
+            "encodeURI",
+            "(Ljava/lang/String;D)Ljava/lang/String;",
+        ),
+        "nts_decode_uri" => (
+            RUNTIME,
+            "decodeURI",
+            "(Ljava/lang/String;D)Ljava/lang/String;",
+        ),
         _ => return None,
     })
 }
@@ -405,14 +418,22 @@ fn global_external(name: &str) -> Option<(&'static str, &'static str, &'static s
 fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
         "nts_template_reflection" => (types::VALUE, "templateReflection", "(Lnts/rt/NtsValue;)V"),
-        "nts_array_writable" => (types::VALUE, "arrayReference", "(Ljava/lang/Object;)Ljava/lang/Object;"),
+        "nts_array_writable" => (
+            types::VALUE,
+            "arrayReference",
+            "(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "nts_array_length" => (types::VALUE, "arrayLength", "(Lnts/rt/NtsValue;)I"),
-        "nts_value_to_string" => {
-            (types::VALUE, "valueToString", "(Lnts/rt/NtsValue;)Ljava/lang/String;")
-        }
-        "nts_value_inspect" => {
-            (types::VALUE, "valueInspect", "(Lnts/rt/NtsValue;)Ljava/lang/String;")
-        }
+        "nts_value_to_string" => (
+            types::VALUE,
+            "valueToString",
+            "(Lnts/rt/NtsValue;)Ljava/lang/String;",
+        ),
+        "nts_value_inspect" => (
+            types::VALUE,
+            "valueInspect",
+            "(Lnts/rt/NtsValue;)Ljava/lang/String;",
+        ),
         // `Number(v)` on an erased union of primitives, and `+v` since unary
         // plus became the same operation. The helper has existed for as long as
         // `Number` has; no example on this lane reached it until
@@ -421,7 +442,11 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         "nts_value_to_number" => (types::VALUE, "valueToNumber", "(Lnts/rt/NtsValue;)D"),
         // `Number(v)` where `v` may be an erased bigint, which converts; the
         // implicit conversion above refuses one (a TypeError in JavaScript).
-        "nts_value_to_number_explicit" => (types::VALUE, "valueToNumberExplicit", "(Lnts/rt/NtsValue;)D"),
+        "nts_value_to_number_explicit" => (
+            types::VALUE,
+            "valueToNumberExplicit",
+            "(Lnts/rt/NtsValue;)D",
+        ),
         "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_data_view" => (types::VALUE, "isDataView", "(Lnts/rt/NtsValue;)Z"),
         // `ArrayBuffer.isView(x)`, which is a typed array *or* a `DataView`.
@@ -438,26 +463,35 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         // `nts_is_map_like(value, holds_values)` -- for the same reason.
         // The class is the element kind on this lane, so no descriptor
         // field was needed -- see `NtsValue.arrayElement`.
-        "nts_array_element" => {
-            (types::VALUE, "arrayElement", "(Lnts/rt/NtsValue;D)Lnts/rt/NtsValue;")
-        }
+        "nts_array_element" => (
+            types::VALUE,
+            "arrayElement",
+            "(Lnts/rt/NtsValue;D)Lnts/rt/NtsValue;",
+        ),
         "nts_is_map" => (types::VALUE, "isMap", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_set" => (types::VALUE, "isSet", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_promise" => (types::VALUE, "isPromise", "(Lnts/rt/NtsValue;)Z"),
-        "nts_view_join" => {
-            (types::VIEW_BASE, "join", "(Lnts/rt/NtsView;Ljava/lang/String;)Ljava/lang/String;")
-        }
+        "nts_view_join" => (
+            types::VIEW_BASE,
+            "join",
+            "(Lnts/rt/NtsView;Ljava/lang/String;)Ljava/lang/String;",
+        ),
         "nts_is_view_kind" => (types::VALUE, "isViewKind", "(Lnts/rt/NtsValue;D)Z"),
         _ => return None,
     })
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     if let Some(found) = value_external(name) {
         return Some(found);
     }
     Some(match name {
-        "nts_uncaught" => (RUNTIME, "uncaught", "(Lnts/rt/NtsValue;Ljava/lang/String;)V"),
+        "nts_uncaught" => (
+            RUNTIME,
+            "uncaught",
+            "(Lnts/rt/NtsValue;Ljava/lang/String;)V",
+        ),
         // The end of a lowering-built dispatch chain, which this lane reaches by
         // the same call the native lanes do rather than by an emitter's own
         // `unreachable`: the chain is control flow the lowering wrote, so there
@@ -507,7 +541,9 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // Without these, everything reaching the environment was refused on this
         // lane: `Event`'s constructor, `File`'s, and whatever else the shared
         // provider hangs off the slot.
-        "nts_environment_install_platform" => (types::ENV, "installPlatform", "(Ljava/lang/Object;)V"),
+        "nts_environment_install_platform" => {
+            (types::ENV, "installPlatform", "(Ljava/lang/Object;)V")
+        }
         "nts_environment_platform" => (types::ENV, "platform", "()Ljava/lang/Object;"),
         "nts_environment_has_platform" => (types::ENV, "hasPlatform", "()Z"),
         "nts_to_index" => (types::BUFFER, "toIndexNumber", "(D)D"),
@@ -516,24 +552,34 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
             (types::BUFFER, "allocateResizable", "(DD)Lnts/rt/NtsBuffer;")
         }
         "nts_buffer_byte_length" => (types::BUFFER, "byteLength", "(Lnts/rt/NtsBuffer;)D"),
-        "nts_buffer_max_byte_length" => {
-            (types::BUFFER, "maxByteLength", "(Lnts/rt/NtsBuffer;)D")
-        }
+        "nts_buffer_max_byte_length" => (types::BUFFER, "maxByteLength", "(Lnts/rt/NtsBuffer;)D"),
         "nts_buffer_resizable" => (types::BUFFER, "resizable", "(Lnts/rt/NtsBuffer;)Z"),
         "nts_buffer_detached" => (types::BUFFER, "detached", "(Lnts/rt/NtsBuffer;)Z"),
-        "nts_buffer_slice" => {
-            (types::BUFFER, "slice", "(Lnts/rt/NtsBuffer;DD)Lnts/rt/NtsBuffer;")
-        }
+        "nts_buffer_slice" => (
+            types::BUFFER,
+            "slice",
+            "(Lnts/rt/NtsBuffer;DD)Lnts/rt/NtsBuffer;",
+        ),
         "nts_buffer_resize" => (types::BUFFER, "resize", "(Lnts/rt/NtsBuffer;D)V"),
         // `DataView`. The width and the signedness are in the *name* rather
         // than in the type -- one class, sixteen accessors -- so this is a
         // table rather than an overload set, and `NtsDataView` already carries
         // every one of them.
-        "nts_dataview_over" => (types::VIEW, "over", "(Lnts/rt/NtsBuffer;D)Lnts/rt/NtsDataView;"),
-        "nts_dataview_part" => {
-            (types::VIEW, "part", "(Lnts/rt/NtsBuffer;DD)Lnts/rt/NtsDataView;")
-        }
-        "nts_dataview_buffer" => (types::VIEW, "buffer", "(Lnts/rt/NtsDataView;)Lnts/rt/NtsBuffer;"),
+        "nts_dataview_over" => (
+            types::VIEW,
+            "over",
+            "(Lnts/rt/NtsBuffer;D)Lnts/rt/NtsDataView;",
+        ),
+        "nts_dataview_part" => (
+            types::VIEW,
+            "part",
+            "(Lnts/rt/NtsBuffer;DD)Lnts/rt/NtsDataView;",
+        ),
+        "nts_dataview_buffer" => (
+            types::VIEW,
+            "buffer",
+            "(Lnts/rt/NtsDataView;)Lnts/rt/NtsBuffer;",
+        ),
         "nts_dataview_byte_offset" => (types::VIEW, "byteOffset", "(Lnts/rt/NtsDataView;)D"),
         "nts_dataview_byte_length" => (types::VIEW, "byteLength", "(Lnts/rt/NtsDataView;)D"),
         "nts_dataview_get_int8" => (types::VIEW, "getInt8", "(Lnts/rt/NtsDataView;D)D"),
@@ -546,18 +592,26 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // The bigint pair. A bigint is `NtsBigInt` on this lane and 128 bits
         // wide where the element is 64, so the read chooses what lands in the
         // high word and the write keeps the low one.
-        "nts_dataview_get_bigint64" => {
-            (types::VIEW, "getBigInt64", "(Lnts/rt/NtsDataView;DZ)Lnts/rt/NtsBigInt;")
-        }
-        "nts_dataview_get_biguint64" => {
-            (types::VIEW, "getBigUint64", "(Lnts/rt/NtsDataView;DZ)Lnts/rt/NtsBigInt;")
-        }
-        "nts_dataview_set_bigint64" => {
-            (types::VIEW, "setBigInt64", "(Lnts/rt/NtsDataView;DLnts/rt/NtsBigInt;Z)V")
-        }
-        "nts_dataview_set_biguint64" => {
-            (types::VIEW, "setBigUint64", "(Lnts/rt/NtsDataView;DLnts/rt/NtsBigInt;Z)V")
-        }
+        "nts_dataview_get_bigint64" => (
+            types::VIEW,
+            "getBigInt64",
+            "(Lnts/rt/NtsDataView;DZ)Lnts/rt/NtsBigInt;",
+        ),
+        "nts_dataview_get_biguint64" => (
+            types::VIEW,
+            "getBigUint64",
+            "(Lnts/rt/NtsDataView;DZ)Lnts/rt/NtsBigInt;",
+        ),
+        "nts_dataview_set_bigint64" => (
+            types::VIEW,
+            "setBigInt64",
+            "(Lnts/rt/NtsDataView;DLnts/rt/NtsBigInt;Z)V",
+        ),
+        "nts_dataview_set_biguint64" => (
+            types::VIEW,
+            "setBigUint64",
+            "(Lnts/rt/NtsDataView;DLnts/rt/NtsBigInt;Z)V",
+        ),
         "nts_dataview_get_float64" => (types::VIEW, "getFloat64", "(Lnts/rt/NtsDataView;DZ)D"),
         "nts_dataview_set_int8" => (types::VIEW, "setInt8", "(Lnts/rt/NtsDataView;DD)V"),
         "nts_dataview_set_uint8" => (types::VIEW, "setUint8", "(Lnts/rt/NtsDataView;DD)V"),
@@ -567,22 +621,40 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_dataview_set_uint32" => (types::VIEW, "setUint32", "(Lnts/rt/NtsDataView;DDZ)V"),
         "nts_dataview_set_float32" => (types::VIEW, "setFloat32", "(Lnts/rt/NtsDataView;DDZ)V"),
         "nts_dataview_set_float64" => (types::VIEW, "setFloat64", "(Lnts/rt/NtsDataView;DDZ)V"),
-        "nts_buffer_transfer" => {
-            (types::BUFFER, "transfer", "(Lnts/rt/NtsBuffer;DZ)Lnts/rt/NtsBuffer;")
-        }
+        "nts_buffer_transfer" => (
+            types::BUFFER,
+            "transfer",
+            "(Lnts/rt/NtsBuffer;DZ)Lnts/rt/NtsBuffer;",
+        ),
         // A symbol is a description and an identity. `keyFor` walks the
         // registry rather than keeping a reverse index, which is `runtime/c`'s
         // choice and its reason: `Symbol.keyFor` is the rare direction and a
         // second index would cost every `Symbol.for` a write.
-        "nts_symbol_new" => (types::SYMBOL, "newSymbol", "(Ljava/lang/String;)Lnts/rt/NtsSymbol;"),
-        "nts_symbol_for" => (types::SYMBOL, "forKey", "(Ljava/lang/String;)Lnts/rt/NtsSymbol;"),
-        "nts_symbol_key_for" => (types::SYMBOL, "keyFor", "(Lnts/rt/NtsSymbol;)Ljava/lang/String;"),
-        "nts_symbol_description" => {
-            (types::SYMBOL, "description", "(Lnts/rt/NtsSymbol;)Ljava/lang/String;")
-        }
-        "nts_symbol_to_string" => {
-            (types::SYMBOL, "describe", "(Lnts/rt/NtsSymbol;)Ljava/lang/String;")
-        }
+        "nts_symbol_new" => (
+            types::SYMBOL,
+            "newSymbol",
+            "(Ljava/lang/String;)Lnts/rt/NtsSymbol;",
+        ),
+        "nts_symbol_for" => (
+            types::SYMBOL,
+            "forKey",
+            "(Ljava/lang/String;)Lnts/rt/NtsSymbol;",
+        ),
+        "nts_symbol_key_for" => (
+            types::SYMBOL,
+            "keyFor",
+            "(Lnts/rt/NtsSymbol;)Ljava/lang/String;",
+        ),
+        "nts_symbol_description" => (
+            types::SYMBOL,
+            "description",
+            "(Lnts/rt/NtsSymbol;)Ljava/lang/String;",
+        ),
+        "nts_symbol_to_string" => (
+            types::SYMBOL,
+            "describe",
+            "(Lnts/rt/NtsSymbol;)Ljava/lang/String;",
+        ),
         // A `Date` is a `double` and an identity, and these are all of it.
         "nts_date_new" => (types::DATE, "newDate", "(D)Lnts/rt/NtsDate;"),
         "nts_date_value" => (types::DATE, "value", "(Lnts/rt/NtsDate;)D"),
@@ -608,9 +680,7 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
         // `Long.toString(long, int)` is not this: it handles integers, and the
         // fraction is the whole difficulty. See `numberToStringRadix`.
-        "nts_number_to_string_radix" => {
-            (RUNTIME, "numberToStringRadix", "(DD)Ljava/lang/String;")
-        }
+        "nts_number_to_string_radix" => (RUNTIME, "numberToStringRadix", "(DD)Ljava/lang/String;"),
         // `String.format("%.2f", x)` is not this either: it rounds half to
         // even and the specification rounds half away from zero. See
         // `numberToFixed`.
@@ -727,6 +797,7 @@ fn string_external(name: &str) -> Option<(&'static str, &'static str, &'static s
 }
 
 /// `Map`, `Set` and `bigint`: the three types with a class of their own.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
     Some(match name {
         // One class for `Map` and `Set`. `kind` is accepted and ignored: in C
@@ -734,51 +805,75 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         // optimisation rather than a semantic, and taking the parameter keeps
         // `hir::runtime` the single answer about the signature.
         "nts_promise_new" => (types::PROMISE, "newPromise", "()Lnts/rt/NtsPromise;"),
-        "nts_promise_race" => {
-            (types::PROMISE, "race", "([Lnts/rt/NtsPromise;)Lnts/rt/NtsPromise;")
-        }
+        "nts_promise_race" => (
+            types::PROMISE,
+            "race",
+            "([Lnts/rt/NtsPromise;)Lnts/rt/NtsPromise;",
+        ),
         "nts_promise_fulfill_void" => (types::PROMISE, "fulfillVoid", "(Lnts/rt/NtsPromise;)V"),
         "nts_promise_fulfill_number" => {
             (types::PROMISE, "fulfillNumber", "(Lnts/rt/NtsPromise;D)V")
         }
-        "nts_promise_fulfill_reference" => {
-            (types::PROMISE, "fulfillReference", "(Lnts/rt/NtsPromise;Ljava/lang/Object;)V")
-        }
-        "nts_promise_fulfill_tagged" => {
-            (types::PROMISE, "fulfillTagged", "(Lnts/rt/NtsPromise;Ljava/lang/Object;I)V")
-        }
-        "nts_promise_fulfill_value" => {
-            (types::PROMISE, "fulfillValue", "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V")
-        }
-        "nts_promise_resolve_value" => {
-            (types::PROMISE, "resolveValue", "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V")
-        }
-        "nts_promise_reject" => {
-            (types::PROMISE, "reject", "(Lnts/rt/NtsPromise;Ljava/lang/Object;)V")
-        }
-        "nts_promise_reject_with" => {
-            (types::PROMISE, "rejectWith", "(Lnts/rt/NtsPromise;Lnts/rt/NtsPromise;)V")
-        }
-        "nts_promise_adopt" => {
-            (types::PROMISE, "adopt", "(Lnts/rt/NtsPromise;Lnts/rt/NtsPromise;)V")
-        }
+        "nts_promise_fulfill_reference" => (
+            types::PROMISE,
+            "fulfillReference",
+            "(Lnts/rt/NtsPromise;Ljava/lang/Object;)V",
+        ),
+        "nts_promise_fulfill_tagged" => (
+            types::PROMISE,
+            "fulfillTagged",
+            "(Lnts/rt/NtsPromise;Ljava/lang/Object;I)V",
+        ),
+        "nts_promise_fulfill_value" => (
+            types::PROMISE,
+            "fulfillValue",
+            "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V",
+        ),
+        "nts_promise_resolve_value" => (
+            types::PROMISE,
+            "resolveValue",
+            "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V",
+        ),
+        "nts_promise_reject" => (
+            types::PROMISE,
+            "reject",
+            "(Lnts/rt/NtsPromise;Ljava/lang/Object;)V",
+        ),
+        "nts_promise_reject_with" => (
+            types::PROMISE,
+            "rejectWith",
+            "(Lnts/rt/NtsPromise;Lnts/rt/NtsPromise;)V",
+        ),
+        "nts_promise_adopt" => (
+            types::PROMISE,
+            "adopt",
+            "(Lnts/rt/NtsPromise;Lnts/rt/NtsPromise;)V",
+        ),
         "nts_enqueue_job" => (RUNTIME, "enqueueJob", "(Lnts/rt/NtsCallback;D)V"),
         "nts_promise_claim" => (types::PROMISE, "claim", "(Lnts/rt/NtsPromise;I)Z"),
         "nts_promise_pair" => (types::PROMISE, "pair", "(Lnts/rt/NtsPromise;)I"),
         "nts_promise_is_rejected" => (types::PROMISE, "isRejected", "(Lnts/rt/NtsPromise;)Z"),
         "nts_promise_number" => (types::PROMISE, "number", "(Lnts/rt/NtsPromise;)D"),
-        "nts_promise_reference" => {
-            (types::PROMISE, "reference", "(Lnts/rt/NtsPromise;)Ljava/lang/Object;")
-        }
-        "nts_promise_value" => {
-            (types::PROMISE, "value", "(Lnts/rt/NtsPromise;)Lnts/rt/NtsValue;")
-        }
-        "nts_promise_reason" => {
-            (types::PROMISE, "reason", "(Lnts/rt/NtsPromise;)Lnts/rt/NtsValue;")
-        }
-        "nts_promise_reject_value" => {
-            (types::PROMISE, "rejectValue", "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V")
-        }
+        "nts_promise_reference" => (
+            types::PROMISE,
+            "reference",
+            "(Lnts/rt/NtsPromise;)Ljava/lang/Object;",
+        ),
+        "nts_promise_value" => (
+            types::PROMISE,
+            "value",
+            "(Lnts/rt/NtsPromise;)Lnts/rt/NtsValue;",
+        ),
+        "nts_promise_reason" => (
+            types::PROMISE,
+            "reason",
+            "(Lnts/rt/NtsPromise;)Lnts/rt/NtsValue;",
+        ),
+        "nts_promise_reject_value" => (
+            types::PROMISE,
+            "rejectValue",
+            "(Lnts/rt/NtsPromise;Lnts/rt/NtsValue;)V",
+        ),
 
         // **Three owners, and the name says which.** A helper that does not care
         // which kind it was handed lives on `NtsTable` and takes one; the ones
@@ -803,7 +898,11 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
             "add",
             "(Lnts/rt/NtsSet;Lnts/rt/NtsValue;)Lnts/rt/NtsSet;",
         ),
-        "nts_map_delete" => (types::TABLE, "delete", "(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Z"),
+        "nts_map_delete" => (
+            types::TABLE,
+            "delete",
+            "(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Z",
+        ),
         "nts_map_clear" => (types::TABLE, "clear", "(Lnts/rt/NtsTable;)V"),
         "nts_map_size" => (types::TABLE, "size", "(Lnts/rt/NtsTable;)D"),
         "nts_map_copy" => (types::MAP, "copy", "(Lnts/rt/NtsMap;)Lnts/rt/NtsMap;"),
@@ -815,28 +914,32 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
             "extend",
             "(Lnts/rt/NtsMap;Lnts/rt/NtsMap;)Lnts/rt/NtsMap;",
         ),
-        "nts_map_keys_str" => {
-            (types::TABLE, "keysStr", "(Lnts/rt/NtsTable;)[Ljava/lang/Object;")
-        }
+        "nts_map_keys_str" => (
+            types::TABLE,
+            "keysStr",
+            "(Lnts/rt/NtsTable;)[Ljava/lang/Object;",
+        ),
         "nts_map_next" => (types::TABLE, "next", "(Lnts/rt/NtsTable;D)D"),
         "nts_map_key_at" => (types::TABLE, "keyAt", MAP_AT_TO_VALUE),
         "nts_map_value_at" => (types::TABLE, "valueAt", MAP_AT_TO_VALUE),
 
         "nts_bigint_from_number" => (types::BIGINT, "fromNumber", "(D)Lnts/rt/NtsBigInt;"),
-        "nts_bigint_to_string" => (types::BIGINT, "toText", "(Lnts/rt/NtsBigInt;)Ljava/lang/String;"),
-        "nts_bigint_compare_string" => {
-            (types::BIGINT, "compareString", "(Lnts/rt/NtsBigInt;Ljava/lang/String;)D")
-        }
+        "nts_bigint_to_string" => (
+            types::BIGINT,
+            "toText",
+            "(Lnts/rt/NtsBigInt;)Ljava/lang/String;",
+        ),
+        "nts_bigint_compare_string" => (
+            types::BIGINT,
+            "compareString",
+            "(Lnts/rt/NtsBigInt;Ljava/lang/String;)D",
+        ),
         "nts_bigint_shl" => (types::BIGINT, "shl", BIGINT_BINARY),
         "nts_bigint_shr" => (types::BIGINT, "shr", BIGINT_BINARY),
         "nts_bigint_as_intn" => (types::BIGINT, "asIntN", BIGINT_BITS),
         "nts_bigint_as_uintn" => (types::BIGINT, "asUintN", BIGINT_BITS),
-        "nts_string_from_char_code" => {
-            (RUNTIME, "stringFromCharCode", "(D)Ljava/lang/String;")
-        }
-        "nts_string_from_code_point" => {
-            (RUNTIME, "stringFromCodePoint", "(D)Ljava/lang/String;")
-        }
+        "nts_string_from_char_code" => (RUNTIME, "stringFromCharCode", "(D)Ljava/lang/String;"),
+        "nts_string_from_code_point" => (RUNTIME, "stringFromCodePoint", "(D)Ljava/lang/String;"),
         "nts_console_write" => (RUNTIME, "consoleWrite", "(Ljava/lang/String;Z)V"),
         _ => return None,
     })
@@ -909,21 +1012,90 @@ pub const WEB_INTRINSICS: &[Intrinsic] = &[
     // take a caller's window: a store that allocated here would be the only
     // entry that does, and would copy every value twice. `append` takes no
     // offset or length beside the view because a view carries both.
-    Intrinsic { declared: "nts_jvm_store_configure", owner: types::WEB, member: "storeConfigure", descriptor: "(Ljava/lang/String;)V" },
-    Intrinsic { declared: "nts_jvm_store_close", owner: types::WEB, member: "storeClose", descriptor: "()V" },
-    Intrinsic { declared: "nts_jvm_store_open", owner: types::WEB, member: "storeOpen", descriptor: "(Ljava/lang/String;Ljava/lang/String;)D" },
-    Intrinsic { declared: "nts_jvm_store_append", owner: types::WEB, member: "storeAppend", descriptor: "(DLnts/rt/NtsViewU8;)V" },
-    Intrinsic { declared: "nts_jvm_store_commit", owner: types::WEB, member: "storeCommit", descriptor: "(D)V" },
-    Intrinsic { declared: "nts_jvm_store_discard", owner: types::WEB, member: "storeDiscard", descriptor: "(D)V" },
-    Intrinsic { declared: "nts_jvm_store_read", owner: types::WEB, member: "storeRead", descriptor: "(Ljava/lang/String;Ljava/lang/String;Lnts/rt/NtsViewU8;)D" },
-    Intrinsic { declared: "nts_jvm_store_delete", owner: types::WEB, member: "storeDelete", descriptor: "(Ljava/lang/String;Ljava/lang/String;)Z" },
-    Intrinsic { declared: "nts_jvm_store_list", owner: types::WEB, member: "storeList", descriptor: "(Ljava/lang/String;Lnts/rt/NtsViewU8;)D" },
-    Intrinsic { declared: "nts_jvm_store_size", owner: types::WEB, member: "storeSize", descriptor: "(Ljava/lang/String;)D" },
-    Intrinsic { declared: "nts_jvm_store_source_open", owner: types::WEB, member: "storeSourceOpen", descriptor: "(Ljava/lang/String;Ljava/lang/String;DD)D" },
-    Intrinsic { declared: "nts_jvm_store_source_read", owner: types::WEB, member: "storeSourceRead", descriptor: "(DLnts/rt/NtsViewU8;)D" },
-    Intrinsic { declared: "nts_jvm_store_source_close", owner: types::WEB, member: "storeSourceClose", descriptor: "(D)V" },
-    Intrinsic { declared: "nts_jvm_store_source_size", owner: types::WEB, member: "storeSourceSize", descriptor: "(Ljava/lang/String;Ljava/lang/String;)D" },
-
+    Intrinsic {
+        declared: "nts_jvm_store_configure",
+        owner: types::WEB,
+        member: "storeConfigure",
+        descriptor: "(Ljava/lang/String;)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_close",
+        owner: types::WEB,
+        member: "storeClose",
+        descriptor: "()V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_open",
+        owner: types::WEB,
+        member: "storeOpen",
+        descriptor: "(Ljava/lang/String;Ljava/lang/String;)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_append",
+        owner: types::WEB,
+        member: "storeAppend",
+        descriptor: "(DLnts/rt/NtsViewU8;)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_commit",
+        owner: types::WEB,
+        member: "storeCommit",
+        descriptor: "(D)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_discard",
+        owner: types::WEB,
+        member: "storeDiscard",
+        descriptor: "(D)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_read",
+        owner: types::WEB,
+        member: "storeRead",
+        descriptor: "(Ljava/lang/String;Ljava/lang/String;Lnts/rt/NtsViewU8;)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_delete",
+        owner: types::WEB,
+        member: "storeDelete",
+        descriptor: "(Ljava/lang/String;Ljava/lang/String;)Z",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_list",
+        owner: types::WEB,
+        member: "storeList",
+        descriptor: "(Ljava/lang/String;Lnts/rt/NtsViewU8;)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_size",
+        owner: types::WEB,
+        member: "storeSize",
+        descriptor: "(Ljava/lang/String;)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_source_open",
+        owner: types::WEB,
+        member: "storeSourceOpen",
+        descriptor: "(Ljava/lang/String;Ljava/lang/String;DD)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_source_read",
+        owner: types::WEB,
+        member: "storeSourceRead",
+        descriptor: "(DLnts/rt/NtsViewU8;)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_source_close",
+        owner: types::WEB,
+        member: "storeSourceClose",
+        descriptor: "(D)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_store_source_size",
+        owner: types::WEB,
+        member: "storeSourceSize",
+        descriptor: "(Ljava/lang/String;Ljava/lang/String;)D",
+    },
     Intrinsic {
         declared: "nts_jvm_web_connect",
         owner: types::WEB,
@@ -1111,13 +1283,21 @@ pub fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static 
             "create",
             format!("(L{};DDDZ)L{class};", types::BUFFER),
         ),
-        "nts_view_length" => (types::VIEW_BASE, "length", format!("(L{};)D", types::VIEW_BASE)),
-        "nts_view_byte_length" => {
-            (types::VIEW_BASE, "byteLength", format!("(L{};)D", types::VIEW_BASE))
-        }
-        "nts_view_byte_offset" => {
-            (types::VIEW_BASE, "byteOffset", format!("(L{};)D", types::VIEW_BASE))
-        }
+        "nts_view_length" => (
+            types::VIEW_BASE,
+            "length",
+            format!("(L{};)D", types::VIEW_BASE),
+        ),
+        "nts_view_byte_length" => (
+            types::VIEW_BASE,
+            "byteLength",
+            format!("(L{};)D", types::VIEW_BASE),
+        ),
+        "nts_view_byte_offset" => (
+            types::VIEW_BASE,
+            "byteOffset",
+            format!("(L{};)D", types::VIEW_BASE),
+        ),
         "nts_view_buffer" => (
             types::VIEW_BASE,
             "buffer",
@@ -1128,10 +1308,16 @@ pub fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static 
         // operation, so they are the entries most worth getting right: the
         // class is the *subject's*, because both answer a view of the element
         // type they were given.
-        "nts_view_subarray" => {
-            (leak(class.to_owned()), "subarray", format!("(L{class};DD)L{class};"))
-        }
-        "nts_view_slice" => (leak(class.to_owned()), "slice", format!("(L{class};DD)L{class};")),
+        "nts_view_subarray" => (
+            leak(class.to_owned()),
+            "subarray",
+            format!("(L{class};DD)L{class};"),
+        ),
+        "nts_view_slice" => (
+            leak(class.to_owned()),
+            "slice",
+            format!("(L{class};DD)L{class};"),
+        ),
         // `set` and `copyWithin` are declared on the base and take a base-typed
         // receiver, so they need no per-element entry -- and both are correct
         // only when the ranges intersect, which is why the runtime's `set`
@@ -1149,18 +1335,24 @@ pub fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static 
         ),
         // The generic pair, which exists for `set` across two element kinds and
         // for `DataView`. Not the indexing path.
-        "nts_view_get" => {
-            (types::VIEW_BASE, "getElement", format!("(L{};D)D", types::VIEW_BASE))
-        }
-        "nts_view_put" => {
-            (types::VIEW_BASE, "putElement", format!("(L{};DD)V", types::VIEW_BASE))
-        }
+        "nts_view_get" => (
+            types::VIEW_BASE,
+            "getElement",
+            format!("(L{};D)D", types::VIEW_BASE),
+        ),
+        "nts_view_put" => (
+            types::VIEW_BASE,
+            "putElement",
+            format!("(L{};DD)V", types::VIEW_BASE),
+        ),
         // A loop over the per-element write, so each store keeps its own
         // coercion -- a byte fill would answer 44 for a `Uint8ClampedArray`
         // where the language says 255.
-        "nts_view_fill" => {
-            (types::VIEW_BASE, "fill", format!("(L{};DDD)V", types::VIEW_BASE))
-        }
+        "nts_view_fill" => (
+            types::VIEW_BASE,
+            "fill",
+            format!("(L{};DDD)V", types::VIEW_BASE),
+        ),
         _ => return None,
     })
 }
@@ -1197,7 +1389,6 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
         .or_else(|| web_external(name))?;
     Some((found.0, found.1, found.2.to_owned()))
 }
-
 
 /// The boxing a bound parameter wants, as `(class, the primitive it takes)`.
 ///
@@ -1266,7 +1457,6 @@ fn view_to_array(want: &str, held: Option<&str>) -> Option<(&'static str, String
     };
     Some((member, format!("({view}){want}")))
 }
-
 
 /// What every arm of a field-access chain shares: where it came from, what it
 /// reads through, and whether that arrives erased.
@@ -1387,6 +1577,7 @@ impl Emitter<'_> {
         comparison(op).map(|_| *cond)
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn operation(
         &mut self,
         code: &mut Code,
@@ -1407,7 +1598,9 @@ impl Emitter<'_> {
             OpKind::ConstBool(_) | OpKind::ConstInt(_) | OpKind::ConstFloat(_) => {
                 self.constant(code, pool, &op.kind, &op.ty, &origin)?
             }
-            OpKind::ConstTemplate { .. } | OpKind::ClosureStatic => self.static_instance(code, pool, &op.kind, &op.ty, &origin)?,
+            OpKind::ConstTemplate { .. } | OpKind::ClosureStatic => {
+                self.static_instance(code, pool, &op.kind, &op.ty, &origin)?
+            }
             OpKind::ConstString(_) | OpKind::Length(_) | OpKind::StringUnitAt { .. } => {
                 self.string_operation(code, pool, value, &op.kind, &op.ty, &origin)?
             }
@@ -1428,7 +1621,9 @@ impl Emitter<'_> {
             OpKind::ConstNull | OpKind::ConstUndefined => {
                 self.absence(code, pool, &op.kind, &op.ty, &origin)?
             }
-            OpKind::Binary { op: bin, lhs, rhs } => self.binary(code, pool, value, *bin, *lhs, *rhs)?,
+            OpKind::Binary { op: bin, lhs, rhs } => {
+                self.binary(code, pool, value, *bin, *lhs, *rhs)?
+            }
             OpKind::Unary { op: un, operand } => self.unary(code, pool, &op.ty, *un, *operand)?,
             OpKind::Convert(operand) => {
                 self.conversion(code, pool, value, *operand, &op.ty, &origin)?
@@ -1438,7 +1633,9 @@ impl Emitter<'_> {
                 self.global(code, pool, &op.kind, &origin)?
             }
 
-            OpKind::Call { callee, args, .. } => self.call(code, pool, value, &op.ty, callee, args, &origin)?,
+            OpKind::Call { callee, args, .. } => {
+                self.call(code, pool, value, &op.ty, callee, args, &origin)?
+            }
 
             // `new; dup; invokespecial <init>()V`, and then the lowering calls
             // the TypeScript constructor as an ordinary method on the result --
@@ -1452,15 +1649,19 @@ impl Emitter<'_> {
             // analysis is much weaker, honouring the hint may be worth
             // something -- and that is a measurement for when a DEX pipeline
             // exists, not a guess now.
-            OpKind::SharedFieldGet { value: receiver, arms, field } => {
-                self.shared_field_get(code, pool, value, *receiver, arms, *field)?
-            }
+            OpKind::SharedFieldGet {
+                value: receiver,
+                arms,
+                field,
+            } => self.shared_field_get(code, pool, value, *receiver, arms, *field)?,
             OpKind::OpenFieldGet { object, arms } => {
                 self.chain_field_get(code, pool, value, *object, arms)?
             }
-            OpKind::OpenFieldSet { object, arms, value: stored } => {
-                self.chain_field_set(code, pool, value, *object, arms, *stored)?
-            }
+            OpKind::OpenFieldSet {
+                object,
+                arms,
+                value: stored,
+            } => self.chain_field_set(code, pool, value, *object, arms, *stored)?,
             OpKind::ObjectNew { .. } => self.object_new(code, pool, &op.ty, &origin)?,
             OpKind::FieldGet { .. } | OpKind::FieldSet { .. } => {
                 match self.field_op(code, pool, &op.kind, &origin)? {
@@ -1469,33 +1670,33 @@ impl Emitter<'_> {
                 }
             }
 
-        // A closed set of classes, so `instanceof` answers it directly --
-        // one instruction against the C backend's chain of descriptor
-        // pointer comparisons, and a fixed few when the set is larger.
-        // Subscribe the frame to the promise. The `Return` that follows is
-        // the suspension itself -- this operation only records who to come
-        // back to.
-        //
-        // The frame's class implements `NtsResumable`, which is the one
-        // nominal relationship this backend *creates* rather than recovers:
-        // `Suspend` names a frame and a function, and both are emitted
-        // here, so nothing upstream has to carry it.
-        // A retain under a tracing collector has nothing to do, and the
-        // guard was never about the operation -- it was about not knowing
-        // why it was there.
-        //
-        // `hir::suspend` emits one regardless of provider, because a frame
-        // outliving its function is a lifetime question the provider does
-        // not answer: the resume *consumes* a reference, so the runtime
-        // holds one until the resumption runs. Here that reference is the
-        // frame sitting in the promise's waiting list, which is a strong
-        // reference and is the whole of what keeps it alive.
-        //
-        // So this refuses only under `ReferenceCounting`, where a retain
-        // means the middle end expects *this backend* to be counting and it
-        // is not. Under `NoGc` the pair is dropped, both halves together --
-        // `suspend.rs` emits the matching `Release` and ignoring one
-        // without the other is not a thing.
+            // A closed set of classes, so `instanceof` answers it directly --
+            // one instruction against the C backend's chain of descriptor
+            // pointer comparisons, and a fixed few when the set is larger.
+            // Subscribe the frame to the promise. The `Return` that follows is
+            // the suspension itself -- this operation only records who to come
+            // back to.
+            //
+            // The frame's class implements `NtsResumable`, which is the one
+            // nominal relationship this backend *creates* rather than recovers:
+            // `Suspend` names a frame and a function, and both are emitted
+            // here, so nothing upstream has to carry it.
+            // A retain under a tracing collector has nothing to do, and the
+            // guard was never about the operation -- it was about not knowing
+            // why it was there.
+            //
+            // `hir::suspend` emits one regardless of provider, because a frame
+            // outliving its function is a lifetime question the provider does
+            // not answer: the resume *consumes* a reference, so the runtime
+            // holds one until the resumption runs. Here that reference is the
+            // frame sitting in the promise's waiting list, which is a strong
+            // reference and is the whole of what keeps it alive.
+            //
+            // So this refuses only under `ReferenceCounting`, where a retain
+            // means the middle end expects *this backend* to be counting and it
+            // is not. Under `NoGc` the pair is dropped, both halves together --
+            // `suspend.rs` emits the matching `Release` and ignoring one
+            // without the other is not a thing.
             OpKind::Retain(_) | OpKind::Release(_)
                 if self.program.provider != nts_core::hir::Provider::ReferenceCounting =>
             {
@@ -1504,7 +1705,9 @@ impl Emitter<'_> {
             OpKind::Suspend { promise, frame, .. } => {
                 self.suspend(code, pool, *promise, *frame, &origin)?
             }
-            OpKind::PromiseSubscribe { promise, reaction, .. } => self.promise_subscribe(code, pool, *promise, *reaction, &origin)?,
+            OpKind::PromiseSubscribe {
+                promise, reaction, ..
+            } => self.promise_subscribe(code, pool, *promise, *reaction, &origin)?,
             OpKind::InstanceOf { value, classes } if classes.len() != 1 => {
                 self.instance_of_any(code, pool, *value, classes, &origin)?
             }
@@ -1513,7 +1716,10 @@ impl Emitter<'_> {
                     return Err(refuse(self.func, "an `instanceof` against no class at all"));
                 };
                 let Some(layout) = self.program.layout(*only) else {
-                    return Err(refuse(self.func, "an `instanceof` against an unknown class"));
+                    return Err(refuse(
+                        self.func,
+                        "an `instanceof` against an unknown class",
+                    ));
                 };
                 self.load(code, pool, *value)?;
                 // **Unbox before asking for a class.** An erased operand is the
@@ -1528,23 +1734,17 @@ impl Emitter<'_> {
                 // out the end. The benchmark's cross-variant checksum caught
                 // it; nothing in the emitter did.
                 if *self.ty(*value) == HirType::Erased && !self.unboxed.contains(value) {
-                    code.get_field(
-                        &origin,
-                        pool,
-                        types::VALUE,
-                        "ref",
-                        "Ljava/lang/Object;",
-                    );
+                    code.get_field(&origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
                 }
                 // The class this test *names*, which is not always the
                 // layout's: see `hierarchy::identities`. Testing the layout's
                 // class asks "does it have this shape", and `instanceof` asks
                 // "is it this class" -- the same question only while one class
                 // owns the layout.
-                let wanted = crate::hierarchy::identity_of(self.program, *only)
-                    .map_or_else(|| types::class_name(self.shape.package, layout), |class| {
-                        types::identity_class_name(self.shape.package, layout, class)
-                    });
+                let wanted = crate::hierarchy::identity_of(self.program, *only).map_or_else(
+                    || types::class_name(self.shape.package, layout),
+                    |class| types::identity_class_name(self.shape.package, layout, class),
+                );
                 code.instance_of(&origin, pool, &wanted);
                 Placed::OnStack
             }
@@ -1585,10 +1785,9 @@ impl Emitter<'_> {
             // an unused one takes this branch -- so the declared type was right
             // by accident for as long as the only narrowing was of results
             // somebody wanted.
-            let words = self.kind_of(value).map_or_else(
-                |_| types::kind(ty).map_or(0, Kind::words),
-                Kind::words,
-            );
+            let words = self
+                .kind_of(value)
+                .map_or_else(|_| types::kind(ty).map_or(0, Kind::words), Kind::words);
             if words > 0 {
                 code.pop(origin, words);
             }
@@ -1597,6 +1796,7 @@ impl Emitter<'_> {
     }
 
     /// Module-scope storage, which is a static field on the program class.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn global(
         &mut self,
         code: &mut Code,
@@ -1607,7 +1807,12 @@ impl Emitter<'_> {
         let (index, storing) = match kind {
             OpKind::GlobalGet(global) => (*global, None),
             OpKind::GlobalSet { global, value } => (*global, Some(*value)),
-            _ => return Err(refuse(self.func, "a global operation that is neither a read nor a write")),
+            _ => {
+                return Err(refuse(
+                    self.func,
+                    "a global operation that is neither a read nor a write",
+                ));
+            }
         };
         let Some(entry) = self.program.globals.get(index as usize) else {
             return Err(refuse(self.func, "a global this program does not declare"));
@@ -1649,7 +1854,10 @@ impl Emitter<'_> {
                 (Some(_), Some(_)) => {
                     return Err(refuse(
                         self.func,
-                        &format!("the bound static `{}`, which more than one binding row names", entry.name),
+                        &format!(
+                            "the bound static `{}`, which more than one binding row names",
+                            entry.name
+                        ),
                     ));
                 }
                 _ => None,
@@ -1657,10 +1865,16 @@ impl Emitter<'_> {
         };
         if let Some(key) = foreign_static {
             let Some((head, field)) = key.split_once(':') else {
-                return Err(refuse(self.func, &format!("a malformed binding row `{key}`")));
+                return Err(refuse(
+                    self.func,
+                    &format!("a malformed binding row `{key}`"),
+                ));
             };
             let Some((owner, member)) = head.rsplit_once('.') else {
-                return Err(refuse(self.func, &format!("a malformed binding row `{key}`")));
+                return Err(refuse(
+                    self.func,
+                    &format!("a malformed binding row `{key}`"),
+                ));
             };
             let field = field.to_owned();
             if storing.is_some() {
@@ -1674,7 +1888,13 @@ impl Emitter<'_> {
             return Ok(Placed::OnStack);
         }
         let Some(stored) = storing else {
-            code.get_static(origin, pool, &crate::body::program_class(self.shape.package), &name, &descriptor);
+            code.get_static(
+                origin,
+                pool,
+                &crate::body::program_class(self.shape.package),
+                &name,
+                &descriptor,
+            );
             return Ok(Placed::OnStack);
         };
         // The value's type and the global's have to be the same type, and on
@@ -1734,7 +1954,13 @@ impl Emitter<'_> {
             self.assignable_types(&held, &entry.ty)?;
         }
         self.load(code, pool, stored)?;
-        code.put_static(origin, pool, &crate::body::program_class(self.shape.package), &name, &descriptor);
+        code.put_static(
+            origin,
+            pool,
+            &crate::body::program_class(self.shape.package),
+            &name,
+            &descriptor,
+        );
         Ok(Placed::Stored)
     }
 
@@ -1752,7 +1978,12 @@ impl Emitter<'_> {
         target: Label,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
-        let Test { compare, negate, lhs, rhs } = test;
+        let Test {
+            compare,
+            negate,
+            lhs,
+            rhs,
+        } = test;
         if !matches!(compare, Compare::Eq | Compare::Ne) {
             return Err(refuse(
                 self.func,
@@ -1830,13 +2061,20 @@ impl Emitter<'_> {
         if returns == types::VALUE_DESCRIPTOR {
             return match result {
                 HirType::Bool => {
-                    code.invoke_static(origin, pool, types::VALUE, "asBoolean", "(Lnts/rt/NtsValue;)Z");
+                    code.invoke_static(
+                        origin,
+                        pool,
+                        types::VALUE,
+                        "asBoolean",
+                        "(Lnts/rt/NtsValue;)Z",
+                    );
                     Ok(())
                 }
                 HirType::Int { .. } | HirType::Float { .. } => {
                     code.get_field(origin, pool, types::VALUE, "num", "D");
-                    let target = types::kind(result)
-                        .ok_or_else(|| refuse(self.func, "narrowing to an unrepresentable number"))?;
+                    let target = types::kind(result).ok_or_else(|| {
+                        refuse(self.func, "narrowing to an unrepresentable number")
+                    })?;
                     if target != Kind::Double {
                         let opcode = match target {
                             Kind::Long => insn::D2L,
@@ -1854,7 +2092,10 @@ impl Emitter<'_> {
                 }
                 other => Err(refuse(
                     self.func,
-                    &format!("a helper answering `NtsValue` where {} was proved", types::describe(other)),
+                    &format!(
+                        "a helper answering `NtsValue` where {} was proved",
+                        types::describe(other)
+                    ),
                 )),
             };
         }
@@ -1916,8 +2157,6 @@ impl Emitter<'_> {
         }
     }
 
-
-
     /// A `number` on the stack, as the boxed primitive a bound parameter
     /// declared.
     ///
@@ -1933,7 +2172,10 @@ impl Emitter<'_> {
     ) -> Result<(), Diagnostic> {
         use nts_jvm_emitter::insn::{self, Kind};
         let Some((class, from)) = boxed_primitive(want) else {
-            return Err(refuse(self.func, "a boxed primitive this lane cannot build"));
+            return Err(refuse(
+                self.func,
+                "a boxed primitive this lane cannot build",
+            ));
         };
         match from {
             "I" => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
@@ -1963,112 +2205,108 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
         use nts_jvm_emitter::insn::{self, Kind};
-    match (want, integral) {
-        // Already the width the jar asked for.
-        ("I" | "Z", true) | ("D", false) => {}
-        // The JavaScript conversions, one helper per width.
-        ("I", false) => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
-        ("S", false) => code.invoke_static(origin, pool, RUNTIME, "toInt16", "(D)I"),
-        ("B", false) => code.invoke_static(origin, pool, RUNTIME, "toInt8", "(D)I"),
-        ("C", false) => code.invoke_static(origin, pool, RUNTIME, "toUint16", "(D)I"),
-        // Already an `int`, so the JVM's own narrowing is the same
-        // truncation `ToInt32` would do from here and is one byte.
-        ("S", true) => code.convert(origin, insn::I2S, Kind::Int, Kind::Int),
-        ("B", true) => code.convert(origin, insn::I2B, Kind::Int, Kind::Int),
-        ("C", true) => code.convert(origin, insn::I2C, Kind::Int, Kind::Int),
-        ("F", false) => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
-        ("D", true) => code.convert(origin, insn::I2D, Kind::Int, Kind::Double),
-        // **A `bigint` into a `long` is its low 64 bits**, which is
-        // what `BigInt.asIntN(64, v)` specifies and what node does:
-        // `2**63` arrives as `-2**63` and `2**64` as `0`. Wrapping
-        // rather than refusing is the same rule the integral widths
-        // above follow, and the same one `ToInt32` follows -- a
-        // boundary conversion takes the low bits.
-        //
-        // `lo` *is* that value by construction: `fromLong` builds a
-        // bigint as `of(value >> 63, value)`, so `hi` is the sign
-        // extension and `lo` is the 64 bits. Reading it is the whole
-        // conversion, and it is one instruction.
-        ("J", _) if matches!(self.ty(arg), HirType::BigInt) => {
-            code.get_field(origin, pool, types::BIGINT, "lo", "J");
-        }
-        // A reference parameter: the callback coercion already owns
-        // this question and answers it for interfaces as well.
-        // **A `number[]` meeting a Java primitive array.** Ours is a
-        // `[D`; `sum(int...)` wants `[I`, and the two are unrelated
-        // types to the verifier however alike the values look. The
-        // elements move and each takes the narrowing a scalar would
-        // take here -- the same `ToInt32` rule, not `d2i`.
-        (other, _)
-            if matches!(other, "[I" | "[J" | "[S" | "[B" | "[C" | "[F")
-                && matches!(
-                    types::descriptor(self.shape, self.ty(arg)).as_deref(),
-                    Some("[D")
-                ) =>
-        {
-            let to = match other {
-                "[I" => "toI",
-                "[J" => "toJ",
-                "[S" => "toS",
-                "[B" => "toB",
-                "[C" => "toC",
-                _ => "toF",
-            };
-            code.invoke_static(origin, pool, types::ARRAYS, to, &format!("([D){other}"));
-        }
-        // **Under `arrays_can_grow` the wrapper's `items` is longer
-        // than its `length`**, so even the same-element case cannot be
-        // handed over: the callee would see trailing slots the program
-        // does not consider part of the array. A copy, which is what
-        // the cost table has always said this costs and what this
-        // refused to do until now.
-        //
-        // The reference case passes an **empty array of the wanted
-        // type** and lets `Arrays.copyOf` preserve it -- no class
-        // constant and no reflection, and the verifier checks the
-        // result really is a `String[]`.
-        (other, _) if other.starts_with('[') && self.shape.grows => {
-            if let Some(element) = other.strip_prefix('[').filter(|it| it.starts_with('L'))
-            {
-                code.const_int(origin, pool, 0);
-                // The *element descriptor*, `Ljava/lang/String;` --
-                // `new_array` spells a reference element the way the
-                // descriptor does, not the way `checkcast` spells a
-                // class.
-                code.new_array(origin, pool, element);
-                code.invoke_static(
-                    origin,
-                    pool,
-                    types::ARRAYS,
-                    "objects",
-                    "(Lnts/rt/NtsArrayL;[Ljava/lang/Object;)[Ljava/lang/Object;",
-                );
-                code.check_cast(origin, pool, other);
-            } else if let Some((member, from)) = grown_array(other) {
-                code.invoke_static(
-                    origin,
-                    pool,
-                    types::ARRAYS,
-                    member,
-                    &format!("({from}){other}"),
-                );
-            } else {
-                return Err(refuse(
-                    self.func,
-                    &format!(
-                        "a bound member wanting `{other}` from a growable array, whose \
-                         element this lane has no conversion for"
-                    ),
-                ));
+        match (want, integral) {
+            // Already the width the jar asked for.
+            ("I" | "Z", true) | ("D", false) => {}
+            // The JavaScript conversions, one helper per width.
+            ("I", false) => code.invoke_static(origin, pool, RUNTIME, "toInt32", "(D)I"),
+            ("S", false) => code.invoke_static(origin, pool, RUNTIME, "toInt16", "(D)I"),
+            ("B", false) => code.invoke_static(origin, pool, RUNTIME, "toInt8", "(D)I"),
+            ("C", false) => code.invoke_static(origin, pool, RUNTIME, "toUint16", "(D)I"),
+            // Already an `int`, so the JVM's own narrowing is the same
+            // truncation `ToInt32` would do from here and is one byte.
+            ("S", true) => code.convert(origin, insn::I2S, Kind::Int, Kind::Int),
+            ("B", true) => code.convert(origin, insn::I2B, Kind::Int, Kind::Int),
+            ("C", true) => code.convert(origin, insn::I2C, Kind::Int, Kind::Int),
+            ("F", false) => code.convert(origin, insn::D2F, Kind::Double, Kind::Float),
+            ("D", true) => code.convert(origin, insn::I2D, Kind::Int, Kind::Double),
+            // **A `bigint` into a `long` is its low 64 bits**, which is
+            // what `BigInt.asIntN(64, v)` specifies and what node does:
+            // `2**63` arrives as `-2**63` and `2**64` as `0`. Wrapping
+            // rather than refusing is the same rule the integral widths
+            // above follow, and the same one `ToInt32` follows -- a
+            // boundary conversion takes the low bits.
+            //
+            // `lo` *is* that value by construction: `fromLong` builds a
+            // bigint as `of(value >> 63, value)`, so `hi` is the sign
+            // extension and `lo` is the 64 bits. Reading it is the whole
+            // conversion, and it is one instruction.
+            ("J", _) if matches!(self.ty(arg), HirType::BigInt) => {
+                code.get_field(origin, pool, types::BIGINT, "lo", "J");
             }
-        }
-        // Any array crossing to Java; see `push_foreign_array`.
-        (other, _)
-            if other.starts_with('[')
-                && self.crosses_as_array(other, arg) =>
-        {
-            self.push_foreign_array(code, pool, arg, other, origin)?;
-        }
+            // A reference parameter: the callback coercion already owns
+            // this question and answers it for interfaces as well.
+            // **A `number[]` meeting a Java primitive array.** Ours is a
+            // `[D`; `sum(int...)` wants `[I`, and the two are unrelated
+            // types to the verifier however alike the values look. The
+            // elements move and each takes the narrowing a scalar would
+            // take here -- the same `ToInt32` rule, not `d2i`.
+            (other, _)
+                if matches!(other, "[I" | "[J" | "[S" | "[B" | "[C" | "[F")
+                    && matches!(
+                        types::descriptor(self.shape, self.ty(arg)).as_deref(),
+                        Some("[D")
+                    ) =>
+            {
+                let to = match other {
+                    "[I" => "toI",
+                    "[J" => "toJ",
+                    "[S" => "toS",
+                    "[B" => "toB",
+                    "[C" => "toC",
+                    _ => "toF",
+                };
+                code.invoke_static(origin, pool, types::ARRAYS, to, &format!("([D){other}"));
+            }
+            // **Under `arrays_can_grow` the wrapper's `items` is longer
+            // than its `length`**, so even the same-element case cannot be
+            // handed over: the callee would see trailing slots the program
+            // does not consider part of the array. A copy, which is what
+            // the cost table has always said this costs and what this
+            // refused to do until now.
+            //
+            // The reference case passes an **empty array of the wanted
+            // type** and lets `Arrays.copyOf` preserve it -- no class
+            // constant and no reflection, and the verifier checks the
+            // result really is a `String[]`.
+            (other, _) if other.starts_with('[') && self.shape.grows => {
+                if let Some(element) = other.strip_prefix('[').filter(|it| it.starts_with('L')) {
+                    code.const_int(origin, pool, 0);
+                    // The *element descriptor*, `Ljava/lang/String;` --
+                    // `new_array` spells a reference element the way the
+                    // descriptor does, not the way `checkcast` spells a
+                    // class.
+                    code.new_array(origin, pool, element);
+                    code.invoke_static(
+                        origin,
+                        pool,
+                        types::ARRAYS,
+                        "objects",
+                        "(Lnts/rt/NtsArrayL;[Ljava/lang/Object;)[Ljava/lang/Object;",
+                    );
+                    code.check_cast(origin, pool, other);
+                } else if let Some((member, from)) = grown_array(other) {
+                    code.invoke_static(
+                        origin,
+                        pool,
+                        types::ARRAYS,
+                        member,
+                        &format!("({from}){other}"),
+                    );
+                } else {
+                    return Err(refuse(
+                        self.func,
+                        &format!(
+                            "a bound member wanting `{other}` from a growable array, whose \
+                         element this lane has no conversion for"
+                        ),
+                    ));
+                }
+            }
+            // Any array crossing to Java; see `push_foreign_array`.
+            (other, _) if other.starts_with('[') && self.crosses_as_array(other, arg) => {
+                self.push_foreign_array(code, pool, arg, other, origin)?;
+            }
             // **A number meeting a boxed primitive.** `nts bind` renders
             // `java.lang.Double` as `number`, so the value on the stack is a
             // `double` where a reference is declared -- two words where one is
@@ -2077,48 +2315,47 @@ impl Emitter<'_> {
             // and it is the cached box for the small integers, so the common
             // case allocates nothing.
             (other, _)
-                if boxed_primitive(other).is_some()
-                    && !matches!(self.ty(arg), HirType::Erased) =>
+                if boxed_primitive(other).is_some() && !matches!(self.ty(arg), HirType::Erased) =>
             {
                 self.box_primitive(code, pool, other, origin)?;
             }
-        // **An erased value meeting a bound reference parameter.**
-        // `setOnTouch(View.OnTouch | ((x, y) => boolean))` is a union,
-        // so the argument is an `NtsValue` -- and handing that to Java
-        // is `IncompatibleClassChangeError` at the first dispatch:
-        // `NtsValue does not implement View$OnTouch`.
-        //
-        // `coerce_callback` answers this for *our* callback interfaces
-        // and does not recognise a jar's, so the unboxing is done here
-        // against the descriptor the jar declared. The `checkcast` is
-        // what makes a wrong binding a `ClassCastException` at the call
-        // rather than a corrupt frame.
-        (other, _)
-            if other.starts_with('L')
-                && matches!(self.ty(arg), HirType::Erased)
-                && !self.unboxed.contains(&arg) =>
-        {
-            code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
-            code.check_cast(origin, pool, &other[1..other.len() - 1]);
+            // **An erased value meeting a bound reference parameter.**
+            // `setOnTouch(View.OnTouch | ((x, y) => boolean))` is a union,
+            // so the argument is an `NtsValue` -- and handing that to Java
+            // is `IncompatibleClassChangeError` at the first dispatch:
+            // `NtsValue does not implement View$OnTouch`.
+            //
+            // `coerce_callback` answers this for *our* callback interfaces
+            // and does not recognise a jar's, so the unboxing is done here
+            // against the descriptor the jar declared. The `checkcast` is
+            // what makes a wrong binding a `ClassCastException` at the call
+            // rather than a corrupt frame.
+            (other, _)
+                if other.starts_with('L')
+                    && matches!(self.ty(arg), HirType::Erased)
+                    && !self.unboxed.contains(&arg) =>
+            {
+                code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+                code.check_cast(origin, pool, &other[1..other.len() - 1]);
+            }
+            (other, _) if other.starts_with('L') || other.starts_with('[') => {
+                self.coerce_callback(code, pool, arg, other, origin)?;
+            }
+            // **`J` lands here deliberately.** A `bigint` is an
+            // `NtsBigInt`, not a `long`, and the conversion between them is
+            // a decision this lane has not made. Refusing by name is the
+            // rule; emitting `d2l` would be a wrong number at every
+            // magnitude a `long` exists for.
+            (other, held) => {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "a bound member wanting `{other}` for {}",
+                        if held { "an integer" } else { "a number" }
+                    ),
+                ));
+            }
         }
-        (other, _) if other.starts_with('L') || other.starts_with('[') => {
-            self.coerce_callback(code, pool, arg, other, origin)?;
-        }
-        // **`J` lands here deliberately.** A `bigint` is an
-        // `NtsBigInt`, not a `long`, and the conversion between them is
-        // a decision this lane has not made. Refusing by name is the
-        // rule; emitting `d2l` would be a wrong number at every
-        // magnitude a `long` exists for.
-        (other, held) => {
-            return Err(refuse(
-                self.func,
-                &format!(
-                    "a bound member wanting `{other}` for {}",
-                    if held { "an integer" } else { "a number" }
-                ),
-            ));
-        }
-    }
         Ok(())
     }
 
@@ -2127,8 +2364,7 @@ impl Emitter<'_> {
     fn crosses_as_array(&self, want: &str, arg: ValueId) -> bool {
         let held = types::descriptor(self.shape, self.ty(arg));
         view_to_array(want, held.as_deref()).is_some()
-            || (self.shape.grows
-                && (want.starts_with("[L") || grown_array(want).is_some()))
+            || (self.shape.grows && (want.starts_with("[L") || grown_array(want).is_some()))
     }
 
     /// An array of ours, as the Java array a bound parameter declared.
@@ -2173,7 +2409,13 @@ impl Emitter<'_> {
                 &format!("a bound member wanting `{want}`, which this lane cannot hand over"),
             ));
         };
-        code.invoke_static(origin, pool, types::ARRAYS, member, &format!("({from}){want}"));
+        code.invoke_static(
+            origin,
+            pool,
+            types::ARRAYS,
+            member,
+            &format!("({from}){want}"),
+        );
         Ok(())
     }
 
@@ -2208,7 +2450,9 @@ impl Emitter<'_> {
         let Some(parameters) = nts_jvm_emitter::descriptor::parameters(descriptor) else {
             return Err(refuse(
                 self.func,
-                &format!("a bound member whose descriptor `{descriptor}` this compiler cannot read"),
+                &format!(
+                    "a bound member whose descriptor `{descriptor}` this compiler cannot read"
+                ),
             ));
         };
         if parameters.len() != args.len() {
@@ -2345,22 +2589,22 @@ impl Emitter<'_> {
             HirType::Managed(ManagedType::Object(id)) => self.shape.program.layout(*id),
             _ => None,
         }
-            .is_some_and(|layout| {
-                layout.methods.iter().flatten().any(|name| {
-                    crate::hierarchy::member_name(name) == "call"
-                        && self
-                            .shape
-                            .program
-                            .funcs
-                            .iter()
-                            .find(|func| &func.name == name)
-                            .and_then(|func| {
-                                crate::instance_descriptor(self.shape.package, self.shape.program, func)
-                            })
-                            .and_then(|descriptor| types::callback_interface(&descriptor))
-                            == Some(&want[1..want.len() - 1])
-                })
-            });
+        .is_some_and(|layout| {
+            layout.methods.iter().flatten().any(|name| {
+                crate::hierarchy::member_name(name) == "call"
+                    && self
+                        .shape
+                        .program
+                        .funcs
+                        .iter()
+                        .find(|func| &func.name == name)
+                        .and_then(|func| {
+                            crate::instance_descriptor(self.shape.package, self.shape.program, func)
+                        })
+                        .and_then(|descriptor| types::callback_interface(&descriptor))
+                        == Some(&want[1..want.len() - 1])
+            })
+        });
         if implements {
             return Ok(());
         }
@@ -2430,10 +2674,10 @@ impl Emitter<'_> {
         let Some(layout) = self.program.layout(arm) else {
             return Err(refuse(self.func, "a field read over an arm with no layout"));
         };
-        let tested = crate::hierarchy::identity_of(self.program, arm)
-            .map_or_else(|| types::class_name(self.shape.package, layout), |class| {
-                types::identity_class_name(self.shape.package, layout, class)
-            });
+        let tested = crate::hierarchy::identity_of(self.program, arm).map_or_else(
+            || types::class_name(self.shape.package, layout),
+            |class| types::identity_class_name(self.shape.package, layout, class),
+        );
         self.load(code, pool, receiver)?;
         if erased {
             code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
@@ -2563,7 +2807,10 @@ impl Emitter<'_> {
         // layout is emitted as an interface; see `types::instance_class`.
         let class = match ty {
             HirType::Managed(ManagedType::Object(id))
-                if self.program.layout(*id).is_some_and(|l| crate::hierarchy::is_interface(self.program, l)) =>
+                if self
+                    .program
+                    .layout(*id)
+                    .is_some_and(|l| crate::hierarchy::is_interface(self.program, l)) =>
             {
                 self.program
                     .layout(*id)
@@ -2584,9 +2831,18 @@ impl Emitter<'_> {
     /// object, and so is its unbox -- the operand is the answer.
     /// `Erase(BoxedBigInt)` is then `ofTagged(BIGINT, ref)` through
     /// `tags::of_reference`, and `Unerase` a tag-16 proof and a checkcast.
-    fn bigint_box_identity(&mut self, code: &mut Code, pool: &mut Pool, name: &str, args: &[ValueId]) -> Result<Placed, Diagnostic> {
+    fn bigint_box_identity(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        name: &str,
+        args: &[ValueId],
+    ) -> Result<Placed, Diagnostic> {
         let [operand] = args else {
-            return Err(refuse(self.func, &format!("`{name}` with other than one operand")));
+            return Err(refuse(
+                self.func,
+                &format!("`{name}` with other than one operand"),
+            ));
         };
         self.load(code, pool, *operand)?;
         Ok(Placed::OnStack)
@@ -2701,8 +2957,12 @@ impl Emitter<'_> {
     /// the general arm left the failing program failing unchanged -- two sites
     /// spelling one narrowing, and a guard on one of them is not a guard.
     fn refuse_impossible_cast(&self, ty: &HirType) -> Result<(), Diagnostic> {
-        let HirType::Managed(ManagedType::Object(id)) = ty else { return Ok(()) };
-        let Some(target) = self.program.layout(*id) else { return Ok(()) };
+        let HirType::Managed(ManagedType::Object(id)) = ty else {
+            return Ok(());
+        };
+        let Some(target) = self.program.layout(*id) else {
+            return Ok(());
+        };
         if !crate::hierarchy::claimed_without_extending(self.program, target) {
             return Ok(());
         }
@@ -2752,7 +3012,9 @@ impl Emitter<'_> {
         // Any actual callable storage is a value of a signature
         // type: both are referred to as `types::callable_class`, which every
         // such class extends. See it for the 81 declines this answered.
-        if types::is_signature(self.program, target_layout) && types::is_callable_storage(self.program, source_layout) {
+        if types::is_signature(self.program, target_layout)
+            && types::is_callable_storage(self.program, source_layout)
+        {
             return Ok(());
         }
         let wanted = types::class_name(self.shape.package, target_layout);
@@ -2808,7 +3070,10 @@ impl Emitter<'_> {
         }
         for (at, class) in classes.iter().enumerate() {
             let Some(layout) = self.program.layout(*class) else {
-                return Err(refuse(self.func, "an `instanceof` against an unknown class"));
+                return Err(refuse(
+                    self.func,
+                    "an `instanceof` against an unknown class",
+                ));
             };
             self.load(code, pool, value)?;
             // Unbox before asking for a class; see the single-class arm. A
@@ -2822,10 +3087,10 @@ impl Emitter<'_> {
             // than a shape. Checked rather than assumed -- this arm resolved the
             // layout's class and would have kept answering `true` for a sibling
             // while the single-class arm was already right.
-            let wanted = crate::hierarchy::identity_of(self.program, *class)
-                .map_or_else(|| types::class_name(self.shape.package, layout), |owner| {
-                    types::identity_class_name(self.shape.package, layout, owner)
-                });
+            let wanted = crate::hierarchy::identity_of(self.program, *class).map_or_else(
+                || types::class_name(self.shape.package, layout),
+                |owner| types::identity_class_name(self.shape.package, layout, owner),
+            );
             code.instance_of(origin, pool, &wanted);
             if at > 0 {
                 code.bitwise(origin, insn::OR, Kind::Int);
@@ -2837,7 +3102,10 @@ impl Emitter<'_> {
     /// The wrapper class for a growable array, by its element type.
     fn growable_class(&self, ty: &HirType) -> Result<String, Diagnostic> {
         let HirType::Managed(ManagedType::Array(element)) = ty else {
-            return Err(refuse(self.func, "an array operation on something that is not an array"));
+            return Err(refuse(
+                self.func,
+                "an array operation on something that is not an array",
+            ));
         };
         types::wrapper(element).map(str::to_owned).ok_or_else(|| {
             refuse(
@@ -2857,7 +3125,10 @@ impl Emitter<'_> {
     /// keep everywhere else.
     fn growable_element(&self, ty: &HirType) -> Result<(String, Kind), Diagnostic> {
         let HirType::Managed(ManagedType::Array(element)) = ty else {
-            return Err(refuse(self.func, "an array operation on something that is not an array"));
+            return Err(refuse(
+                self.func,
+                "an array operation on something that is not an array",
+            ));
         };
         Ok(match types::kind(element) {
             Some(Kind::Double | Kind::Int | Kind::Long | Kind::Float)
@@ -2917,7 +3188,14 @@ impl Emitter<'_> {
         // `Absent` from. A nullable reference crossing here is the same hazard
         // `OpKind::Erase` documents and is **not** fixed by this commit; it
         // needs the argument's declared type, which this function is not given.
-        self.erase(code, pool, None, value, nts_core::hir::Absent::Impossible, origin)?;
+        self.erase(
+            code,
+            pool,
+            None,
+            value,
+            nts_core::hir::Absent::Impossible,
+            origin,
+        )?;
         Ok(())
     }
 
@@ -2991,7 +3269,10 @@ impl Emitter<'_> {
         // Said about what the program wrote, since that is what its author can
         // change.
         let handle = match kind {
-            OpKind::Erase { value, .. } => matches!(self.func.values[value.0 as usize].ty, HirType::NativePointer(_)),
+            OpKind::Erase { value, .. } => matches!(
+                self.func.values[value.0 as usize].ty,
+                HirType::NativePointer(_)
+            ),
             OpKind::Unerase { .. } => matches!(ty, HirType::NativePointer(_)),
             _ => false,
         };
@@ -3005,7 +3286,7 @@ impl Emitter<'_> {
             OpKind::Erase { value, absent } => {
                 self.erase(code, pool, Some(result), *value, *absent, origin)
             }
-                // A `Void` erases to `undefined` and has nothing to load.
+            // A `Void` erases to `undefined` and has nothing to load.
             OpKind::TagOf { value } => {
                 self.load(code, pool, *value)?;
                 code.get_field(origin, pool, types::VALUE, "tag", "I");
@@ -3049,8 +3330,9 @@ impl Emitter<'_> {
                     ),
                     HirType::Int { .. } | HirType::Float { .. } => {
                         code.get_field(origin, pool, types::VALUE, "num", "D");
-                        let target = types::kind(ty)
-                            .ok_or_else(|| refuse(self.func, "unerasing to an unrepresentable type"))?;
+                        let target = types::kind(ty).ok_or_else(|| {
+                            refuse(self.func, "unerasing to an unrepresentable type")
+                        })?;
                         if target != Kind::Double {
                             let opcode = match target {
                                 Kind::Long => insn::D2L,
@@ -3126,7 +3408,13 @@ impl Emitter<'_> {
         let from = self.ty(value).clone();
         // A `Void` erases to `undefined` and has nothing to load.
         if matches!(from, HirType::Void) {
-            code.get_static(origin, pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
+            code.get_static(
+                origin,
+                pool,
+                types::VALUE,
+                "UNDEFINED_VALUE",
+                types::VALUE_DESCRIPTOR,
+            );
             return Ok(Placed::OnStack);
         }
         // A closure erases to `function`, not `object`, and so does a value of
@@ -3142,9 +3430,7 @@ impl Emitter<'_> {
         // more row in the table below.
         if let HirType::Managed(managed) = &from {
             let tag = nts_core::hir::tags::of_prepared(self.program, &from);
-            if tag != nts_core::hir::tags::OBJECT
-                && !matches!(managed, ManagedType::String)
-            {
+            if tag != nts_core::hir::tags::OBJECT && !matches!(managed, ManagedType::String) {
                 // A closure singleton erased is itself a constant: the tag is
                 // `FUNCTION` and the reference is the one instance. Building it
                 // per use allocated 1.6 MB/op on `optional-chain`, for a value
@@ -3200,14 +3486,18 @@ impl Emitter<'_> {
             // A string's absence is decided as any reference's is: the null
             // reference of a `(string | undefined)[]` slot is `undefined`.
             HirType::Managed(ManagedType::String) if absent == nts_core::hir::Absent::Undefined => {
-                ("ofStringOrUndefined", "(Ljava/lang/String;)Lnts/rt/NtsValue;")
+                (
+                    "ofStringOrUndefined",
+                    "(Ljava/lang/String;)Lnts/rt/NtsValue;",
+                )
             }
             HirType::Managed(ManagedType::String) => {
                 ("ofString", "(Ljava/lang/String;)Lnts/rt/NtsValue;")
             }
-            HirType::Managed(_) if absent == nts_core::hir::Absent::Undefined => {
-                ("ofObjectOrUndefined", "(Ljava/lang/Object;)Lnts/rt/NtsValue;")
-            }
+            HirType::Managed(_) if absent == nts_core::hir::Absent::Undefined => (
+                "ofObjectOrUndefined",
+                "(Ljava/lang/Object;)Lnts/rt/NtsValue;",
+            ),
             HirType::Managed(_) => ("ofObject", "(Ljava/lang/Object;)Lnts/rt/NtsValue;"),
             HirType::Int { .. } | HirType::Float { .. } => {
                 let source = types::kind(&from)
@@ -3236,7 +3526,10 @@ impl Emitter<'_> {
                 return Ok(Placed::OnStack);
             }
             other => {
-                return Err(refuse(self.func, &format!("erasing {}", types::describe(other))));
+                return Err(refuse(
+                    self.func,
+                    &format!("erasing {}", types::describe(other)),
+                ));
             }
         };
         code.invoke_static(origin, pool, types::VALUE, name, signature);
@@ -3276,7 +3569,10 @@ impl Emitter<'_> {
     /// `(uint32_t)index` for `checked: false`, with no `nts_check`. Reading a
     /// slot between the length and the capacity is a stale value on both lanes
     /// rather than a refusal on one of them.
-    #[allow(clippy::too_many_arguments, reason = "the call site has all of it and computes none of it")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the call site has all of it and computes none of it"
+    )]
     fn proved_growable_read(
         &mut self,
         code: &mut Code,
@@ -3318,9 +3614,20 @@ impl Emitter<'_> {
     /// array's spare capacity -- reaches one of the three loads that call
     /// this, so the answer is given at the read rather than at each.
     /// (`examples/an-erased-array-read-keeps-missing-elements`, `hole`.)
-    fn hole_reads_undefined(code: &mut Code, pool: &mut Pool, ty: &HirType, origin: &nts_semantic_schema::Origin) {
+    fn hole_reads_undefined(
+        code: &mut Code,
+        pool: &mut Pool,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) {
         if *ty == HirType::Erased {
-            code.invoke_static(origin, pool, types::VALUE, "orUndefined", "(Lnts/rt/NtsValue;)Lnts/rt/NtsValue;");
+            code.invoke_static(
+                origin,
+                pool,
+                types::VALUE,
+                "orUndefined",
+                "(Lnts/rt/NtsValue;)Lnts/rt/NtsValue;",
+            );
         }
     }
 
@@ -3336,7 +3643,10 @@ impl Emitter<'_> {
     /// `(uint32_t)index` for `checked: false` and `NTS_ITEMS(a)[slot] = v`
     /// stores through it, so the two lanes write the same slot or refuse the
     /// same program.
-    #[allow(clippy::too_many_arguments, reason = "the call site has all of it and computes none of it")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the call site has all of it and computes none of it"
+    )]
     fn proved_growable_store(
         &mut self,
         code: &mut Code,
@@ -3451,6 +3761,7 @@ impl Emitter<'_> {
         Ok(Placed::OnStack)
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn array_operation(
         &mut self,
         code: &mut Code,
@@ -3460,7 +3771,11 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
-            OpKind::ArrayGet { array, index, .. } if self.ty(*array) == &HirType::Managed(ManagedType::Template) => self.template_get(code, pool, *array, *index, origin),
+            OpKind::ArrayGet { array, index, .. }
+                if self.ty(*array) == &HirType::Managed(ManagedType::Template) =>
+            {
+                self.template_get(code, pool, *array, *index, origin)
+            }
 
             // A typed array. Its elements are bytes in a buffer something else
             // may also be looking at, so a subscript is a call on the element's
@@ -3489,8 +3804,14 @@ impl Emitter<'_> {
             // index is a `double` across this boundary, matching the C ABI:
             // that is how it passes a number the compiler knew all along, and
             // it saves a narrowing at each site.
-            OpKind::ArrayNew { length, .. } if self.shape.grows => self.growable_new(code, pool, *length, ty, origin),
-            OpKind::ArrayGet { array, index, checked } if self.shape.grows => {
+            OpKind::ArrayNew { length, .. } if self.shape.grows => {
+                self.growable_new(code, pool, *length, ty, origin)
+            }
+            OpKind::ArrayGet {
+                array,
+                index,
+                checked,
+            } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
                 let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
                 if !*checked {
@@ -3517,8 +3838,11 @@ impl Emitter<'_> {
                 // and answer identically: an array is at most `2^31 - 2` long,
                 // so every `long` the rounding could disturb is one the bounds
                 // check refuses anyway.
-                let subscript =
-                    if self.kind_of(*index)? == Kind::Int { Kind::Int } else { Kind::Double };
+                let subscript = if self.kind_of(*index)? == Kind::Int {
+                    Kind::Int
+                } else {
+                    Kind::Double
+                };
                 self.push_as(code, pool, *index, subscript, origin)?;
                 let at = if subscript == Kind::Int { "I" } else { "D" };
                 code.invoke_static(
@@ -3545,7 +3869,12 @@ impl Emitter<'_> {
                 Self::hole_reads_undefined(code, pool, ty, origin);
                 Ok(Placed::OnStack)
             }
-            OpKind::ArraySet { array, index, value, checked } if self.shape.grows => {
+            OpKind::ArraySet {
+                array,
+                index,
+                value,
+                checked,
+            } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
                 let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
                 if !*checked {
@@ -3575,7 +3904,11 @@ impl Emitter<'_> {
                 code.new_array(origin, pool, &element);
                 Ok(Placed::OnStack)
             }
-            OpKind::ArrayGet { array, index, checked } => {
+            OpKind::ArrayGet {
+                array,
+                index,
+                checked,
+            } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
                 self.load(code, pool, *array)?;
                 self.checked_subscript(code, pool, *index, *checked, origin)?;
@@ -3583,7 +3916,12 @@ impl Emitter<'_> {
                 Self::hole_reads_undefined(code, pool, ty, origin);
                 Ok(Placed::OnStack)
             }
-            OpKind::ArraySet { array, index, value, checked } => {
+            OpKind::ArraySet {
+                array,
+                index,
+                value,
+                checked,
+            } => {
                 let element = self.element_descriptor(&self.ty(*array).clone())?;
                 self.load(code, pool, *array)?;
                 self.checked_subscript(code, pool, *index, *checked, origin)?;
@@ -3591,7 +3929,10 @@ impl Emitter<'_> {
                 code.array_store(origin, &element);
                 Ok(Placed::Stored)
             }
-            _ => Err(refuse(self.func, "an array operation this backend does not spell")),
+            _ => Err(refuse(
+                self.func,
+                "an array operation this backend does not spell",
+            )),
         }
     }
 
@@ -3610,14 +3951,30 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         let (array, index, value, checked) = match *kind {
-            OpKind::ArrayGet { array, index, checked } => (array, index, None, checked),
-            OpKind::ArraySet { array, index, value, checked } => {
-                (array, index, Some(value), checked)
+            OpKind::ArrayGet {
+                array,
+                index,
+                checked,
+            } => (array, index, None, checked),
+            OpKind::ArraySet {
+                array,
+                index,
+                value,
+                checked,
+            } => (array, index, Some(value), checked),
+            _ => {
+                return Err(refuse(
+                    self.func,
+                    "a view element operation that is neither",
+                ));
             }
-            _ => return Err(refuse(self.func, "a view element operation that is neither")),
         };
         let (class, element) = self.view_receiver(array).expect("the arm tested this");
-        let accessor = if value.is_some() { view_write(&element) } else { view_read(&element) };
+        let accessor = if value.is_some() {
+            view_write(&element)
+        } else {
+            view_read(&element)
+        };
         let Some((member, spelled)) = accessor else {
             return Err(refuse(
                 self.func,
@@ -3627,7 +3984,13 @@ impl Emitter<'_> {
         self.load(code, pool, array)?;
         self.view_subscript(code, pool, index, checked, origin)?;
         let Some(value) = value else {
-            code.invoke_static(origin, pool, &class, member, &format!("(L{class};I){spelled}"));
+            code.invoke_static(
+                origin,
+                pool,
+                &class,
+                member,
+                &format!("(L{class};I){spelled}"),
+            );
             return Ok(Placed::OnStack);
         };
         // The value in the element's own representation, not in a `double`: the
@@ -3636,7 +3999,13 @@ impl Emitter<'_> {
         // runtime narrow it back is the round trip `getInt` exists to avoid on
         // the way out.
         self.load(code, pool, value)?;
-        code.invoke_static(origin, pool, &class, member, &format!("(L{class};I{spelled})V"));
+        code.invoke_static(
+            origin,
+            pool,
+            &class,
+            member,
+            &format!("(L{class};I{spelled})V"),
+        );
         Ok(Placed::Stored)
     }
 
@@ -3733,7 +4102,13 @@ impl Emitter<'_> {
         // per access.
         code.dup(origin);
         code.array_length(origin);
-        self.push_as(code, pool, index, if integral { kind } else { Kind::Double }, origin)?;
+        self.push_as(
+            code,
+            pool,
+            index,
+            if integral { kind } else { Kind::Double },
+            origin,
+        )?;
         // The length stays an `int` in both forms: widening it only to compare
         // against a double costs an instruction per access and buys nothing --
         // `index < length` promotes the `int` for free.
@@ -3786,8 +4161,12 @@ impl Emitter<'_> {
     ) -> Result<(), Diagnostic> {
         self.load(code, pool, value)?;
         let have = self.kind_of(value)?;
-        convert_kind(code, origin, have, wanted)
-            .ok_or_else(|| refuse(self.func, &format!("a {have:?} where a {wanted:?} is needed")))
+        convert_kind(code, origin, have, wanted).ok_or_else(|| {
+            refuse(
+                self.func,
+                &format!("a {have:?} where a {wanted:?} is needed"),
+            )
+        })
     }
 
     /// Adapt what an instruction *produced* to the representation the middle
@@ -3818,7 +4197,10 @@ impl Emitter<'_> {
     ) -> Result<(), Diagnostic> {
         let want = self.kind_of(value)?;
         convert_kind(code, origin, produced, want).ok_or_else(|| {
-            refuse(self.func, &format!("a {produced:?} result in a {want:?} slot"))
+            refuse(
+                self.func,
+                &format!("a {produced:?} result in a {want:?} slot"),
+            )
         })
     }
 
@@ -3832,17 +4214,27 @@ impl Emitter<'_> {
         let want = types::kind(wanted)
             .ok_or_else(|| refuse(self.func, "a result of unrepresentable type"))?;
         convert_kind(code, origin, produced, want).ok_or_else(|| {
-            refuse(self.func, &format!("a {produced:?} result in a {want:?} slot"))
+            refuse(
+                self.func,
+                &format!("a {produced:?} result in a {want:?} slot"),
+            )
         })
     }
 
     /// The descriptor of what an array holds.
     fn element_descriptor(&self, ty: &HirType) -> Result<String, Diagnostic> {
         let HirType::Managed(ManagedType::Array(element)) = ty else {
-            return Err(refuse(self.func, "an array operation on something that is not an array"));
+            return Err(refuse(
+                self.func,
+                "an array operation on something that is not an array",
+            ));
         };
-        types::descriptor(self.shape, element)
-            .ok_or_else(|| refuse(self.func, &format!("an array of {}", types::describe(element))))
+        types::descriptor(self.shape, element).ok_or_else(|| {
+            refuse(
+                self.func,
+                &format!("an array of {}", types::describe(element)),
+            )
+        })
     }
 
     /// The operations `java.lang.String` already is.
@@ -3864,6 +4256,7 @@ impl Emitter<'_> {
     /// finding a real duplication rather than merely a long function", and here
     /// it found that these six arms have nothing to do with strings at all
     /// beyond having been written next to one.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn length_of(
         &mut self,
         code: &mut Code,
@@ -3879,13 +4272,25 @@ impl Emitter<'_> {
             // `NtsValue.arrayLength`.
             OpKind::Length(of) if self.ty(*of) == &HirType::Erased => {
                 self.load(code, pool, *of)?;
-                code.invoke_static(origin, pool, types::VALUE, "arrayLength", "(Lnts/rt/NtsValue;)I");
+                code.invoke_static(
+                    origin,
+                    pool,
+                    types::VALUE,
+                    "arrayLength",
+                    "(Lnts/rt/NtsValue;)I",
+                );
                 self.adapt_to(code, Kind::Int, value, origin)?;
                 Ok(Placed::OnStack)
             }
             OpKind::Length(of) if self.ty(*of) == &HirType::Managed(ManagedType::Template) => {
                 self.load(code, pool, *of)?;
-                code.invoke_static(origin, pool, types::TEMPLATE, "count", "(Lnts/rt/NtsTemplate;)I");
+                code.invoke_static(
+                    origin,
+                    pool,
+                    types::TEMPLATE,
+                    "count",
+                    "(Lnts/rt/NtsTemplate;)I",
+                );
                 self.adapt_to(code, Kind::Int, value, origin)?;
                 Ok(Placed::OnStack)
             }
@@ -3927,10 +4332,19 @@ impl Emitter<'_> {
                 // integral overloads for the same round trip; this is the
                 // third place it occurs and the last one that had none.
                 let integral = matches!(self.kind_of(value)?, Kind::Int | Kind::Long);
-                let (member, produced) =
-                    if integral { ("count", Kind::Int) } else { ("length", Kind::Double) };
+                let (member, produced) = if integral {
+                    ("count", Kind::Int)
+                } else {
+                    ("length", Kind::Double)
+                };
                 let returns = if integral { "I" } else { "D" };
-                code.invoke_static(origin, pool, &class, member, &format!("(L{class};){returns}"));
+                code.invoke_static(
+                    origin,
+                    pool,
+                    &class,
+                    member,
+                    &format!("(L{class};){returns}"),
+                );
                 self.adapt_to(code, produced, value, origin)?;
                 Ok(Placed::OnStack)
             }
@@ -3964,7 +4378,9 @@ impl Emitter<'_> {
                 self.adapt_to(code, produced, value, origin)?;
                 Ok(Placed::OnStack)
             }
-            OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) => {
+            OpKind::Length(of)
+                if matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) =>
+            {
                 self.load(code, pool, *of)?;
                 code.array_length(origin);
                 self.adapt_to(code, Kind::Int, value, origin)?;
@@ -3995,7 +4411,10 @@ impl Emitter<'_> {
             // static per literal and takes its address.
             OpKind::ConstString(text) => {
                 if nts_jvm_emitter::Pool::utf8_length(text) > 65_535 {
-                    return Err(refuse(self.func, "a string literal past the 65,535-byte constant limit"));
+                    return Err(refuse(
+                        self.func,
+                        "a string literal past the 65,535-byte constant limit",
+                    ));
                 }
                 // The seed of a string accumulator. A `ConstString` is not
                 // rematerialised -- it has a slot like any other value -- so
@@ -4056,11 +4475,21 @@ impl Emitter<'_> {
             // fractional index truncates rather than being an error. Where the
             // compiler proved the index in range neither applies, so `charAt`
             // is called directly and the helper is not in the program.
-            OpKind::StringUnitAt { string, index, checked } => {
+            OpKind::StringUnitAt {
+                string,
+                index,
+                checked,
+            } => {
                 self.load(code, pool, *string)?;
                 if *checked {
                     self.push_as(code, pool, *index, Kind::Double, origin)?;
-                    code.invoke_static(origin, pool, RUNTIME, "charCodeAt", "(Ljava/lang/String;D)D");
+                    code.invoke_static(
+                        origin,
+                        pool,
+                        RUNTIME,
+                        "charCodeAt",
+                        "(Ljava/lang/String;D)D",
+                    );
                     self.adapt(code, Kind::Double, ty, origin)?;
                 } else {
                     self.push_as(code, pool, *index, Kind::Int, origin)?;
@@ -4070,7 +4499,10 @@ impl Emitter<'_> {
                 Ok(Placed::OnStack)
             }
 
-            _ => Err(refuse(self.func, "a string operation this backend does not spell")),
+            _ => Err(refuse(
+                self.func,
+                "a string operation this backend does not spell",
+            )),
         }
     }
 
@@ -4111,7 +4543,12 @@ impl Emitter<'_> {
                     };
                     code.const_int(origin, pool, narrow);
                 }
-                _ => return Err(refuse(self.func, "an integer literal of unrepresentable type")),
+                _ => {
+                    return Err(refuse(
+                        self.func,
+                        "an integer literal of unrepresentable type",
+                    ));
+                }
             },
             OpKind::ConstFloat(number) => {
                 if matches!(ty, HirType::Float { bits: 32 }) {
@@ -4132,10 +4569,16 @@ impl Emitter<'_> {
     /// The class a value of this type is an instance of.
     fn object_class(&self, ty: &HirType) -> Result<String, Diagnostic> {
         let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
-            return Err(refuse(self.func, "an object operation on something that is not one"));
+            return Err(refuse(
+                self.func,
+                "an object operation on something that is not one",
+            ));
         };
         let Some(layout) = self.program.layout(*id) else {
-            return Err(refuse(self.func, "an object whose layout this program does not carry"));
+            return Err(refuse(
+                self.func,
+                "an object whose layout this program does not carry",
+            ));
         };
         // **The class this type *is*, which is not always the layout's.** Two
         // classes with identical fields share a layout on purpose, so the
@@ -4144,10 +4587,12 @@ impl Emitter<'_> {
         // class has an empty subclass and this is the one `new` allocates and
         // `instanceof` tests. A parameter or field keeps the base, which is
         // what leaves `readA(new B())` passing.
-        Ok(crate::hierarchy::identity_of(self.program, *id)
-            .map_or_else(|| types::reference_class(self.shape.package, self.program, layout), |class| {
-                types::identity_class_name(self.shape.package, layout, class)
-            }))
+        Ok(
+            crate::hierarchy::identity_of(self.program, *id).map_or_else(
+                || types::reference_class(self.shape.package, self.program, layout),
+                |class| types::identity_class_name(self.shape.package, layout, class),
+            ),
+        )
     }
 
     /// The owning class, member name and descriptor of one field.
@@ -4172,7 +4617,10 @@ impl Emitter<'_> {
     ) -> Result<(String, String, String, HirType), Diagnostic> {
         let ty = self.ty(object).clone();
         let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
-            return Err(refuse(self.func, "a field of something that is not an object"));
+            return Err(refuse(
+                self.func,
+                "a field of something that is not an object",
+            ));
         };
         let resolved = self.field_ref_of(id, field)?;
         // **A bound class has no fields of ours, and this is where that stops
@@ -4206,7 +4654,10 @@ impl Emitter<'_> {
             return Err(refuse(self.func, "a field of an object with no layout"));
         };
         let Some(entry) = layout.fields.get(field as usize) else {
-            return Err(refuse(self.func, "a field this object's layout does not have"));
+            return Err(refuse(
+                self.func,
+                "a field this object's layout does not have",
+            ));
         };
         // Named on the class that *declares* it. A derived class does not
         // redeclare its base's fields, so `getfield nts/gen/Square.x` where `x`
@@ -4225,7 +4676,12 @@ impl Emitter<'_> {
         // answered "foreign" for every class in the program.
         if nts_core::hir::runtime::is_foreign_layout_name(&owner.name) {
             let prefix = format!("{}.{}:", owner.name, entry.name);
-            let Some(row) = self.program.foreign.keys().find(|key| key.starts_with(&prefix)) else {
+            let Some(row) = self
+                .program
+                .foreign
+                .keys()
+                .find(|key| key.starts_with(&prefix))
+            else {
                 return Err(refuse(
                     self.func,
                     &format!(
@@ -4235,7 +4691,10 @@ impl Emitter<'_> {
                 ));
             };
             let Some((_, descriptor)) = row.split_once(':') else {
-                return Err(refuse(self.func, &format!("a malformed binding row `{row}`")));
+                return Err(refuse(
+                    self.func,
+                    &format!("a malformed binding row `{row}`"),
+                ));
             };
             return Ok((
                 owner.name.clone(),
@@ -4248,7 +4707,10 @@ impl Emitter<'_> {
         // *declaring* class and the field's name, which is the one identity the
         // declaration in `object_class` and this access can both compute.
         let member = crate::hierarchy::field_name(self.program, owner, field as usize);
-        let held = if self.widened_fields.contains(&(types::class_name(self.shape.package, owner), member.clone())) {
+        let held = if self
+            .widened_fields
+            .contains(&(types::class_name(self.shape.package, owner), member.clone()))
+        {
             HirType::Float { bits: 64 }
         } else {
             entry.ty.clone()
@@ -4256,10 +4718,18 @@ impl Emitter<'_> {
         let Some(descriptor) = types::descriptor(self.shape, &held) else {
             return Err(refuse(
                 self.func,
-                &format!("a field of unrepresentable type: {}", types::describe(&entry.ty)),
+                &format!(
+                    "a field of unrepresentable type: {}",
+                    types::describe(&entry.ty)
+                ),
             ));
         };
-        Ok((types::class_name(self.shape.package, owner), member, descriptor, held))
+        Ok((
+            types::class_name(self.shape.package, owner),
+            member,
+            descriptor,
+            held,
+        ))
     }
 
     /// The binary operations whose operands are references, which is every one
@@ -4270,6 +4740,7 @@ impl Emitter<'_> {
     /// `if_acmpeq`. Getting that wrong is silent wherever two equal strings
     /// happen to be one constant-pool entry, which is most of a test suite --
     /// record 0044 found exactly that in the LLVM backend.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn reference_binary(
         &mut self,
         code: &mut Code,
@@ -4344,7 +4815,11 @@ impl Emitter<'_> {
             HirType::Managed(ManagedType::String)
                 if equality && *self.ty(rhs) == HirType::Managed(ManagedType::String) =>
             {
-                (RUNTIME, "stringEq", "(Ljava/lang/String;Ljava/lang/String;)Z")
+                (
+                    RUNTIME,
+                    "stringEq",
+                    "(Ljava/lang/String;Ljava/lang/String;)Z",
+                )
             }
             _ if op == BinOp::Concat => {
                 let origin = self.func.values[lhs.0 as usize].origin.clone();
@@ -4362,8 +4837,7 @@ impl Emitter<'_> {
                     // `appendCharCode` rather than a cast emitted here, so the
                     // coercion has one spelling; see its note in `NtsRuntime`.
                     if self.char_codes.contains(&rhs)
-                        && let OpKind::Call { args, .. } =
-                            &self.func.values[rhs.0 as usize].kind
+                        && let OpKind::Call { args, .. } = &self.func.values[rhs.0 as usize].kind
                         && let [unit] = args.as_slice()
                     {
                         let unit = *unit;
@@ -4430,7 +4904,17 @@ impl Emitter<'_> {
         };
         let taken = code.label();
         let done = code.label();
-        self.compare_and_branch(code, pool, Test { compare, negate: false, lhs, rhs }, taken)?;
+        self.compare_and_branch(
+            code,
+            pool,
+            Test {
+                compare,
+                negate: false,
+                lhs,
+                rhs,
+            },
+            taken,
+        )?;
         code.const_int(&origin, pool, 0);
         code.store(&origin, Kind::Int, scratch);
         code.goto(&origin, done);
@@ -4488,8 +4972,8 @@ impl Emitter<'_> {
             // `branch_float` is the entry point that pairs the comparison with
             // the branch that answers `false` for one.
             HirType::Float { .. } => {
-                let kind = types::kind(from)
-                    .ok_or_else(|| refuse(self.func, "a float with no kind"))?;
+                let kind =
+                    types::kind(from).ok_or_else(|| refuse(self.func, "a float with no kind"))?;
                 if kind == Kind::Float {
                     code.const_float(origin, pool, 0.0);
                 } else {
@@ -4497,7 +4981,12 @@ impl Emitter<'_> {
                 }
                 code.branch_float(origin, Compare::Ne, kind, truthy);
             }
-            _ => return Err(refuse(self.func, "a value this backend cannot test for truth")),
+            _ => {
+                return Err(refuse(
+                    self.func,
+                    "a value this backend cannot test for truth",
+                ));
+            }
         }
         code.const_int(origin, pool, 0);
         code.store(origin, Kind::Int, scratch);
@@ -4543,7 +5032,10 @@ impl Emitter<'_> {
         // not a wrong number but a stack that stops balancing, caught by
         // `Code`'s own accounting at the operation rather than a block later.
         let from = if self.narrowed.contains(&operand) {
-            HirType::Int { bits: 32, signed: true }
+            HirType::Int {
+                bits: 32,
+                signed: true,
+            }
         } else {
             self.ty(operand).clone()
         };
@@ -4552,7 +5044,10 @@ impl Emitter<'_> {
         // this emits the `i2l` that marking it exists to remove -- and then
         // stores a long into a slot the frame says is an int.
         let to = if self.narrowed.contains(&value) {
-            HirType::Int { bits: 32, signed: true }
+            HirType::Int {
+                bits: 32,
+                signed: true,
+            }
         } else {
             result.clone()
         };
@@ -4645,13 +5140,7 @@ impl Emitter<'_> {
             // `uint32`, so widening it as a signed `int` would answer negative
             // for anything with the top bit set.
             if op == BinOp::UShr {
-                code.invoke_static(
-                    &origin,
-                    pool,
-                    "java/lang/Integer",
-                    "toUnsignedLong",
-                    "(I)J",
-                );
+                code.invoke_static(&origin, pool, "java/lang/Integer", "toUnsignedLong", "(I)J");
                 convert_kind(code, &origin, Kind::Long, kind)
                     .ok_or_else(|| refuse(self.func, "an unsigned shift into an odd slot"))?;
             } else {
@@ -4746,7 +5235,12 @@ impl Emitter<'_> {
         test: Test,
         target: Label,
     ) -> Result<(), Diagnostic> {
-        let Test { compare, negate, lhs, rhs } = test;
+        let Test {
+            compare,
+            negate,
+            lhs,
+            rhs,
+        } = test;
         let origin = self.func.values[lhs.0 as usize].origin.clone();
         let kind = self.kind_of(lhs)?;
         if *self.ty(lhs) == HirType::Erased || *self.ty(rhs) == HirType::Erased {
@@ -4987,7 +5481,11 @@ impl Emitter<'_> {
                 // The ten-instruction reduction the runtime spells out, called
                 // rather than reproduced: inlining it would be a second
                 // implementation of `ToInt32` to keep in step with the first.
-                let name = if op == UnOp::ToInt32 { "toInt32" } else { "toUint32" };
+                let name = if op == UnOp::ToInt32 {
+                    "toInt32"
+                } else {
+                    "toUint32"
+                };
                 code.invoke_static(origin, pool, RUNTIME, name, "(D)I");
             }
             Kind::Long => code.convert(origin, insn::L2I, Kind::Long, Kind::Int),
@@ -5040,12 +5538,24 @@ impl Emitter<'_> {
         // check alone throws on the case it is meant to answer.
         if matches!(self.ty(operand), HirType::Managed(ManagedType::String)) {
             self.load(code, pool, operand)?;
-            code.invoke_static(&origin, pool, RUNTIME, "stringTruthy", "(Ljava/lang/String;)Z");
+            code.invoke_static(
+                &origin,
+                pool,
+                RUNTIME,
+                "stringTruthy",
+                "(Ljava/lang/String;)Z",
+            );
             return Ok(Placed::OnStack);
         }
         if *self.ty(operand) == HirType::Erased {
             self.load(code, pool, operand)?;
-            code.invoke_static(&origin, pool, types::VALUE, "truthy", "(Lnts/rt/NtsValue;)Z");
+            code.invoke_static(
+                &origin,
+                pool,
+                types::VALUE,
+                "truthy",
+                "(Lnts/rt/NtsValue;)Z",
+            );
             return Ok(Placed::OnStack);
         }
         // **`0n` is falsy, and a bigint is a reference on this lane.** So the
@@ -5065,7 +5575,13 @@ impl Emitter<'_> {
         // other backends would have to learn.
         if matches!(self.ty(operand), HirType::BigInt) {
             self.load(code, pool, operand)?;
-            code.get_static(&origin, pool, types::BIGINT, "ZERO", types::BIGINT_DESCRIPTOR);
+            code.get_static(
+                &origin,
+                pool,
+                types::BIGINT,
+                "ZERO",
+                types::BIGINT_DESCRIPTOR,
+            );
             code.invoke_static(
                 &origin,
                 pool,
@@ -5136,6 +5652,7 @@ impl Emitter<'_> {
     /// `d2i` is right *here* and wrong for `UnOp::ToInt32`: a `Convert` is
     /// emitted only where specialization proved the value integral and in
     /// range, which is the same proof the C backend's plain cast relies on.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn convert(
         &mut self,
         code: &mut Code,
@@ -5150,17 +5667,14 @@ impl Emitter<'_> {
         // through the runtime rather than being a cast.
         if matches!(from, HirType::BigInt) || matches!(to, HirType::BigInt) {
             let (name, signature) = match (from, to) {
-                (HirType::BigInt, HirType::Float { .. }) => {
-                    ("toNumber", "(Lnts/rt/NtsBigInt;)D")
-                }
-                (HirType::Float { .. }, HirType::BigInt) => {
-                    ("fromNumber", "(D)Lnts/rt/NtsBigInt;")
-                }
+                (HirType::BigInt, HirType::Float { .. }) => ("toNumber", "(Lnts/rt/NtsBigInt;)D"),
+                (HirType::Float { .. }, HirType::BigInt) => ("fromNumber", "(D)Lnts/rt/NtsBigInt;"),
                 // A boolean is an `int` here and converts to `1n` or `0n`; an
                 // integer of any width widens the same way.
                 (HirType::Bool | HirType::Int { .. }, HirType::BigInt) => {
-                    let have = types::kind(from)
-                        .ok_or_else(|| refuse(self.func, "a conversion from an unrepresentable type"))?;
+                    let have = types::kind(from).ok_or_else(|| {
+                        refuse(self.func, "a conversion from an unrepresentable type")
+                    })?;
                     convert_kind(code, origin, have, Kind::Long).ok_or_else(|| {
                         refuse(self.func, "an integer that does not widen to 64 bits")
                     })?;
@@ -5203,8 +5717,13 @@ impl Emitter<'_> {
         // problem rather than the performance one the plan predicted: `Kind`
         // is the stack representation and has no signedness, so a table keyed
         // on it cannot see the difference and answers plausibly.
-        let source = if matches!(from, HirType::Int { bits: 32, signed: false })
-            && matches!(target, Kind::Long | Kind::Float | Kind::Double)
+        let source = if matches!(
+            from,
+            HirType::Int {
+                bits: 32,
+                signed: false
+            }
+        ) && matches!(target, Kind::Long | Kind::Float | Kind::Double)
         {
             code.invoke_static(origin, pool, "java/lang/Integer", "toUnsignedLong", "(I)J");
             Kind::Long
@@ -5266,16 +5785,28 @@ impl Emitter<'_> {
         // question. The JVM has no narrow slot, so the mask is explicit.
         if target == Kind::Int {
             match to {
-                HirType::Int { bits: 8, signed: true } => {
+                HirType::Int {
+                    bits: 8,
+                    signed: true,
+                } => {
                     code.convert(origin, insn::I2B, Kind::Int, Kind::Int);
                 }
-                HirType::Int { bits: 16, signed: true } => {
+                HirType::Int {
+                    bits: 16,
+                    signed: true,
+                } => {
                     code.convert(origin, insn::I2S, Kind::Int, Kind::Int);
                 }
-                HirType::Int { bits: 16, signed: false } => {
+                HirType::Int {
+                    bits: 16,
+                    signed: false,
+                } => {
                     code.convert(origin, insn::I2C, Kind::Int, Kind::Int);
                 }
-                HirType::Int { bits: 8, signed: false } => {
+                HirType::Int {
+                    bits: 8,
+                    signed: false,
+                } => {
                     code.const_int(origin, pool, 0xFF);
                     code.bitwise(origin, insn::AND, Kind::Int);
                 }
@@ -5320,15 +5851,22 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
         if matches!(from, HirType::Managed(ManagedType::Template))
-            && matches!(to, HirType::Managed(ManagedType::Array(_))) {
+            && matches!(to, HirType::Managed(ManagedType::Array(_)))
+        {
             self.writable_array(code, pool, to, origin);
         }
 
         let have = types::descriptor(self.shape, from).ok_or_else(|| {
-            refuse(self.func, "a conversion from a managed type this backend cannot spell")
+            refuse(
+                self.func,
+                "a conversion from a managed type this backend cannot spell",
+            )
         })?;
         let want = types::descriptor(self.shape, to).ok_or_else(|| {
-            refuse(self.func, "a conversion to a managed type this backend cannot spell")
+            refuse(
+                self.func,
+                "a conversion to a managed type this backend cannot spell",
+            )
         })?;
         if have != want {
             code.check_cast(origin, pool, &want);
@@ -5351,48 +5889,49 @@ impl Emitter<'_> {
         result: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
-            let Some(&receiver) = args.first() else {
-                return Err(refuse(self.func, "a virtual call with no receiver"));
-            };
-            let owner = self.object_class(&self.ty(receiver).clone())?;
-            let Some(target) = self.program.funcs.iter().find(|f| f.name == declared) else {
-                return Err(refuse(
-                    self.func,
-                    &format!("a virtual call to `{declared}`, which is not in this program"),
-                ));
-            };
-            let Some(descriptor) = crate::instance_descriptor(self.shape.package, self.program, target) else {
-                return Err(refuse(
-                    self.func,
-                    &format!("a virtual call to `{declared}`, whose signature has no representation"),
-                ));
-            };
-            for &arg in args {
-                self.load(code, pool, arg)?;
-            }
-            let member = crate::hierarchy::member_name(declared);
-            // Which instruction, decided by what the receiver's static type
-            // is emitted as. The two are not interchangeable: they resolve
-            // through different constant-pool tags, and the wrong one is an
-            // `IncompatibleClassChangeError` at the call rather than
-            // anything the verifier reports at load.
-            let through_interface = match self.ty(receiver) {
-                HirType::Managed(ManagedType::Object(id)) => self
-                    .program
-                    .layout(*id)
-                    .is_some_and(|at| crate::hierarchy::is_interface(self.program, at)),
-                _ => false,
-            };
-            if through_interface {
-                code.invoke_interface(origin, pool, &owner, &member, &descriptor);
-            } else {
-                code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
-            }
-            Ok(if matches!(result, HirType::Void) {
-                Placed::Stored
-            } else {
-                Placed::OnStack
-            })
+        let Some(&receiver) = args.first() else {
+            return Err(refuse(self.func, "a virtual call with no receiver"));
+        };
+        let owner = self.object_class(&self.ty(receiver).clone())?;
+        let Some(target) = self.program.funcs.iter().find(|f| f.name == declared) else {
+            return Err(refuse(
+                self.func,
+                &format!("a virtual call to `{declared}`, which is not in this program"),
+            ));
+        };
+        let Some(descriptor) = crate::instance_descriptor(self.shape.package, self.program, target)
+        else {
+            return Err(refuse(
+                self.func,
+                &format!("a virtual call to `{declared}`, whose signature has no representation"),
+            ));
+        };
+        for &arg in args {
+            self.load(code, pool, arg)?;
+        }
+        let member = crate::hierarchy::member_name(declared);
+        // Which instruction, decided by what the receiver's static type
+        // is emitted as. The two are not interchangeable: they resolve
+        // through different constant-pool tags, and the wrong one is an
+        // `IncompatibleClassChangeError` at the call rather than
+        // anything the verifier reports at load.
+        let through_interface = match self.ty(receiver) {
+            HirType::Managed(ManagedType::Object(id)) => self
+                .program
+                .layout(*id)
+                .is_some_and(|at| crate::hierarchy::is_interface(self.program, at)),
+            _ => false,
+        };
+        if through_interface {
+            code.invoke_interface(origin, pool, &owner, &member, &descriptor);
+        } else {
+            code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
+        }
+        Ok(if matches!(result, HirType::Void) {
+            Placed::Stored
+        } else {
+            Placed::OnStack
+        })
     }
 
     /// A map key the caller already holds as a reference; see
@@ -5403,11 +5942,7 @@ impl Emitter<'_> {
     /// `push_arguments` reads the descriptor to decide how to push each
     /// operand, so changing one without the other puts a box where an `Object`
     /// is declared, or the reverse, and the verifier is what finds out.
-    fn object_key(
-        &self,
-        name: &str,
-        args: &[ValueId],
-    ) -> Option<ObjectKeyCall> {
+    fn object_key(&self, name: &str, args: &[ValueId]) -> Option<ObjectKeyCall> {
         let (member, spelling) = crate::fuse::object_key_form(name)?;
         let key = *args.get(crate::fuse::KEY_AT)?;
         let source = *self.object_keys.get(&key)?;
@@ -5465,8 +6000,6 @@ impl Emitter<'_> {
         Ok(true)
     }
 
-
-
     /// A field read or write, ours or a bound class's.
     ///
     /// Split out of [`Self::operation`] because the two arms are one question
@@ -5481,47 +6014,51 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Option<Placed>, Diagnostic> {
         Ok(match kind {
-        OpKind::FieldGet { object, field } => {
-            let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
-            self.load(code, pool, *object)?;
-            code.get_field(origin, pool, &class, &name, &descriptor);
-            self.convert_field(code, pool, &descriptor, &declared, true, origin)?;
-            Some(Placed::OnStack)
-        }
-        OpKind::FieldSet { object, field, value: stored } => {
-            let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
-            // **A store into a field is an assignment to its declared type,
-            // and this was the last of the three that did not check.**
-            // `Return` checks, and the global store checks; a `putfield`
-            // did not, so a value the program could not license became a
-            // `VerifyError` at class load instead of a refusal by name.
-            //
-            // `examples/function-in-an-object-literal` is the shape:
-            // `const table = { doubled }` gives `Type5.doubled` the
-            // *function type* as its descriptor and stores the *closure
-            // class* into it, and with one closure of that signature
-            // nothing relates the two -- so the verifier said "Type
-            // 'nts/gen/Closure0' is not assignable to 'nts/gen/Fn2__2'"
-            // and the emitter had said nothing at all. Two closures of one
-            // signature and `Layout.base` relates them, which is why a
-            // second function in any object literal made it disappear.
-            //
-            // This does not make that program work; the relation is the
-            // middle end's to record. It makes the backend say so, which
-            // is the whole of what `unverifiable class` being a hard zero
-            // in the corpus is worth.
-            self.assignable_types(&self.ty(*stored).clone(), &declared)?;
-            self.load(code, pool, *object)?;
-            self.load(code, pool, *stored)?;
-            self.convert_field(code, pool, &descriptor, &declared, false, origin)?;
-            code.put_field(origin, pool, &class, &name, &descriptor);
-            // **`None`, not `Placed::Stored`.** A store produces no value, and
-            // the original arm returned from `operation` early rather than
-            // falling through to the code that puts a result in its slot.
-            // Extracting it had to carry that: `Stored` would have run the
-            // store-the-result path over a value that does not exist.
-            None
-        }
+            OpKind::FieldGet { object, field } => {
+                let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
+                self.load(code, pool, *object)?;
+                code.get_field(origin, pool, &class, &name, &descriptor);
+                self.convert_field(code, pool, &descriptor, &declared, true, origin)?;
+                Some(Placed::OnStack)
+            }
+            OpKind::FieldSet {
+                object,
+                field,
+                value: stored,
+            } => {
+                let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
+                // **A store into a field is an assignment to its declared type,
+                // and this was the last of the three that did not check.**
+                // `Return` checks, and the global store checks; a `putfield`
+                // did not, so a value the program could not license became a
+                // `VerifyError` at class load instead of a refusal by name.
+                //
+                // `examples/function-in-an-object-literal` is the shape:
+                // `const table = { doubled }` gives `Type5.doubled` the
+                // *function type* as its descriptor and stores the *closure
+                // class* into it, and with one closure of that signature
+                // nothing relates the two -- so the verifier said "Type
+                // 'nts/gen/Closure0' is not assignable to 'nts/gen/Fn2__2'"
+                // and the emitter had said nothing at all. Two closures of one
+                // signature and `Layout.base` relates them, which is why a
+                // second function in any object literal made it disappear.
+                //
+                // This does not make that program work; the relation is the
+                // middle end's to record. It makes the backend say so, which
+                // is the whole of what `unverifiable class` being a hard zero
+                // in the corpus is worth.
+                self.assignable_types(&self.ty(*stored).clone(), &declared)?;
+                self.load(code, pool, *object)?;
+                self.load(code, pool, *stored)?;
+                self.convert_field(code, pool, &descriptor, &declared, false, origin)?;
+                code.put_field(origin, pool, &class, &name, &descriptor);
+                // **`None`, not `Placed::Stored`.** A store produces no value, and
+                // the original arm returned from `operation` early rather than
+                // falling through to the code that puts a result in its slot.
+                // Extracting it had to carry that: `Stored` would have run the
+                // store-the-result path over a value that does not exist.
+                None
+            }
             _ => return Err(refuse(self.func, "a field operation that is neither")),
         })
     }
@@ -5550,7 +6087,9 @@ impl Emitter<'_> {
         if !matches!(declared, HirType::Float { bits: 64 }) {
             return Err(refuse(
                 self.func,
-                &format!("a bound field declared `{descriptor}` held as something other than a number"),
+                &format!(
+                    "a bound field declared `{descriptor}` held as something other than a number"
+                ),
             ));
         }
         if reading {
@@ -5621,11 +6160,12 @@ impl Emitter<'_> {
         // and nothing to alias against, so there is no store to adopt. The
         // copy is 0.04 ns per element, measured, which is why this is a copy
         // and not the refusal it used to be.
-        if returns.starts_with('[')
-            && matches!(result, HirType::Managed(ManagedType::View(_)))
-        {
+        if returns.starts_with('[') && matches!(result, HirType::Managed(ManagedType::View(_))) {
             let Some(want) = types::descriptor(self.shape, result) else {
-                return Err(refuse(self.func, "a bound array whose view form has no name"));
+                return Err(refuse(
+                    self.func,
+                    "a bound array whose view form has no name",
+                ));
             };
             let Some(view) = want.strip_prefix('L').and_then(|it| it.strip_suffix(';')) else {
                 return Err(refuse(
@@ -5641,7 +6181,10 @@ impl Emitter<'_> {
             && self.shape.grows
         {
             let Some(want) = types::descriptor(self.shape, result) else {
-                return Err(refuse(self.func, "a bound array whose growable form has no name"));
+                return Err(refuse(
+                    self.func,
+                    "a bound array whose growable form has no name",
+                ));
             };
             let Some(wrapper) = want.strip_prefix('L').and_then(|it| it.strip_suffix(';')) else {
                 return Err(refuse(
@@ -5660,7 +6203,13 @@ impl Emitter<'_> {
             } else {
                 returns
             };
-            code.invoke_static(origin, pool, wrapper, "adopt", &format!("({accepts}){want}"));
+            code.invoke_static(
+                origin,
+                pool,
+                wrapper,
+                "adopt",
+                &format!("({accepts}){want}"),
+            );
             return Ok(());
         }
         // **A Java reference arriving where a JavaScript value is held.**
@@ -5767,129 +6316,127 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         use nts_core::hir::runtime::ForeignKind;
-                // Keyed by the foreign key, which is what a backend holds.
-                // Scanning the rows instead was O(rows) per call site
-                // against 78,948 of them for a bound Android SDK.
-                let Some(bound) = self.program.foreign.get(name) else {
-                    // Refused rather than guessed. `invokevirtual` on an
-                    // interface is an `IncompatibleClassChangeError` at
-                    // link time, in the user's program, which is far worse
-                    // than a refusal here.
-                    return Err(refuse(
-                        self.func,
-                        &format!(
-                            "a call to the bound member `{name}`, whose binding table row is \
+        // Keyed by the foreign key, which is what a backend holds.
+        // Scanning the rows instead was O(rows) per call site
+        // against 78,948 of them for a bound Android SDK.
+        let Some(bound) = self.program.foreign.get(name) else {
+            // Refused rather than guessed. `invokevirtual` on an
+            // interface is an `IncompatibleClassChangeError` at
+            // link time, in the user's program, which is far worse
+            // than a refusal here.
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "a call to the bound member `{name}`, whose binding table row is \
                              missing -- the `.bind` file beside the declaration says how to \
                              invoke it, and without it this backend would have to guess \
                              between `invokevirtual` and `invokeinterface`"
-                        ),
-                    ));
+                ),
+            ));
+        };
+        let Some((owner, member, descriptor)) = nts_jvm_emitter::bind::split_key(name) else {
+            return Err(refuse(
+                self.func,
+                &format!("a call to `{name}`, which is not a well-formed foreign key"),
+            ));
+        };
+        // **A bound constructor allocates here, not in HIR.**
+        // `new` on a foreign class is the JVM's own `new; dup;
+        // invokespecial <init>`, so there is no layout of ours to
+        // fill and no receiver to load: this is the one bound
+        // member whose arguments are all of `args`. Lowering knows
+        // the same thing and emits no `ObjectNew` -- doing it in
+        // one place and not the other would either allocate twice
+        // or verify against an uninitialised reference.
+        if member == "<init>" {
+            // **Told apart by arity, which is the only thing that
+            // distinguishes them.** Constructing a bound class gives
+            // exactly the descriptor's parameters and this allocates;
+            // a TypeScript class extending a bound one gives those
+            // *plus the object it already allocated*, and this runs
+            // the jar's constructor on that object.
+            //
+            // `class Panel extends View` is the second shape. Taking
+            // the first for it emitted `new com/example/ui/View` where
+            // a `Panel` was wanted -- a field then held the base and
+            // the class did not load.
+            let declared =
+                nts_jvm_emitter::descriptor::parameters(descriptor).map_or(0, |it| it.len());
+            if args.len() == declared + 1 {
+                let Some((receiver, rest)) = args.split_first() else {
+                    return Err(refuse(self.func, "a super-constructor with no receiver"));
                 };
-                let Some((owner, member, descriptor)) =
-                    nts_jvm_emitter::bind::split_key(name)
-                else {
-                    return Err(refuse(
-                        self.func,
-                        &format!("a call to `{name}`, which is not a well-formed foreign key"),
-                    ));
-                };
-                // **A bound constructor allocates here, not in HIR.**
-                // `new` on a foreign class is the JVM's own `new; dup;
-                // invokespecial <init>`, so there is no layout of ours to
-                // fill and no receiver to load: this is the one bound
-                // member whose arguments are all of `args`. Lowering knows
-                // the same thing and emits no `ObjectNew` -- doing it in
-                // one place and not the other would either allocate twice
-                // or verify against an uninitialised reference.
-                if member == "<init>" {
-                    // **Told apart by arity, which is the only thing that
-                    // distinguishes them.** Constructing a bound class gives
-                    // exactly the descriptor's parameters and this allocates;
-                    // a TypeScript class extending a bound one gives those
-                    // *plus the object it already allocated*, and this runs
-                    // the jar's constructor on that object.
-                    //
-                    // `class Panel extends View` is the second shape. Taking
-                    // the first for it emitted `new com/example/ui/View` where
-                    // a `Panel` was wanted -- a field then held the base and
-                    // the class did not load.
-                    let declared =
-                        nts_jvm_emitter::descriptor::parameters(descriptor).map_or(0, |it| it.len());
-                    if args.len() == declared + 1 {
-                        let Some((receiver, rest)) = args.split_first() else {
-                            return Err(refuse(self.func, "a super-constructor with no receiver"));
-                        };
-                        self.load(code, pool, *receiver)?;
-                        self.push_foreign_arguments(code, pool, rest, descriptor, origin)?;
-                        code.invoke_special(origin, pool, owner, member, descriptor);
-                        return Ok(Placed::Stored);
-                    }
-                    code.new_object(origin, pool, owner);
-                    code.dup(origin);
-                    self.push_foreign_arguments(code, pool, args, descriptor, origin)?;
-                    code.invoke_special(origin, pool, owner, member, descriptor);
-                    return Ok(Placed::OnStack);
-                }
-                // **The receiver is `args[0]` and the descriptor does not
-                // mention it.** HIR gives a foreign instance call the same
-                // shape every runtime helper has -- receiver first, then the
-                // declared arguments -- because `Callee::External` has no
-                // receiver of its own. A JVM instance invoke wants exactly
-                // that on the stack, but `push_arguments` walks the
-                // *descriptor*, which declares only the rest. Pushing all of
-                // `args` against it left the stack one short and the
-                // emitter's own accounting caught it.
-                let rest = if matches!(bound.kind, ForeignKind::Static) {
-                    args
-                } else {
-                    let Some((receiver, rest)) = args.split_first() else {
-                        return Err(refuse(
-                            self.func,
-                            &format!("an instance call to `{name}` with no receiver"),
-                        ));
-                    };
-                    self.load(code, pool, *receiver)?;
-                    rest
-                };
+                self.load(code, pool, *receiver)?;
                 self.push_foreign_arguments(code, pool, rest, descriptor, origin)?;
-                match bound.kind {
-                    ForeignKind::Static => {
-                        code.invoke_static(origin, pool, owner, member, descriptor);
-                    }
-                    ForeignKind::Virtual => {
-                        code.invoke_virtual(origin, pool, owner, member, descriptor);
-                    }
-                    ForeignKind::Interface => {
-                        code.invoke_interface(origin, pool, owner, member, descriptor);
-                    }
-                    ForeignKind::Special => {
-                        code.invoke_special(origin, pool, owner, member, descriptor);
-                    }
-                    ForeignKind::Field | ForeignKind::StaticField => {
-                        return Err(refuse(
-                            self.func,
-                            &format!("`{name}` is a field, reached as a call"),
-                        ));
-                    }
-                }
-                // **Java's width is not TypeScript's.** `int size()` gives
-                // an `I` and a `number` is a `double`, so the value on the
-                // stack is one word where the accounting wants two -- which
-                // is what `moved the operand stack from 0 to -1` was. The
-                // conversion is the boundary rather than an optimisation:
-                // `hir::runtime` is the single answer about conversions for
-                // our own helpers, and a bound member needs the same rule
-                // applied to the descriptor the jar declared.
-                let returns = descriptor.rsplit(')').next().unwrap_or("");
-                self.narrow_foreign_return(code, pool, descriptor, result, origin)?;
-                if matches!(result, HirType::Void) {
-                    let words = nts_jvm_emitter::descriptor::words(returns);
-                    if words > 0 {
-                        code.pop(origin, words);
-                    }
-                    return Ok(Placed::Stored);
-                }
-                Ok(Placed::OnStack)
+                code.invoke_special(origin, pool, owner, member, descriptor);
+                return Ok(Placed::Stored);
+            }
+            code.new_object(origin, pool, owner);
+            code.dup(origin);
+            self.push_foreign_arguments(code, pool, args, descriptor, origin)?;
+            code.invoke_special(origin, pool, owner, member, descriptor);
+            return Ok(Placed::OnStack);
+        }
+        // **The receiver is `args[0]` and the descriptor does not
+        // mention it.** HIR gives a foreign instance call the same
+        // shape every runtime helper has -- receiver first, then the
+        // declared arguments -- because `Callee::External` has no
+        // receiver of its own. A JVM instance invoke wants exactly
+        // that on the stack, but `push_arguments` walks the
+        // *descriptor*, which declares only the rest. Pushing all of
+        // `args` against it left the stack one short and the
+        // emitter's own accounting caught it.
+        let rest = if matches!(bound.kind, ForeignKind::Static) {
+            args
+        } else {
+            let Some((receiver, rest)) = args.split_first() else {
+                return Err(refuse(
+                    self.func,
+                    &format!("an instance call to `{name}` with no receiver"),
+                ));
+            };
+            self.load(code, pool, *receiver)?;
+            rest
+        };
+        self.push_foreign_arguments(code, pool, rest, descriptor, origin)?;
+        match bound.kind {
+            ForeignKind::Static => {
+                code.invoke_static(origin, pool, owner, member, descriptor);
+            }
+            ForeignKind::Virtual => {
+                code.invoke_virtual(origin, pool, owner, member, descriptor);
+            }
+            ForeignKind::Interface => {
+                code.invoke_interface(origin, pool, owner, member, descriptor);
+            }
+            ForeignKind::Special => {
+                code.invoke_special(origin, pool, owner, member, descriptor);
+            }
+            ForeignKind::Field | ForeignKind::StaticField => {
+                return Err(refuse(
+                    self.func,
+                    &format!("`{name}` is a field, reached as a call"),
+                ));
+            }
+        }
+        // **Java's width is not TypeScript's.** `int size()` gives
+        // an `I` and a `number` is a `double`, so the value on the
+        // stack is one word where the accounting wants two -- which
+        // is what `moved the operand stack from 0 to -1` was. The
+        // conversion is the boundary rather than an optimisation:
+        // `hir::runtime` is the single answer about conversions for
+        // our own helpers, and a bound member needs the same rule
+        // applied to the descriptor the jar declared.
+        let returns = descriptor.rsplit(')').next().unwrap_or("");
+        self.narrow_foreign_return(code, pool, descriptor, result, origin)?;
+        if matches!(result, HirType::Void) {
+            let words = nts_jvm_emitter::descriptor::words(returns);
+            if words > 0 {
+                code.pop(origin, words);
+            }
+            return Ok(Placed::Stored);
+        }
+        Ok(Placed::OnStack)
     }
 
     // Adding a method here: put it above this attribute, not below it. An
@@ -5948,8 +6495,9 @@ impl Emitter<'_> {
                 // that carry the payload representation.
                 let which = usize::from(name == "nts_promise_all");
                 let subject = args.get(which).map(|&first| self.ty(first).clone());
-                let element =
-                    subject.as_ref().and_then(|ty| self.array_element_descriptor(ty));
+                let element = subject
+                    .as_ref()
+                    .and_then(|ty| self.array_element_descriptor(ty));
                 let found = if self.shape.grows {
                     // A growable program has no bare arrays, so every array
                     // helper is a method on a wrapper and the element-width
@@ -5982,18 +6530,19 @@ impl Emitter<'_> {
                 // exactly "moved the operand stack from 0 to 1", and it named
                 // the operation rather than leaving it to be bisected -- which
                 // is what that check was added for.
-                let cursor_form = crate::intcall::cursor_helper(name).and_then(|(position, _, narrow)| {
-                    let cursor_held = position
-                        .and_then(|at| args.get(at))
-                        .is_some_and(|arg| self.narrowed.contains(arg));
-                    if !cursor_held && !self.narrowed.contains(&value) {
-                        return None;
-                    }
-                    Some(match narrow {
-                        "nextI" => (types::TABLE, "nextI", CURSOR_NEXT.to_owned()),
-                        _ => (types::TABLE, "keyAtI", CURSOR_KEY.to_owned()),
-                    })
-                });
+                let cursor_form =
+                    crate::intcall::cursor_helper(name).and_then(|(position, _, narrow)| {
+                        let cursor_held = position
+                            .and_then(|at| args.get(at))
+                            .is_some_and(|arg| self.narrowed.contains(arg));
+                        if !cursor_held && !self.narrowed.contains(&value) {
+                            return None;
+                        }
+                        Some(match narrow {
+                            "nextI" => (types::TABLE, "nextI", CURSOR_NEXT.to_owned()),
+                            _ => (types::TABLE, "keyAtI", CURSOR_KEY.to_owned()),
+                        })
+                    });
                 let found = cursor_form.or(found);
                 let (swapped, object_form) = self.object_key(name, args).unzip();
                 let args = swapped.as_deref().unwrap_or(args);
@@ -6034,9 +6583,7 @@ impl Emitter<'_> {
                     // a plausible plan is worse than no plan when it is wrong.
                     return Err(refuse(
                         self.func,
-                        &format!(
-                            "a call to `{name}`, {NO_NAME_FOR}"
-                        ),
+                        &format!("a call to `{name}`, {NO_NAME_FOR}"),
                     ));
                 };
                 self.push_arguments(code, pool, args, &descriptor, origin)?;
@@ -6171,7 +6718,13 @@ impl Emitter<'_> {
         } else {
             returns
         };
-        code.invoke_static(origin, pool, wrapper, "adopt", &format!("({accepts}){want}"));
+        code.invoke_static(
+            origin,
+            pool,
+            wrapper,
+            "adopt",
+            &format!("({accepts}){want}"),
+        );
         true
     }
 
@@ -6228,12 +6781,21 @@ impl Emitter<'_> {
             return Ok(Placed::OnStack);
         }
         let HirType::Managed(ManagedType::Object(id)) = self.ty(*object).clone() else {
-            return Err(refuse(self.func, &format!("`{name}` on a value that is not an object")));
+            return Err(refuse(
+                self.func,
+                &format!("`{name}` on a value that is not an object"),
+            ));
         };
         let Some(layout) = self.program.layout(id) else {
-            return Err(refuse(self.func, &format!("`{name}` on a type with no layout")));
+            return Err(refuse(
+                self.func,
+                &format!("`{name}` on a type with no layout"),
+            ));
         };
-        let owner = types::class_name(self.shape.package, crate::hierarchy::root(self.program, layout));
+        let owner = types::class_name(
+            self.shape.package,
+            crate::hierarchy::root(self.program, layout),
+        );
         let field = types::PRESENCE;
         match name {
             "nts_presence_has" | "nts_presence_has_fn" => {
@@ -6282,7 +6844,10 @@ impl Emitter<'_> {
                 code.put_field(origin, pool, &owner, field, "I");
                 Ok(Placed::Stored)
             }
-            other => Err(refuse(self.func, &format!("`{other}`, which is not a presence helper"))),
+            other => Err(refuse(
+                self.func,
+                &format!("`{other}`, which is not a presence helper"),
+            )),
         }
     }
 
@@ -6315,10 +6880,16 @@ impl Emitter<'_> {
                     None => self.object_class(&ty)?,
                 };
                 let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
-                    return Err(refuse(self.func, "a closure call on something that is not an object"));
+                    return Err(refuse(
+                        self.func,
+                        "a closure call on something that is not an object",
+                    ));
                 };
                 let Some(layout) = self.program.layout(id) else {
-                    return Err(refuse(self.func, "a closure whose layout this program does not carry"));
+                    return Err(refuse(
+                        self.func,
+                        "a closure whose layout this program does not carry",
+                    ));
                 };
                 let Some(Some(declared)) = layout.methods.get(slot as usize) else {
                     return Err(refuse(
@@ -6332,10 +6903,14 @@ impl Emitter<'_> {
                         &format!("a closure call to `{declared}`, which is not in this program"),
                     ));
                 };
-                let Some(descriptor) = crate::instance_descriptor(self.shape.package, self.program, target) else {
+                let Some(descriptor) =
+                    crate::instance_descriptor(self.shape.package, self.program, target)
+                else {
                     return Err(refuse(
                         self.func,
-                        &format!("a closure call to `{declared}`, whose signature has no representation"),
+                        &format!(
+                            "a closure call to `{declared}`, whose signature has no representation"
+                        ),
                     ));
                 };
                 let member = crate::hierarchy::member_name(declared);
@@ -6354,7 +6929,8 @@ impl Emitter<'_> {
                 for (&arg, param) in args.iter().zip(&target.params).skip(1) {
                     self.assignable_types(&self.ty(arg).clone(), &param.ty)?;
                 }
-                let parameters = nts_jvm_emitter::descriptor::parameters(&descriptor).unwrap_or_default();
+                let parameters =
+                    nts_jvm_emitter::descriptor::parameters(&descriptor).unwrap_or_default();
                 for (at, &arg) in args.iter().enumerate() {
                     self.load(code, pool, arg)?;
                     if let Some(want) = at.checked_sub(1).and_then(|at| parameters.get(at)) {
@@ -6397,7 +6973,10 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         let Some(target) = self.program.funcs.iter().find(|func| func.name == name) else {
-            return Err(refuse(self.func, &format!("a call to `{name}`, which is not in this program")));
+            return Err(refuse(
+                self.func,
+                &format!("a call to `{name}`, which is not in this program"),
+            ));
         };
         // **A direct call to one closure's body, on a receiver that is not
         // necessarily that closure.**
@@ -6434,7 +7013,9 @@ impl Emitter<'_> {
             .filter(|_| crate::hierarchy::member_name(name) == "call")
             .and_then(|receiver| self.joined.get(receiver).cloned());
         if let Some(base) = merged {
-            let Some(descriptor) = crate::instance_descriptor(self.shape.package, self.program, target) else {
+            let Some(descriptor) =
+                crate::instance_descriptor(self.shape.package, self.program, target)
+            else {
                 return Err(refuse(
                     self.func,
                     &format!("a closure call to `{name}`, whose signature has no representation"),
@@ -6473,8 +7054,12 @@ impl Emitter<'_> {
                 &format!("a direct call to `{name}`, which is abstract and has no body to call"),
             ));
         }
-        let Some(signature) = crate::body::signature(self.shape.package, self.program, target) else {
-            return Err(refuse(self.func, &format!("a call to `{name}`, whose signature has no representation")));
+        let Some(signature) = crate::body::signature(self.shape.package, self.program, target)
+        else {
+            return Err(refuse(
+                self.func,
+                &format!("a call to `{name}`, whose signature has no representation"),
+            ));
         };
         // Every argument against the parameter it lands in. The IR relates
         // these types; the class file has to as well, and where `Layout.base`
@@ -6495,7 +7080,13 @@ impl Emitter<'_> {
             }
         }
         let method = crate::body::method_name(name);
-        code.invoke_static(origin, pool, &crate::body::program_class(self.shape.package), &method, &signature);
+        code.invoke_static(
+            origin,
+            pool,
+            &crate::body::program_class(self.shape.package),
+            &method,
+            &signature,
+        );
         // The callee's descriptor says what *it* returns; the IR says what this
         // call site gets, and for a method returning `this` those differ. A
         // `Counter.bump()` called on a `Labelled` is typed `Labelled` by the
@@ -6533,12 +7124,10 @@ impl Emitter<'_> {
         next: Option<BlockId>,
         fused: Option<ValueId>,
     ) -> Result<(), Diagnostic> {
-        let origin = self.func.blocks[block.0 as usize]
-            .ops
-            .last()
-            .map_or_else(|| self.func.origin.clone(), |&value| {
-                self.func.values[value.0 as usize].origin.clone()
-            });
+        let origin = self.func.blocks[block.0 as usize].ops.last().map_or_else(
+            || self.func.origin.clone(),
+            |&value| self.func.values[value.0 as usize].origin.clone(),
+        );
         match terminator {
             Terminator::Return(value) => {
                 match value {
@@ -6608,7 +7197,13 @@ impl Emitter<'_> {
                 }
                 Ok(())
             }
-            Terminator::Branch { cond, then_target, then_args, else_target, else_args } => {
+            Terminator::Branch {
+                cond,
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+            } => {
                 let then_copies = self.copies(*then_target, then_args);
                 let else_copies = self.copies(*else_target, else_args);
                 let then_label = self.labels[then_target];
@@ -6672,12 +7267,28 @@ impl Emitter<'_> {
         let origin = self.func.values[cond.0 as usize].origin.clone();
         if fused == Some(cond) {
             let OpKind::Binary { op, lhs, rhs } = self.func.values[cond.0 as usize].kind else {
-                return Err(refuse(self.func, "a fused condition that is not a comparison"));
+                return Err(refuse(
+                    self.func,
+                    "a fused condition that is not a comparison",
+                ));
             };
             let Some(compare) = comparison(op) else {
-                return Err(refuse(self.func, "a fused condition that is not a comparison"));
+                return Err(refuse(
+                    self.func,
+                    "a fused condition that is not a comparison",
+                ));
             };
-            return self.compare_and_branch(code, pool, Test { compare, negate: invert, lhs, rhs }, target);
+            return self.compare_and_branch(
+                code,
+                pool,
+                Test {
+                    compare,
+                    negate: invert,
+                    lhs,
+                    rhs,
+                },
+                target,
+            );
         }
         self.load(code, pool, cond)?;
         let compare = if invert { Compare::Eq } else { Compare::Ne };
@@ -6772,12 +7383,16 @@ impl Emitter<'_> {
             return Err(refuse(self.func, "a cell that is not an object"));
         };
         let Some(layout) = self.program.layout(id) else {
-            return Err(refuse(self.func, "a cell whose layout this program does not carry"));
+            return Err(refuse(
+                self.func,
+                "a cell whose layout this program does not carry",
+            ));
         };
         let Some(at) = layout.fields.iter().position(|field| field.name == "ready") else {
             return Err(refuse(self.func, "a guarded cell with no `ready` field"));
         };
-        let (owner, member, descriptor, _) = self.field_ref(cell, u32::try_from(at).unwrap_or(0))?;
+        let (owner, member, descriptor, _) =
+            self.field_ref(cell, u32::try_from(at).unwrap_or(0))?;
         self.load(code, pool, cell)?;
         code.get_field(origin, pool, &owner, &member, &descriptor);
         code.const_string(origin, pool, name);
@@ -6851,9 +7466,14 @@ mod agrees_with_hir {
         let mut at = 0;
         while let Some(start) = SOURCE[at..].find("\"nts_") {
             let open = at + start + 1;
-            let Some(len) = SOURCE[open..].find('"') else { break };
+            let Some(len) = SOURCE[open..].find('"') else {
+                break;
+            };
             let name = &SOURCE[open..open + len];
-            if name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') {
+            if name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+            {
                 found.push(name);
             }
             at = open + len;
@@ -6918,7 +7538,10 @@ mod agrees_with_hir {
         if wanted.contains(&actual) {
             None
         } else {
-            Some(format!("`{}`, and this backend takes `{actual}`", wanted[0]))
+            Some(format!(
+                "`{}`, and this backend takes `{actual}`",
+                wanted[0]
+            ))
         }
     }
 
@@ -6927,8 +7550,12 @@ mod agrees_with_hir {
         let mut checked = 0_usize;
         let mut wrong: Vec<String> = Vec::new();
         for name in mapped_names() {
-            let Some((_, _, descriptor)) = core_external(name) else { continue };
-            let Some(declared) = hir::runtime::parameters(name) else { continue };
+            let Some((_, _, descriptor)) = core_external(name) else {
+                continue;
+            };
+            let Some(declared) = hir::runtime::parameters(name) else {
+                continue;
+            };
             let Some((params, result)) = split(descriptor) else {
                 wrong.push(format!("{name}: `{descriptor}` is not a descriptor"));
                 continue;
@@ -6951,7 +7578,11 @@ mod agrees_with_hir {
                 wrong.push(format!("{name}: the result should be {why}"));
             }
         }
-        assert!(wrong.is_empty(), "{checked} name(s) checked:\n  {}", wrong.join("\n  "));
+        assert!(
+            wrong.is_empty(),
+            "{checked} name(s) checked:\n  {}",
+            wrong.join("\n  ")
+        );
         // **A floor, because the interesting failure is this loop matching
         // nothing.** `continue` on a name the table does not declare is right
         // and is also how the whole test becomes vacuous -- a rename on either
@@ -6963,7 +7594,10 @@ mod agrees_with_hir {
         // It was written as 40 first, from nothing, and the run said 30 -- so
         // the first version of this line was the guess `dexes.sh`'s own comment
         // forbids, in a test written to stop two tables guessing at each other.
-        assert!(checked >= 30, "only {checked} name(s) reached the comparison");
+        assert!(
+            checked >= 30,
+            "only {checked} name(s) reached the comparison"
+        );
     }
 }
 
@@ -7006,11 +7640,15 @@ mod signatures {
                 return Some(path);
             }
         }
-        let found =
-            Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
-        found.status.success().then(|| {
-            PathBuf::from(String::from_utf8_lossy(&found.stdout).trim().to_owned())
-        })
+        let found = Command::new("sh")
+            .arg("-c")
+            .arg(format!("command -v {name}"))
+            .output()
+            .ok()?;
+        found
+            .status
+            .success()
+            .then(|| PathBuf::from(String::from_utf8_lossy(&found.stdout).trim().to_owned()))
     }
 
     /// Every `(class, method, descriptor)` the jar declares, for the classes
@@ -7018,7 +7656,13 @@ mod signatures {
     fn declared(javap: &PathBuf, jar: &PathBuf, classes: &BTreeSet<String>) -> BTreeSet<String> {
         let mut out = BTreeSet::new();
         let named: Vec<String> = classes.iter().map(|c| c.replace('/', ".")).collect();
-        let Ok(dump) = Command::new(javap).arg("-p").arg("-s").arg("-cp").arg(jar).args(&named).output()
+        let Ok(dump) = Command::new(javap)
+            .arg("-p")
+            .arg("-s")
+            .arg("-cp")
+            .arg(jar)
+            .args(&named)
+            .output()
         else {
             return out;
         };
@@ -7026,7 +7670,10 @@ mod signatures {
         let (mut class, mut member) = (String::new(), String::new());
         for line in text.lines() {
             let trimmed = line.trim();
-            if let Some(at) = trimmed.find(" class ").or_else(|| trimmed.find(" interface ")) {
+            if let Some(at) = trimmed
+                .find(" class ")
+                .or_else(|| trimmed.find(" interface "))
+            {
                 let rest = &trimmed[at..];
                 if let Some(name) = rest.split_whitespace().nth(1) {
                     class = name.split('<').next().unwrap_or(name).replace('.', "/");
@@ -7042,7 +7689,10 @@ mod signatures {
                 // here, which is why the name is taken from the *descriptor*
                 // pairing rather than parsed into a signature.
                 let head = &trimmed[..open];
-                member = head.rsplit_once(' ').map_or(head, |(_, last)| last).to_owned();
+                member = head
+                    .rsplit_once(' ')
+                    .map_or(head, |(_, last)| last)
+                    .to_owned();
             }
         }
         out
@@ -7050,9 +7700,10 @@ mod signatures {
 
     #[test]
     fn every_call_this_backend_emits_exists_in_the_jar() {
-        let (Some(javap), jar) =
-            (tool("javap"), repository().join("runtime/jvm/nts-runtime.jar"))
-        else {
+        let (Some(javap), jar) = (
+            tool("javap"),
+            repository().join("runtime/jvm/nts-runtime.jar"),
+        ) else {
             return;
         };
         if !jar.exists() {
@@ -7068,7 +7719,10 @@ mod signatures {
             .collect();
         let classes: BTreeSet<String> = wanted.iter().map(|(c, _, _)| c.clone()).collect();
         let have = declared(&javap, &jar, &classes);
-        assert!(!have.is_empty(), "javap named no methods -- this run compared nothing");
+        assert!(
+            !have.is_empty(),
+            "javap named no methods -- this run compared nothing"
+        );
 
         let mut missing: Vec<String> = Vec::new();
         for (class, member, descriptor) in &wanted {
@@ -7092,7 +7746,11 @@ mod signatures {
         // second test of a pair written to stop two tables guessing at each
         // other. The rule is `dexes.sh`'s and it is easier to quote than to
         // keep: a floor is a number a run produced.
-        assert!(wanted.len() >= 73, "only {} call(s) were checked", wanted.len());
+        assert!(
+            wanted.len() >= 73,
+            "only {} call(s) were checked",
+            wanted.len()
+        );
     }
 }
 
@@ -7106,9 +7764,11 @@ mod set_length {
     /// someone else's gate step.
     #[test]
     fn the_name_lower_emits_resolves_to_a_void_method() {
-        for (holds, class) in
-            [("D", "nts/rt/NtsArrayD"), ("Z", "nts/rt/NtsArrayZ"), ("L", "nts/rt/NtsArrayL")]
-        {
+        for (holds, class) in [
+            ("D", "nts/rt/NtsArrayD"),
+            ("Z", "nts/rt/NtsArrayZ"),
+            ("L", "nts/rt/NtsArrayL"),
+        ] {
             let (owner, method, descriptor) =
                 super::growable_external("nts_array_set_length", holds)
                     .unwrap_or_else(|| panic!("no entry for a {holds} array"));

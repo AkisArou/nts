@@ -127,7 +127,10 @@ fn falling_off_the_end_settles_the_promise() {
             .values
             .iter()
             .filter_map(|op| match &op.kind {
-                OpKind::Call { callee: Callee::External(name), .. } => Some(name.as_str()),
+                OpKind::Call {
+                    callee: Callee::External(name),
+                    ..
+                } => Some(name.as_str()),
                 _ => None,
             })
             .collect::<Vec<_>>(),
@@ -157,10 +160,11 @@ fn the_receiver_is_in_the_frame() {
         "the three fixed fields come first",
     );
     assert!(
-        frame.fields.iter().skip(3).any(|field| matches!(
-            field.ty,
-            hir::HirType::Managed(ManagedType::Object(_))
-        )),
+        frame
+            .fields
+            .iter()
+            .skip(3)
+            .any(|field| matches!(field.ty, hir::HirType::Managed(ManagedType::Object(_)))),
         "and the receiver is a parameter field among the rest: {names:?}",
     );
 }

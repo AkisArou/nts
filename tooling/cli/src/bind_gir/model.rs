@@ -251,7 +251,10 @@ pub(crate) struct Param {
 pub(crate) enum TypeRef {
     /// `<type name="..." c:type="...">`. `name` is as GIR wrote it, qualified
     /// or not; the mapper qualifies it against the namespace it appears in.
-    Named { name: String, c_type: Option<String> },
+    Named {
+        name: String,
+        c_type: Option<String>,
+    },
     /// `<array>`: C's pointer to elements, described by GIR.
     Array(ArrayRef),
     Varargs,

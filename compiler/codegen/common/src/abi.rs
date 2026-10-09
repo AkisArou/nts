@@ -18,9 +18,18 @@ use nts_diagnostics::Diagnostic;
 pub fn unrepresentable_constants(program: &Program, abi: NativeAbi) -> Vec<Diagnostic> {
     let mut refusals = Vec::new();
     for func in &program.funcs {
-        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|v| func.value(*v)) {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|v| func.value(*v))
+        {
             let crossings: Vec<(ValueId, HirType, HirType)> = match &op.kind {
-                OpKind::Call { callee: Callee::Native(target), args, .. } if target.send.is_none() => args
+                OpKind::Call {
+                    callee: Callee::Native(target),
+                    args,
+                    ..
+                } if target.send.is_none() => args
                     .iter()
                     .enumerate()
                     .filter_map(|(at, arg)| {
@@ -44,8 +53,12 @@ pub fn unrepresentable_constants(program: &Program, abi: NativeAbi) -> Vec<Diagn
                 if representation == slot {
                     continue;
                 }
-                let HirType::Int { bits, signed } = slot else { continue };
-                let Some(constant) = constant(func, value) else { continue };
+                let HirType::Int { bits, signed } = slot else {
+                    continue;
+                };
+                let Some(constant) = constant(func, value) else {
+                    continue;
+                };
                 let (low, high) = if signed {
                     (-(1_i128 << (bits - 1)), (1_i128 << (bits - 1)) - 1)
                 } else {
@@ -89,7 +102,10 @@ fn constant(func: &Func, value: ValueId) -> Option<i128> {
     match &func.value(value).kind {
         OpKind::ConstInt(n) => Some(*n),
         OpKind::Convert(inner) => constant(func, *inner),
-        OpKind::Unary { op: UnOp::Neg, operand } => constant(func, *operand).and_then(i128::checked_neg),
+        OpKind::Unary {
+            op: UnOp::Neg,
+            operand,
+        } => constant(func, *operand).and_then(i128::checked_neg),
         _ => None,
     }
 }
@@ -108,8 +124,19 @@ pub fn unavailable_scalars(program: &Program, abi: NativeAbi) -> Vec<Diagnostic>
     let mut refusals = Vec::new();
     let mut named = std::collections::BTreeSet::new();
     for func in &program.funcs {
-        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|v| func.value(*v)) {
-            let OpKind::Call { callee: Callee::Native(target), .. } = &op.kind else { continue };
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|v| func.value(*v))
+        {
+            let OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
             let mentions = target
                 .parameters
                 .iter()
@@ -137,9 +164,11 @@ fn type_holds_long32(ty: &Type, seen: &mut Vec<String>) -> bool {
         Type::Scalar(scalar) => matches!(scalar, Scalar::Long32 | Scalar::ULong32),
         Type::Pointer(pointee) => pointee_holds_long32(pointee, seen),
         Type::Record(record) => pointee_holds_long32(&Pointee::Record(record.clone()), seen),
-        Type::FnPointer(signature) => {
-            signature.parameters.iter().chain(std::iter::once(&*signature.result)).any(|t| type_holds_long32(t, seen))
-        }
+        Type::FnPointer(signature) => signature
+            .parameters
+            .iter()
+            .chain(std::iter::once(&*signature.result))
+            .any(|t| type_holds_long32(t, seen)),
         _ => false,
     }
 }
@@ -154,15 +183,21 @@ fn pointee_holds_long32(pointee: &Pointee, seen: &mut Vec<String>) -> bool {
                 return false;
             }
             seen.push(record.name.clone());
-            record.fields.iter().any(|field| pointee_holds_long32(&field.ty, seen))
+            record
+                .fields
+                .iter()
+                .any(|field| pointee_holds_long32(&field.ty, seen))
         }
-        Pointee::Pointer(inner) | Pointee::Const(inner) | Pointee::Flexible(inner) | Pointee::Unaligned(inner) => {
-            pointee_holds_long32(inner, seen)
-        }
+        Pointee::Pointer(inner)
+        | Pointee::Const(inner)
+        | Pointee::Flexible(inner)
+        | Pointee::Unaligned(inner) => pointee_holds_long32(inner, seen),
         Pointee::Array { element, .. } => pointee_holds_long32(element, seen),
-        Pointee::FnPointer(signature) => {
-            signature.parameters.iter().chain(std::iter::once(&*signature.result)).any(|t| type_holds_long32(t, seen))
-        }
+        Pointee::FnPointer(signature) => signature
+            .parameters
+            .iter()
+            .chain(std::iter::once(&*signature.result))
+            .any(|t| type_holds_long32(t, seen)),
         Pointee::Opaque(_) | Pointee::Void => false,
     }
 }

@@ -26,7 +26,10 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir:
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = root.join(format!("target/by-value-tests/{}-{name}", std::process::id()));
+    let dir = root.join(format!(
+        "target/by-value-tests/{}-{name}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -37,7 +40,9 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir:
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     Some((dir, hir::prepare(&snapshot).unwrap()))
 }
@@ -98,25 +103,41 @@ fn a_record_crosses_by_value_in_c() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
 
     // The prototype says the record, not a pointer to it.
-    assert!(text.contains("struct rect inset(struct rect, double);"), "no by-value prototype:\n{text}");
+    assert!(
+        text.contains("struct rect inset(struct rect, double);"),
+        "no by-value prototype:\n{text}"
+    );
     assert!(text.contains("double area(struct rect);"), "{text}");
     // An argument is the record its storage holds; a result is assigned
     // through the storage the lowering made for it.
-    let assigned = text.lines().find(|line| line.contains("= inset(")).unwrap_or_default();
+    let assigned = text
+        .lines()
+        .find(|line| line.contains("= inset("))
+        .unwrap_or_default();
     assert!(
         assigned.trim_start().starts_with('*') && assigned.contains("inset(*v"),
         "the record result is not assigned through its storage, or the argument is not dereferenced:\n{text}"
     );
     // A send returning a record picks its entry point by size, so x86_64 can
     // use `objc_msgSend_stret` and arm64, which has none, never names it.
-    assert!(text.contains("NTS_OBJC_SEND_FOR(sizeof(struct CGRect))"), "no entry point chosen by size:\n{text}");
-    assert!(text.contains("#if defined(__x86_64__)\nextern void objc_msgSend_stret(void);"), "{text}");
+    assert!(
+        text.contains("NTS_OBJC_SEND_FOR(sizeof(struct CGRect))"),
+        "no entry point chosen by size:\n{text}"
+    );
+    assert!(
+        text.contains("#if defined(__x86_64__)\nextern void objc_msgSend_stret(void);"),
+        "{text}"
+    );
 
     // And it is C.
     for file in emitted.support_files() {
@@ -131,7 +152,11 @@ fn a_record_crosses_by_value_in_c() {
         eprintln!("skipped the compile: no clang");
         return;
     };
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
 }
 
 /// Where no send returns a record, nothing about `objc_msgSend_stret` is
@@ -148,10 +173,17 @@ export function run(): bigint {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     let text = emitted.writer.text();
-    assert!(!text.contains("stret") && !text.contains("NTS_OBJC_SEND_FOR"), "{text}");
+    assert!(
+        !text.contains("stret") && !text.contains("NTS_OBJC_SEND_FOR"),
+        "{text}"
+    );
     // Its sends are the plain cast they were.
     assert!(
         text.contains("((unsigned long (*)(const void *, struct objc_selector *))objc_msgSend)("),
@@ -291,7 +323,9 @@ fn normalized(line: &str, sizes: &std::collections::BTreeMap<String, u32>) -> St
             let end = after.find(')').unwrap() + 1;
             let after = &after[end..];
             // ` align N`
-            let after = after.strip_prefix(" align ").map_or(after, |a| a.trim_start_matches(char::is_numeric));
+            let after = after
+                .strip_prefix(" align ")
+                .map_or(after, |a| a.trim_start_matches(char::is_numeric));
             rest = after;
         }
         out.push_str(rest);
@@ -306,10 +340,14 @@ fn normalized(line: &str, sizes: &std::collections::BTreeMap<String, u32>) -> St
     // and compared, because there the alignment is part of the slot.
     let mut text = text;
     while let Some(at) = text.find("ptr align ") {
-        let digits = text[at + "ptr align ".len()..].chars().take_while(char::is_ascii_digit).count();
+        let digits = text[at + "ptr align ".len()..]
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .count();
         text.replace_range(at + "ptr".len()..at + "ptr align ".len() + digits, "");
     }
-    text.replace("(ptr, i32)", "(i64, i32)").replace("{ ptr, i32 }", "{ i64, i32 }")
+    text.replace("(ptr, i32)", "(i64, i32)")
+        .replace("{ ptr, i32 }", "{ i64, i32 }")
 }
 
 /// The eightbyte rules, checked against clang itself: each declaration this
@@ -317,22 +355,35 @@ fn normalized(line: &str, sizes: &std::collections::BTreeMap<String, u32>) -> St
 /// C prototype, on `x86_64` System V.
 #[test]
 fn the_llvm_declarations_are_clangs() {
-    compare_with_clang(nts_codegen_llvm::Platform::SYSV_X86_64, "x86_64-unknown-linux-gnu", 24);
+    compare_with_clang(
+        nts_codegen_llvm::Platform::SYSV_X86_64,
+        "x86_64-unknown-linux-gnu",
+        24,
+    );
 }
 
 /// The same on Win64, where the rule is the record's size alone. `big` is
 /// three `long`s, which LLP64 makes twelve bytes.
 #[test]
 fn the_llvm_declarations_are_clangs_on_win64() {
-    compare_with_clang(nts_codegen_llvm::Platform::WIN64_X86_64, "x86_64-w64-windows-gnu", 12);
+    compare_with_clang(
+        nts_codegen_llvm::Platform::WIN64_X86_64,
+        "x86_64-w64-windows-gnu",
+        12,
+    );
 }
 
 fn compare_with_clang(platform: nts_codegen_llvm::Platform, triple: &str, big: u32) {
-    let Some((dir, prepared)) = prepare(&format!("shapes-{triple}"), SHAPES_TS, SHAPES_PROGRAM) else {
+    let Some((dir, prepared)) = prepare(&format!("shapes-{triple}"), SHAPES_TS, SHAPES_PROGRAM)
+    else {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let llvm = nts_codegen_llvm::emit(&prepared.program, platform);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 
@@ -342,17 +393,40 @@ fn compare_with_clang(platform: nts_codegen_llvm::Platform, triple: &str, big: u
          (void *)sse_out, (void *)int_out }};\n"
     )).unwrap();
     let Ok(clang) = Command::new("clang")
-        .args([&format!("--target={triple}"), "-S", "-emit-llvm", "-O0", "-o", "-"])
+        .args([
+            &format!("--target={triple}"),
+            "-S",
+            "-emit-llvm",
+            "-O0",
+            "-o",
+            "-",
+        ])
         .arg(dir.join("shapes.c"))
         .output()
     else {
         eprintln!("skipped: no clang");
         return;
     };
-    assert!(clang.status.success(), "{}", String::from_utf8_lossy(&clang.stderr));
+    assert!(
+        clang.status.success(),
+        "{}",
+        String::from_utf8_lossy(&clang.stderr)
+    );
     let sizes: std::collections::BTreeMap<String, u32> = [
-        ("pd", 16), ("pf", 8), ("tf", 12), ("fd", 16), ("ci", 16), ("dc", 16), ("cc", 2), ("iii", 12), ("ic", 8),
-        ("pi", 16), ("big", big), ("c1", 1), ("f1", 4), ("d1", 8),
+        ("pd", 16),
+        ("pf", 8),
+        ("tf", 12),
+        ("fd", 16),
+        ("ci", 16),
+        ("dc", 16),
+        ("cc", 2),
+        ("iii", 12),
+        ("ic", 8),
+        ("pi", 16),
+        ("big", big),
+        ("c1", 1),
+        ("f1", 4),
+        ("d1", 8),
     ]
     .into_iter()
     .map(|(name, size)| (name.to_owned(), size))
@@ -361,7 +435,12 @@ fn compare_with_clang(platform: nts_codegen_llvm::Platform, triple: &str, big: u
         .lines()
         .filter(|line| line.starts_with("declare "))
         .map(|line| {
-            let name = line.split('@').nth(1).and_then(|rest| rest.split('(').next()).unwrap_or_default().to_owned();
+            let name = line
+                .split('@')
+                .nth(1)
+                .and_then(|rest| rest.split('(').next())
+                .unwrap_or_default()
+                .to_owned();
             (name, normalized(line, &sizes))
         })
         .collect();
@@ -371,7 +450,10 @@ fn compare_with_clang(platform: nts_codegen_llvm::Platform, triple: &str, big: u
             .text
             .lines()
             .find(|line| line.starts_with("declare ") && line.contains(&format!("@{function}(")))
-            .map_or_else(|| panic!("no declaration of {function}:\n{}", llvm.text), |line| normalized(line, &sizes));
+            .map_or_else(
+                || panic!("no declaration of {function}:\n{}", llvm.text),
+                |line| normalized(line, &sizes),
+            );
         assert_eq!(&ours, expected, "{function}");
     }
 }
@@ -386,25 +468,44 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let windows_arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::Win64, arch: nts_codegen_llvm::Arch::Aarch64 };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let windows_arm64 = nts_codegen_llvm::Platform {
+        abi: nts_core::hir::native::NativeAbi::Win64,
+        arch: nts_codegen_llvm::Arch::Aarch64,
+    };
     let llvm = nts_codegen_llvm::emit(&prepared.program, windows_arm64);
     assert!(
-        llvm.diagnostics.iter().any(|d| d.message.contains("crossing a call on arm64 Windows")),
+        llvm.diagnostics
+            .iter()
+            .any(|d| d.message.contains("crossing a call on arm64 Windows")),
         "{:?}",
         llvm.diagnostics
     );
     // Apple's and Linux's arm64 place the same rectangle: four doubles, in
     // `d0`-`d3` both ways, and a send that returns one needs no `_stret`.
-    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let arm64 = nts_codegen_llvm::Platform {
+        abi: nts_core::hir::native::NativeAbi::SysV,
+        arch: nts_codegen_llvm::Arch::Aarch64,
+    };
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(
-        llvm.text.contains("declare { double, double, double, double } @inset([4 x double], double)"),
+        llvm.text
+            .contains("declare { double, double, double, double } @inset([4 x double], double)"),
         "{}",
         llvm.text
     );
-    assert!(!llvm.text.contains("call void (ptr, ptr, ptr) @objc_msgSend_stret"), "{}", llvm.text);
+    assert!(
+        !llvm
+            .text
+            .contains("call void (ptr, ptr, ptr) @objc_msgSend_stret"),
+        "{}",
+        llvm.text
+    );
 
     let binding = r#"declare module "c:u" {
   import type { ByValue, Union, c_double, c_int } from "c:types";
@@ -413,17 +514,29 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
 }
 "#;
     let source = "import { take, type Either } from \"c:u\";\nimport { local } from \"c:memory\";\nexport function run(): void {\n  take(local<Either>());\n}\n";
-    let Some((_, prepared)) = prepare("llvm-union", binding, source) else { return };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    let Some((_, prepared)) = prepare("llvm-union", binding, source) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
     assert!(
-        llvm.diagnostics.iter().any(|d| d.message.contains("cannot classify (a union")),
+        llvm.diagnostics
+            .iter()
+            .any(|d| d.message.contains("cannot classify (a union")),
         "{:?}",
         llvm.diagnostics
     );
     let win64 = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(win64.diagnostics.is_empty(), "{:?}", win64.diagnostics);
-    assert!(win64.text.contains("declare void @take(i64)"), "an 8-byte union is not one integer:\n{}", win64.text);
+    assert!(
+        win64.text.contains("declare void @take(i64)"),
+        "an 8-byte union is not one integer:\n{}",
+        win64.text
+    );
 }
 
 /// AAPCS64's shapes, one per rule in `aggregate`'s module doc, and results of
@@ -508,8 +621,15 @@ fn the_llvm_declarations_are_clangs_on_arm64() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let arm64 = nts_codegen_llvm::Platform {
+        abi: nts_core::hir::native::NativeAbi::SysV,
+        arch: nts_codegen_llvm::Arch::Aarch64,
+    };
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("shapes.c"), format!(
@@ -517,14 +637,25 @@ fn the_llvm_declarations_are_clangs_on_arm64() {
          (void *)f_pi, (void *)make_c3, (void *)make_tf, (void *)make_big, (void *)spill }};\n"
     )).unwrap();
     let Ok(clang) = Command::new("clang")
-        .args(["--target=arm64-apple-macos13", "-S", "-emit-llvm", "-O0", "-o", "-"])
+        .args([
+            "--target=arm64-apple-macos13",
+            "-S",
+            "-emit-llvm",
+            "-O0",
+            "-o",
+            "-",
+        ])
         .arg(dir.join("shapes.c"))
         .output()
     else {
         eprintln!("skipped: no clang");
         return;
     };
-    assert!(clang.status.success(), "{}", String::from_utf8_lossy(&clang.stderr));
+    assert!(
+        clang.status.success(),
+        "{}",
+        String::from_utf8_lossy(&clang.stderr)
+    );
     let spelled = [
         ("pd", "{ double, double }"),
         ("d1", "{ double }"),
@@ -543,7 +674,16 @@ fn the_llvm_declarations_are_clangs_on_arm64() {
     let theirs: std::collections::BTreeMap<String, String> = String::from_utf8_lossy(&clang.stdout)
         .lines()
         .filter(|line| line.starts_with("declare "))
-        .map(|line| (line.split('@').nth(1).and_then(|rest| rest.split('(').next()).unwrap_or_default().to_owned(), spell(line)))
+        .map(|line| {
+            (
+                line.split('@')
+                    .nth(1)
+                    .and_then(|rest| rest.split('(').next())
+                    .unwrap_or_default()
+                    .to_owned(),
+                spell(line),
+            )
+        })
         .collect();
     assert_eq!(theirs.len(), 11, "clang declared {theirs:?}");
     for (function, expected) in &theirs {
@@ -551,7 +691,10 @@ fn the_llvm_declarations_are_clangs_on_arm64() {
             .text
             .lines()
             .find(|line| line.starts_with("declare ") && line.contains(&format!("@{function}(")))
-            .map_or_else(|| panic!("no declaration of {function}:\n{}", llvm.text), spell);
+            .map_or_else(
+                || panic!("no declaration of {function}:\n{}", llvm.text),
+                spell,
+            );
         assert_eq!(&ours, expected, "{function}");
     }
 }
@@ -589,10 +732,21 @@ declare module "objc:Foundation" {
         eprintln!("skipped: no tsgo");
         return;
     };
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let arm64 = nts_codegen_llvm::Platform {
+        abi: nts_core::hir::native::NativeAbi::SysV,
+        arch: nts_codegen_llvm::Arch::Aarch64,
+    };
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
-    assert!(llvm.diagnostics.is_empty(), "a scalar call or send was refused on arm64: {:?}", llvm.diagnostics);
+    assert!(
+        llvm.diagnostics.is_empty(),
+        "a scalar call or send was refused on arm64: {:?}",
+        llvm.diagnostics
+    );
     assert!(llvm.text.contains("@scaled("), "{}", llvm.text);
     assert!(llvm.text.contains("objc_msgSend"), "{}", llvm.text);
 }
@@ -618,14 +772,28 @@ fn byval_is_a_pointer_to_a_copy_on_win64() {
         return;
     };
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let asm = String::from_utf8_lossy(&out.stdout);
-    let body: Vec<&str> = asm.lines().skip_while(|line| !line.starts_with("f:")).take_while(|line| !line.contains("retq")).collect();
+    let body: Vec<&str> = asm
+        .lines()
+        .skip_while(|line| !line.starts_with("f:"))
+        .take_while(|line| !line.contains("retq"))
+        .collect();
     let body = body.join("\n");
     // The copy: the record read through the incoming pointer (`%rcx`) into the
     // caller's frame, then that frame address passed in `%rcx`.
-    assert!(body.contains("(%rcx)"), "the record is not copied from the incoming pointer:\n{body}");
-    assert!(body.contains("leaq") && body.contains("(%rsp), %rcx"), "no address of a copy in %rcx:\n{body}");
+    assert!(
+        body.contains("(%rcx)"),
+        "the record is not copied from the incoming pointer:\n{body}"
+    );
+    assert!(
+        body.contains("leaq") && body.contains("(%rsp), %rcx"),
+        "no address of a copy in %rcx:\n{body}"
+    );
     assert!(body.contains("callq\ttake"), "{body}");
 }
 
@@ -650,15 +818,29 @@ fn a_local_stored_in_a_global_is_refused() {
         return;
     };
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("native local address escapes")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("native local address escapes")),
         "a local's address stored into a global is not refused: {:?}",
         prepared.diagnostics
     );
     // The control: memory that outlives the frame is a pointer a global may
     // hold, so the refusal above is the escape rule's and not the global's.
-    let heap = source.replace("import { local } from \"c:memory\";", "import { malloc } from \"c:stdlib\";").replace("local<Pair>()", "malloc<Pair>(16)");
-    let Some((_, prepared)) = prepare("held-heap", binding, &heap) else { return };
-    assert!(prepared.diagnostics.is_empty(), "a heap pointer is refused as a global: {:?}", prepared.diagnostics);
+    let heap = source
+        .replace(
+            "import { local } from \"c:memory\";",
+            "import { malloc } from \"c:stdlib\";",
+        )
+        .replace("local<Pair>()", "malloc<Pair>(16)");
+    let Some((_, prepared)) = prepare("held-heap", binding, &heap) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "a heap pointer is refused as a global: {:?}",
+        prepared.diagnostics
+    );
 }
 
 /// Each record that cannot cross by value is refused where the binding is
@@ -739,7 +921,10 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
             return;
         };
         assert!(
-            prepared.diagnostics.iter().any(|d| d.message.contains(expected)),
+            prepared
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(expected)),
             "{name}: no refusal saying `{expected}`: {:?}",
             prepared.diagnostics
         );

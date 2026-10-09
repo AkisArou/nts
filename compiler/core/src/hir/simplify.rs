@@ -112,8 +112,16 @@ fn exact_through(from: &HirType, detour: &HirType) -> bool {
 /// Whether every value of `from` is a value of `to`, so the direct conversion
 /// is the same operation the detour performed.
 fn fits(from: &HirType, to: &HirType) -> bool {
-    let (HirType::Int { bits: narrow, signed: from_signed }, HirType::Int { bits: wide, signed: to_signed }) =
-        (from, to)
+    let (
+        HirType::Int {
+            bits: narrow,
+            signed: from_signed,
+        },
+        HirType::Int {
+            bits: wide,
+            signed: to_signed,
+        },
+    ) = (from, to)
     else {
         return false;
     };
@@ -248,7 +256,10 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             *first = of(*first);
             *second = of(*second);
         }
-        OpKind::Await { promise, rejects_to } => {
+        OpKind::Await {
+            promise,
+            rejects_to,
+        } => {
             *promise = of(*promise);
             substitute_rejection(rejects_to.as_mut(), of);
         }
@@ -265,7 +276,11 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
         | OpKind::ObjectNew { .. }
-        | OpKind::GlobalGet(_) | OpKind::NativeLocal { .. } | OpKind::NativeSizeOf(_) | OpKind::ObjcClass { .. } | OpKind::ObjcSelector { .. }
+        | OpKind::GlobalGet(_)
+        | OpKind::NativeLocal { .. }
+        | OpKind::NativeSizeOf(_)
+        | OpKind::ObjcClass { .. }
+        | OpKind::ObjcSelector { .. }
         | OpKind::DelegateInvoke { .. } => {}
         OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => *value = of(*value),
         OpKind::StringUnitAt { string, index, .. } => {
@@ -300,8 +315,14 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         OpKind::NativeFieldAddress { pointer, .. }
         | OpKind::NativeBitLoad { pointer, .. }
         | OpKind::NativeFree { pointer } => *pointer = of(*pointer),
-        OpKind::NativeIndexAddress { pointer: array, index }
-        | OpKind::NativeLoad { pointer: array, index }
+        OpKind::NativeIndexAddress {
+            pointer: array,
+            index,
+        }
+        | OpKind::NativeLoad {
+            pointer: array,
+            index,
+        }
         | OpKind::ArrayGet { array, index, .. } => {
             *array = of(*array);
             *index = of(*index);
@@ -310,7 +331,11 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             *pointer = of(*pointer);
             *value = of(*value);
         }
-        OpKind::NativeStore { pointer: array, index, value }
+        OpKind::NativeStore {
+            pointer: array,
+            index,
+            value,
+        }
         | OpKind::ArraySet {
             array,
             index,
@@ -532,7 +557,7 @@ const fn leaves_fields_alone(kind: &OpKind) -> bool {
             | OpKind::ConstFloat(_)
             | OpKind::ConstBool(_)
             | OpKind::ConstString(_)
-        | OpKind::ConstTemplate { .. }
+            | OpKind::ConstTemplate { .. }
             | OpKind::ConstNull
             | OpKind::ConstUndefined
             | OpKind::Binary { .. }

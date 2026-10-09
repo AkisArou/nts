@@ -79,11 +79,15 @@ pub fn erased_handle_tag(pointee: &super::native::Pointee) -> Option<u32> {
 pub const HANDLE_BLOCK: u32 = 8;
 pub const HANDLE_BLOCK_SIZE: u32 = 8;
 const _: () = assert!(
-    HANDLE_BLOCK == NULL + 1 && HANDLE_GOBJECT == HANDLE_BLOCK && HANDLE_HOST < HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
+    HANDLE_BLOCK == NULL + 1
+        && HANDLE_GOBJECT == HANDLE_BLOCK
+        && HANDLE_HOST < HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
     "the handle block follows NULL, and every handle tag is inside it"
 );
-const _: () = assert!(BIGINT >= HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
-    "an erased BigInt must not overlap the native handle tag band");
+const _: () = assert!(
+    BIGINT >= HANDLE_BLOCK + HANDLE_BLOCK_SIZE,
+    "an erased BigInt must not overlap the native handle tag band"
+);
 
 /// The tags `typeof` spells `"object"`: [`OBJECT`], [`NULL`] and the handle
 /// block, `first <= tag < end`. A closed band rather than `tag >= OBJECT`,
@@ -222,7 +226,10 @@ pub(super) fn of_registered(
 ) -> u32 {
     match ty {
         super::HirType::Managed(ManagedType::Object(ty))
-            if super::is_closure_type(*ty) || faces.contains_key(ty) => FUNCTION,
+            if super::is_closure_type(*ty) || faces.contains_key(ty) =>
+        {
+            FUNCTION
+        }
         _ => of_representation(ty),
     }
 }
@@ -406,14 +413,25 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
 /// The two halves are joined as integers because HIR has no boolean `and`;
 /// both are single compares on a `u32` every backend already emits, and clang
 /// folds the pair back into one unsigned range check.
-fn fold_range(func: &mut super::Func, index: usize, tag: super::ValueId, first: u32, end: u32, negate: bool) {
+fn fold_range(
+    func: &mut super::Func,
+    index: usize,
+    tag: super::ValueId,
+    first: u32,
+    end: u32,
+    negate: bool,
+) {
     use super::{BinOp, HirType, OpKind, ValueId};
     let origin = func.values[index].origin.clone();
     let tag_type = func.values[tag.0 as usize].ty.clone();
     let mut made = Vec::with_capacity(7);
     let mut push = |kind, ty| {
         let id = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
-        func.values.push(super::Op { kind, ty, origin: origin.clone() });
+        func.values.push(super::Op {
+            kind,
+            ty,
+            origin: origin.clone(),
+        });
         made.push(id);
         id
     };
@@ -424,12 +442,36 @@ fn fold_range(func: &mut super::Func, index: usize, tag: super::ValueId, first: 
     } else {
         (BinOp::Ge, BinOp::Lt, BinOp::BitAnd)
     };
-    let lower = push(OpKind::Binary { op: above, lhs: tag, rhs: low }, HirType::Bool);
-    let upper = push(OpKind::Binary { op: below, lhs: tag, rhs: high }, HirType::Bool);
-    let integer = HirType::Int { bits: 32, signed: true };
+    let lower = push(
+        OpKind::Binary {
+            op: above,
+            lhs: tag,
+            rhs: low,
+        },
+        HirType::Bool,
+    );
+    let upper = push(
+        OpKind::Binary {
+            op: below,
+            lhs: tag,
+            rhs: high,
+        },
+        HirType::Bool,
+    );
+    let integer = HirType::Int {
+        bits: 32,
+        signed: true,
+    };
     let lower = push(OpKind::Convert(lower), integer.clone());
     let upper = push(OpKind::Convert(upper), integer.clone());
-    let joined = push(OpKind::Binary { op: join, lhs: lower, rhs: upper }, integer);
+    let joined = push(
+        OpKind::Binary {
+            op: join,
+            lhs: lower,
+            rhs: upper,
+        },
+        integer,
+    );
     // Every new value is defined after the existing ones, so each has to be
     // *placed* before the comparison it now feeds, in the block holding it.
     for block in &mut func.blocks {
@@ -474,8 +516,14 @@ mod representation {
         // class used as a value, both in the provided classes' bands above
         // `SYNTHETIC_CLOSURES`, and only the class is a function.
         use crate::hir::{ManagedType, constructor_token, provided_error_type};
-        assert_eq!(of_reference(&ManagedType::Object(provided_error_type(0))), OBJECT);
-        assert_eq!(of_reference(&ManagedType::Object(constructor_token(0))), FUNCTION);
+        assert_eq!(
+            of_reference(&ManagedType::Object(provided_error_type(0))),
+            OBJECT
+        );
+        assert_eq!(
+            of_reference(&ManagedType::Object(constructor_token(0))),
+            FUNCTION
+        );
     }
 
     #[test]
@@ -484,10 +532,25 @@ mod representation {
         let mut program = Program::default();
         let callable = TypeId(41);
         let plain = TypeId(42);
-        program.signature_faces.insert(callable, SignatureFace { params: Vec::new(), returns: Some(HirType::Bool) });
-        assert_eq!(super::of_prepared(&program, &HirType::Managed(ManagedType::Object(callable))), FUNCTION);
-        assert_eq!(super::of_prepared(&program, &HirType::Managed(ManagedType::Object(plain))), OBJECT);
-        assert_eq!(of_representation(&HirType::Managed(ManagedType::Object(callable))), OBJECT);
+        program.signature_faces.insert(
+            callable,
+            SignatureFace {
+                params: Vec::new(),
+                returns: Some(HirType::Bool),
+            },
+        );
+        assert_eq!(
+            super::of_prepared(&program, &HirType::Managed(ManagedType::Object(callable))),
+            FUNCTION
+        );
+        assert_eq!(
+            super::of_prepared(&program, &HirType::Managed(ManagedType::Object(plain))),
+            OBJECT
+        );
+        assert_eq!(
+            of_representation(&HirType::Managed(ManagedType::Object(callable))),
+            OBJECT
+        );
     }
 
     #[test]
@@ -514,7 +577,10 @@ mod representation {
     /// register, and lowering keeps a program to one (`check_host_pairs`).
     #[test]
     fn a_host_handle_has_the_host_tag() {
-        let host = Family::Host(crate::hir::native::HostFamily::of("host_retain", "host_release"));
+        let host = Family::Host(crate::hir::native::HostFamily::of(
+            "host_retain",
+            "host_release",
+        ));
         assert_eq!(handle_tag(host), Some(super::HANDLE_HOST));
         assert_eq!(of_representation(&handle(host)), super::HANDLE_HOST);
     }

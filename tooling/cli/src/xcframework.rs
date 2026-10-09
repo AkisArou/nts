@@ -44,7 +44,11 @@ pub(crate) fn framework_for(framework: &Utf8Path, slice: Slice<'_>) -> Result<Ut
             slice.platform,
             if slice.simulator { " simulator" } else { "" },
             slice.arch,
-            libraries.iter().map(|library| library.identifier.as_str()).collect::<Vec<_>>().join(", ")
+            libraries
+                .iter()
+                .map(|library| library.identifier.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     };
     Ok(framework.join(&library.identifier).join(&library.path))
@@ -64,20 +68,44 @@ struct Library {
 /// value pairs, whose value here is a `string` or an `array` of them.
 fn available_libraries(text: &str) -> Result<Vec<Library>> {
     // Every Apple plist names its DTD, which roxmltree refuses unless asked.
-    let options = roxmltree::ParsingOptions { allow_dtd: true, ..roxmltree::ParsingOptions::default() };
-    let document = roxmltree::Document::parse_with_options(text, options).context("an Info.plist that is not XML (a binary plist is not read)")?;
-    let root = document.root_element().children().find(roxmltree::Node::is_element).context("an empty plist")?;
+    let options = roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..roxmltree::ParsingOptions::default()
+    };
+    let document = roxmltree::Document::parse_with_options(text, options)
+        .context("an Info.plist that is not XML (a binary plist is not read)")?;
+    let root = document
+        .root_element()
+        .children()
+        .find(roxmltree::Node::is_element)
+        .context("an empty plist")?;
     let libraries = value_of(root, "AvailableLibraries").context("no AvailableLibraries")?;
     let mut found = Vec::new();
-    for entry in libraries.children().filter(|node| node.has_tag_name("dict")) {
-        let string = |key: &str| value_of(entry, key).and_then(|node| node.text()).map(str::to_owned);
+    for entry in libraries
+        .children()
+        .filter(|node| node.has_tag_name("dict"))
+    {
+        let string = |key: &str| {
+            value_of(entry, key)
+                .and_then(|node| node.text())
+                .map(str::to_owned)
+        };
         found.push(Library {
-            identifier: string("LibraryIdentifier").context("a library with no LibraryIdentifier")?,
+            identifier: string("LibraryIdentifier")
+                .context("a library with no LibraryIdentifier")?,
             path: string("LibraryPath").context("a library with no LibraryPath")?,
             platform: string("SupportedPlatform").context("a library with no SupportedPlatform")?,
             variant: string("SupportedPlatformVariant"),
             architectures: value_of(entry, "SupportedArchitectures")
-                .map(|array| array.children().filter_map(|node| node.text()).map(str::trim).filter(|arch| !arch.is_empty()).map(str::to_owned).collect())
+                .map(|array| {
+                    array
+                        .children()
+                        .filter_map(|node| node.text())
+                        .map(str::trim)
+                        .filter(|arch| !arch.is_empty())
+                        .map(str::to_owned)
+                        .collect()
+                })
                 .unwrap_or_default(),
         });
     }
@@ -147,14 +175,45 @@ mod tests {
     /// the simulator's is not the device's, and macOS's is neither.
     #[test]
     fn the_slice_is_the_platform_variant_and_architecture() {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-xcframework-{}", std::process::id())).join("Beep.xcframework");
+        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-xcframework-{}", std::process::id()))
+            .join("Beep.xcframework");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("Info.plist"), PLIST).unwrap();
-        let mac = framework_for(&dir, Slice { platform: "macos", simulator: false, arch: "x86_64" }).unwrap();
+        let mac = framework_for(
+            &dir,
+            Slice {
+                platform: "macos",
+                simulator: false,
+                arch: "x86_64",
+            },
+        )
+        .unwrap();
         assert_eq!(mac, dir.join("macos-arm64_x86_64/Beep.framework"));
-        let simulator = framework_for(&dir, Slice { platform: "ios", simulator: true, arch: "x86_64" }).unwrap();
-        assert_eq!(simulator, dir.join("ios-arm64_x86_64-simulator/Beep.framework"));
-        let device = framework_for(&dir, Slice { platform: "ios", simulator: false, arch: "arm64" }).unwrap_err().to_string();
+        let simulator = framework_for(
+            &dir,
+            Slice {
+                platform: "ios",
+                simulator: true,
+                arch: "x86_64",
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            simulator,
+            dir.join("ios-arm64_x86_64-simulator/Beep.framework")
+        );
+        let device = framework_for(
+            &dir,
+            Slice {
+                platform: "ios",
+                simulator: false,
+                arch: "arm64",
+            },
+        )
+        .unwrap_err()
+        .to_string();
         assert!(device.contains("no slice for ios arm64"), "{device}");
         std::fs::remove_dir_all(dir.parent().unwrap()).unwrap();
     }

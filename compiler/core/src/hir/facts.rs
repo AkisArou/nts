@@ -118,7 +118,13 @@ pub fn from_jvm_descriptor(descriptor: &str) -> Option<Facts> {
         // A `float` is finite-ranged but not integral, and it CAN be NaN -- so
         // the only thing gained over TOP is the bound, and `maybe_nan` stays
         // true. Saying so is the difference between a fact and a wish.
-        "F" => Some(Facts::new(f64::from(f32::MIN), f64::from(f32::MAX), false, true, true)),
+        "F" => Some(Facts::new(
+            f64::from(f32::MIN),
+            f64::from(f32::MAX),
+            false,
+            true,
+            true,
+        )),
         _ => None,
     }
 }
@@ -842,8 +848,22 @@ pub fn sign(a: Facts) -> Facts {
     }
     // Monotone, so the bounds' signs bound it. Not Rust's `signum`, which
     // answers 1 for 0.
-    let sign = |x: f64| if x > 0.0 { 1.0 } else if x < 0.0 { -1.0 } else { 0.0 };
-    Facts::new(sign(a.lo), sign(a.hi), true, a.maybe_nan, a.maybe_negative_zero)
+    let sign = |x: f64| {
+        if x > 0.0 {
+            1.0
+        } else if x < 0.0 {
+            -1.0
+        } else {
+            0.0
+        }
+    };
+    Facts::new(
+        sign(a.lo),
+        sign(a.hi),
+        true,
+        a.maybe_nan,
+        a.maybe_negative_zero,
+    )
 }
 
 /// `Math.abs`.
@@ -1166,7 +1186,10 @@ mod tests {
     fn sign_is_minus_one_zero_or_one() {
         let difference = Facts::new(-5.0, 7.0, true, false, false);
         assert_eq!(sign(difference), Facts::new(-1.0, 1.0, true, false, false));
-        assert_eq!(sign(Facts::new(0.0, 0.0, true, false, false)), Facts::constant(0.0));
+        assert_eq!(
+            sign(Facts::new(0.0, 0.0, true, false, false)),
+            Facts::constant(0.0)
+        );
         assert!(sign(Facts::TOP).maybe_nan && sign(Facts::TOP).maybe_negative_zero);
     }
 
@@ -1178,7 +1201,11 @@ mod tests {
         let claimed = Facts::new(0.0, f64::INFINITY, true, false, false);
         assert!(claimed.whole && !claimed.integral());
         assert!(claimed.contains(f64::INFINITY) && !claimed.contains(0.5));
-        assert!(claimed.narrow(Facts::new(0.0, 100.0, false, false, false)).integral());
+        assert!(
+            claimed
+                .narrow(Facts::new(0.0, 100.0, false, false, false))
+                .integral()
+        );
     }
 
     #[test]
@@ -1207,12 +1234,15 @@ mod tests {
 
 #[cfg(test)]
 mod jvm_descriptor_tests {
-    use super::{from_jvm_descriptor, Facts};
+    use super::{Facts, from_jvm_descriptor};
 
     #[test]
     fn an_integer_descriptor_is_strictly_tighter_than_top() {
         let int = from_jvm_descriptor("I").expect("`I` is a number");
-        assert!(int.whole, "a Java `int` is integral by the JVM's own guarantee");
+        assert!(
+            int.whole,
+            "a Java `int` is integral by the JVM's own guarantee"
+        );
         assert!(!int.maybe_nan, "an `int` cannot be NaN");
         assert!(!int.maybe_negative_zero, "an `int` has no -0");
         assert_eq!(int.lo, -2_147_483_648.0);
@@ -1241,7 +1271,10 @@ mod jvm_descriptor_tests {
     #[test]
     fn char_is_unsigned_and_boolean_is_two_valued() {
         let ch = from_jvm_descriptor("C").expect("`C` is a number");
-        assert_eq!(ch.lo, 0.0, "a `char` is a UTF-16 code unit and is never negative");
+        assert_eq!(
+            ch.lo, 0.0,
+            "a `char` is a UTF-16 code unit and is never negative"
+        );
         assert_eq!(ch.hi, 65_535.0);
 
         let yes = from_jvm_descriptor("Z").expect("`Z` is a number");
@@ -1256,7 +1289,10 @@ mod jvm_descriptor_tests {
         // exactly the inputs that matter.
         assert!(!float.whole);
         assert!(float.maybe_nan);
-        assert!(float.hi < f64::INFINITY, "but it is bounded, which TOP is not");
+        assert!(
+            float.hi < f64::INFINITY,
+            "but it is bounded, which TOP is not"
+        );
     }
 
     #[test]

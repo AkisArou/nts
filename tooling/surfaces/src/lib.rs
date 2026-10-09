@@ -40,7 +40,14 @@ pub enum Surface {
 }
 
 impl Surface {
-    pub const ALL: [Self; 6] = [Self::Objc, Self::Gobject, Self::Winrt, Self::Win32, Self::Java, Self::C];
+    pub const ALL: [Self; 6] = [
+        Self::Objc,
+        Self::Gobject,
+        Self::Winrt,
+        Self::Win32,
+        Self::Java,
+        Self::C,
+    ];
 
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -107,7 +114,11 @@ impl Installed {
     /// declarations, then the values files.
     #[must_use]
     pub fn files(&self) -> Vec<Utf8PathBuf> {
-        self.packages.iter().map(|(_, dir)| dir.join("index.d.ts")).chain(self.values.iter().cloned()).collect()
+        self.packages
+            .iter()
+            .map(|(_, dir)| dir.join("index.d.ts"))
+            .chain(self.values.iter().cloned())
+            .collect()
     }
 }
 
@@ -163,7 +174,8 @@ impl Store {
             let _ = std::fs::remove_dir_all(&partial);
             write_packages(&partial, &packages)?;
             let _ = std::fs::remove_dir_all(&directory);
-            std::fs::rename(&partial, &directory).with_context(|| format!("moving {partial} to {directory}"))?;
+            std::fs::rename(&partial, &directory)
+                .with_context(|| format!("moving {partial} to {directory}"))?;
             // This version's entry for inputs that have since changed: nothing
             // of this version asks for it again, and a project still linked
             // to it relinks on its next build.
@@ -225,7 +237,9 @@ pub fn link(installed: &Installed, project: &Utf8Path) -> Result<Vec<String>> {
             std::fs::create_dir_all(parent)?;
         }
         if at.symlink_metadata().is_ok() {
-            std::fs::remove_file(&at).or_else(|_| std::fs::remove_dir_all(&at)).with_context(|| format!("replacing {at}"))?;
+            std::fs::remove_file(&at)
+                .or_else(|_| std::fs::remove_dir_all(&at))
+                .with_context(|| format!("replacing {at}"))?;
         } else {
             new.push(name.clone());
         }
@@ -242,7 +256,10 @@ fn write_packages(directory: &Utf8Path, packages: &[Package]) -> Result<()> {
     let mut values = Vec::new();
     for package in packages {
         let Some(short) = package.name.strip_prefix("@nts/") else {
-            bail!("a surface package is named `@nts/...`, and `{}` is not", package.name);
+            bail!(
+                "a surface package is named `@nts/...`, and `{}` is not",
+                package.name
+            );
         };
         let dir = directory.join("node_modules/@nts").join(short);
         std::fs::create_dir_all(&dir)?;
@@ -252,7 +269,10 @@ fn write_packages(directory: &Utf8Path, packages: &[Package]) -> Result<()> {
             package.surface.as_str()
         );
         std::fs::write(dir.join("package.json"), manifest)?;
-        std::fs::write(dir.join("index.d.ts"), format!("{NOCHECK}\n{}", package.declarations))?;
+        std::fs::write(
+            dir.join("index.d.ts"),
+            format!("{NOCHECK}\n{}", package.declarations),
+        )?;
         listed.push(format!("{:?}", package.name));
         if let Some((file, text)) = &package.values {
             std::fs::create_dir_all(directory.join("values"))?;
@@ -260,7 +280,11 @@ fn write_packages(directory: &Utf8Path, packages: &[Package]) -> Result<()> {
             values.push(format!("{file:?}"));
         }
     }
-    let text = format!("{{\n  \"packages\": [{}],\n  \"values\": [{}]\n}}\n", listed.join(", "), values.join(", "));
+    let text = format!(
+        "{{\n  \"packages\": [{}],\n  \"values\": [{}]\n}}\n",
+        listed.join(", "),
+        values.join(", ")
+    );
     std::fs::write(directory.join("manifest.json"), text)?;
     Ok(())
 }
@@ -269,7 +293,16 @@ fn read_manifest(manifest: &Utf8Path, directory: &Utf8Path) -> Result<Installed>
     let text = std::fs::read_to_string(manifest)?;
     let value: serde_json::Value = serde_json::from_str(&text)?;
     let strings = |field: &str| -> Vec<String> {
-        value.get(field).and_then(serde_json::Value::as_array).map(|items| items.iter().filter_map(|item| item.as_str().map(str::to_owned)).collect()).unwrap_or_default()
+        value
+            .get(field)
+            .and_then(serde_json::Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
     };
     let packages = strings("packages")
         .into_iter()
@@ -278,7 +311,10 @@ fn read_manifest(manifest: &Utf8Path, directory: &Utf8Path) -> Result<Installed>
             (name, directory.join("node_modules/@nts").join(short))
         })
         .collect();
-    let values = strings("values").into_iter().map(|file| directory.join("values").join(file)).collect();
+    let values = strings("values")
+        .into_iter()
+        .map(|file| directory.join("values").join(file))
+        .collect();
     Ok(Installed { packages, values })
 }
 
@@ -291,19 +327,35 @@ pub fn fingerprint(files: &[Utf8PathBuf]) -> String {
     let mut text = String::new();
     for file in files {
         let meta = std::fs::metadata(file).ok();
-        let _ = write!(text, "|{file}|{:?}|{:?}", meta.as_ref().map(std::fs::Metadata::len), meta.and_then(|m| m.modified().ok()));
+        let _ = write!(
+            text,
+            "|{file}|{:?}|{:?}",
+            meta.as_ref().map(std::fs::Metadata::len),
+            meta.and_then(|m| m.modified().ok())
+        );
     }
     format!("{:016x}", fnv(text.as_bytes()))
 }
 
 /// FNV-1a.
 fn fnv(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, &byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
 /// An identity as a directory name.
 fn slug(identity: &str) -> String {
-    identity.chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c } else { '_' }).collect()
+    identity
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -315,7 +367,10 @@ mod tests {
     /// package for: two lists of one fact.
     #[test]
     fn the_surfaces_are_the_frontends() {
-        let ours: Vec<&str> = Surface::ALL.iter().map(|surface| surface.as_str()).collect();
+        let ours: Vec<&str> = Surface::ALL
+            .iter()
+            .map(|surface| surface.as_str())
+            .collect();
         assert_eq!(ours, nts_frontend_ts::tsgo::SURFACES);
     }
 
@@ -337,7 +392,10 @@ mod tests {
                 name: "@nts/test-one".to_owned(),
                 surface: Surface::Objc,
                 declarations: "declare module \"objc:One\" {}\n".to_owned(),
-                values: Some(("one.values.ts".to_owned(), "export const one = 1;\n".to_owned())),
+                values: Some((
+                    "one.values.ts".to_owned(),
+                    "export const one = 1;\n".to_owned(),
+                )),
             }])
         }
     }
@@ -346,7 +404,9 @@ mod tests {
     /// written, created or removed: a missing file is not an empty one.
     #[test]
     fn a_fingerprint_follows_its_files() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-fingerprint-{}", std::process::id()));
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-fingerprint-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let files = [root.join("a.gir"), root.join("b.gir")];
@@ -354,10 +414,21 @@ mod tests {
         let missing = fingerprint(&files);
         std::fs::write(&files[1], "").unwrap();
         let empty = fingerprint(&files);
-        assert_ne!(missing, empty, "a missing file and an empty one fingerprint alike");
-        assert_eq!(empty, fingerprint(&files), "an unchanged set fingerprinted differently");
+        assert_ne!(
+            missing, empty,
+            "a missing file and an empty one fingerprint alike"
+        );
+        assert_eq!(
+            empty,
+            fingerprint(&files),
+            "an unchanged set fingerprinted differently"
+        );
         std::fs::write(&files[0], "ab").unwrap();
-        assert_ne!(empty, fingerprint(&files), "a written file did not change the fingerprint");
+        assert_ne!(
+            empty,
+            fingerprint(&files),
+            "a written file did not change the fingerprint"
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -366,25 +437,50 @@ mod tests {
     /// no build has used for [`RETAIN`] is removed by the next.
     #[test]
     fn two_versions_share_a_store_until_one_is_idle() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-versions-{}", std::process::id()));
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-versions-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let input = root.join("input.txt");
         std::fs::write(&input, "a").unwrap();
         let store = Store::new(root.join("store"));
-        let old = Counting(std::cell::Cell::new(0), input.clone(), std::cell::Cell::new(1));
-        let new = Counting(std::cell::Cell::new(0), input.clone(), std::cell::Cell::new(2));
+        let old = Counting(
+            std::cell::Cell::new(0),
+            input.clone(),
+            std::cell::Cell::new(1),
+        );
+        let new = Counting(
+            std::cell::Cell::new(0),
+            input.clone(),
+            std::cell::Cell::new(2),
+        );
         let old_packages = store.ensure(&old).unwrap();
         let new_packages = store.ensure(&new).unwrap();
-        assert!(old_packages.files().iter().all(|file| file.is_file()), "a newer version evicted an older one in use");
+        assert!(
+            old_packages.files().iter().all(|file| file.is_file()),
+            "a newer version evicted an older one in use"
+        );
         store.ensure(&old).unwrap();
         store.ensure(&new).unwrap();
-        assert_eq!((old.0.get(), new.0.get()), (1, 1), "a version regenerated what the other left in place");
+        assert_eq!(
+            (old.0.get(), new.0.get()),
+            (1, 1),
+            "a version regenerated what the other left in place"
+        );
         // The older version, idle past RETAIN, goes at the newer one's next build.
         // `<identity>/<version>/<inputs>/node_modules/@nts/<package>`.
-        let old_version = old_packages.packages[0].1.ancestors().nth(4).unwrap().to_owned();
+        let old_version = old_packages.packages[0]
+            .1
+            .ancestors()
+            .nth(4)
+            .unwrap()
+            .to_owned();
         let idle = std::time::SystemTime::now() - RETAIN - std::time::Duration::from_mins(1);
-        std::fs::File::open(&old_version).unwrap().set_modified(idle).unwrap();
+        std::fs::File::open(&old_version)
+            .unwrap()
+            .set_modified(idle)
+            .unwrap();
         store.ensure(&new).unwrap();
         assert!(!old_version.exists(), "a version idle past RETAIN was kept");
         assert!(new_packages.files().iter().all(|file| file.is_file()));
@@ -395,12 +491,18 @@ mod tests {
     /// package it writes says what surface it is.
     #[test]
     fn a_store_generates_once_per_input() {
-        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-surfaces-{}", std::process::id()));
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-surfaces-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let input = root.join("input.txt");
         std::fs::write(&input, "a").unwrap();
-        let binder = Counting(std::cell::Cell::new(0), input.clone(), std::cell::Cell::new(1));
+        let binder = Counting(
+            std::cell::Cell::new(0),
+            input.clone(),
+            std::cell::Cell::new(1),
+        );
         let store = Store::new(root.join("store"));
         let first = store.ensure(&binder).unwrap();
         let again = store.ensure(&binder).unwrap();
@@ -409,26 +511,56 @@ mod tests {
         let manifest = std::fs::read_to_string(first.packages[0].1.join("package.json")).unwrap();
         assert!(manifest.contains("\"surface\": \"objc\""), "{manifest}");
         let declarations = std::fs::read_to_string(first.packages[0].1.join("index.d.ts")).unwrap();
-        assert!(declarations.starts_with("// @ts-nocheck\ndeclare module"), "{declarations}");
+        assert!(
+            declarations.starts_with("// @ts-nocheck\ndeclare module"),
+            "{declarations}"
+        );
         assert!(first.files().iter().all(|file| file.is_file()), "{first:?}");
         std::fs::write(&input, "changed").unwrap();
         let second = store.ensure(&binder).unwrap();
         assert_eq!(binder.0.get(), 2, "a changed input did not generate again");
-        assert!(!first.packages[0].1.exists(), "the packages the changed input superseded were kept");
-        assert!(second.files().iter().all(|file| file.is_file()), "{second:?}");
+        assert!(
+            !first.packages[0].1.exists(),
+            "the packages the changed input superseded were kept"
+        );
+        assert!(
+            second.files().iter().all(|file| file.is_file()),
+            "{second:?}"
+        );
         // A new generator for the same identity makes its own, in the same
         // identity's directory, beside the old one's: another binary may be
         // using those (`two_versions_share_a_store_until_one_is_idle`).
         binder.2.set(2);
         let third = store.ensure(&binder).unwrap();
-        assert_eq!(binder.0.get(), 3, "a changed generator did not generate again");
-        assert!(second.packages[0].1.exists(), "the old generator's packages, which may be in use, were removed");
+        assert_eq!(
+            binder.0.get(),
+            3,
+            "a changed generator did not generate again"
+        );
+        assert!(
+            second.packages[0].1.exists(),
+            "the old generator's packages, which may be in use, were removed"
+        );
         let identities = std::fs::read_dir(root.join("store")).unwrap().count();
-        assert_eq!(identities, 1, "a generator version made an identity of its own");
+        assert_eq!(
+            identities, 1,
+            "a generator version made an identity of its own"
+        );
         assert!(third.files().iter().all(|file| file.is_file()), "{third:?}");
         let project = root.join("project");
-        assert_eq!(link(&third, &project).unwrap(), ["@nts/test-one"], "a first link is new");
-        assert!(link(&third, &project).unwrap().is_empty(), "a link already there is not new");
-        assert!(project.join("node_modules/@nts/test-one/index.d.ts").is_file());
+        assert_eq!(
+            link(&third, &project).unwrap(),
+            ["@nts/test-one"],
+            "a first link is new"
+        );
+        assert!(
+            link(&third, &project).unwrap().is_empty(),
+            "a link already there is not new"
+        );
+        assert!(
+            project
+                .join("node_modules/@nts/test-one/index.d.ts")
+                .is_file()
+        );
     }
 }

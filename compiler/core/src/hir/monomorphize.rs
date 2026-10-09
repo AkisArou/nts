@@ -221,7 +221,10 @@ fn find_request(
 /// or handed on is one whose new type would have to travel with it, and the
 /// profit is in the call rather than in the type.
 fn only_called(func: &Func, slot: u32) -> bool {
-    let Some(param) = func.parameter_values().and_then(|values| values.get(slot as usize).copied().flatten()) else {
+    let Some(param) = func
+        .parameter_values()
+        .and_then(|values| values.get(slot as usize).copied().flatten())
+    else {
         return false;
     };
     for block in &func.blocks {
@@ -258,7 +261,10 @@ fn retype_parameter(
     written: (String, usize, HirType),
     result_absent: super::Absent,
 ) {
-    let Some(param) = clone.parameter_values().and_then(|values| values.get(slot as usize).copied().flatten()) else {
+    let Some(param) = clone
+        .parameter_values()
+        .and_then(|values| values.get(slot as usize).copied().flatten())
+    else {
         return;
     };
     let ty = HirType::Managed(ManagedType::Object(concrete));
@@ -300,12 +306,16 @@ fn retype_parameter(
             // either. Those keep their dispatch, which `fields::devirtualize` can
             // still resolve because it reads the class's entry at the call's own
             // slot rather than assuming the written one.
-            (args.first() == Some(&param) && Some(*at) == erased_slot)
-                .then_some((index, true))
+            (args.first() == Some(&param) && Some(*at) == erased_slot).then_some((index, true))
         })
         .collect();
     for (index, uniform) in sites {
-        let written = super::Written { name: name.clone(), arity, returns: &returns, result_absent };
+        let written = super::Written {
+            name: name.clone(),
+            arity,
+            returns: &returns,
+            result_absent,
+        };
         super::call_directly(clone, index, written, uniform, None);
     }
 }

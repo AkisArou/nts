@@ -29,7 +29,8 @@ pub trait SourceTransform: std::fmt::Debug {
     fn identity(&self) -> String;
 
     /// New text for one of the project's own files, or `None` to leave it.
-    fn transform(&mut self, file: &TransformInput<'_>, types: &mut dyn NodeTypes) -> Option<String>;
+    fn transform(&mut self, file: &TransformInput<'_>, types: &mut dyn NodeTypes)
+    -> Option<String>;
 
     /// The text [`SourceTransform::transform`] or an earlier revision gave
     /// `path` has errors at `errors` (UTF-16 offsets into that text): new
@@ -97,7 +98,14 @@ struct SnapshotTypes<'a> {
 
 impl NodeTypes for SnapshotTypes<'_> {
     fn type_at(&mut self, node: NodeId) -> Option<String> {
-        type_at(self.client, self.snapshot, self.project, self.path, self.tree, node)
+        type_at(
+            self.client,
+            self.snapshot,
+            self.project,
+            self.path,
+            self.tree,
+            node,
+        )
     }
 }
 
@@ -121,9 +129,13 @@ pub fn type_at(
         return None;
     }
     let handle = NodeHandle(node_handle(node.0 + 1, kind, path.as_str()));
-    let found = client.types_at(snapshot, project, vec![handle.clone()]).ok()?;
+    let found = client
+        .types_at(snapshot, project, vec![handle.clone()])
+        .ok()?;
     let found = found.into_iter().next().flatten()?;
-    client.type_to_string(snapshot, project, found.id, handle, TYPE_FORMAT).ok()
+    client
+        .type_to_string(snapshot, project, found.id, handle, TYPE_FORMAT)
+        .ok()
 }
 
 /// Whether a file the program compiles is the project's own source, which a
@@ -161,11 +173,31 @@ pub(super) fn apply(
             if bytes.is_empty() {
                 continue;
             }
-            let tree = super::ast::decode(&bytes, nts_diagnostics::SourceId(0))
-                .map_err(|source| TsgoError::Ast { file: path.to_string(), source })?;
-            let Ok(text) = std::fs::read_to_string(&path) else { continue };
-            let mut types = SnapshotTypes { client, snapshot: opened.snapshot, project: &project.id, path: &path, tree: &tree };
-            if let Some(rewritten) = transform.transform(&TransformInput { path: &path, text: &text, tree: &tree }, &mut types) {
+            let tree =
+                super::ast::decode(&bytes, nts_diagnostics::SourceId(0)).map_err(|source| {
+                    TsgoError::Ast {
+                        file: path.to_string(),
+                        source,
+                    }
+                })?;
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let mut types = SnapshotTypes {
+                client,
+                snapshot: opened.snapshot,
+                project: &project.id,
+                path: &path,
+                tree: &tree,
+            };
+            if let Some(rewritten) = transform.transform(
+                &TransformInput {
+                    path: &path,
+                    text: &text,
+                    tree: &tree,
+                },
+                &mut types,
+            ) {
                 client.set_overlay(path.as_str(), rewritten)?;
                 changed.push((path.to_string(), project.id.clone()));
             }
@@ -205,7 +237,12 @@ pub(super) fn apply(
                 .file_diagnostics(current.snapshot, project, path)?
                 .into_iter()
                 .filter(|d| d.category == proto::category::ERROR)
-                .map(|d| (u32::try_from(d.pos.max(0)).unwrap_or(0), u32::try_from(d.end.max(0)).unwrap_or(0)))
+                .map(|d| {
+                    (
+                        u32::try_from(d.pos.max(0)).unwrap_or(0),
+                        u32::try_from(d.end.max(0)).unwrap_or(0),
+                    )
+                })
                 .collect();
             if errors.is_empty() {
                 continue;
@@ -221,5 +258,8 @@ pub(super) fn apply(
         // The snapshot again, and not the projects: see above.
         current.snapshot = client.update_files(&revised)?.snapshot;
     }
-    Err(TsgoError::TransformUnsettled { rounds: REVISION_ROUNDS, identity: transform.identity() })
+    Err(TsgoError::TransformUnsettled {
+        rounds: REVISION_ROUNDS,
+        identity: transform.identity(),
+    })
 }

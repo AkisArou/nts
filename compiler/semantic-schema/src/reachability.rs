@@ -119,7 +119,11 @@ pub fn for_frontend(snapshot: &SemanticSnapshot) -> Reachability {
     // resolved in depth -- a placeholder has no handle to be -- though nothing
     // in the program names it. The same reason `foreign_functions` gives.
     let bound = crate::binding::bound_declarations(snapshot);
-    from_roots(snapshot, exports, statements.chain(foreign_functions(snapshot)).chain(bound))
+    from_roots(
+        snapshot,
+        exports,
+        statements.chain(foreign_functions(snapshot)).chain(bound),
+    )
 }
 
 /// Every function a declaration file declares: a foreign function, which
@@ -135,12 +139,16 @@ pub fn for_frontend(snapshot: &SemanticSnapshot) -> Reachability {
 /// the members of the classes it names.
 fn foreign_functions(snapshot: &SemanticSnapshot) -> impl Iterator<Item = NodeId> + '_ {
     let declaration_files: FxHashSet<u32> = declaration_files(snapshot);
-    snapshot.nodes.iter().enumerate().filter_map(move |(index, node)| {
-        (matches!(node.kind, NodeKind::Syntax(syntax::FUNCTION_DECLARATION))
-            && declaration_files.contains(&node.origin.location.file.0))
-        .then(|| u32::try_from(index).ok().map(NodeId))
-        .flatten()
-    })
+    snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .filter_map(move |(index, node)| {
+            (matches!(node.kind, NodeKind::Syntax(syntax::FUNCTION_DECLARATION))
+                && declaration_files.contains(&node.origin.location.file.0))
+            .then(|| u32::try_from(index).ok().map(NodeId))
+            .flatten()
+        })
 }
 
 /// The class and interface declarations a heritage clause's types name: the
@@ -152,19 +160,34 @@ fn inherited(snapshot: &SemanticSnapshot, types: &[NodeId]) -> Vec<NodeId> {
         .filter_map(|ty| snapshot.nodes.get(ty.0 as usize)?.children.first().copied())
         .collect();
     while let Some(node) = stack.pop() {
-        let Some(record) = snapshot.nodes.get(node.0 as usize) else { continue };
+        let Some(record) = snapshot.nodes.get(node.0 as usize) else {
+            continue;
+        };
         stack.extend(record.children.iter().copied());
         // Through an import to what it imports: `import { Application }`
         // names the class by an alias, whose declaration is the specifier.
-        let Some(mut declared) = record.symbol.and_then(|symbol| snapshot.symbols.get(symbol.0 as usize)) else { continue };
-        while let Some(aliased) = declared.aliased.and_then(|symbol| snapshot.symbols.get(symbol.0 as usize)) {
+        let Some(mut declared) = record
+            .symbol
+            .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+        else {
+            continue;
+        };
+        while let Some(aliased) = declared
+            .aliased
+            .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+        {
             declared = aliased;
         }
         named.extend(declared.declarations.iter().copied().filter(|declaration| {
             snapshot
                 .nodes
                 .get(declaration.0 as usize)
-                .is_some_and(|node| matches!(node.kind, NodeKind::Syntax(syntax::CLASS_DECLARATION | syntax::INTERFACE_DECLARATION)))
+                .is_some_and(|node| {
+                    matches!(
+                        node.kind,
+                        NodeKind::Syntax(syntax::CLASS_DECLARATION | syntax::INTERFACE_DECLARATION)
+                    )
+                })
         }));
     }
     named
@@ -185,7 +208,9 @@ fn declaration_files(snapshot: &SemanticSnapshot) -> FxHashSet<u32> {
 /// forms `.d.mts` and `.d.cts` -- which declares and holds no code.
 #[must_use]
 pub fn is_declaration_file(uri: &str) -> bool {
-    [".d.ts", ".d.mts", ".d.cts"].iter().any(|suffix| uri.ends_with(suffix))
+    [".d.ts", ".d.mts", ".d.cts"]
+        .iter()
+        .any(|suffix| uri.ends_with(suffix))
 }
 
 /// Walk outward from a given set of root symbols.
@@ -243,9 +268,16 @@ pub fn from_roots(
         // dozen of them.
         let declares_members = matches!(
             record.kind,
-            NodeKind::Syntax(syntax::CLASS_DECLARATION | syntax::INTERFACE_DECLARATION | syntax::ENUM_DECLARATION | syntax::MODULE_DECLARATION)
+            NodeKind::Syntax(
+                syntax::CLASS_DECLARATION
+                    | syntax::INTERFACE_DECLARATION
+                    | syntax::ENUM_DECLARATION
+                    | syntax::MODULE_DECLARATION
+            )
         );
-        if !(declares_members && declaration_files.contains(&record.origin.location.file.0)) || whole.contains(&node) {
+        if !(declares_members && declaration_files.contains(&record.origin.location.file.0))
+            || whole.contains(&node)
+        {
             worklist.extend(record.children.iter().copied());
         }
 
@@ -258,7 +290,13 @@ pub fn from_roots(
         if matches!(record.kind, NodeKind::Syntax(syntax::HERITAGE_CLAUSE)) {
             for base in inherited(snapshot, &record.children) {
                 if whole.insert(base) && result.nodes.contains(&base) {
-                    worklist.extend(snapshot.nodes.get(base.0 as usize).into_iter().flat_map(|base| base.children.iter().copied()));
+                    worklist.extend(
+                        snapshot
+                            .nodes
+                            .get(base.0 as usize)
+                            .into_iter()
+                            .flat_map(|base| base.children.iter().copied()),
+                    );
                 } else {
                     worklist.push(base);
                 }
@@ -449,7 +487,12 @@ mod tests {
         }
     }
 
-    fn declared(kind: u16, file: u32, children: Vec<NodeId>, symbol: Option<SymbolId>) -> NodeRecord {
+    fn declared(
+        kind: u16,
+        file: u32,
+        children: Vec<NodeId>,
+        symbol: Option<SymbolId>,
+    ) -> NodeRecord {
         let mut record = node(children, symbol);
         record.kind = NodeKind::Syntax(kind);
         record.origin.location.file = SourceId(file);
@@ -469,18 +512,31 @@ mod tests {
     fn a_program_over_a_library() -> SemanticSnapshot {
         SemanticSnapshot {
             schema_version: crate::SCHEMA_VERSION,
-            sources: vec![source("nts-workspace:///main.ts"), source("nts-workspace:///lib.d.ts")],
+            sources: vec![
+                source("nts-workspace:///main.ts"),
+                source("nts-workspace:///lib.d.ts"),
+            ],
             nodes: vec![
                 declared(0, 0, vec![NodeId(1), NodeId(2)], None),
                 declared(0, 0, vec![], Some(SymbolId(0))),
                 declared(0, 0, vec![], Some(SymbolId(1))),
-                declared(syntax::CLASS_DECLARATION, 1, vec![NodeId(4), NodeId(5)], None),
+                declared(
+                    syntax::CLASS_DECLARATION,
+                    1,
+                    vec![NodeId(4), NodeId(5)],
+                    None,
+                ),
                 declared(0, 1, vec![], None),
                 declared(0, 1, vec![NodeId(6)], None),
                 declared(0, 1, vec![], Some(SymbolId(2))),
                 declared(syntax::CLASS_DECLARATION, 1, vec![], None),
                 declared(syntax::FUNCTION_DECLARATION, 1, vec![], None),
-                declared(syntax::SOURCE_FILE, 1, vec![NodeId(3), NodeId(7), NodeId(8)], None),
+                declared(
+                    syntax::SOURCE_FILE,
+                    1,
+                    vec![NodeId(3), NodeId(7), NodeId(8)],
+                    None,
+                ),
             ],
             symbols: vec![
                 symbol("Window", vec![NodeId(3)]),
@@ -489,11 +545,19 @@ mod tests {
                 symbol("gtk_label_new", vec![NodeId(8)]),
             ],
             modules: vec![
-                ModuleRecord { file: SourceId(0), imports: Vec::new(), exports: Vec::new(), root: NodeId(0) },
+                ModuleRecord {
+                    file: SourceId(0),
+                    imports: Vec::new(),
+                    exports: Vec::new(),
+                    root: NodeId(0),
+                },
                 ModuleRecord {
                     file: SourceId(1),
                     imports: Vec::new(),
-                    exports: vec![("Window".to_owned(), SymbolId(0)), ("Screen".to_owned(), SymbolId(2))],
+                    exports: vec![
+                        ("Window".to_owned(), SymbolId(0)),
+                        ("Screen".to_owned(), SymbolId(2)),
+                    ],
                     root: NodeId(9),
                 },
             ],
@@ -510,7 +574,10 @@ mod tests {
         assert!(reached.contains(NodeId(3)), "the class the program names");
         assert!(reached.contains(NodeId(4)), "the member the program names");
         assert!(!reached.contains(NodeId(5)), "a member nothing names");
-        assert!(!reached.contains(NodeId(7)), "a class only that member names");
+        assert!(
+            !reached.contains(NodeId(7)),
+            "a class only that member names"
+        );
     }
 
     /// The same class in a file with code is walked whole, as before: its
@@ -543,7 +610,12 @@ mod tests {
         snapshot.nodes.extend([
             declared(syntax::CLASS_DECLARATION, 0, vec![NodeId(11)], None),
             declared(syntax::HERITAGE_CLAUSE, 0, vec![NodeId(12)], None),
-            declared(syntax::EXPRESSION_WITH_TYPE_ARGUMENTS, 0, vec![NodeId(13)], None),
+            declared(
+                syntax::EXPRESSION_WITH_TYPE_ARGUMENTS,
+                0,
+                vec![NodeId(13)],
+                None,
+            ),
             declared(0, 0, vec![], Some(SymbolId(4))),
         ]);
         let mut import = symbol("Window", vec![]);
@@ -551,7 +623,10 @@ mod tests {
         snapshot.symbols.push(import);
         snapshot.nodes[0].children.push(NodeId(10));
         let reached = for_frontend(&snapshot);
-        assert!(reached.contains(NodeId(5)), "a member only an override would match");
+        assert!(
+            reached.contains(NodeId(5)),
+            "a member only an override would match"
+        );
         assert!(reached.contains(NodeId(7)), "what that member names");
     }
 

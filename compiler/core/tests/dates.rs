@@ -73,14 +73,10 @@ fn a_date_is_its_own_representation() {
     );
     // And a field holding one, which is what `fs.Stats` is.
     assert!(
-        lowered
-            .program
-            .layouts
+        lowered.program.layouts.iter().any(|layout| layout
+            .fields
             .iter()
-            .any(|layout| layout
-                .fields
-                .iter()
-                .any(|field| matches!(field.ty, HirType::Managed(ManagedType::Date)))),
+            .any(|field| matches!(field.ty, HirType::Managed(ManagedType::Date)))),
         "a class may hold a date in a field"
     );
 }
@@ -105,8 +101,9 @@ fn get_time_and_value_of_are_one_operation() {
         "and so does reading the time value, in {calls:?}"
     );
     assert!(
-        !calls.iter().any(|name| name.contains("value_of")
-            || name.contains("get_time")),
+        !calls
+            .iter()
+            .any(|name| name.contains("value_of") || name.contains("get_time")),
         "and there is exactly one entry point for it, in {calls:?}"
     );
 }

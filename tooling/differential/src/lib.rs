@@ -313,10 +313,13 @@ fn c_type(ty: &HirType) -> String {
         // Neither is drivable -- `drivable` gates what reaches here -- but a
         // wrong *spelling* would be a wrong C declaration rather than a
         // refusal, so they are named rather than defaulted.
-        HirType::Managed(nts_core::hir::ManagedType::Array(_) | nts_core::hir::ManagedType::Template) => "NtsArray *",
+        HirType::Managed(
+            nts_core::hir::ManagedType::Array(_) | nts_core::hir::ManagedType::Template,
+        ) => "NtsArray *",
         HirType::Managed(nts_core::hir::ManagedType::Object(_)) => "void *",
         HirType::Void | HirType::Never => "void",
-    }.to_owned()
+    }
+    .to_owned()
 }
 
 /// Compile a program, run it, run the same source on node, and compare.
@@ -341,6 +344,7 @@ fn c_type(ty: &HirType) -> String {
 ///
 /// If the program does not typecheck, does not lower, does not compile, or the
 /// two sides disagree.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn check(
     tsconfig: &Utf8Path,
     configure: impl FnOnce(TsgoApi) -> Result<TsgoApi>,
@@ -382,7 +386,10 @@ pub fn check(
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, &stamp)?;
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
-            eprintln!("{}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+            eprintln!(
+                "{}",
+                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+            );
         }
         bail!("the program does not typecheck");
     }
@@ -406,7 +413,10 @@ pub fn check(
         Err(unprepared) => bail!("{}", unprepared.render(&snapshot.sources)),
     };
     for diagnostic in &prepared.diagnostics {
-        eprintln!("  refused: {}", nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic));
+        eprintln!(
+            "  refused: {}",
+            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+        );
     }
 
     let entry = entry_module(&snapshot)?;
@@ -473,9 +483,25 @@ pub fn check(
     // `java` -- a different artifact *and* a different runner, where C and
     // LLVM differ only in what they hand the same linker.
     let native = if Backend::from_environment()? == Backend::Jvm {
-        run_jvm(dir, &prepared.program, &snapshot.sources, &testable, &mut refused, &mut aborts, &mut timeouts)?
+        run_jvm(
+            dir,
+            &prepared.program,
+            &snapshot.sources,
+            &testable,
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+        )?
     } else {
-        run_native(dir, &prepared.program, &snapshot.sources, &testable, &mut refused, &mut aborts, &mut timeouts)?
+        run_native(
+            dir,
+            &prepared.program,
+            &snapshot.sources,
+            &testable,
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+        )?
     };
     let engine = run_node(dir, &entry, &testable)?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
@@ -689,7 +715,10 @@ fn exports_of(
 /// The start of each case's result line, `name at `, in the order the cases
 /// are run: what both runners print before the value.
 fn results(testable: &[Testable]) -> Vec<String> {
-    interleaved(testable).into_iter().map(|(one, at, _)| format!("{} {at} ", one.name)).collect()
+    interleaved(testable)
+        .into_iter()
+        .map(|(one, at, _)| format!("{} {at} ", one.name))
+        .collect()
 }
 
 fn interleaved(testable: &[Testable]) -> Vec<(&Testable, usize, Vec<f64>)> {
@@ -1099,14 +1128,18 @@ pub fn compiles(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
         ));
     }
     let generated = dir.join("program.c");
-    std::fs::write(&generated, emitted.writer.text()).map_err(|error| NotC::Rejected(error.to_string()))?;
+    std::fs::write(&generated, emitted.writer.text())
+        .map_err(|error| NotC::Rejected(error.to_string()))?;
     std::fs::write(
         dir.join(nts_codegen_c::RUNTIME_HEADER_NAME),
         nts_codegen_c::RUNTIME_HEADER,
     )
     .map_err(|error| NotC::Rejected(error.to_string()))?;
-    std::fs::write(dir.join(nts_codegen_c::STRING_VIEW_HEADER_NAME), nts_codegen_c::STRING_VIEW_HEADER)
-        .map_err(|error| NotC::Rejected(error.to_string()))?;
+    std::fs::write(
+        dir.join(nts_codegen_c::STRING_VIEW_HEADER_NAME),
+        nts_codegen_c::STRING_VIEW_HEADER,
+    )
+    .map_err(|error| NotC::Rejected(error.to_string()))?;
     let build = std::process::Command::new("clang")
         .args(["-std=c11", "-fsyntax-only", "-w"])
         .arg("-I")
@@ -1406,9 +1439,7 @@ fn stopped_with(code: Option<i32>, signal: Option<i32>, complaint: &str) -> Stop
             .or_else(|| complaint.lines().next())
             .unwrap_or(line)
             .trim();
-        return Stopped::Defect(format!(
-            "the program threw rather than refusing: {thrown}"
-        ));
+        return Stopped::Defect(format!("the program threw rather than refusing: {thrown}"));
     }
     let said_something = complaint.lines().any(|line| {
         line.starts_with(REFUSED) || line.starts_with(EXHAUSTED) || line.starts_with(UNCAUGHT)
@@ -1445,7 +1476,10 @@ fn render(
         let rendered = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
         if !rendered.diagnostics.is_empty() {
             for diagnostic in rendered.diagnostics.iter().take(3) {
-                eprintln!("  not rendered: {}", nts_diagnostics::diagnostic_line(sources, diagnostic));
+                eprintln!(
+                    "  not rendered: {}",
+                    nts_diagnostics::diagnostic_line(sources, diagnostic)
+                );
             }
             bail!(
                 "the LLVM backend declined {} function(s)",
@@ -1479,7 +1513,7 @@ fn render(
         let path = dir.join("program.c");
         std::fs::write(&path, emitted.writer.text())?;
         path
-        })
+    })
 }
 
 fn run_native(
@@ -1517,7 +1551,10 @@ fn run_native(
     // undefined reference and no hint of which construct was behind it. The
     // lowering's refusals were printed all along; these were not.
     for diagnostic in &emitted.diagnostics {
-        eprintln!("  not emitted: {}", nts_diagnostics::diagnostic_line(sources, diagnostic));
+        eprintln!(
+            "  not emitted: {}",
+            nts_diagnostics::diagnostic_line(sources, diagnostic)
+        );
     }
     if !emitted.diagnostics.is_empty() {
         // Stop here rather than at the linker. The driver calls every function
@@ -1588,7 +1625,10 @@ fn run_native(
     // The runtime and the host are the same bytes in nearly every check, and
     // compiling them was nearly all of one: see `objects`. The program and its
     // driver are compiled here, every time.
-    let flags: Vec<&str> = ["-std=c11", "-O1", "-w"].into_iter().chain(defines.iter().copied()).collect();
+    let flags: Vec<&str> = ["-std=c11", "-O1", "-w"]
+        .into_iter()
+        .chain(defines.iter().copied())
+        .collect();
     let objects = sources
         .iter()
         .chain(std::iter::once(&host))
@@ -1615,19 +1655,31 @@ fn run_native(
     // such case costs every case after it. Node answers `undefined` for the same
     // input, so the two had nothing to compare there anyway; what matters is
     // that the *rest* of the program still gets checked.
-    collect_restarting(dir, &results(testable), refused, aborts, timeouts, |from, path| {
-        bounded(binary.as_str())
-            .env("NTS_DIFF_RESULTS", path.as_str())
-            .arg(from.to_string())
-            .output()
-            .context("running the compiled program")
-    })
+    collect_restarting(
+        dir,
+        &results(testable),
+        refused,
+        aborts,
+        timeouts,
+        |from, path| {
+            bounded(binary.as_str())
+                .env("NTS_DIFF_RESULTS", path.as_str())
+                .arg(from.to_string())
+                .output()
+                .context("running the compiled program")
+        },
+    )
 }
 
 /// The `n` of a results file's `done <n>` line, if it has one.
 fn run_done(path: &Utf8Path) -> Option<usize> {
     let text = std::fs::read_to_string(path).ok()?;
-    text.lines().last()?.strip_prefix("done ")?.trim().parse().ok()
+    text.lines()
+        .last()?
+        .strip_prefix("done ")?
+        .trim()
+        .parse()
+        .ok()
 }
 
 /// What one side of the comparison produced: the cases' result lines, from the
@@ -1680,10 +1732,14 @@ fn collect_restarting(
         let path = dir.join(format!("results-{restarts}.txt"));
         let _ = std::fs::remove_file(&path);
         let run = run_from(from, &path)?;
-        let mut produced = std::fs::read(&path).map(|bytes| lines(&bytes)).unwrap_or_default();
+        let mut produced = std::fs::read(&path)
+            .map(|bytes| lines(&bytes))
+            .unwrap_or_default();
         // The terminal marker. A run that stopped after three cases leaves
         // three good lines; without `done` it is not a short clean run.
-        let finished = produced.last().is_some_and(|last| last.starts_with("done "));
+        let finished = produced
+            .last()
+            .is_some_and(|last| last.starts_with("done "));
         if finished {
             produced.pop();
         }
@@ -1702,7 +1758,14 @@ fn collect_restarting(
         // expected next is now a check on the harness, not a way to tell
         // results from output.
         let reached = produced.iter().fold(0, |answered, line| {
-            if results.get(from + answered).is_some_and(|result| line.starts_with(result.as_str())) { answered + 1 } else { answered }
+            if results
+                .get(from + answered)
+                .is_some_and(|result| line.starts_with(result.as_str()))
+            {
+                answered + 1
+            } else {
+                answered
+            }
         });
         collected.extend(produced);
         let complaint = String::from_utf8_lossy(&run.stderr);
@@ -1719,7 +1782,9 @@ fn collect_restarting(
         // answered, and the collector counts the lines it read. A harness that
         // miscounts is reported rather than trusted.
         if let Some(said) = run_done(&path).filter(|said| *said != read) {
-            aborts.push(format!("the harness wrote `done {said}` after {read} result line(s)"));
+            aborts.push(format!(
+                "the harness wrote `done {said}` after {read} result line(s)"
+            ));
         }
         if !finished && run.status.success() && reached < total - from {
             aborts.push(format!(
@@ -1731,7 +1796,10 @@ fn collect_restarting(
             if !finished {
                 aborts.push(format!(
                     "answered every case and ended without its `done` line: {}",
-                    String::from_utf8_lossy(&run.stderr).lines().next().unwrap_or("no message")
+                    String::from_utf8_lossy(&run.stderr)
+                        .lines()
+                        .next()
+                        .unwrap_or("no message")
                 ));
             }
             break;
@@ -1751,7 +1819,11 @@ fn collect_restarting(
         from += reached + 1;
         restarts += 1;
     }
-    Ok(Run { results: collected, output, thrown })
+    Ok(Run {
+        results: collected,
+        output,
+        thrown,
+    })
 }
 
 /// The JVM lane: classes, a jar, and `java`.
@@ -1772,7 +1844,10 @@ fn run_jvm(
 ) -> Result<Run> {
     let emitted = nts_codegen_jvm::emit(program);
     for diagnostic in &emitted.diagnostics {
-        eprintln!("  not emitted: {}", nts_diagnostics::diagnostic_line(sources, diagnostic));
+        eprintln!(
+            "  not emitted: {}",
+            nts_diagnostics::diagnostic_line(sources, diagnostic)
+        );
     }
     if !emitted.diagnostics.is_empty() {
         // The same rule the C arm keeps: stop here rather than at the point of
@@ -1803,13 +1878,24 @@ fn run_jvm(
     // one place that does not matter.
     let mut cases = String::new();
     for (one, at, tuple) in interleaved(testable) {
-        let Some(returns) = nts_codegen_jvm::types::descriptor(nts_codegen_jvm::types::Shape::of(program), &one.returns) else {
-            bail!("`{}` returns a type the JVM backend rendered but this harness cannot", one.name);
+        let Some(returns) = nts_codegen_jvm::types::descriptor(
+            nts_codegen_jvm::types::Shape::of(program),
+            &one.returns,
+        ) else {
+            bail!(
+                "`{}` returns a type the JVM backend rendered but this harness cannot",
+                one.name
+            );
         };
         let mut parameters = Vec::with_capacity(one.params.len());
         for (ty, _) in &one.params {
-            let Some(descriptor) = nts_codegen_jvm::types::descriptor(nts_codegen_jvm::types::Shape::of(program), ty) else {
-                bail!("`{}` takes a type the JVM backend rendered but this harness cannot", one.name);
+            let Some(descriptor) =
+                nts_codegen_jvm::types::descriptor(nts_codegen_jvm::types::Shape::of(program), ty)
+            else {
+                bail!(
+                    "`{}` takes a type the JVM backend rendered but this harness cannot",
+                    one.name
+                );
             };
             parameters.push(descriptor);
         }
@@ -1823,7 +1909,11 @@ fn run_jvm(
             cases,
             "{} {at} {returns} {}",
             nts_codegen_jvm::body::method_name(&one.name),
-            if parameters.is_empty() { "-".to_owned() } else { parameters.join(",") }
+            if parameters.is_empty() {
+                "-".to_owned()
+            } else {
+                parameters.join(",")
+            }
         );
         for (slot, value) in tuple.iter().enumerate() {
             let descriptor = parameters.get(slot).map_or("D", String::as_str);
@@ -1833,8 +1923,10 @@ fn run_jvm(
                 // units rather than its text: no escaping rules, and a
                 // surrogate pair arrives as the two units `length` counts.
                 let text = string_at(*value);
-                let units: Vec<String> =
-                    text.encode_utf16().map(|unit| format!("{unit:x}")).collect();
+                let units: Vec<String> = text
+                    .encode_utf16()
+                    .map(|unit| format!("{unit:x}"))
+                    .collect();
                 let _ = write!(cases, " s:{}", units.join(","));
                 continue;
             }
@@ -1848,17 +1940,24 @@ fn run_jvm(
     std::fs::write(&cases_path, cases)?;
 
     let classpath = format!("{dir}:{jar}");
-    collect_restarting(dir, &results(testable), refused, aborts, timeouts, move |from, path| {
-        bounded_jvm()
-            .env("NTS_DIFF_RESULTS", path.as_str())
-            .arg("-cp")
-            .arg(&classpath)
-            .arg("nts.rt.Check")
-            .arg(cases_path.as_str())
-            .arg(from.to_string())
-            .output()
-            .context("running the compiled classes")
-    })
+    collect_restarting(
+        dir,
+        &results(testable),
+        refused,
+        aborts,
+        timeouts,
+        move |from, path| {
+            bounded_jvm()
+                .env("NTS_DIFF_RESULTS", path.as_str())
+                .arg("-cp")
+                .arg(&classpath)
+                .arg("nts.rt.Check")
+                .arg(cases_path.as_str())
+                .arg(from.to_string())
+                .output()
+                .context("running the compiled classes")
+        },
+    )
 }
 
 /// Whether a pool value is one the parameter's proved type can hold.
@@ -1990,6 +2089,7 @@ fn growth(complaint: &str) -> Option<String> {
     })
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Run> {
     let absolute = entry
         .canonicalize_utf8()
@@ -2110,7 +2210,11 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
     }
     // The terminal marker, the same as the compiled side's: a driver that died
     // after three cases must not read as a run of three.
-    let _ = writeln!(driver, "emit(\"done {}\\n\"); closeSync(resultsFd);", interleaved(testable).len());
+    let _ = writeln!(
+        driver,
+        "emit(\"done {}\\n\"); closeSync(resultsFd);",
+        interleaved(testable).len()
+    );
     let path = dir.join("check_driver.mjs");
     std::fs::write(&path, driver)?;
     let hook = dir.join("resolve_ts.mjs");
@@ -2144,7 +2248,11 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
         .output()
         .context("running node")?;
     let results = node_results(&results_path, &run)?;
-    Ok(Run { results, output: lines(&run.stdout), thrown: Vec::new() })
+    Ok(Run {
+        results,
+        output: lines(&run.stdout),
+        thrown: Vec::new(),
+    })
 }
 
 /// The node oracle, uncoloured whatever shell launched it.
@@ -2157,7 +2265,10 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
 /// another. Removed, and `NO_COLOR` set so the intent is stated rather than
 /// implied by the absence of two variables.
 fn without_colour(mut command: std::process::Command) -> std::process::Command {
-    command.env_remove("FORCE_COLOR").env_remove("CLICOLOR_FORCE").env("NO_COLOR", "1");
+    command
+        .env_remove("FORCE_COLOR")
+        .env_remove("CLICOLOR_FORCE")
+        .env("NO_COLOR", "1");
     command
 }
 
@@ -2165,7 +2276,9 @@ fn without_colour(mut command: std::process::Command) -> std::process::Command {
 /// split by how node ended. Apart from `run_node` so the rules about a
 /// truncated file sit in one place.
 fn node_results(results_path: &Utf8Path, run: &std::process::Output) -> Result<Vec<String>> {
-    let mut results = std::fs::read(results_path).map(|bytes| lines(&bytes)).unwrap_or_default();
+    let mut results = std::fs::read(results_path)
+        .map(|bytes| lines(&bytes))
+        .unwrap_or_default();
     if results.last().is_some_and(|last| last.starts_with("done ")) {
         results.pop();
     } else {
@@ -2190,7 +2303,10 @@ fn node_results(results_path: &Utf8Path, run: &std::process::Output) -> Result<V
         eprintln!(
             "  node stopped part-way: {} result(s), no `done` line ({})",
             results.len(),
-            String::from_utf8_lossy(&run.stderr).lines().find(|l| !l.trim().is_empty()).unwrap_or("no message")
+            String::from_utf8_lossy(&run.stderr)
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("no message")
         );
     }
     Ok(results)
@@ -2317,7 +2433,10 @@ fn report(
     let mut threw_against = Vec::new();
     let mut engine: Vec<&String> = Vec::new();
     for line in &engine_run.results {
-        let Some(result) = results.get(case).filter(|result| line.starts_with(result.as_str())) else {
+        let Some(result) = results
+            .get(case)
+            .filter(|result| line.starts_with(result.as_str()))
+        else {
             engine.push(line);
             continue;
         };
@@ -2340,7 +2459,9 @@ fn report(
         .iter()
         .filter(|line| {
             let mut spaces = line.match_indices(' ').map(|(at, _)| at);
-            spaces.nth(1).is_some_and(|second| keys.contains(&line[..=second]))
+            spaces
+                .nth(1)
+                .is_some_and(|second| keys.contains(&line[..=second]))
         })
         .count();
     let mut disagreements = Vec::new();
@@ -2367,7 +2488,10 @@ fn report(
         let mine = ours.get(at).map_or("(no line)", String::as_str);
         let node = theirs.get(at).map_or("(no line)", String::as_str);
         if mine != node {
-            disagreements.push((format!("output {at}: {mine}"), format!("output {at}: {node}")));
+            disagreements.push((
+                format!("output {at}: {mine}"),
+                format!("output {at}: {node}"),
+            ));
         }
     }
     Report {
@@ -2414,7 +2538,8 @@ mod classification {
             "NoSuchFieldError",
             "UnsupportedClassVersionError",
         ] {
-            let complaint = format!("Exception in thread \"main\" java.lang.{name}: nts/gen/Program\n");
+            let complaint =
+                format!("Exception in thread \"main\" java.lang.{name}: nts/gen/Program\n");
             assert!(
                 matches!(stopped_with(None, None, &complaint), Stopped::Defect(_)),
                 "{name} read as a declined case"
@@ -2432,7 +2557,10 @@ mod classification {
             stopped_with(None, None, "nts: refused: index 5 is outside [0, 3)\n"),
             Stopped::Declined
         ));
-        assert!(matches!(stopped_with(None, None, "nts: out of memory\n"), Stopped::Declined));
+        assert!(matches!(
+            stopped_with(None, None, "nts: out of memory\n"),
+            Stopped::Declined
+        ));
     }
 }
 
@@ -2469,7 +2597,10 @@ mod tests {
         // verdict, and the second is not a verdict at all.
         assert_eq!(stopped_with(Some(124), None, ""), Stopped::TimedOut);
         // A segfault that printed nothing. This is the case that was missing.
-        assert!(matches!(stopped_with(None, Some(11), ""), Stopped::Defect(_)));
+        assert!(matches!(
+            stopped_with(None, Some(11), ""),
+            Stopped::Defect(_)
+        ));
         // And one that named itself is a defect however it died.
         assert!(matches!(
             stopped_with(None, None, "nts: `x` was read before its declaration ran\n"),
@@ -2564,7 +2695,8 @@ mod tests {
     #[test]
     fn a_refusal_is_not_a_stack_trace() {
         assert_eq!(
-            stopped_with(None, 
+            stopped_with(
+                None,
                 Some(6),
                 "nts: refused: index 9 is outside [0, 3) at /var/cat(1)/x
 "
@@ -2581,14 +2713,20 @@ mod result_channel {
     use std::os::unix::process::ExitStatusExt;
 
     fn scratch(name: &str) -> Utf8PathBuf {
-        let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir().join(format!("nts-result-channel-{name}-{}", std::process::id())))
-            .expect("utf-8 temp dir");
+        let dir = Utf8PathBuf::from_path_buf(
+            std::env::temp_dir().join(format!("nts-result-channel-{name}-{}", std::process::id())),
+        )
+        .expect("utf-8 temp dir");
         std::fs::create_dir_all(&dir).expect("temp dir");
         dir
     }
 
     fn exited(stdout: &str) -> std::process::Output {
-        std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: stdout.as_bytes().to_vec(), stderr: Vec::new() }
+        std::process::Output {
+            status: std::process::ExitStatus::from_raw(0),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: Vec::new(),
+        }
     }
 
     const RESULTS: [&str; 2] = ["f 0 ", "f 1 "];
@@ -2604,13 +2742,23 @@ mod result_channel {
     fn answering_every_case_without_done_is_reported() {
         let dir = scratch("no-done");
         let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
-        let run = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
-            std::fs::write(path, "f 0 1\nf 1 2\n").expect("write results");
-            Ok(exited(""))
-        })
+        let run = collect_restarting(
+            &dir,
+            &expected(),
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+            |_, path| {
+                std::fs::write(path, "f 0 1\nf 1 2\n").expect("write results");
+                Ok(exited(""))
+            },
+        )
         .expect("collect");
         assert_eq!(run.results.len(), 2);
-        assert!(aborts.iter().any(|a| a.contains("without its `done` line")), "no report: {aborts:?}");
+        assert!(
+            aborts.iter().any(|a| a.contains("without its `done` line")),
+            "no report: {aborts:?}"
+        );
     }
 
     /// The spawner truncates: a file left at the path by an earlier run must
@@ -2618,15 +2766,29 @@ mod result_channel {
     #[test]
     fn a_stale_results_file_is_removed_before_the_spawn() {
         let dir = scratch("stale");
-        std::fs::write(dir.join("results-0.txt"), "f 0 stale\nf 1 stale\ndone 2\n").expect("stale file");
+        std::fs::write(dir.join("results-0.txt"), "f 0 stale\nf 1 stale\ndone 2\n")
+            .expect("stale file");
         let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
-        let run = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
-            assert!(!path.exists(), "the stale file was still there when the program started");
-            std::fs::write(path, "f 0 fresh\nf 1 fresh\ndone 2\n").expect("write results");
-            Ok(exited(""))
-        })
+        let run = collect_restarting(
+            &dir,
+            &expected(),
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+            |_, path| {
+                assert!(
+                    !path.exists(),
+                    "the stale file was still there when the program started"
+                );
+                std::fs::write(path, "f 0 fresh\nf 1 fresh\ndone 2\n").expect("write results");
+                Ok(exited(""))
+            },
+        )
         .expect("collect");
-        assert_eq!(run.results, vec!["f 0 fresh".to_owned(), "f 1 fresh".to_owned()]);
+        assert_eq!(
+            run.results,
+            vec!["f 0 fresh".to_owned(), "f 1 fresh".to_owned()]
+        );
         assert!(aborts.is_empty(), "{aborts:?}");
     }
 
@@ -2636,12 +2798,22 @@ mod result_channel {
     fn exit_zero_without_done_part_way_is_a_defect() {
         let dir = scratch("exit-zero");
         let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
-        let _ = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
-            std::fs::write(path, "f 0 1\n").expect("write results");
-            Ok(exited(""))
-        })
+        let _ = collect_restarting(
+            &dir,
+            &expected(),
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+            |_, path| {
+                std::fs::write(path, "f 0 1\n").expect("write results");
+                Ok(exited(""))
+            },
+        )
         .expect("collect");
-        assert!(aborts.iter().any(|a| a.contains("exited 0 after 1 of 2")), "no report: {aborts:?}");
+        assert!(
+            aborts.iter().any(|a| a.contains("exited 0 after 1 of 2")),
+            "no report: {aborts:?}"
+        );
     }
 
     /// The marker must agree with the reader: `done 3` after two lines is a
@@ -2650,12 +2822,22 @@ mod result_channel {
     fn a_done_count_that_disagrees_is_reported() {
         let dir = scratch("miscount");
         let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
-        let _ = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
-            std::fs::write(path, "f 0 1\nf 1 2\ndone 3\n").expect("write results");
-            Ok(exited(""))
-        })
+        let _ = collect_restarting(
+            &dir,
+            &expected(),
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+            |_, path| {
+                std::fs::write(path, "f 0 1\nf 1 2\ndone 3\n").expect("write results");
+                Ok(exited(""))
+            },
+        )
         .expect("collect");
-        assert!(aborts.iter().any(|a| a.contains("wrote `done 3` after 2")), "no report: {aborts:?}");
+        assert!(
+            aborts.iter().any(|a| a.contains("wrote `done 3` after 2")),
+            "no report: {aborts:?}"
+        );
     }
 
     /// Program output shaped exactly like a result stays output: it cannot
@@ -2664,13 +2846,23 @@ mod result_channel {
     fn output_shaped_like_a_result_is_not_a_result() {
         let dir = scratch("spoof");
         let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
-        let run = collect_restarting(&dir, &expected(), &mut refused, &mut aborts, &mut timeouts, |_, path| {
-            std::fs::write(path, "f 0 1\nf 1 2\ndone 2\n").expect("write results");
-            Ok(exited("f 1 999 printed by the program\n"))
-        })
+        let run = collect_restarting(
+            &dir,
+            &expected(),
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+            |_, path| {
+                std::fs::write(path, "f 0 1\nf 1 2\ndone 2\n").expect("write results");
+                Ok(exited("f 1 999 printed by the program\n"))
+            },
+        )
         .expect("collect");
         assert_eq!(run.results, vec!["f 0 1".to_owned(), "f 1 2".to_owned()]);
-        assert_eq!(run.output, vec!["f 1 999 printed by the program".to_owned()]);
+        assert_eq!(
+            run.output,
+            vec!["f 1 999 printed by the program".to_owned()]
+        );
         assert!(refused.is_empty() && aborts.is_empty());
     }
 }
@@ -2682,14 +2874,21 @@ mod pairing {
 
     /// One function of no parameters: one case, `f 0 `.
     fn one() -> Vec<Testable> {
-        vec![Testable { name: "f".to_owned(), returns: HirType::Void, params: Vec::new() }]
+        vec![Testable {
+            name: "f".to_owned(),
+            returns: HirType::Void,
+            params: Vec::new(),
+        }]
     }
 
     fn run(results: &[&str], thrown: &[(usize, &str)]) -> Run {
         Run {
             results: results.iter().map(|line| (*line).to_owned()).collect(),
             output: Vec::new(),
-            thrown: thrown.iter().map(|(at, line)| (*at, (*line).to_owned())).collect(),
+            thrown: thrown
+                .iter()
+                .map(|(at, line)| (*at, (*line).to_owned()))
+                .collect(),
         }
     }
 
@@ -2700,7 +2899,13 @@ mod pairing {
         let compiled = run(&[], &[(0, "nts: uncaught TypeError: x")]);
         let node = run(&["f 0 4"], &[]);
         let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
-        assert_eq!(got.disagreements, vec![("f 0 nts: uncaught TypeError: x".to_owned(), "f 0 4".to_owned())]);
+        assert_eq!(
+            got.disagreements,
+            vec![(
+                "f 0 nts: uncaught TypeError: x".to_owned(),
+                "f 0 4".to_owned()
+            )]
+        );
         assert_eq!((got.refused, got.checked), (0, 1));
         assert!(!got.agreed());
     }

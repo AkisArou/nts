@@ -261,6 +261,7 @@ impl Header {
 }
 
 /// Decode the flat node array, dropping the nil sentinel at index 0.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn decode_nodes(
     nodes_bytes: &[u8],
     extended: &[u8],
@@ -365,12 +366,21 @@ fn decode_nodes(
             if let Some(bytes) = extended.get(at..at + 4) {
                 let index = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
                 text = strings.get(index, node_index).ok();
-                let flags_at = at + if raw.kind == u32::from(nts_semantic_schema::syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL) { 4 } else { 8 };
+                let flags_at = at
+                    + if raw.kind
+                        == u32::from(nts_semantic_schema::syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL)
+                    {
+                        4
+                    } else {
+                        8
+                    };
                 if let Some(flags) = extended.get(flags_at..flags_at + 4) {
                     let flags = u32::from_le_bytes([flags[0], flags[1], flags[2], flags[3]]);
                     // tsgo's ContainsInvalidEscape. Such a tagged token has an
                     // undefined cooked entry, not the scanner's recovery text.
-                    if flags & (1 << 11) != 0 { text = None; }
+                    if flags & (1 << 11) != 0 {
+                        text = None;
+                    }
                 }
             }
         }
@@ -415,7 +425,9 @@ fn decode_nodes(
             // NSXMLParserDelegate` on `interface XMLParserDelegate`.
             native: if carries_native_attributes(kind) {
                 strings.source(raw.pos, raw.end).and_then(native_attributes)
-            } else { None },
+            } else {
+                None
+            },
             data,
             text,
         });
@@ -558,7 +570,9 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     (attributes != nts_semantic_schema::NativeAttributes::default()).then(|| Box::new(attributes))
 }
 
-fn native_abi(source: &str) -> Option<String> { leading_tag(source, "@ntsAbi") }
+fn native_abi(source: &str) -> Option<String> {
+    leading_tag(source, "@ntsAbi")
+}
 
 fn leading_tag(mut source: &str, marker: &str) -> Option<String> {
     let mut tags = Vec::new();
@@ -791,8 +805,7 @@ fn token_start(data: &[u8], utf16: &[u32], pos: u32) -> u32 {
                 }
                 Some(b'*') => {
                     at += 2;
-                    while at < data.len()
-                        && !(data[at] == b'*' && data.get(at + 1) == Some(&b'/'))
+                    while at < data.len() && !(data[at] == b'*' && data.get(at + 1) == Some(&b'/'))
                     {
                         at += 1;
                     }
@@ -812,9 +825,8 @@ fn utf16_offsets(data: &[u8]) -> Vec<u32> {
     // The valid prefix rather than nothing on bad input: the file text comes
     // first, so a malformed string appended after it must not cost every
     // literal in the file its value.
-    let text = std::str::from_utf8(data).unwrap_or_else(|broken| {
-        std::str::from_utf8(&data[..broken.valid_up_to()]).unwrap_or("")
-    });
+    let text = std::str::from_utf8(data)
+        .unwrap_or_else(|broken| std::str::from_utf8(&data[..broken.valid_up_to()]).unwrap_or(""));
     let mut offsets = Vec::with_capacity(text.len() + 1);
     for (at, character) in text.char_indices() {
         for _ in 0..character.len_utf16() {

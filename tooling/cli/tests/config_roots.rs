@@ -47,8 +47,13 @@ export function helper(n: number): number { return n; }
 export function diagnostic(n: number): number { return onlyDiagnostic(n); }
 ";
 
-const NAMES: [&str; 5] =
-    ["published", "diagnostic", "onlyPublished", "onlyDiagnostic", "helper"];
+const NAMES: [&str; 5] = [
+    "published",
+    "diagnostic",
+    "onlyPublished",
+    "onlyDiagnostic",
+    "helper",
+];
 
 fn available() -> bool {
     let frontend =
@@ -179,7 +184,10 @@ fn without_the_config_every_export_is_a_root() {
         return;
     }
     let project = fixture("config-absent", Some(ONE_PRODUCT));
-    assert_eq!(emit(&project, &[]).kept, names(&["published", "onlyPublished"]));
+    assert_eq!(
+        emit(&project, &[]).kept,
+        names(&["published", "onlyPublished"])
+    );
     let project = fixture("config-absent", None);
     assert_eq!(emit(&project, &[]).kept, names(NAMES.as_slice()));
 }
@@ -224,7 +232,11 @@ export default defineConfig({
     let run = emit(&project, &[]);
     assert!(!run.ok, "expected a refusal, got:\n{}", run.stderr);
     assert!(run.stderr.contains("--product"), "{}", run.stderr);
-    assert!(run.stderr.contains("addon") && run.stderr.contains("sdk"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("addon") && run.stderr.contains("sdk"),
+        "{}",
+        run.stderr
+    );
 
     let chosen = emit(&project, &["--product", "addon"]);
     assert!(chosen.ok, "{}", chosen.stderr);
@@ -240,7 +252,10 @@ export default defineConfig({
     // root is never inlined away.
     let other = emit(&project, &["--product", "sdk"]);
     assert!(other.ok, "{}", other.stderr);
-    assert_eq!(other.kept, names(&["diagnostic", "onlyDiagnostic", "helper"]));
+    assert_eq!(
+        other.kept,
+        names(&["diagnostic", "onlyDiagnostic", "helper"])
+    );
     assert!(
         chosen.kept.is_disjoint(&other.kept),
         "two products differing only in `entry` should publish disjoint surfaces",
@@ -264,9 +279,16 @@ fn a_broken_config_stops_the_build() {
     );
     let run = emit(&project, &[]);
     assert!(!run.ok, "a throwing config should stop the build");
-    assert!(run.stderr.contains("the config itself failed"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("the config itself failed"),
+        "{}",
+        run.stderr
+    );
 
     let project = fixture("config-broken", Some("export default 42;\n"));
     let run = emit(&project, &[]);
-    assert!(!run.ok, "a config that is not a config should stop the build");
+    assert!(
+        !run.ok,
+        "a config that is not a config should stop the build"
+    );
 }

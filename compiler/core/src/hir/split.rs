@@ -453,11 +453,11 @@ fn set_arg(
     tag: ValueId,
     payload: ValueId,
 ) {
-    let args = match (&mut func.blocks[from].terminator, which) {
-        (Terminator::Jump { args, .. }, _) | (Terminator::Branch { then_args: args, .. }, 0) => {
-            args
-        }
-        (Terminator::Branch { else_args: args, .. }, _) => args,
+    // A branch's edge 0 is its `then` edge, and any other its `else` edge.
+    let args = match &mut func.blocks[from].terminator {
+        Terminator::Jump { args, .. } => args,
+        Terminator::Branch { then_args, .. } if which == 0 => then_args,
+        Terminator::Branch { else_args, .. } => else_args,
         _ => return,
     };
     args[index] = tag;
@@ -552,7 +552,13 @@ mod tests {
             op(OpKind::Param(0), HirType::NUMBER),
             op(OpKind::ConstBool(true), HirType::Bool),
             op(OpKind::ConstUndefined, HirType::Erased),
-            op(OpKind::Erase { value: ValueId(0) , absent: super::super::Absent::Impossible }, HirType::Erased),
+            op(
+                OpKind::Erase {
+                    value: ValueId(0),
+                    absent: super::super::Absent::Impossible,
+                },
+                HirType::Erased,
+            ),
             op(OpKind::BlockParam(0), HirType::Erased),
         ];
         values.extend(use_of_member);
@@ -618,15 +624,10 @@ mod tests {
 
         // And the reads are gone rather than left for `dce`: a `tag.of` on a
         // parameter that is now a tag would not verify.
-        assert!(
-            !it.blocks[3]
-                .ops
-                .iter()
-                .any(|id| matches!(
-                    it.values[id.0 as usize].kind,
-                    OpKind::TagOf { .. } | OpKind::Unerase { .. }
-                ))
-        );
+        assert!(!it.blocks[3].ops.iter().any(|id| matches!(
+            it.values[id.0 as usize].kind,
+            OpKind::TagOf { .. } | OpKind::Unerase { .. }
+        )));
     }
 
     /// A member handed anywhere but a tag read or an unerase wants the general
@@ -672,7 +673,13 @@ mod tests {
             op(OpKind::Param(0), HirType::NUMBER),
             op(OpKind::ConstBool(true), HirType::Bool),
             op(OpKind::ConstUndefined, HirType::Erased),
-            op(OpKind::Erase { value: ValueId(0) , absent: super::super::Absent::Impossible }, HirType::Erased),
+            op(
+                OpKind::Erase {
+                    value: ValueId(0),
+                    absent: super::super::Absent::Impossible,
+                },
+                HirType::Erased,
+            ),
             op(OpKind::BlockParam(1), HirType::Erased),
             op(OpKind::BlockParam(0), HirType::Erased),
             op(OpKind::TagOf { value: ValueId(4) }, tag_type()),
@@ -730,7 +737,13 @@ mod tests {
             op(OpKind::Param(0), HirType::NUMBER),
             op(OpKind::ConstBool(true), HirType::Bool),
             op(OpKind::ConstUndefined, HirType::Erased),
-            op(OpKind::Erase { value: ValueId(0) , absent: super::super::Absent::Impossible }, HirType::Erased),
+            op(
+                OpKind::Erase {
+                    value: ValueId(0),
+                    absent: super::super::Absent::Impossible,
+                },
+                HirType::Erased,
+            ),
             op(OpKind::BlockParam(0), HirType::Erased),
             op(OpKind::ConstNull, HirType::Erased),
             op(OpKind::BlockParam(0), HirType::Erased),

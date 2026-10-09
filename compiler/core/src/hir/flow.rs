@@ -310,7 +310,11 @@ pub struct Written {
 impl Written {
     #[must_use]
     pub fn of(program: &super::Program) -> Self {
-        let returns = program.funcs.iter().filter_map(|func| Some((func.name.clone(), func.call_kind()?.facts()))).collect();
+        let returns = program
+            .funcs
+            .iter()
+            .filter_map(|func| Some((func.name.clone(), func.call_kind()?.facts())))
+            .collect();
         let awaited = program
             .funcs
             .iter()
@@ -322,14 +326,19 @@ impl Written {
             .iter()
             .filter(|func| func.written_return_elements.iter().any(Option::is_some))
             .map(|func| {
-                let facts = func.written_return_elements.iter().map(|kind| kind.map_or(Facts::TOP, super::native::Scalar::facts));
+                let facts = func
+                    .written_return_elements
+                    .iter()
+                    .map(|kind| kind.map_or(Facts::TOP, super::native::Scalar::facts));
                 (func.name.clone(), facts.collect())
             })
             .collect();
         let mut fields = super::fields::FieldFacts::default();
         for layout in &program.layouts {
             for (index, field) in layout.fields.iter().enumerate() {
-                let (Some(kind), Ok(index)) = (field.written, u32::try_from(index)) else { continue };
+                let (Some(kind), Ok(index)) = (field.written, u32::try_from(index)) else {
+                    continue;
+                };
                 fields.extend(layout.types.iter().map(|ty| ((*ty, index), kind.facts())));
             }
         }
@@ -348,7 +357,13 @@ impl Written {
                 Some((u32::try_from(index).ok()?, facts))
             })
             .collect();
-        Self { returns, awaited, return_elements, fields, globals }
+        Self {
+            returns,
+            awaited,
+            return_elements,
+            fields,
+            globals,
+        }
     }
 }
 
@@ -570,7 +585,9 @@ fn merge(slot: &mut Option<Relations>, arriving: Relations) {
 /// proven to fit (`super::obligations`).
 fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
     let declared = func.params.get(slot as usize).map_or(Facts::TOP, |param| {
-        param.written.map_or(param.known, |kind| param.known.narrow(kind.facts()))
+        param
+            .written
+            .map_or(param.known, |kind| param.known.narrow(kind.facts()))
     });
     context
         .params
@@ -587,21 +604,38 @@ fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
 fn call_result(context: &Context, callee: &Callee) -> Facts {
     // A method's override can't write its result wider than the declaration
     // it overrides (Q1), so the declaration's kind holds for the dispatch.
-    let written = |name: &String| context.written.returns.get(name).copied().unwrap_or(Facts::TOP);
+    let written = |name: &String| {
+        context
+            .written
+            .returns
+            .get(name)
+            .copied()
+            .unwrap_or(Facts::TOP)
+    };
     match callee {
-        Callee::Direct(name) => context.whole.returns.get(name).copied().unwrap_or(Facts::TOP).narrow(written(name)),
-        Callee::Virtual { slot, declared } => {
-            context.whole.slot_returns.get(slot).copied().unwrap_or(Facts::TOP).narrow(written(declared))
-        }
+        Callee::Direct(name) => context
+            .whole
+            .returns
+            .get(name)
+            .copied()
+            .unwrap_or(Facts::TOP)
+            .narrow(written(name)),
+        Callee::Virtual { slot, declared } => context
+            .whole
+            .slot_returns
+            .get(slot)
+            .copied()
+            .unwrap_or(Facts::TOP)
+            .narrow(written(declared)),
         Callee::Closure { slot } => context
             .whole
             .slot_returns
             .get(slot)
             .copied()
             .unwrap_or(Facts::TOP),
-        Callee::External(name) => {
-            runtime_result(name).or_else(|| foreign_result(name)).unwrap_or(Facts::TOP)
-        }
+        Callee::External(name) => runtime_result(name)
+            .or_else(|| foreign_result(name))
+            .unwrap_or(Facts::TOP),
         // What C returns is its declared type's: an `unsigned int` result is
         // 0..2^32-1, whole, as `foreign_result` reads a JVM descriptor.
         Callee::Native(target) => match target.result {
@@ -615,16 +649,31 @@ fn call_result(context: &Context, callee: &Callee) -> Facts {
 /// written to settle with, where `promise` is a call to one.
 fn awaited(func: &Func, context: &Context, promise: ValueId) -> Facts {
     match &func.values[promise.0 as usize].kind {
-        OpKind::Call { callee: Callee::Direct(name), .. } => context.written.awaited.get(name).copied().unwrap_or(Facts::TOP),
+        OpKind::Call {
+            callee: Callee::Direct(name),
+            ..
+        } => context
+            .written
+            .awaited
+            .get(name)
+            .copied()
+            .unwrap_or(Facts::TOP),
         _ => Facts::TOP,
     }
 }
 
 /// What one of the runtime's own functions returns given its operand:
 /// `Math.sign`'s answer follows its argument's.
-fn operand_result(callee: &Callee, args: &[ValueId], refinements: &Refinements, values: &[Facts]) -> Option<Facts> {
+fn operand_result(
+    callee: &Callee,
+    args: &[ValueId],
+    refinements: &Refinements,
+    values: &[Facts],
+) -> Option<Facts> {
     match (callee, args) {
-        (Callee::External(name), [argument]) if name == "nts_math_sign" => Some(facts::sign(lookup(refinements, values, *argument))),
+        (Callee::External(name), [argument]) if name == "nts_math_sign" => {
+            Some(facts::sign(lookup(refinements, values, *argument)))
+        }
         _ => None,
     }
 }
@@ -777,10 +826,19 @@ fn foreign_result(key: &str) -> Option<Facts> {
 }
 
 /// A position a search answers, or -1.
-const INDEX: &[&str] = &["nts_str_index_of", "nts_str_last_index_of", "nts_array_index_of", "nts_array_last_index_of"];
+const INDEX: &[&str] = &[
+    "nts_str_index_of",
+    "nts_str_last_index_of",
+    "nts_array_index_of",
+    "nts_array_last_index_of",
+];
 /// The length after one element was added: one at least. A number's array,
 /// a reference's, an erased value's.
-const LENGTH: &[&str] = &["nts_array_push", "nts_array_push_ref", "nts_array_push_value"];
+const LENGTH: &[&str] = &[
+    "nts_array_push",
+    "nts_array_push_ref",
+    "nts_array_push_value",
+];
 /// A view's, a buffer's or a `DataView`'s length counts what was allocated,
 /// which no machine holds 2^53 of.
 const STORAGE: &[&str] = &[
@@ -826,7 +884,9 @@ fn local_tuples(func: &Func) -> LocalTuples {
         match func.values[value.0 as usize].kind {
             OpKind::ConstInt(at) => usize::try_from(at).ok(),
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            OpKind::ConstFloat(at) if at >= 0.0 && at.fract() == 0.0 && at < 65_536.0 => Some(at as usize),
+            OpKind::ConstFloat(at) if at >= 0.0 && at.fract() == 0.0 && at < 65_536.0 => {
+                Some(at as usize)
+            }
             _ => None,
         }
     };
@@ -835,7 +895,10 @@ fn local_tuples(func: &Func) -> LocalTuples {
         if let OpKind::ArrayNew { length, .. } = op.kind
             && let Some(length) = position(length)
         {
-            tuples.insert(ValueId(u32::try_from(index).unwrap_or(u32::MAX)), vec![Vec::new(); length]);
+            tuples.insert(
+                ValueId(u32::try_from(index).unwrap_or(u32::MAX)),
+                vec![Vec::new(); length],
+            );
         }
     }
     if tuples.is_empty() {
@@ -846,7 +909,12 @@ fn local_tuples(func: &Func) -> LocalTuples {
     for block in &func.blocks {
         for &op in &block.ops {
             match &func.values[op.0 as usize].kind {
-                OpKind::ArraySet { array, index, value, .. } if tuples.contains_key(array) => {
+                OpKind::ArraySet {
+                    array,
+                    index,
+                    value,
+                    ..
+                } if tuples.contains_key(array) => {
                     match (position(*index), tuples.get_mut(array)) {
                         (Some(at), Some(slots)) if at < slots.len() => slots[at].push(*value),
                         _ => {
@@ -855,11 +923,20 @@ fn local_tuples(func: &Func) -> LocalTuples {
                     }
                     escaped.extend(std::iter::once(*value).filter(|v| tuples.contains_key(v)));
                 }
-                OpKind::ArrayGet { array, index, .. } if tuples.contains_key(array) && position(*index).is_some() => {}
-                kind => escaped.extend(super::operands_of(kind).into_iter().filter(|v| tuples.contains_key(v))),
+                OpKind::ArrayGet { array, index, .. }
+                    if tuples.contains_key(array) && position(*index).is_some() => {}
+                kind => escaped.extend(
+                    super::operands_of(kind)
+                        .into_iter()
+                        .filter(|v| tuples.contains_key(v)),
+                ),
             }
         }
-        escaped.extend(super::operands_of_terminator(&block.terminator).into_iter().filter(|v| tuples.contains_key(v)));
+        escaped.extend(
+            super::operands_of_terminator(&block.terminator)
+                .into_iter()
+                .filter(|v| tuples.contains_key(v)),
+        );
     }
     // Every position stored where the tuple is built, before any read there.
     for block in &func.blocks {
@@ -891,8 +968,15 @@ fn local_tuples(func: &Func) -> LocalTuples {
 
 /// A read of a local tuple's position ([`LocalTuples`]): the join of what was
 /// stored there.
-fn local_tuple_read(tuples: &LocalTuples, kind: &OpKind, refinements: &Refinements, values: &[Facts]) -> Option<Facts> {
-    let OpKind::ArrayGet { array, index, .. } = kind else { return None };
+fn local_tuple_read(
+    tuples: &LocalTuples,
+    kind: &OpKind,
+    refinements: &Refinements,
+    values: &[Facts],
+) -> Option<Facts> {
+    let OpKind::ArrayGet { array, index, .. } = kind else {
+        return None;
+    };
     let slots = tuples.get(array)?;
     let at = lookup(refinements, values, *index);
     if !(at.is_singleton() && at.integral()) {
@@ -900,7 +984,9 @@ fn local_tuple_read(tuples: &LocalTuples, kind: &OpKind, refinements: &Refinemen
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let stored = slots.get(at.lo as usize)?;
-    Some(stored.iter().fold(Facts::BOTTOM, |joined, value| joined.join(lookup(refinements, values, *value))))
+    Some(stored.iter().fold(Facts::BOTTOM, |joined, value| {
+        joined.join(lookup(refinements, values, *value))
+    }))
 }
 
 /// What native memory of a scalar type holds: that type's values. C wrote
@@ -908,12 +994,20 @@ fn local_tuple_read(tuples: &LocalTuples, kind: &OpKind, refinements: &Refinemen
 /// (`super::obligations`). A bit-field holds its width's.
 fn native_load_facts(func: &Func, kind: &OpKind) -> Facts {
     use super::native::Pointee;
-    let (OpKind::NativeLoad { pointer, .. } | OpKind::NativeBitLoad { pointer, .. }) = kind else { return Facts::TOP };
-    let super::HirType::NativePointer(pointee) = &func.values[pointer.0 as usize].ty else { return Facts::TOP };
+    let (OpKind::NativeLoad { pointer, .. } | OpKind::NativeBitLoad { pointer, .. }) = kind else {
+        return Facts::TOP;
+    };
+    let super::HirType::NativePointer(pointee) = &func.values[pointer.0 as usize].ty else {
+        return Facts::TOP;
+    };
     match (kind, pointee.viewed()) {
         (OpKind::NativeLoad { .. }, Pointee::Scalar(scalar)) => scalar.facts(),
         (OpKind::NativeBitLoad { field, .. }, Pointee::Record(record)) => {
-            match record.fields.get(*field as usize).map(|member| member.ty.viewed()) {
+            match record
+                .fields
+                .get(*field as usize)
+                .map(|member| member.ty.viewed())
+            {
                 Some(Pointee::Bits { unit, width }) => bit_field_facts(*unit, *width),
                 _ => Facts::TOP,
             }
@@ -941,7 +1035,12 @@ fn field_facts(context: &Context, object: &super::HirType, field: u32) -> Facts 
     let super::HirType::Managed(super::ManagedType::Object(ty)) = object else {
         return Facts::TOP;
     };
-    let written = context.written.fields.get(&(*ty, field)).copied().unwrap_or(Facts::TOP);
+    let written = context
+        .written
+        .fields
+        .get(&(*ty, field))
+        .copied()
+        .unwrap_or(Facts::TOP);
     context
         .whole
         .field_facts
@@ -958,6 +1057,7 @@ fn field_facts(context: &Context, object: &super::HirType, field: u32) -> Facts 
 /// degrades silently and at a distance: a missing `Convert` arm cost the
 /// `bytes` benchmark 2.4x, in a specializer that was working correctly. Adding
 /// a producer of values to the HIR means adding an arm here. See record 0016.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn transfer_op(
     func: &Func,
     context: &Context,
@@ -1056,7 +1156,8 @@ fn transfer_op(
         // What the callee was proven to return. Without this every call is
         // a wall: an unanalyzed result poisons everything downstream of it,
         // which for a program made of small functions is everything.
-        OpKind::Call { callee, args, .. } => operand_result(callee, args, refinements, values).unwrap_or_else(|| call_result(context, callee)),
+        OpKind::Call { callee, args, .. } => operand_result(callee, args, refinements, values)
+            .unwrap_or_else(|| call_result(context, callee)),
         // What was stored into this field, anywhere in the program.
         OpKind::FieldGet { object, field } => {
             field_facts(context, &func.values[object.0 as usize].ty, *field)
@@ -1070,7 +1171,14 @@ fn transfer_op(
             .get(global)
             .copied()
             .unwrap_or(Facts::TOP)
-            .narrow(context.written.globals.get(global).copied().unwrap_or(Facts::TOP)),
+            .narrow(
+                context
+                    .written
+                    .globals
+                    .get(global)
+                    .copied()
+                    .unwrap_or(Facts::TOP),
+            ),
         // What anything in the program stored into an array of this type,
         // but *only once the storage agrees*.
         //
@@ -1086,14 +1194,20 @@ fn transfer_op(
         // A position of a tuple a function was written to return: that
         // position's kind, which each of its `return`s was proven to fit.
         OpKind::ArrayGet { array, index, .. }
-            if let OpKind::Call { callee: Callee::Direct(name), .. } = &func.values[array.0 as usize].kind
+            if let OpKind::Call {
+                callee: Callee::Direct(name),
+                ..
+            } = &func.values[array.0 as usize].kind
                 && let Some(elements) = context.written.return_elements.get(name)
                 && let position = lookup(refinements, values, *index)
                 && position.is_singleton()
                 && position.integral() =>
         {
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            elements.get(position.lo as usize).copied().unwrap_or(Facts::TOP)
+            elements
+                .get(position.lo as usize)
+                .copied()
+                .unwrap_or(Facts::TOP)
         }
         OpKind::ArrayGet { array, .. } => match &func.values[array.0 as usize].ty {
             // A view's element carries the same fact for the same reason: the
@@ -1104,8 +1218,7 @@ fn transfer_op(
             // that would have said so.
             super::HirType::Managed(
                 super::ManagedType::Array(element) | super::ManagedType::View(element),
-            ) if matches!(**element, super::HirType::Int { .. }) =>
-            {
+            ) if matches!(**element, super::HirType::Int { .. }) => {
                 // The width *is* a range, whatever the stores say. A
                 // `Uint8Array`'s element is 0 to 255 by construction, and
                 // for a declared typed array that is the only fact there
@@ -1123,13 +1236,20 @@ fn transfer_op(
             }
             _ => Facts::TOP,
         },
-        OpKind::NativeLoad { .. } | OpKind::NativeBitLoad { .. } => native_load_facts(func, &op.kind),
+        OpKind::NativeLoad { .. } | OpKind::NativeBitLoad { .. } => {
+            native_load_facts(func, &op.kind)
+        }
         OpKind::Await { promise, .. } => awaited(func, context, *promise),
         // What an erased value holds, as the type the checker narrowed it to.
         // Its facts are about the number it is when it is one -- a written
         // parameter's kind, through a uniform closure entry -- and this is
         // emitted only where a test proved it is one.
-        OpKind::Unerase { value } if matches!(op.ty, super::HirType::Int { .. } | super::HirType::Float { .. }) => {
+        OpKind::Unerase { value }
+            if matches!(
+                op.ty,
+                super::HirType::Int { .. } | super::HirType::Float { .. }
+            ) =>
+        {
             lookup(refinements, values, *value)
         }
         // A conversion keeps the value it was given, as far as it fits.
@@ -1275,7 +1395,12 @@ fn send(
 ///
 /// An absent entry means the value has only its own definition so far, which is
 /// what `values` holds.
-fn join_into(existing: &mut Refinements, value: ValueId, incoming: Facts, values: &[Facts]) -> bool {
+fn join_into(
+    existing: &mut Refinements,
+    value: ValueId,
+    incoming: Facts,
+    values: &[Facts],
+) -> bool {
     let previous = existing
         .get(&value)
         .copied()
@@ -1340,13 +1465,26 @@ fn refine_edge(
     let mut refined = refinements.clone();
     // `Number.isInteger(x)` taken: `x` is a finite integer -- whole and not
     // NaN, which a guard on its bounds then makes integral. `-0` passes it.
-    if let OpKind::Call { callee: Callee::External(name), args, .. } = &func.values[cond.0 as usize].kind
+    if let OpKind::Call {
+        callee: Callee::External(name),
+        args,
+        ..
+    } = &func.values[cond.0 as usize].kind
         && name == "nts_is_integer"
         && let [tested] = args[..]
     {
         if taken {
             let facts = lookup(refinements, values, tested);
-            refined.insert(tested, facts.narrow(Facts::new(f64::NEG_INFINITY, f64::INFINITY, true, false, true)));
+            refined.insert(
+                tested,
+                facts.narrow(Facts::new(
+                    f64::NEG_INFINITY,
+                    f64::INFINITY,
+                    true,
+                    false,
+                    true,
+                )),
+            );
         }
         return refined;
     }
@@ -1484,7 +1622,10 @@ mod tests {
     #[test]
     fn a_helper_with_result_facts_declares_its_result() {
         for name in INDEX.iter().chain(LENGTH).chain(STORAGE) {
-            assert!(runtime_result(name).is_some(), "{name} is listed and has no facts");
+            assert!(
+                runtime_result(name).is_some(),
+                "{name} is listed and has no facts"
+            );
             assert_eq!(
                 crate::hir::runtime::result(name),
                 Some(&HirType::Float { bits: 64 }),

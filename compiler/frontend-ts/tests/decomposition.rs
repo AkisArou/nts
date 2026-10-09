@@ -459,7 +459,11 @@ fn over_a_foreign_binding(main: &str) -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .unwrap()
-        .join(format!("nts-decompose-foreign-{}-{}", std::process::id(), main.len()));
+        .join(format!(
+            "nts-decompose-foreign-{}-{}",
+            std::process::id(),
+            main.len()
+        ));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("kit.d.ts"),
@@ -482,7 +486,11 @@ fn class_kind<'a>(snapshot: &'a SemanticSnapshot, name: &str) -> &'a TypeKind {
     snapshot
         .types
         .iter()
-        .filter(|record| record.symbol.is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name == name))
+        .filter(|record| {
+            record
+                .symbol
+                .is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name == name)
+        })
         .map(|record| &record.kind)
         .find(|kind| matches!(kind, TypeKind::Object { .. } | TypeKind::Structured { .. }))
         .unwrap_or_else(|| panic!("no type declared by `{name}`"))
@@ -501,12 +509,21 @@ fn a_foreign_classs_member_types_are_decomposed_only_when_reached() {
         return;
     };
     let TypeKind::Object { properties } = class_kind(&snapshot, "KitWindow") else {
-        panic!("`KitWindow` was not decomposed: {:?}", class_kind(&snapshot, "KitWindow"));
+        panic!(
+            "`KitWindow` was not decomposed: {:?}",
+            class_kind(&snapshot, "KitWindow")
+        );
     };
-    let names: Vec<&str> = properties.iter().map(|property| property.name.as_str()).collect();
+    let names: Vec<&str> = properties
+        .iter()
+        .map(|property| property.name.as_str())
+        .collect();
     assert_eq!(names, ["title", "screen"], "its members are all recorded");
     assert!(
-        matches!(class_kind(&snapshot, "KitScreen"), TypeKind::Structured { .. }),
+        matches!(
+            class_kind(&snapshot, "KitScreen"),
+            TypeKind::Structured { .. }
+        ),
         "a class only a member names was decomposed: {:?}",
         class_kind(&snapshot, "KitScreen")
     );
@@ -531,8 +548,12 @@ fn a_foreign_classs_member_types_are_decomposed_only_when_reached() {
 /// generic instance still has its arguments and nothing goes unanswered.
 #[test]
 fn type_arguments_are_asked_of_references_only() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-decompose-arguments-{}", std::process::id()));
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+        .unwrap()
+        .join(format!("nts-decompose-arguments-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("main.ts"),
@@ -547,12 +568,26 @@ fn type_arguments_are_asked_of_references_only() {
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
     let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
     let snapshot = source.snapshot(&tsconfig).expect("snapshot should succeed");
-    assert_eq!(source.stats().types_unanswered, 0, "{:?}", snapshot.diagnostics);
+    assert_eq!(
+        source.stats().types_unanswered,
+        0,
+        "{:?}",
+        snapshot.diagnostics
+    );
     // The instance, not the form `Box<T>` its declaration has: the one type
     // declared by `Box` whose argument is `number`.
     let instance = snapshot.type_arguments.iter().find(|(ty, arguments)| {
-        snapshot.types[ty.0 as usize].symbol.is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name == "Box")
-            && arguments.iter().map(|argument| &snapshot.types[argument.0 as usize].kind).eq([&TypeKind::Number])
+        snapshot.types[ty.0 as usize]
+            .symbol
+            .is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name == "Box")
+            && arguments
+                .iter()
+                .map(|argument| &snapshot.types[argument.0 as usize].kind)
+                .eq([&TypeKind::Number])
     });
-    assert!(instance.is_some(), "`Box<number>` lost its argument: {:?}", snapshot.type_arguments);
+    assert!(
+        instance.is_some(),
+        "`Box<number>` lost its argument: {:?}",
+        snapshot.type_arguments
+    );
 }

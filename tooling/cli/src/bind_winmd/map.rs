@@ -20,10 +20,23 @@ const ULONG: (&str, &str) = ("c_ulong32", "unsigned long");
 #[derive(Debug, Clone)]
 pub(crate) enum TypeDecl {
     /// `export type NAME = <ts>;` -- a handle, a scalar typedef, a callback.
-    Alias { name: String, ts: String, uses: BTreeSet<Name> },
+    Alias {
+        name: String,
+        ts: String,
+        uses: BTreeSet<Name>,
+    },
     /// A struct or union with its fields' emitted C spellings.
-    Record { name: String, ts: String, c: String, fields: Vec<(String, String)>, uses: BTreeSet<Name> },
-    Enum { name: String, members: Vec<(String, String)> },
+    Record {
+        name: String,
+        ts: String,
+        c: String,
+        fields: Vec<(String, String)>,
+        uses: BTreeSet<Name>,
+    },
+    Enum {
+        name: String,
+        members: Vec<(String, String)>,
+    },
 }
 
 impl TypeDecl {
@@ -85,12 +98,20 @@ pub(crate) fn module_of(namespace: &str) -> String {
 }
 
 /// The questions the model raises, asked.
-pub(crate) fn ask(model: &Model, headers: &[String], clang_args: &[String]) -> anyhow::Result<Facts> {
+pub(crate) fn ask(
+    model: &Model,
+    headers: &[String],
+    clang_args: &[String],
+) -> anyhow::Result<Facts> {
     let mut fields = Vec::new();
     let mut typedefs = Vec::new();
     for ((_, name), info) in &model.types {
         match &info.kind {
-            Kind::Struct { fields: members, nested: false, .. } => {
+            Kind::Struct {
+                fields: members,
+                nested: false,
+                ..
+            } => {
                 typedefs.push(name.as_str());
                 for (field, _) in members {
                     fields.push((name.as_str(), field.as_str()));
@@ -101,7 +122,11 @@ pub(crate) fn ask(model: &Model, headers: &[String], clang_args: &[String]) -> a
         }
     }
     let questions = Questions {
-        functions: model.functions.iter().map(|function| function.name.as_str()).collect(),
+        functions: model
+            .functions
+            .iter()
+            .map(|function| function.name.as_str())
+            .collect(),
         fields,
         typedefs,
     };
@@ -195,17 +220,40 @@ impl Mapper<'_> {
         name
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn spell(&mut self, meta: &Type, c: &CType, how: Use) -> Result<Spelled, String> {
         let none = BTreeSet::new;
         match meta {
             Type::Void => match c {
-                CType::Void => Ok(Spelled { ts: "void".into(), c: "void".into(), uses: none() }),
-                other => Err(format!("`void` in the metadata and `{}` in the header", other.spelled())),
+                CType::Void => Ok(Spelled {
+                    ts: "void".into(),
+                    c: "void".into(),
+                    uses: none(),
+                }),
+                other => Err(format!(
+                    "`void` in the metadata and `{}` in the header",
+                    other.spelled()
+                )),
             },
-            Type::Bool | Type::Char | Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::I32 | Type::U32
-            | Type::I64 | Type::U64 | Type::F32 | Type::F64 | Type::ISize | Type::USize => {
+            Type::Bool
+            | Type::Char
+            | Type::I8
+            | Type::U8
+            | Type::I16
+            | Type::U16
+            | Type::I32
+            | Type::U32
+            | Type::I64
+            | Type::U64
+            | Type::F32
+            | Type::F64
+            | Type::ISize
+            | Type::USize => {
                 let CType::Scalar(name) = c else {
-                    return Err(format!("a scalar in the metadata and `{}` in the header", c.spelled()));
+                    return Err(format!(
+                        "a scalar in the metadata and `{}` in the header",
+                        c.spelled()
+                    ));
                 };
                 // The header decides the C type -- `int` or `long`, signed or
                 // not -- but not the width: two sources disagreeing on how
@@ -214,14 +262,24 @@ impl Mapper<'_> {
                 if let (Some(meta_bytes), Some(c_bytes)) = (width_of_meta(meta), width_of_c(name))
                     && meta_bytes != c_bytes
                 {
-                    return Err(format!("{meta_bytes} bytes in the metadata and `{name}` ({c_bytes} bytes) in the header"));
+                    return Err(format!(
+                        "{meta_bytes} bytes in the metadata and `{name}` ({c_bytes} bytes) in the header"
+                    ));
                 }
-                let (brand, emitted) = scalar(name).ok_or_else(|| format!("`{name}`, a C scalar this binder does not spell"))?;
-                Ok(Spelled { ts: self.brand(brand).into(), c: emitted.into(), uses: none() })
+                let (brand, emitted) = scalar(name)
+                    .ok_or_else(|| format!("`{name}`, a C scalar this binder does not spell"))?;
+                Ok(Spelled {
+                    ts: self.brand(brand).into(),
+                    c: emitted.into(),
+                    uses: none(),
+                })
             }
             Type::PtrMut(inner, depth) | Type::PtrConst(inner, depth) => {
                 let CType::Pointer { to, constant } = c else {
-                    return Err(format!("a pointer in the metadata and `{}` in the header", c.spelled()));
+                    return Err(format!(
+                        "a pointer in the metadata and `{}` in the header",
+                        c.spelled()
+                    ));
                 };
                 let pointee = if *depth > 1 {
                     match meta {
@@ -232,9 +290,20 @@ impl Mapper<'_> {
                     (**inner).clone()
                 };
                 let target = if matches!(pointee, Type::Void) {
-                    Spelled { ts: "void".into(), c: "void".into(), uses: none() }
+                    Spelled {
+                        ts: "void".into(),
+                        c: "void".into(),
+                        uses: none(),
+                    }
                 } else {
-                    self.spell(&pointee, to, Use { stored: true, ..Use::default() })?
+                    self.spell(
+                        &pointee,
+                        to,
+                        Use {
+                            stored: true,
+                            ..Use::default()
+                        },
+                    )?
                 };
                 let wrapper = if *constant { "ConstPtr" } else { "Ptr" };
                 self.brands.insert(wrapper);
@@ -248,7 +317,10 @@ impl Mapper<'_> {
                     format!("{}{} *", if *constant { "const " } else { "" }, target.c)
                 };
                 Ok(Spelled {
-                    ts: nullable(format!("{wrapper}<{}>", target.ts), how.optional || how.stored),
+                    ts: nullable(
+                        format!("{wrapper}<{}>", target.ts),
+                        how.optional || how.stored,
+                    ),
                     c: c_spelled,
                     uses: target.uses,
                 })
@@ -257,15 +329,31 @@ impl Mapper<'_> {
                 let CType::Array(element, _) = c else {
                     return Err("a fixed array in the metadata and not in the header".into());
                 };
-                let element = self.spell(inner, element, Use { stored: true, ..Use::default() })?;
+                let element = self.spell(
+                    inner,
+                    element,
+                    Use {
+                        stored: true,
+                        ..Use::default()
+                    },
+                )?;
                 self.brands.insert("CArray");
-                Ok(Spelled { ts: format!("CArray<{}, {count}>", element.ts), c: format!("{}[{count}]", element.c), uses: element.uses })
+                Ok(Spelled {
+                    ts: format!("CArray<{}, {count}>", element.ts),
+                    c: format!("{}[{count}]", element.c),
+                    uses: element.uses,
+                })
             }
             Type::ValueName(type_name) | Type::ClassName(type_name) => {
                 let name = super::read::name_of(type_name);
                 self.named(&name, c, how)
             }
-            Type::String | Type::Object | Type::Array(_) | Type::Generic(..) | Type::RefMut(_) | Type::RefConst(_) => {
+            Type::String
+            | Type::Object
+            | Type::Array(_)
+            | Type::Generic(..)
+            | Type::RefMut(_)
+            | Type::RefConst(_) => {
                 Err("a managed type, which Win32 metadata does not use for a C API".into())
             }
         }
@@ -277,37 +365,62 @@ impl Mapper<'_> {
         };
         match &info.kind {
             // A typedef the metadata says points at UTF-16 characters.
-            Kind::Typedef { value: Type::PtrMut(unit, 1) | Type::PtrConst(unit, 1), .. } if **unit == Type::Char => {
-                self.utf16(&name.1, c, how)
+            Kind::Typedef {
+                value: Type::PtrMut(unit, 1) | Type::PtrConst(unit, 1),
+                ..
+            } if **unit == Type::Char => self.utf16(&name.1, c, how),
+            Kind::Typedef { .. } if matches!(name.1.as_str(), "PSTR" | "PCSTR") => {
+                Ok(self.narrow(c, how))
             }
-            Kind::Typedef { .. } if matches!(name.1.as_str(), "PSTR" | "PCSTR") => Ok(self.narrow(c, how)),
             Kind::Typedef { parent, .. } => self.typedef(name, parent.as_ref(), c, how),
             Kind::Enum { members } => self.enumeration(name, members, c),
-            Kind::Struct { nested: true, .. } => Err(format!("`{}`, a struct with a nested anonymous member", name.1)),
+            Kind::Struct { nested: true, .. } => Err(format!(
+                "`{}`, a struct with a nested anonymous member",
+                name.1
+            )),
             Kind::Struct { fields, union, .. } => self.record(name, fields, *union, c, how),
-            Kind::Delegate { parameters, result } => self.delegate(name, parameters, result, c, how),
+            Kind::Delegate { parameters, result } => {
+                self.delegate(name, parameters, result, c, how)
+            }
             Kind::Interface => Err(format!("`{}`, a COM interface (W2)", name.1)),
-            Kind::Other => Err(format!("`{}`, a kind of type this binder does not read", name.1)),
+            Kind::Other => Err(format!(
+                "`{}`, a kind of type this binder does not read",
+                name.1
+            )),
         }
     }
 
     /// `PWSTR`: a lent `Utf16String` where the callee only reads it during the
     /// call, and a pointer to UTF-16 units otherwise.
     fn utf16(&mut self, simple: &str, c: &CType, how: Use) -> Result<Spelled, String> {
-        let CType::Pointer { to, constant: const_in_header } = c else {
+        let CType::Pointer {
+            to,
+            constant: const_in_header,
+        } = c
+        else {
             return Err(format!("`{simple}` is not a pointer in the header"));
         };
         if **to != CType::Scalar("unsigned short".into()) {
-            return Err(format!("`{simple}` does not point at 16-bit units in the header"));
+            return Err(format!(
+                "`{simple}` does not point at 16-bit units in the header"
+            ));
         }
         // The header decides `const`: the metadata writes `PWSTR` for
         // members the header declares `LPCWSTR` (`WNDCLASSEXW.lpszClassName`).
         let read_only = *const_in_header || how.constant;
         if read_only && !how.output && !how.stored {
             self.brands.insert("Utf16String");
-            return Ok(Spelled { ts: nullable("Utf16String".into(), how.optional), c: "const uint16_t *".into(), uses: BTreeSet::new() });
+            return Ok(Spelled {
+                ts: nullable("Utf16String".into(), how.optional),
+                c: "const uint16_t *".into(),
+                uses: BTreeSet::new(),
+            });
         }
-        let (wrapper, c_spelled) = if *const_in_header { ("ConstPtr", "const uint16_t *") } else { ("Ptr", "uint16_t *") };
+        let (wrapper, c_spelled) = if *const_in_header {
+            ("ConstPtr", "const uint16_t *")
+        } else {
+            ("Ptr", "uint16_t *")
+        };
         self.brands.insert(wrapper);
         self.brands.insert("c_uint16");
         Ok(Spelled {
@@ -321,10 +434,18 @@ impl Mapper<'_> {
     /// to, so a pointer to `char`.
     fn narrow(&mut self, c: &CType, how: Use) -> Spelled {
         let const_in_header = matches!(c, CType::Pointer { constant: true, .. });
-        let (wrapper, c_spelled) = if const_in_header { ("ConstPtr", "const char *") } else { ("Ptr", "char *") };
+        let (wrapper, c_spelled) = if const_in_header {
+            ("ConstPtr", "const char *")
+        } else {
+            ("Ptr", "char *")
+        };
         self.brands.insert(wrapper);
         self.brands.insert("c_char");
-        Spelled { ts: nullable(format!("{wrapper}<c_char>"), how.optional || how.stored), c: c_spelled.into(), uses: BTreeSet::new() }
+        Spelled {
+            ts: nullable(format!("{wrapper}<c_char>"), how.optional || how.stored),
+            c: c_spelled.into(),
+            uses: BTreeSet::new(),
+        }
     }
 
     /// A handle (`struct HWND__ *`, or `void *` for `HANDLE`) or a scalar
@@ -341,7 +462,13 @@ impl Mapper<'_> {
     /// both `struct HINSTANCE__ *`, so C also takes an `HMODULE` for an
     /// `HINSTANCE`, and `wc.hInstance = GetModuleHandleW(null)` is how every
     /// Win32 program starts. Such a handle is an alias of its parent.
-    fn typedef(&mut self, name: &Name, parent: Option<&Name>, c: &CType, how: Use) -> Result<Spelled, String> {
+    fn typedef(
+        &mut self,
+        name: &Name,
+        parent: Option<&Name>,
+        c: &CType,
+        how: Use,
+    ) -> Result<Spelled, String> {
         let simple = name.1.as_str();
         let mut uses = BTreeSet::from([name.clone()]);
         // The parent is declared first, and only when it maps: a handle
@@ -350,7 +477,8 @@ impl Mapper<'_> {
         let parent_ts = parent.and_then(|parent| {
             let parent_c = self.facts.typedefs.get(&parent.1)?.clone();
             self.typedef(parent, None, &parent_c, Use::default()).ok()?;
-            same_in_c = parent_c == *c && matches!(c, CType::Pointer { to, .. } if matches!(**to, CType::Record { .. }));
+            same_in_c = parent_c == *c
+                && matches!(c, CType::Pointer { to, .. } if matches!(**to, CType::Record { .. }));
             Some(parent.1.clone())
         });
         let class = |tag: &str| match &parent_ts {
@@ -359,9 +487,11 @@ impl Mapper<'_> {
         };
         let (ts, nullable_ok, c_spelled) = match c {
             CType::Pointer { to, .. } => match &**to {
-                CType::Record { tag, .. } if same_in_c => {
-                    (parent_ts.clone().unwrap_or_default(), true, format!("struct {tag} *"))
-                }
+                CType::Record { tag, .. } if same_in_c => (
+                    parent_ts.clone().unwrap_or_default(),
+                    true,
+                    format!("struct {tag} *"),
+                ),
                 CType::Record { tag, .. } => {
                     self.brands.insert("Class");
                     (class(tag), true, format!("struct {tag} *"))
@@ -372,42 +502,90 @@ impl Mapper<'_> {
                     (format!("Erased<{}>", class(simple)), true, "void *".into())
                 }
                 other => {
-                    let pointer = CType::Pointer { to: Box::new(other.clone()), constant: false };
+                    let pointer = CType::Pointer {
+                        to: Box::new(other.clone()),
+                        constant: false,
+                    };
                     return Err(format!("`{simple}`, a typedef of `{}`", pointer.spelled()));
                 }
             },
             CType::Scalar(scalar_name) => {
-                let (brand, emitted) =
-                    scalar(scalar_name).ok_or_else(|| format!("`{scalar_name}`, a C scalar this binder does not spell"))?;
+                let (brand, emitted) = scalar(scalar_name).ok_or_else(|| {
+                    format!("`{scalar_name}`, a C scalar this binder does not spell")
+                })?;
                 (self.brand(brand).into(), false, emitted.into())
             }
             other => return Err(format!("`{simple}`, a typedef of `{}`", other.spelled())),
         };
-        let own_uses: BTreeSet<Name> = parent.filter(|_| parent_ts.is_some()).cloned().into_iter().collect();
+        let own_uses: BTreeSet<Name> = parent
+            .filter(|_| parent_ts.is_some())
+            .cloned()
+            .into_iter()
+            .collect();
         uses.extend(own_uses.iter().cloned());
-        self.declared.insert(name.clone(), Some(TypeDecl::Alias { name: simple.into(), ts, uses: own_uses }));
-        Ok(Spelled { ts: nullable(simple.into(), nullable_ok && (how.optional || how.stored)), c: c_spelled, uses })
+        self.declared.insert(
+            name.clone(),
+            Some(TypeDecl::Alias {
+                name: simple.into(),
+                ts,
+                uses: own_uses,
+            }),
+        );
+        Ok(Spelled {
+            ts: nullable(simple.into(), nullable_ok && (how.optional || how.stored)),
+            c: c_spelled,
+            uses,
+        })
     }
 
     /// An enum: a `const enum` of its members, crossing as the scalar the
     /// header gives it.
-    fn enumeration(&mut self, name: &Name, members: &[(String, Value)], c: &CType) -> Result<Spelled, String> {
+    fn enumeration(
+        &mut self,
+        name: &Name,
+        members: &[(String, Value)],
+        c: &CType,
+    ) -> Result<Spelled, String> {
         let simple = name.1.as_str();
         let CType::Scalar(scalar_name) = c else {
-            return Err(format!("`{simple}`, an enum the header spells `{}`", c.spelled()));
+            return Err(format!(
+                "`{simple}`, an enum the header spells `{}`",
+                c.spelled()
+            ));
         };
-        let (brand, emitted) = scalar(scalar_name).ok_or_else(|| format!("`{scalar_name}`, a C scalar this binder does not spell"))?;
+        let (brand, emitted) = scalar(scalar_name)
+            .ok_or_else(|| format!("`{scalar_name}`, a C scalar this binder does not spell"))?;
         let brand = self.brand(brand);
         self.brands.insert("CEnum");
-        let members = members.iter().filter_map(|(member, value)| number(value).map(|v| (member.clone(), v))).collect();
-        self.declared.insert(name.clone(), Some(TypeDecl::Enum { name: simple.into(), members }));
-        Ok(Spelled { ts: format!("CEnum<{simple}, {brand}>"), c: emitted.into(), uses: BTreeSet::from([name.clone()]) })
+        let members = members
+            .iter()
+            .filter_map(|(member, value)| number(value).map(|v| (member.clone(), v)))
+            .collect();
+        self.declared.insert(
+            name.clone(),
+            Some(TypeDecl::Enum {
+                name: simple.into(),
+                members,
+            }),
+        );
+        Ok(Spelled {
+            ts: format!("CEnum<{simple}, {brand}>"),
+            c: emitted.into(),
+            uses: BTreeSet::from([name.clone()]),
+        })
     }
 
     /// A struct or union, through a pointer or as a member, or by value as a
     /// function's own argument or result (`WindowFromPoint(POINT)`):
     /// `ByValue<POINT>`, whose calling convention is the backend's to follow.
-    fn record(&mut self, name: &Name, fields: &[(String, Type)], union: bool, c: &CType, how: Use) -> Result<Spelled, String> {
+    fn record(
+        &mut self,
+        name: &Name,
+        fields: &[(String, Type)],
+        union: bool,
+        c: &CType,
+        how: Use,
+    ) -> Result<Spelled, String> {
         let simple = name.1.as_str();
         if !how.stored && !how.direct {
             return Err(format!("`{simple}` passed by value to or from a callback"));
@@ -421,7 +599,9 @@ impl Mapper<'_> {
             _ => None,
         };
         let keyword = if union { "union" } else { "struct" };
-        let c_spelled = tag.as_ref().map_or_else(|| simple.to_owned(), |tag| format!("{keyword} {tag}"));
+        let c_spelled = tag
+            .as_ref()
+            .map_or_else(|| simple.to_owned(), |tag| format!("{keyword} {tag}"));
         let mut uses = BTreeSet::from([name.clone()]);
         if !self.declared.contains_key(name) {
             // Declared before its members are, so a member pointing back at
@@ -435,8 +615,20 @@ impl Mapper<'_> {
                     .fields
                     .get(&(simple.to_owned(), field.clone()))
                     .cloned()
-                    .ok_or_else(|| format!("`{simple}.{field}`, a field the headers did not answer for"))
-                    .and_then(|field_c| self.spell(meta, &field_c, Use { stored: true, ..Use::default() }).map_err(|why| format!("`{simple}.{field}`: {why}")));
+                    .ok_or_else(|| {
+                        format!("`{simple}.{field}`, a field the headers did not answer for")
+                    })
+                    .and_then(|field_c| {
+                        self.spell(
+                            meta,
+                            &field_c,
+                            Use {
+                                stored: true,
+                                ..Use::default()
+                            },
+                        )
+                        .map_err(|why| format!("`{simple}.{field}`: {why}"))
+                    });
                 match spelled {
                     Ok(spelled) => {
                         member_uses.extend(spelled.uses);
@@ -450,7 +642,11 @@ impl Mapper<'_> {
             }
             let shape = if union { "Union" } else { "Struct" };
             self.brands.insert(shape);
-            let body = members.iter().map(|(field, ts, _)| format!("{field}: {ts}")).collect::<Vec<_>>().join("; ");
+            let body = members
+                .iter()
+                .map(|(field, ts, _)| format!("{field}: {ts}"))
+                .collect::<Vec<_>>()
+                .join("; ");
             let ts = if let Some(tag) = &tag {
                 format!("{shape}<{{ {body} }}, \"{tag}\">")
             } else {
@@ -459,26 +655,68 @@ impl Mapper<'_> {
             };
             uses.extend(member_uses.iter().cloned());
             member_uses.remove(name);
-            let fields = members.into_iter().map(|(field, _, c)| (field, c)).collect();
-            self.declared.insert(name.clone(), Some(TypeDecl::Record { name: simple.into(), ts, c: c_spelled.clone(), fields, uses: member_uses }));
+            let fields = members
+                .into_iter()
+                .map(|(field, _, c)| (field, c))
+                .collect();
+            self.declared.insert(
+                name.clone(),
+                Some(TypeDecl::Record {
+                    name: simple.into(),
+                    ts,
+                    c: c_spelled.clone(),
+                    fields,
+                    uses: member_uses,
+                }),
+            );
         }
         if how.stored {
-            return Ok(Spelled { ts: simple.into(), c: c_spelled, uses });
+            return Ok(Spelled {
+                ts: simple.into(),
+                c: c_spelled,
+                uses,
+            });
         }
         self.brands.insert("ByValue");
-        Ok(Spelled { ts: format!("ByValue<{simple}>"), c: c_spelled, uses })
+        Ok(Spelled {
+            ts: format!("ByValue<{simple}>"),
+            c: c_spelled,
+            uses,
+        })
     }
 
     /// A callback type: a function type alias, crossing as the C function
     /// pointer the header declares.
-    fn delegate(&mut self, name: &Name, parameters: &[(String, Type)], result: &Type, c: &CType, how: Use) -> Result<Spelled, String> {
+    fn delegate(
+        &mut self,
+        name: &Name,
+        parameters: &[(String, Type)],
+        result: &Type,
+        c: &CType,
+        how: Use,
+    ) -> Result<Spelled, String> {
         let simple = name.1.as_str();
-        let CType::Pointer { to, .. } = c else { return Err(format!("`{simple}` is not a function pointer in the header")) };
-        let CType::Function { result: c_result, parameters: c_parameters, variadic: false } = &**to else {
-            return Err(format!("`{simple}` is not a function pointer in the header"));
+        let CType::Pointer { to, .. } = c else {
+            return Err(format!(
+                "`{simple}` is not a function pointer in the header"
+            ));
+        };
+        let CType::Function {
+            result: c_result,
+            parameters: c_parameters,
+            variadic: false,
+        } = &**to
+        else {
+            return Err(format!(
+                "`{simple}` is not a function pointer in the header"
+            ));
         };
         if c_parameters.len() != parameters.len() {
-            return Err(format!("`{simple}` has {} parameters in the metadata and {} in the header", parameters.len(), c_parameters.len()));
+            return Err(format!(
+                "`{simple}` has {} parameters in the metadata and {} in the header",
+                parameters.len(),
+                c_parameters.len()
+            ));
         }
         let mut uses = BTreeSet::from([name.clone()]);
         let mut list = Vec::new();
@@ -495,10 +733,26 @@ impl Mapper<'_> {
         own.remove(name);
         self.declared.insert(
             name.clone(),
-            Some(TypeDecl::Alias { name: simple.into(), ts: format!("({}) => {}", list.join(", "), returned.ts), uses: own }),
+            Some(TypeDecl::Alias {
+                name: simple.into(),
+                ts: format!("({}) => {}", list.join(", "), returned.ts),
+                uses: own,
+            }),
         );
-        let c_spelled = format!("{} (*)({})", returned.c, if c_list.is_empty() { "void".into() } else { c_list.join(", ") });
-        Ok(Spelled { ts: nullable(simple.into(), how.optional || how.stored), c: c_spelled, uses })
+        let c_spelled = format!(
+            "{} (*)({})",
+            returned.c,
+            if c_list.is_empty() {
+                "void".into()
+            } else {
+                c_list.join(", ")
+            }
+        );
+        Ok(Spelled {
+            ts: nullable(simple.into(), how.optional || how.stored),
+            c: c_spelled,
+            uses,
+        })
     }
 }
 
@@ -532,17 +786,33 @@ fn constant_brand(meta: &Type) -> Option<&'static str> {
 /// Every namespace's module: the ones asked for, and each one owning a type
 /// they reach.
 pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
-    let mut mapper = Mapper { model, facts, declared: BTreeMap::new(), brands: BTreeSet::new() };
+    let mut mapper = Mapper {
+        model,
+        facts,
+        declared: BTreeMap::new(),
+        brands: BTreeSet::new(),
+    };
     let mut by_namespace: BTreeMap<String, Binding> = BTreeMap::new();
     let entry = |by: &mut BTreeMap<String, Binding>, namespace: &str| {
-        by.entry(namespace.to_owned())
-            .or_insert_with(|| Binding { namespace: namespace.to_owned(), module: module_of(namespace), ..Binding::default() });
+        by.entry(namespace.to_owned()).or_insert_with(|| Binding {
+            namespace: namespace.to_owned(),
+            module: module_of(namespace),
+            ..Binding::default()
+        });
     };
     for function in &model.functions {
         entry(&mut by_namespace, &function.namespace);
         match map_function(&mut mapper, function) {
-            Ok(bound) => by_namespace.get_mut(&function.namespace).expect("inserted").functions.push(bound),
-            Err(why) => by_namespace.get_mut(&function.namespace).expect("inserted").refused.push((function.name.clone(), why)),
+            Ok(bound) => by_namespace
+                .get_mut(&function.namespace)
+                .expect("inserted")
+                .functions
+                .push(bound),
+            Err(why) => by_namespace
+                .get_mut(&function.namespace)
+                .expect("inserted")
+                .refused
+                .push((function.name.clone(), why)),
         }
     }
     for constant in &model.constants {
@@ -551,9 +821,16 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
         match (constant_brand(&constant.ty), number(&constant.value)) {
             (Some(brand), Some(value)) => {
                 mapper.brands.insert(brand);
-                binding.constants.push(Constant { name: constant.name.clone(), value, ts: brand.to_owned() });
+                binding.constants.push(Constant {
+                    name: constant.name.clone(),
+                    value,
+                    ts: brand.to_owned(),
+                });
             }
-            _ => binding.refused.push((constant.name.clone(), "a constant that is not a plain integer".into())),
+            _ => binding.refused.push((
+                constant.name.clone(),
+                "a constant that is not a plain integer".into(),
+            )),
         }
     }
     // Each type declared where the metadata puts it.
@@ -561,9 +838,20 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
         let Some(decl) = decl else { continue };
         entry(&mut by_namespace, &name.0);
         let binding = by_namespace.get_mut(&name.0).expect("inserted");
-        if let TypeDecl::Record { name: record, c, fields, .. } = &decl {
+        if let TypeDecl::Record {
+            name: record,
+            c,
+            fields,
+            ..
+        } = &decl
+        {
             for (field, field_c) in fields {
-                binding.field_checks.push((record.clone(), c.clone(), field.clone(), field_c.clone()));
+                binding.field_checks.push((
+                    record.clone(),
+                    c.clone(),
+                    field.clone(),
+                    field_c.clone(),
+                ));
             }
         }
         binding.types.push(decl);
@@ -580,8 +868,18 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
 }
 
 fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result<Function, String> {
-    let Some(CType::Function { result, parameters, variadic }) = mapper.facts.functions.get(&function.name).cloned() else {
-        return Err(mapper.facts.unanswered.get(&function.name).cloned().unwrap_or_else(|| "not declared by <windows.h>".into()));
+    let Some(CType::Function {
+        result,
+        parameters,
+        variadic,
+    }) = mapper.facts.functions.get(&function.name).cloned()
+    else {
+        return Err(mapper
+            .facts
+            .unanswered
+            .get(&function.name)
+            .cloned()
+            .unwrap_or_else(|| "not declared by <windows.h>".into()));
     };
     if variadic {
         return Err("variadic".into());
@@ -598,8 +896,16 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
     let mut uses = BTreeSet::new();
     let mut no_escape = Vec::new();
     for (parameter, c) in function.parameters.iter().zip(&parameters) {
-        let how = Use { optional: parameter.optional, constant: parameter.constant, output: parameter.output, stored: false, direct: true };
-        let spelled = mapper.spell(&parameter.ty, c, how).map_err(|why| format!("parameter `{}`: {why}", parameter.name))?;
+        let how = Use {
+            optional: parameter.optional,
+            constant: parameter.constant,
+            output: parameter.output,
+            stored: false,
+            direct: true,
+        };
+        let spelled = mapper
+            .spell(&parameter.ty, c, how)
+            .map_err(|why| format!("parameter `{}`: {why}", parameter.name))?;
         // A pointer Win32 reads or writes during the call: the metadata's
         // `[In]`/`[Out]` is that contract, and no Win32 API it marks so keeps
         // the address. A lent string is released after the call anyway.
@@ -611,10 +917,26 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
         c_list.push(spelled.c);
     }
     let returned = mapper
-        .spell(&function.result, &result, Use { optional: true, direct: true, ..Use::default() })
+        .spell(
+            &function.result,
+            &result,
+            Use {
+                optional: true,
+                direct: true,
+                ..Use::default()
+            },
+        )
         .map_err(|why| format!("the result: {why}"))?;
     uses.extend(returned.uses);
-    let c_type = format!("{} (*)({})", returned.c, if c_list.is_empty() { "void".into() } else { c_list.join(", ") });
+    let c_type = format!(
+        "{} (*)({})",
+        returned.c,
+        if c_list.is_empty() {
+            "void".into()
+        } else {
+            c_list.join(", ")
+        }
+    );
     Ok(Function {
         name: function.name.clone(),
         library: function.library.clone(),

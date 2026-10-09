@@ -54,9 +54,17 @@ fn lint(text: &str, name: &str) -> Option<Vec<String>> {
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("m.ll");
     std::fs::write(&path, text).unwrap();
-    let output = Command::new("opt").args(["-passes=lint", "-disable-output"]).arg(&path).output().ok()?;
+    let output = Command::new("opt")
+        .args(["-passes=lint", "-disable-output"])
+        .arg(&path)
+        .output()
+        .ok()?;
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(output.status.success(), "opt rejected the module: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "opt rejected the module: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let report = String::from_utf8_lossy(&output.stderr).into_owned();
     let lines: Vec<&str> = report.lines().collect();
     Some(
@@ -75,7 +83,10 @@ fn every_runtime_call_agrees_with_its_declaration() {
         eprintln!("skipped: no opt");
         return;
     };
-    assert!(!found.is_empty(), "lint reported nothing for a call with the wrong arguments");
+    assert!(
+        !found.is_empty(),
+        "lint reported nothing for a call with the wrong arguments"
+    );
 
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         eprintln!("skipped: no tsgo");
@@ -93,24 +104,56 @@ fn every_runtime_call_agrees_with_its_declaration() {
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     // Under reference counting as well: an erased value's retain and release
     // are spelled by hand, and were System V's split on Win64 too -- a crash
     // the first time a Windows program counted one.
-    let counted = hir::prepare_with(&snapshot, &hir::Options { provider: hir::Provider::ReferenceCounting, ..hir::Options::default() }).unwrap();
+    let counted = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Provider::ReferenceCounting,
+            ..hir::Options::default()
+        },
+    )
+    .unwrap();
     assert!(counted.diagnostics.is_empty(), "{:?}", counted.diagnostics);
-    for platform in [nts_codegen_llvm::Platform::SYSV_X86_64, nts_codegen_llvm::Platform::WIN64_X86_64] {
+    for platform in [
+        nts_codegen_llvm::Platform::SYSV_X86_64,
+        nts_codegen_llvm::Platform::WIN64_X86_64,
+    ] {
         let emitted = nts_codegen_llvm::emit(&counted.program, platform);
-        assert!(emitted.diagnostics.is_empty(), "{platform:?} --rc: {:?}", emitted.diagnostics);
+        assert!(
+            emitted.diagnostics.is_empty(),
+            "{platform:?} --rc: {:?}",
+            emitted.diagnostics
+        );
         for helper in ["@nts_value_retain(", "@nts_value_release("] {
-            assert!(emitted.text.contains(helper), "{platform:?} --rc: the program does not call {helper}");
+            assert!(
+                emitted.text.contains(helper),
+                "{platform:?} --rc: the program does not call {helper}"
+            );
         }
         let found = lint(&emitted.text, &format!("{platform:?}-rc")).unwrap();
-        assert!(found.is_empty(), "{platform:?} --rc: calls that disagree with their declarations:\n{}", found.join("\n"));
+        assert!(
+            found.is_empty(),
+            "{platform:?} --rc: calls that disagree with their declarations:\n{}",
+            found.join("\n")
+        );
     }
-    for platform in [nts_codegen_llvm::Platform::SYSV_X86_64, nts_codegen_llvm::Platform::WIN64_X86_64] {
+    for platform in [
+        nts_codegen_llvm::Platform::SYSV_X86_64,
+        nts_codegen_llvm::Platform::WIN64_X86_64,
+    ] {
         let emitted = nts_codegen_llvm::emit(&prepared.program, platform);
-        assert!(emitted.diagnostics.is_empty(), "{platform:?}: {:?}", emitted.diagnostics);
+        assert!(
+            emitted.diagnostics.is_empty(),
+            "{platform:?}: {:?}",
+            emitted.diagnostics
+        );
         // The program reaches each path this is about, or it checked nothing.
         for helper in [
             "@nts_map_set(",
@@ -122,10 +165,17 @@ fn every_runtime_call_agrees_with_its_declaration() {
             "@nts_bigint_shl(",
             "call i32 @nts_array_length(",
         ] {
-            assert!(emitted.text.contains(helper), "{platform:?}: the program does not call {helper}");
+            assert!(
+                emitted.text.contains(helper),
+                "{platform:?}: the program does not call {helper}"
+            );
         }
         let found = lint(&emitted.text, &format!("{platform:?}")).unwrap();
-        assert!(found.is_empty(), "{platform:?}: calls that disagree with their declarations:\n{}", found.join("\n"));
+        assert!(
+            found.is_empty(),
+            "{platform:?}: calls that disagree with their declarations:\n{}",
+            found.join("\n")
+        );
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -152,23 +202,57 @@ fn arm64_passes_an_erased_value_as_two_words() {
     let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    let arm64 = nts_codegen_llvm::Platform {
+        abi: nts_core::hir::native::NativeAbi::SysV,
+        arch: nts_codegen_llvm::Arch::Aarch64,
+    };
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let prepared = hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).unwrap();
-        assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+        let prepared = hir::prepare_with(
+            &snapshot,
+            &hir::Options {
+                provider,
+                ..hir::Options::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
         let emitted = nts_codegen_llvm::emit(&prepared.program, arm64);
         // `run` is exported and returns a string, and takes `unknown[]` -- an
         // array, not an erased value -- so nothing here is refused.
-        assert!(emitted.diagnostics.is_empty(), "arm64 {provider:?}: {:?}", emitted.diagnostics);
-        for helper in ["@nts_map_set(", "@nts_value_truthy_fn(", "@nts_value_strict_eq(", "@nts_is_class(", "call i32 @nts_array_length("] {
-            assert!(emitted.text.contains(helper), "arm64 {provider:?}: the program does not call {helper}");
+        assert!(
+            emitted.diagnostics.is_empty(),
+            "arm64 {provider:?}: {:?}",
+            emitted.diagnostics
+        );
+        for helper in [
+            "@nts_map_set(",
+            "@nts_value_truthy_fn(",
+            "@nts_value_strict_eq(",
+            "@nts_is_class(",
+            "call i32 @nts_array_length(",
+        ] {
+            assert!(
+                emitted.text.contains(helper),
+                "arm64 {provider:?}: the program does not call {helper}"
+            );
         }
-        assert!(emitted.text.contains("[2 x i64]"), "arm64 {provider:?}: no erased value crossed as two words");
+        assert!(
+            emitted.text.contains("[2 x i64]"),
+            "arm64 {provider:?}: no erased value crossed as two words"
+        );
         let Some(found) = lint(&emitted.text, &format!("arm64-{provider:?}")) else {
             eprintln!("skipped the lint: no opt");
             return;
         };
-        assert!(found.is_empty(), "arm64 {provider:?}: calls that disagree with their declarations:\n{}", found.join("\n"));
+        assert!(
+            found.is_empty(),
+            "arm64 {provider:?}: calls that disagree with their declarations:\n{}",
+            found.join("\n")
+        );
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -203,8 +287,13 @@ fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let emitted =
+        nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     for shape in [
         "define internal i128 @doubled.body(i128 %v0)",
@@ -213,13 +302,21 @@ fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
         "define void @described(ptr sret({ i32, i64 }) align 8 %result, ptr %a0)",
         "define double @plain(double %v0)",
     ] {
-        assert!(emitted.text.contains(shape), "no `{shape}`:\n{}", emitted.text);
+        assert!(
+            emitted.text.contains(shape),
+            "no `{shape}`:\n{}",
+            emitted.text
+        );
     }
     let Some(found) = lint(&emitted.text, "win64-entry") else {
         eprintln!("skipped the lint: no opt");
         return;
     };
-    assert!(found.is_empty(), "calls that disagree with their declarations:\n{}", found.join("\n"));
+    assert!(
+        found.is_empty(),
+        "calls that disagree with their declarations:\n{}",
+        found.join("\n")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -234,7 +331,10 @@ fn arm64_exports_an_erased_value_through_a_c_entry() {
         eprintln!("skipped: no tsgo");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("nts-runtime-abi-arm64-entry-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "nts-runtime-abi-arm64-entry-{}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
         dir.join("src/main.ts"),
@@ -251,8 +351,15 @@ fn arm64_exports_an_erased_value_through_a_c_entry() {
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let arm64 = nts_codegen_llvm::Platform { abi: nts_core::hir::native::NativeAbi::SysV, arch: nts_codegen_llvm::Arch::Aarch64 };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let arm64 = nts_codegen_llvm::Platform {
+        abi: nts_core::hir::native::NativeAbi::SysV,
+        arch: nts_codegen_llvm::Arch::Aarch64,
+    };
     let emitted = nts_codegen_llvm::emit(&prepared.program, arm64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     for shape in [
@@ -260,12 +367,20 @@ fn arm64_exports_an_erased_value_through_a_c_entry() {
         "define [2 x i64] @described([2 x i64] %a0)",
         "define [2 x i64] @kept([2 x i64] %a0, double %a1)",
     ] {
-        assert!(emitted.text.contains(shape), "no `{shape}`:\n{}", emitted.text);
+        assert!(
+            emitted.text.contains(shape),
+            "no `{shape}`:\n{}",
+            emitted.text
+        );
     }
     let Some(found) = lint(&emitted.text, "arm64-entry") else {
         eprintln!("skipped the lint: no opt");
         return;
     };
-    assert!(found.is_empty(), "calls that disagree with their declarations:\n{}", found.join("\n"));
+    assert!(
+        found.is_empty(),
+        "calls that disagree with their declarations:\n{}",
+        found.join("\n")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

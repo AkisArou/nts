@@ -25,7 +25,6 @@ pub(crate) mod map;
 mod read;
 pub(crate) mod winrt;
 
-
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -63,15 +62,24 @@ pub(crate) fn run(request: &Request) -> Result<()> {
     let command = format!("nts bind-winmd {}", request.namespaces.join(" "));
     // Windows Runtime namespaces are read straight off their own metadata;
     // Win32 ones are checked against the headers too.
-    let (winrt, win32): (Vec<String>, Vec<String>) =
-        request.namespaces.iter().cloned().partition(|namespace| winrt::is_winrt(namespace));
+    let (winrt, win32): (Vec<String>, Vec<String>) = request
+        .namespaces
+        .iter()
+        .cloned()
+        .partition(|namespace| winrt::is_winrt(namespace));
     if !winrt.is_empty() {
         for line in winrt::write(&winrt, &winrt::default_metadata(), &request.out, &command)? {
             println!("{line}");
         }
     }
     if !win32.is_empty() {
-        for line in bind(&Request { namespaces: win32, ..request.clone() }, &command)? {
+        for line in bind(
+            &Request {
+                namespaces: win32,
+                ..request.clone()
+            },
+            &command,
+        )? {
             println!("{line}");
         }
     }
@@ -81,7 +89,9 @@ pub(crate) fn run(request: &Request) -> Result<()> {
 /// The namespace a `c:` module names, when it is a Win32 metadata one.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
     let namespace = module.strip_prefix("c:")?;
-    namespace.starts_with("Windows.Win32.").then(|| namespace.to_owned())
+    namespace
+        .starts_with("Windows.Win32.")
+        .then(|| namespace.to_owned())
 }
 
 /// Bind `request.namespaces` into `request.out`, answering one line per module.
@@ -110,12 +120,20 @@ fn summary(binding: &map::Binding) -> String {
 /// Win32 `namespaces` bound from `winmd` and checked against the headers for
 /// `arch`, in memory, and which namespace declares each name -- what the
 /// modules import from each other (`emit::render`).
-pub(crate) fn generate(namespaces: &[String], winmd: &Utf8Path, arch: &str) -> Result<(Vec<map::Binding>, std::collections::BTreeMap<String, String>)> {
+pub(crate) fn generate(
+    namespaces: &[String],
+    winmd: &Utf8Path,
+    arch: &str,
+) -> Result<(
+    Vec<map::Binding>,
+    std::collections::BTreeMap<String, String>,
+)> {
     let index = windows_metadata::reader::Index::read(winmd)
         .with_context(|| format!("reading {winmd}: fetch it with tooling/windows/fetch-win32metadata.sh, or pass --winmd"))?
         .leak();
     let model = read::read(index, namespaces);
-    let zig = crate::zig_lib_dir().context("`zig env` did not answer; the Windows headers come from zig")?;
+    let zig = crate::zig_lib_dir()
+        .context("`zig env` did not answer; the Windows headers come from zig")?;
     let clang_args = crate::windows_compile_flags(arch, &zig);
     let headers = vec!["windows.h".to_owned()];
     let facts = map::ask(&model, &headers, &clang_args)?;
@@ -123,7 +141,12 @@ pub(crate) fn generate(namespaces: &[String], winmd: &Utf8Path, arch: &str) -> R
     check::against_headers(&mut bindings, &headers, &clang_args)?;
     let owners = bindings
         .iter()
-        .flat_map(|binding| binding.types.iter().map(|decl| (decl.name().to_owned(), binding.namespace.clone())))
+        .flat_map(|binding| {
+            binding
+                .types
+                .iter()
+                .map(|decl| (decl.name().to_owned(), binding.namespace.clone()))
+        })
         .collect();
     Ok((bindings, owners))
 }

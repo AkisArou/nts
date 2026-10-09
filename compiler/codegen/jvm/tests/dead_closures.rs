@@ -45,26 +45,46 @@ fn lowered_from(name: &str, source: &str) -> Option<(hir::Program, std::path::Pa
     let fixtures = common::repository().join("tsconfig.fixtures.json");
     std::fs::write(
         dir.join("tsconfig.json"),
-        format!("{{\"extends\": {:?}, \"include\": [\"src\"]}}\n", fixtures.display().to_string()),
+        format!(
+            "{{\"extends\": {:?}, \"include\": [\"src\"]}}\n",
+            fixtures.display().to_string()
+        ),
     )
     .unwrap();
     std::fs::write(dir.join("src/main.ts"), source).unwrap();
     let tsconfig = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).expect("snapshot");
-    let prepared = hir::prepare_with(&snapshot, &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() })
-        .expect("prepared");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot");
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Provider::NoGc,
+            ..hir::Options::default()
+        },
+    )
+    .expect("prepared");
     Some((prepared.program, dir))
 }
 
 fn closure_type(program: &hir::Program, layout: &str) -> nts_semantic_schema::TypeId {
-    program.layouts.iter().find(|l| l.name == layout).expect("the closure layout").types[0]
+    program
+        .layouts
+        .iter()
+        .find(|l| l.name == layout)
+        .expect("the closure layout")
+        .types[0]
 }
 
 /// Append a `ClosureStatic` of `Closure0` to `module#init`'s arena; when `live`,
 /// also hold it in the entry block and have the first `array.set` store it.
 fn with_closure_static(program: &mut hir::Program, live: bool) {
     let ty = closure_type(program, "Closure0");
-    let init = program.funcs.iter_mut().find(|f| f.name == "module#init").expect("module#init");
+    let init = program
+        .funcs
+        .iter_mut()
+        .find(|f| f.name == "module#init")
+        .expect("module#init");
     let origin = init.values[0].origin.clone();
     let id = hir::ValueId(u32::try_from(init.values.len()).unwrap());
     init.values.push(hir::Op {
@@ -89,7 +109,13 @@ fn with_closure_static(program: &mut hir::Program, live: bool) {
 
 fn program_class(program: &hir::Program) -> Vec<u8> {
     let emitted = nts_codegen_jvm::emit(program);
-    emitted.classes.iter().find(|c| c.path().ends_with("nts/gen/Program.class")).expect("Program").bytes.clone()
+    emitted
+        .classes
+        .iter()
+        .find(|c| c.path().ends_with("nts/gen/Program.class"))
+        .expect("Program")
+        .bytes
+        .clone()
 }
 
 fn names(bytes: &[u8], needle: &str) -> bool {
@@ -101,12 +127,22 @@ fn names(bytes: &[u8], needle: &str) -> bool {
 /// does. The control holds the same op in a block and reads it.
 #[test]
 fn a_closure_static_no_block_holds_gets_no_singleton() {
-    let Some((mut dead, _)) = lowered("dead") else { return };
-    let Some((mut live, _)) = lowered("live") else { return };
+    let Some((mut dead, _)) = lowered("dead") else {
+        return;
+    };
+    let Some((mut live, _)) = lowered("live") else {
+        return;
+    };
     with_closure_static(&mut dead, false);
     with_closure_static(&mut live, true);
-    assert!(!names(&program_class(&dead), "closure$Closure0"), "an excised ClosureStatic built a singleton");
-    assert!(names(&program_class(&live), "closure$Closure0"), "the control: a held, read ClosureStatic builds one");
+    assert!(
+        !names(&program_class(&dead), "closure$Closure0"),
+        "an excised ClosureStatic built a singleton"
+    );
+    assert!(
+        names(&program_class(&live), "closure$Closure0"),
+        "the control: a held, read ClosureStatic builds one"
+    );
 }
 
 /// A closure layout every body of which is gone, under a callable base: each
@@ -114,9 +150,13 @@ fn a_closure_static_no_block_holds_gets_no_singleton() {
 /// (an `AbstractMethodError`) or bridged to a body it does not have.
 #[test]
 fn an_uncallable_closure_refuses_by_name() {
-    let Some(said) = uncallable("uncallable", SOURCE, false) else { return };
+    let Some(said) = uncallable("uncallable", SOURCE, false) else {
+        return;
+    };
     assert!(
-        said.contains("erased_call: nts: refused at run time: `Closure1` has no `erased_call` to call"),
+        said.contains(
+            "erased_call: nts: refused at run time: `Closure1` has no `erased_call` to call"
+        ),
         "the stub refuses by name as the missing-feature abort: {said}"
     );
 }
@@ -126,7 +166,9 @@ fn an_uncallable_closure_refuses_by_name() {
 /// So the fixture's raising body is asserted before it is taken away.
 #[test]
 fn an_uncallable_closure_refuses_its_raising_entry_by_name() {
-    let Some(said) = uncallable("uncallable-raising", RAISING_SOURCE, true) else { return };
+    let Some(said) = uncallable("uncallable-raising", RAISING_SOURCE, true) else {
+        return;
+    };
     assert!(
         said.contains("erased_call$raises: nts: refused at run time: `Closure1` has no `erased_call$raises` to call"),
         "the raising stub refuses by name as the missing-feature abort: {said}"
@@ -145,7 +187,12 @@ fn uncallable(name: &str, source: &str, raising: bool) -> Option<String> {
     };
     let javac = common::tool("javac").expect("javac beside java");
     let raises = program.funcs.iter().any(|f| f.name.ends_with("@raises"));
-    assert_eq!(raises, raising, "the fixture's raising bodies: {:?}", program.funcs.iter().map(|f| &f.name).collect::<Vec<_>>());
+    assert_eq!(
+        raises,
+        raising,
+        "the fixture's raising bodies: {:?}",
+        program.funcs.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
     for layout in program.layouts.iter_mut().filter(|l| l.name == "Closure1") {
         layout.methods.iter_mut().for_each(|m| *m = None);
     }
@@ -173,11 +220,30 @@ fn uncallable(name: &str, source: &str, raising: bool) -> Option<String> {
     )
     .unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac).args(["-cp", &cp, "-d"]).arg(&out).arg(out.join("Drive.java")).output().unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
-    let ran = Command::new(&java).args(["-Xverify:all", "-cp", &cp, "Drive"]).output().unwrap();
+    let compiled = Command::new(&javac)
+        .args(["-cp", &cp, "-d"])
+        .arg(&out)
+        .arg(out.join("Drive.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let ran = Command::new(&java)
+        .args(["-Xverify:all", "-cp", &cp, "Drive"])
+        .output()
+        .unwrap();
     let said = String::from_utf8_lossy(&ran.stdout).into_owned();
-    assert!(ran.status.success(), "{said}{}", String::from_utf8_lossy(&ran.stderr));
-    assert!(!said.contains("answered"), "no uniform entry of a bodiless closure may answer: {said}");
+    assert!(
+        ran.status.success(),
+        "{said}{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert!(
+        !said.contains("answered"),
+        "no uniform entry of a bodiless closure may answer: {said}"
+    );
     Some(said)
 }

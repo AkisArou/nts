@@ -22,7 +22,11 @@ fn origin() -> nts_semantic_schema::Origin {
 
 /// `name(a: erased) -> returns`, the length of `a`.
 fn length(name: &str, returns: HirType) -> hir::Func {
-    let op = |kind, ty| hir::Op { kind, ty, origin: origin() };
+    let op = |kind, ty| hir::Op {
+        kind,
+        ty,
+        origin: origin(),
+    };
     hir::Func {
         name: name.into(),
         params: vec![hir::Param {
@@ -34,7 +38,10 @@ fn length(name: &str, returns: HirType) -> hir::Func {
             written: None,
         }],
         return_type: returns.clone(),
-        values: vec![op(OpKind::Param(0), HirType::Erased), op(OpKind::Length(ValueId(0)), returns)],
+        values: vec![
+            op(OpKind::Param(0), HirType::Erased),
+            op(OpKind::Length(ValueId(0)), returns),
+        ],
         blocks: vec![hir::Block {
             params: Vec::new(),
             ops: vec![ValueId(0), ValueId(1)],
@@ -59,11 +66,28 @@ fn an_erased_length_reads_every_actual_representation() {
         return;
     };
     let program = hir::Program {
-        funcs: vec![length("asNumber", HirType::NUMBER), length("asInt", HirType::Int { bits: 32, signed: true })],
+        funcs: vec![
+            length("asNumber", HirType::NUMBER),
+            length(
+                "asInt",
+                HirType::Int {
+                    bits: 32,
+                    signed: true,
+                },
+            ),
+        ],
         ..hir::Program::default()
     };
     let emitted = nts_codegen_jvm::emit(&program);
-    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics.iter().map(|d| d.message.clone()).collect::<Vec<_>>());
+    assert!(
+        emitted.is_complete(),
+        "{:?}",
+        emitted
+            .diagnostics
+            .iter()
+            .map(|d| d.message.clone())
+            .collect::<Vec<_>>()
+    );
     let out = std::env::temp_dir().join(format!("nts-erased-length-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     for class in &emitted.classes {
@@ -94,10 +118,29 @@ public class Drive { public static void main(String[] a) {
     )
     .unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac).args(["-cp", &cp, "-d"]).arg(&out).arg(out.join("Drive.java")).output().unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
-    let ran = Command::new(&java).args(["-Xverify:all", "-cp", &cp, "Drive"]).output().unwrap();
+    let compiled = Command::new(&javac)
+        .args(["-cp", &cp, "-d"])
+        .arg(&out)
+        .arg(out.join("Drive.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let ran = Command::new(&java)
+        .args(["-Xverify:all", "-cp", &cp, "Drive"])
+        .output()
+        .unwrap();
     let said = String::from_utf8_lossy(&ran.stdout).into_owned();
-    assert!(ran.status.success(), "{said}{}", String::from_utf8_lossy(&ran.stderr));
-    assert_eq!(said.trim(), "5:5 2:2 3:3 1:1 4:4 6:6 7:7 8:8 9:9 0:0 tuple refused");
+    assert!(
+        ran.status.success(),
+        "{said}{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert_eq!(
+        said.trim(),
+        "5:5 2:2 3:3 1:1 4:4 6:6 7:7 8:8 9:9 0:0 tuple refused"
+    );
 }

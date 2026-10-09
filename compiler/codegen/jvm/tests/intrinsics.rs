@@ -48,7 +48,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -109,22 +113,37 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
 
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/intrinsics");
     let tsconfig = Utf8PathBuf::from_path_buf(
-        fixture.join("tsconfig.json").canonicalize().expect("fixture is checked in"),
+        fixture
+            .join("tsconfig.json")
+            .canonicalize()
+            .expect("fixture is checked in"),
     )
     .expect("a UTF-8 path");
 
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).expect("snapshot");
-    assert!(!snapshot.has_errors(), "the intrinsics fixture should typecheck");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot");
+    assert!(
+        !snapshot.has_errors(),
+        "the intrinsics fixture should typecheck"
+    );
 
     // `NoGc`, which is what this lane ships: a tracing collector owns these
     // objects, so `Retain` and `Release` are refused by name rather than
     // emitted as nothing.
     let prepared = hir::prepare_with(
         &snapshot,
-        &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() },
+        &hir::Options {
+            provider: hir::Provider::NoGc,
+            ..hir::Options::default()
+        },
     )
     .expect("prepared HIR should verify");
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
 
     let emitted = nts_codegen_jvm::emit(&prepared.program);
     assert!(
@@ -182,7 +201,12 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
         "the driver should exit cleanly: {}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert_eq!(out, EXPECTED, "stderr: {}", String::from_utf8_lossy(&ran.stderr));
+    assert_eq!(
+        out,
+        EXPECTED,
+        "stderr: {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -260,10 +284,9 @@ fn descriptor_of(ts: &str) -> Option<String> {
 /// Every `declare function nts_jvm_web_*` in the declarations, as
 /// `(name, descriptor_or_none, wired)`.
 fn declarations() -> Vec<(String, Option<String>, bool)> {
-    let text = std::fs::read_to_string(
-        repository().join("runtime/jvm/web-platform/intrinsics.d.ts"),
-    )
-    .expect("the declarations are checked in");
+    let text =
+        std::fs::read_to_string(repository().join("runtime/jvm/web-platform/intrinsics.d.ts"))
+            .expect("the declarations are checked in");
 
     let mut found = Vec::new();
     let mut rest = text.as_str();
@@ -340,17 +363,23 @@ fn the_declarations_the_table_and_the_jar_agree() {
             "`{}`: the declaration and the table disagree",
             entry.declared
         );
-        assert!(found.2, "`{}` is wired and its declaration does not say WIRED", entry.declared);
+        assert!(
+            found.2,
+            "`{}` is wired and its declaration does not say WIRED",
+            entry.declared
+        );
     }
 
     // The complement, so marking something WIRED is a claim rather than a
     // comment: a declaration that says it while no table entry exists fails
     // here, and so does a gated one that quietly grew an implementation.
     for (name, _, wired) in &declared {
-        let in_table =
-            nts_codegen_jvm::ops::WEB_INTRINSICS.iter().any(|it| it.declared == *name);
+        let in_table = nts_codegen_jvm::ops::WEB_INTRINSICS
+            .iter()
+            .any(|it| it.declared == *name);
         assert_eq!(
-            *wired, in_table,
+            *wired,
+            in_table,
             "`{name}`: the declaration says {}, the table says {}",
             if *wired { "WIRED" } else { "GATED" },
             if in_table { "wired" } else { "absent" }
@@ -403,8 +432,10 @@ fn the_declarations_the_table_and_the_jar_agree() {
     // down again -- the version that hardcoded one owner passed until the day
     // an entry moved, and then failed on the owner rather than on anything
     // about the ABI.
-    let mut owners: Vec<&str> =
-        nts_codegen_jvm::ops::WEB_INTRINSICS.iter().map(|it| it.owner).collect();
+    let mut owners: Vec<&str> = nts_codegen_jvm::ops::WEB_INTRINSICS
+        .iter()
+        .map(|it| it.owner)
+        .collect();
     owners.sort_unstable();
     owners.dedup();
 
@@ -416,7 +447,11 @@ fn the_declarations_the_table_and_the_jar_agree() {
         .args(owners.iter().map(|it| it.replace('/', ".")))
         .output()
         .expect("javap runs");
-    assert!(listed.status.success(), "{}", String::from_utf8_lossy(&listed.stderr));
+    assert!(
+        listed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&listed.stderr)
+    );
     let text = String::from_utf8_lossy(&listed.stdout);
     let _ = std::fs::remove_dir_all(&dir);
 

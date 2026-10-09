@@ -44,7 +44,10 @@ type Widths = FxHashMap<String, Vec<Option<HirType>>>;
 /// Narrow every root's written parameters to their kinds, returning how many
 /// roots changed.
 pub fn narrow(program: &mut Program, roots: Roots<'_>, targets: &[NativeAbi]) -> usize {
-    let roots: FxHashSet<String> = super::reachable::root_names(program, roots).into_iter().map(str::to_owned).collect();
+    let roots: FxHashSet<String> = super::reachable::root_names(program, roots)
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
     let dispatched: FxHashSet<&str> = program
         .layouts
         .iter()
@@ -56,8 +59,15 @@ pub fn narrow(program: &mut Program, roots: Roots<'_>, targets: &[NativeAbi]) ->
         .iter()
         .filter(|func| roots.contains(&func.name) && !dispatched.contains(func.name.as_str()))
         .filter_map(|func| {
-            let widths: Vec<Option<HirType>> = func.params.iter().map(|param| width(param, targets)).collect();
-            widths.iter().any(Option::is_some).then(|| (func.name.clone(), widths))
+            let widths: Vec<Option<HirType>> = func
+                .params
+                .iter()
+                .map(|param| width(param, targets))
+                .collect();
+            widths
+                .iter()
+                .any(Option::is_some)
+                .then(|| (func.name.clone(), widths))
         })
         .collect();
     if widths.is_empty() {
@@ -82,15 +92,26 @@ fn width(param: &Param, targets: &[NativeAbi]) -> Option<HirType> {
 /// Give each narrowed parameter its width, and the body a `number` widened
 /// from it at entry, which every use reads instead.
 fn widen_at_entry(func: &mut Func, widths: &[Option<HirType>]) {
-    let Some(parameters) = func.parameter_values() else { return };
+    let Some(parameters) = func.parameter_values() else {
+        return;
+    };
     for (slot, width) in widths.iter().enumerate() {
         let Some(width) = width else { continue };
         func.params[slot].ty = width.clone();
         // A parameter nothing reads has no value to widen.
-        let Some(Some(parameter)) = parameters.get(slot).copied() else { continue };
+        let Some(Some(parameter)) = parameters.get(slot).copied() else {
+            continue;
+        };
         func.values[parameter.0 as usize].ty = width.clone();
         let origin = func.values[parameter.0 as usize].origin.clone();
-        let widened = push(func, Op { kind: OpKind::Convert(parameter), ty: HirType::NUMBER, origin });
+        let widened = push(
+            func,
+            Op {
+                kind: OpKind::Convert(parameter),
+                ty: HirType::NUMBER,
+                origin,
+            },
+        );
         let Func { blocks, values, .. } = func;
         let to_widened = |value: ValueId| if value == parameter { widened } else { value };
         for block in blocks.iter_mut() {
@@ -117,14 +138,27 @@ fn narrow_arguments(func: &mut Func, widths: &Widths) {
         let mut ops = Vec::with_capacity(func.blocks[at].ops.len());
         for op in std::mem::take(&mut func.blocks[at].ops) {
             let narrowed = match &func.values[op.0 as usize].kind {
-                OpKind::Call { callee: Callee::Direct(name), args, .. } => widths.get(name).map(|widths| (widths.clone(), args.clone())),
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    args,
+                    ..
+                } => widths
+                    .get(name)
+                    .map(|widths| (widths.clone(), args.clone())),
                 _ => None,
             };
             if let Some((widths, mut args)) = narrowed {
                 for (arg, width) in args.iter_mut().zip(&widths) {
                     let Some(width) = width else { continue };
                     let origin = func.values[op.0 as usize].origin.clone();
-                    let converted = push(func, Op { kind: OpKind::Convert(*arg), ty: width.clone(), origin });
+                    let converted = push(
+                        func,
+                        Op {
+                            kind: OpKind::Convert(*arg),
+                            ty: width.clone(),
+                            origin,
+                        },
+                    );
                     ops.push(converted);
                     *arg = converted;
                 }

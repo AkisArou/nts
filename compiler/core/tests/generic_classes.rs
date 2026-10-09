@@ -63,7 +63,8 @@ fn a_generic_class_is_lowered_once_per_instantiation() {
         return;
     };
     assert_eq!(
-        lowered.diagnostics, [],
+        lowered.diagnostics,
+        [],
         "no member of a generic class may be refused"
     );
 
@@ -77,7 +78,9 @@ fn a_generic_class_is_lowered_once_per_instantiation() {
         "the inherited method is emitted, in {names:?}"
     );
     assert!(
-        !names.iter().any(|name| name.contains("Labelled") && name.contains("#origin")),
+        !names
+            .iter()
+            .any(|name| name.contains("Labelled") && name.contains("#origin")),
         "and it is inherited rather than copied per instantiation, in {names:?}"
     );
 

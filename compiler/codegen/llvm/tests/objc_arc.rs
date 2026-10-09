@@ -184,8 +184,14 @@ int main(void) {
 
 fn prepare(name: &str, provider: hir::Provider) -> Option<(Utf8PathBuf, hir::Prepared)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
-    let dir = root.join(format!("target/objc-arc-tests/{}-{name}", std::process::id()));
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize_utf8()
+        .unwrap();
+    let dir = root.join(format!(
+        "target/objc-arc-tests/{}-{name}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -196,20 +202,44 @@ fn prepare(name: &str, provider: hir::Provider) -> Option<(Utf8PathBuf, hir::Pre
     .unwrap();
     std::fs::write(dir.join("stub.d.ts"), BINDING).unwrap();
     std::fs::write(dir.join("main.ts"), PROGRAM).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&dir.join("tsconfig.json"))
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare_with(&snapshot, &hir::Options { provider, ..hir::Options::default() }).unwrap()))
+    Some((
+        dir,
+        hir::prepare_with(
+            &snapshot,
+            &hir::Options {
+                provider,
+                ..hir::Options::default()
+            },
+        )
+        .unwrap(),
+    ))
 }
 
 fn clang(dir: &Utf8Path, args: &[&str]) {
-    let result = Command::new("clang").current_dir(dir).args(args).output().unwrap();
-    assert!(result.status.success(), "{args:?}: {}", String::from_utf8_lossy(&result.stderr));
+    let result = Command::new("clang")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{args:?}: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
 }
 
 /// `(objects made, objects still alive)` after `run()`, per backend.
 fn made_and_alive(provider: hir::Provider, label: &str) -> Option<Vec<(String, u32, u32)>> {
     let (dir, prepared) = prepare(label, provider)?;
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -221,13 +251,46 @@ fn made_and_alive(provider: hir::Provider, label: &str) -> Option<Vec<(String, u
     }
     std::fs::write(dir.join("stub.c"), STUB).unwrap();
     std::fs::write(dir.join("caller.c"), CALLER).unwrap();
-    let counted: &[&str] = if provider == hir::Provider::ReferenceCounting { &["-DNTS_PROVIDER_RC"] } else { &[] };
-    clang(&dir, &["-std=c11", "-O2", "-Wall", "-Werror", "-c", "stub.c", "caller.c"]);
-    clang(&dir, &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat());
+    let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+        &["-DNTS_PROVIDER_RC"]
+    } else {
+        &[]
+    };
+    clang(
+        &dir,
+        &[
+            "-std=c11", "-O2", "-Wall", "-Werror", "-c", "stub.c", "caller.c",
+        ],
+    );
+    clang(
+        &dir,
+        &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat(),
+    );
     let mut answers = Vec::new();
-    for (source, object, executable) in [("program.c", "c.o", "c-run"), ("program.ll", "llvm.o", "llvm-run")] {
-        clang(&dir, &[&["-O2", "-Wno-override-module", "-c", source, "-o", object][..], counted].concat());
-        clang(&dir, &[object, "stub.o", "caller.o", "nts_runtime.o", "-lm", "-o", executable]);
+    for (source, object, executable) in [
+        ("program.c", "c.o", "c-run"),
+        ("program.ll", "llvm.o", "llvm-run"),
+    ] {
+        clang(
+            &dir,
+            &[
+                &["-O2", "-Wno-override-module", "-c", source, "-o", object][..],
+                counted,
+            ]
+            .concat(),
+        );
+        clang(
+            &dir,
+            &[
+                object,
+                "stub.o",
+                "caller.o",
+                "nts_runtime.o",
+                "-lm",
+                "-o",
+                executable,
+            ],
+        );
         let run = Command::new(dir.join(executable)).output().unwrap();
         assert!(
             run.status.success(),
@@ -236,7 +299,11 @@ fn made_and_alive(provider: hir::Provider, label: &str) -> Option<Vec<(String, u
         );
         let text = String::from_utf8_lossy(&run.stdout).into_owned();
         let mut numbers = text.split_whitespace().map(|n| n.parse::<u32>().unwrap());
-        answers.push((executable.to_owned(), numbers.next().unwrap(), numbers.next().unwrap()));
+        answers.push((
+            executable.to_owned(),
+            numbers.next().unwrap(),
+            numbers.next().unwrap(),
+        ));
     }
     Some(answers)
 }
@@ -252,15 +319,26 @@ fn every_object_the_program_owns_is_released_once_on_both_backends() {
     // No abort means no object was retained after it was freed, released
     // below zero, or sent a message after it died.
     for (backend, made, alive) in &counted {
-        assert_eq!(*made, 7, "{backend}: the program made {made} objects, not 7");
-        assert_eq!(*alive, 0, "{backend}: {alive} object(s) outlived the program's last reference");
+        assert_eq!(
+            *made, 7,
+            "{backend}: the program made {made} objects, not 7"
+        );
+        assert_eq!(
+            *alive, 0,
+            "{backend}: {alive} object(s) outlived the program's last reference"
+        );
     }
     // The control: the same program with nothing counted. `alloc`'s object is
     // still consumed by `init` (the stub's `init` releases it), so six live on.
-    let Some(uncounted) = made_and_alive(hir::Provider::NoGc, "nogc") else { return };
+    let Some(uncounted) = made_and_alive(hir::Provider::NoGc, "nogc") else {
+        return;
+    };
     for (backend, made, alive) in &uncounted {
         assert_eq!(*made, 7, "{backend}");
-        assert_eq!(*alive, 6, "{backend}: under NoGc {alive} object(s) are alive, where nothing releases them but init");
+        assert_eq!(
+            *alive, 6,
+            "{backend}: under NoGc {alive} object(s) are alive, where nothing releases them but init"
+        );
     }
 }
 
@@ -287,9 +365,17 @@ fn arc_reserved_selectors_and_uncounted_ownership_are_refused() {
                 "  export type Thing = ObjcClass",
                 "  export type Plain = import(\"c:types\").Class<\"Plain\">;\n  /**\n   * @ntsSelector new\n   * @ntsClass Plain\n   */\n  export function makePlain(): Plain;\n  export type Thing = ObjcClass",
             );
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
-        let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..").canonicalize_utf8().unwrap();
-        let dir = root.join(format!("target/objc-arc-tests/{}-refuse-{at}", std::process::id()));
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
+        let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .canonicalize_utf8()
+            .unwrap();
+        let dir = root.join(format!(
+            "target/objc-arc-tests/{}-refuse-{at}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("tsconfig.json"),
@@ -300,11 +386,16 @@ fn arc_reserved_selectors_and_uncounted_ownership_are_refused() {
         .unwrap();
         std::fs::write(dir.join("stub.d.ts"), binding).unwrap();
         std::fs::write(dir.join("main.ts"), program).unwrap();
-        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&dir.join("tsconfig.json")).unwrap();
+        let snapshot = TsgoApi::for_compilation(tsgo)
+            .snapshot(&dir.join("tsconfig.json"))
+            .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
         let prepared = hir::prepare(&snapshot).unwrap();
         assert!(
-            prepared.diagnostics.iter().any(|d| d.message.contains(expected)),
+            prepared
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(expected)),
             "no refusal saying `{expected}`: {:?}",
             prepared.diagnostics
         );

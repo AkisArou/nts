@@ -20,7 +20,11 @@ use crate::bind_objc;
 /// packages change when it does, and only then. A rebuild that leaves it alone
 /// keeps the packages, which the executable's size and time did not.
 /// `every_generator_file_is_hashed` keeps the list whole.
-const GENERATOR: u64 = fnv(&[include_bytes!("apple_surface.rs"), include_bytes!("bind_objc.rs"), include_bytes!("bind_objc/cf.rs")]);
+const GENERATOR: u64 = fnv(&[
+    include_bytes!("apple_surface.rs"),
+    include_bytes!("bind_objc.rs"),
+    include_bytes!("bind_objc/cf.rs"),
+]);
 
 /// FNV-1a over `parts` in order, at compile time.
 pub(crate) const fn fnv(parts: &[&[u8]]) -> u64 {
@@ -63,7 +67,11 @@ impl ApplePlatform {
     fn frameworks(&self) -> &'static [(&'static str, &'static [&'static str])] {
         match self.os {
             "ios" => &[("Foundation", &[]), ("UIKit", &["Foundation"])],
-            _ => &[("CoreGraphics", &[]), ("Foundation", &[]), ("AppKit", &["Foundation", "CoreGraphics"])],
+            _ => &[
+                ("CoreGraphics", &[]),
+                ("Foundation", &[]),
+                ("AppKit", &["Foundation", "CoreGraphics"]),
+            ],
         }
     }
 
@@ -87,7 +95,12 @@ impl Binder for ApplePlatform {
         let version = std::fs::read_to_string(self.sdk.join("SDKSettings.json"))
             .ok()
             .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-            .and_then(|settings| settings.get("CanonicalName").and_then(serde_json::Value::as_str).map(str::to_owned))
+            .and_then(|settings| {
+                settings
+                    .get("CanonicalName")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
             .unwrap_or_else(|| "unknown-sdk".to_owned());
         format!("apple-{} {version} {}", self.os, self.triple)
     }
@@ -100,7 +113,9 @@ impl Binder for ApplePlatform {
         let mut inputs = vec![self.sdk.join("SDKSettings.json")];
         if let Ok(symbols) = self.symbols() {
             for (framework, _) in self.frameworks() {
-                if let Ok(path) = Utf8PathBuf::from_path_buf(symbols.join(format!("{framework}.symbols.json"))) {
+                if let Ok(path) =
+                    Utf8PathBuf::from_path_buf(symbols.join(format!("{framework}.symbols.json")))
+                {
                     inputs.push(path);
                 }
             }
@@ -110,8 +125,14 @@ impl Binder for ApplePlatform {
 
     fn generate(&self) -> Result<Vec<Package>> {
         let symbols = self.symbols()?;
-        let request = |framework: &str, reads: &[&str], records: &BTreeMap<String, String>, lent: bind_objc::Lent| bind_objc::Request {
-            frameworks: std::iter::once(framework).chain(reads.iter().copied()).map(str::to_owned).collect(),
+        let request = |framework: &str,
+                       reads: &[&str],
+                       records: &BTreeMap<String, String>,
+                       lent: bind_objc::Lent| bind_objc::Request {
+            frameworks: std::iter::once(framework)
+                .chain(reads.iter().copied())
+                .map(str::to_owned)
+                .collect(),
             module: format!("objc:{framework}"),
             classes: Vec::new(),
             protocols: Vec::new(),
@@ -125,10 +146,17 @@ impl Binder for ApplePlatform {
             lent,
             // The platform's other frameworks: a class one of them owns is
             // imported from it, whichever is generated first.
-            provided: self.modules().filter(|other| *other != framework).map(str::to_owned).collect(),
+            provided: self
+                .modules()
+                .filter(|other| *other != framework)
+                .map(str::to_owned)
+                .collect(),
             project: None,
         };
-        let run = |request: &bind_objc::Request| bind_objc::run(request).with_context(|| format!("generating the `{}` package", request.module));
+        let run = |request: &bind_objc::Request| {
+            bind_objc::run(request)
+                .with_context(|| format!("generating the `{}` package", request.module))
+        };
         // Each framework once, in order: the structs it declares are the
         // next one's to import, and what it adds to an earlier framework's
         // classes is collected for that framework's package.
@@ -137,8 +165,18 @@ impl Binder for ApplePlatform {
         let mut lends: BTreeMap<String, bind_objc::Lent> = BTreeMap::new();
         for (framework, reads) in self.frameworks() {
             let seen = records.clone();
-            let output = run(&request(framework, reads, &seen, bind_objc::Lent::default()))?;
-            records.extend(output.records.iter().map(|record| (record.clone(), format!("objc:{framework}"))));
+            let output = run(&request(
+                framework,
+                reads,
+                &seen,
+                bind_objc::Lent::default(),
+            ))?;
+            records.extend(
+                output
+                    .records
+                    .iter()
+                    .map(|record| (record.clone(), format!("objc:{framework}"))),
+            );
             for (owner, lent) in &output.lends {
                 lends.entry(owner.clone()).or_default().absorb(lent);
             }
@@ -162,13 +200,17 @@ impl Binder for ApplePlatform {
                 name,
                 surface: Surface::Objc,
                 declarations: output.binding,
-                values: (!output.values.is_empty()).then(|| (format!("{framework}.values.ts"), output.values)),
+                values: (!output.values.is_empty())
+                    .then(|| (format!("{framework}.values.ts"), output.values)),
             });
         }
         packages.push(Package {
             name: self.platform_package(),
             surface: Surface::Objc,
-            declarations: format!("// {}'s frameworks, for a project's `types`.\n{references}", self.os),
+            declarations: format!(
+                "// {}'s frameworks, for a project's `types`.\n{references}",
+                self.os
+            ),
             values: None,
         });
         Ok(packages)
@@ -180,23 +222,42 @@ impl Binder for ApplePlatform {
 /// ask for, which is the one every product can rely on.
 pub(crate) fn platforms(targets: &[nts_build::config::Target]) -> Vec<ApplePlatform> {
     let root = crate::apple_root();
-    let version = |text: &str| -> Vec<u32> { text.split('.').map(|part| part.parse().unwrap_or(0)).collect() };
+    let version = |text: &str| -> Vec<u32> {
+        text.split('.')
+            .map(|part| part.parse().unwrap_or(0))
+            .collect()
+    };
     let mut platforms = Vec::new();
     for os in ["macos", "ios"] {
         let Some(minimum) = targets
             .iter()
             .filter(|target| target.os == os)
-            .map(|target| target.minimum_version.clone().unwrap_or_else(|| if os == "ios" { "13.0" } else { "11.0" }.to_owned()))
+            .map(|target| {
+                target
+                    .minimum_version
+                    .clone()
+                    .unwrap_or_else(|| if os == "ios" { "13.0" } else { "11.0" }.to_owned())
+            })
             .min_by(|a, b| version(a).cmp(&version(b)))
         else {
             continue;
         };
         platforms.push(if os == "ios" {
-            let sdk = std::env::var("NTS_IOS_SIMULATOR_SDK").map_or_else(|_| root.join("iPhoneSimulator.sdk"), Utf8PathBuf::from);
-            ApplePlatform { os: "ios", sdk, triple: format!("x86_64-apple-ios{minimum}-simulator") }
+            let sdk = std::env::var("NTS_IOS_SIMULATOR_SDK")
+                .map_or_else(|_| root.join("iPhoneSimulator.sdk"), Utf8PathBuf::from);
+            ApplePlatform {
+                os: "ios",
+                sdk,
+                triple: format!("x86_64-apple-ios{minimum}-simulator"),
+            }
         } else {
-            let sdk = std::env::var("NTS_APPLE_SDK").map_or_else(|_| root.join("MacOSX.sdk"), Utf8PathBuf::from);
-            ApplePlatform { os: "macos", sdk, triple: format!("x86_64-apple-macos{minimum}") }
+            let sdk = std::env::var("NTS_APPLE_SDK")
+                .map_or_else(|_| root.join("MacOSX.sdk"), Utf8PathBuf::from);
+            ApplePlatform {
+                os: "macos",
+                sdk,
+                triple: format!("x86_64-apple-macos{minimum}"),
+            }
         });
     }
     platforms
@@ -209,18 +270,31 @@ pub(crate) fn platforms(targets: &[nts_build::config::Target]) -> Vec<ApplePlatf
 pub(crate) fn records_of(files: &[Utf8PathBuf]) -> BTreeMap<String, String> {
     let mut records = BTreeMap::new();
     for file in files {
-        let Ok(text) = std::fs::read_to_string(file) else { continue };
+        let Ok(text) = std::fs::read_to_string(file) else {
+            continue;
+        };
         let mut module = None;
         for line in text.lines() {
-            if let Some(name) = line.strip_prefix("declare module \"").and_then(|rest| rest.strip_suffix("\" {")) {
+            if let Some(name) = line
+                .strip_prefix("declare module \"")
+                .and_then(|rest| rest.strip_suffix("\" {"))
+            {
                 // The package's own block is the first; the rest extend
                 // other modules.
                 if module.is_some() {
                     break;
                 }
                 module = Some(name.to_owned());
-            } else if let (Some(module), Some(rest)) = (&module, line.strip_prefix("  export type ")) {
-                let Some(tag) = rest.contains(" = Struct<").then(|| rest.rsplit('"').nth(1)).flatten() else { continue };
+            } else if let (Some(module), Some(rest)) =
+                (&module, line.strip_prefix("  export type "))
+            {
+                let Some(tag) = rest
+                    .contains(" = Struct<")
+                    .then(|| rest.rsplit('"').nth(1))
+                    .flatten()
+                else {
+                    continue;
+                };
                 records.insert(tag.to_owned(), module.clone());
             }
         }
@@ -231,7 +305,10 @@ pub(crate) fn records_of(files: &[Utf8PathBuf]) -> BTreeMap<String, String> {
 /// Whether an SDK for `platform` is on this machine, with Swift's graphs for
 /// it: what generating its packages needs.
 pub(crate) fn available(platform: &ApplePlatform) -> bool {
-    platform.sdk.join("SDKSettings.json").is_file() && platform.symbols().is_ok_and(|symbols| symbols.join("Foundation.symbols.json").is_file())
+    platform.sdk.join("SDKSettings.json").is_file()
+        && platform
+            .symbols()
+            .is_ok_and(|symbols| symbols.join("Foundation.symbols.json").is_file())
 }
 
 #[cfg(test)]
@@ -244,7 +321,9 @@ mod tests {
     /// only: a struct named in a block extending another module is not its.
     #[test]
     fn records_are_read_from_a_packages_own_module() {
-        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-records-of-{}", std::process::id()));
+        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-records-of-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("index.d.ts");
         std::fs::write(
@@ -255,7 +334,10 @@ mod tests {
         let records = super::records_of(&[file]);
         assert_eq!(
             records.into_iter().collect::<Vec<_>>(),
-            [("CGPoint".to_owned(), "objc:CoreGraphics".to_owned()), ("_NSRange".to_owned(), "objc:CoreGraphics".to_owned())]
+            [
+                ("CGPoint".to_owned(), "objc:CoreGraphics".to_owned()),
+                ("_NSRange".to_owned(), "objc:CoreGraphics".to_owned())
+            ]
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -278,8 +360,11 @@ mod tests {
         typechecks("ios");
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn typechecks(os: &str) {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else { return };
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
         let target = nts_build::config::Target {
             id: os.to_owned(),
             os: os.to_owned(),
@@ -306,7 +391,10 @@ mod tests {
             for line in package.declarations.lines() {
                 let name = if let Some(rest) = line.strip_prefix("  export class ") {
                     rest.split([' ', '<']).next()
-                } else if let Some(rest) = line.strip_prefix("  export type ").filter(|rest| rest.contains(" = Struct<")) {
+                } else if let Some(rest) = line
+                    .strip_prefix("  export type ")
+                    .filter(|rest| rest.contains(" = Struct<"))
+                {
                     structs += 1;
                     rest.split(' ').next()
                 } else {
@@ -314,18 +402,36 @@ mod tests {
                 };
                 let Some(name) = name else { continue };
                 if let Some(first) = owners.insert(name, &package.name) {
-                    panic!("{os}: `{name}` is declared by both {first} and {}", package.name);
+                    panic!(
+                        "{os}: `{name}` is declared by both {first} and {}",
+                        package.name
+                    );
                 }
             }
         }
-        assert!(owners.len() > 100 && structs > 3, "{os}: {} declarations, {structs} structs: the scan does not match the packages", owners.len());
+        assert!(
+            owners.len() > 100 && structs > 3,
+            "{os}: {} declarations, {structs} structs: the scan does not match the packages",
+            owners.len()
+        );
         // What the packages leave unbound, held to a ceiling: a change that
         // stops binding a shape adds a reason line and nothing else, which no
         // typecheck sees. Deprecated and too-new members are left out by
         // choice; a bare "a `T`" is a type no spelling handles yet.
-        let reasons: Vec<&str> = packages.iter().flat_map(|package| not_bound(&package.declarations)).collect();
-        let chosen = reasons.iter().filter(|why| why.starts_with("deprecated in") || why.starts_with("introduced in")).count();
-        let unhandled = reasons.iter().filter(|why| why.starts_with("a `") && why.ends_with('`') && why.matches('`').count() == 2).count();
+        let reasons: Vec<&str> = packages
+            .iter()
+            .flat_map(|package| not_bound(&package.declarations))
+            .collect();
+        let chosen = reasons
+            .iter()
+            .filter(|why| why.starts_with("deprecated in") || why.starts_with("introduced in"))
+            .count();
+        let unhandled = reasons
+            .iter()
+            .filter(|why| {
+                why.starts_with("a `") && why.ends_with('`') && why.matches('`').count() == 2
+            })
+            .count();
         // Measured 2026-09-27. Lower them when a shape is bound: the largest
         // named one is a toll-free type in a C function, whose prototype
         // lowering cannot yet write as the header's `CFStringRef`.
@@ -339,12 +445,20 @@ mod tests {
             "{os}: {} not bound, {chosen} of them by choice, {unhandled} of a type nothing spells; the ceilings are {most} and {most_unhandled}",
             reasons.len()
         );
-        let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize_utf8().unwrap();
-        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap().join(format!("nts-apple-packages-{os}-{}", std::process::id()));
+        let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize_utf8()
+            .unwrap();
+        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-apple-packages-{os}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         // As a project has them, through `types`, but as the binder wrote
         // them: without the store's `// @ts-nocheck`.
-        let mut files = vec![root.join("runtime/native/libc.d.ts"), root.join("runtime/objc/objc.d.ts")];
+        let mut files = vec![
+            root.join("runtime/native/libc.d.ts"),
+            root.join("runtime/objc/objc.d.ts"),
+        ];
         for package in &packages {
             let at = dir.join("node_modules").join(&package.name);
             std::fs::create_dir_all(&at).unwrap();
@@ -352,7 +466,11 @@ mod tests {
             // the frontend reads a package's `.d.ts` as an external library,
             // which it does not check, and this test passed over declarations
             // it never read. The control below keeps that honest.
-            let manifest = format!(r#"{{ "name": {:?}, "types": "index.d.ts", "nts": {{ "surface": {:?} }} }}"#, package.name, package.surface.as_str());
+            let manifest = format!(
+                r#"{{ "name": {:?}, "types": "index.d.ts", "nts": {{ "surface": {:?} }} }}"#,
+                package.name,
+                package.surface.as_str()
+            );
             std::fs::write(at.join("package.json"), manifest).unwrap();
             std::fs::write(at.join("index.d.ts"), &package.declarations).unwrap();
             if let Some((name, text)) = &package.values {
@@ -371,7 +489,9 @@ mod tests {
         )
         .unwrap();
         let errors = || -> Vec<String> {
-            let snapshot = nts_frontend_ts::TsgoApi::new(tsgo.clone()).snapshot(&dir.join("tsconfig.json")).unwrap();
+            let snapshot = nts_frontend_ts::TsgoApi::new(tsgo.clone())
+                .snapshot(&dir.join("tsconfig.json"))
+                .unwrap();
             snapshot
                 .diagnostics
                 .iter()
@@ -381,18 +501,39 @@ mod tests {
         };
         let found = errors();
         if !found.is_empty() {
-            let mut codes: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+            let mut codes: std::collections::BTreeMap<&str, usize> =
+                std::collections::BTreeMap::new();
             for error in &found {
-                *codes.entry(error.split(' ').next().unwrap_or_default()).or_default() += 1;
+                *codes
+                    .entry(error.split(' ').next().unwrap_or_default())
+                    .or_default() += 1;
             }
-            panic!("the {os} packages do not typecheck: {} errors, by code {codes:?}, the first {:#?}", found.len(), &found[..found.len().min(10)]);
+            panic!(
+                "the {os} packages do not typecheck: {} errors, by code {codes:?}, the first {:#?}",
+                found.len(),
+                &found[..found.len().min(10)]
+            );
         }
         // The control: one unresolved name in one package's declarations is
         // an error, so a clean answer above was a check of them.
-        let first = dir.join("node_modules").join(&packages[0].name).join("index.d.ts");
-        std::fs::write(&first, format!("{}\nexport type Unresolved = NoSuchName;\n", packages[0].declarations)).unwrap();
+        let first = dir
+            .join("node_modules")
+            .join(&packages[0].name)
+            .join("index.d.ts");
+        std::fs::write(
+            &first,
+            format!(
+                "{}\nexport type Unresolved = NoSuchName;\n",
+                packages[0].declarations
+            ),
+        )
+        .unwrap();
         let found = errors();
-        assert!(found.iter().any(|error| error.contains("NoSuchName")), "{os}: an unresolved name in {} went unreported: {found:#?}", packages[0].name);
+        assert!(
+            found.iter().any(|error| error.contains("NoSuchName")),
+            "{os}: an unresolved name in {} went unreported: {found:#?}",
+            packages[0].name
+        );
         // Kept when an assertion above fails, to be read; removed when none
         // does, or every run leaves the platform's packages in /tmp.
         std::fs::remove_dir_all(&dir).unwrap();
@@ -405,7 +546,9 @@ mod tests {
             .lines()
             .filter_map(|line| {
                 let line = line.trim_start();
-                let rest = line.strip_prefix("// Not bound: ").or_else(|| line.strip_prefix("//   "))?;
+                let rest = line
+                    .strip_prefix("// Not bound: ")
+                    .or_else(|| line.strip_prefix("//   "))?;
                 rest.split_once(": ").map(|(_, why)| why)
             })
             .collect()
@@ -418,10 +561,16 @@ mod tests {
     fn every_generator_file_is_hashed() {
         let source = include_str!("apple_surface.rs");
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bind_objc");
-        for entry in std::fs::read_dir(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display())) {
+        for entry in
+            std::fs::read_dir(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()))
+        {
             let name = entry.unwrap_or_else(|error| panic!("{error}")).file_name();
             let named = format!("include_bytes!(\"bind_objc/{}\")", name.to_string_lossy());
-            assert!(source.contains(&named), "the generator's key does not hash bind_objc/{}", name.to_string_lossy());
+            assert!(
+                source.contains(&named),
+                "the generator's key does not hash bind_objc/{}",
+                name.to_string_lossy()
+            );
         }
     }
 }

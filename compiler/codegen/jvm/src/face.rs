@@ -76,26 +76,57 @@ pub(crate) fn of(package: &str, program: &Program, layout: &Layout) -> Option<Fa
     if !params.iter().all(convertible) {
         return None;
     }
-    Some(Face { interface, typed, params, member, erased })
+    Some(Face {
+        interface,
+        typed,
+        params,
+        member,
+        erased,
+    })
 }
 
 /// The kinds of parameter a callback interface can carry that this face
 /// converts: a number, and a string.
 fn convertible(ty: &HirType) -> bool {
-    matches!(ty, HirType::Float { bits: 64 } | HirType::Managed(nts_core::hir::ManagedType::String))
+    matches!(
+        ty,
+        HirType::Float { bits: 64 } | HirType::Managed(nts_core::hir::ManagedType::String)
+    )
 }
 
 /// Box the typed value on the stack into an `NtsValue`.
-pub(crate) fn boxed(code: &mut Code, pool: &mut Pool, origin: &nts_semantic_schema::Origin, ty: &HirType) {
+pub(crate) fn boxed(
+    code: &mut Code,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+    ty: &HirType,
+) {
     if let HirType::Float { .. } = ty {
-        code.invoke_static(origin, pool, types::VALUE, "ofNumber", "(D)Lnts/rt/NtsValue;");
+        code.invoke_static(
+            origin,
+            pool,
+            types::VALUE,
+            "ofNumber",
+            "(D)Lnts/rt/NtsValue;",
+        );
     } else {
-        code.invoke_static(origin, pool, types::VALUE, "ofString", "(Ljava/lang/String;)Lnts/rt/NtsValue;");
+        code.invoke_static(
+            origin,
+            pool,
+            types::VALUE,
+            "ofString",
+            "(Ljava/lang/String;)Lnts/rt/NtsValue;",
+        );
     }
 }
 
 /// Unbox the `NtsValue` on the stack to the typed value.
-pub(crate) fn unboxed(code: &mut Code, pool: &mut Pool, origin: &nts_semantic_schema::Origin, ty: &HirType) {
+pub(crate) fn unboxed(
+    code: &mut Code,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+    ty: &HirType,
+) {
     if let HirType::Float { .. } = ty {
         code.get_field(origin, pool, types::VALUE, "num", "D");
     } else {
@@ -143,7 +174,13 @@ pub(crate) fn typed_call(
     }
     let width = nts_jvm_emitter::descriptor::parameters(&face.erased).map_or(0, |list| list.len());
     for _ in face.params.len()..width {
-        code.get_static(origin, pool, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR);
+        code.get_static(
+            origin,
+            pool,
+            types::VALUE,
+            "UNDEFINED_VALUE",
+            types::VALUE_DESCRIPTOR,
+        );
     }
     code.invoke_virtual(origin, pool, &class, &face.member, &face.erased);
     code.pop(origin, 1);

@@ -19,10 +19,10 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
+use react_compiler_ast::File;
 use react_compiler_ast::declarations::{ImportSpecifier, ModuleExportName};
 use react_compiler_ast::expressions::Expression;
 use react_compiler_ast::statements::{ClassDeclaration, Statement};
-use react_compiler_ast::File;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::Value;
 
@@ -46,7 +46,13 @@ const LIFECYCLES: [&str; 13] = [
 
 /// The statics the descriptor carries, and how each is passed: the reconciler
 /// holds props and state erased, so a typed static is adapted.
-const STATICS: [&str; 5] = ["contextType", "getDerivedStateFromProps", "getDerivedStateFromError", "defaultProps", "displayName"];
+const STATICS: [&str; 5] = [
+    "contextType",
+    "getDerivedStateFromProps",
+    "getDerivedStateFromError",
+    "defaultProps",
+    "displayName",
+];
 
 /// A class component declared earlier in the file, for a class extending it.
 #[derive(Debug, Clone)]
@@ -80,7 +86,9 @@ impl ClassComponents {
     pub(super) fn new(original: &File) -> Self {
         let mut found = Self::default();
         for statement in &original.program.body {
-            let Statement::ImportDeclaration(import) = statement else { continue };
+            let Statement::ImportDeclaration(import) = statement else {
+                continue;
+            };
             if import.source.value != "react" {
                 continue;
             }
@@ -111,24 +119,37 @@ impl ClassComponents {
                 if let Some(&pure) = self.bases.get(&id.name) {
                     return Some(Base::React { pure });
                 }
-                self.known.get(&id.name).map(|known| Base::Class { name: id.name.clone(), known: known.clone() })
+                self.known.get(&id.name).map(|known| Base::Class {
+                    name: id.name.clone(),
+                    known: known.clone(),
+                })
             }
-            Expression::MemberExpression(member) if !member.computed => match (member.object.as_ref(), member.property.as_ref()) {
-                (Expression::Identifier(object), Expression::Identifier(property)) if self.namespaces.contains(&object.name) => {
-                    react_base(&property.name).map(|pure| Base::React { pure })
+            Expression::MemberExpression(member) if !member.computed => {
+                match (member.object.as_ref(), member.property.as_ref()) {
+                    (Expression::Identifier(object), Expression::Identifier(property))
+                        if self.namespaces.contains(&object.name) =>
+                    {
+                        react_base(&property.name).map(|pure| Base::React { pure })
+                    }
+                    _ => None,
                 }
-                _ => None,
-            },
+            }
             _ => None,
         }
     }
 
     /// The `$$type` member for `class`, when it is a class component; the
     /// runtime's class is imported as `runtime`.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     pub(super) fn describe(&mut self, class: &ClassDeclaration, runtime: &str) -> Option<String> {
         let name = class.id.as_ref()?.name.clone();
         let base = self.base(class)?;
-        let members: Vec<Value> = class.body.body.iter().map(react_compiler_ast::common::RawNode::parse_value).collect();
+        let members: Vec<Value> = class
+            .body
+            .body
+            .iter()
+            .map(react_compiler_ast::common::RawNode::parse_value)
+            .collect();
         let member = |m: &Value, key: &str| m.get(key).and_then(Value::as_str).map(str::to_owned);
         let is_static = |m: &Value| m.get("static").and_then(Value::as_bool) == Some(true);
 
@@ -145,7 +166,9 @@ impl ClassComponents {
                 constructor_parameters = m.get("parameters").and_then(Value::as_u64);
                 continue;
             }
-            let Some(member_name) = member(m, "name") else { continue };
+            let Some(member_name) = member(m, "name") else {
+                continue;
+            };
             if !is_static(m) && member_name == "state" {
                 declares_state = true;
             }
@@ -155,7 +178,8 @@ impl ClassComponents {
                 }
                 continue;
             }
-            let function = kind == "method" || m.get("functionValued").and_then(Value::as_bool) == Some(true);
+            let function =
+                kind == "method" || m.get("functionValued").and_then(Value::as_bool) == Some(true);
             let parameters = m.get("parameters").and_then(Value::as_u64).unwrap_or(0);
             if let Some(bit) = LIFECYCLES.iter().position(|l| *l == member_name)
                 && function
@@ -168,11 +192,19 @@ impl ClassComponents {
             }
         }
 
-        let (pure, inherited_statics, inherited_context, inherited_state, lifecycles) = match &base {
+        let (pure, inherited_statics, inherited_context, inherited_state, lifecycles) = match &base
+        {
             Base::React { pure } => (*pure, BTreeSet::new(), true, false, own.to_string()),
-            Base::Class { name: parent, known } => {
-                (known.pure, known.statics.clone(), known.takes_context, known.has_state, format!("{parent}.$$type.lifecycles | {own}"))
-            }
+            Base::Class {
+                name: parent,
+                known,
+            } => (
+                known.pure,
+                known.statics.clone(),
+                known.takes_context,
+                known.has_state,
+                format!("{parent}.$$type.lifecycles | {own}"),
+            ),
         };
         statics.extend(inherited_statics);
         let takes_context = constructor_parameters.map_or(inherited_context, |n| n >= 2);
@@ -180,16 +212,35 @@ impl ClassComponents {
         let state_argument = class
             .super_type_parameters
             .as_ref()
-            .and_then(|raw| raw.parse_value().get("params").and_then(Value::as_array).map(Vec::len))
+            .and_then(|raw| {
+                raw.parse_value()
+                    .get("params")
+                    .and_then(Value::as_array)
+                    .map(Vec::len)
+            })
             .is_some_and(|n| n >= 2);
         let has_state = state_argument || declares_state || inherited_state;
-        self.known.insert(name.clone(), Known { pure, statics: statics.clone(), takes_context, has_state });
-        let invoke = invoke_closure(&name, &calls, match &base {
-            Base::React { .. } => None,
-            Base::Class { name: parent, .. } => Some(parent.as_str()),
-        });
+        self.known.insert(
+            name.clone(),
+            Known {
+                pure,
+                statics: statics.clone(),
+                takes_context,
+                has_state,
+            },
+        );
+        let invoke = invoke_closure(
+            &name,
+            &calls,
+            match &base {
+                Base::React { .. } => None,
+                Base::Class { name: parent, .. } => Some(parent.as_str()),
+            },
+        );
         let merge = if has_state {
-            format!("(prev, partial) => ({{ ...(prev as {name}[\"state\"]), ...(partial as Partial<{name}[\"state\"]>) }})")
+            format!(
+                "(prev, partial) => ({{ ...(prev as {name}[\"state\"]), ...(partial as Partial<{name}[\"state\"]>) }})"
+            )
         } else {
             "null".to_owned()
         };
@@ -200,9 +251,17 @@ impl ClassComponents {
         } else {
             format!("(props) => new {name}({props})")
         };
-        let mask_comment = if named.is_empty() { String::new() } else { format!("/* {} */ ", named.join(" | ")) };
+        let mask_comment = if named.is_empty() {
+            String::new()
+        } else {
+            format!("/* {} */ ", named.join(" | "))
+        };
         let statics_text: Vec<String> = statics.iter().map(|s| static_entry(&name, s)).collect();
-        let statics_text = if statics_text.is_empty() { "{}".to_owned() } else { format!("{{ {} }}", statics_text.join(", ")) };
+        let statics_text = if statics_text.is_empty() {
+            "{}".to_owned()
+        } else {
+            format!("{{ {} }}", statics_text.join(", "))
+        };
         Some(format!(
             "\n  // The descriptor the native build holds for this class (written by the React stage).\n  static readonly $$type = new {runtime}(\n    {},\n    {create},\n    {invoke},\n    {merge},\n    {mask_comment}{lifecycles},\n    {pure},\n    {statics_text},\n  );\n",
             quote_ascii(&name),
@@ -218,20 +277,31 @@ const RENDER: u32 = 1 << 13;
 /// declares, each as the type it declares. What the class does not define
 /// is its parent's to answer, for a class extending another class component.
 fn invoke_closure(class: &str, calls: &[(u32, String, u64)], parent: Option<&str>) -> String {
-    let mut out = format!("(instance, lifecycle, _a, _b, _c) => {{\n      const self = instance as {class};\n      switch (lifecycle) {{\n");
+    let mut out = format!(
+        "(instance, lifecycle, _a, _b, _c) => {{\n      const self = instance as {class};\n      switch (lifecycle) {{\n"
+    );
     for (bit, method, parameters) in calls {
         let arguments: Vec<String> = ["_a", "_b", "_c"]
             .iter()
             .take(usize::try_from(*parameters).unwrap_or(0).min(3))
             .enumerate()
-            .map(|(index, argument)| format!("{argument} as Parameters<{class}[\"{method}\"]>[{index}]"))
+            .map(|(index, argument)| {
+                format!("{argument} as Parameters<{class}[\"{method}\"]>[{index}]")
+            })
             .collect();
-        let _ = write!(out, "        case {bit}:\n          return self.{method}({});\n", arguments.join(", "));
+        let _ = write!(
+            out,
+            "        case {bit}:\n          return self.{method}({});\n",
+            arguments.join(", ")
+        );
     }
     out.push_str("      }\n");
     match parent {
         Some(parent) => {
-            let _ = writeln!(out, "      return {parent}.$$type.invoke(instance, lifecycle, _a, _b, _c);");
+            let _ = writeln!(
+                out,
+                "      return {parent}.$$type.invoke(instance, lifecycle, _a, _b, _c);"
+            );
         }
         None => out.push_str("      return undefined;\n"),
     }
@@ -258,7 +328,10 @@ fn static_entry(class: &str, name: &str) -> String {
             parameter(0),
             parameter(1)
         ),
-        "getDerivedStateFromError" => format!("{name}: (error) => {class}.{name}(error as {})", parameter(0)),
+        "getDerivedStateFromError" => format!(
+            "{name}: (error) => {class}.{name}(error as {})",
+            parameter(0)
+        ),
         _ => format!("{name}: {class}.{name}"),
     }
 }

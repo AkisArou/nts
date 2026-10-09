@@ -70,7 +70,10 @@ pub struct Plan {
 impl Plan {
     #[must_use]
     pub fn empty() -> Self {
-        Self { values: FxHashMap::default(), fields: FxHashSet::default() }
+        Self {
+            values: FxHashMap::default(),
+            fields: FxHashSet::default(),
+        }
     }
 
     #[must_use]
@@ -95,7 +98,9 @@ struct Classes {
 
 impl Classes {
     fn new(count: usize) -> Self {
-        Self { parent: (0..u32::try_from(count).unwrap_or(u32::MAX)).collect() }
+        Self {
+            parent: (0..u32::try_from(count).unwrap_or(u32::MAX)).collect(),
+        }
     }
 
     fn find(&mut self, at: u32) -> u32 {
@@ -168,7 +173,13 @@ fn field_of<'a>(
     // `contains(&(types::class_name(..), name))` -- so a key spelled any other
     // way answers `false` for every field and the widening silently stops
     // happening. It reads like a pass-internal identity and is not one.
-    Some(((crate::types::class_name(package, owner), crate::hierarchy::field_name(program, owner, index as usize)), &field.ty))
+    Some((
+        (
+            crate::types::class_name(package, owner),
+            crate::hierarchy::field_name(program, owner, index as usize),
+        ),
+        &field.ty,
+    ))
 }
 
 /// The functions this backend actually renders.
@@ -269,8 +280,10 @@ pub fn plan(package: &str, program: &Program) -> Plan {
     //
     // So the rule is not "widen what is exact" -- that was true of the locals
     // too -- but "widen what removes a conversion from a field access".
-    let reaching_a_field: FxHashSet<u32> =
-        field_index.values().map(|slot| classes.find(*slot)).collect();
+    let reaching_a_field: FxHashSet<u32> = field_index
+        .values()
+        .map(|slot| classes.find(*slot))
+        .collect();
 
     // The second shape, and the reason it is not the losing one.
     //
@@ -293,8 +306,7 @@ pub fn plan(package: &str, program: &Program) -> Plan {
     // Priced before building, on the shape rather than the emitter: the same
     // program with an `f64` payload instead of an `i32` one runs at 2.96 cycles
     // an iteration against 4.17. Record 0150.
-    let round_trip: FxHashSet<u32> =
-        from_f64.difference(&computed).copied().collect();
+    let round_trip: FxHashSet<u32> = from_f64.difference(&computed).copied().collect();
     let mut plan = Plan::empty();
     for func in program.funcs.iter().filter(|it| emitted(it)) {
         let mut kept = FxHashSet::default();
@@ -327,7 +339,10 @@ pub fn plan(package: &str, program: &Program) -> Plan {
 /// Split from `plan` because the union pass and the refusal pass are two
 /// separate readings of the program and reading them as one function was the
 /// thing that hid a `yield` in a block nothing reaches.
-#[allow(clippy::too_many_arguments, reason = "four disjoint verdicts about one class")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "four disjoint verdicts about one class"
+)]
 fn strike_down(
     program: &Program,
     classes: &mut Classes,
@@ -405,7 +420,6 @@ fn strike_down(
             }
         }
     }
-
 }
 
 /// Tie together everything that must share one representation.
@@ -429,7 +443,13 @@ fn unify(
         for block in &func.blocks {
             let outgoing: Vec<(nts_core::hir::BlockId, &Vec<ValueId>)> = match &block.terminator {
                 Terminator::Jump { target, args } => vec![(*target, args)],
-                Terminator::Branch { then_target, then_args, else_target, else_args, .. } => {
+                Terminator::Branch {
+                    then_target,
+                    then_args,
+                    else_target,
+                    else_args,
+                    ..
+                } => {
                     vec![(*then_target, then_args), (*else_target, else_args)]
                 }
                 _ => Vec::new(),
@@ -457,7 +477,11 @@ fn unify(
                             classes.union(id(func, value), *slot);
                         }
                     }
-                    OpKind::FieldSet { object, field, value: stored } => {
+                    OpKind::FieldSet {
+                        object,
+                        field,
+                        value: stored,
+                    } => {
                         if let Some(slot) = field_of(package, program, func, *object, *field)
                             .and_then(|(key, _)| field_index.get(&key))
                         {
@@ -469,5 +493,4 @@ fn unify(
             }
         }
     }
-
 }

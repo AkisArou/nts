@@ -29,8 +29,12 @@ use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program, Templa
 
 use super::{CodeWriter, Diagnostic, Origin, c_identifier, c_type_of};
 
-
-pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Program) -> Result<(), Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn classes(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+) -> Result<(), Diagnostic> {
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     let registered = nts_codegen_common::gobject::registered(program);
     let wrote = !registered.is_empty();
@@ -50,10 +54,20 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .find(|func| func.name == method.function)
                 .ok_or_else(|| refuse("a GObject virtual function whose compiled function this program does not define"))?;
             if compiled.params.len() != method.signature.parameters.len() {
-                return Err(refuse("a GObject virtual function whose entry point and compiled function disagree about arity"));
+                return Err(refuse(
+                    "a GObject virtual function whose entry point and compiled function disagree about arity",
+                ));
             }
-            if method.signature.parameters.iter().chain(std::iter::once(&*method.signature.result)).any(|ty| matches!(ty, Type::Record(_))) {
-                return Err(refuse("a GObject virtual function taking or returning a record by value"));
+            if method
+                .signature
+                .parameters
+                .iter()
+                .chain(std::iter::once(&*method.signature.result))
+                .any(|ty| matches!(ty, Type::Record(_)))
+            {
+                return Err(refuse(
+                    "a GObject virtual function taking or returning a record by value",
+                ));
             }
             let offset = method
                 .selector()
@@ -62,9 +76,18 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
                 .ok_or_else(|| refuse("a GObject virtual function whose slot has no offset"))?;
             let mut parameters = Vec::new();
             let mut arguments = Vec::new();
-            for (slot, (ty, want)) in method.signature.parameters.iter().zip(&compiled.params).enumerate() {
+            for (slot, (ty, want)) in method
+                .signature
+                .parameters
+                .iter()
+                .zip(&compiled.params)
+                .enumerate()
+            {
                 parameters.push(format!("{} a{slot}", ty.c_type()));
-                arguments.push(format!("({})a{slot}", c_type_of(program, &want.ty, &want.origin)?));
+                arguments.push(format!(
+                    "({})a{slot}",
+                    c_type_of(program, &want.ty, &want.origin)?
+                ));
             }
             let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
             let entry = format!("nts_gobject_{name}_{at}");
@@ -72,11 +95,23 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             let body = if matches!(*method.signature.result, Type::Void) {
                 format!("nts_callback_enter(); {call}; nts_callback_leave();")
             } else {
-                format!("nts_callback_enter(); {returns} r = ({returns}){call}; nts_callback_leave(); return r;")
+                format!(
+                    "nts_callback_enter(); {returns} r = ({returns}){call}; nts_callback_leave(); return r;"
+                )
             };
-            writer.line(origin, format!("static {returns} {entry}({}) {{ {body} }}", parameters.join(", ")));
+            writer.line(
+                origin,
+                format!(
+                    "static {returns} {entry}({}) {{ {body} }}",
+                    parameters.join(", ")
+                ),
+            );
             let structure = method.selector().split_whitespace().next();
-            let table = match class.protocols.iter().position(|interface| interface.split_whitespace().next() == structure) {
+            let table = match class
+                .protocols
+                .iter()
+                .position(|interface| interface.split_whitespace().next() == structure)
+            {
                 Some(interface) => &mut interfaces[interface],
                 None => &mut slots,
             };
@@ -85,7 +120,13 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         let table = if slots.is_empty() {
             "0".to_owned()
         } else {
-            writer.line(origin, format!("static const struct nts_gobject_slot nts_gobject_slots_{name}[] = {{ {} }};", slots.join(", ")));
+            writer.line(
+                origin,
+                format!(
+                    "static const struct nts_gobject_slot nts_gobject_slots_{name}[] = {{ {} }};",
+                    slots.join(", ")
+                ),
+            );
             format!("nts_gobject_slots_{name}")
         };
         // The fields' maker, which `instance_init` calls wherever GTK makes
@@ -105,7 +146,11 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         }
         signals.push_str(&implementations(writer, origin, class, &interfaces)?);
         if let Some(table) = properties(writer, origin, program, class)? {
-            let _ = write!(signals, " nts_gobject_set_properties(type, {table}, {}u);", class.properties.len());
+            let _ = write!(
+                signals,
+                " nts_gobject_set_properties(type, {table}, {}u);",
+                class.properties.len()
+            );
         }
         writer.line(
             origin,
@@ -120,10 +165,18 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         // program already declares, which this definition has to match. An
         // ancestor made only through its descendants has none.
         let make = format!("nts_gobject_new_{name}");
-        if let Some(result) = program.funcs.iter().flat_map(|func| &func.values).find_map(|op| match &op.kind {
-            OpKind::Call { callee: Callee::Native(target), .. } if target.name == make => Some(target.result.c_type()),
-            _ => None,
-        }) {
+        if let Some(result) = program
+            .funcs
+            .iter()
+            .flat_map(|func| &func.values)
+            .find_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Native(target),
+                    ..
+                } if target.name == make => Some(target.result.c_type()),
+                _ => None,
+            })
+        {
             writer.line(origin, format!("{result} {make}(void) {{ return ({result})nts_gobject_new(nts_gobject_type_{name}()); }}"));
         }
     }
@@ -139,19 +192,31 @@ pub(super) fn classes(writer: &mut CodeWriter, origin: &Origin, program: &Progra
 /// What the classes' code below needs declared first: the support file's
 /// registration calls, the tables' types, and each class's `GType` function.
 fn header(writer: &mut CodeWriter, origin: &Origin, registered: &[&ForeignClass]) {
-    writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+    writer.line(
+        origin,
+        "/* GObject classes the program declares: see `emit/gobject.rs`. */",
+    );
     writer.line(
         origin,
         "size_t nts_gobject_register(size_t parent, const char *name, const void *slots, size_t count, void *(*make_state)(void), void (*class_setup)(void *), void (*instance_setup)(void *));",
     );
     writer.line(origin, "void *nts_gobject_new(size_t type);");
-    writer.line(origin, "struct nts_gobject_slot { size_t offset; void (*entry)(void); };");
+    writer.line(
+        origin,
+        "struct nts_gobject_slot { size_t offset; void (*entry)(void); };",
+    );
     if registered.iter().any(|class| !class.properties.is_empty()) {
         writer.line(origin, "struct nts_gobject_property { const char *name; char kind; void (*get)(void); void (*set)(void); };");
-        writer.line(origin, "void nts_gobject_set_properties(size_t type, const void *properties, size_t count);");
+        writer.line(
+            origin,
+            "void nts_gobject_set_properties(size_t type, const void *properties, size_t count);",
+        );
     }
     if registered.iter().any(|class| !class.protocols.is_empty()) {
-        writer.line(origin, "void nts_gobject_add_interfaces(size_t type, const void *interfaces, size_t count);");
+        writer.line(
+            origin,
+            "void nts_gobject_add_interfaces(size_t type, const void *interfaces, size_t count);",
+        );
         writer.line(origin, "struct nts_gobject_interface { size_t (*get_type)(void); const struct nts_gobject_slot *slots; size_t count; };");
     }
     // Each class's `GType` function, before any class names it as a
@@ -159,14 +224,22 @@ fn header(writer: &mut CodeWriter, origin: &Origin, registered: &[&ForeignClass]
     // too, as the native function it is, and that call's prototype is
     // printed with every other native's, above this.
     for class in registered {
-        writer.line(origin, format!("size_t {PROGRAM_GTYPE}{}(void);", class.name));
+        writer.line(
+            origin,
+            format!("size_t {PROGRAM_GTYPE}{}(void);", class.name),
+        );
     }
 }
 
 /// The interfaces a class implements: each one's table of the slots its
 /// methods fill, and the call adding them all to the class's `GType` once it
 /// is registered -- in an order `GLib` accepts, which the runtime finds.
-fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClass, tables: &[Vec<String>]) -> Result<String, Diagnostic> {
+fn implementations(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    class: &ForeignClass,
+    tables: &[Vec<String>],
+) -> Result<String, Diagnostic> {
     if class.protocols.is_empty() {
         return Ok(String::new());
     }
@@ -174,7 +247,11 @@ fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClas
     let mut rows = Vec::new();
     for (at, (interface, slots)) in class.protocols.iter().zip(tables).enumerate() {
         let get_type = interface.split_whitespace().nth(1).ok_or_else(|| {
-            Diagnostic::error("NTS2006", format!("an interface `{interface}` with no `GType` function"), origin.location)
+            Diagnostic::error(
+                "NTS2006",
+                format!("an interface `{interface}` with no `GType` function"),
+                origin.location,
+            )
         })?;
         writer.line(origin, format!("size_t {get_type}(void);"));
         let table = if slots.is_empty() {
@@ -185,8 +262,17 @@ fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClas
         };
         rows.push(format!("{{ {get_type}, {table}, {}u }}", slots.len()));
     }
-    writer.line(origin, format!("static const struct nts_gobject_interface nts_gobject_interfaces_{name}[] = {{ {} }};", rows.join(", ")));
-    Ok(format!(" nts_gobject_add_interfaces(type, nts_gobject_interfaces_{name}, {}u);", rows.len()))
+    writer.line(
+        origin,
+        format!(
+            "static const struct nts_gobject_interface nts_gobject_interfaces_{name}[] = {{ {} }};",
+            rows.join(", ")
+        ),
+    );
+    Ok(format!(
+        " nts_gobject_add_interfaces(type, nts_gobject_interfaces_{name}, {}u);",
+        rows.len()
+    ))
 }
 
 /// The by-name thunks, each `{prefix}{kind}__{name}` the program calls,
@@ -196,28 +282,57 @@ fn implementations(writer: &mut CodeWriter, origin: &Origin, class: &ForeignClas
 /// property a construction gives, `new GThemedIcon({ name })`, to the
 /// support file's builder.
 const BY_NAME: [(&str, &str, &str); 2] = [
-    ("nts_gobject_prop_", "g_object_set", "void g_object_set(void *object, const char *first_property_name, ...);"),
-    ("nts_gobject_with_", "nts_gobject_with_builder_add", "void nts_gobject_with_builder_add(void *builder, const char *name, ...);"),
+    (
+        "nts_gobject_prop_",
+        "g_object_set",
+        "void g_object_set(void *object, const char *first_property_name, ...);",
+    ),
+    (
+        "nts_gobject_with_",
+        "nts_gobject_with_builder_add",
+        "void nts_gobject_with_builder_add(void *builder, const char *name, ...);",
+    ),
 ];
 
 /// Each by-name thunk the program calls (`BY_NAME`), defined as its
 /// prototype declares it: the value is C's varargs promote it, as the
 /// function it calls reads it.
-fn set_by_name(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
+fn set_by_name(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    mut wrote: bool,
+) -> bool {
     for (prefix, callee, declaration) in BY_NAME {
         let mut done = std::collections::BTreeSet::new();
-        for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-            OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with(prefix) => Some(target),
-            _ => None,
-        }) {
+        for target in program
+            .funcs
+            .iter()
+            .flat_map(|func| &func.values)
+            .filter_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Native(target),
+                    ..
+                } if target.name.starts_with(prefix) => Some(target),
+                _ => None,
+            })
+        {
             // The builder's own functions have no `__`: the support file's.
-            let Some((_, property)) = target.name.trim_start_matches(prefix).split_once("__") else { continue };
+            let Some((_, property)) = target.name.trim_start_matches(prefix).split_once("__")
+            else {
+                continue;
+            };
             if !done.insert(target.name.clone()) {
                 continue;
             }
-            let [object, value] = target.parameters.as_slice() else { continue };
+            let [object, value] = target.parameters.as_slice() else {
+                continue;
+            };
             if !wrote {
-                writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+                writer.line(
+                    origin,
+                    "/* GObject classes the program declares: see `emit/gobject.rs`. */",
+                );
                 wrote = true;
             }
             if done.len() == 1 {
@@ -241,23 +356,50 @@ fn set_by_name(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut 
 /// Each `nts_gobject_propget_{kind}__{name}` the program calls -- a read of
 /// a property with no getter method -- defined as `g_object_get` into a
 /// local of the property's own type.
-fn get_by_name(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
+fn get_by_name(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    mut wrote: bool,
+) -> bool {
     let mut done = std::collections::BTreeSet::new();
-    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_propget_") => Some(target),
-        _ => None,
-    }) {
+    for target in program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_propget_") => Some(target),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((_, property)) = target.name.trim_start_matches("nts_gobject_propget_").split_once("__") else { continue };
-        let [object] = target.parameters.as_slice() else { continue };
+        let Some((_, property)) = target
+            .name
+            .trim_start_matches("nts_gobject_propget_")
+            .split_once("__")
+        else {
+            continue;
+        };
+        let [object] = target.parameters.as_slice() else {
+            continue;
+        };
         if !wrote {
-            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            writer.line(
+                origin,
+                "/* GObject classes the program declares: see `emit/gobject.rs`. */",
+            );
             wrote = true;
         }
         if done.len() == 1 {
-            writer.line(origin, "void g_object_get(void *object, const char *first_property_name, ...);");
+            writer.line(
+                origin,
+                "void g_object_get(void *object, const char *first_property_name, ...);",
+            );
         }
         let value = target.result.c_type();
         writer.line(
@@ -278,14 +420,28 @@ fn get_by_name(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut 
 /// by the child's id, which lends it.
 fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
     let mut done = std::collections::BTreeSet::new();
-    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_child_") => Some(target),
-        _ => None,
-    }) {
+    for target in program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_child_") => Some(target),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((class, index)) = target.name.trim_start_matches("nts_gobject_child_").rsplit_once('_') else { continue };
+        let Some((class, index)) = target
+            .name
+            .trim_start_matches("nts_gobject_child_")
+            .rsplit_once('_')
+        else {
+            continue;
+        };
         let Some(id) = program
             .foreign_classes
             .iter()
@@ -296,14 +452,23 @@ fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
             continue;
         };
         if !wrote {
-            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            writer.line(
+                origin,
+                "/* GObject classes the program declares: see `emit/gobject.rs`. */",
+            );
             wrote = true;
         }
         if done.len() == 1 {
-            writer.line(origin, "void *nts_gtk_template_child(void *widget, size_t type, const char *id);");
+            writer.line(
+                origin,
+                "void *nts_gtk_template_child(void *widget, size_t type, const char *id);",
+            );
         }
         let returns = target.result.c_type();
-        let instance = target.parameters.first().map_or_else(|| "void *".into(), Type::c_type);
+        let instance = target
+            .parameters
+            .first()
+            .map_or_else(|| "void *".into(), Type::c_type);
         writer.line(
             origin,
             format!(
@@ -321,21 +486,44 @@ fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
 /// property's spec, found once and kept.
 fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
     let mut done = std::collections::BTreeSet::new();
-    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_notify_") => Some(target),
-        _ => None,
-    }) {
+    for target in program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_notify_") => Some(target),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((class, index)) = target.name.trim_start_matches("nts_gobject_notify_").rsplit_once('_') else { continue };
+        let Some((class, index)) = target
+            .name
+            .trim_start_matches("nts_gobject_notify_")
+            .rsplit_once('_')
+        else {
+            continue;
+        };
         if !wrote {
-            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            writer.line(
+                origin,
+                "/* GObject classes the program declares: see `emit/gobject.rs`. */",
+            );
             wrote = true;
         }
         if done.len() == 1 {
-            writer.line(origin, "void *nts_gobject_property_spec(size_t type, unsigned index);");
-            writer.line(origin, "void g_object_notify_by_pspec(void *object, void *pspec);");
+            writer.line(
+                origin,
+                "void *nts_gobject_property_spec(size_t type, unsigned index);",
+            );
+            writer.line(
+                origin,
+                "void g_object_notify_by_pspec(void *object, void *pspec);",
+            );
         }
         writer.line(
             origin,
@@ -351,24 +539,52 @@ fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
 /// A class's template (`static readonly template`): `class_init` sets it and
 /// binds each child the class names, and `instance_init` makes the children
 /// (`nts_gtk.c`). The two hooks registration passes, `0, 0` without one.
-fn template(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass) -> Result<String, Diagnostic> {
-    let Some(template) = &class.template else { return Ok("0, 0".to_owned()) };
+fn template(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    class: &ForeignClass,
+) -> Result<String, Diagnostic> {
+    let Some(template) = &class.template else {
+        return Ok("0, 0".to_owned());
+    };
     let name = &class.name;
-    writer.line(origin, "void nts_gtk_class_children(void *klass, const char *const *children, size_t count);");
+    writer.line(
+        origin,
+        "void nts_gtk_class_children(void *klass, const char *const *children, size_t count);",
+    );
     writer.line(origin, "void nts_gtk_init_template(void *instance);");
     let set = match &template.text {
         TemplateText::Literal(text) => {
-            writer.line(origin, "void nts_gtk_class_template(void *klass, const char *text, size_t length);");
-            format!("nts_gtk_class_template(klass, {}, {}u);", c_string(text), text.len())
+            writer.line(
+                origin,
+                "void nts_gtk_class_template(void *klass, const char *text, size_t length);",
+            );
+            format!(
+                "nts_gtk_class_template(klass, {}, {}u);",
+                c_string(text),
+                text.len()
+            )
         }
         // The reader's string, lent to GTK for the call, entered and left
         // as an entry point is; its result is the caller's to release only
         // where the program counts.
         TemplateText::Read(reader) => {
-            writer.line(origin, "void nts_gtk_class_template_text(void *klass, const char *text);");
-            let compiled = program.funcs.iter().find(|func| &func.name == reader).ok_or_else(|| {
-                Diagnostic::error("NTS2006", "a template whose reader this program does not define".to_owned(), origin.location)
-            })?;
+            writer.line(
+                origin,
+                "void nts_gtk_class_template_text(void *klass, const char *text);",
+            );
+            let compiled = program
+                .funcs
+                .iter()
+                .find(|func| &func.name == reader)
+                .ok_or_else(|| {
+                    Diagnostic::error(
+                        "NTS2006",
+                        "a template whose reader this program does not define".to_owned(),
+                        origin.location,
+                    )
+                })?;
             let release = if program.provider == nts_core::hir::Provider::ReferenceCounting {
                 " nts_release((NtsHeader *)text);"
             } else {
@@ -382,11 +598,21 @@ fn template(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: 
         }
     };
     let binds = callbacks(writer, origin, program, class, &template.callbacks)?;
-    let children: Vec<String> = template.children.iter().map(|child| c_string(child)).collect();
+    let children: Vec<String> = template
+        .children
+        .iter()
+        .map(|child| c_string(child))
+        .collect();
     let table = if children.is_empty() {
         "0".to_owned()
     } else {
-        writer.line(origin, format!("static const char *const nts_gobject_children_{name}[] = {{ {} }};", children.join(", ")));
+        writer.line(
+            origin,
+            format!(
+                "static const char *const nts_gobject_children_{name}[] = {{ {} }};",
+                children.join(", ")
+            ),
+        );
         format!("nts_gobject_children_{name}")
     };
     writer.line(
@@ -396,19 +622,30 @@ fn template(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: 
             children.len()
         ),
     );
-    Ok(format!("nts_gobject_class_setup_{name}, nts_gtk_init_template"))
+    Ok(format!(
+        "nts_gobject_class_setup_{name}, nts_gtk_init_template"
+    ))
 }
 
 /// Each method a template names as a signal's handler: an entry point GTK
 /// calls with the signal's arguments and then the instance, its user data,
 /// which calls the compiled method with the instance as `this`, entered and
 /// left as any entry point is. Returns the calls binding each by name.
-fn callbacks(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass, callbacks: &[ForeignMethod]) -> Result<String, Diagnostic> {
+fn callbacks(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    class: &ForeignClass,
+    callbacks: &[ForeignMethod],
+) -> Result<String, Diagnostic> {
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     if callbacks.is_empty() {
         return Ok(String::new());
     }
-    writer.line(origin, "void nts_gtk_bind_callback(void *klass, const char *name, void (*callback)(void));");
+    writer.line(
+        origin,
+        "void nts_gtk_bind_callback(void *klass, const char *name, void (*callback)(void));",
+    );
     let name = &class.name;
     let mut binds = String::new();
     for (at, callback) in callbacks.iter().enumerate() {
@@ -416,16 +653,32 @@ fn callbacks(writer: &mut CodeWriter, origin: &Origin, program: &Program, class:
             .funcs
             .iter()
             .find(|func| func.name == callback.function)
-            .ok_or_else(|| refuse("a template's handler whose compiled function this program does not define"))?;
+            .ok_or_else(|| {
+                refuse("a template's handler whose compiled function this program does not define")
+            })?;
         let signature = &callback.signature;
         if compiled.params.len() != signature.parameters.len() {
-            return Err(refuse("a template's handler whose entry point and compiled function disagree about arity"));
+            return Err(refuse(
+                "a template's handler whose entry point and compiled function disagree about arity",
+            ));
         }
         let mut parameters = Vec::new();
-        let mut arguments = vec![format!("({})self", c_type_of(program, &compiled.params[0].ty, &compiled.params[0].origin)?)];
-        for (slot, (ty, want)) in signature.parameters.iter().zip(&compiled.params).enumerate().skip(1) {
+        let mut arguments = vec![format!(
+            "({})self",
+            c_type_of(program, &compiled.params[0].ty, &compiled.params[0].origin)?
+        )];
+        for (slot, (ty, want)) in signature
+            .parameters
+            .iter()
+            .zip(&compiled.params)
+            .enumerate()
+            .skip(1)
+        {
             parameters.push(format!("{} a{slot}", ty.c_type()));
-            arguments.push(format!("({})a{slot}", c_type_of(program, &want.ty, &want.origin)?));
+            arguments.push(format!(
+                "({})a{slot}",
+                c_type_of(program, &want.ty, &want.origin)?
+            ));
         }
         parameters.push("void *self".to_owned());
         let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
@@ -433,23 +686,50 @@ fn callbacks(writer: &mut CodeWriter, origin: &Origin, program: &Program, class:
         let body = if matches!(*signature.result, Type::Void) {
             format!("nts_callback_enter(); {call}; nts_callback_leave();")
         } else {
-            format!("nts_callback_enter(); {returns} r = ({returns}){call}; nts_callback_leave(); return r;")
+            format!(
+                "nts_callback_enter(); {returns} r = ({returns}){call}; nts_callback_leave(); return r;"
+            )
         };
         let entry = format!("nts_gobject_callback_{name}_{at}");
-        writer.line(origin, format!("static {returns} {entry}({}) {{ {body} }}", parameters.join(", ")));
+        writer.line(
+            origin,
+            format!(
+                "static {returns} {entry}({}) {{ {body} }}",
+                parameters.join(", ")
+            ),
+        );
         let handler = callback.selector().trim_start_matches("callback ");
-        let _ = write!(binds, " nts_gtk_bind_callback(klass, {}, (void (*)(void)){entry});", c_string(handler));
+        let _ = write!(
+            binds,
+            " nts_gtk_bind_callback(klass, {}, (void (*)(void)){entry});",
+            c_string(handler)
+        );
     }
     Ok(binds)
 }
 
 /// The maker of a class's fields, entered and left as an entry point is, or
 /// `0` for a class with none.
-fn state_maker(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass) -> Result<String, Diagnostic> {
-    let Some(state) = &class.state else { return Ok("0".to_owned()) };
-    let compiled = program.funcs.iter().find(|func| &func.name == state).ok_or_else(|| {
-        Diagnostic::error("NTS2006", "a GObject class whose fields' maker this program does not define".to_owned(), origin.location)
-    })?;
+fn state_maker(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    class: &ForeignClass,
+) -> Result<String, Diagnostic> {
+    let Some(state) = &class.state else {
+        return Ok("0".to_owned());
+    };
+    let compiled = program
+        .funcs
+        .iter()
+        .find(|func| &func.name == state)
+        .ok_or_else(|| {
+            Diagnostic::error(
+                "NTS2006",
+                "a GObject class whose fields' maker this program does not define".to_owned(),
+                origin.location,
+            )
+        })?;
     let name = &class.name;
     writer.line(
         origin,
@@ -465,7 +745,12 @@ fn state_maker(writer: &mut CodeWriter, origin: &Origin, program: &Program, clas
 /// reach them: a wrapper per accessor, entered and left as an entry point is,
 /// and the `{ name, kind, get, set }` table registration hands over. `None`
 /// for a class with none.
-fn properties(writer: &mut CodeWriter, origin: &Origin, program: &Program, class: &ForeignClass) -> Result<Option<String>, Diagnostic> {
+fn properties(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    class: &ForeignClass,
+) -> Result<Option<String>, Diagnostic> {
     if class.properties.is_empty() {
         return Ok(None);
     }
@@ -474,7 +759,13 @@ fn properties(writer: &mut CodeWriter, origin: &Origin, program: &Program, class
     let mut rows = Vec::new();
     for (at, property) in class.properties.iter().enumerate() {
         let find = |wanted: &str| {
-            program.funcs.iter().find(|func| func.name == wanted).ok_or_else(|| refuse("a GObject property whose accessor this program does not define"))
+            program
+                .funcs
+                .iter()
+                .find(|func| func.name == wanted)
+                .ok_or_else(|| {
+                    refuse("a GObject property whose accessor this program does not define")
+                })
         };
         let (get, set) = (find(&property.getter)?, find(&property.setter)?);
         let instance = c_type_of(program, &get.params[0].ty, &get.params[0].origin)?;
@@ -499,7 +790,13 @@ fn properties(writer: &mut CodeWriter, origin: &Origin, program: &Program, class
             property.kind
         ));
     }
-    writer.line(origin, format!("static const struct nts_gobject_property nts_gobject_properties_{name}[] = {{ {} }};", rows.join(", ")));
+    writer.line(
+        origin,
+        format!(
+            "static const struct nts_gobject_property nts_gobject_properties_{name}[] = {{ {} }};",
+            rows.join(", ")
+        ),
+    );
     Ok(Some(format!("nts_gobject_properties_{name}")))
 }
 
@@ -507,7 +804,12 @@ fn properties(writer: &mut CodeWriter, origin: &Origin, program: &Program, class
 fn registrations(class: &ForeignClass) -> String {
     let mut out = String::new();
     for signal in &class.signals {
-        let _ = write!(out, " nts_gobject_add_signal(type, {}, \"{}\");", c_string(&signal.name), signal.kinds);
+        let _ = write!(
+            out,
+            " nts_gobject_add_signal(type, {}, \"{}\");",
+            c_string(&signal.name),
+            signal.kinds
+        );
     }
     out
 }
@@ -539,23 +841,48 @@ fn c_string(text: &str) -> String {
 /// back with `_` for `-`, which `GLib` treats as the same signal.
 fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) {
     let mut done = std::collections::BTreeSet::new();
-    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_emit_") => Some(target),
-        _ => None,
-    }) {
+    for target in program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_emit_") => Some(target),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((_, signal)) = target.name.trim_start_matches("nts_gobject_emit_").split_once("__") else { continue };
+        let Some((_, signal)) = target
+            .name
+            .trim_start_matches("nts_gobject_emit_")
+            .split_once("__")
+        else {
+            continue;
+        };
         if !wrote {
-            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            writer.line(
+                origin,
+                "/* GObject classes the program declares: see `emit/gobject.rs`. */",
+            );
             wrote = true;
         }
         if done.len() == 1 {
             writer.line(origin, "unsigned nts_gobject_signal_id(void *instance, const char *name, size_t cache[2]);");
-            writer.line(origin, "void g_signal_emit(void *instance, unsigned signal, unsigned detail, ...);");
+            writer.line(
+                origin,
+                "void g_signal_emit(void *instance, unsigned signal, unsigned detail, ...);",
+            );
         }
-        let parameters: Vec<String> = target.parameters.iter().enumerate().map(|(at, ty)| format!("{} a{at}", ty.c_type())).collect();
+        let parameters: Vec<String> = target
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(at, ty)| format!("{} a{at}", ty.c_type()))
+            .collect();
         let mut arguments = String::new();
         for at in 1..target.parameters.len() {
             let _ = write!(arguments, ", a{at}");
@@ -566,7 +893,11 @@ fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote:
             ("void".to_owned(), String::new(), String::new())
         } else {
             let ty = target.result.c_type();
-            (ty.to_string(), format!(" {ty} r = 0;"), " return r;".to_owned())
+            (
+                ty.to_string(),
+                format!(" {ty} r = 0;"),
+                " return r;".to_owned(),
+            )
         };
         let location = if slot.is_empty() { "" } else { ", &r" };
         writer.line(
@@ -587,13 +918,26 @@ fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote:
 /// Each `nts_gobject_chain_{Class}_{offset}` the program calls -- a chain-up,
 /// `super.vfunc_clicked()` -- defined as its prototype declares it: the
 /// parent's slot at `offset`, called if it is there and skipped if not.
-fn chains(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> Result<bool, Diagnostic> {
+fn chains(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    mut wrote: bool,
+) -> Result<bool, Diagnostic> {
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     let mut done = std::collections::BTreeSet::new();
-    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_chain_") => Some(target),
-        _ => None,
-    }) {
+    for target in program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_chain_") => Some(target),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
@@ -608,22 +952,50 @@ fn chains(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote
             .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
             .map(|foreign| foreign.superclass.clone())
             .ok_or_else(|| refuse("a chain-up in a class this program does not register"))?;
-        if target.parameters.iter().chain(std::iter::once(&target.result)).any(|ty| matches!(ty, Type::Record(_))) {
-            return Err(refuse("a chain-up to a virtual function taking or returning a record by value"));
+        if target
+            .parameters
+            .iter()
+            .chain(std::iter::once(&target.result))
+            .any(|ty| matches!(ty, Type::Record(_)))
+        {
+            return Err(refuse(
+                "a chain-up to a virtual function taking or returning a record by value",
+            ));
         }
         if !wrote {
-            writer.line(origin, "/* GObject classes the program declares: see `emit/gobject.rs`. */");
+            writer.line(
+                origin,
+                "/* GObject classes the program declares: see `emit/gobject.rs`. */",
+            );
             wrote = true;
         }
-        writer.line(origin, "void *nts_gobject_parent_slot(size_t parent, size_t offset);");
+        writer.line(
+            origin,
+            "void *nts_gobject_parent_slot(size_t parent, size_t offset);",
+        );
         if !parent.starts_with(PROGRAM_GTYPE) {
             writer.line(origin, format!("size_t {parent}(void);"));
         }
-        let parameters: Vec<String> = target.parameters.iter().enumerate().map(|(at, ty)| format!("{} a{at}", ty.c_type())).collect();
-        let types: Vec<String> = target.parameters.iter().map(|ty| ty.c_type().into_owned()).collect();
-        let arguments: Vec<String> = (0..target.parameters.len()).map(|at| format!("a{at}")).collect();
+        let parameters: Vec<String> = target
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(at, ty)| format!("{} a{at}", ty.c_type()))
+            .collect();
+        let types: Vec<String> = target
+            .parameters
+            .iter()
+            .map(|ty| ty.c_type().into_owned())
+            .collect();
+        let arguments: Vec<String> = (0..target.parameters.len())
+            .map(|at| format!("a{at}"))
+            .collect();
         let returns = target.result.c_type();
-        let call = format!("(({returns} (*)({}))slot)({})", types.join(", "), arguments.join(", "));
+        let call = format!(
+            "(({returns} (*)({}))slot)({})",
+            types.join(", "),
+            arguments.join(", ")
+        );
         let body = if matches!(target.result, Type::Void) {
             format!("if (slot) {call};")
         } else {

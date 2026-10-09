@@ -122,15 +122,22 @@ pub fn is_callable(program: &nts_core::hir::Program, layout: &Layout) -> bool {
     [program.erased_call_slot, program.raising_call_slot]
         .into_iter()
         .flatten()
-        .any(|slot| layout.methods.get(slot as usize).is_some_and(Option::is_some))
+        .any(|slot| {
+            layout
+                .methods
+                .get(slot as usize)
+                .is_some_and(Option::is_some)
+        })
 }
 
 /// A function value's storage identity survives removal of its unused entries.
 /// This proves the shared reference ABI, never a method that can be invoked.
 #[must_use]
 pub fn is_callable_storage(program: &nts_core::hir::Program, layout: &Layout) -> bool {
-    is_callable(program, layout) || layout.types.iter().any(|ty|
-        nts_core::hir::has_a_closure_body(*ty) || program.signature_faces.contains_key(ty))
+    is_callable(program, layout)
+        || layout.types.iter().any(|ty| {
+            nts_core::hir::has_a_closure_body(*ty) || program.signature_faces.contains_key(ty)
+        })
 }
 
 /// Whether a layout is a *signature*: callable storage, and no closure's
@@ -138,7 +145,11 @@ pub fn is_callable_storage(program: &nts_core::hir::Program, layout: &Layout) ->
 /// there, so it is referred to as [`callable_class`].
 #[must_use]
 pub fn is_signature(program: &nts_core::hir::Program, layout: &Layout) -> bool {
-    is_callable_storage(program, layout) && !layout.types.iter().any(|ty| nts_core::hir::is_closure_type(*ty))
+    is_callable_storage(program, layout)
+        && !layout
+            .types
+            .iter()
+            .any(|ty| nts_core::hir::is_closure_type(*ty))
 }
 
 /// The class a value of this layout's type is referred to as -- in a
@@ -325,24 +336,32 @@ pub const CALLBACKS: &[(&str, &str)] = &[
     ("()V", CALLBACK),
     ("(D)V", "nts/rt/NtsNumberCallback"),
     ("(Ljava/lang/String;)V", "nts/rt/NtsTextCallback"),
-    ("(Ljava/lang/String;Ljava/lang/String;)V", "nts/rt/NtsTextPairCallback"),
+    (
+        "(Ljava/lang/String;Ljava/lang/String;)V",
+        "nts/rt/NtsTextPairCallback",
+    ),
     ("([BDD)V", "nts/rt/NtsBytesCallback"),
 ];
 
 /// The interface a class whose `call` has this descriptor implements, if any.
 #[must_use]
 pub fn callback_interface(descriptor: &str) -> Option<&'static str> {
-    CALLBACKS.iter().find(|(shape, _)| *shape == descriptor).map(|&(_, name)| name)
+    CALLBACKS
+        .iter()
+        .find(|(shape, _)| *shape == descriptor)
+        .map(|&(_, name)| name)
 }
 
 /// Whether this is one of the callback interfaces, which is what decides
 /// whether an argument may be coerced into it rather than refused.
 #[must_use]
 pub fn is_callback_interface(descriptor: &str) -> bool {
-    CALLBACKS.iter().any(|(_, name)| descriptor.len() == name.len() + 2
-        && descriptor.starts_with('L')
-        && descriptor.ends_with(';')
-        && &descriptor[1..descriptor.len() - 1] == *name)
+    CALLBACKS.iter().any(|(_, name)| {
+        descriptor.len() == name.len() + 2
+            && descriptor.starts_with('L')
+            && descriptor.ends_with(';')
+            && &descriptor[1..descriptor.len() - 1] == *name
+    })
 }
 
 /// The program a backend is rendering, and the one whole-program fact that
@@ -379,7 +398,11 @@ impl<'a> Shape<'a> {
 
     #[must_use]
     pub fn packaged(program: &'a Program, package: &'a str) -> Self {
-        Self { program, grows: nts_core::hir::arrays_can_grow(program), package }
+        Self {
+            program,
+            grows: nts_core::hir::arrays_can_grow(program),
+            package,
+        }
     }
 }
 
@@ -573,12 +596,30 @@ pub const ANY_VIEW: &str = "nts/rt/NtsAnyView";
 #[must_use]
 pub fn view_class(element: &HirType) -> Option<&'static str> {
     Some(match element {
-        HirType::Int { bits: 8, signed: true } => "nts/rt/NtsViewI8",
-        HirType::Int { bits: 8, signed: false } => "nts/rt/NtsViewU8",
-        HirType::Int { bits: 16, signed: true } => "nts/rt/NtsViewI16",
-        HirType::Int { bits: 16, signed: false } => "nts/rt/NtsViewU16",
-        HirType::Int { bits: 32, signed: true } => "nts/rt/NtsViewI32",
-        HirType::Int { bits: 32, signed: false } => "nts/rt/NtsViewU32",
+        HirType::Int {
+            bits: 8,
+            signed: true,
+        } => "nts/rt/NtsViewI8",
+        HirType::Int {
+            bits: 8,
+            signed: false,
+        } => "nts/rt/NtsViewU8",
+        HirType::Int {
+            bits: 16,
+            signed: true,
+        } => "nts/rt/NtsViewI16",
+        HirType::Int {
+            bits: 16,
+            signed: false,
+        } => "nts/rt/NtsViewU16",
+        HirType::Int {
+            bits: 32,
+            signed: true,
+        } => "nts/rt/NtsViewI32",
+        HirType::Int {
+            bits: 32,
+            signed: false,
+        } => "nts/rt/NtsViewU32",
         HirType::Float { bits: 32 } => "nts/rt/NtsViewF32",
         HirType::Float { bits: 64 } => "nts/rt/NtsViewF64",
         _ => return None,
@@ -666,11 +707,12 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         //
         // The fallback is here rather than at the field, so every `getfield`,
         // `putfield` and signature asks one question and gets one answer.
-        HirType::Managed(ManagedType::Object(id)) => nts_jvm_emitter::descriptor::object(
-            &program
-                .layout(*id)
-                .map_or_else(|| OBJECT.to_owned(), |layout| reference_class(shape.package, program, layout)),
-        ),
+        HirType::Managed(ManagedType::Object(id)) => {
+            nts_jvm_emitter::descriptor::object(&program.layout(*id).map_or_else(
+                || OBJECT.to_owned(),
+                |layout| reference_class(shape.package, program, layout),
+            ))
+        }
         // UTF-16 code units with a compact one-byte/two-byte representation --
         // which is what `NtsString` implements by hand and what JavaScript's
         // string *is*. `length`, `charAt`, `substring` and `equals` are already
@@ -688,7 +730,9 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // two would then disagree on precisely the inputs that matter, with
         // `agrees_with_c` as the oracle because node's arbitrary precision is
         // not one.
-        HirType::BigInt | HirType::Managed(ManagedType::BoxedBigInt) => BIGINT_DESCRIPTOR.to_owned(),
+        HirType::BigInt | HirType::Managed(ManagedType::BoxedBigInt) => {
+            BIGINT_DESCRIPTOR.to_owned()
+        }
         // `Map` and `Table` are one runtime class, and their keys and values
         // are erased -- which is why the payload types in `ManagedType::Map` are
         // for the compiler rather than the runtime, exactly as that type's own
@@ -777,9 +821,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // on. The middle end spells the round trip back out as
         // `Erase`/`Unerase` because both are one `NtsView *` on the other
         // lanes; here both are one reference and the pair is equally free.
-        HirType::Managed(ManagedType::AnyView) => {
-            nts_jvm_emitter::descriptor::object(ANY_VIEW)
-        }
+        HirType::Managed(ManagedType::AnyView) => nts_jvm_emitter::descriptor::object(ANY_VIEW),
         // Every `ManagedType` is spelled above, so there is no catch-all here
         // and adding a variant upstream is a compile error rather than a
         // silent refusal. `never` reaching a value position means control got
@@ -844,7 +886,9 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
         Kind::Double => VType::Double,
         Kind::Ref => match ty {
             HirType::Erased => VType::Object(VALUE.to_owned()),
-            HirType::BigInt | HirType::Managed(ManagedType::BoxedBigInt) => VType::Object(BIGINT.to_owned()),
+            HirType::BigInt | HirType::Managed(ManagedType::BoxedBigInt) => {
+                VType::Object(BIGINT.to_owned())
+            }
             // **The same split as `descriptor`'s, and the second place it had
             // to be made.** Leaving `Set` on `MAP` here while `descriptor`
             // answered `NtsSet` produced `VerifyError: Type 'nts/rt/NtsSet' is
@@ -871,9 +915,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
                 // put `NtsArrayD.pop` where an `NtsValue` was wanted.
                 VType::Object(wrapper(element)?.to_owned())
             }
-            HirType::Managed(ManagedType::Array(_)) => {
-                VType::Object(descriptor(shape, ty)?)
-            }
+            HirType::Managed(ManagedType::Array(_)) => VType::Object(descriptor(shape, ty)?),
             // The class, not the descriptor: a view is an ordinary object, so
             // this is the `Array`-when-growable case rather than the bare-array
             // one, and passing `Lnts/rt/NtsViewU8;` here is the
@@ -884,11 +926,10 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             // The same fallback as `descriptor`, and it has to be the same or the
             // frame and the field would disagree about a slot.
             HirType::Managed(ManagedType::Object(id)) => {
-                VType::Object(
-                    program
-                        .layout(*id)
-                        .map_or_else(|| OBJECT.to_owned(), |l| reference_class(shape.package, program, l)),
-                )
+                VType::Object(program.layout(*id).map_or_else(
+                    || OBJECT.to_owned(),
+                    |l| reference_class(shape.package, program, l),
+                ))
             }
             HirType::Managed(ManagedType::Date) => VType::Object(DATE.to_owned()),
             HirType::Managed(ManagedType::Symbol) => VType::Object(SYMBOL.to_owned()),
@@ -916,7 +957,8 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             | HirType::Int { .. }
             | HirType::Float { .. }
             | HirType::Void
-            | HirType::NativePointer(_) | HirType::Never => return None,
+            | HirType::NativePointer(_)
+            | HirType::Never => return None,
         },
     })
 }
@@ -993,13 +1035,28 @@ mod tests {
 
     #[test]
     fn callable_storage_needs_actual_identity_and_never_supplies_an_entry() {
-        use nts_core::hir::{SignatureFace, SYNTHETIC_CLOSURES, constructor_token, class_token};
+        use nts_core::hir::{SYNTHETIC_CLOSURES, SignatureFace, class_token, constructor_token};
         use nts_semantic_schema::TypeId;
         let mut program = Program::default();
-        let mut layout = Layout { types: vec![TypeId(7)], name: "Fn__forged".to_owned(),
-            fields: Vec::new(), methods: Vec::new(), interfaces: Vec::new(), base: None };
-        assert!(!is_callable_storage(&program, &layout), "a name supplies no function identity");
-        program.signature_faces.insert(TypeId(7), SignatureFace { params: Vec::new(), returns: Some(HirType::Erased) });
+        let mut layout = Layout {
+            types: vec![TypeId(7)],
+            name: "Fn__forged".to_owned(),
+            fields: Vec::new(),
+            methods: Vec::new(),
+            interfaces: Vec::new(),
+            base: None,
+        };
+        assert!(
+            !is_callable_storage(&program, &layout),
+            "a name supplies no function identity"
+        );
+        program.signature_faces.insert(
+            TypeId(7),
+            SignatureFace {
+                params: Vec::new(),
+                returns: Some(HirType::Erased),
+            },
+        );
         assert!(is_callable_storage(&program, &layout));
         assert!(is_signature(&program, &layout));
         assert!(!is_callable(&program, &layout), "storage is not an entry");
@@ -1009,7 +1066,10 @@ mod tests {
         assert!(!is_callable(&program, &layout));
         for token in [constructor_token(0), class_token(3)] {
             layout.types = vec![token];
-            assert!(!is_callable_storage(&program, &layout), "constructor identity is not callback storage");
+            assert!(
+                !is_callable_storage(&program, &layout),
+                "constructor identity is not callback storage"
+            );
         }
     }
 
@@ -1044,7 +1104,9 @@ mod tests {
                 Box::new(HirType::Managed(ManagedType::String)),
                 Box::new(HirType::Erased),
             )),
-            HirType::Managed(ManagedType::Set(Box::new(HirType::Managed(ManagedType::String)))),
+            HirType::Managed(ManagedType::Set(Box::new(HirType::Managed(
+                ManagedType::String,
+            )))),
             HirType::Managed(ManagedType::Promise(Box::new(HirType::Erased))),
         ];
         for ty in cases {
@@ -1074,14 +1136,26 @@ mod tests {
         // crossing to Java is a `java.util.Set` rather than a `Map` whose values
         // equal its keys.
         let table = HirType::Managed(ManagedType::Table(string(), Box::new(HirType::Erased)));
-        assert_eq!(descriptor(Shape::of(&empty()), &map), descriptor(Shape::of(&empty()), &table));
-        assert_ne!(descriptor(Shape::of(&empty()), &map), descriptor(Shape::of(&empty()), &set));
-        assert_eq!(descriptor(Shape::of(&empty()), &set).as_deref(), Some(SET_DESCRIPTOR));
+        assert_eq!(
+            descriptor(Shape::of(&empty()), &map),
+            descriptor(Shape::of(&empty()), &table)
+        );
+        assert_ne!(
+            descriptor(Shape::of(&empty()), &map),
+            descriptor(Shape::of(&empty()), &set)
+        );
+        assert_eq!(
+            descriptor(Shape::of(&empty()), &set).as_deref(),
+            Some(SET_DESCRIPTOR)
+        );
     }
 
     #[test]
     fn a_narrow_integer_is_an_int_in_every_vocabulary_but_none() {
-        let byte = HirType::Int { bits: 8, signed: true };
+        let byte = HirType::Int {
+            bits: 8,
+            signed: true,
+        };
         assert_eq!(descriptor(Shape::of(&empty()), &byte).as_deref(), Some("I"));
         assert_eq!(kind(&byte), Some(Kind::Int));
         assert_eq!(vtype(Shape::of(&empty()), &byte), Some(VType::Integer));
@@ -1089,13 +1163,19 @@ mod tests {
 
     #[test]
     fn a_bool_is_an_int_to_compute_and_a_z_to_declare() {
-        assert_eq!(descriptor(Shape::of(&empty()), &HirType::Bool).as_deref(), Some("Z"));
+        assert_eq!(
+            descriptor(Shape::of(&empty()), &HirType::Bool).as_deref(),
+            Some("Z")
+        );
         assert_eq!(kind(&HirType::Bool), Some(Kind::Int));
     }
 
     #[test]
     fn sixty_four_bits_is_the_only_wide_integer() {
-        let long = HirType::Int { bits: 64, signed: true };
+        let long = HirType::Int {
+            bits: 64,
+            signed: true,
+        };
         assert_eq!(descriptor(Shape::of(&empty()), &long).as_deref(), Some("J"));
         assert_eq!(kind(&long), Some(Kind::Long));
         assert_eq!(vtype(Shape::of(&empty()), &long), Some(VType::Long));
@@ -1104,7 +1184,10 @@ mod tests {
     #[test]
     fn what_this_slice_does_not_represent_says_so() {
         assert_eq!(descriptor(Shape::of(&empty()), &HirType::Never), None);
-        assert_eq!(descriptor(Shape::of(&empty()), &HirType::Void).as_deref(), Some("V"));
+        assert_eq!(
+            descriptor(Shape::of(&empty()), &HirType::Void).as_deref(),
+            Some("V")
+        );
         assert_eq!(kind(&HirType::Void), None, "void has no computational kind");
     }
 
@@ -1113,7 +1196,10 @@ mod tests {
     /// so the two spellings are pinned apart where they are decided.
     #[test]
     fn void_is_a_return_descriptor_and_not_a_field_one() {
-        assert_eq!(descriptor(Shape::of(&empty()), &HirType::Void).as_deref(), Some("V"));
+        assert_eq!(
+            descriptor(Shape::of(&empty()), &HirType::Void).as_deref(),
+            Some("V")
+        );
         assert_eq!(
             field_descriptor(Shape::of(&empty()), &HirType::Void),
             None,
@@ -1139,7 +1225,10 @@ mod tests {
     /// here because node's `BigInt` is not one.
     #[test]
     fn a_bigint_is_a_reference_to_two_longs() {
-        assert_eq!(descriptor(Shape::of(&empty()), &HirType::BigInt).as_deref(), Some(BIGINT_DESCRIPTOR));
+        assert_eq!(
+            descriptor(Shape::of(&empty()), &HirType::BigInt).as_deref(),
+            Some(BIGINT_DESCRIPTOR)
+        );
         assert_eq!(kind(&HirType::BigInt), Some(Kind::Ref));
         assert_eq!(
             vtype(Shape::of(&empty()), &HirType::BigInt),

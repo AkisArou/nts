@@ -21,9 +21,14 @@ fn source(interface: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../runtime/jvm/src/nts/rt")
         .join(format!("{file}.java"));
-    std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("{} is named by \
+    std::fs::read_to_string(&path).unwrap_or_else(|_| {
+        panic!(
+            "{} is named by \
          `types::CALLBACKS` and does not exist -- the table is the ABI, so an \
-         entry with no interface behind it is a call that will not link", path.display()))
+         entry with no interface behind it is a call that will not link",
+            path.display()
+        )
+    })
 }
 
 /// The JVM descriptor of a Java parameter list, in the small vocabulary these
@@ -42,7 +47,10 @@ fn descriptor_of(declaration: &str) -> String {
         .expect("a `call` declaration")
         .0;
     for parameter in inside.split(',').map(str::trim).filter(|p| !p.is_empty()) {
-        let ty = parameter.split_whitespace().next().expect("a parameter type");
+        let ty = parameter
+            .split_whitespace()
+            .next()
+            .expect("a parameter type");
         spelled.push_str(match ty {
             "double" => "D",
             "int" => "I",
@@ -57,7 +65,11 @@ fn descriptor_of(declaration: &str) -> String {
         });
     }
     spelled.push(')');
-    spelled.push_str(if declaration.contains("void call") { "V" } else { "?" });
+    spelled.push_str(if declaration.contains("void call") {
+        "V"
+    } else {
+        "?"
+    });
     spelled
 }
 
@@ -66,13 +78,19 @@ fn every_callback_interface_has_the_shape_the_table_claims() {
     for &(descriptor, interface) in nts_codegen_jvm::types::CALLBACKS {
         let java = source(interface);
         assert!(
-            java.contains(&format!("public interface {}", interface.rsplit('/').next().unwrap())),
+            java.contains(&format!(
+                "public interface {}",
+                interface.rsplit('/').next().unwrap()
+            )),
             "{interface} is named by the callback table and is not an interface -- a \
              generated class can extend only one base, so a callback shape that is a \
              class can never be attached to a closure that already has one"
         );
-        let declarations: Vec<&str> =
-            java.lines().map(str::trim).filter(|line| line.contains(" call(")).collect();
+        let declarations: Vec<&str> = java
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.contains(" call("))
+            .collect();
         assert_eq!(
             declarations.len(),
             1,
@@ -92,12 +110,18 @@ fn every_callback_interface_has_the_shape_the_table_claims() {
 
 #[test]
 fn the_table_is_a_function_in_both_directions() {
-    let mut shapes: Vec<&str> = nts_codegen_jvm::types::CALLBACKS.iter().map(|&(s, _)| s).collect();
+    let mut shapes: Vec<&str> = nts_codegen_jvm::types::CALLBACKS
+        .iter()
+        .map(|&(s, _)| s)
+        .collect();
     let before = shapes.len();
     shapes.sort_unstable();
     shapes.dedup();
     assert_eq!(before, shapes.len(), "two interfaces claim one descriptor");
-    let mut names: Vec<&str> = nts_codegen_jvm::types::CALLBACKS.iter().map(|&(_, n)| n).collect();
+    let mut names: Vec<&str> = nts_codegen_jvm::types::CALLBACKS
+        .iter()
+        .map(|&(_, n)| n)
+        .collect();
     names.sort_unstable();
     names.dedup();
     assert_eq!(
@@ -118,6 +142,10 @@ fn the_table_is_a_function_in_both_directions() {
              an argument declared as it would be pushed uncoerced"
         );
     }
-    assert!(!nts_codegen_jvm::types::is_callback_interface("Ljava/lang/Object;"));
-    assert!(!nts_codegen_jvm::types::is_callback_interface("Lnts/rt/NtsResumable;"));
+    assert!(!nts_codegen_jvm::types::is_callback_interface(
+        "Ljava/lang/Object;"
+    ));
+    assert!(!nts_codegen_jvm::types::is_callback_interface(
+        "Lnts/rt/NtsResumable;"
+    ));
 }

@@ -51,10 +51,16 @@ fn repository() -> PathBuf {
 fn runtime_jar() -> PathBuf {
     static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
+            || repository().join("runtime/jvm/nts-runtime.jar"),
+            PathBuf::from,
+        );
         let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+        if std::fs::copy(&source, &mine).is_ok() {
+            mine
+        } else {
+            source
+        }
     })
     .clone()
 }
@@ -66,7 +72,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -93,11 +103,15 @@ fn compile(javac: &Path, jar: &Path, dir: &Path, driver: &str) {
     );
 }
 
-fn jar() -> PathBuf { runtime_jar() }
+fn jar() -> PathBuf {
+    runtime_jar()
+}
 
 #[test]
 fn the_reference_transport_delivers_on_the_owner_lane() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let jar = jar();
     let dir = std::env::temp_dir().join(format!("nts-socket-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -115,7 +129,7 @@ fn the_reference_transport_delivers_on_the_owner_lane() {
         "the transport test failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-        // The **count**, not only the zero. A suite that stopped running half its
+    // The **count**, not only the zero. A suite that stopped running half its
     // cases reports no failures perfectly well, which is the assertion
     // `android.rs` already makes about `PASS: 11` and the one every other
     // driver here was missing.
@@ -136,7 +150,9 @@ fn the_reference_transport_delivers_on_the_owner_lane() {
 /// an application on a phone cannot be made to spawn a thread per connect.
 #[test]
 fn a_full_io_queue_refuses_at_submission_and_gives_the_credit_back() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let jar = jar();
     let dir = std::env::temp_dir().join(format!("nts-saturate-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -175,25 +191,70 @@ fn keystores(keytool: &Path, dir: &Path) -> (PathBuf, PathBuf) {
     let cert = dir.join("nts.cer");
     let trust = dir.join("trust.p12");
     let made = Command::new(keytool)
-        .args(["-genkeypair", "-alias", "nts", "-keyalg", "RSA", "-keysize", "2048"])
-        .args(["-validity", "1", "-dname", "CN=nts-test", "-ext", "SAN=dns:localhost"])
+        .args([
+            "-genkeypair",
+            "-alias",
+            "nts",
+            "-keyalg",
+            "RSA",
+            "-keysize",
+            "2048",
+        ])
+        .args([
+            "-validity",
+            "1",
+            "-dname",
+            "CN=nts-test",
+            "-ext",
+            "SAN=dns:localhost",
+        ])
         .arg("-keystore")
         .arg(&server)
-        .args(["-storetype", "PKCS12", "-storepass", "changeit", "-keypass", "changeit"])
+        .args([
+            "-storetype",
+            "PKCS12",
+            "-storepass",
+            "changeit",
+            "-keypass",
+            "changeit",
+        ])
         .output()
         .unwrap();
-    assert!(made.status.success(), "keytool: {}", String::from_utf8_lossy(&made.stderr));
+    assert!(
+        made.status.success(),
+        "keytool: {}",
+        String::from_utf8_lossy(&made.stderr)
+    );
     let exported = Command::new(keytool)
-        .args(["-exportcert", "-alias", "nts", "-storetype", "PKCS12", "-storepass", "changeit"])
+        .args([
+            "-exportcert",
+            "-alias",
+            "nts",
+            "-storetype",
+            "PKCS12",
+            "-storepass",
+            "changeit",
+        ])
         .arg("-keystore")
         .arg(&server)
         .arg("-file")
         .arg(&cert)
         .output()
         .unwrap();
-    assert!(exported.status.success(), "keytool: {}", String::from_utf8_lossy(&exported.stderr));
+    assert!(
+        exported.status.success(),
+        "keytool: {}",
+        String::from_utf8_lossy(&exported.stderr)
+    );
     let imported = Command::new(keytool)
-        .args(["-importcert", "-noprompt", "-alias", "nts", "-storetype", "PKCS12"])
+        .args([
+            "-importcert",
+            "-noprompt",
+            "-alias",
+            "nts",
+            "-storetype",
+            "PKCS12",
+        ])
         .args(["-storepass", "changeit"])
         .arg("-file")
         .arg(&cert)
@@ -201,7 +262,11 @@ fn keystores(keytool: &Path, dir: &Path) -> (PathBuf, PathBuf) {
         .arg(&trust)
         .output()
         .unwrap();
-    assert!(imported.status.success(), "keytool: {}", String::from_utf8_lossy(&imported.stderr));
+    assert!(
+        imported.status.success(),
+        "keytool: {}",
+        String::from_utf8_lossy(&imported.stderr)
+    );
     (server, trust)
 }
 
@@ -243,7 +308,10 @@ fn dropping_endpoint_identification_lets_a_wrong_name_through() {
     copy_tree(&repository().join("runtime/jvm/src"), &src);
     let socket = src.join("nts/rt/NtsSocket.java");
     let text = std::fs::read_to_string(&socket).unwrap();
-    assert!(text.contains(LINE), "the TLS sabotage no longer matches: {LINE}");
+    assert!(
+        text.contains(LINE),
+        "the TLS sabotage no longer matches: {LINE}"
+    );
     std::fs::write(
         &socket,
         text.replace(LINE, "/* sabotaged: the name is not checked */"),
@@ -252,7 +320,9 @@ fn dropping_endpoint_identification_lets_a_wrong_name_through() {
 
     let classes = dir.join("classes");
     let mut compile = Command::new(&javac);
-    compile.args(["--release", "8", "-Xlint:-options", "-d"]).arg(&classes);
+    compile
+        .args(["--release", "8", "-Xlint:-options", "-d"])
+        .arg(&classes);
     for entry in std::fs::read_dir(src.join("nts/rt")).unwrap().flatten() {
         compile.arg(entry.path());
     }
@@ -338,7 +408,7 @@ fn a_tunnel_carries_bytes_and_keeps_the_targets_name() {
         "{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-        // The **count**, not only the zero. A suite that stopped running half its
+    // The **count**, not only the zero. A suite that stopped running half its
     // cases reports no failures perfectly well, which is the assertion
     // `android.rs` already makes about `PASS: 11` and the one every other
     // driver here was missing.
@@ -356,7 +426,6 @@ fn tls_refuses_a_certificate_that_names_another_host() {
     let dir = std::env::temp_dir().join(format!("nts-tls-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let (server, trust) = keystores(&keytool, &dir);
-
 
     compile(&javac, &jar, &dir, "TlsTest");
     let ran = Command::new(&java)
@@ -378,7 +447,7 @@ fn tls_refuses_a_certificate_that_names_another_host() {
         "the TLS test failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-        // The **count**, not only the zero. A suite that stopped running half its
+    // The **count**, not only the zero. A suite that stopped running half its
     // cases reports no failures perfectly well, which is the assertion
     // `android.rs` already makes about `PASS: 11` and the one every other
     // driver here was missing.
@@ -443,7 +512,9 @@ fn alpn_negotiates_and_the_servers_order_is_the_one_that_counts() {
 /// this seam is allowed to inflate anything on its own.
 #[test]
 fn a_gzip_response_survives_the_socket_and_keeps_its_headers() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let jar = jar();
     let dir = std::env::temp_dir().join(format!("nts-httpgzip-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

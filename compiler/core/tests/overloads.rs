@@ -143,11 +143,11 @@ fn an_argument_is_coerced_to_the_implementation_s_parameter() {
         .values
         .iter()
         .filter_map(|op| match &op.kind {
-            OpKind::Call { callee: Callee::Direct(name), args, .. }
-                if name.ends_with("pick") =>
-            {
-                args.get(2).map(|arg| &caller.values[arg.0 as usize].ty)
-            }
+            OpKind::Call {
+                callee: Callee::Direct(name),
+                args,
+                ..
+            } if name.ends_with("pick") => args.get(2).map(|arg| &caller.values[arg.0 as usize].ty),
             _ => None,
         })
         .collect();
@@ -182,7 +182,11 @@ fn one_implementation_is_lowered_per_overload_set() {
             .map(|func| func.name.as_str())
             .filter(|func| func.ends_with(name))
             .collect();
-        assert_eq!(found.len(), 1, "one `{name}` is emitted, not three: {found:?}");
+        assert_eq!(
+            found.len(),
+            1,
+            "one `{name}` is emitted, not three: {found:?}"
+        );
     }
 
     let said: Vec<&str> = lowered
@@ -217,12 +221,17 @@ fn an_overloaded_function_is_defined() {
         .iter()
         .flat_map(|func| &func.values)
         .filter_map(|op| match &op.kind {
-            OpKind::Call { callee: Callee::External(name), .. } => Some(name.clone()),
+            OpKind::Call {
+                callee: Callee::External(name),
+                ..
+            } => Some(name.clone()),
             _ => None,
         })
         .collect();
     assert!(
-        !external.iter().any(|name| name == "combine" || name == "total"),
+        !external
+            .iter()
+            .any(|name| name == "combine" || name == "total"),
         "both are declared in this program: {external:?}",
     );
     assert!(
@@ -268,7 +277,10 @@ fn a_rest_is_gathered_against_the_implementation() {
         .iter()
         .filter(|op| matches!(op.kind, OpKind::ArrayNew { .. }))
         .count();
-    assert_eq!(built, 2, "one per call, and the empty one is still an array");
+    assert_eq!(
+        built, 2,
+        "one per call, and the empty one is still an array"
+    );
 }
 
 /// A signature is told from a method whose body is merely missing.

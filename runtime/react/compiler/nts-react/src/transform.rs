@@ -12,8 +12,8 @@
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::tsgo::ast::EncodedSourceFile;
 use nts_diagnostics::Severity;
+use nts_frontend_ts::tsgo::ast::EncodedSourceFile;
 use nts_frontend_ts::tsgo::transform::{NodeTypes, Reported, SourceTransform, TransformInput};
 use nts_semantic_schema::NodeId;
 use rustc_hash::FxHashMap;
@@ -67,15 +67,40 @@ impl ReactTransform {
     #[must_use]
     pub fn new(options: Value) -> (Self, Report) {
         let report = Report::default();
-        (Self { options, lower_jsx: true, files: FxHashMap::default(), report: Arc::clone(&report) }, report)
+        (
+            Self {
+                options,
+                lower_jsx: true,
+                files: FxHashMap::default(),
+                report: Arc::clone(&report),
+            },
+            report,
+        )
     }
 
-    fn print(&self, path: &Utf8Path, state: &mut FileState, types: &mut dyn TypeOracle) -> Option<stage::Outcome> {
+    fn print(
+        &self,
+        path: &Utf8Path,
+        state: &mut FileState,
+        types: &mut dyn TypeOracle,
+    ) -> Option<stage::Outcome> {
         let nodes = Nodes::new(&state.tree.nodes);
-        match stage::compile_file(&state.code, nodes, path.as_str(), &self.options, types, &state.print) {
+        match stage::compile_file(
+            &state.code,
+            nodes,
+            path.as_str(),
+            &self.options,
+            types,
+            &state.print,
+        ) {
             Ok(outcome) => Some(outcome),
             Err(why) => {
-                self.report.lock().ok()?.entry(path.to_owned()).or_default().refused = Some(why.to_string());
+                self.report
+                    .lock()
+                    .ok()?
+                    .entry(path.to_owned())
+                    .or_default()
+                    .refused = Some(why.to_string());
                 None
             }
         }
@@ -133,20 +158,39 @@ fn described(function: &Function, path: &Utf8Path, code: &str) -> String {
 impl SourceTransform for ReactTransform {
     fn identity(&self) -> String {
         let options = serde_json::to_string(&self.options).unwrap_or_default();
-        format!("react-compiler@{COMPILER_PIN} jsx={} cache=typed {:032x}", self.lower_jsx, xxhash_rust::xxh3::xxh3_128(options.as_bytes()))
+        format!(
+            "react-compiler@{COMPILER_PIN} jsx={} cache=typed {:032x}",
+            self.lower_jsx,
+            xxhash_rust::xxh3::xxh3_128(options.as_bytes())
+        )
     }
 
-    fn transform(&mut self, file: &TransformInput<'_>, types: &mut dyn NodeTypes) -> Option<String> {
+    fn transform(
+        &mut self,
+        file: &TransformInput<'_>,
+        types: &mut dyn NodeTypes,
+    ) -> Option<String> {
         let mut state = FileState {
             code: file.text.to_owned(),
             tree: file.tree.clone(),
             types: FxHashMap::default(),
-            print: PrintOptions { lower_jsx: self.lower_jsx, typed_cache: true, ..PrintOptions::default() },
+            print: PrintOptions {
+                lower_jsx: self.lower_jsx,
+                typed_cache: true,
+                ..PrintOptions::default()
+            },
             functions: Vec::new(),
             segments: Vec::new(),
         };
         let mut answers = std::mem::take(&mut state.types);
-        let outcome = self.print(file.path, &mut state, &mut Remembering { types, answers: &mut answers });
+        let outcome = self.print(
+            file.path,
+            &mut state,
+            &mut Remembering {
+                types,
+                answers: &mut answers,
+            },
+        );
         state.types = answers;
         let outcome = outcome?;
         state.functions = outcome.functions;
@@ -158,12 +202,26 @@ impl SourceTransform for ReactTransform {
     }
 
     fn diagnostics(&self, path: &Utf8Path) -> Vec<Reported> {
-        let warning = |code, message| Reported { severity: Severity::Warning, code, message };
+        let warning = |code, message| Reported {
+            severity: Severity::Warning,
+            code,
+            message,
+        };
         let mut reported = Vec::new();
-        if let Some(why) = self.report.lock().ok().and_then(|report| report.get(path).and_then(|r| r.refused.clone())) {
-            reported.push(warning("NTS0006", format!("the React stage could not take {path}, so it is read as written: {why}")));
+        if let Some(why) = self
+            .report
+            .lock()
+            .ok()
+            .and_then(|report| report.get(path).and_then(|r| r.refused.clone()))
+        {
+            reported.push(warning(
+                "NTS0006",
+                format!("the React stage could not take {path}, so it is read as written: {why}"),
+            ));
         }
-        let Some(state) = self.files.get(path) else { return reported };
+        let Some(state) = self.files.get(path) else {
+            return reported;
+        };
         for function in &state.functions {
             let message = if state.print.as_written.contains(&function.span) {
                 format!(
@@ -171,18 +229,27 @@ impl SourceTransform for ReactTransform {
                     described(function, path, &state.code)
                 )
             } else if let FunctionState::Failed(reason) = &function.state {
-                format!("the React Compiler left {} as written: {reason}", described(function, path, &state.code))
+                format!(
+                    "the React Compiler left {} as written: {reason}",
+                    described(function, path, &state.code)
+                )
             } else {
                 continue;
             };
-            let code = if state.print.as_written.contains(&function.span) { "NTS0004" } else { "NTS0005" };
+            let code = if state.print.as_written.contains(&function.span) {
+                "NTS0004"
+            } else {
+                "NTS0005"
+            };
             reported.push(warning(code, message));
         }
         reported
     }
 
     fn position_map(&self, path: &Utf8Path) -> Vec<nts_diagnostics::RewrittenSegment> {
-        self.files.get(path).map_or_else(Vec::new, |state| state.segments.clone())
+        self.files
+            .get(path)
+            .map_or_else(Vec::new, |state| state.segments.clone())
     }
 
     fn revise(&mut self, path: &Utf8Path, errors: &[(u32, u32)]) -> Option<String> {
@@ -190,14 +257,28 @@ impl SourceTransform for ReactTransform {
         let failing: Vec<&Function> = state
             .functions
             .iter()
-            .filter(|f| f.state == FunctionState::Compiled && !state.print.as_written.contains(&f.span))
-            .filter(|f| f.output.is_some_and(|(start, end)| errors.iter().any(|(at, _)| (start..end).contains(at))))
+            .filter(|f| {
+                f.state == FunctionState::Compiled && !state.print.as_written.contains(&f.span)
+            })
+            .filter(|f| {
+                f.output.is_some_and(|(start, end)| {
+                    errors.iter().any(|(at, _)| (start..end).contains(at))
+                })
+            })
             .collect();
         // A step at a time: a typed cache that does not typecheck gives way
         // to the compiler's array, which keeps the memoization; only a
         // function already on the array is given back as written.
-        let typed: Vec<(u32, u32)> = failing.iter().filter(|f| f.typed_cache).map(|f| f.span).collect();
-        let array: Vec<(u32, u32)> = failing.iter().filter(|f| !f.typed_cache).map(|f| f.span).collect();
+        let typed: Vec<(u32, u32)> = failing
+            .iter()
+            .filter(|f| f.typed_cache)
+            .map(|f| f.span)
+            .collect();
+        let array: Vec<(u32, u32)> = failing
+            .iter()
+            .filter(|f| !f.typed_cache)
+            .map(|f| f.span)
+            .collect();
         let revised = if typed.is_empty() && array.is_empty() {
             None
         } else {

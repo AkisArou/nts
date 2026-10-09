@@ -16,8 +16,8 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, reachable::Roots};
-use nts_semantic_schema::SemanticSnapshot;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_semantic_schema::SemanticSnapshot;
 
 fn snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
@@ -65,7 +65,10 @@ fn a_published_class_keeps_its_members_and_a_hidden_one_does_not() {
     // test passes for a root set that keeps everything, which is the behaviour
     // `EntrySurface` exists to replace.
     for dropped in ["Hidden#secret", "unreachable"] {
-        assert!(!names.contains(&dropped), "{dropped} should be pruned: {names:?}");
+        assert!(
+            !names.contains(&dropped),
+            "{dropped} should be pruned: {names:?}"
+        );
     }
 }
 

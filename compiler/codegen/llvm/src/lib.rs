@@ -41,16 +41,16 @@
 //! *something* for every input is a backend nobody can trust the output of.
 
 mod aggregate;
-mod native;
-mod objc;
 mod com;
 mod gobject;
 mod indirect;
+mod native;
+mod objc;
 /// How many sixteen-byte arguments a Win64 runtime call can pass; see `indirect`.
 pub use indirect::SLOTS as WIN64_INDIRECT_SLOTS;
 pub mod signatures;
-pub mod signatures_win64;
 pub mod signatures_arm64;
+pub mod signatures_win64;
 
 use std::fmt::Write as _;
 
@@ -87,9 +87,15 @@ pub enum Arch {
 
 impl Platform {
     /// `x86_64` System V: Linux and the other ELF targets.
-    pub const SYSV_X86_64: Self = Self { abi: NativeAbi::SysV, arch: Arch::X86_64 };
+    pub const SYSV_X86_64: Self = Self {
+        abi: NativeAbi::SysV,
+        arch: Arch::X86_64,
+    };
     /// `x86_64` Windows, mingw and MSVC alike.
-    pub const WIN64_X86_64: Self = Self { abi: NativeAbi::Win64, arch: Arch::X86_64 };
+    pub const WIN64_X86_64: Self = Self {
+        abi: NativeAbi::Win64,
+        arch: Arch::X86_64,
+    };
 }
 
 /// Render a whole program as textual LLVM IR.
@@ -103,18 +109,28 @@ impl Platform {
 /// the first place the answer exists, and it is required so that no caller
 /// gets the host's by omission.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn emit(program: &Program, platform: Platform) -> Emitted {
     let mut text = String::new();
     let mut diagnostics = Vec::new();
     if let Err(why) = nts_codegen_common::native::layouts(program)
         && let Some(func) = program.funcs.first()
     {
-        return Emitted { text, diagnostics: vec![refuse(func, &why)] };
+        return Emitted {
+            text,
+            diagnostics: vec![refuse(func, &why)],
+        };
     }
     let mut refusals = nts_codegen_common::abi::unrepresentable_constants(program, platform.abi);
-    refusals.extend(nts_codegen_common::abi::unavailable_scalars(program, platform.abi));
+    refusals.extend(nts_codegen_common::abi::unavailable_scalars(
+        program,
+        platform.abi,
+    ));
     if !refusals.is_empty() {
-        return Emitted { text, diagnostics: refusals };
+        return Emitted {
+            text,
+            diagnostics: refusals,
+        };
     }
     let native = match native::declarations(program, platform) {
         Ok(lines) => lines,
@@ -160,7 +176,10 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     let _ = writeln!(text, "declare double @llvm.ceil.f64(double) nounwind");
     let _ = writeln!(text, "declare double @llvm.trunc.f64(double) nounwind");
     let _ = writeln!(text, "@nts_desc_ref = external constant %NtsDescriptor");
-    let _ = writeln!(text, "@nts_desc_ref_acyclic = external constant %NtsDescriptor");
+    let _ = writeln!(
+        text,
+        "@nts_desc_ref_acyclic = external constant %NtsDescriptor"
+    );
     let _ = writeln!(
         text,
         "@nts_closure_call_slot = constant i32 {}",
@@ -368,7 +387,9 @@ fn tbaa(ty: &str) -> &'static str {
 /// through a `double *` and C converts on the way in. Here it is written down.
 fn array_element(func: &Func, array: ValueId) -> Result<&HirType, Diagnostic> {
     match &func.values[array.0 as usize].ty {
-        HirType::Managed(nts_core::hir::ManagedType::Template) => Ok(&HirType::Managed(nts_core::hir::ManagedType::String)),
+        HirType::Managed(nts_core::hir::ManagedType::Template) => {
+            Ok(&HirType::Managed(nts_core::hir::ManagedType::String))
+        }
         HirType::Managed(
             nts_core::hir::ManagedType::Array(element) | nts_core::hir::ManagedType::View(element),
         ) => Ok(element),
@@ -426,7 +447,11 @@ fn refused_declaration(func: &Func) -> Option<String> {
         } else {
             // A parameter's extension follows its type; a result's precedes.
             let ty = ty_of(&param.ty, func).ok()?;
-            params.push(format!("{ty} {}", extension(&param.ty)).trim_end().to_owned());
+            params.push(
+                format!("{ty} {}", extension(&param.ty))
+                    .trim_end()
+                    .to_owned(),
+            );
         }
     }
     Some(format!(
@@ -445,31 +470,61 @@ const ERASED_TYPE: &str = "{ i32, i64 }";
 /// registers, a pointer to its copy on Win64 (`indirect`), and on arm64 the
 /// two words AAPCS64 passes a sixteen-byte struct in, `[2 x i64]` -- the tag
 /// in the low half of the first, the payload the second.
-fn erased_argument(platform: Platform, value: &str, out: &str, at: usize, lines: &mut Vec<String>) -> String {
+fn erased_argument(
+    platform: Platform,
+    value: &str,
+    out: &str,
+    at: usize,
+    lines: &mut Vec<String>,
+) -> String {
     if indirect::applies(platform) {
         return indirect::argument(ERASED_TYPE, value, at, lines);
     }
     if platform.arch == Arch::Aarch64 {
-        lines.push(format!("{out}.t{at} = extractvalue {ERASED_TYPE} {value}, 0"));
+        lines.push(format!(
+            "{out}.t{at} = extractvalue {ERASED_TYPE} {value}, 0"
+        ));
         lines.push(format!("{out}.w{at} = zext i32 {out}.t{at} to i64"));
-        lines.push(format!("{out}.p{at} = extractvalue {ERASED_TYPE} {value}, 1"));
-        lines.push(format!("{out}.h{at} = insertvalue [2 x i64] undef, i64 {out}.w{at}, 0"));
-        lines.push(format!("{out}.a{at} = insertvalue [2 x i64] {out}.h{at}, i64 {out}.p{at}, 1"));
+        lines.push(format!(
+            "{out}.p{at} = extractvalue {ERASED_TYPE} {value}, 1"
+        ));
+        lines.push(format!(
+            "{out}.h{at} = insertvalue [2 x i64] undef, i64 {out}.w{at}, 0"
+        ));
+        lines.push(format!(
+            "{out}.a{at} = insertvalue [2 x i64] {out}.h{at}, i64 {out}.p{at}, 1"
+        ));
         return format!("[2 x i64] {out}.a{at}");
     }
-    lines.push(format!("{out}.t{at} = extractvalue {ERASED_TYPE} {value}, 0"));
-    lines.push(format!("{out}.p{at} = extractvalue {ERASED_TYPE} {value}, 1"));
+    lines.push(format!(
+        "{out}.t{at} = extractvalue {ERASED_TYPE} {value}, 0"
+    ));
+    lines.push(format!(
+        "{out}.p{at} = extractvalue {ERASED_TYPE} {value}, 1"
+    ));
     format!("i32 {out}.t{at}, i64 {out}.p{at}")
 }
 
 /// A runtime helper's call when the platform answers its sixteen-byte result
 /// other than as the value: Win64 through a hidden pointer or XMM0
 /// (`indirect`), arm64 as two words. `None` where the result is the value.
-fn wide_result(platform: Platform, ty: &HirType, out: &str, callable: &str, arguments: &[String]) -> Option<String> {
+fn wide_result(
+    platform: Platform,
+    ty: &HirType,
+    out: &str,
+    callable: &str,
+    arguments: &[String],
+) -> Option<String> {
     if indirect::applies(platform) && indirect::is_indirect(ty) {
-        return Some(indirect::call_returning(out, callable, arguments.to_vec(), ty));
+        return Some(indirect::call_returning(
+            out,
+            callable,
+            arguments.to_vec(),
+            ty,
+        ));
     }
-    (platform.arch == Arch::Aarch64 && *ty == HirType::Erased).then(|| two_word_result(out, callable, arguments))
+    (platform.arch == Arch::Aarch64 && *ty == HirType::Erased)
+        .then(|| two_word_result(out, callable, arguments))
 }
 
 /// A runtime helper's erased result on arm64: AAPCS64 answers sixteen bytes
@@ -477,7 +532,10 @@ fn wide_result(platform: Platform, ty: &HirType, out: &str, callable: &str, argu
 /// inverse of `erased_argument`'s spelling.
 fn two_word_result(out: &str, callable: &str, arguments: &[String]) -> String {
     [
-        format!("{out}.a = call [2 x i64] {callable}({})", arguments.join(", ")),
+        format!(
+            "{out}.a = call [2 x i64] {callable}({})",
+            arguments.join(", ")
+        ),
         format!("{out}.w = extractvalue [2 x i64] {out}.a, 0"),
         format!("{out}.t = trunc i64 {out}.w to i32"),
         format!("{out}.p = extractvalue [2 x i64] {out}.a, 1"),
@@ -573,16 +631,27 @@ fn literals(program: &Program) -> String {
         );
     }
     for object in nts_core::hir::templates::objects(program) {
-        let pieces: Vec<String> = object.cooked.iter().map(|text| {
-            let index = table.iter().position(|known| known == text).unwrap_or(0);
-            format!("ptr @nts_str_{index}")
-        }).collect();
+        let pieces: Vec<String> = object
+            .cooked
+            .iter()
+            .map(|text| {
+                let index = table.iter().position(|known| known == text).unwrap_or(0);
+                format!("ptr @nts_str_{index}")
+            })
+            .collect();
         let site = object.site;
         let count = pieces.len();
-        let _ = writeln!(out, "@nts_template_{site}_items = internal constant [{count} x ptr] [{}]", pieces.join(", "));
-        let _ = writeln!(out,
+        let _ = writeln!(
+            out,
+            "@nts_template_{site}_items = internal constant [{count} x ptr] [{}]",
+            pieces.join(", ")
+        );
+        let _ = writeln!(
+            out,
             "@nts_template_{site} = internal constant {{ %NtsHeader, i32, ptr, [2 x i32] }} {{ %NtsHeader {{ ptr @nts_desc_ref, i64 {}, i32 {}, i32 {count} }}, i32 {count}, ptr @nts_template_{site}_items, [2 x i32] zeroinitializer }}",
-            nts_core::hir::layout::IMMORTAL, nts_core::hir::layout::TEMPLATE_IMMUTABLE);
+            nts_core::hir::layout::IMMORTAL,
+            nts_core::hir::layout::TEMPLATE_IMMUTABLE
+        );
     }
 
     out
@@ -599,7 +668,11 @@ fn literal_table(program: &Program) -> Vec<String> {
                     OpKind::ConstTemplate { cooked, .. } => cooked,
                     _ => &[],
                 };
-                for text in texts { if !table.contains(text) { table.push(text.clone()); } }
+                for text in texts {
+                    if !table.contains(text) {
+                        table.push(text.clone());
+                    }
+                }
             }
         }
     }
@@ -762,7 +835,10 @@ fn descriptors(program: &Program) -> String {
             references.len()
         );
         // `element` is `NTS_ARRAY_UNKNOWN` for an object, as in C.
-        let tail = format!("i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}", erased.len());
+        let tail = format!(
+            "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}",
+            erased.len()
+        );
         let _ = writeln!(
             out,
             "@nts_desc_{tag} = internal constant %NtsDescriptor \
@@ -785,14 +861,20 @@ fn array_descriptors(out: &mut String, program: &Program) {
         let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
         let ops = nts_codegen_common::counting::ops_name(&counting);
         let name = format!("{}[]", family.name());
-        let _ = writeln!(*out, "@{descriptor}.name = internal constant [{} x i8] c\"{name}\\00\"", name.len() + 1);
+        let _ = writeln!(
+            *out,
+            "@{descriptor}.name = internal constant [{} x i8] c\"{name}\\00\"",
+            name.len() + 1
+        );
         let _ = writeln!(
             *out,
             "@{descriptor}.slot = internal constant [1 x {{ i32, i32, ptr }}] [{{ i32, i32, ptr }} {{ i32 0, i32 {}, ptr @{ops} }}]",
             family.runtime_id()
         );
-        let size = nts_core::hir::layout::shape_of(&HirType::NativePointer(nts_core::hir::native::Pointee::Void))
-            .map_or(8, |shape| shape.size);
+        let size = nts_core::hir::layout::shape_of(&HirType::NativePointer(
+            nts_core::hir::native::Pointee::Void,
+        ))
+        .map_or(8, |shape| shape.size);
         let _ = writeln!(
             *out,
             "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
@@ -812,7 +894,9 @@ fn array_descriptors(out: &mut String, program: &Program) {
             };
             // An array of foreign objects has its family's descriptor, which
             // `counting_declarations` writes beside the family's operations.
-            if element.is_managed() || nts_codegen_common::counting::counted_element(element).is_some() {
+            if element.is_managed()
+                || nts_codegen_common::counting::counted_element(element).is_some()
+            {
                 continue;
             }
             let Some(shape) = nts_core::hir::layout::shape_of(element) else {
@@ -849,15 +933,26 @@ fn array_descriptors(out: &mut String, program: &Program) {
 /// with its family and its family's `NtsFamilyOps`, whose release `nts_free`
 /// calls when the object dies.
 /// Answers how many, and the table's operand (`ptr null` for none).
-fn foreign_slots(out: &mut String, layout: &nts_core::hir::Layout, offsets: &[u32], tag: &str) -> (usize, String) {
+fn foreign_slots(
+    out: &mut String,
+    layout: &nts_core::hir::Layout,
+    offsets: &[u32],
+    tag: &str,
+) -> (usize, String) {
     let slots: Vec<String> = layout
         .fields
         .iter()
         .enumerate()
         .filter_map(|(at, field)| {
             let ops = nts_codegen_common::counting::ops_name(&field.ty.counting()?);
-            let family = field.ty.counted_family().map_or(0, nts_core::hir::native::Family::runtime_id);
-            Some(format!("{{ i32, i32, ptr }} {{ i32 {}, i32 {family}, ptr @{ops} }}", offsets.get(at)?))
+            let family = field
+                .ty
+                .counted_family()
+                .map_or(0, nts_core::hir::native::Family::runtime_id);
+            Some(format!(
+                "{{ i32, i32, ptr }} {{ i32 {}, i32 {family}, ptr @{ops} }}",
+                offsets.get(at)?
+            ))
         })
         .collect();
     if slots.is_empty() {
@@ -1014,6 +1109,7 @@ fn element_tag(ty: &HirType) -> String {
 /// middle end, so a backend never sees `await` -- it sees the machine. What is
 /// left is subscribing the rest of the function to a promise, and checking that
 /// a cell was written before it is read.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn suspension(
     program: &Program,
     func: &Func,
@@ -1025,108 +1121,134 @@ fn suspension(
     let out = out.to_owned();
     Ok(match &op.kind {
         // A cell read before its initializer ran. The check is a load and a
-    // branch rather than a call, because the answer is yes on every
-    // execution but the broken one -- so this is the one place the emitter
-    // writes basic blocks of its own.
-    OpKind::CellReady { cell, name: what } => {
-        let held = &func.values[cell.0 as usize].ty;
-        let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = held else {
-            return Err(refuse(func, "a readiness check on something that is not a cell"));
-        };
-        let layout = program
-            .layouts
-            .iter()
-            .find(|layout| layout.types.contains(id))
-            .ok_or_else(|| refuse(func, "a cell whose type has no layout"))?;
-        let placed = nts_core::hir::layout::place(&layout.fields)
-            .ok_or_else(|| refuse(func, "a cell whose fields cannot be placed"))?;
-        let at = layout
-            .fields
-            .iter()
-            .position(|field| field.name == "ready")
-            .and_then(|at| placed.offsets.get(at).copied())
-            .ok_or_else(|| refuse(func, "a cell with no `ready` field"))?;
-        let text = format!("@nts_cellname_{}", cell_names(program)
-            .iter()
-            .position(|known| known == what)
-            .unwrap_or(0));
-        [
-            format!("{out}.at = getelementptr i8, ptr {}, i64 {at}", name(*cell)),
-            format!("{out}.ready = load i8, ptr {out}.at{}", tbaa("i8")),
-            format!("{out}.is = icmp ne i8 {out}.ready, 0"),
-            // `out` already carries its `%`, and the label definitions below
-            // strip it. Adding one here made `label %%v2.ok`, which is not a
-            // token clang accepts -- the emitter was unreachable *and* could
-            // never have produced a valid module.
-            format!("br i1 {out}.is, label {out}.ok, label {out}.no"),
-            format!("{}.no:", out.trim_start_matches('%')),
-            format!("  call void @nts_cell_unready(ptr {text})"),
-            format!("  br label {out}.ok"),
-            format!("{}.ok:", out.trim_start_matches('%')),
+        // branch rather than a call, because the answer is yes on every
+        // execution but the broken one -- so this is the one place the emitter
+        // writes basic blocks of its own.
+        OpKind::CellReady { cell, name: what } => {
+            let held = &func.values[cell.0 as usize].ty;
+            let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = held else {
+                return Err(refuse(
+                    func,
+                    "a readiness check on something that is not a cell",
+                ));
+            };
+            let layout = program
+                .layouts
+                .iter()
+                .find(|layout| layout.types.contains(id))
+                .ok_or_else(|| refuse(func, "a cell whose type has no layout"))?;
+            let placed = nts_core::hir::layout::place(&layout.fields)
+                .ok_or_else(|| refuse(func, "a cell whose fields cannot be placed"))?;
+            let at = layout
+                .fields
+                .iter()
+                .position(|field| field.name == "ready")
+                .and_then(|at| placed.offsets.get(at).copied())
+                .ok_or_else(|| refuse(func, "a cell with no `ready` field"))?;
+            let text = format!(
+                "@nts_cellname_{}",
+                cell_names(program)
+                    .iter()
+                    .position(|known| known == what)
+                    .unwrap_or(0)
+            );
+            [
+                format!("{out}.at = getelementptr i8, ptr {}, i64 {at}", name(*cell)),
+                format!("{out}.ready = load i8, ptr {out}.at{}", tbaa("i8")),
+                format!("{out}.is = icmp ne i8 {out}.ready, 0"),
+                // `out` already carries its `%`, and the label definitions below
+                // strip it. Adding one here made `label %%v2.ok`, which is not a
+                // token clang accepts -- the emitter was unreachable *and* could
+                // never have produced a valid module.
+                format!("br i1 {out}.is, label {out}.ok, label {out}.no"),
+                format!("{}.no:", out.trim_start_matches('%')),
+                format!("  call void @nts_cell_unready(ptr {text})"),
+                format!("  br label {out}.ok"),
+                format!("{}.ok:", out.trim_start_matches('%')),
+            ]
+            .join("\n  ")
+        }
+        // `await` is not a code generation concept. `hir::suspend` turns a
+        // function that awaits into a state machine and leaves `Suspend`
+        // behind; one reaching here means that pass did not run.
+        OpKind::Await { .. } => {
+            return Err(refuse(
+                func,
+                "an `await`, which the suspension pass should have removed",
+            ));
+        }
+        // Subscribing the rest of this function to a promise. `NtsTask` is
+        // three pointers -- what to run, how to drop it unrun, and the frame
+        // both act on -- and every platform passes it in memory, each its own
+        // way: System V copies it into the argument area (`byval`), Win64 and
+        // AAPCS64 hand over a pointer to a copy the caller made. The spelling
+        // is the platform's table's, not written here: `byval` on AArch64 is a
+        // stack copy where the callee reads a pointer from a register, and ran
+        // into a segfault in the first arm64 program to `await`.
+        OpKind::Suspend {
+            promise,
+            frame,
+            resume,
+        } => [
+            format!("{out}.task = alloca %struct.NtsTask, align 8"),
+            format!(
+                "store ptr {}, ptr {out}.task{}",
+                symbol(resume),
+                tbaa("ptr")
+            ),
+            format!("{out}.drop = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 1"),
+            format!("store ptr null, ptr {out}.drop{}", tbaa("ptr")),
+            format!("{out}.state = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 2"),
+            format!("store ptr {}, ptr {out}.state{}", name(*frame), tbaa("ptr")),
+            format!(
+                "call void @nts_promise_subscribe(ptr {}, {} {out}.task)",
+                name(*promise),
+                signatures::signature_on("nts_promise_subscribe", platform)
+                    .and_then(|known| known.params.get(1))
+                    .ok_or_else(|| refuse(
+                        func,
+                        "`nts_promise_subscribe` is missing from this platform's table"
+                    ))?
+            ),
         ]
-        .join("\n  ")
-    }
-    // `await` is not a code generation concept. `hir::suspend` turns a
-    // function that awaits into a state machine and leaves `Suspend`
-    // behind; one reaching here means that pass did not run.
-    OpKind::Await { .. } => {
-        return Err(refuse(func, "an `await`, which the suspension pass should have removed"));
-    }
-    // Subscribing the rest of this function to a promise. `NtsTask` is
-    // three pointers -- what to run, how to drop it unrun, and the frame
-    // both act on -- and every platform passes it in memory, each its own
-    // way: System V copies it into the argument area (`byval`), Win64 and
-    // AAPCS64 hand over a pointer to a copy the caller made. The spelling
-    // is the platform's table's, not written here: `byval` on AArch64 is a
-    // stack copy where the callee reads a pointer from a register, and ran
-    // into a segfault in the first arm64 program to `await`.
-    OpKind::Suspend {
-        promise,
-        frame,
-        resume,
-    } => [
-        format!("{out}.task = alloca %struct.NtsTask, align 8"),
-        format!("store ptr {}, ptr {out}.task{}", symbol(resume), tbaa("ptr")),
-        format!("{out}.drop = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 1"),
-        format!("store ptr null, ptr {out}.drop{}", tbaa("ptr")),
-        format!("{out}.state = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 2"),
-        format!("store ptr {}, ptr {out}.state{}", name(*frame), tbaa("ptr")),
-        format!(
-            "call void @nts_promise_subscribe(ptr {}, {} {out}.task)",
-            name(*promise),
-            signatures::signature_on("nts_promise_subscribe", platform)
-                .and_then(|known| known.params.get(1))
-                .ok_or_else(|| refuse(func, "`nts_promise_subscribe` is missing from this platform's table"))?
-        ),
-    ]
-    .join("\n  "),
-    // **The task is filled by the runtime, not rebuilt here.** `nts_callback_task`
-    // allocates the callback entry and takes the reference, which its own
-    // documentation calls ownership-critical code where "a second copy of it that
-    // has to stay in step is worse than a function". So this allocas the struct and
-    // lets the helper write it, which is what its `sret` parameter is for -- and then
-    // passes it exactly as the `Suspend` arm above does, by the table's spelling
-    // rather than by a guess about this platform's ABI.
-    //
-    // `repeating` is **false**: a reaction runs once and gives its reference back by
-    // running. The same doc warns that releasing on every round "frees the callback
-    // under the timer that is about to call it, which is a use-after-free that leaves
-    // the trace right, the totals balanced, and AddressSanitizer silent".
-    OpKind::PromiseSubscribe {
-        promise,
-        reaction,
-        slot,
-    } => {
-        let made = signatures::signature_on("nts_callback_task", platform)
-            .ok_or_else(|| refuse(func, "`nts_callback_task` is missing from this platform's table"))?;
-        let returned = made
-            .params
-            .first()
-            .ok_or_else(|| refuse(func, "`nts_callback_task` with no result parameter"))?;
-        let taken = signatures::signature_on("nts_promise_subscribe", platform)
-            .and_then(|known| known.params.get(1).copied())
-            .ok_or_else(|| refuse(func, "`nts_promise_subscribe` is missing from this platform's table"))?;
-        [
+        .join("\n  "),
+        // **The task is filled by the runtime, not rebuilt here.** `nts_callback_task`
+        // allocates the callback entry and takes the reference, which its own
+        // documentation calls ownership-critical code where "a second copy of it that
+        // has to stay in step is worse than a function". So this allocas the struct and
+        // lets the helper write it, which is what its `sret` parameter is for -- and then
+        // passes it exactly as the `Suspend` arm above does, by the table's spelling
+        // rather than by a guess about this platform's ABI.
+        //
+        // `repeating` is **false**: a reaction runs once and gives its reference back by
+        // running. The same doc warns that releasing on every round "frees the callback
+        // under the timer that is about to call it, which is a use-after-free that leaves
+        // the trace right, the totals balanced, and AddressSanitizer silent".
+        OpKind::PromiseSubscribe {
+            promise,
+            reaction,
+            slot,
+        } => {
+            let made =
+                signatures::signature_on("nts_callback_task", platform).ok_or_else(|| {
+                    refuse(
+                        func,
+                        "`nts_callback_task` is missing from this platform's table",
+                    )
+                })?;
+            let returned = made
+                .params
+                .first()
+                .ok_or_else(|| refuse(func, "`nts_callback_task` with no result parameter"))?;
+            let taken = signatures::signature_on("nts_promise_subscribe", platform)
+                .and_then(|known| known.params.get(1).copied())
+                .ok_or_else(|| {
+                    refuse(
+                        func,
+                        "`nts_promise_subscribe` is missing from this platform's table",
+                    )
+                })?;
+            [
             format!(
                 "call void @nts_callback_task({returned} {out}.task, ptr {}, double {slot}.0, i1 zeroext false)",
                 name(*reaction)
@@ -1137,7 +1259,7 @@ fn suspension(
             ),
         ]
         .join("\n  ")
-    }
+        }
         other => {
             return Err(refuse(
                 func,
@@ -1233,8 +1355,15 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
 
 /// What a bridge calls: the compiled function by name, or the one in the
 /// receiver's table at `dispatched`, whose loads go on the end of `body`.
-fn bridge_callee(compiled: &Func, dispatched: Option<u32>, receiver: &str, body: &mut String) -> String {
-    let Some(slot) = dispatched else { return symbol(&compiled.name) };
+fn bridge_callee(
+    compiled: &Func,
+    dispatched: Option<u32>,
+    receiver: &str,
+    body: &mut String,
+) -> String {
+    let Some(slot) = dispatched else {
+        return symbol(&compiled.name);
+    };
     let mut loads = Vec::new();
     let pointer = method_pointer("%d", receiver, slot, &mut loads);
     for load in loads {
@@ -1253,18 +1382,36 @@ fn bridge_callee(compiled: &Func, dispatched: Option<u32>, receiver: &str, body:
 ///
 /// The receiver is the static closure's global. Only a closure with no captures
 /// is bridged, so one immortal instance is the whole of its state.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut types: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut declared = false;
     for func in &program.funcs {
-        for op in func.blocks.iter().flat_map(|block| &block.ops).map(|value| func.value(*value)) {
-            let OpKind::NativeBridge { closure, signature, context, once, bridging } = &op.kind else { continue };
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|value| func.value(*value))
+        {
+            let OpKind::NativeBridge {
+                closure,
+                signature,
+                context,
+                once,
+                bridging,
+            } = &op.kind
+            else {
+                continue;
+            };
             let layout = closure_layout(program, func, *closure)?;
-            let target = layout
-                .closure_call()
-                .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
+            let target = layout.closure_call().ok_or_else(|| {
+                refuse(
+                    func,
+                    "a callback bridge whose closure publishes no function",
+                )
+            })?;
             let name = nts_codegen_common::symbols::bridge_name(target, signature, *once, bridging);
             if !seen.insert(name.clone()) {
                 continue;
@@ -1279,7 +1426,12 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 .funcs
                 .iter()
                 .find(|candidate| candidate.name == target)
-                .ok_or_else(|| refuse(func, "a callback bridge naming a function this program does not define"))?;
+                .ok_or_else(|| {
+                    refuse(
+                        func,
+                        "a callback bridge naming a function this program does not define",
+                    )
+                })?;
             // With a context, the foreign signature's last parameter is the
             // receiver -- the closure C was lent and hands back -- so the two
             // counts agree instead of differing by one. Both are `ptr`, so it
@@ -1292,11 +1444,17 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             let foreign = signature.parameters.len() - usize::from(*context);
             let foreign = (0..foreign).filter_map(|at| bridging.parameter(at)).count();
             if compiled.params.is_empty() || compiled.params.len() - 1 > foreign {
-                return Err(refuse(func, "a callback bridge whose foreign signature and compiled function disagree about arity"));
+                return Err(refuse(
+                    func,
+                    "a callback bridge whose foreign signature and compiled function disagree about arity",
+                ));
             }
             let dispatched = nts_core::hir::bridged_through_table(program, layout);
             if dispatched.is_some() && !*context {
-                return Err(refuse(func, "a callback bridge with no context whose closure is not known here"));
+                return Err(refuse(
+                    func,
+                    "a callback bridge with no context whose closure is not known here",
+                ));
             }
             let last = signature.parameters.len().saturating_sub(1);
             let mut parameters = Vec::new();
@@ -1313,7 +1471,10 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 // The context, which became the receiver; an array's length,
                 // which its array reads; and any argument C passes that the
                 // compiled function does not take.
-                let Some(parameter) = bridging.parameter(at).filter(|_| !(*context && at == last)) else { continue };
+                let Some(parameter) = bridging.parameter(at).filter(|_| !(*context && at == last))
+                else {
+                    continue;
+                };
                 if parameter + 1 >= compiled.params.len() {
                     continue;
                 }
@@ -1343,24 +1504,42 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             // A once-bridge gives the closure back after its one call, before
             // leaving, as the C bridge does.
             let leave = if *once {
-                format!("{releases}  call void @nts_closure_unlend_once(ptr %a{last})\n  call void @nts_callback_leave()")
+                format!(
+                    "{releases}  call void @nts_closure_unlend_once(ptr %a{last})\n  call void @nts_callback_leave()"
+                )
             } else {
                 format!("{releases}  call void @nts_callback_leave()")
             };
             let callee = bridge_callee(compiled, dispatched, &format!("%a{last}"), &mut body);
-            let call = format!("call {} {callee}({})", return_ty_of(&have, compiled)?, arguments.join(", "));
+            let call = format!(
+                "call {} {callee}({})",
+                return_ty_of(&have, compiled)?,
+                arguments.join(", ")
+            );
             let parameters = parameters.join(", ");
             if want == HirType::Void {
-                let _ = writeln!(out, "define internal void @{name}({parameters}) nounwind {{");
+                let _ = writeln!(
+                    out,
+                    "define internal void @{name}({parameters}) nounwind {{"
+                );
                 out.push_str(&body);
                 let _ = writeln!(out, "{enter}\n  {call}\n{leave}\n  ret void\n}}");
             } else {
                 let want_ty = ty_of(&want, compiled)?;
-                let _ = writeln!(out, "define internal {want_ty} @{name}({parameters}) nounwind {{");
+                let _ = writeln!(
+                    out,
+                    "define internal {want_ty} @{name}({parameters}) nounwind {{"
+                );
                 out.push_str(&body);
                 let _ = writeln!(out, "{enter}");
                 let _ = writeln!(out, "  %r = {call}");
-                bridge_answer(&mut out, compiled, (&have, &want), (&signature.result, &leave), program.provider)?;
+                bridge_answer(
+                    &mut out,
+                    compiled,
+                    (&have, &want),
+                    (&signature.result, &leave),
+                    program.provider,
+                )?;
             }
         }
     }
@@ -1392,7 +1571,11 @@ fn bridge_answer(
         let _ = writeln!(out, "  ret {want_ty} %r\n}}");
     } else {
         let instruction = conversion(have, want, compiled)?;
-        let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}", ty_of(have, compiled)?);
+        let _ = writeln!(
+            out,
+            "  %c = {instruction} {} %r to {want_ty}",
+            ty_of(have, compiled)?
+        );
         let _ = writeln!(out, "  ret {want_ty} %c\n}}");
     }
     Ok(())
@@ -1404,7 +1587,12 @@ fn bridge_answer(
 /// the call into `releases`.
 /// Each boxed parameter's `GType` function, once, unless the program declares
 /// it by calling it: LLVM refuses a second.
-fn declare_types(program: &Program, bridging: &nts_core::hir::Bridging, types: &mut std::collections::BTreeSet<String>, out: &mut String) {
+fn declare_types(
+    program: &Program,
+    bridging: &nts_core::hir::Bridging,
+    types: &mut std::collections::BTreeSet<String>,
+    out: &mut String,
+) {
     for parameter in &bridging.boxed {
         let called = program.funcs.iter().flat_map(|f| &f.values).any(|op| {
             matches!(&op.kind, OpKind::Call { callee: Callee::Native(t), .. } if t.name == parameter.get_type)
@@ -1441,7 +1629,11 @@ fn bridge_argument(
     // the function lowering made for it (`Bridging::sequences`), and given
     // back after the call under counting, as a boxed copy is.
     if let Some(sequence) = sequence {
-        let _ = writeln!(body, "  %q{at} = call ptr {}(ptr %a{at})", symbol(&sequence.function));
+        let _ = writeln!(
+            body,
+            "  %q{at} = call ptr {}(ptr %a{at})",
+            symbol(&sequence.function)
+        );
         if counted {
             let _ = writeln!(releases, "  call void @nts_release(ptr %q{at})");
         }
@@ -1449,7 +1641,10 @@ fn bridge_argument(
     }
     if let Some(boxing) = boxing {
         let _ = writeln!(body, "  %g{at} = call i64 @{}()", boxing.get_type);
-        let _ = writeln!(body, "  %b{at} = call ptr @nts_gobject_boxed_copy(ptr %a{at}, i64 %g{at})");
+        let _ = writeln!(
+            body,
+            "  %b{at} = call ptr @nts_gobject_boxed_copy(ptr %a{at}, i64 %g{at})"
+        );
         if counted {
             let _ = writeln!(releases, "  call void @nts_release(ptr %b{at})");
         }
@@ -1459,10 +1654,18 @@ fn bridge_argument(
     // the C bridge makes it; given back after the call under counting.
     if let Some((length_at, length_ty)) = length {
         let HirType::Managed(nts_core::hir::ManagedType::Array(element)) = &to else {
-            return Err(Diagnostic::error("NTS2006", "a callback's array of objects taken as something else", compiled.origin.location));
+            return Err(Diagnostic::error(
+                "NTS2006",
+                "a callback's array of objects taken as something else",
+                compiled.origin.location,
+            ));
         };
         let counting = nts_codegen_common::counting::counted_element(element).ok_or_else(|| {
-            Diagnostic::error("NTS2006", "a callback's array of objects whose elements are not counted", compiled.origin.location)
+            Diagnostic::error(
+                "NTS2006",
+                "a callback's array of objects whose elements are not counted",
+                compiled.origin.location,
+            )
         })?;
         let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
         let wide = ty_of(&length_ty, compiled)?;
@@ -1472,7 +1675,10 @@ fn bridge_argument(
             let _ = writeln!(body, "  %n{at} = trunc {wide} %a{length_at} to i32");
             format!("%n{at}")
         };
-        let _ = writeln!(body, "  %h{at} = call ptr @nts_array_from_handles(ptr %a{at}, i32 {count}, ptr @{descriptor})");
+        let _ = writeln!(
+            body,
+            "  %h{at} = call ptr @nts_array_from_handles(ptr %a{at}, i32 {count}, ptr @{descriptor})"
+        );
         if counted {
             let _ = writeln!(releases, "  call void @nts_release(ptr %h{at})");
         }
@@ -1481,13 +1687,19 @@ fn bridge_argument(
     // A string C lends: copied in for the call, given back after it, as the C
     // bridge does.
     if nts_core::hir::native::lent_string(foreign, &to) {
-        let _ = writeln!(body, "  %s{at} = call ptr @nts_string_from_cstring(ptr %a{at})");
+        let _ = writeln!(
+            body,
+            "  %s{at} = call ptr @nts_string_from_cstring(ptr %a{at})"
+        );
         let _ = writeln!(releases, "  call void @nts_release(ptr %s{at})");
         return Ok(format!("ptr %s{at}"));
     }
     // An `NSString` a block is given: its text, copied in the same way.
     if nts_core::hir::native::lent_ns_string(foreign, &to) {
-        let _ = writeln!(body, "  %s{at} = call ptr @nts_string_of_nsstring(ptr %a{at})");
+        let _ = writeln!(
+            body,
+            "  %s{at} = call ptr @nts_string_of_nsstring(ptr %a{at})"
+        );
         let _ = writeln!(releases, "  call void @nts_release(ptr %s{at})");
         return Ok(format!("ptr %s{at}"));
     }
@@ -1497,7 +1709,11 @@ fn bridge_argument(
     if to == HirType::Bool {
         // A `gboolean` C passes, read as C reads it: any non-zero is true, as
         // `Convert` reads one -- a `trunc` to `i1` would read 2 as false.
-        let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{at}"), &from, from_ty, &format!("%a{at}")));
+        let _ = writeln!(
+            body,
+            "  {}",
+            is_not_zero(&format!("%p{at}"), &from, from_ty, &format!("%a{at}"))
+        );
         return Ok(format!("{to_ty} %p{at}"));
     }
     let instruction = conversion(&from, &to, compiled)?;
@@ -1508,7 +1724,11 @@ fn bridge_argument(
 /// The functions foreign code calls into: the callback bridges, and the
 /// methods of the Objective-C classes the program declares, which share the
 /// two runtime calls around a callback and declare them once.
-fn entry_points(program: &Program, platform: Platform, diagnostics: &mut Vec<Diagnostic>) -> String {
+fn entry_points(
+    program: &Program,
+    platform: Platform,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> String {
     let mut text = String::new();
     let bridged = match bridges(program, platform) {
         Ok(text_for_bridges) => {
@@ -1547,8 +1767,16 @@ fn entry_points(program: &Program, platform: Platform, diagnostics: &mut Vec<Dia
         Err(diagnostic) => diagnostics.push(diagnostic),
     }
     if !constructors.is_empty() {
-        let entries: Vec<String> = constructors.iter().map(|name| format!("{{ i32, ptr, ptr }} {{ i32 65535, ptr @{name}, ptr null }}")).collect();
-        let _ = writeln!(text, "@llvm.global_ctors = appending global [{} x {{ i32, ptr, ptr }}] [{}]", entries.len(), entries.join(", "));
+        let entries: Vec<String> = constructors
+            .iter()
+            .map(|name| format!("{{ i32, ptr, ptr }} {{ i32 65535, ptr @{name}, ptr null }}"))
+            .collect();
+        let _ = writeln!(
+            text,
+            "@llvm.global_ctors = appending global [{} x {{ i32, ptr, ptr }}] [{}]",
+            entries.len(),
+            entries.join(", ")
+        );
     }
     text
 }
@@ -1559,7 +1787,11 @@ fn entry_points(program: &Program, platform: Platform, diagnostics: &mut Vec<Dia
 /// -- a table per class, and one constructor in `llvm.global_ctors`
 /// registering them all, base class first, before `main`. Returns the text
 /// and that constructor's name.
-fn objc_classes(program: &Program, platform: Platform, callbacks_declared: &mut bool) -> Result<(String, Option<&'static str>), Diagnostic> {
+fn objc_classes(
+    program: &Program,
+    platform: Platform,
+    callbacks_declared: &mut bool,
+) -> Result<(String, Option<&'static str>), Diagnostic> {
     let classes = nts_codegen_common::objc::classes_in_order(program);
     let mut out = String::new();
     if classes.is_empty() {
@@ -1575,8 +1807,13 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: &mut 
         let table = nts_codegen_common::objc::methods_symbol(&class.name);
         let mut rows = Vec::new();
         for (at, method) in class.methods.iter().enumerate() {
-            let Some(compiled) = program.funcs.iter().find(|func| func.name == method.function) else {
-                let missing = "an Objective-C method whose compiled function this program does not define";
+            let Some(compiled) = program
+                .funcs
+                .iter()
+                .find(|func| func.name == method.function)
+            else {
+                let missing =
+                    "an Objective-C method whose compiled function this program does not define";
                 // A method is one of the program's functions, so there is one
                 // to name the refusal by.
                 return match program.funcs.first() {
@@ -1584,9 +1821,24 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: &mut 
                     None => Ok((String::new(), None)),
                 };
             };
-            rows.push(imp(&mut out, (platform, program.provider == nts_core::hir::Provider::ReferenceCounting), &class.name, at, method, compiled)?);
+            rows.push(imp(
+                &mut out,
+                (
+                    platform,
+                    program.provider == nts_core::hir::Provider::ReferenceCounting,
+                ),
+                &class.name,
+                at,
+                method,
+                compiled,
+            )?);
         }
-        let _ = writeln!(out, "@{table} = internal constant [{} x {{ ptr, ptr, ptr }}] [{}]", rows.len(), rows.join(", "));
+        let _ = writeln!(
+            out,
+            "@{table} = internal constant [{} x {{ ptr, ptr, ptr }}] [{}]",
+            rows.len(),
+            rows.join(", ")
+        );
         text_constant(&mut out, &format!("{table}.name"), &class.name);
         text_constant(&mut out, &format!("{table}.super"), &class.superclass);
         let state = match state_maker(program, class, &mut out) {
@@ -1601,10 +1853,16 @@ fn objc_classes(program: &Program, platform: Platform, callbacks_declared: &mut 
         ));
         for (at, protocol) in class.protocols.iter().enumerate() {
             text_constant(&mut out, &format!("{table}.protocol{at}"), protocol);
-            registrations.push(format!("  call void @nts_objc_adopt(ptr @{table}.name, ptr @{table}.protocol{at})"));
+            registrations.push(format!(
+                "  call void @nts_objc_adopt(ptr @{table}.name, ptr @{table}.protocol{at})"
+            ));
         }
     }
-    let _ = writeln!(out, "define internal void @nts_objc_register_classes() {{\n{}\n  ret void\n}}", registrations.join("\n"));
+    let _ = writeln!(
+        out,
+        "define internal void @nts_objc_register_classes() {{\n{}\n  ret void\n}}",
+        registrations.join("\n")
+    );
     Ok((out, Some("nts_objc_register_classes")))
 }
 
@@ -1618,19 +1876,37 @@ fn declare_callbacks(out: &mut String, declared: &mut bool) {
 
 /// A private NUL-terminated string constant, `@name`.
 fn text_constant(out: &mut String, name: &str, value: &str) {
-    let _ = writeln!(out, "@{name} = private unnamed_addr constant [{} x i8] c\"{value}\\00\"", value.len() + 1);
+    let _ = writeln!(
+        out,
+        "@{name} = private unnamed_addr constant [{} x i8] c\"{value}\\00\"",
+        value.len() + 1
+    );
 }
 
 /// One method's entry point, `nts_imp_<Class>_<at>`: the runtime's arguments
 /// -- `self`, `_cmd`, then the method's, a record by value by the platform's
 /// convention -- converted to the compiled method's, and its result back.
 /// Returns the method table's row for it.
-fn imp(out: &mut String, (platform, program_counts): (Platform, bool), class: &str, at: usize, method: &nts_core::hir::ForeignMethod, compiled: &Func) -> Result<String, Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+fn imp(
+    out: &mut String,
+    (platform, program_counts): (Platform, bool),
+    class: &str,
+    at: usize,
+    method: &nts_core::hir::ForeignMethod,
+    compiled: &Func,
+) -> Result<String, Diagnostic> {
     // A record result is written through an address the entry point passes
     // the compiled method last.
-    let record_out = matches!(*method.signature.result, nts_core::hir::native::Type::Record(_));
+    let record_out = matches!(
+        *method.signature.result,
+        nts_core::hir::native::Type::Record(_)
+    );
     if compiled.params.len() + 1 != method.signature.parameters.len() + usize::from(record_out) {
-        return Err(refuse(compiled, "an Objective-C method whose entry point and compiled function disagree about arity"));
+        return Err(refuse(
+            compiled,
+            "an Objective-C method whose entry point and compiled function disagree about arity",
+        ));
     }
     let imp = nts_codegen_common::objc::imp_symbol(class, at);
     let mut parameters = Vec::new();
@@ -1641,14 +1917,31 @@ fn imp(out: &mut String, (platform, program_counts): (Platform, bool), class: &s
     let (mut copies, mut releases) = (String::new(), String::new());
     // How each argument arrives: a record by value by the platform's
     // convention, the rest as themselves.
-    let Some(plan) = aggregate::plan(0, &method.signature.parameters, &method.signature.result, platform) else {
-        return Err(refuse(compiled, "an Objective-C method of the program's whose record arguments this platform's convention cannot place here; the C backend builds it"));
+    let Some(plan) = aggregate::plan(
+        0,
+        &method.signature.parameters,
+        &method.signature.result,
+        platform,
+    ) else {
+        return Err(refuse(
+            compiled,
+            "an Objective-C method of the program's whose record arguments this platform's convention cannot place here; the C backend builds it",
+        ));
     };
     for (slot, foreign) in method.signature.parameters.iter().enumerate() {
-        if let (nts_core::hir::native::Type::Record(record), Some(aggregate::Crossing::Record(passing))) = (foreign, plan.arguments.get(slot)) {
+        if let (
+            nts_core::hir::native::Type::Record(record),
+            Some(aggregate::Crossing::Record(passing)),
+        ) = (foreign, plan.arguments.get(slot))
+        {
             let mut stores = Vec::new();
-            let Some((received, address)) = aggregate::receive(passing, record, platform, &format!("%a{slot}"), &mut stores) else {
-                return Err(refuse(compiled, "an Objective-C method of the program's taking a record this backend cannot place"));
+            let Some((received, address)) =
+                aggregate::receive(passing, record, platform, &format!("%a{slot}"), &mut stores)
+            else {
+                return Err(refuse(
+                    compiled,
+                    "an Objective-C method of the program's taking a record this backend cannot place",
+                ));
             };
             parameters.extend(received);
             for line in stores {
@@ -1664,20 +1957,32 @@ fn imp(out: &mut String, (platform, program_counts): (Platform, bool), class: &s
         if slot == 1 {
             continue;
         }
-        let to = compiled.params[if slot == 0 { 0 } else { slot - 1 }].ty.clone();
+        let to = compiled.params[if slot == 0 { 0 } else { slot - 1 }]
+            .ty
+            .clone();
         let to_ty = ty_of(&to, compiled)?;
         if nts_core::hir::native::lent_ns_string(foreign, &to) {
-            let _ = writeln!(copies, "  %s{slot} = call ptr @nts_string_of_nsstring(ptr %a{slot})");
+            let _ = writeln!(
+                copies,
+                "  %s{slot} = call ptr @nts_string_of_nsstring(ptr %a{slot})"
+            );
             let _ = writeln!(releases, "  call void @nts_release(ptr %s{slot})");
             arguments.push(format!("ptr %s{slot}"));
         } else if passes_as_is(&from, &to) {
             arguments.push(format!("{to_ty} %a{slot}"));
         } else if to == HirType::Bool {
-            let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));
+            let _ = writeln!(
+                body,
+                "  {}",
+                is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}"))
+            );
             arguments.push(format!("{to_ty} %p{slot}"));
         } else {
             let instruction = conversion(&from, &to, compiled)?;
-            let _ = writeln!(body, "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}");
+            let _ = writeln!(
+                body,
+                "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}"
+            );
             arguments.push(format!("{to_ty} %p{slot}"));
         }
     }
@@ -1685,58 +1990,132 @@ fn imp(out: &mut String, (platform, program_counts): (Platform, bool), class: &s
     // pointer the caller passed, which the compiled method writes directly,
     // or loaded from a slot of the entry point's in its registers' types.
     if record_out && !copies.is_empty() {
-        return Err(refuse(compiled, "an Objective-C method answering a record by value and taking a string, which the C backend builds"));
+        return Err(refuse(
+            compiled,
+            "an Objective-C method answering a record by value and taking a string, which the C backend builds",
+        ));
     }
     if let (true, Some(passing)) = (record_out, &plan.result) {
-        let nts_core::hir::native::Type::Record(record) = &*method.signature.result else { unreachable!() };
-        let (size, align) = aggregate::extent_of(record, platform)
-            .ok_or_else(|| refuse(compiled, "an Objective-C method returning a record this backend cannot place"))?;
+        let nts_core::hir::native::Type::Record(record) = &*method.signature.result else {
+            unreachable!()
+        };
+        let (size, align) = aggregate::extent_of(record, platform).ok_or_else(|| {
+            refuse(
+                compiled,
+                "an Objective-C method returning a record this backend cannot place",
+            )
+        })?;
         let call_args = |slot: &str| {
             let mut all = arguments.clone();
             all.push(format!("ptr {slot}"));
             all.join(", ")
         };
         if let Some(hidden) = aggregate::sret(passing, "%ret") {
-            let _ = writeln!(out, "define internal void @{imp}({}) nounwind {{", std::iter::once(hidden).chain(parameters.iter().cloned()).collect::<Vec<_>>().join(", "));
+            let _ = writeln!(
+                out,
+                "define internal void @{imp}({}) nounwind {{",
+                std::iter::once(hidden)
+                    .chain(parameters.iter().cloned())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             out.push_str(&body);
-            let _ = writeln!(out, "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()\n  ret void\n}}", symbol(&compiled.name), call_args("%ret"));
+            let _ = writeln!(
+                out,
+                "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()\n  ret void\n}}",
+                symbol(&compiled.name),
+                call_args("%ret")
+            );
         } else {
             let spelled = aggregate::result_type(passing);
-            let _ = writeln!(out, "define internal {spelled} @{imp}({}) nounwind {{", parameters.join(", "));
+            let _ = writeln!(
+                out,
+                "define internal {spelled} @{imp}({}) nounwind {{",
+                parameters.join(", ")
+            );
             out.push_str(&body);
             let _ = writeln!(out, "  %slot = alloca [{size} x i8], align {align}");
-            let _ = writeln!(out, "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()", symbol(&compiled.name), call_args("%slot"));
-            let _ = writeln!(out, "  %r = load {spelled}, ptr %slot, align {}\n  ret {spelled} %r\n}}", align.min(8));
+            let _ = writeln!(
+                out,
+                "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()",
+                symbol(&compiled.name),
+                call_args("%slot")
+            );
+            let _ = writeln!(
+                out,
+                "  %r = load {spelled}, ptr %slot, align {}\n  ret {spelled} %r\n}}",
+                align.min(8)
+            );
         }
         text_constant(out, &format!("{imp}.sel"), method.selector());
-        text_constant(out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
-        return Ok(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"));
+        text_constant(
+            out,
+            &format!("{imp}.types"),
+            &nts_codegen_common::objc::method_encoding(&method.signature),
+        );
+        return Ok(format!(
+            "{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"
+        ));
     }
     let want = method.signature.result.abi(platform.abi);
     let have = compiled.return_type.clone();
-    let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
+    let call = format!(
+        "call {} {}({})",
+        ty_of(&have, compiled)?,
+        symbol(&compiled.name),
+        arguments.join(", ")
+    );
     if want == HirType::Void {
-        let _ = writeln!(out, "define internal void @{imp}({}) nounwind {{", parameters.join(", "));
+        let _ = writeln!(
+            out,
+            "define internal void @{imp}({}) nounwind {{",
+            parameters.join(", ")
+        );
         out.push_str(&body);
-        let _ = writeln!(out, "  call void @nts_callback_enter()\n{copies}  {call}\n{releases}  call void @nts_callback_leave()\n  ret void\n}}");
+        let _ = writeln!(
+            out,
+            "  call void @nts_callback_enter()\n{copies}  {call}\n{releases}  call void @nts_callback_leave()\n  ret void\n}}"
+        );
     } else {
         let want_ty = ty_of(&want, compiled)?;
-        let _ = writeln!(out, "define internal {want_ty} @{imp}({}) nounwind {{", parameters.join(", "));
+        let _ = writeln!(
+            out,
+            "define internal {want_ty} @{imp}({}) nounwind {{",
+            parameters.join(", ")
+        );
         out.push_str(&body);
         // A string answered as the `NSString` Swift's `String` result is:
         // made of the method's inside the bracket, which is given back.
-        let answers_string = nts_core::hir::native::answered_ns_string(&method.signature.result, &have);
+        let answers_string =
+            nts_core::hir::native::answered_ns_string(&method.signature.result, &have);
         let (made, reply) = if answers_string {
-            ("  %made = call ptr @nts_nsstring_of(ptr %r)\n  call void @nts_release(ptr %r)\n", "%made")
+            (
+                "  %made = call ptr @nts_nsstring_of(ptr %r)\n  call void @nts_release(ptr %r)\n",
+                "%made",
+            )
         } else {
             ("", "%r")
         };
-        let _ = writeln!(out, "  call void @nts_callback_enter()\n{copies}  %r = {call}\n{releases}{made}  call void @nts_callback_leave()");
-        answer(out, (method, compiled), (&have, &want, want_ty), (reply, program_counts))?;
+        let _ = writeln!(
+            out,
+            "  call void @nts_callback_enter()\n{copies}  %r = {call}\n{releases}{made}  call void @nts_callback_leave()"
+        );
+        answer(
+            out,
+            (method, compiled),
+            (&have, &want, want_ty),
+            (reply, program_counts),
+        )?;
     }
     text_constant(out, &format!("{imp}.sel"), method.selector());
-    text_constant(out, &format!("{imp}.types"), &nts_codegen_common::objc::method_encoding(&method.signature));
-    Ok(format!("{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"))
+    text_constant(
+        out,
+        &format!("{imp}.types"),
+        &nts_codegen_common::objc::method_encoding(&method.signature),
+    );
+    Ok(format!(
+        "{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"
+    ))
 }
 /// How an entry point answers once the compiled method has returned `%r`,
 /// its `NSString` made into `reply` where the result is a string
@@ -1753,12 +2132,19 @@ fn answer(
 ) -> Result<(), Diagnostic> {
     let object = objc::returns_object(&method.signature.result);
     if program_counts && object && (reply == "%made" || passes_as_is(have, want)) {
-        let _ = writeln!(out, "  %given = call ptr @objc_autoreleaseReturnValue(ptr {reply})\n  ret {want_ty} %given\n}}");
+        let _ = writeln!(
+            out,
+            "  %given = call ptr @objc_autoreleaseReturnValue(ptr {reply})\n  ret {want_ty} %given\n}}"
+        );
     } else if reply == "%made" || passes_as_is(have, want) {
         let _ = writeln!(out, "  ret {want_ty} {reply}\n}}");
     } else {
         let instruction = conversion(have, want, compiled)?;
-        let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}", ty_of(have, compiled)?);
+        let _ = writeln!(
+            out,
+            "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}",
+            ty_of(have, compiled)?
+        );
     }
     Ok(())
 }
@@ -1767,8 +2153,14 @@ fn answer(
 /// `{Class}#state` entered as an entry point is, because the runtime calls it
 /// from the `init` it adds, on whatever stack sent `init`. `Err(None)` for a
 /// program with no function to name a refusal by.
-fn state_maker(program: &Program, class: &nts_core::hir::ForeignClass, out: &mut String) -> Result<Option<String>, Option<Diagnostic>> {
-    let Some(state) = &class.state else { return Ok(None) };
+fn state_maker(
+    program: &Program,
+    class: &nts_core::hir::ForeignClass,
+    out: &mut String,
+) -> Result<Option<String>, Option<Diagnostic>> {
+    let Some(state) = &class.state else {
+        return Ok(None);
+    };
     let Some(compiled) = program.funcs.iter().find(|func| &func.name == state) else {
         let missing = "an Objective-C class whose fields' maker this program does not define";
         return Err(program.funcs.first().map(|func| refuse(func, missing)));
@@ -1789,7 +2181,10 @@ fn closure_layout<'p>(
     closure: nts_core::hir::ValueId,
 ) -> Result<&'p nts_core::hir::Layout, Diagnostic> {
     let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &func.value(closure).ty else {
-        return Err(refuse(func, "a callback bridge whose operand is not a closure"));
+        return Err(refuse(
+            func,
+            "a callback bridge whose operand is not a closure",
+        ));
     };
     program
         .layouts
@@ -1829,7 +2224,11 @@ fn instance_of(
     // copy, stored again before each call because the callee owns it.
     let win64 = indirect::applies(platform);
     let mut lines = Vec::new();
-    let shared = if win64 { String::new() } else { erased_argument(platform, &subject, out, 0, &mut lines) };
+    let shared = if win64 {
+        String::new()
+    } else {
+        erased_argument(platform, &subject, out, 0, &mut lines)
+    };
     let mut answers: Vec<String> = Vec::new();
     for class in classes {
         let Some(layout) = program
@@ -1894,7 +2293,12 @@ fn identity_suffix(
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect();
-    if sharing.iter().filter(|other| other.name == class.name).count() > 1 {
+    if sharing
+        .iter()
+        .filter(|other| other.name == class.name)
+        .count()
+        > 1
+    {
         return format!("{spelling}_{}", class.symbol);
     }
     spelling
@@ -2035,13 +2439,7 @@ fn string_equality(out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> String 
 /// to come first for the reason `absent_reference` gives: `s === null` asks
 /// about the pointer, and reading contents through it would be reading through
 /// the null one.
-fn string_binary(
-    func: &Func,
-    out: &str,
-    bin: BinOp,
-    lhs: ValueId,
-    rhs: ValueId,
-) -> Option<String> {
+fn string_binary(func: &Func, out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> Option<String> {
     if func.values[lhs.0 as usize].ty != HirType::Managed(nts_core::hir::ManagedType::String)
         || absent(func, lhs)
         || absent(func, rhs)
@@ -2146,12 +2544,16 @@ fn frame_storage(program: &Program, func: &Func) -> Vec<String> {
                     frame: Some(units), ..
                 } => Some(one_frame(&out, units)),
                 // A block's frame slot: see `OpKind::NativeBlock`.
-                OpKind::NativeBlock { .. } => Some(format!("{out}.block = alloca %nts.block, align 8")),
+                OpKind::NativeBlock { .. } => {
+                    Some(format!("{out}.block = alloca %nts.block, align 8"))
+                }
                 // A reaction's task, which `nts_callback_task` fills and
                 // `nts_promise_subscribe` copies out of before it returns -- so one
                 // slot per site is enough, and a `.then` in a loop does not take
                 // another 24 bytes of stack every iteration.
-                OpKind::PromiseSubscribe { .. } => Some(format!("{out}.task = alloca %struct.NtsTask, align 8")),
+                OpKind::PromiseSubscribe { .. } => {
+                    Some(format!("{out}.task = alloca %struct.NtsTask, align 8"))
+                }
                 OpKind::ObjectNew { frame: true } => {
                     let placed = object_placement(program, &op.ty)?;
                     Some(format!(
@@ -2166,10 +2568,7 @@ fn frame_storage(program: &Program, func: &Func) -> Vec<String> {
 }
 
 /// Where an object type's fields sit, for the two places that need it.
-fn object_placement(
-    program: &Program,
-    ty: &HirType,
-) -> Option<nts_core::hir::layout::Placement> {
+fn object_placement(program: &Program, ty: &HirType) -> Option<nts_core::hir::layout::Placement> {
     let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
         return None;
     };
@@ -2300,9 +2699,14 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
     // A once-bridge calls `nts_closure_unlend_once` from its own body, which
     // no operation above names -- the bridges are emitted from the operations
     // that create them, not from calls.
-    let once = program.funcs.iter().flat_map(|func| &func.values).any(|op| matches!(op.kind, OpKind::NativeBridge { once: true, .. }));
+    let once = program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .any(|op| matches!(op.kind, OpKind::NativeBridge { once: true, .. }));
     let unlend = "nts_closure_unlend_once".to_owned();
-    if once && !seen.contains(&unlend)
+    if once
+        && !seen.contains(&unlend)
         && let Some(line) = declaration(&unlend, platform)
     {
         seen.push(unlend);
@@ -2326,9 +2730,7 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
     // An Objective-C entry point copies an `NSString` argument into the
     // program's string and gives it back after the call (`imp`), and no
     // operation names either.
-    let ns_string = |ty: &nts_core::hir::native::Type| {
-        matches!(ty, nts_core::hir::native::Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if *handle == nts_core::hir::native::Handle::ns_string())
-    };
+    let ns_string = |ty: &nts_core::hir::native::Type| matches!(ty, nts_core::hir::native::Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if *handle == nts_core::hir::native::Handle::ns_string());
     // And answers the `NSString` it makes of a `string` result.
     let crosses_ns_strings = program
         .foreign_classes
@@ -2349,7 +2751,13 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
         }
     }
     if !nts_codegen_common::objc::block_signatures(program).is_empty() {
-        for helper in ["nts_is_owner_thread", "nts_closure_lend", "nts_closure_unlend", "nts_block_carry", "nts_block_unlend"] {
+        for helper in [
+            "nts_is_owner_thread",
+            "nts_closure_lend",
+            "nts_closure_unlend",
+            "nts_block_carry",
+            "nts_block_unlend",
+        ] {
             let helper = helper.to_owned();
             if !seen.contains(&helper)
                 && let Some(line) = declaration(&helper, platform)
@@ -2377,8 +2785,12 @@ fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
     Ok(match ty {
         HirType::NativePointer(name) => {
             if let nts_core::hir::native::Pointee::Opaque(name) = name
-                && !nts_codegen_common::symbols::is_native_c_identifier(name) {
-                return Err(refuse(func, "an opaque pointee that is not an available C struct tag"));
+                && !nts_codegen_common::symbols::is_native_c_identifier(name)
+            {
+                return Err(refuse(
+                    func,
+                    "an opaque pointee that is not an available C struct tag",
+                ));
             }
             "ptr"
         }
@@ -2438,9 +2850,13 @@ fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
 /// three cannot disagree about sign extension.
 fn widening(slot: &HirType, value: &HirType) -> Option<&'static str> {
     match (slot, value) {
-        (HirType::Int { bits: narrow, signed }, HirType::Int { bits: wide, .. }) if narrow < wide => {
-            Some(if *signed { "sext" } else { "zext" })
-        }
+        (
+            HirType::Int {
+                bits: narrow,
+                signed,
+            },
+            HirType::Int { bits: wide, .. },
+        ) if narrow < wide => Some(if *signed { "sext" } else { "zext" }),
         _ => None,
     }
 }
@@ -2495,7 +2911,14 @@ fn symbol(raw: &str) -> String {
     format!("@{}", nts_codegen_common::symbols::c_identifier(raw))
 }
 
-fn function(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+fn function(
+    program: &Program,
+    cycles: &nts_core::hir::Cycles,
+    func: &Func,
+    platform: Platform,
+    templates: bool,
+) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let returns = return_ty_of(&func.return_type, func)?;
     let mut params = Vec::new();
@@ -2533,7 +2956,8 @@ fn function(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, plat
     prologue.extend(indirect::scratch(platform));
     let public = nts_codegen_common::symbols::is_public(program, func);
     indirect::unexportable(func, platform, public).map_or(Ok(()), |why| Err(refuse(func, why)))?;
-    let (linkage, defined, entry) = indirect::definition(func, platform, (symbol(&func.name), public));
+    let (linkage, defined, entry) =
+        indirect::definition(func, platform, (symbol(&func.name), public));
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
     //
@@ -2625,7 +3049,11 @@ fn function(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, plat
         let _ = writeln!(out, "  {}", terminator(func, &block.terminator)?);
     }
     let _ = writeln!(out, "}}");
-    Ok(if entry { out + &c_entry(func, returns, platform)? } else { out })
+    Ok(if entry {
+        out + &c_entry(func, returns, platform)?
+    } else {
+        out
+    })
 }
 
 /// The entry C calls an exported function through where C passes one of its
@@ -2658,9 +3086,15 @@ fn c_entry(func: &Func, returns: &str, platform: Platform) -> Result<String, Dia
             }
             HirType::Erased => {
                 params.push(format!("ptr %a{at}"));
-                lines.push(format!("%a{at}.v = load {ERASED_TYPE}, ptr %a{at}, align 8"));
-                lines.push(format!("%a{at}.tag = extractvalue {ERASED_TYPE} %a{at}.v, 0"));
-                lines.push(format!("%a{at}.bits = extractvalue {ERASED_TYPE} %a{at}.v, 1"));
+                lines.push(format!(
+                    "%a{at}.v = load {ERASED_TYPE}, ptr %a{at}, align 8"
+                ));
+                lines.push(format!(
+                    "%a{at}.tag = extractvalue {ERASED_TYPE} %a{at}.v, 0"
+                ));
+                lines.push(format!(
+                    "%a{at}.bits = extractvalue {ERASED_TYPE} %a{at}.v, 1"
+                ));
                 arguments.push(format!("i32 %a{at}.tag"));
                 arguments.push(format!("i64 %a{at}.bits"));
             }
@@ -2692,19 +3126,36 @@ fn c_entry(func: &Func, returns: &str, platform: Platform) -> Result<String, Dia
         ),
         HirType::Erased => (
             "void".to_owned(),
-            vec![format!("%r = call {ERASED_TYPE} {call}"), format!("store {ERASED_TYPE} %r, ptr %result, align 8"), "ret void".to_owned()],
+            vec![
+                format!("%r = call {ERASED_TYPE} {call}"),
+                format!("store {ERASED_TYPE} %r, ptr %result, align 8"),
+                "ret void".to_owned(),
+            ],
         ),
         HirType::BigInt if win64 => (
             "<2 x i64>".to_owned(),
-            vec![format!("%r = call i128 {call}"), "%r.v = bitcast i128 %r to <2 x i64>".to_owned(), "ret <2 x i64> %r.v".to_owned()],
+            vec![
+                format!("%r = call i128 {call}"),
+                "%r.v = bitcast i128 %r to <2 x i64>".to_owned(),
+                "ret <2 x i64> %r.v".to_owned(),
+            ],
         ),
-        _ if returns == "void" => ("void".to_owned(), vec![format!("call void {call}"), "ret void".to_owned()]),
+        _ if returns == "void" => (
+            "void".to_owned(),
+            vec![format!("call void {call}"), "ret void".to_owned()],
+        ),
         other => (
             format!("{}{returns}", extension(other)),
-            vec![format!("%r = call {returns} {call}"), format!("ret {returns} %r")],
+            vec![
+                format!("%r = call {returns} {call}"),
+                format!("ret {returns} %r"),
+            ],
         ),
     };
-    let mut out = format!("define {result} {exported}({}) nounwind {{\nentry:\n", params.join(", "));
+    let mut out = format!(
+        "define {result} {exported}({}) nounwind {{\nentry:\n",
+        params.join(", ")
+    );
     for line in lines.iter().chain(&finish) {
         let _ = writeln!(out, "  {line}");
     }
@@ -2841,7 +3292,14 @@ fn field_at(
     Ok((offset, ty_of(ty, func)?))
 }
 
-fn operation(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, value: ValueId, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
+fn operation(
+    program: &Program,
+    cycles: &nts_core::hir::Cycles,
+    func: &Func,
+    value: ValueId,
+    platform: Platform,
+    templates: bool,
+) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = name(value);
     Ok(match &op.kind {
@@ -2871,14 +3329,23 @@ fn operation(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, val
             format!("{out} = fsub double {}, 0.0", float_literal(*number))
         }
         // The cached, required lookup a class send makes (`objc::module`).
-        OpKind::ObjcClass { name, .. } => format!("{out} = call ptr @{}()", nts_codegen_common::objc::class_symbol(name)),
-        OpKind::ObjcSelector { name } => format!("{out} = call ptr @{}()", nts_codegen_common::objc::selector_symbol(name)),
+        OpKind::ObjcClass { name, .. } => format!(
+            "{out} = call ptr @{}()",
+            nts_codegen_common::objc::class_symbol(name)
+        ),
+        OpKind::ObjcSelector { name } => format!(
+            "{out} = call ptr @{}()",
+            nts_codegen_common::objc::selector_symbol(name)
+        ),
         // The size is this target's, so it is resolved here and not in HIR,
         // and spelled as the constant it is.
         OpKind::NativeSizeOf(storage) => {
             let shape = nts_core::hir::layout::native_shape(storage, platform.abi)
                 .ok_or_else(|| refuse(func, "sizeof needs a complete native layout"))?;
-            format!("{out} = fsub double {}, 0.0", float_literal(f64::from(shape.size)))
+            format!(
+                "{out} = fsub double {}, 0.0",
+                float_literal(f64::from(shape.size))
+            )
         }
         OpKind::ConstInt(number) => {
             let ty = ty_of(&op.ty, func)?;
@@ -2892,7 +3359,9 @@ fn operation(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, val
                 .unwrap_or(0);
             format!("{out} = getelementptr i8, ptr @nts_str_{index}, i64 0")
         }
-        OpKind::ConstTemplate { site, .. } => format!("{out} = getelementptr i8, ptr @nts_template_{site}, i64 0"),
+        OpKind::ConstTemplate { site, .. } => {
+            format!("{out} = getelementptr i8, ptr @nts_template_{site}, i64 0")
+        }
         OpKind::ConstBool(flag) => {
             format!("{out} = add i1 0, {}", u8::from(*flag))
         }
@@ -2952,7 +3421,9 @@ fn operation(program: &Program, cycles: &nts_core::hir::Cycles, func: &Func, val
         OpKind::Call { .. } => return call(func, value, &out, platform),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.
-        OpKind::ConstNull | OpKind::ConstUndefined if matches!(op.ty, HirType::Managed(_) | HirType::NativePointer(_)) => {
+        OpKind::ConstNull | OpKind::ConstUndefined
+            if matches!(op.ty, HirType::Managed(_) | HirType::NativePointer(_)) =>
+        {
             format!("{out} = inttoptr i64 0 to ptr")
         }
         // Where there are *two* absences the value is erased and each has a tag
@@ -3066,6 +3537,7 @@ fn representation_change(
 /// an `alloca` and the header written out, which is what the C backend's
 /// `v_frame.header.descriptor = ...` compiles to and one of the reasons escape
 /// analysis is worth having.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn allocation(
     program: &Program,
     cycles: &nts_core::hir::Cycles,
@@ -3096,7 +3568,10 @@ fn allocation(
                     "@nts_desc_ref_acyclic".to_owned()
                 }
             } else if let Some(counting) = nts_codegen_common::counting::counted_element(element) {
-                format!("@{}", nts_codegen_common::counting::array_descriptor_name(&counting))
+                format!(
+                    "@{}",
+                    nts_codegen_common::counting::array_descriptor_name(&counting)
+                )
             } else {
                 format!("@nts_desc_arr_{}", element_tag(element))
             };
@@ -3120,19 +3595,35 @@ fn allocation(
         // A bridge's address is its symbol. `getelementptr i8, ptr @f, i64 0` for
         // the same reason the static closure below uses one: a value needs a
         // name, and there is no no-op cast between two `ptr`s.
-        OpKind::NativeBridge { closure, signature, once, bridging, .. } => {
+        OpKind::NativeBridge {
+            closure,
+            signature,
+            once,
+            bridging,
+            ..
+        } => {
             let layout = closure_layout(program, func, *closure)?;
-            let target = layout
-                .closure_call()
-                .ok_or_else(|| refuse(func, "a callback bridge whose closure publishes no function"))?;
+            let target = layout.closure_call().ok_or_else(|| {
+                refuse(
+                    func,
+                    "a callback bridge whose closure publishes no function",
+                )
+            })?;
             format!(
                 "{out} = getelementptr i8, ptr @{}, i64 0",
                 nts_codegen_common::symbols::bridge_name(target, signature, *once, bridging)
             )
         }
-        OpKind::NativeBlock { invoke, context, signature } => objc::block(&out, *invoke, *context, signature),
+        OpKind::NativeBlock {
+            invoke,
+            context,
+            signature,
+        } => objc::block(&out, *invoke, *context, signature),
         OpKind::DelegateInvoke { signature } => {
-            format!("{out} = getelementptr i8, ptr @{}, i64 0", nts_codegen_common::com::delegate_invoke_symbol(signature))
+            format!(
+                "{out} = getelementptr i8, ptr @{}, i64 0",
+                nts_codegen_common::com::delegate_invoke_symbol(signature)
+            )
         }
         OpKind::ClosureStatic => {
             let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = &op.ty else {
@@ -3361,8 +3852,12 @@ fn counting_or_global(
             let retain = matches!(op.kind, OpKind::Retain(_));
             let operand = name(*object);
             match counter(&func.values[object.0 as usize].ty).map_err(|why| refuse(func, why))? {
-                Counter::Foreign(counting) if retain => format!("call ptr @{}(ptr {operand})", counting.called(true)),
-                Counter::Foreign(counting) => format!("call void @{}(ptr {operand})", counting.called(false)),
+                Counter::Foreign(counting) if retain => {
+                    format!("call ptr @{}(ptr {operand})", counting.called(true))
+                }
+                Counter::Foreign(counting) => {
+                    format!("call void @{}(ptr {operand})", counting.called(false))
+                }
                 _ if retain => format!("call void @nts_retain(ptr {operand})"),
                 _ => format!("call void @nts_release(ptr {operand})"),
             }
@@ -3398,7 +3893,12 @@ fn counting_or_global(
 /// Both are a load through a header, and both differ from an array's rule in
 /// the same direction: a string is immutable and cannot grow, so its count is
 /// the header's own and an index out of range answers NaN rather than trapping.
-fn text_operation(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<String, Diagnostic> {
+fn text_operation(
+    func: &Func,
+    value: ValueId,
+    out: &str,
+    platform: Platform,
+) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -3469,7 +3969,10 @@ fn text_operation(func: &Func, value: ValueId, out: &str, platform: Platform) ->
                 let mut lines = Vec::new();
                 let args = runtime_arguments(func, &out, &[*of], &mut lines, platform)?;
                 let raw = format!("{out}.count");
-                lines.push(format!("{raw} = call i32 @nts_array_length({})", args.join(", ")));
+                lines.push(format!(
+                    "{raw} = call i32 @nts_array_length({})",
+                    args.join(", ")
+                ));
                 lines.push(if returns == "i32" {
                     format!("{out} = add i32 {raw}, 0")
                 } else {
@@ -3505,7 +4008,9 @@ fn text_operation(func: &Func, value: ValueId, out: &str, platform: Platform) ->
             // A statically represented aggregate supplies its header count.
             let mut lines = Vec::new();
             let receiver = name(*of);
-            lines.push(format!("{at} = getelementptr i8, ptr {receiver}, i64 {offset}"));
+            lines.push(format!(
+                "{at} = getelementptr i8, ptr {receiver}, i64 {offset}"
+            ));
             lines.push(format!("{raw} = load i32, ptr {at}{}", tbaa("i32")));
             // A length is a `uint32_t`, so widening it is `zext` and turning
             // it into a float is `uitofp` -- and the difference is not
@@ -3548,9 +4053,20 @@ fn mixed_equality(
     // A handle, compared here rather than by a helper: its family's tag, and
     // the same address.
     if let HirType::NativePointer(_) = other {
-        let tag = tag_of(other).ok_or_else(|| refuse(func, "an equality between an erased value and a C pointer of a family no value holds"))?;
-        lines.push(format!("{out}.ht = extractvalue {ERASED_TYPE} {}, 0", name(erased)));
-        lines.push(format!("{out}.hb = extractvalue {ERASED_TYPE} {}, 1", name(erased)));
+        let tag = tag_of(other).ok_or_else(|| {
+            refuse(
+                func,
+                "an equality between an erased value and a C pointer of a family no value holds",
+            )
+        })?;
+        lines.push(format!(
+            "{out}.ht = extractvalue {ERASED_TYPE} {}, 0",
+            name(erased)
+        ));
+        lines.push(format!(
+            "{out}.hb = extractvalue {ERASED_TYPE} {}, 1",
+            name(erased)
+        ));
         lines.push(format!("{out}.hp = ptrtoint ptr {} to i64", name(against)));
         lines.push(format!("{out}.htag = icmp eq i32 {out}.ht, {tag}"));
         lines.push(format!("{out}.hptr = icmp eq i64 {out}.hb, {out}.hp"));
@@ -3562,7 +4078,10 @@ fn mixed_equality(
     // holds: the tag says `number` and the payload is a double whatever width
     // the other side was proved into.
     let (helper, argument) = match other {
-        HirType::Float { .. } => ("nts_value_eq_number_fn", format!("double {}", name(against))),
+        HirType::Float { .. } => (
+            "nts_value_eq_number_fn",
+            format!("double {}", name(against)),
+        ),
         HirType::Int { .. } => {
             let wide = format!("{out}.n");
             lines.push(format!(
@@ -3587,7 +4106,9 @@ fn mixed_equality(
             ));
         }
     };
-    lines.push(format!("{same} = call zeroext i1 @{helper}({receiver}, {argument})"));
+    lines.push(format!(
+        "{same} = call zeroext i1 @{helper}({receiver}, {argument})"
+    ));
     Ok(lines)
 }
 
@@ -3597,7 +4118,15 @@ fn mixed_equality(
 /// only a tag can answer, and the runtime answers them. The payload eightbyte
 /// holds the union's first member, the `double`, so an integer is converted
 /// before it is stored -- the same conversion `nts_value_of_number(x)` makes.
-fn tagging(program: &Program, func: &Func, value: ValueId, out: &str, platform: Platform, templates: bool) -> Result<String, Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+fn tagging(
+    program: &Program,
+    func: &Func,
+    value: ValueId,
+    out: &str,
+    platform: Platform,
+    templates: bool,
+) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -3624,11 +4153,15 @@ fn tagging(program: &Program, func: &Func, value: ValueId, out: &str, platform: 
             let same = format!("{out}.eq");
             let mut lines = Vec::new();
             if let Some((erased, against, other)) = mixed {
-                lines.extend(mixed_equality(func, &out, &same, erased, against, other, platform)?);
+                lines.extend(mixed_equality(
+                    func, &out, &same, erased, against, other, platform,
+                )?);
             } else {
                 let left = erased_argument(platform, &name(*lhs), &out, 0, &mut lines);
                 let right = erased_argument(platform, &name(*rhs), &out, 1, &mut lines);
-                lines.push(format!("{same} = call zeroext i1 @nts_value_strict_eq({left}, {right})"));
+                lines.push(format!(
+                    "{same} = call zeroext i1 @nts_value_strict_eq({left}, {right})"
+                ));
             }
             lines.push(if matches!(bin, BinOp::Ne) {
                 format!("{out} = xor i1 {same}, true")
@@ -3643,13 +4176,17 @@ fn tagging(program: &Program, func: &Func, value: ValueId, out: &str, platform: 
         // `nts_value_of_number(x)` converts it, and a bool and a pointer are
         // widened to the same eightbyte.
         OpKind::Erase { value, absent } => {
-            use nts_core::hir::{tags, Absent};
+            use nts_core::hir::{Absent, tags};
             let from = &func.values[value.0 as usize].ty;
             let tag = tag_of(from)
                 .ok_or_else(|| refuse(func, &format!("erasing a value of type {from:?}")))?;
             // A function value held at its signature's type is still a
             // function to `typeof`; see `tags::of_prepared`.
-            let tag = if tag == tags::OBJECT { tags::of_prepared(program, from) } else { tag };
+            let tag = if tag == tags::OBJECT {
+                tags::of_prepared(program, from)
+            } else {
+                tag
+            };
             let bits = format!("{out}.bits");
             let widen = payload_from(func, &out, &bits, from, *value)?;
             // **A null reference is not an object**, and which absence it is
@@ -3667,7 +4204,11 @@ fn tagging(program: &Program, func: &Func, value: ValueId, out: &str, platform: 
             let (test, chosen) = match absent {
                 Absent::Impossible => (String::new(), tag.to_string()),
                 Absent::Null | Absent::Undefined => {
-                    let empty = if *absent == Absent::Null { tags::NULL } else { tags::UNDEFINED };
+                    let empty = if *absent == Absent::Null {
+                        tags::NULL
+                    } else {
+                        tags::UNDEFINED
+                    };
                     (
                         format!(
                             "{out}.gone = icmp eq i64 {bits}, 0\n  \
@@ -3675,7 +4216,7 @@ fn tagging(program: &Program, func: &Func, value: ValueId, out: &str, platform: 
                         ),
                         format!("{out}.tag"),
                     )
-                },
+                }
             };
             format!(
                 "{widen}\n  {test}{out}.half = insertvalue {ERASED_TYPE} undef, i32 {chosen}, 0\n  \
@@ -3692,7 +4233,9 @@ fn tagging(program: &Program, func: &Func, value: ValueId, out: &str, platform: 
             // family's tag, or an absence, whose payload is zero and so reads
             // back as the null pointer; anything else aborts in the runtime.
             if let HirType::NativePointer(_) = &op.ty {
-                let wanted = tag_of(&op.ty).ok_or_else(|| refuse(func, "reading back a C pointer of a family no value holds"))?;
+                let wanted = tag_of(&op.ty).ok_or_else(|| {
+                    refuse(func, "reading back a C pointer of a family no value holds")
+                })?;
                 return Ok(format!(
                     "{read}\n  {out}.found = extractvalue {ERASED_TYPE} {}, 0\n  \
                      call void @nts_handle_check(i32 {out}.found, i32 {wanted})\n  \
@@ -3700,8 +4243,15 @@ fn tagging(program: &Program, func: &Func, value: ValueId, out: &str, platform: 
                     name(*value)
                 ));
             }
-            if templates && matches!(op.ty, HirType::Managed(nts_core::hir::ManagedType::Array(_))) {
-                return Ok(format!("{read}\n  {out}.reference = inttoptr i64 {bits} to ptr\n  {out} = call ptr @nts_array_writable(ptr {out}.reference)"));
+            if templates
+                && matches!(
+                    op.ty,
+                    HirType::Managed(nts_core::hir::ManagedType::Array(_))
+                )
+            {
+                return Ok(format!(
+                    "{read}\n  {out}.reference = inttoptr i64 {bits} to ptr\n  {out} = call ptr @nts_array_writable(ptr {out}.reference)"
+                ));
             }
             let narrow = payload_into(func, &out, &bits, &op.ty)?;
             format!("{read}\n  {narrow}")
@@ -3751,7 +4301,8 @@ fn erased_reference(out: &str, value: &str) -> (String, String) {
 
 /// A call's receiver, `args[0]`.
 fn receiver_name(args: &[ValueId]) -> String {
-    args.first().map_or_else(|| "null".to_owned(), |value| name(*value))
+    args.first()
+        .map_or_else(|| "null".to_owned(), |value| name(*value))
 }
 
 fn method_pointer(out: &str, receiver: &str, slot: u32, before: &mut Vec<String>) -> String {
@@ -3870,9 +4421,17 @@ fn runtime_arguments(
         let ty = &func.values[arg.0 as usize].ty;
         if indirect::is_indirect(ty) {
             if slot == indirect::SLOTS {
-                return Err(refuse(func, "a runtime call passing more sixteen-byte values than Win64's scratch slots hold"));
+                return Err(refuse(
+                    func,
+                    "a runtime call passing more sixteen-byte values than Win64's scratch slots hold",
+                ));
             }
-            rendered.push(indirect::argument(ty_of(ty, func)?, &name(*arg), slot, before));
+            rendered.push(indirect::argument(
+                ty_of(ty, func)?,
+                &name(*arg),
+                slot,
+                before,
+            ));
             slot += 1;
         } else {
             rendered.extend(arguments(func, out, &[*arg], before)?);
@@ -3915,6 +4474,7 @@ fn declared_result(returns: &str) -> (String, &str) {
 /// struct. And an argument whose type is not the one the runtime declares is
 /// converted -- C does that at the call and says nothing, which is how
 /// `nts_tag_name(uint32_t)` came to be handed a double.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     if let OpKind::Call {
@@ -3991,7 +4551,11 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
             // convention; between two of this program's functions, which
             // follow this backend's.
             let into_c = matches!(callee, Callee::External(_));
-            rendered.extend(if into_c { runtime_arguments(func, &out, args, &mut before, platform)? } else { arguments(func, &out, args, &mut before)? });
+            rendered.extend(if into_c {
+                runtime_arguments(func, &out, args, &mut before, platform)?
+            } else {
+                arguments(func, &out, args, &mut before)?
+            });
             // A helper the table does not carry is one this backend cannot
             // call. `nts_to_uint8` is `static inline` in the header, so there
             // is no symbol to link against and no signature to read -- and
@@ -4028,14 +4592,25 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
                 Some(slot) => method_pointer(&out, &receiver_name(args), slot, &mut before),
             };
             // A runtime helper is called at its declared result (`declared_result`).
-            let declared = if into_c { signatures::signature_on(&called, platform) } else { None };
-            if let Some(call) = declared.and_then(|_| wide_result(platform, &op.ty, &out, &callable, &rendered)) {
+            let declared = if into_c {
+                signatures::signature_on(&called, platform)
+            } else {
+                None
+            };
+            if let Some(call) =
+                declared.and_then(|_| wide_result(platform, &op.ty, &out, &callable, &rendered))
+            {
                 before.push(call);
                 return Ok(before.join("\n  "));
             }
-            let (attribute, call_returns) =
-                declared.map_or_else(|| (extension(&op.ty).to_owned(), call_returns), |known| declared_result(known.returns));
-            let call = format!("call {attribute}{call_returns} {callable}({})", rendered.join(", "));
+            let (attribute, call_returns) = declared.map_or_else(
+                || (extension(&op.ty).to_owned(), call_returns),
+                |known| declared_result(known.returns),
+            );
+            let call = format!(
+                "call {attribute}{call_returns} {callable}({})",
+                rendered.join(", ")
+            );
             let call = if returns == "void" && call_returns != "void" {
                 format!("{out}.unused = {call}")
             } else if returns == "void" {
@@ -4087,7 +4662,9 @@ fn payload_from(
             )
         }
         HirType::Bool => format!("{bits} = zext i1 {} to i64", name(value)),
-        HirType::Managed(_) | HirType::NativePointer(_) => format!("{bits} = ptrtoint ptr {} to i64", name(value)),
+        HirType::Managed(_) | HirType::NativePointer(_) => {
+            format!("{bits} = ptrtoint ptr {} to i64", name(value))
+        }
         other => return Err(refuse(func, &format!("erasing a value of type {other:?}"))),
     })
 }
@@ -4346,12 +4923,7 @@ fn arithmetic(
     if float
         && matches!(
             op,
-            BinOp::BitAnd
-                | BinOp::BitOr
-                | BinOp::BitXor
-                | BinOp::Shl
-                | BinOp::Shr
-                | BinOp::UShr
+            BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr | BinOp::UShr
         )
     {
         return Ok(float_bitwise(out, op, lhs, rhs));
@@ -4412,9 +4984,17 @@ fn float_bitwise(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId) -> String {
     } else {
         String::new()
     };
-    let right = if shift { format!("{out}.c") } else { format!("{out}.r") };
+    let right = if shift {
+        format!("{out}.c")
+    } else {
+        format!("{out}.r")
+    };
     // `>>>` is the one bitwise result that is a `uint32` rather than an `int32`.
-    let widen = if matches!(op, BinOp::UShr) { "uitofp" } else { "sitofp" };
+    let widen = if matches!(op, BinOp::UShr) {
+        "uitofp"
+    } else {
+        "sitofp"
+    };
     format!(
         "{out}.l = call i32 @nts_to_int32_fn(double {0})\n  \
          {out}.r = call i32 @nts_to_int32_fn(double {1})\n  \
@@ -4447,7 +5027,9 @@ fn wide_shift(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId, platform: Platfo
         let mut lines = Vec::new();
         let left = indirect::argument("i128", &name(lhs), 0, &mut lines);
         let right = indirect::argument("i128", &name(rhs), 1, &mut lines);
-        lines.push(format!("{out}.v = call <2 x i64> @{helper}({left}, {right})"));
+        lines.push(format!(
+            "{out}.v = call <2 x i64> @{helper}({left}, {right})"
+        ));
         lines.push(format!("{out} = bitcast <2 x i64> {out}.v to i128"));
         return lines.join("\n  ");
     }
@@ -4617,7 +5199,11 @@ fn converted(
 /// against a tagged pair -- so a managed arm here would pass one as the
 /// other, and so would asking this anywhere but at a bridge.
 fn passes_as_is(from: &HirType, to: &HirType) -> bool {
-    from == to || matches!((from, to), (HirType::NativePointer(_), HirType::NativePointer(_)))
+    from == to
+        || matches!(
+            (from, to),
+            (HirType::NativePointer(_), HirType::NativePointer(_))
+        )
 }
 
 /// A conversion **to** `bool`, which is a comparison rather than a cast.
@@ -4695,8 +5281,18 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
         // unsigned source, `sext` for a signed one -- the same rule the integer
         // arm above states, and the reason this is not folded into it is that
         // `BigInt` is its own `HirType` rather than a wide `Int`.
-        (HirType::Int { signed: from_signed, .. }, HirType::BigInt) => {
-            if *from_signed { "sext" } else { "zext" }
+        (
+            HirType::Int {
+                signed: from_signed,
+                ..
+            },
+            HirType::BigInt,
+        ) => {
+            if *from_signed {
+                "sext"
+            } else {
+                "zext"
+            }
         }
         // And back: the low 64 bits, which is `BigInt.asIntN(64, x)` for a
         // signed destination and `asUintN` for an unsigned one. Both are the
@@ -4896,7 +5492,9 @@ fn unary(
             HirType::Erased => {
                 let mut lines = Vec::new();
                 let argument = erased_argument(platform, &name(operand), out, 0, &mut lines);
-                lines.push(format!("{out} = call zeroext i1 @nts_value_truthy_fn({argument})"));
+                lines.push(format!(
+                    "{out} = call zeroext i1 @nts_value_truthy_fn({argument})"
+                ));
                 lines.join("\n  ")
             }
             _ => format!("{out} = fcmp one {ty} {}, 0.0", name(operand)),
@@ -5040,7 +5638,7 @@ fn open_chain_op(
                 open_chain_name(arms, ty, false),
                 name(*object)
             ))
-        },
+        }
         OpKind::OpenFieldSet {
             object,
             arms,
@@ -5054,8 +5652,11 @@ fn open_chain_op(
                 name(*object),
                 name(*value)
             ))
-        },
-        _ => Err(refuse(func, "an open field access this dispatch did not recognise")),
+        }
+        _ => Err(refuse(
+            func,
+            "an open field access this dispatch did not recognise",
+        )),
     }
 }
 
@@ -5075,7 +5676,15 @@ fn open_chain_call(
     if arms.is_empty() {
         return Err(refuse(func, "an open field access over no arms"));
     }
-    if open_chain_body(program, &open_chain_name(arms, ty, stored), arms, ty, stored).is_none() {
+    if open_chain_body(
+        program,
+        &open_chain_name(arms, ty, stored),
+        arms,
+        ty,
+        stored,
+    )
+    .is_none()
+    {
         return Err(refuse(
             func,
             "an open field access over an arm with no layout, or an index outside one",
@@ -5093,11 +5702,13 @@ fn open_chains(program: &Program) -> String {
                 OpKind::OpenFieldGet { arms, .. } => (arms, None),
                 OpKind::OpenFieldSet { arms, value, .. } => {
                     (arms, Some(&func.values[value.0 as usize].ty))
-                },
+                }
                 _ => continue,
             };
             let carried = stored.unwrap_or(&op.ty);
-            let Ok(ty) = ty_of(carried, func) else { continue };
+            let Ok(ty) = ty_of(carried, func) else {
+                continue;
+            };
             let name = open_chain_name(arms, ty, stored.is_some());
             if !seen.insert(name.clone()) {
                 continue;
@@ -5145,7 +5756,8 @@ fn open_chain_body(
     } else {
         format!("{ERASED_TYPE} %v")
     };
-    let mut text = format!("define internal {result} @\"{symbol}\"({params}) alwaysinline {{\nentry:\n");
+    let mut text =
+        format!("define internal {result} @\"{symbol}\"({params}) alwaysinline {{\nentry:\n");
     let _ = writeln!(text, "  %t = extractvalue {ERASED_TYPE} %v, 0");
     let _ = writeln!(text, "  %p = extractvalue {ERASED_TYPE} %v, 1");
     let _ = writeln!(text, "  %ref = inttoptr i64 %p to ptr");
@@ -5191,10 +5803,7 @@ fn open_chain_body(
     // rather than `unreachable` alone, because a wrong set announcing itself is
     // the whole reason to test the arms instead of casting the pointer.
     let _ = writeln!(text, "miss:");
-    let _ = writeln!(
-        text,
-        "  call void @nts_no_arm(ptr @\"{symbol}.member\")"
-    );
+    let _ = writeln!(text, "  call void @nts_no_arm(ptr @\"{symbol}.member\")");
     let _ = writeln!(text, "  unreachable");
     let _ = writeln!(text, "done:");
     if stored {
@@ -5243,7 +5852,6 @@ fn counting_declarations(program: &Program) -> String {
             counting.called(true),
             counting.called(false)
         );
-
     }
     text
 }

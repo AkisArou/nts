@@ -1,22 +1,44 @@
 //! Address native storage using the shared C layout. Never attach managed
 //! TBAA, noalias, or inbounds promises to a caller-owned address.
-use super::{Func, OpKind, HirType, Diagnostic, Platform, name, refuse, ty_of, widening};
+use super::{Diagnostic, Func, HirType, OpKind, Platform, name, refuse, ty_of, widening};
 use nts_core::hir::native::Pointee;
 
-pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str, platform: Platform) -> Result<String, Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn operation(
+    func: &Func,
+    kind: &OpKind,
+    result: &HirType,
+    out: &str,
+    platform: Platform,
+) -> Result<String, Diagnostic> {
     match *kind {
         OpKind::NativeLocal { count } => {
-            let HirType::NativePointer(element) = result else { return Err(refuse(func, "local needs native layout")); };
-            let shape = nts_core::hir::layout::native_shape(element, platform.abi).ok_or_else(|| refuse(func, "local needs native layout"))?;
+            let HirType::NativePointer(element) = result else {
+                return Err(refuse(func, "local needs native layout"));
+            };
+            let shape = nts_core::hir::layout::native_shape(element, platform.abi)
+                .ok_or_else(|| refuse(func, "local needs native layout"))?;
             let bytes = shape.size * count;
-            return Ok(format!("store [{bytes} x i8] zeroinitializer, ptr {out}, align {}", shape.align));
+            return Ok(format!(
+                "store [{bytes} x i8] zeroinitializer, ptr {out}, align {}",
+                shape.align
+            ));
         }
         OpKind::NativeMalloc { bytes } => {
-            let HirType::NativePointer(element) = result else { return Err(refuse(func, "malloc needs native layout")); };
-            let size = nts_core::hir::layout::native_shape(element, platform.abi).ok_or_else(|| refuse(func, "malloc needs native layout"))?.size;
-            return Ok(format!("{out} = call ptr @nts_native_malloc(double {}, i64 {size})", name(bytes)));
+            let HirType::NativePointer(element) = result else {
+                return Err(refuse(func, "malloc needs native layout"));
+            };
+            let size = nts_core::hir::layout::native_shape(element, platform.abi)
+                .ok_or_else(|| refuse(func, "malloc needs native layout"))?
+                .size;
+            return Ok(format!(
+                "{out} = call ptr @nts_native_malloc(double {}, i64 {size})",
+                name(bytes)
+            ));
         }
-        OpKind::NativeFree { pointer } => return Ok(format!("call void @free(ptr {})", name(pointer))),
+        OpKind::NativeFree { pointer } => {
+            return Ok(format!("call void @free(ptr {})", name(pointer)));
+        }
         // `llvm.memcpy` rather than a load and a store of an aggregate: this
         // backend never names a struct type -- every address here is a byte
         // GEP -- so there is no aggregate value to move through a register.
@@ -24,7 +46,10 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str,
         // The alignment is the type's, which is what the destination and the
         // source both have: `copy` refuses two different pointees, so there is
         // one alignment and not a smaller of two.
-        OpKind::NativeCopy { destination, source } => {
+        OpKind::NativeCopy {
+            destination,
+            source,
+        } => {
             let HirType::NativePointer(element) = &func.value(destination).ty else {
                 return Err(refuse(func, "a copy without a native pointer"));
             };
@@ -41,10 +66,15 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str,
         }
         _ => {}
     }
-    let (OpKind::NativeLoad { pointer, .. } | OpKind::NativeStore { pointer, .. }
-        | OpKind::NativeIndexAddress { pointer, .. } | OpKind::NativeFieldAddress { pointer, .. }
-        | OpKind::NativeBitLoad { pointer, .. } | OpKind::NativeBitStore { pointer, .. }) = *kind
-    else { unreachable!("only native memory operations are routed here"); };
+    let (OpKind::NativeLoad { pointer, .. }
+    | OpKind::NativeStore { pointer, .. }
+    | OpKind::NativeIndexAddress { pointer, .. }
+    | OpKind::NativeFieldAddress { pointer, .. }
+    | OpKind::NativeBitLoad { pointer, .. }
+    | OpKind::NativeBitStore { pointer, .. }) = *kind
+    else {
+        unreachable!("only native memory operations are routed here");
+    };
     let HirType::NativePointer(storage) = &func.value(pointer).ty else {
         return Err(refuse(func, "native memory without a pointer"));
     };
@@ -54,30 +84,52 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str,
             bit_field(func, kind, storage, field, &base, out, platform)?
         }
         OpKind::NativeFieldAddress { field, .. } => {
-            let Pointee::Record(layout) = storage else { return Err(refuse(func, "field address without a native struct")); };
-            let placed = nts_core::hir::layout::native_place(layout, platform.abi).ok_or_else(|| refuse(func, "native struct without a layout"))?;
-            let offset = placed.offsets.get(field as usize).ok_or_else(|| refuse(func, "invalid native field index"))?;
+            let Pointee::Record(layout) = storage else {
+                return Err(refuse(func, "field address without a native struct"));
+            };
+            let placed = nts_core::hir::layout::native_place(layout, platform.abi)
+                .ok_or_else(|| refuse(func, "native struct without a layout"))?;
+            let offset = placed
+                .offsets
+                .get(field as usize)
+                .ok_or_else(|| refuse(func, "invalid native field index"))?;
             format!("{out} = getelementptr i8, ptr {base}, i64 {offset}")
         }
         OpKind::NativeIndexAddress { index, .. } => {
-            let shape = nts_core::hir::layout::native_shape(storage, platform.abi).ok_or_else(|| refuse(func, "native pointer without an element size"))?;
-            format!("{out}.offset = mul i64 {}, {}\n  {out} = getelementptr i8, ptr {base}, i64 {out}.offset", name(index), shape.size)
+            let shape = nts_core::hir::layout::native_shape(storage, platform.abi)
+                .ok_or_else(|| refuse(func, "native pointer without an element size"))?;
+            format!(
+                "{out}.offset = mul i64 {}, {}\n  {out} = getelementptr i8, ptr {base}, i64 {out}.offset",
+                name(index),
+                shape.size
+            )
         }
         OpKind::NativeLoad { index, .. } | OpKind::NativeStore { index, .. } => {
             // The slot C laid out, which a `c_long` under Win64 makes
             // narrower than the value: stored truncated and loaded widened,
             // with the address arithmetic on the slot's own width.
-            let slot = storage.abi_element_type(platform.abi).ok_or_else(|| refuse(func, "native memory without a loadable element"))?;
-            let value = storage.element_type().ok_or_else(|| refuse(func, "native memory without a loadable element"))?;
+            let slot = storage
+                .abi_element_type(platform.abi)
+                .ok_or_else(|| refuse(func, "native memory without a loadable element"))?;
+            let value = storage
+                .element_type()
+                .ok_or_else(|| refuse(func, "native memory without a loadable element"))?;
             let widen = widening(&slot, &value);
             let element = ty_of(&slot, func)?;
-            let address = format!("{out}.at = getelementptr {element}, ptr {base}, i64 {}", name(index));
+            let address = format!(
+                "{out}.at = getelementptr {element}, ptr {base}, i64 {}",
+                name(index)
+            );
             // An omitted `align` means the ABI alignment of the type, which for
             // a member of a packed record is a promise nothing made: `data` sits
             // at offset 4 of `struct epoll_event` and LLVM would assume 8. The
             // suffix is spelled only where it is not the default, so ordinary
             // native memory keeps the IR it had.
-            let aligned = if matches!(storage, Pointee::Unaligned(_)) { ", align 1" } else { "" };
+            let aligned = if matches!(storage, Pointee::Unaligned(_)) {
+                ", align 1"
+            } else {
+                ""
+            };
             let access = match kind {
                 OpKind::NativeStore { value: stored, .. } if widen.is_some() => format!(
                     "{out}.narrow = trunc {} {} to {element}\n  store {element} {out}.narrow, ptr {out}.at{aligned}",
@@ -101,34 +153,59 @@ pub(super) fn operation(func: &Func, kind: &OpKind, result: &HirType, out: &str,
     })
 }
 
-
 pub(super) fn stack_storage(func: &Func, platform: Platform) -> Vec<String> {
-    func.blocks.iter().flat_map(|b| &b.ops).filter_map(|at| {
-        let op = func.value(*at);
-        let OpKind::NativeLocal { count } = op.kind else { return None; };
-        let HirType::NativePointer(element) = &op.ty else { return None; };
-        let shape = nts_core::hir::layout::native_shape(element, platform.abi)?;
-        Some(format!("{} = alloca [{} x i8], align {}", name(*at), shape.size * count, shape.align))
-    }).collect()
+    func.blocks
+        .iter()
+        .flat_map(|b| &b.ops)
+        .filter_map(|at| {
+            let op = func.value(*at);
+            let OpKind::NativeLocal { count } = op.kind else {
+                return None;
+            };
+            let HirType::NativePointer(element) = &op.ty else {
+                return None;
+            };
+            let shape = nts_core::hir::layout::native_shape(element, platform.abi)?;
+            Some(format!(
+                "{} = alloca [{} x i8], align {}",
+                name(*at),
+                shape.size * count,
+                shape.align
+            ))
+        })
+        .collect()
 }
 
 pub(super) fn helpers(program: &super::Program) -> String {
-    let allocate = program.funcs.iter().any(|f| f.values.iter().any(|op| matches!(op.kind, OpKind::NativeMalloc { .. })));
-    let free = program.funcs.iter().any(|f| f.values.iter().any(|op| matches!(op.kind, OpKind::NativeFree { .. })));
+    let allocate = program.funcs.iter().any(|f| {
+        f.values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::NativeMalloc { .. }))
+    });
+    let free = program.funcs.iter().any(|f| {
+        f.values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::NativeFree { .. }))
+    });
     // The intrinsic is declared only where it is used, like the two above. An
     // unused `declare` is harmless and an undeclared use is not, so the
     // condition is the same shape either way -- this one exists so the IR of a
     // program that copies nothing is unchanged.
-    let copies = program
-        .funcs
-        .iter()
-        .any(|f| f.values.iter().any(|op| matches!(op.kind, OpKind::NativeCopy { .. })));
+    let copies = program.funcs.iter().any(|f| {
+        f.values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::NativeCopy { .. }))
+    });
     let mut text = String::new();
     if copies {
         text.push_str("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)\n");
     }
-    if free { text.push_str("declare void @free(ptr)\n"); }
-    if allocate { text.push_str(r"declare ptr @malloc(i64)
+    if free {
+        text.push_str("declare void @free(ptr)\n");
+    }
+    if allocate {
+        text.push_str(
+            r"declare ptr @malloc(i64)
 define internal ptr @nts_native_malloc(double %bytes, i64 %minimum) {
 entry:
   %min = uitofp i64 %minimum to double
@@ -146,7 +223,9 @@ allocate:
 invalid:
   ret ptr null
 }
-"); }
+",
+        );
+    }
     text
 }
 
@@ -157,7 +236,7 @@ invalid:
 /// are, so a width this binding gets wrong is invisible there. It is
 /// visible here, and `agrees_with_c` is then two independent derivations
 /// of one answer rather than one derivation checked against itself.
-        fn bit_field(
+fn bit_field(
     func: &Func,
     kind: &OpKind,
     storage: &Pointee,
@@ -167,7 +246,10 @@ invalid:
     platform: Platform,
 ) -> Result<String, Diagnostic> {
     let Pointee::Record(layout) = storage else {
-        return Err(refuse(func, "a bit-field through a pointer to something else"));
+        return Err(refuse(
+            func,
+            "a bit-field through a pointer to something else",
+        ));
     };
     let placed = nts_core::hir::layout::native_place(layout, platform.abi)
         .ok_or_else(|| refuse(func, "a bit-field in a record with no layout"))?;
@@ -210,11 +292,19 @@ invalid:
     let last = (at + width - 1) / 8;
     let span = (last - first + 1) * 8;
     let shift = at - first * 8;
-    let ones = |bits: u64| if bits >= 64 { u64::MAX } else { (1u64 << bits) - 1 };
+    let ones = |bits: u64| {
+        if bits >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
+        }
+    };
     let mask = ones(width);
     let held = format!("i{span}");
     let ty = ty_of(&unit_ty, func)?;
-    let mut lines = vec![format!("{out}.at = getelementptr i8, ptr {base}, i64 {first}")];
+    let mut lines = vec![format!(
+        "{out}.at = getelementptr i8, ptr {base}, i64 {first}"
+    )];
 
     if let OpKind::NativeBitStore { value, .. } = *kind {
         // Read, clear, place, write back. The clear mask is kept inside the
@@ -228,7 +318,10 @@ invalid:
         };
         lines.extend([
             format!("{out}.old = load {held}, ptr {out}.at, align 1"),
-            format!("{out}.clear = and {held} {out}.old, {}", !(mask << shift) & ones(span)),
+            format!(
+                "{out}.clear = and {held} {out}.old, {}",
+                !(mask << shift) & ones(span)
+            ),
             widened,
             format!("{out}.keep = and {held} {out}.wide, {mask}"),
             format!("{out}.put = shl {held} {out}.keep, {shift}"),
@@ -253,8 +346,14 @@ invalid:
     };
     lines.push(narrowed);
     if signed && width < unit_bits {
-        lines.push(format!("{out}.top = shl {ty} {out}.val, {}", unit_bits - width));
-        lines.push(format!("{out} = ashr {ty} {out}.top, {}", unit_bits - width));
+        lines.push(format!(
+            "{out}.top = shl {ty} {out}.val, {}",
+            unit_bits - width
+        ));
+        lines.push(format!(
+            "{out} = ashr {ty} {out}.top, {}",
+            unit_bits - width
+        ));
     } else {
         lines.push(format!("{out} = add {ty} {out}.val, 0"));
     }

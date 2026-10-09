@@ -29,7 +29,9 @@ fn check(probe: &FuncBuilder<'_>, id: NodeId) -> Option<Check> {
     if probe.kind_of(id) == Some(syntax::NON_NULL_EXPRESSION) {
         return probe
             .type_of(id)
-            .is_some_and(|target| target.is_managed() || matches!(target, HirType::NativePointer(_)))
+            .is_some_and(|target| {
+                target.is_managed() || matches!(target, HirType::NativePointer(_))
+            })
             .then_some(Check::Present);
     }
     if probe.kind_of(id) != Some(syntax::AS_EXPRESSION) {
@@ -134,8 +136,10 @@ pub(super) fn lower(
     // assertion tests the value's own absence -- for a host handle, a pointer
     // compared with NULL -- and a handle has no erased form to refuse over
     // (blockers/a-non-null-assertion-on-a-host-handle-is-refused).
-    if matches!(check(builder, id), Some(Check::Primitive { .. } | Check::Class(_)))
-        && actual_is_unerasable(builder, value)
+    if matches!(
+        check(builder, id),
+        Some(Check::Primitive { .. } | Check::Class(_))
+    ) && actual_is_unerasable(builder, value)
     {
         return Err(builder.unsupported(
             id,
@@ -321,7 +325,11 @@ fn actual_is_unerasable(builder: &FuncBuilder<'_>, value: ValueId) -> bool {
 /// Only a dereference is checked: an absence question about the read (`+`,
 /// `=== null`, `??`) is answered from its declaration (`read_type`) instead,
 /// and gives JavaScript's answer rather than a throw.
-pub(super) fn dereferenced_getter_read(builder: &mut FuncBuilder<'_>, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+pub(super) fn dereferenced_getter_read(
+    builder: &mut FuncBuilder<'_>,
+    id: NodeId,
+    value: ValueId,
+) -> Result<ValueId, Diagnostic> {
     if !getter_read_can_throw(builder, id) {
         return Ok(value);
     }
@@ -340,7 +348,9 @@ pub(super) fn dereferenced_getter_read(builder: &mut FuncBuilder<'_>, id: NodeId
 /// Whether [`dereferenced_getter_read`] checks the read at `id`: one fact for
 /// lowering and for the effect analysis that decides who can catch it.
 pub(super) fn getter_read_can_throw(probe: &FuncBuilder<'_>, id: NodeId) -> bool {
-    probe.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) && probe.dereferenced(id) && probe.narrowed_past_absence(id)
+    probe.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+        && probe.dereferenced(id)
+        && probe.narrowed_past_absence(id)
 }
 
 /// A native safety failure is a checked `TypeError` where the program can

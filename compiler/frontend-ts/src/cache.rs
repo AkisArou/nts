@@ -83,7 +83,11 @@ pub fn snapshot<S: SemanticSource>(
     // A source transform answers too: its version and options decide the
     // snapshot as much as the files do, so they are part of the question.
     let identity = source.identity();
-    let tool = &*if identity.is_empty() { tool.to_owned() } else { format!("{tool}+{identity}") };
+    let tool = &*if identity.is_empty() {
+        tool.to_owned()
+    } else {
+        format!("{tool}+{identity}")
+    };
     // **The key is a path, so it has to be *the* path.**
     //
     // It was `tsconfig.as_str()` verbatim, and `nts build` run from a project
@@ -145,9 +149,10 @@ pub fn snapshot<S: SemanticSource>(
         && entry.tool == tool
         && entry.listing == listing
         && entry.configs == config_chain(&canonical)
-        && entry.read.iter().all(|(file, seen)| {
-            std::fs::read(file).is_ok_and(|bytes| hash_of(&bytes) == *seen)
-        })
+        && entry
+            .read
+            .iter()
+            .all(|(file, seen)| std::fs::read(file).is_ok_and(|bytes| hash_of(&bytes) == *seen))
     {
         // **Touched, which is what makes the sweep an LRU rather than a cull by
         // age.** An entry is written once and then only *read*, so its mtime is
@@ -433,7 +438,11 @@ fn cache_dir() -> Option<Utf8PathBuf> {
         .ok()
         .filter(|dir| !dir.is_empty())
         .map(Utf8PathBuf::from)
-        .or_else(|| std::env::var("HOME").ok().map(|home| Utf8PathBuf::from(home).join(".cache")));
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|home| Utf8PathBuf::from(home).join(".cache"))
+        });
     base.map(|dir| dir.join("nts/snapshots")).or_else(|| {
         Utf8PathBuf::from_path_buf(std::env::temp_dir())
             .ok()
@@ -449,7 +458,11 @@ fn cache_dir() -> Option<Utf8PathBuf> {
 /// cannot be resolved falls back to the path itself, which keys no worse than
 /// before.
 fn absolute(path: &Utf8Path) -> Utf8PathBuf {
-    let path = if path.as_str().is_empty() { Utf8Path::new(".") } else { path };
+    let path = if path.as_str().is_empty() {
+        Utf8Path::new(".")
+    } else {
+        path
+    };
     std::fs::canonicalize(path)
         .ok()
         .and_then(|resolved| Utf8PathBuf::from_path_buf(resolved).ok())
@@ -529,7 +542,11 @@ fn project_listing(tsconfig: &Utf8Path) -> Vec<String> {
     // Defence in depth for the bug above: a caller reaching this with a bare
     // relative path got an empty listing, and an empty listing is a guard that
     // passes for everything rather than a project with no sources in it.
-    let root = if root.as_str().is_empty() { Utf8Path::new(".") } else { root };
+    let root = if root.as_str().is_empty() {
+        Utf8Path::new(".")
+    } else {
+        root
+    };
     let mut found = Vec::new();
     walk(root, &mut found, 0);
     found.sort_unstable();
@@ -614,10 +631,25 @@ mod tests {
 
         let first = stamp_of(&original, &dir);
         assert_ne!(first, 0, "a readable executable has a stamp");
-        assert_eq!(stamp_of(&copy, &dir), first, "a copy shares the original's entries");
-        assert_ne!(stamp_of(&other, &dir), first, "different bytes are a different compiler");
-        assert_eq!(stamp_of(&original, &dir), first, "the remembered hash answers again");
-        assert!(dir.join("compilers").is_dir(), "the hash is remembered beside the entries");
+        assert_eq!(
+            stamp_of(&copy, &dir),
+            first,
+            "a copy shares the original's entries"
+        );
+        assert_ne!(
+            stamp_of(&other, &dir),
+            first,
+            "different bytes are a different compiler"
+        );
+        assert_eq!(
+            stamp_of(&original, &dir),
+            first,
+            "the remembered hash answers again"
+        );
+        assert!(
+            dir.join("compilers").is_dir(),
+            "the hash is remembered beside the entries"
+        );
         drop(std::fs::remove_dir_all(&root));
     }
 
@@ -699,7 +731,10 @@ mod bounding {
         for index in 0_u64..4 {
             let path = dir.join(format!("{index}.postcard"));
             std::fs::write(&path, vec![0_u8; 100]).expect("write");
-            let file = std::fs::File::options().write(true).open(&path).expect("open");
+            let file = std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .expect("open");
             file.set_modified(now - Duration::from_secs(3600 * (4 - index)))
                 .expect("stamp");
             made.push(path);
@@ -736,6 +771,9 @@ mod bounding {
 
     #[test]
     fn a_directory_that_is_not_there_is_not_an_error() {
-        sweep(&Utf8PathBuf::from("/nonexistent/nts-snapshots-should-not-exist"), 0);
+        sweep(
+            &Utf8PathBuf::from("/nonexistent/nts-snapshots-should-not-exist"),
+            0,
+        );
     }
 }

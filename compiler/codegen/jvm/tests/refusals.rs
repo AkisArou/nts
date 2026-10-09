@@ -54,15 +54,23 @@ fn declined() -> Vec<(String, String)> {
     )
     .expect("a UTF-8 path");
 
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).expect("snapshot");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot");
     // **The fixture must typecheck.** Every shape in it is legal TypeScript that
     // this backend declines; one that failed the checker would be refused a
     // stage earlier and would test the checker instead.
-    assert!(!snapshot.has_errors(), "the refusals fixture should typecheck");
+    assert!(
+        !snapshot.has_errors(),
+        "the refusals fixture should typecheck"
+    );
 
     let prepared = hir::prepare_with(
         &snapshot,
-        &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() },
+        &hir::Options {
+            provider: hir::Provider::NoGc,
+            ..hir::Options::default()
+        },
     )
     .expect("prepared HIR should verify");
 
@@ -89,12 +97,20 @@ fn two_properties_that_become_one_jvm_field_are_refused_by_name() {
     // Naming one of the two would leave a reader hunting for the other, and the
     // whole value of this refusal over `ClassFormatError` is that it says which
     // two lines of their program disagree.
-    assert!(message.contains("`a-b`"), "names the first property: {message}");
-    assert!(message.contains("`a$b_1`"), "names the second property and the field they collide on: {message}");
+    assert!(
+        message.contains("`a-b`"),
+        "names the first property: {message}"
+    );
+    assert!(
+        message.contains("`a$b_1`"),
+        "names the second property and the field they collide on: {message}"
+    );
     // The control: two properties of one spelling, and nothing else, now load
     // as `a$b` and `a$b_1` -- C's rule, `hierarchy::field_name`.
     assert!(
-        !diagnostics.iter().any(|(code, message)| code == "NTS4013" && message.contains("Spelled")),
+        !diagnostics
+            .iter()
+            .any(|(code, message)| code == "NTS4013" && message.contains("Spelled")),
         "two properties of one spelling are told apart by index: {diagnostics:?}"
     );
 }
@@ -124,7 +140,10 @@ fn an_interface_that_carries_state_is_refused_rather_than_cast() {
              the backend said: {diagnostics:?}"
         );
     };
-    assert_eq!(code, "NTS4001", "refusals from lowering carry the backend's code");
+    assert_eq!(
+        code, "NTS4001",
+        "refusals from lowering carry the backend's code"
+    );
     assert!(
         message.contains("`Stateful`"),
         "names the declaration to change: {message}"

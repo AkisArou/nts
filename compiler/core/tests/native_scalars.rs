@@ -42,16 +42,8 @@ fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSna
 #[test]
 fn a_narrow_brand_has_number_semantics_in_both_signature_positions() {
     for name in [
-        "c_int",
-        "c_uint",
-        "c_int8",
-        "c_uint8",
-        "c_int16",
-        "c_uint16",
-        "c_int32",
-        "c_uint32",
-        "c_float",
-        "c_double",
+        "c_int", "c_uint", "c_int8", "c_uint8", "c_int16", "c_uint16", "c_int32", "c_uint32",
+        "c_float", "c_double",
     ] {
         let Some(snapshot) = snapshot(
             name,
@@ -157,7 +149,12 @@ fn managed_abi_belongs_only_to_the_annotated_declaration() {
         .iter()
         // Assert attachment within this fixture, independent of tags on the
         // imported library's own declarations.
-        .filter(|node| snapshot.sources[node.origin.location.file.0 as usize].display_path.file_name() == Some("main.ts"))
+        .filter(|node| {
+            snapshot.sources[node.origin.location.file.0 as usize]
+                .display_path
+                .file_name()
+                == Some("main.ts")
+        })
         .filter_map(|node| node.native.as_ref().and_then(|n| n.abi.as_deref()))
         .collect();
     assert_eq!(annotations, ["managed", "nonsense"]);
@@ -178,41 +175,102 @@ fn managed_abi_belongs_only_to_the_annotated_declaration() {
 fn opaque_pointers_reject_boxing_forgery_and_numeric_containers() {
     let declarations = "import type { Opaque } from \"c:types\"; type Counter = Opaque<\"Counter\">; declare function make(): Counter; declare function read(c: Counter): c_int;\n";
     for (name, body) in [
-        ("pointer-array", "export function bad(): number { const a = [make()]; return read(a[0]!); }"),
-        ("pointer-erased", "export function bad(): unknown { return make(); }"),
-        ("pointer-field", "export function bad(): string { return make().__c_opaque; }"),
-        ("pointer-in", "export function bad(): boolean { return \"__c_opaque\" in make(); }"),
-        ("pointer-index", "export function bad(): string { return make()[\"__c_opaque\"]; }"),
-        ("pointer-forged", "export function bad(): Counter { return { __c_opaque: \"Counter\" }; }"),
-        ("pointer-cast", "export function bad(n: number): Counter { return n as unknown as Counter; }"),
-        ("pointer-brand-cast", "type Other = Opaque<\"Other\">; export function bad(): Other { return make() as unknown as Other; }"),
-        ("pointer-undefined", "export function bad(n: number): Counter | undefined { return n ? make() : undefined; }"),
+        (
+            "pointer-array",
+            "export function bad(): number { const a = [make()]; return read(a[0]!); }",
+        ),
+        (
+            "pointer-erased",
+            "export function bad(): unknown { return make(); }",
+        ),
+        (
+            "pointer-field",
+            "export function bad(): string { return make().__c_opaque; }",
+        ),
+        (
+            "pointer-in",
+            "export function bad(): boolean { return \"__c_opaque\" in make(); }",
+        ),
+        (
+            "pointer-index",
+            "export function bad(): string { return make()[\"__c_opaque\"]; }",
+        ),
+        (
+            "pointer-forged",
+            "export function bad(): Counter { return { __c_opaque: \"Counter\" }; }",
+        ),
+        (
+            "pointer-cast",
+            "export function bad(n: number): Counter { return n as unknown as Counter; }",
+        ),
+        (
+            "pointer-brand-cast",
+            "type Other = Opaque<\"Other\">; export function bad(): Other { return make() as unknown as Other; }",
+        ),
+        (
+            "pointer-undefined",
+            "export function bad(n: number): Counter | undefined { return n ? make() : undefined; }",
+        ),
     ] {
         // The valid arm is present in the same program as every rejected arm.
-        let source = format!("{declarations} export function good(): number {{ return read(make()); }} {body}");
-        let Some(snapshot) = snapshot(name, &source) else { return; };
+        let source = format!(
+            "{declarations} export function good(): number {{ return read(make()); }} {body}"
+        );
+        let Some(snapshot) = snapshot(name, &source) else {
+            return;
+        };
         let prepared = hir::prepare(&snapshot).unwrap();
         assert!(!prepared.diagnostics.is_empty(), "{name} must refuse");
-        assert!(prepared.program.funcs.iter().any(|f| f.name == "good"), "{name}: valid arm lost");
-        assert!(!prepared.program.funcs.iter().any(|f| f.name == "bad"), "{name}: rejected function emitted");
+        assert!(
+            prepared.program.funcs.iter().any(|f| f.name == "good"),
+            "{name}: valid arm lost"
+        );
+        assert!(
+            !prepared.program.funcs.iter().any(|f| f.name == "bad"),
+            "{name}: rejected function emitted"
+        );
     }
 }
 
 #[test]
 fn opaque_pointee_identity_does_not_depend_on_signature_position() {
     for (name, declaration, body) in [
-        ("result", "declare function create(): Handle;", "export function run(): Handle { return create(); }"),
-        ("parameter", "declare function consume(p: Handle): c_int;", "export function run(p: Handle): number { return consume(p); }"),
+        (
+            "result",
+            "declare function create(): Handle;",
+            "export function run(): Handle { return create(); }",
+        ),
+        (
+            "parameter",
+            "declare function consume(p: Handle): c_int;",
+            "export function run(p: Handle): number { return consume(p); }",
+        ),
     ] {
         for witness in ["", "type Unused = Opaque<\"Different\">;"] {
-            let source = format!("import type {{ Opaque }} from \"c:types\"; type Handle = Opaque<\"_Counter\">; {declaration} {body} {witness}");
-            let Some(snapshot) = snapshot(&format!("opaque-position-{name}"), &source) else { return; };
+            let source = format!(
+                "import type {{ Opaque }} from \"c:types\"; type Handle = Opaque<\"_Counter\">; {declaration} {body} {witness}"
+            );
+            let Some(snapshot) = snapshot(&format!("opaque-position-{name}"), &source) else {
+                return;
+            };
             let prepared = hir::prepare(&snapshot).unwrap();
-            assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-            let run = prepared.program.funcs.iter().find(|f| f.name == "run").unwrap();
+            assert!(
+                prepared.diagnostics.is_empty(),
+                "{:?}",
+                prepared.diagnostics
+            );
+            let run = prepared
+                .program
+                .funcs
+                .iter()
+                .find(|f| f.name == "run")
+                .unwrap();
             let pointer = HirType::NativePointer(hir::native::Pointee::Opaque("_Counter".into()));
-            if name == "result" { assert_eq!(run.return_type, pointer); }
-            else { assert_eq!(run.params[0].ty, pointer); }
+            if name == "result" {
+                assert_eq!(run.return_type, pointer);
+            } else {
+                assert_eq!(run.params[0].ty, pointer);
+            }
         }
     }
 }
@@ -222,68 +280,162 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
     let declarations = "import type { Ptr } from \"c:types\"; type Bytes = Ptr<c_uint8>; declare function make(): Bytes;";
     for (name, body) in [
         ("erase", "export function bad(): unknown { return make(); }"),
-        ("brand", "export function bad(): c_uint8 { return make().__c_pointer; }"),
-        ("in", "export function bad(): boolean { return '__c_pointer' in make(); }"),
+        (
+            "brand",
+            "export function bad(): c_uint8 { return make().__c_pointer; }",
+        ),
+        (
+            "in",
+            "export function bad(): boolean { return '__c_pointer' in make(); }",
+        ),
         // The forgery has to carry `__c_writable` too, or TypeScript refuses it
         // before lowering is reached and this arm stops testing the lowering
         // guard it exists for.
-        ("forged", "export function bad(): Bytes { return { __c_pointer: 0 as c_uint8, __c_writable: true }; }"),
-        ("cast", "export function bad(n: number): Bytes { return n as unknown as Bytes; }"),
-        ("reinterpret", "export function bad(): Ptr<c_double> { return make() as unknown as Ptr<c_double>; }"),
-        ("array", "export function bad(): number { const a = [make()]; return a[0]![0]; }"),
+        (
+            "forged",
+            "export function bad(): Bytes { return { __c_pointer: 0 as c_uint8, __c_writable: true }; }",
+        ),
+        (
+            "cast",
+            "export function bad(n: number): Bytes { return n as unknown as Bytes; }",
+        ),
+        (
+            "reinterpret",
+            "export function bad(): Ptr<c_double> { return make() as unknown as Ptr<c_double>; }",
+        ),
+        (
+            "array",
+            "export function bad(): number { const a = [make()]; return a[0]![0]; }",
+        ),
     ] {
-        let source = format!("{declarations} export function good(): number {{ const p = make(); p[0] = 42; return p[0]; }} {body}");
-        let Some(snapshot) = snapshot(&format!("scalar-pointer-{name}"), &source) else { return; };
+        let source = format!(
+            "{declarations} export function good(): number {{ const p = make(); p[0] = 42; return p[0]; }} {body}"
+        );
+        let Some(snapshot) = snapshot(&format!("scalar-pointer-{name}"), &source) else {
+            return;
+        };
         let prepared = hir::prepare(&snapshot).unwrap();
         assert!(!prepared.diagnostics.is_empty(), "{name} must refuse");
-        assert!(prepared.program.funcs.iter().any(|f| f.name == "good"), "{name}: valid arm lost");
-        assert!(!prepared.program.funcs.iter().any(|f| f.name == "bad"), "{name}: rejected function emitted");
+        assert!(
+            prepared.program.funcs.iter().any(|f| f.name == "good"),
+            "{name}: valid arm lost"
+        );
+        assert!(
+            !prepared.program.funcs.iter().any(|f| f.name == "bad"),
+            "{name}: rejected function emitted"
+        );
     }
 }
 
 #[test]
 fn native_memory_verifier_rejects_corrupted_widths_and_indices() {
-    let Some(snapshot) = snapshot("native-memory-verifier", "import type { Ptr } from \"c:types\"; export function run(p: Ptr<c_uint8>, n: c_uint8): number { p[0] = n; return p[1]; }") else { return; };
+    let Some(snapshot) = snapshot(
+        "native-memory-verifier",
+        "import type { Ptr } from \"c:types\"; export function run(p: Ptr<c_uint8>, n: c_uint8): number { p[0] = n; return p[1]; }",
+    ) else {
+        return;
+    };
     let prepared = hir::prepare(&snapshot).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let function = prepared.program.funcs.iter().position(|f| f.name == "run").unwrap();
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let function = prepared
+        .program
+        .funcs
+        .iter()
+        .position(|f| f.name == "run")
+        .unwrap();
     for arm in ["read", "store", "index", "opaque"] {
         let mut program = prepared.program.clone();
         let func = &mut program.funcs[function];
-        let (load, pointer, index) = func.values.iter().enumerate().find_map(|(at, op)| match op.kind {
-            hir::OpKind::NativeLoad { pointer, index } => Some((at, pointer, index)),
-            _ => None,
-        }).unwrap();
+        let (load, pointer, index) = func
+            .values
+            .iter()
+            .enumerate()
+            .find_map(|(at, op)| match op.kind {
+                hir::OpKind::NativeLoad { pointer, index } => Some((at, pointer, index)),
+                _ => None,
+            })
+            .unwrap();
         match arm {
             "read" => func.values[load].ty = HirType::NUMBER,
             "index" => func.values[index.0 as usize].ty = HirType::NUMBER,
-            "opaque" => func.values[pointer.0 as usize].ty = HirType::NativePointer(hir::native::Pointee::Opaque("Hidden".into())),
+            "opaque" => {
+                func.values[pointer.0 as usize].ty =
+                    HirType::NativePointer(hir::native::Pointee::Opaque("Hidden".into()));
+            }
             _ => {
-                let stored = func.values.iter().find_map(|op| match op.kind {
-                    hir::OpKind::NativeStore { value, .. } => Some(value), _ => None,
-                }).unwrap();
+                let stored = func
+                    .values
+                    .iter()
+                    .find_map(|op| match op.kind {
+                        hir::OpKind::NativeStore { value, .. } => Some(value),
+                        _ => None,
+                    })
+                    .unwrap();
                 func.values[stored.0 as usize].ty = HirType::NUMBER;
             }
         }
-        assert!(hir::verify::verify(&program).is_err(), "{arm} corruption must fail");
+        assert!(
+            hir::verify::verify(&program).is_err(),
+            "{arm} corruption must fail"
+        );
     }
 }
 
 #[test]
 fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
-    for brand in ["c_int", "c_uint", "c_int8", "c_uint8", "c_int16", "c_uint16", "c_int32", "c_uint32", "c_int64", "c_uint64", "c_long", "c_ulong", "c_size_t", "c_ptrdiff_t", "c_float", "c_double"] {
+    for brand in [
+        "c_int",
+        "c_uint",
+        "c_int8",
+        "c_uint8",
+        "c_int16",
+        "c_uint16",
+        "c_int32",
+        "c_uint32",
+        "c_int64",
+        "c_uint64",
+        "c_long",
+        "c_ulong",
+        "c_size_t",
+        "c_ptrdiff_t",
+        "c_float",
+        "c_double",
+    ] {
         for witness in ["", "type Unused = Ptr<c_double>;"] {
-            let source = format!("import type {{ Ptr }} from \"c:types\"; declare function make(): Ptr<{brand}>;
+            let source = format!(
+                "import type {{ Ptr }} from \"c:types\"; declare function make(): Ptr<{brand}>;
                 // `void` rather than `number`: an element of a 64-bit brand is a
                 // bigint, and this test is about the *pointee* surviving, not
                 // about what the element projects to.
-                export function run(): void {{ void make()[1]; }} {witness}");
-            let Some(snapshot) = snapshot(&format!("pointer-result-{brand}"), &source) else { return; };
+                export function run(): void {{ void make()[1]; }} {witness}"
+            );
+            let Some(snapshot) = snapshot(&format!("pointer-result-{brand}"), &source) else {
+                return;
+            };
             let prepared = hir::prepare(&snapshot).unwrap();
-            assert!(prepared.diagnostics.is_empty(), "{brand}: {:?}", prepared.diagnostics);
-            let expected = HirType::NativePointer(hir::native::Pointee::Scalar(hir::native::Scalar::from_brand(&format!("__{brand}")).unwrap()));
-            let run = prepared.program.funcs.iter().find(|f| f.name == "run").unwrap();
-            let call = run.values.iter().find(|op| matches!(op.kind, hir::OpKind::Call { .. })).unwrap();
+            assert!(
+                prepared.diagnostics.is_empty(),
+                "{brand}: {:?}",
+                prepared.diagnostics
+            );
+            let expected = HirType::NativePointer(hir::native::Pointee::Scalar(
+                hir::native::Scalar::from_brand(&format!("__{brand}")).unwrap(),
+            ));
+            let run = prepared
+                .program
+                .funcs
+                .iter()
+                .find(|f| f.name == "run")
+                .unwrap();
+            let call = run
+                .values
+                .iter()
+                .find(|op| matches!(op.kind, hir::OpKind::Call { .. }))
+                .unwrap();
             assert_eq!(call.ty, expected, "{brand}");
         }
     }
@@ -291,7 +443,9 @@ fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
 
 #[test]
 fn local_storage_and_sizeof_lower_from_the_authored_types() {
-    let Some(snapshot) = snapshot("local-storage", r#"
+    let Some(snapshot) = snapshot(
+        "local-storage",
+        r#"
         import { local, sizeof, addrOf } from "c:memory";
         import { malloc, free } from "c:stdlib";
         import type { Ptr, Struct } from "c:types";
@@ -315,9 +469,16 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
             free(p);
             return result;
         }
-    "#) else { return; };
+    "#,
+    ) else {
+        return;
+    };
     let prepared = hir::prepare(&snapshot).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     assert!(prepared.program.funcs.iter().any(|f| f.name == "run"));
     assert!(prepared.program.funcs.iter().any(|f| f.name == "heap"));
 }
@@ -330,93 +491,245 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
 /// size -- a wrong number, not a crash.
 #[test]
 fn sizes_of_two_structs_in_one_function_are_not_merged() {
-    let Some(snapshot) = snapshot("two-sizes", r#"
+    let Some(snapshot) = snapshot(
+        "two-sizes",
+        r#"
         import { sizeof } from "c:memory";
         import type { Struct } from "c:types";
         type One = Struct<{ a: c_int }, "one">;
         type Three = Struct<{ a: c_int; b: c_int; c: c_int }, "three">;
         export function run(): number { return sizeof<One>() * 100 + sizeof<Three>(); }
-    "#) else { return; };
+    "#,
+    ) else {
+        return;
+    };
     let prepared = hir::prepare(&snapshot).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
-    let run = prepared.program.funcs.iter().find(|f| f.name == "run").unwrap();
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let run = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|f| f.name == "run")
+        .unwrap();
     let sizes: Vec<u32> = run
         .blocks
         .iter()
         .flat_map(|block| &block.ops)
         .filter_map(|value| match &run.values[value.0 as usize].kind {
-            hir::OpKind::NativeSizeOf(storage) => hir::layout::native_shape(storage, hir::native::NativeAbi::SysV).map(|s| s.size),
+            hir::OpKind::NativeSizeOf(storage) => {
+                hir::layout::native_shape(storage, hir::native::NativeAbi::SysV).map(|s| s.size)
+            }
             _ => None,
         })
         .collect();
-    assert_eq!(sizes, [4, 12], "the two sizes did not both survive preparation");
+    assert_eq!(
+        sizes,
+        [4, 12],
+        "the two sizes did not both survive preparation"
+    );
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn local_addresses_cannot_outlive_or_free_their_storage() {
     // `global` and `store-helper` were refused as a module-scope variable of
     // a native pointer, which no global could hold. One can now, and what
     // refuses them is the rule these cases are about: the address escapes.
     for (name, body, reason) in [
-        ("return", "export function bad(): Ptr<c_int> { return local<c_int>(); }", "escapes"),
-        ("field-return", "export function bad(): Ptr<c_int> { return addrOf(local<S>().x); }", "escapes"),
-        ("join-return", "export function bad(n: number): Ptr<c_int> { const p = local<c_int>(); const q = n > 0 ? p : local<c_int>(); return q; }", "escapes"),
-        ("global", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } export function bad(): void { held = local<c_int>(); }", "escapes"),
-        ("object", "export function bad(): {p: Ptr<c_int>} { return {p: local<c_int>()}; }", "escapes"),
-        ("closure", "export function bad(): () => number { const p = local<c_int>(); return () => p[0]; }", "escapes"),
-        ("store", "export function bad(out: Ptr<Ptr<c_int>>): void { out[0] = local<c_int>(); }", "escapes"),
-        ("unknown-call", "declare function consume(p: Ptr<c_int>): void; export function bad(): void { consume(local<c_int>()); }", "escapes"),
-        ("return-helper", "function alias(p: Ptr<c_int>): Ptr<c_int> { return p; } export function bad(): number { return alias(local<c_int>())[0]; }", "escapes"),
-        ("store-helper", "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } function keep(p: Ptr<c_int>): void { held = p; } export function bad(): void { keep(local<c_int>()); }", "escapes"),
-        ("free", "export function bad(): void { const p = local<c_int>(2); const q = addrOf(p[0]); free(q); }", "escapes"),
+        (
+            "return",
+            "export function bad(): Ptr<c_int> { return local<c_int>(); }",
+            "escapes",
+        ),
+        (
+            "field-return",
+            "export function bad(): Ptr<c_int> { return addrOf(local<S>().x); }",
+            "escapes",
+        ),
+        (
+            "join-return",
+            "export function bad(n: number): Ptr<c_int> { const p = local<c_int>(); const q = n > 0 ? p : local<c_int>(); return q; }",
+            "escapes",
+        ),
+        (
+            "global",
+            "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } export function bad(): void { held = local<c_int>(); }",
+            "escapes",
+        ),
+        (
+            "object",
+            "export function bad(): {p: Ptr<c_int>} { return {p: local<c_int>()}; }",
+            "escapes",
+        ),
+        (
+            "closure",
+            "export function bad(): () => number { const p = local<c_int>(); return () => p[0]; }",
+            "escapes",
+        ),
+        (
+            "store",
+            "export function bad(out: Ptr<Ptr<c_int>>): void { out[0] = local<c_int>(); }",
+            "escapes",
+        ),
+        (
+            "unknown-call",
+            "declare function consume(p: Ptr<c_int>): void; export function bad(): void { consume(local<c_int>()); }",
+            "escapes",
+        ),
+        (
+            "return-helper",
+            "function alias(p: Ptr<c_int>): Ptr<c_int> { return p; } export function bad(): number { return alias(local<c_int>())[0]; }",
+            "escapes",
+        ),
+        (
+            "store-helper",
+            "let held: Ptr<c_int> | null = null; export function heldValue(): Ptr<c_int>|null { return held; } function keep(p: Ptr<c_int>): void { held = p; } export function bad(): void { keep(local<c_int>()); }",
+            "escapes",
+        ),
+        (
+            "free",
+            "export function bad(): void { const p = local<c_int>(2); const q = addrOf(p[0]); free(q); }",
+            "escapes",
+        ),
         // A local used before the function can suspend, or within one
         // iteration, is allowed (`native_storage::confined`); these use the
         // address after the suspension, or carry it to the next iteration.
-        ("async", "export async function bad(): Promise<number> { const p = local<c_int>(); await 0; return p[0]; }", "suspending"),
-        ("generator", "export function* bad(): Generator<number> { const p = local<c_int>(); yield 1; yield p[0]; }", "suspending"),
-        ("loop", "export function bad(n: number): number { let r=0; let q=local<c_int>(); for(let i=0;i<n;i++) { const p=local<c_int>(); r+=q[0]; q=p; } return r; }", "inside a loop"),
-        ("budget", "export function bad(): number { const a=local<c_int>(10000); const b=local<c_int>(10000); return a[0]+b[0]; }", "budget"),
-        ("dynamic", "export function bad(n: number): number { return local<c_int>(n)[0]; }", "compile-time constant"),
-        ("zero", "export function bad(): number { return local<c_int>(0)[0]; }", "positive fixed count"),
-        ("fraction", "export function bad(): number { return local<c_int>(1.5)[0]; }", "positive fixed count"),
-        ("size-managed", "export function bad(): number { return sizeof<{x:number}>(); }", "complete native storage"),
+        (
+            "async",
+            "export async function bad(): Promise<number> { const p = local<c_int>(); await 0; return p[0]; }",
+            "suspending",
+        ),
+        (
+            "generator",
+            "export function* bad(): Generator<number> { const p = local<c_int>(); yield 1; yield p[0]; }",
+            "suspending",
+        ),
+        (
+            "loop",
+            "export function bad(n: number): number { let r=0; let q=local<c_int>(); for(let i=0;i<n;i++) { const p=local<c_int>(); r+=q[0]; q=p; } return r; }",
+            "inside a loop",
+        ),
+        (
+            "budget",
+            "export function bad(): number { const a=local<c_int>(10000); const b=local<c_int>(10000); return a[0]+b[0]; }",
+            "budget",
+        ),
+        (
+            "dynamic",
+            "export function bad(n: number): number { return local<c_int>(n)[0]; }",
+            "compile-time constant",
+        ),
+        (
+            "zero",
+            "export function bad(): number { return local<c_int>(0)[0]; }",
+            "positive fixed count",
+        ),
+        (
+            "fraction",
+            "export function bad(): number { return local<c_int>(1.5)[0]; }",
+            "positive fixed count",
+        ),
+        (
+            "size-managed",
+            "export function bad(): number { return sizeof<{x:number}>(); }",
+            "complete native storage",
+        ),
     ] {
-        let source = format!(r#"
+        let source = format!(
+            r#"
             import {{ local, sizeof, addrOf }} from "c:memory";
             import {{ free }} from "c:stdlib";
             import type {{ Ptr, Struct }} from "c:types";
             type S = Struct<{{x:c_int}}>;
             export function good(): number {{ const p = local<c_int>(); p[0]=23; return p[0]; }}
             {body}
-        "#);
-        let Some(snapshot) = snapshot(&format!("local-{name}"), &source) else { return; };
+        "#
+        );
+        let Some(snapshot) = snapshot(&format!("local-{name}"), &source) else {
+            return;
+        };
         let prepared = hir::prepare(&snapshot).unwrap();
-        assert!(prepared.program.funcs.iter().any(|f| f.name == "good"), "{name}: {:?}", prepared.diagnostics);
-        assert!(!prepared.program.funcs.iter().any(|f| f.name == "bad"), "{name} was accepted: {:?}", prepared.diagnostics);
-        assert!(prepared.diagnostics.iter().any(|d| d.message.contains(reason)), "{name}: {:?}", prepared.diagnostics);
+        assert!(
+            prepared.program.funcs.iter().any(|f| f.name == "good"),
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
+        assert!(
+            !prepared.program.funcs.iter().any(|f| f.name == "bad"),
+            "{name} was accepted: {:?}",
+            prepared.diagnostics
+        );
+        assert!(
+            prepared
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(reason)),
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
     }
 }
 
 #[test]
 fn no_escape_annotations_are_checked_and_scoped_to_their_declaration() {
     for (name, tag, signature, expected) in [
-        ("documented", "/** Reads synchronously.\n * @ntsNoEscape p\n */", "p: Ptr<c_int>", true),
+        (
+            "documented",
+            "/** Reads synchronously.\n * @ntsNoEscape p\n */",
+            "p: Ptr<c_int>",
+            true,
+        ),
         ("empty", "/** @ntsNoEscape */", "p: Ptr<c_int>", false),
         ("missing", "", "p: Ptr<c_int>", false),
-        ("ordinary-comment", "/* @ntsNoEscape p */", "p: Ptr<c_int>", false),
-        ("misspelled", "/** @ntsNoEscape absent */", "p: Ptr<c_int>", false),
-        ("duplicate", "/** @ntsNoEscape p p */", "p: Ptr<c_int>", false),
+        (
+            "ordinary-comment",
+            "/* @ntsNoEscape p */",
+            "p: Ptr<c_int>",
+            false,
+        ),
+        (
+            "misspelled",
+            "/** @ntsNoEscape absent */",
+            "p: Ptr<c_int>",
+            false,
+        ),
+        (
+            "duplicate",
+            "/** @ntsNoEscape p p */",
+            "p: Ptr<c_int>",
+            false,
+        ),
     ] {
-        let Some(snapshot) = snapshot(&format!("no-escape-{name}"), &format!(r#"
+        let Some(snapshot) = snapshot(
+            &format!("no-escape-{name}"),
+            &format!(
+                r#"
             import {{ local }} from "c:memory";
             import type {{ Ptr }} from "c:types";
             {tag}
             declare function consume({signature}): c_int;
             export function run(): number {{ return consume(local<c_int>()); }}
-        "#)) else { return; };
+        "#
+            ),
+        ) else {
+            return;
+        };
         let prepared = hir::prepare(&snapshot).unwrap();
-        assert_eq!(prepared.diagnostics.is_empty(), expected, "{name}: {:?}", prepared.diagnostics);
-        assert_eq!(prepared.program.funcs.iter().any(|f| f.name == "run"), expected, "{name}");
+        assert_eq!(
+            prepared.diagnostics.is_empty(),
+            expected,
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
+        assert_eq!(
+            prepared.program.funcs.iter().any(|f| f.name == "run"),
+            expected,
+            "{name}"
+        );
     }
 }
 
@@ -440,35 +753,55 @@ fn no_escape_annotations_are_checked_and_scoped_to_their_declaration() {
 #[test]
 fn a_borrow_contract_survives_the_prepared_pipeline() {
     for (name, tag, expected) in [
-        ("tagged", "/** @ntsNoEscape p */", hir::native::Retention::NotRetained),
+        (
+            "tagged",
+            "/** @ntsNoEscape p */",
+            hir::native::Retention::NotRetained,
+        ),
         ("untagged", "", hir::native::Retention::Unknown),
     ] {
         // The pointer is a parameter, not `local<c_int>()`. Stack storage
         // handed to a callee with no contract *is* an escape, and the untagged
         // arm was refused for that -- correctly, and it would have made the
         // control a test of the refusal rather than of the contract.
-        let Some(snapshot) = snapshot(&format!("contract-survives-{name}"), &format!(r#"
+        let Some(snapshot) = snapshot(
+            &format!("contract-survives-{name}"),
+            &format!(
+                r#"
             import type {{ Ptr }} from "c:types";
             {tag}
             declare function consume(p: Ptr<c_int>): c_int;
             // One hop, so the call is not the exported function's own.
             function hand(p: Ptr<c_int>): c_int {{ return consume(p); }}
             export function run(p: Ptr<c_int>): number {{ return hand(p); }}
-        "#)) else { return; };
+        "#
+            ),
+        ) else {
+            return;
+        };
         let prepared = hir::prepare(&snapshot).unwrap();
-        assert!(prepared.diagnostics.is_empty(), "{name}: {:?}", prepared.diagnostics);
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
         let contracts: Vec<hir::native::Retention> = prepared
             .program
             .funcs
             .iter()
             .flat_map(|func| &func.values)
             .filter_map(|op| match &op.kind {
-                hir::OpKind::Call { callee: hir::Callee::Native(target), .. }
-                    if target.name == "consume" => target.retention.first().copied(),
+                hir::OpKind::Call {
+                    callee: hir::Callee::Native(target),
+                    ..
+                } if target.name == "consume" => target.retention.first().copied(),
                 _ => None,
             })
             .collect();
-        assert!(!contracts.is_empty(), "{name}: no call to `consume` survived to be checked");
+        assert!(
+            !contracts.is_empty(),
+            "{name}: no call to `consume` survived to be checked"
+        );
         assert!(
             contracts.iter().all(|kept| *kept == expected),
             "{name}: expected {expected:?} on every surviving call, found {contracts:?}"
@@ -486,16 +819,25 @@ fn a_borrow_contract_survives_the_prepared_pipeline() {
 fn a_copy_survives_and_is_refused_between_two_types() {
     // Named `same`, not `snapshot`: the binding would shadow the helper and the
     // second call below would not resolve.
-    let Some(same) = snapshot("copy-survives", r#"
+    let Some(same) = snapshot(
+        "copy-survives",
+        r#"
         import { copy, local } from "c:memory";
         // Only `Struct`: the harness already imports every scalar brand, and
         // naming one again is `TS2300 Duplicate identifier`.
         import type { Struct } from "c:types";
         type A = Struct<{ v: c_int; w: c_int }, "">;
         export function go(): void { const a = local<A>(); const b = local<A>(); copy(a, b); }
-    "#) else { return; };
+    "#,
+    ) else {
+        return;
+    };
     let prepared = hir::prepare(&same).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     let copies = prepared
         .program
         .funcs
@@ -503,20 +845,31 @@ fn a_copy_survives_and_is_refused_between_two_types() {
         .flat_map(|func| &func.values)
         .filter(|op| matches!(op.kind, hir::OpKind::NativeCopy { .. }))
         .count();
-    assert_eq!(copies, 1, "the copy was dropped between lowering and the backend");
+    assert_eq!(
+        copies, 1,
+        "the copy was dropped between lowering and the backend"
+    );
 
     // The arm that makes it a check: two different layouts, which would take
     // the destination's size and read past the source.
-    let Some(mismatched) = snapshot("copy-mismatch", r#"
+    let Some(mismatched) = snapshot(
+        "copy-mismatch",
+        r#"
         import { copy, local } from "c:memory";
         import type { Struct } from "c:types";
         type A = Struct<{ v: c_int }, "">;
         type B = Struct<{ v: c_int; w: c_int }, "">;
         export function go(): void { const a = local<A>(); const b = local<B>(); copy(a, b); }
-    "#) else { return; };
+    "#,
+    ) else {
+        return;
+    };
     let prepared = hir::prepare(&mismatched).unwrap();
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("two different native types")),
+        prepared
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("two different native types")),
         "{:?}",
         prepared.diagnostics
     );
@@ -534,15 +887,32 @@ fn a_copy_survives_and_is_refused_between_two_types() {
 /// So the words are asserted. The accepted arm is what makes it a check.
 #[test]
 fn a_promoted_variadic_tail_is_refused_with_the_type_to_declare() {
-    for (tail, promoted) in [("c_uint16", Some("int")), ("c_float", Some("double")), ("c_uint32", None)] {
-        let Some(snapshot) = snapshot(&format!("variadic-{tail}"), &format!("
+    for (tail, promoted) in [
+        ("c_uint16", Some("int")),
+        ("c_float", Some("double")),
+        ("c_uint32", None),
+    ] {
+        let Some(snapshot) = snapshot(
+            &format!("variadic-{tail}"),
+            &format!(
+                "
             declare function log(first: c_int, ...rest: {tail}[]): c_int;
             export function go(): number {{ return log(1 as c_int, 2 as {tail}); }}
-        ")) else { return; };
+        "
+            ),
+        ) else {
+            return;
+        };
         let prepared = hir::prepare(&snapshot).unwrap();
-        let refusal = prepared.diagnostics.iter().find(|d| d.message.contains("variadic tail"));
+        let refusal = prepared
+            .diagnostics
+            .iter()
+            .find(|d| d.message.contains("variadic tail"));
         match promoted {
-            None => assert!(refusal.is_none(), "`{tail}` passes as declared: {refusal:?}"),
+            None => assert!(
+                refusal.is_none(),
+                "`{tail}` passes as declared: {refusal:?}"
+            ),
             Some(promoted) => {
                 let message = &refusal.expect("a promoted tail must be refused").message;
                 for expected in [tail_c_name(tail), promoted, "declare"] {
@@ -568,13 +938,18 @@ fn tail_c_name(brand: &str) -> &'static str {
 
 #[test]
 fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
-    let Some(snapshot) = snapshot("local-verifier", r#"
+    let Some(snapshot) = snapshot(
+        "local-verifier",
+        r#"
         import { local } from "c:memory";
         import type { Ptr } from "c:types";
         /** @ntsNoEscape p */
         declare function consume(p: Ptr<c_int>): c_int;
         export function run(): number { return consume(local<c_int>()); }
-    "#) else { return; };
+    "#,
+    ) else {
+        return;
+    };
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(prepared.diagnostics.is_empty());
     for kind in 0..4 {
@@ -587,12 +962,19 @@ fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
                         *count = if kind == 0 { 0 } else { u32::MAX };
                         changed = true;
                     }
-                    hir::OpKind::Call { callee: hir::Callee::Native(target), .. } if kind >= 2 => {
+                    hir::OpKind::Call {
+                        callee: hir::Callee::Native(target),
+                        ..
+                    } if kind >= 2 => {
                         let target = std::sync::Arc::make_mut(target);
-                        if kind == 2 { target.retention.fill(hir::native::Retention::Unknown); } else { target.retention.clear(); }
+                        if kind == 2 {
+                            target.retention.fill(hir::native::Retention::Unknown);
+                        } else {
+                            target.retention.clear();
+                        }
                         changed = true;
                     }
-                    _ => {},
+                    _ => {}
                 }
             }
         }
@@ -677,10 +1059,9 @@ fn addrof_takes_a_native_place_and_nothing_else() {
             Caught::Lowering,
         ),
     ] {
-        let Some((snapshot, typescript)) = snapshot_allowing_errors(
-            &format!("addrof-{name}"),
-            &format!("{header}{body}"),
-        ) else {
+        let Some((snapshot, typescript)) =
+            snapshot_allowing_errors(&format!("addrof-{name}"), &format!("{header}{body}"))
+        else {
             return;
         };
         let caught = if typescript {
@@ -833,7 +1214,11 @@ fn a_native_declaration_contributes_its_no_escape_contract() {
     let escaping = |name: &str, tag: &str| -> Option<bool> {
         let snapshot = snapshot(name, &program(tag))?;
         let prepared = hir::prepare(&snapshot).unwrap();
-        assert!(prepared.diagnostics.is_empty(), "{name}: {:?}", prepared.diagnostics);
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{name}: {:?}",
+            prepared.diagnostics
+        );
         let escapes = hir::escape::analyze_program(&prepared.program);
         let at = prepared
             .program
@@ -844,7 +1229,9 @@ fn a_native_declaration_contributes_its_no_escape_contract() {
         // The argument is `go`'s own parameter, which is value 0.
         Some(escapes[at].escapes(hir::ValueId(0)))
     };
-    let Some(without) = escaping("no-escape-absent", "") else { return };
+    let Some(without) = escaping("no-escape-absent", "") else {
+        return;
+    };
     let with = escaping("no-escape-present", "/** @ntsNoEscape p */\n").unwrap();
     assert!(
         without,
@@ -866,7 +1253,14 @@ fn a_native_declaration_contributes_its_no_escape_contract() {
 /// exactness hold rather than a restriction imposed beside it.
 #[test]
 fn a_wide_brand_has_bigint_semantics_in_both_signature_positions() {
-    for name in ["c_int64", "c_uint64", "c_long", "c_ulong", "c_size_t", "c_ptrdiff_t"] {
+    for name in [
+        "c_int64",
+        "c_uint64",
+        "c_long",
+        "c_ulong",
+        "c_size_t",
+        "c_ptrdiff_t",
+    ] {
         let Some(snapshot) = snapshot(
             &format!("wide-{name}"),
             &format!(
@@ -877,9 +1271,18 @@ fn a_wide_brand_has_bigint_semantics_in_both_signature_positions() {
             return;
         };
         let lowered = hir::lower::lower(&snapshot);
-        assert!(lowered.diagnostics.is_empty(), "{name}: {:?}", lowered.diagnostics);
+        assert!(
+            lowered.diagnostics.is_empty(),
+            "{name}: {:?}",
+            lowered.diagnostics
+        );
         for which in ["argument", "result"] {
-            let func = lowered.program.funcs.iter().find(|f| f.name == which).unwrap();
+            let func = lowered
+                .program
+                .funcs
+                .iter()
+                .find(|f| f.name == which)
+                .unwrap();
             let seen: Vec<_> = func
                 .params
                 .iter()
@@ -894,7 +1297,10 @@ fn a_wide_brand_has_bigint_semantics_in_both_signature_positions() {
             // anywhere here is the loss this family exists to prevent, and it
             // would still emit a correct `int64_t` prototype.
             assert!(
-                !func.values.iter().any(|v| v.ty == hir::HirType::Float { bits: 64 }),
+                !func
+                    .values
+                    .iter()
+                    .any(|v| v.ty == hir::HirType::Float { bits: 64 }),
                 "{name}/{which}: a value passed through a double"
             );
         }
@@ -948,7 +1354,8 @@ fn a_retained_callback_refuses_a_local_context_and_accepts_a_heap_one() {
             false,
         ),
     ] {
-        let Some(snapshot) = snapshot(&format!("retained-{name}"), &format!("{header}{body}")) else {
+        let Some(snapshot) = snapshot(&format!("retained-{name}"), &format!("{header}{body}"))
+        else {
             return;
         };
         let prepared = hir::prepare(&snapshot).unwrap();
@@ -1037,7 +1444,9 @@ fn an_async_callback_is_refused_and_an_async_caller_is_not() {
 /// library is named as `-l` takes it, which is wider than a C identifier.
 #[test]
 fn a_program_links_the_libraries_of_the_functions_it_calls() {
-    let Some(called) = snapshot("link-libraries", r"
+    let Some(called) = snapshot(
+        "link-libraries",
+        r"
         /** @ntsLibrary gdi32 */
         declare function drawn(): c_int;
         /** @ntsLibrary comctl32 */
@@ -1045,19 +1454,33 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
         /** @ntsLibrary glib-2.0 */
         declare function dashed(): c_int;
         export function run(): number { return drawn() + dashed(); }
-    ") else { return; };
+    ",
+    ) else {
+        return;
+    };
     let prepared = hir::prepare(&called).unwrap();
-    assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
     assert_eq!(prepared.program.native_libraries, ["gdi32", "glib-2.0"]);
 
-    let Some(flagged) = snapshot("link-libraries-bad", r"
+    let Some(flagged) = snapshot(
+        "link-libraries-bad",
+        r"
         /** @ntsLibrary -lfoo */
         declare function flag(): c_int;
         export function run(): number { return flag(); }
-    ") else { return; };
+    ",
+    ) else {
+        return;
+    };
     let prepared = hir::prepare(&flagged).unwrap();
     assert!(
-        prepared.diagnostics.iter().any(|d| d.message.contains("@ntsLibrary names libraries as `-l` takes them")),
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("@ntsLibrary names libraries as `-l` takes them")),
         "a flag passed as a library name was accepted: {:?}",
         prepared.diagnostics
     );
@@ -1069,8 +1492,15 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
 fn refusals(name: &str, source: &str) -> Option<Vec<(String, String)>> {
     let snapshot = snapshot(name, source)?;
     Some(match hir::prepare(&snapshot) {
-        Ok(prepared) => prepared.diagnostics.into_iter().map(|refused| (refused.code, refused.message)).collect(),
-        Err(hir::Unprepared::Rejected(errors)) => errors.into_iter().map(|error| (error.code, error.message)).collect(),
+        Ok(prepared) => prepared
+            .diagnostics
+            .into_iter()
+            .map(|refused| (refused.code, refused.message))
+            .collect(),
+        Err(hir::Unprepared::Rejected(errors)) => errors
+            .into_iter()
+            .map(|error| (error.code, error.message))
+            .collect(),
         Err(invalid) => panic!("{name}: {}", invalid.render(&snapshot.sources)),
     })
 }
@@ -1153,10 +1583,28 @@ fn each_proof_is_refused_without_the_fact_it_rests_on() {
         ),
     ];
     for (name, proven, control) in cases {
-        let Some(refused) = refusals(&format!("proof-{name}"), &format!("{declarations}{proven}\n")) else { return };
-        assert!(refused.is_empty(), "{name}: proven, and refused: {refused:?}");
-        let refused = refusals(&format!("control-{name}"), &format!("{declarations}{control}\n")).unwrap();
-        assert!(!refused.is_empty(), "{name}: the control has to be refused, or the case shows nothing");
-        assert!(refused.iter().all(|(code, _)| code == "NTS5001"), "{name}: {refused:?}");
+        let Some(refused) = refusals(
+            &format!("proof-{name}"),
+            &format!("{declarations}{proven}\n"),
+        ) else {
+            return;
+        };
+        assert!(
+            refused.is_empty(),
+            "{name}: proven, and refused: {refused:?}"
+        );
+        let refused = refusals(
+            &format!("control-{name}"),
+            &format!("{declarations}{control}\n"),
+        )
+        .unwrap();
+        assert!(
+            !refused.is_empty(),
+            "{name}: the control has to be refused, or the case shows nothing"
+        );
+        assert!(
+            refused.iter().all(|(code, _)| code == "NTS5001"),
+            "{name}: {refused:?}"
+        );
     }
 }

@@ -162,7 +162,9 @@ fn run(binary: &Path, tsconfig: &Path, runtime: Option<&Path>) -> bool {
         Some(jar) => command.env("NTS_JVM_RUNTIME_JAR", jar),
         None => command.env_remove("NTS_JVM_RUNTIME_JAR"),
     };
-    let Ok(output) = command.output() else { return false };
+    let Ok(output) = command.output() else {
+        return false;
+    };
     let text = String::from_utf8_lossy(&output.stdout);
     output.status.success() && text.contains("agreed on every case")
 }
@@ -210,9 +212,8 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
         let original = std::fs::read_to_string(&source_path)
             .unwrap_or_else(|_| panic!("{} exists", sabotage.file));
 
-        let (open, body) = method_body(&original, sabotage.method).unwrap_or_else(|| {
-            panic!("`{}` has no method `{}`", sabotage.file, sabotage.method)
-        });
+        let (open, body) = method_body(&original, sabotage.method)
+            .unwrap_or_else(|| panic!("`{}` has no method `{}`", sabotage.file, sabotage.method));
         let hits = body.matches(sabotage.pattern).count();
         assert_eq!(
             hits, 1,
@@ -251,7 +252,10 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
         // thing testing it also shares any state either of them leaks, and the
         // whole point is to observe the harness from outside.
         let Some(binary) = binary() else { return };
-        let tsconfig = root.join("examples").join(sabotage.example).join("tsconfig.json");
+        let tsconfig = root
+            .join("examples")
+            .join(sabotage.example)
+            .join("tsconfig.json");
 
         let honest = run(&binary, &tsconfig, None);
         let broken = run(&binary, &tsconfig, Some(&jar));

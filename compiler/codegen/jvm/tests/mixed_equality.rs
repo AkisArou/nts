@@ -24,7 +24,11 @@ fn origin() -> nts_semantic_schema::Origin {
 }
 
 fn op(kind: OpKind, ty: HirType) -> hir::Op {
-    hir::Op { kind, ty, origin: origin() }
+    hir::Op {
+        kind,
+        ty,
+        origin: origin(),
+    }
 }
 
 fn param(i: usize, ty: &HirType) -> hir::Param {
@@ -39,13 +43,27 @@ fn param(i: usize, ty: &HirType) -> hir::Param {
 }
 
 fn block(ops: &[u32], terminator: hir::Terminator) -> hir::Block {
-    hir::Block { params: Vec::new(), ops: ops.iter().map(|&v| ValueId(v)).collect(), terminator }
+    hir::Block {
+        params: Vec::new(),
+        ops: ops.iter().map(|&v| ValueId(v)).collect(),
+        terminator,
+    }
 }
 
-fn func(name: &str, params: &[HirType], returns: HirType, values: Vec<hir::Op>, blocks: Vec<hir::Block>) -> hir::Func {
+fn func(
+    name: &str,
+    params: &[HirType],
+    returns: HirType,
+    values: Vec<hir::Op>,
+    blocks: Vec<hir::Block>,
+) -> hir::Func {
     hir::Func {
         name: name.into(),
-        params: params.iter().enumerate().map(|(i, ty)| param(i, ty)).collect(),
+        params: params
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| param(i, ty))
+            .collect(),
         return_type: returns,
         values,
         blocks,
@@ -66,9 +84,22 @@ fn valued(name: &str, a: &HirType, b: &HirType, compare: BinOp) -> hir::Func {
     let values = vec![
         op(OpKind::Param(0), a.clone()),
         op(OpKind::Param(1), b.clone()),
-        op(OpKind::Binary { op: compare, lhs: ValueId(0), rhs: ValueId(1) }, HirType::Bool),
+        op(
+            OpKind::Binary {
+                op: compare,
+                lhs: ValueId(0),
+                rhs: ValueId(1),
+            },
+            HirType::Bool,
+        ),
     ];
-    func(name, &[a.clone(), b.clone()], HirType::Bool, values, vec![block(&[0, 1, 2], hir::Terminator::Return(Some(ValueId(2))))])
+    func(
+        name,
+        &[a.clone(), b.clone()],
+        HirType::Bool,
+        values,
+        vec![block(&[0, 1, 2], hir::Terminator::Return(Some(ValueId(2))))],
+    )
 }
 
 /// `(a, b) -> a === b ? 1 : 0`, the comparison consumed by a branch.
@@ -76,7 +107,14 @@ fn branched(name: &str, a: &HirType, b: &HirType) -> hir::Func {
     let values = vec![
         op(OpKind::Param(0), a.clone()),
         op(OpKind::Param(1), b.clone()),
-        op(OpKind::Binary { op: BinOp::Eq, lhs: ValueId(0), rhs: ValueId(1) }, HirType::Bool),
+        op(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: ValueId(0),
+                rhs: ValueId(1),
+            },
+            HirType::Bool,
+        ),
         op(OpKind::ConstFloat(1.0), HirType::NUMBER),
         op(OpKind::ConstFloat(0.0), HirType::NUMBER),
     ];
@@ -94,7 +132,13 @@ fn branched(name: &str, a: &HirType, b: &HirType) -> hir::Func {
         block(&[3], hir::Terminator::Return(Some(ValueId(3)))),
         block(&[4], hir::Terminator::Return(Some(ValueId(4)))),
     ];
-    func(name, &[a.clone(), b.clone()], HirType::NUMBER, values, blocks)
+    func(
+        name,
+        &[a.clone(), b.clone()],
+        HirType::NUMBER,
+        values,
+        blocks,
+    )
 }
 
 #[test]
@@ -117,7 +161,15 @@ fn a_string_against_another_reference_is_identity_in_both_forms() {
         ..hir::Program::default()
     };
     let emitted = nts_codegen_jvm::emit(&program);
-    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics.iter().map(|d| d.message.clone()).collect::<Vec<_>>());
+    assert!(
+        emitted.is_complete(),
+        "{:?}",
+        emitted
+            .diagnostics
+            .iter()
+            .map(|d| d.message.clone())
+            .collect::<Vec<_>>()
+    );
     let out = std::env::temp_dir().join(format!("nts-mixed-equality-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     for class in &emitted.classes {
@@ -140,10 +192,26 @@ public class Drive { public static void main(String[] a) {
     )
     .unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac).args(["-cp", &cp, "-d"]).arg(&out).arg(out.join("Drive.java")).output().unwrap();
-    assert!(compiled.status.success(), "{}", String::from_utf8_lossy(&compiled.stderr));
-    let ran = Command::new(&java).args(["-Xverify:all", "-cp", &cp, "Drive"]).output().unwrap();
+    let compiled = Command::new(&javac)
+        .args(["-cp", &cp, "-d"])
+        .arg(&out)
+        .arg(out.join("Drive.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let ran = Command::new(&java)
+        .args(["-Xverify:all", "-cp", &cp, "Drive"])
+        .output()
+        .unwrap();
     let said = String::from_utf8_lossy(&ran.stdout).into_owned();
-    assert!(ran.status.success(), "{said}{}", String::from_utf8_lossy(&ran.stderr));
+    assert!(
+        ran.status.success(),
+        "{said}{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
     assert_eq!(said, "false true 0.0\ntrue 1.0 false\n");
 }

@@ -51,11 +51,23 @@ pub(crate) enum Kind {
     /// `[NativeTypedef]`: a C typedef over `value` -- a handle, `BOOL`, `PWSTR`.
     /// `parent` is `[AlsoUsableFor]`: the handle it is also, as `HBRUSH` is an
     /// `HGDIOBJ` and `HWND` a `HANDLE`.
-    Typedef { value: Type, parent: Option<Name> },
-    Struct { fields: Vec<(String, Type)>, union: bool, nested: bool },
-    Enum { members: Vec<(String, Value)> },
+    Typedef {
+        value: Type,
+        parent: Option<Name>,
+    },
+    Struct {
+        fields: Vec<(String, Type)>,
+        union: bool,
+        nested: bool,
+    },
+    Enum {
+        members: Vec<(String, Value)>,
+    },
     /// A C function pointer type: `WNDPROC`, with its parameters' names.
-    Delegate { parameters: Vec<(String, Type)>, result: Type },
+    Delegate {
+        parameters: Vec<(String, Type)>,
+        result: Type,
+    },
     /// A COM interface, which is W2's.
     Interface,
     /// Something this binder does not read.
@@ -75,12 +87,16 @@ pub(crate) struct Model {
 }
 
 fn documentation(row: &impl HasAttributes<'static>) -> Option<String> {
-    row.find_attribute("DocumentationAttribute").and_then(|attribute| {
-        attribute.value().into_iter().find_map(|(_, value)| match value {
-            Value::Utf8(text) => Some(text),
-            _ => None,
+    row.find_attribute("DocumentationAttribute")
+        .and_then(|attribute| {
+            attribute
+                .value()
+                .into_iter()
+                .find_map(|(_, value)| match value {
+                    Value::Utf8(text) => Some(text),
+                    _ => None,
+                })
         })
-    })
 }
 
 /// Every function and constant of `namespaces`, and the types they reach.
@@ -98,7 +114,9 @@ pub(crate) fn read(index: &'static Index, namespaces: &[String]) -> Model {
                 if method.has_attribute("AnsiAttribute") {
                     continue;
                 }
-                let Some(import) = method.impl_map() else { continue };
+                let Some(import) = method.impl_map() else {
+                    continue;
+                };
                 let signature = method.signature(&[]);
                 let mut parameters = Vec::new();
                 let rows: Vec<_> = method.params().filter(|p| p.sequence() > 0).collect();
@@ -125,7 +143,9 @@ pub(crate) fn read(index: &'static Index, namespaces: &[String]) -> Model {
                 });
             }
             for field in apis.fields() {
-                let Some(constant) = field.constant() else { continue };
+                let Some(constant) = field.constant() else {
+                    continue;
+                };
                 let ty = field.ty();
                 reach(&ty, &mut wanted);
                 model.constants.push(Constant {
@@ -142,7 +162,9 @@ pub(crate) fn read(index: &'static Index, namespaces: &[String]) -> Model {
         if !seen.insert(name.clone()) {
             continue;
         }
-        let Some(def) = index.get(&name.0, &name.1).next() else { continue };
+        let Some(def) = index.get(&name.0, &name.1).next() else {
+            continue;
+        };
         let info = describe(index, def, &mut wanted);
         model.types.insert(name, info);
     }
@@ -156,16 +178,24 @@ fn describe(index: &'static Index, def: TypeDef<'static>, wanted: &mut Vec<Name>
             reach(&value, wanted);
             // The metadata names the parent handle and not its namespace:
             // the one that declares a typedef of that name, found once.
-            let parent = def.find_attribute("AlsoUsableForAttribute").and_then(|attribute| {
-                attribute.value().into_iter().find_map(|(_, value)| match value {
-                    Value::Utf8(name) => Some(name),
-                    _ => None,
-                })
-            });
+            let parent = def
+                .find_attribute("AlsoUsableForAttribute")
+                .and_then(|attribute| {
+                    attribute
+                        .value()
+                        .into_iter()
+                        .find_map(|(_, value)| match value {
+                            Value::Utf8(name) => Some(name),
+                            _ => None,
+                        })
+                });
             let parent = parent.and_then(|name| {
                 let namespace = index
                     .types()
-                    .find(|candidate| candidate.name() == name && candidate.has_attribute("NativeTypedefAttribute"))?
+                    .find(|candidate| {
+                        candidate.name() == name
+                            && candidate.has_attribute("NativeTypedefAttribute")
+                    })?
                     .namespace()
                     .to_owned();
                 Some((namespace, name))
@@ -176,17 +206,30 @@ fn describe(index: &'static Index, def: TypeDef<'static>, wanted: &mut Vec<Name>
             Kind::Typedef { value, parent }
         }
         TypeCategory::Struct => {
-            let fields: Vec<(String, Type)> = def.fields().map(|field| (field.name().to_owned(), field.ty())).collect();
+            let fields: Vec<(String, Type)> = def
+                .fields()
+                .map(|field| (field.name().to_owned(), field.ty()))
+                .collect();
             for (_, ty) in &fields {
                 reach(ty, wanted);
             }
-            let union = def.flags().contains(windows_metadata::TypeAttributes::ExplicitLayout);
-            Kind::Struct { fields, union, nested: index.nested(def).next().is_some() }
+            let union = def
+                .flags()
+                .contains(windows_metadata::TypeAttributes::ExplicitLayout);
+            Kind::Struct {
+                fields,
+                union,
+                nested: index.nested(def).next().is_some(),
+            }
         }
         TypeCategory::Enum => {
             let members = def
                 .fields()
-                .filter_map(|field| field.constant().map(|constant| (field.name().to_owned(), constant.value())))
+                .filter_map(|field| {
+                    field
+                        .constant()
+                        .map(|constant| (field.name().to_owned(), constant.value()))
+                })
                 .collect();
             Kind::Enum { members }
         }
@@ -199,11 +242,18 @@ fn describe(index: &'static Index, def: TypeDef<'static>, wanted: &mut Vec<Name>
                         reach(ty, wanted);
                     }
                     reach(&signature.return_type, wanted);
-                    let names = invoke.params().filter(|p| p.sequence() > 0).map(|p| p.name().to_owned());
-                    let parameters = names.chain((signature.types.len()..).map(|at| format!("p{at}")))
+                    let names = invoke
+                        .params()
+                        .filter(|p| p.sequence() > 0)
+                        .map(|p| p.name().to_owned());
+                    let parameters = names
+                        .chain((signature.types.len()..).map(|at| format!("p{at}")))
                         .zip(signature.types.iter().cloned())
                         .collect();
-                    Kind::Delegate { parameters, result: signature.return_type.clone() }
+                    Kind::Delegate {
+                        parameters,
+                        result: signature.return_type.clone(),
+                    }
                 }
                 None => Kind::Other,
             }

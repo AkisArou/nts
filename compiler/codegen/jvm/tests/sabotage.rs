@@ -96,20 +96,14 @@ const NAMED: &[Named] = &[
 
 #[test]
 fn every_named_sabotage_breaks_the_case_it_names() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let tests = repository().join("compiler/codegen/jvm/tests");
 
     for (name, file, edits, driver, args, must_fail) in NAMED {
         let args: Vec<String> = args.iter().map(|it| (*it).to_owned()).collect();
-        let ran = with_sabotage(
-            &javac,
-            &java,
-            name,
-            file,
-            edits,
-            &tests.join(driver),
-            &args,
-        );
+        let ran = with_sabotage(&javac, &java, name, file, edits, &tests.join(driver), &args);
         let failed = ran.failed();
         for one in *must_fail {
             assert!(
@@ -139,7 +133,9 @@ fn every_named_sabotage_breaks_the_case_it_names() {
 /// path with an empty edit list.
 #[test]
 fn every_driver_passes_against_an_unsabotaged_runtime() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let tests = repository().join("compiler/codegen/jvm/tests");
 
     for (name, file, _, driver, args, _) in NAMED {

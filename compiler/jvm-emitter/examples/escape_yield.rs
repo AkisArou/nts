@@ -13,7 +13,9 @@ use nts_jvm_emitter::{escapes, read};
 use std::path::{Path, PathBuf};
 
 fn walk(at: &Path, found: &mut Vec<PathBuf>) {
-    let Ok(entries) = std::fs::read_dir(at) else { return };
+    let Ok(entries) = std::fs::read_dir(at) else {
+        return;
+    };
     for entry in entries.filter_map(Result::ok) {
         let path = entry.path();
         if path.is_dir() {
@@ -37,8 +39,12 @@ fn main() {
     let (mut any_reference, mut proved_none, mut proved_some) = (0usize, 0usize, 0usize);
 
     for path in &files {
-        let Ok(bytes) = std::fs::read(path) else { continue };
-        let Ok(class) = read::class_file(&bytes) else { continue };
+        let Ok(bytes) = std::fs::read(path) else {
+            continue;
+        };
+        let Ok(class) = read::class_file(&bytes) else {
+            continue;
+        };
         classes += 1;
         for method in &class.methods {
             methods += 1;
@@ -81,6 +87,10 @@ fn main() {
     if any_reference > 0 {
         #[allow(clippy::cast_precision_loss)]
         let pct = |n: usize| (n as f64) * 100.0 / (any_reference as f64);
-        println!("yield: {:.1}% analysed, {:.1}% proved non-escaping", pct(analysed), pct(proved_none));
+        println!(
+            "yield: {:.1}% analysed, {:.1}% proved non-escaping",
+            pct(analysed),
+            pct(proved_none)
+        );
     }
 }

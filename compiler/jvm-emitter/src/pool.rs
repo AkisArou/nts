@@ -82,7 +82,11 @@ enum Entry {
     Class(u16),
     String(u16),
     NameAndType(u16, u16),
-    Ref { tag: u8, class: u16, name_and_type: u16 },
+    Ref {
+        tag: u8,
+        class: u16,
+        name_and_type: u16,
+    },
     /// The unusable slot that follows a `Long` or a `Double`.
     ///
     /// JVMS 4.4.5 calls this "a poor choice" in its own words and keeps it.
@@ -204,7 +208,11 @@ impl Pool {
         let name_and_type = self.name_and_type(name, descriptor);
         self.push(
             Key::Ref(tag, class, name_and_type),
-            Entry::Ref { tag, class, name_and_type },
+            Entry::Ref {
+                tag,
+                class,
+                name_and_type,
+            },
         )
     }
 
@@ -274,7 +282,11 @@ impl Pool {
                     out.extend_from_slice(&name.to_be_bytes());
                     out.extend_from_slice(&descriptor.to_be_bytes());
                 }
-                Entry::Ref { tag, class, name_and_type } => {
+                Entry::Ref {
+                    tag,
+                    class,
+                    name_and_type,
+                } => {
                     out.push(*tag);
                     out.extend_from_slice(&class.to_be_bytes());
                     out.extend_from_slice(&name_and_type.to_be_bytes());

@@ -7,8 +7,8 @@
 use std::fmt::Write as _;
 
 use nts_codegen_common::objc::{
-    block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol, lookups,
-    selector_symbol,
+    block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol,
+    lookups, selector_symbol,
 };
 use nts_core::hir::native::{FnPointer, Function, Send, Type};
 use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId};
@@ -63,7 +63,10 @@ pub(super) fn module(program: &Program) -> String {
     // spells the function type it actually makes.
     for (symbol, declaration) in [
         ("sel_registerName", "declare ptr @sel_registerName(ptr)"),
-        ("objc_getRequiredClass", "declare ptr @objc_getRequiredClass(ptr)"),
+        (
+            "objc_getRequiredClass",
+            "declare ptr @objc_getRequiredClass(ptr)",
+        ),
         ("objc_msgSend", "declare void @objc_msgSend()"),
     ] {
         if !bound(program, symbol) {
@@ -76,7 +79,10 @@ pub(super) fn module(program: &Program) -> String {
     if found.supers {
         for (symbol, declaration) in [
             ("objc_msgSendSuper", "declare void @objc_msgSendSuper()"),
-            ("class_getSuperclass", "declare ptr @class_getSuperclass(ptr)"),
+            (
+                "class_getSuperclass",
+                "declare ptr @class_getSuperclass(ptr)",
+            ),
         ] {
             if !bound(program, symbol) {
                 let _ = writeln!(text, "{declaration}");
@@ -90,10 +96,20 @@ pub(super) fn module(program: &Program) -> String {
         let _ = writeln!(text, "declare void @objc_msgSendSuper_stret()");
     }
     for selector in found.selectors {
-        lookup(&mut text, &selector_symbol(selector), "sel_registerName", selector);
+        lookup(
+            &mut text,
+            &selector_symbol(selector),
+            "sel_registerName",
+            selector,
+        );
     }
     for class in found.classes {
-        lookup(&mut text, &class_symbol(class), "objc_getRequiredClass", class);
+        lookup(
+            &mut text,
+            &class_symbol(class),
+            "objc_getRequiredClass",
+            class,
+        );
     }
     text
 }
@@ -104,6 +120,7 @@ pub(super) fn module(program: &Program) -> String {
 /// selector counted as the two integer arguments ahead of it. A record result
 /// in memory goes through `objc_msgSend_stret`, the `sret` pointer first: on
 /// `x86_64` plain `objc_msgSend` would read that pointer as the receiver.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(super) fn send(
     func: &Func,
     target: &Function,
@@ -118,7 +135,10 @@ pub(super) fn send(
     // among the declared parameters.
     let plan = super::native::plan(func, target, 1 + usize::from(!instance), platform)?;
     if args.len() != target.argument_types().count() || *result != target.call_result() {
-        return Err(refuse(func, "an Objective-C message whose HIR disagrees with its declared ABI"));
+        return Err(refuse(
+            func,
+            "an Objective-C message whose HIR disagrees with its declared ABI",
+        ));
     }
     let (args, destination) = super::native::split_destination(target, args);
     let mut before = Vec::new();
@@ -139,15 +159,22 @@ pub(super) fn send(
             before.push(format!("{at} = alloca {{ ptr, ptr }}"));
             before.push(format!("store ptr {receiver}, ptr {at}"));
             before.push(format!("{at}.class = call ptr @{}()", class_symbol(class)));
-            before.push(format!("{at}.base = call ptr @class_getSuperclass(ptr {at}.class)"));
-            before.push(format!("{at}.slot = getelementptr inbounds {{ ptr, ptr }}, ptr {at}, i32 0, i32 1"));
+            before.push(format!(
+                "{at}.base = call ptr @class_getSuperclass(ptr {at}.class)"
+            ));
+            before.push(format!(
+                "{at}.slot = getelementptr inbounds {{ ptr, ptr }}, ptr {at}, i32 0, i32 1"
+            ));
             before.push(format!("store ptr {at}.base, ptr {at}.slot"));
             (at, "objc_msgSendSuper")
         }
         None => (receiver, "objc_msgSend"),
     };
     let selector = format!("{out}.selector");
-    before.push(format!("{selector} = call ptr @{}()", selector_symbol(&send.selector)));
+    before.push(format!(
+        "{selector} = call ptr @{}()",
+        selector_symbol(&send.selector)
+    ));
     let mut types = Vec::new();
     let mut values = Vec::new();
     if let (Some(passing), Some(destination)) = (&plan.result, destination)
@@ -162,7 +189,10 @@ pub(super) fn send(
     for (at, arg) in args.iter().enumerate().skip(skip) {
         let ty = &func.values[arg.0 as usize].ty;
         if *ty == HirType::Erased {
-            return Err(refuse(func, "an Objective-C message with an erased argument"));
+            return Err(refuse(
+                func,
+                "an Objective-C message with an erased argument",
+            ));
         }
         let temp = format!("{out}.arg{at}");
         if let Crossing::Record(passing) = &plan.arguments[at] {
@@ -172,7 +202,13 @@ pub(super) fn send(
             } else {
                 types.extend(aggregate::parameter_types(passing));
             }
-            values.extend(aggregate::load_argument(passing, align, &name(*arg), &temp, &mut before));
+            values.extend(aggregate::load_argument(
+                passing,
+                align,
+                &name(*arg),
+                &temp,
+                &mut before,
+            ));
         } else {
             types.push(ty_of(ty, func)?.to_owned());
             values.extend(super::arguments(func, &temp, &[*arg], &mut before)?);
@@ -184,11 +220,18 @@ pub(super) fn send(
         let (entry, prefix) = match passing {
             // arm64 has no `_stret`: `objc_msgSend` itself takes the `sret`
             // pointer, in `x8`.
-            Passing::Memory { .. } if platform.arch == crate::Arch::X86_64 => {
-                (if send.super_of.is_some() { "objc_msgSendSuper_stret" } else { "objc_msgSend_stret" }, String::new())
-            }
+            Passing::Memory { .. } if platform.arch == crate::Arch::X86_64 => (
+                if send.super_of.is_some() {
+                    "objc_msgSendSuper_stret"
+                } else {
+                    "objc_msgSend_stret"
+                },
+                String::new(),
+            ),
             Passing::Memory { .. } => (entry, String::new()),
-            Passing::Registers(_) | Passing::Homogeneous { .. } => (entry, format!("{returned} = ")),
+            Passing::Registers(_) | Passing::Homogeneous { .. } => {
+                (entry, format!("{returned} = "))
+            }
         };
         let spelled = aggregate::result_type(passing);
         before.push(format!(
@@ -199,7 +242,11 @@ pub(super) fn send(
         aggregate::store_result(passing, align, &returned, &name(destination), &mut before);
         return Ok(before.join("\n"));
     }
-    let prefix = if *result == HirType::Void { String::new() } else { format!("{out} = ") };
+    let prefix = if *result == HirType::Void {
+        String::new()
+    } else {
+        format!("{out} = ")
+    };
     before.push(format!(
         "{prefix}call {}{} ({}) @{entry}({})",
         extension(result),
@@ -213,10 +260,14 @@ pub(super) fn send(
 /// Whether the program binds `symbol` as a C function of its own, which the
 /// native declarations have already declared.
 fn bound(program: &Program, symbol: &str) -> bool {
-    program.funcs.iter().flat_map(|func| &func.values).any(|op| {
-        matches!(&op.kind, OpKind::Call { callee: Callee::Native(target), .. }
+    program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .any(|op| {
+            matches!(&op.kind, OpKind::Call { callee: Callee::Native(target), .. }
             if target.send.is_none() && target.name == symbol)
-    })
+        })
 }
 
 /// The C backend's `objc::blocks`, in the other spelling: the block layout,
@@ -239,7 +290,10 @@ fn blocks(program: &Program) -> String {
         .flat_map(|class| &class.methods)
         .any(|method| returns_object(&method.signature.result));
     if counted
-        && (signatures.iter().any(|signature| returns_object(&signature.result)) || entries_return_objects)
+        && (signatures
+            .iter()
+            .any(|signature| returns_object(&signature.result))
+            || entries_return_objects)
         && !bound(program, "objc_autoreleaseReturnValue")
     {
         let _ = writeln!(text, "declare ptr @objc_autoreleaseReturnValue(ptr)");
@@ -267,7 +321,8 @@ fn blocks(program: &Program) -> String {
         "fine:".to_owned(),
         "  ret void".to_owned(),
         "foreign:".to_owned(),
-        "  %said = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @nts.block.message, ptr %what)".to_owned(),
+        "  %said = call i32 (i32, ptr, ...) @dprintf(i32 2, ptr @nts.block.message, ptr %what)"
+            .to_owned(),
         "  call void @abort()".to_owned(),
         "  unreachable".to_owned(),
         "}".to_owned(),
@@ -319,7 +374,9 @@ pub(super) fn abi(ty: &Type) -> String {
 /// the type. The result's order there is not IR.
 pub(super) fn abi_parameter(ty: &Type) -> String {
     let representation = ty.representation();
-    format!("{} {}", bare(&representation), extension(&representation)).trim_end().to_owned()
+    format!("{} {}", bare(&representation), extension(&representation))
+        .trim_end()
+        .to_owned()
 }
 
 pub(super) fn bare(ty: &HirType) -> &'static str {
@@ -343,6 +400,7 @@ pub(super) fn returns_object(result: &Type) -> bool {
     matches!(result, Type::Pointer(nts_core::hir::native::Pointee::Opaque(handle)) if handle.family == nts_core::hir::native::Family::Objc)
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn adapter(text: &mut String, signature: &FnPointer, counted: bool) {
     let result = abi(&signature.result);
     let mut parameters = vec!["ptr %block".to_owned()];
@@ -359,12 +417,21 @@ fn adapter(text: &mut String, signature: &FnPointer, counted: bool) {
     // Called off the thread owning the closure: carried there, where `run`
     // unpacks the arguments into the bridge. Not for a record by value,
     // which this adapter passes as its address; that one keeps the owner check.
-    let carried = nts_codegen_common::objc::hop_arguments(signature)
-        .filter(|_| !signature.parameters.iter().any(|ty| matches!(ty, Type::Record(_))));
+    let carried = nts_codegen_common::objc::hop_arguments(signature).filter(|_| {
+        !signature
+            .parameters
+            .iter()
+            .any(|ty| matches!(ty, Type::Record(_)))
+    });
     if let Some(carried) = &carried {
         hop(text, signature, carried, &types, &arguments);
     }
-    let _ = writeln!(text, "define internal {result} @{}({}) {{", block_invoke_symbol(signature), parameters.join(", "));
+    let _ = writeln!(
+        text,
+        "define internal {result} @{}({}) {{",
+        block_invoke_symbol(signature),
+        parameters.join(", ")
+    );
     if let Some(carried) = &carried {
         let hop = nts_codegen_common::objc::block_hop_symbol(signature);
         let _ = writeln!(text, "  %owned = call zeroext i1 @nts_is_owner_thread()");
@@ -372,33 +439,68 @@ fn adapter(text: &mut String, signature: &FnPointer, counted: bool) {
         let _ = writeln!(text, "carry:");
         let _ = writeln!(text, "  %h = alloca %{hop}");
         for (at, ty) in signature.parameters.iter().enumerate() {
-            let _ = writeln!(text, "  %h{at} = getelementptr inbounds %{hop}, ptr %h, i32 0, i32 {at}");
-            let _ = writeln!(text, "  store {} %a{at}, ptr %h{at}", bare(&ty.representation()));
+            let _ = writeln!(
+                text,
+                "  %h{at} = getelementptr inbounds %{hop}, ptr %h, i32 0, i32 {at}"
+            );
+            let _ = writeln!(
+                text,
+                "  store {} %a{at}, ptr %h{at}",
+                bare(&ty.representation())
+            );
         }
         let _ = writeln!(text, "  %size.at = getelementptr %{hop}, ptr null, i32 1");
         let _ = writeln!(text, "  %size = ptrtoint ptr %size.at to i64");
-        let objects = if carried.iter().any(|c| matches!(c, nts_codegen_common::objc::Carried::Counted(_))) {
+        let objects = if carried
+            .iter()
+            .any(|c| matches!(c, nts_codegen_common::objc::Carried::Counted(_)))
+        {
             format!("@{hop}.objects")
         } else {
             "null".to_owned()
         };
-        let count = carried.iter().filter(|c| matches!(c, nts_codegen_common::objc::Carried::Counted(_))).count();
-        let _ = writeln!(text, "  call void @nts_block_carry(ptr %block, ptr %h, i64 %size, ptr {objects}, i32 {count}, ptr @{hop}.run)");
+        let count = carried
+            .iter()
+            .filter(|c| matches!(c, nts_codegen_common::objc::Carried::Counted(_)))
+            .count();
+        let _ = writeln!(
+            text,
+            "  call void @nts_block_carry(ptr %block, ptr %h, i64 %size, ptr {objects}, i32 {count}, ptr @{hop}.run)"
+        );
         let _ = writeln!(text, "  ret void");
         let _ = writeln!(text, "here:");
     }
-    let _ = writeln!(text, "  %context.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5");
+    let _ = writeln!(
+        text,
+        "  %context.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5"
+    );
     let _ = writeln!(text, "  %context = load ptr, ptr %context.slot");
-    let _ = writeln!(text, "  %bridge.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 6");
+    let _ = writeln!(
+        text,
+        "  %bridge.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 6"
+    );
     let _ = writeln!(text, "  %bridge = load ptr, ptr %bridge.slot");
     let returned = bare(&signature.result.representation());
     if returned == "void" {
-        let _ = writeln!(text, "  call void ({}) %bridge({})", types.join(", "), arguments.join(", "));
+        let _ = writeln!(
+            text,
+            "  call void ({}) %bridge({})",
+            types.join(", "),
+            arguments.join(", ")
+        );
         let _ = writeln!(text, "  ret void");
     } else {
-        let _ = writeln!(text, "  %r = call {result} ({}) %bridge({})", types.join(", "), arguments.join(", "));
+        let _ = writeln!(
+            text,
+            "  %r = call {result} ({}) %bridge({})",
+            types.join(", "),
+            arguments.join(", ")
+        );
         if counted && returns_object(&signature.result) {
-            let _ = writeln!(text, "  %given = call ptr @objc_autoreleaseReturnValue(ptr %r)");
+            let _ = writeln!(
+                text,
+                "  %given = call ptr @objc_autoreleaseReturnValue(ptr %r)"
+            );
             let _ = writeln!(text, "  ret {returned} %given");
         } else {
             let _ = writeln!(text, "  ret {returned} %r");
@@ -410,36 +512,80 @@ fn adapter(text: &mut String, signature: &FnPointer, counted: bool) {
 /// The carried call of a block signature: the arguments' type, the offsets of
 /// the objects in it, and `run`, which unpacks them on the owning thread and
 /// calls the bridge -- the C backend's `hop`, in the other spelling.
-fn hop(text: &mut String, signature: &FnPointer, carried: &[nts_codegen_common::objc::Carried], types: &[String], arguments: &[String]) {
+fn hop(
+    text: &mut String,
+    signature: &FnPointer,
+    carried: &[nts_codegen_common::objc::Carried],
+    types: &[String],
+    arguments: &[String],
+) {
     let hop = nts_codegen_common::objc::block_hop_symbol(signature);
-    let fields: Vec<&str> = signature.parameters.iter().map(|ty| bare(&ty.representation())).collect();
-    let _ = writeln!(text, "%{hop} = type {{ {} }}", if fields.is_empty() { "i8".to_owned() } else { fields.join(", ") });
+    let fields: Vec<&str> = signature
+        .parameters
+        .iter()
+        .map(|ty| bare(&ty.representation()))
+        .collect();
+    let _ = writeln!(
+        text,
+        "%{hop} = type {{ {} }}",
+        if fields.is_empty() {
+            "i8".to_owned()
+        } else {
+            fields.join(", ")
+        }
+    );
     let offsets: Vec<String> = carried
         .iter()
         .enumerate()
         .filter(|(_, c)| matches!(c, nts_codegen_common::objc::Carried::Counted(_)))
-        .map(|(at, _)| format!("i32 ptrtoint (ptr getelementptr (%{hop}, ptr null, i32 0, i32 {at}) to i32)"))
+        .map(|(at, _)| {
+            format!("i32 ptrtoint (ptr getelementptr (%{hop}, ptr null, i32 0, i32 {at}) to i32)")
+        })
         .collect();
     if !offsets.is_empty() {
-        let _ = writeln!(text, "@{hop}.objects = private constant [{} x i32] [{}]", offsets.len(), offsets.join(", "));
+        let _ = writeln!(
+            text,
+            "@{hop}.objects = private constant [{} x i32] [{}]",
+            offsets.len(),
+            offsets.join(", ")
+        );
     }
-    let _ = writeln!(text, "define internal void @{hop}.run(ptr %block, ptr %h) {{");
+    let _ = writeln!(
+        text,
+        "define internal void @{hop}.run(ptr %block, ptr %h) {{"
+    );
     for (at, field) in fields.iter().enumerate() {
-        let _ = writeln!(text, "  %h{at} = getelementptr inbounds %{hop}, ptr %h, i32 0, i32 {at}");
+        let _ = writeln!(
+            text,
+            "  %h{at} = getelementptr inbounds %{hop}, ptr %h, i32 0, i32 {at}"
+        );
         let _ = writeln!(text, "  %a{at} = load {field}, ptr %h{at}");
     }
-    let _ = writeln!(text, "  %context.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5");
+    let _ = writeln!(
+        text,
+        "  %context.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5"
+    );
     let _ = writeln!(text, "  %context = load ptr, ptr %context.slot");
-    let _ = writeln!(text, "  %bridge.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 6");
+    let _ = writeln!(
+        text,
+        "  %bridge.slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 6"
+    );
     let _ = writeln!(text, "  %bridge = load ptr, ptr %bridge.slot");
-    let _ = writeln!(text, "  call void ({}) %bridge({})", types.join(", "), arguments.join(", "));
+    let _ = writeln!(
+        text,
+        "  call void ({}) %bridge({})",
+        types.join(", "),
+        arguments.join(", ")
+    );
     let _ = writeln!(text, "  ret void\n}}");
 }
 
 /// A `NativeBlock`: its frame slot filled, and the slot's address as the value.
 pub(super) fn block(out: &str, invoke: ValueId, context: ValueId, signature: &FnPointer) -> String {
     let slot = format!("{out}.block");
-    let field = |at: u32| format!("{out}.f{at} = getelementptr inbounds %nts.block, ptr {slot}, i32 0, i32 {at}");
+    let field = |at: u32| {
+        format!("{out}.f{at} = getelementptr inbounds %nts.block, ptr {slot}, i32 0, i32 {at}")
+    };
     [
         field(0),
         format!("store ptr @_NSConcreteStackBlock, ptr {out}.f0"),
@@ -450,9 +596,15 @@ pub(super) fn block(out: &str, invoke: ValueId, context: ValueId, signature: &Fn
         field(2),
         format!("store i32 0, ptr {out}.f2"),
         field(3),
-        format!("store ptr @{}, ptr {out}.f3", block_invoke_symbol(signature)),
+        format!(
+            "store ptr @{}, ptr {out}.f3",
+            block_invoke_symbol(signature)
+        ),
         field(4),
-        format!("store ptr @{}, ptr {out}.f4", block_descriptor_symbol(signature)),
+        format!(
+            "store ptr @{}, ptr {out}.f4",
+            block_descriptor_symbol(signature)
+        ),
         field(5),
         format!("store ptr {}, ptr {out}.f5", name(context)),
         field(6),

@@ -109,7 +109,11 @@ pub fn is_native_c_identifier(name: &str) -> bool {
 /// `inline_`.
 #[must_use]
 pub fn native_member(name: &str) -> String {
-    if RESERVED.contains(&name) { format!("{name}_") } else { name.to_owned() }
+    if RESERVED.contains(&name) {
+        format!("{name}_")
+    } else {
+        name.to_owned()
+    }
 }
 
 /// Names the headers a generated file includes already use.
@@ -316,39 +320,169 @@ const STRING: &[&str] = &[
 /// a fix verified against `program.c` alone looks like it worked.
 const HEADER_MACROS: &[&str] = &[
     // <stdio.h>
-    "EOF", "FILE", "BUFSIZ", "FILENAME_MAX", "FOPEN_MAX", "L_tmpnam", "TMP_MAX",
-    "SEEK_CUR", "SEEK_END", "SEEK_SET", "stdin", "stdout", "stderr",
+    "EOF",
+    "FILE",
+    "BUFSIZ",
+    "FILENAME_MAX",
+    "FOPEN_MAX",
+    "L_tmpnam",
+    "TMP_MAX",
+    "SEEK_CUR",
+    "SEEK_END",
+    "SEEK_SET",
+    "stdin",
+    "stdout",
+    "stderr",
     // <stddef.h>, <stdlib.h>
-    "NULL", "offsetof", "EXIT_FAILURE", "EXIT_SUCCESS", "RAND_MAX", "MB_CUR_MAX",
+    "NULL",
+    "offsetof",
+    "EXIT_FAILURE",
+    "EXIT_SUCCESS",
+    "RAND_MAX",
+    "MB_CUR_MAX",
     // <errno.h>. The `E*` family is long; these are the ones a JavaScript
     // program is likely to publish, and node's own `os.constants.errno` names
     // every one of them.
-    "errno", "EACCES", "EADDRINUSE", "EAGAIN", "EBADF", "EBUSY", "ECONNREFUSED",
-    "ECONNRESET", "EEXIST", "EINTR", "EINVAL", "EIO", "EISDIR", "EMFILE",
-    "ENOENT", "ENOMEM", "ENOSPC", "ENOTDIR", "ENOTEMPTY", "EPERM", "EPIPE",
-    "ERANGE", "EROFS", "ETIMEDOUT", "EWOULDBLOCK",
+    "errno",
+    "EACCES",
+    "EADDRINUSE",
+    "EAGAIN",
+    "EBADF",
+    "EBUSY",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "EEXIST",
+    "EINTR",
+    "EINVAL",
+    "EIO",
+    "EISDIR",
+    "EMFILE",
+    "ENOENT",
+    "ENOMEM",
+    "ENOSPC",
+    "ENOTDIR",
+    "ENOTEMPTY",
+    "EPERM",
+    "EPIPE",
+    "ERANGE",
+    "EROFS",
+    "ETIMEDOUT",
+    "EWOULDBLOCK",
     // <assert.h>
-    "assert", "static_assert",
+    "assert",
+    "static_assert",
 ];
 
 const POSIX: &[&str] = &[
     // <unistd.h>
-    "access", "alarm", "chdir", "chown", "close", "dup", "dup2", "execl", "execv", "execve",
-    "_exit", "fchdir", "fchown", "fork", "fsync", "ftruncate", "getcwd", "getegid", "geteuid",
-    "getgid", "getgroups", "gethostname", "getlogin", "getpgid", "getpgrp", "getpid", "getppid",
-    "getuid", "isatty", "lchown", "link", "lseek", "pause", "pipe", "pread", "pwrite", "read",
-    "readlink", "rmdir", "setgid", "setpgid", "setsid", "setuid", "sleep", "symlink", "sync",
-    "truncate", "ttyname", "unlink", "usleep", "write",
+    "access",
+    "alarm",
+    "chdir",
+    "chown",
+    "close",
+    "dup",
+    "dup2",
+    "execl",
+    "execv",
+    "execve",
+    "_exit",
+    "fchdir",
+    "fchown",
+    "fork",
+    "fsync",
+    "ftruncate",
+    "getcwd",
+    "getegid",
+    "geteuid",
+    "getgid",
+    "getgroups",
+    "gethostname",
+    "getlogin",
+    "getpgid",
+    "getpgrp",
+    "getpid",
+    "getppid",
+    "getuid",
+    "isatty",
+    "lchown",
+    "link",
+    "lseek",
+    "pause",
+    "pipe",
+    "pread",
+    "pwrite",
+    "read",
+    "readlink",
+    "rmdir",
+    "setgid",
+    "setpgid",
+    "setsid",
+    "setuid",
+    "sleep",
+    "symlink",
+    "sync",
+    "truncate",
+    "ttyname",
+    "unlink",
+    "usleep",
+    "write",
     // <fcntl.h> and <sys/stat.h>
-    "creat", "fchmod", "fcntl", "fstat", "lstat", "mkdir", "mkfifo", "mknod", "open", "openat",
-    "stat", "umask",
+    "creat",
+    "fchmod",
+    "fcntl",
+    "fstat",
+    "lstat",
+    "mkdir",
+    "mkfifo",
+    "mknod",
+    "open",
+    "openat",
+    "stat",
+    "umask",
     // <sys/socket.h> and <netdb.h>
-    "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt", "listen", "recv",
-    "recvfrom", "send", "sendto", "setsockopt", "shutdown", "socket", "socketpair",
+    "accept",
+    "bind",
+    "connect",
+    "getpeername",
+    "getsockname",
+    "getsockopt",
+    "listen",
+    "recv",
+    "recvfrom",
+    "send",
+    "sendto",
+    "setsockopt",
+    "shutdown",
+    "socket",
+    "socketpair",
     // <stdlib.h> and <stdio.h>, the ones a program plausibly exports
-    "abort", "atexit", "exit", "getenv", "putenv", "setenv", "unsetenv", "system", "rename",
-    "remove", "printf", "fprintf", "sprintf", "snprintf", "puts", "fopen", "fclose", "fread",
-    "fwrite", "fseek", "ftell", "rewind", "clearerr", "random", "srandom", "time", "clock",
+    "abort",
+    "atexit",
+    "exit",
+    "getenv",
+    "putenv",
+    "setenv",
+    "unsetenv",
+    "system",
+    "rename",
+    "remove",
+    "printf",
+    "fprintf",
+    "sprintf",
+    "snprintf",
+    "puts",
+    "fopen",
+    "fclose",
+    "fread",
+    "fwrite",
+    "fseek",
+    "ftell",
+    "rewind",
+    "clearerr",
+    "random",
+    "srandom",
+    "time",
+    "clock",
 ];
 
 fn collides_with_a_header(name: &str) -> bool {
@@ -458,12 +592,21 @@ fn escaped(c: char) -> String {
 /// the compiled function C calls through it. One spelling for every backend,
 /// since the name is what a native operation and its definition agree on.
 #[must_use]
-pub fn bridge_name(target: &str, signature: &nts_core::hir::native::FnPointer, once: bool, bridging: &nts_core::hir::Bridging) -> String {
+pub fn bridge_name(
+    target: &str,
+    signature: &nts_core::hir::native::FnPointer,
+    once: bool,
+    bridging: &nts_core::hir::Bridging,
+) -> String {
     let kind = if once { "Once" } else { "" };
     // A bridge that converts a parameter -- boxes a record, makes an array --
     // is another bridge than one that does not, for the same closure and
     // signature.
-    let mut name = format!("NtsBridge{kind}_{}_{}", c_identifier(target), signature.name);
+    let mut name = format!(
+        "NtsBridge{kind}_{}_{}",
+        c_identifier(target),
+        signature.name
+    );
     for parameter in &bridging.boxed {
         name.push_str("_B");
         name.push_str(&parameter.at.to_string());
@@ -708,10 +851,18 @@ pub fn jvm_class_name(package: &str, raw: &str) -> String {
 /// internal in LLVM's.
 #[must_use]
 pub fn is_public(program: &nts_core::hir::Program, func: &nts_core::hir::Func) -> bool {
-    let published = |name: &str| program.public_api.iter().any(|(published, _)| published == name);
+    let published = |name: &str| {
+        program
+            .public_api
+            .iter()
+            .any(|(published, _)| published == name)
+    };
     func.exported
         || published(&func.name)
-        || program.generators.iter().any(|generator| generator.resume == func.name && published(&generator.constructor))
+        || program
+            .generators
+            .iter()
+            .any(|generator| generator.resume == func.name && published(&generator.constructor))
 }
 
 #[cfg(test)]
@@ -749,7 +900,12 @@ mod jvm_tests {
         }
         // The shapes this compiler actually emits, named rather than left to
         // the sweep above to cover incidentally.
-        for raw in ["__@kCount@2", "Benchmark#benchmark", "module#init", "resolve@win32"] {
+        for raw in [
+            "__@kCount@2",
+            "Benchmark#benchmark",
+            "module#init",
+            "resolve@win32",
+        ] {
             assert!(dex_can_spell(&jvm_member_name(raw)), "{raw}");
         }
     }
@@ -782,8 +938,15 @@ mod jvm_tests {
         // rename valid programs for a constraint that does not exist.
         for ch in ['\u{3042}', '\u{00e9}', '\u{3b1}', '\u{10400}'] {
             let raw = format!("a{ch}b");
-            assert!(dex_can_spell(&raw), "{ch:?} is in SimpleName and was rejected");
-            assert_eq!(jvm_member_name(&raw), raw, "{ch:?} was renamed for no reason");
+            assert!(
+                dex_can_spell(&raw),
+                "{ch:?} is in SimpleName and was rejected"
+            );
+            assert_eq!(
+                jvm_member_name(&raw),
+                raw,
+                "{ch:?} was renamed for no reason"
+            );
         }
     }
 
@@ -827,8 +990,14 @@ mod jvm_tests {
     /// in the common case and emit an unspellable class in the one that matters.
     #[test]
     fn a_named_package_carries_the_member_rule_with_it() {
-        assert_eq!(jvm_class_name("com/acme/sdk", "Point"), "com/acme/sdk/Point");
-        assert_eq!(jvm_class_name("com/acme/sdk", "a/b.c"), "com/acme/sdk/a$b$c");
+        assert_eq!(
+            jvm_class_name("com/acme/sdk", "Point"),
+            "com/acme/sdk/Point"
+        );
+        assert_eq!(
+            jvm_class_name("com/acme/sdk", "a/b.c"),
+            "com/acme/sdk/a$b$c"
+        );
     }
 
     /// A name libc also declares is escaped, and the failure it prevents is a
@@ -860,7 +1029,13 @@ mod jvm_tests {
     /// is about what a linker can confuse rather than about how a name reads.
     #[test]
     fn a_name_no_header_declares_is_left_alone() {
-        for name in ["probeAccess", "openFile", "readable", "socketPath", "timestamp"] {
+        for name in [
+            "probeAccess",
+            "openFile",
+            "readable",
+            "socketPath",
+            "timestamp",
+        ] {
             assert_eq!(c_identifier(name), name);
         }
     }

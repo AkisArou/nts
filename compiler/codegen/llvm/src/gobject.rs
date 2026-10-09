@@ -9,7 +9,9 @@
 use std::fmt::Write as _;
 
 use nts_core::hir::native::{Family, PROGRAM_GTYPE, Scalar, Type};
-use nts_core::hir::{Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program, TemplateText};
+use nts_core::hir::{
+    Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program, TemplateText,
+};
 use nts_diagnostics::Diagnostic;
 
 use super::{Platform, conversion, is_not_zero, refuse, symbol, text_constant, ty_of};
@@ -23,7 +25,6 @@ pub(super) fn maker(class: &ForeignClass) -> String {
 fn made(program: &Program, class: &ForeignClass) -> bool {
     called(program, &maker(class))
 }
-
 
 /// Whether the program calls `name` as a foreign function, and so declares it.
 fn called(program: &Program, name: &str) -> bool {
@@ -48,7 +49,12 @@ pub(super) fn defined_here(name: &str) -> bool {
         || nts_core::hir::native::is_by_name_thunk(name)
 }
 
-pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared: bool) -> Result<String, Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(super) fn classes(
+    program: &Program,
+    platform: Platform,
+    callbacks_declared: bool,
+) -> Result<String, Diagnostic> {
     // A parent's `get_type`, declared once however many classes extend it
     // and chain up to it: LLVM, unlike C, refuses a second declaration.
     let mut parents = std::collections::BTreeSet::new();
@@ -73,22 +79,31 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         // methods whose slot is in that interface's struct.
         let mut interfaces: Vec<Vec<String>> = vec![Vec::new(); class.protocols.len()];
         for (at, method) in class.methods.iter().enumerate() {
-            let Some(compiled) = program.funcs.iter().find(|func| func.name == method.function) else {
+            let Some(compiled) = program
+                .funcs
+                .iter()
+                .find(|func| func.name == method.function)
+            else {
                 let missing = "a GObject virtual function whose compiled function this program does not define";
                 return match program.funcs.first() {
                     Some(func) => Err(refuse(func, missing)),
                     None => Ok(String::new()),
                 };
             };
-            let offset = method
-                .selector()
-                .split_whitespace()
-                .nth(2)
-                .ok_or_else(|| refuse(compiled, "a GObject virtual function whose slot has no offset"))?;
+            let offset = method.selector().split_whitespace().nth(2).ok_or_else(|| {
+                refuse(
+                    compiled,
+                    "a GObject virtual function whose slot has no offset",
+                )
+            })?;
             let entry = format!("nts_gobject_{name}_{at}");
             entry_point(&mut out, platform, &entry, method, compiled)?;
             let structure = method.selector().split_whitespace().next();
-            let table = match class.protocols.iter().position(|interface| interface.split_whitespace().next() == structure) {
+            let table = match class
+                .protocols
+                .iter()
+                .position(|interface| interface.split_whitespace().next() == structure)
+            {
                 Some(interface) => &mut interfaces[interface],
                 None => &mut slots,
             };
@@ -97,16 +112,26 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         let table = if slots.is_empty() {
             "null".to_owned()
         } else {
-            let _ = writeln!(out, "@nts_gobject_slots_{name} = internal constant [{} x {{ i64, ptr }}] [{}]", slots.len(), slots.join(", "));
+            let _ = writeln!(
+                out,
+                "@nts_gobject_slots_{name} = internal constant [{} x {{ i64, ptr }}] [{}]",
+                slots.len(),
+                slots.join(", ")
+            );
             format!("@nts_gobject_slots_{name}")
         };
-        text_constant(&mut out, &format!("nts_gobject_name_{name}"), class.type_name.as_deref().unwrap_or(name.as_str()));
+        text_constant(
+            &mut out,
+            &format!("nts_gobject_name_{name}"),
+            class.type_name.as_deref().unwrap_or(name.as_str()),
+        );
         // The fields' maker, entered and left as an entry point is:
         // `instance_init` runs wherever GTK makes one.
         let make_state = match &class.state {
             Some(state) => {
                 let Some(compiled) = program.funcs.iter().find(|func| &func.name == state) else {
-                    let missing = "a GObject class whose fields' maker this program does not define";
+                    let missing =
+                        "a GObject class whose fields' maker this program does not define";
                     return match program.funcs.first() {
                         Some(func) => Err(refuse(func, missing)),
                         None => Ok(String::new()),
@@ -124,13 +149,25 @@ pub(super) fn classes(program: &Program, platform: Platform, callbacks_declared:
         // Its signals, added to the type the moment it exists.
         let hooks = template(&mut out, program, platform, class)?;
         let mut signals = registrations(&mut out, class);
-        signals.push_str(&implementations(&mut out, program, (class, &interfaces), &mut parents));
+        signals.push_str(&implementations(
+            &mut out,
+            program,
+            (class, &interfaces),
+            &mut parents,
+        ));
         if let Some(table) = properties(&mut out, program, class)? {
-            let _ = writeln!(signals, "  call void @nts_gobject_set_properties(i64 %made, ptr {table}, i64 {})", class.properties.len());
+            let _ = writeln!(
+                signals,
+                "  call void @nts_gobject_set_properties(i64 %made, ptr {table}, i64 {})",
+                class.properties.len()
+            );
         }
         // A parent the program wrote is defined here, not declared.
         let parent = &class.superclass;
-        if !parent.starts_with(PROGRAM_GTYPE) && !called(program, parent) && parents.insert(parent.clone()) {
+        if !parent.starts_with(PROGRAM_GTYPE)
+            && !called(program, parent)
+            && parents.insert(parent.clone())
+        {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
         let _ = writeln!(
@@ -173,23 +210,41 @@ fn implementations(
     for (at, (interface, slots)) in class.protocols.iter().zip(tables).enumerate() {
         // The lowering writes both words; a bare struct name has no `GType`
         // function to ask.
-        let Some(get_type) = interface.split_whitespace().nth(1) else { continue };
+        let Some(get_type) = interface.split_whitespace().nth(1) else {
+            continue;
+        };
         if !called(program, get_type) && declared.insert(get_type.to_owned()) {
             let _ = writeln!(out, "declare i64 @{get_type}()");
         }
         let table = if slots.is_empty() {
             "null".to_owned()
         } else {
-            let _ = writeln!(out, "@nts_gobject_interface_{name}_{at} = internal constant [{} x {{ i64, ptr }}] [{}]", slots.len(), slots.join(", "));
+            let _ = writeln!(
+                out,
+                "@nts_gobject_interface_{name}_{at} = internal constant [{} x {{ i64, ptr }}] [{}]",
+                slots.len(),
+                slots.join(", ")
+            );
             format!("@nts_gobject_interface_{name}_{at}")
         };
-        rows.push(format!("{{ ptr, ptr, i64 }} {{ ptr @{get_type}, ptr {table}, i64 {} }}", slots.len()));
+        rows.push(format!(
+            "{{ ptr, ptr, i64 }} {{ ptr @{get_type}, ptr {table}, i64 {} }}",
+            slots.len()
+        ));
     }
     if rows.is_empty() {
         return String::new();
     }
-    let _ = writeln!(out, "@nts_gobject_interfaces_{name} = internal constant [{} x {{ ptr, ptr, i64 }}] [{}]", rows.len(), rows.join(", "));
-    format!("  call void @nts_gobject_add_interfaces(i64 %made, ptr @nts_gobject_interfaces_{name}, i64 {})\n", rows.len())
+    let _ = writeln!(
+        out,
+        "@nts_gobject_interfaces_{name} = internal constant [{} x {{ ptr, ptr, i64 }}] [{}]",
+        rows.len(),
+        rows.join(", ")
+    );
+    format!(
+        "  call void @nts_gobject_add_interfaces(i64 %made, ptr @nts_gobject_interfaces_{name}, i64 {})\n",
+        rows.len()
+    )
 }
 
 /// The support files' functions the classes' registrations call, each declared
@@ -199,14 +254,24 @@ fn declarations(out: &mut String, classes: &[&ForeignClass]) {
     if classes.iter().any(|class| class.template.is_some()) {
         out.push_str("declare void @nts_gtk_class_children(ptr, ptr, i64)\ndeclare void @nts_gtk_init_template(ptr)\n");
     }
-    let texts = || classes.iter().filter_map(|class| class.template.as_ref()).map(|template| &template.text);
+    let texts = || {
+        classes
+            .iter()
+            .filter_map(|class| class.template.as_ref())
+            .map(|template| &template.text)
+    };
     if texts().any(|text| matches!(text, TemplateText::Literal(_))) {
         out.push_str("declare void @nts_gtk_class_template(ptr, ptr, i64)\n");
     }
     if texts().any(|text| matches!(text, TemplateText::Read(_))) {
         out.push_str("declare void @nts_gtk_class_template_text(ptr, ptr)\n");
     }
-    if classes.iter().any(|class| class.template.as_ref().is_some_and(|template| !template.callbacks.is_empty())) {
+    if classes.iter().any(|class| {
+        class
+            .template
+            .as_ref()
+            .is_some_and(|template| !template.callbacks.is_empty())
+    }) {
         out.push_str("declare void @nts_gtk_bind_callback(ptr, ptr, ptr)\n");
     }
     if classes.iter().any(|class| !class.signals.is_empty()) {
@@ -223,14 +288,24 @@ fn declarations(out: &mut String, classes: &[&ForeignClass]) {
 /// A class's template: the `class_setup` hook setting it and binding each
 /// child it names, and `nts_gtk_init_template` for each instance
 /// (`nts_gtk.c`). The two hook arguments registration passes.
-fn template(out: &mut String, program: &Program, platform: Platform, class: &ForeignClass) -> Result<String, Diagnostic> {
-    let Some(template) = &class.template else { return Ok("ptr null, ptr null".to_owned()) };
+fn template(
+    out: &mut String,
+    program: &Program,
+    platform: Platform,
+    class: &ForeignClass,
+) -> Result<String, Diagnostic> {
+    let Some(template) = &class.template else {
+        return Ok("ptr null, ptr null".to_owned());
+    };
     let name = &class.name;
     let binds = callbacks(out, program, platform, class, &template.callbacks)?;
     let set = match &template.text {
         TemplateText::Literal(text) => {
             bytes_constant(out, &format!("nts_gobject_template_{name}"), text);
-            format!("  call void @nts_gtk_class_template(ptr %klass, ptr @nts_gobject_template_{name}, i64 {})\n", text.len())
+            format!(
+                "  call void @nts_gtk_class_template(ptr %klass, ptr @nts_gobject_template_{name}, i64 {})\n",
+                text.len()
+            )
         }
         // The reader's string, lent to GTK for the call, entered and left
         // as an entry point is; its result is the caller's to release only
@@ -264,7 +339,12 @@ fn template(out: &mut String, program: &Program, platform: Platform, class: &For
     let table = if names.is_empty() {
         "null".to_owned()
     } else {
-        let _ = writeln!(out, "@nts_gobject_children_{name} = internal constant [{} x ptr] [{}]", names.len(), names.join(", "));
+        let _ = writeln!(
+            out,
+            "@nts_gobject_children_{name} = internal constant [{} x ptr] [{}]",
+            names.len(),
+            names.join(", ")
+        );
         format!("@nts_gobject_children_{name}")
     };
     let _ = writeln!(
@@ -272,19 +352,32 @@ fn template(out: &mut String, program: &Program, platform: Platform, class: &For
         "define internal void @nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n{set}  call void @nts_gtk_class_children(ptr %klass, ptr {table}, i64 {})\n{binds}  ret void\n}}",
         names.len()
     );
-    Ok(format!("ptr @nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template"))
+    Ok(format!(
+        "ptr @nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template"
+    ))
 }
 
 /// Each method a template names as a signal's handler: the entry point a
 /// virtual function's would be, instance first, and the shim GTK calls with
 /// the signal's arguments and the instance last, its user data. Returns the
 /// `class_setup` calls binding each by name.
-fn callbacks(out: &mut String, program: &Program, platform: Platform, class: &ForeignClass, callbacks: &[ForeignMethod]) -> Result<String, Diagnostic> {
+fn callbacks(
+    out: &mut String,
+    program: &Program,
+    platform: Platform,
+    class: &ForeignClass,
+    callbacks: &[ForeignMethod],
+) -> Result<String, Diagnostic> {
     let name = &class.name;
     let mut binds = String::new();
     for (at, callback) in callbacks.iter().enumerate() {
-        let Some(compiled) = program.funcs.iter().find(|func| func.name == callback.function) else {
-            let missing = "a template's handler whose compiled function this program does not define";
+        let Some(compiled) = program
+            .funcs
+            .iter()
+            .find(|func| func.name == callback.function)
+        else {
+            let missing =
+                "a template's handler whose compiled function this program does not define";
             return match program.funcs.first() {
                 Some(func) => Err(refuse(func, missing)),
                 None => Ok(String::new()),
@@ -299,14 +392,35 @@ fn callbacks(out: &mut String, program: &Program, platform: Platform, class: &Fo
             .map(|ty| ty_of(&ty.abi(platform.abi), compiled).map(str::to_owned))
             .collect::<Result<Vec<_>, _>>()?;
         let result = callback.signature.result.abi(platform.abi);
-        let returns = if result == HirType::Void { "void".to_owned() } else { ty_of(&result, compiled)?.to_owned() };
-        let parameters: Vec<String> = types.iter().enumerate().skip(1).map(|(at, ty)| format!("{ty} %a{at}")).chain(["ptr %self".to_owned()]).collect();
+        let returns = if result == HirType::Void {
+            "void".to_owned()
+        } else {
+            ty_of(&result, compiled)?.to_owned()
+        };
+        let parameters: Vec<String> = types
+            .iter()
+            .enumerate()
+            .skip(1)
+            .map(|(at, ty)| format!("{ty} %a{at}"))
+            .chain(["ptr %self".to_owned()])
+            .collect();
         let arguments: Vec<String> = std::iter::once("ptr %self".to_owned())
-            .chain(types.iter().enumerate().skip(1).map(|(at, ty)| format!("{ty} %a{at}")))
+            .chain(
+                types
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .map(|(at, ty)| format!("{ty} %a{at}")),
+            )
             .collect();
         let shim = format!("nts_gobject_callback_{name}_{at}");
         if returns == "void" {
-            let _ = writeln!(out, "define internal void @{shim}({}) nounwind {{\n  call void @{entry}({})\n  ret void\n}}", parameters.join(", "), arguments.join(", "));
+            let _ = writeln!(
+                out,
+                "define internal void @{shim}({}) nounwind {{\n  call void @{entry}({})\n  ret void\n}}",
+                parameters.join(", "),
+                arguments.join(", ")
+            );
         } else {
             let _ = writeln!(
                 out,
@@ -317,7 +431,10 @@ fn callbacks(out: &mut String, program: &Program, platform: Platform, class: &Fo
         }
         let handler = callback.selector().trim_start_matches("callback ");
         bytes_constant(out, &format!("{shim}.name"), handler);
-        let _ = writeln!(binds, "  call void @nts_gtk_bind_callback(ptr %klass, ptr @{shim}.name, ptr @{shim})");
+        let _ = writeln!(
+            binds,
+            "  call void @nts_gtk_bind_callback(ptr %klass, ptr @{shim}.name, ptr @{shim})"
+        );
     }
     Ok(binds)
 }
@@ -327,14 +444,28 @@ fn callbacks(out: &mut String, program: &Program, platform: Platform, class: &Fo
 fn children(program: &Program) -> String {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
-    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_child_") => Some(target),
-        _ => None,
-    }) {
+    for target in program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_child_") => Some(target),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((class, index)) = target.name.trim_start_matches("nts_gobject_child_").rsplit_once('_') else { continue };
+        let Some((class, index)) = target
+            .name
+            .trim_start_matches("nts_gobject_child_")
+            .rsplit_once('_')
+        else {
+            continue;
+        };
         let Some(id) = program
             .foreign_classes
             .iter()
@@ -363,8 +494,16 @@ fn registrations(out: &mut String, class: &ForeignClass) -> String {
     let name = &class.name;
     let mut calls = String::new();
     for (at, signal) in class.signals.iter().enumerate() {
-        bytes_constant(out, &format!("nts_gobject_signal_{name}_{at}"), &signal.name);
-        bytes_constant(out, &format!("nts_gobject_kinds_{name}_{at}"), &signal.kinds);
+        bytes_constant(
+            out,
+            &format!("nts_gobject_signal_{name}_{at}"),
+            &signal.name,
+        );
+        bytes_constant(
+            out,
+            &format!("nts_gobject_kinds_{name}_{at}"),
+            &signal.kinds,
+        );
         let _ = writeln!(
             calls,
             "  call i32 @nts_gobject_add_signal(i64 %made, ptr @nts_gobject_signal_{name}_{at}, ptr @nts_gobject_kinds_{name}_{at})"
@@ -377,7 +516,11 @@ fn registrations(out: &mut String, class: &ForeignClass) -> String {
 /// reach them: a wrapper per accessor, entered and left as an entry point is,
 /// and the `{ name, kind, get, set }` table registration hands over. `None`
 /// for a class with none.
-fn properties(out: &mut String, program: &Program, class: &ForeignClass) -> Result<Option<String>, Diagnostic> {
+fn properties(
+    out: &mut String,
+    program: &Program,
+    class: &ForeignClass,
+) -> Result<Option<String>, Diagnostic> {
     if class.properties.is_empty() {
         return Ok(None);
     }
@@ -403,7 +546,11 @@ fn properties(out: &mut String, program: &Program, class: &ForeignClass) -> Resu
             "define internal void @nts_gobject_set_{name}_{at}(ptr %self, {value} %v) nounwind {{\n  call void @nts_callback_enter()\n  call void {}(ptr %self, {value} %v)\n  call void @nts_callback_leave()\n  ret void\n}}",
             symbol(&set.name)
         );
-        bytes_constant(out, &format!("nts_gobject_property_{name}_{at}"), &property.name);
+        bytes_constant(
+            out,
+            &format!("nts_gobject_property_{name}_{at}"),
+            &property.name,
+        );
         rows.push(format!(
             "{{ ptr, i8, ptr, ptr }} {{ ptr @nts_gobject_property_{name}_{at}, i8 {}, ptr @nts_gobject_get_{name}_{at}, ptr @nts_gobject_set_{name}_{at} }}",
             u32::from(property.kind)
@@ -424,14 +571,28 @@ fn properties(out: &mut String, program: &Program, class: &ForeignClass) -> Resu
 fn notifies(program: &Program) -> String {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
-    for target in program.funcs.iter().flat_map(|func| &func.values).filter_map(|op| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_notify_") => Some(target),
-        _ => None,
-    }) {
+    for target in program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_notify_") => Some(target),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((class, index)) = target.name.trim_start_matches("nts_gobject_notify_").rsplit_once('_') else { continue };
+        let Some((class, index)) = target
+            .name
+            .trim_start_matches("nts_gobject_notify_")
+            .rsplit_once('_')
+        else {
+            continue;
+        };
         if done.len() == 1 {
             out.push_str("declare ptr @nts_gobject_property_spec(i64, i32)\ndeclare void @g_object_notify_by_pspec(ptr, ptr)\n");
         }
@@ -465,7 +626,11 @@ fn bytes_constant(out: &mut String, name: &str, value: &str) {
             }
         }
     }
-    let _ = writeln!(out, "@{name} = private unnamed_addr constant [{} x i8] c\"{escaped}\\00\"", value.len() + 1);
+    let _ = writeln!(
+        out,
+        "@{name} = private unnamed_addr constant [{} x i8] c\"{escaped}\\00\"",
+        value.len() + 1
+    );
 }
 
 /// Each `nts_gobject_emit_{kinds}__{name}` the program calls, defined as its
@@ -476,23 +641,46 @@ fn bytes_constant(out: &mut String, name: &str, value: &str) {
 fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
-    for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_emit_") => Some((func, target)),
-        _ => None,
-    }) {
+    for (func, target) in program
+        .funcs
+        .iter()
+        .flat_map(|func| func.values.iter().map(move |op| (func, op)))
+        .filter_map(|(func, op)| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_emit_") => Some((func, target)),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((_, signal)) = target.name.trim_start_matches("nts_gobject_emit_").split_once("__") else {
-            return Err(refuse(func, "an emit thunk whose name does not say its signal"));
+        let Some((_, signal)) = target
+            .name
+            .trim_start_matches("nts_gobject_emit_")
+            .split_once("__")
+        else {
+            return Err(refuse(
+                func,
+                "an emit thunk whose name does not say its signal",
+            ));
         };
         if done.len() == 1 {
             out.push_str("declare i32 @nts_gobject_signal_id(ptr, ptr, ptr)\ndeclare void @g_signal_emit(ptr, i32, i32, ...)\n");
         }
         let thunk = &target.name;
         bytes_constant(&mut out, &format!("{thunk}.name"), signal);
-        let types = target.parameters.iter().map(|ty| ty_of(&ty.abi(platform.abi), func).map(str::to_owned)).collect::<Result<Vec<_>, _>>()?;
-        let parameters: Vec<String> = types.iter().enumerate().map(|(at, ty)| format!("{ty} %a{at}")).collect();
+        let types = target
+            .parameters
+            .iter()
+            .map(|ty| ty_of(&ty.abi(platform.abi), func).map(str::to_owned))
+            .collect::<Result<Vec<_>, _>>()?;
+        let parameters: Vec<String> = types
+            .iter()
+            .enumerate()
+            .map(|(at, ty)| format!("{ty} %a{at}"))
+            .collect();
         let mut body = String::new();
         let mut passed = Vec::new();
         for (at, ty) in types.iter().enumerate().skip(1) {
@@ -508,9 +696,17 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
             ("void".to_owned(), String::new(), "  ret void\n".to_owned())
         } else {
             let ty = ty_of(&target.result.abi(platform.abi), func)?.to_owned();
-            let zero = if matches!(ty.as_str(), "float" | "double") { "0.0" } else { "0" };
+            let zero = if matches!(ty.as_str(), "float" | "double") {
+                "0.0"
+            } else {
+                "0"
+            };
             let _ = write!(rest, ", ptr %r");
-            (ty.clone(), format!("  %r = alloca {ty}\n  store {ty} {zero}, ptr %r\n"), format!("  %v = load {ty}, ptr %r\n  ret {ty} %v\n"))
+            (
+                ty.clone(),
+                format!("  %r = alloca {ty}\n  store {ty} {zero}, ptr %r\n"),
+                format!("  %v = load {ty}, ptr %r\n  ret {ty} %v\n"),
+            )
         };
         let _ = writeln!(
             out,
@@ -529,7 +725,10 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
 /// a `bool` or narrow integer widened to `int` -- signed as its C type is --
 /// and a `float` to `double`, which is what the callee's `va_arg` reads.
 fn promoted(body: &mut String, at: usize, ty: &str, native: &Type) -> String {
-    let signed = matches!(native, Type::Scalar(Scalar::Int8 | Scalar::Int16 | Scalar::Char));
+    let signed = matches!(
+        native,
+        Type::Scalar(Scalar::Int8 | Scalar::Int16 | Scalar::Char)
+    );
     match ty {
         "i1" | "i8" | "i16" => {
             let widen = if signed { "sext" } else { "zext" };
@@ -553,26 +752,50 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
     // A write of a property with no setter method, to `g_object_set`; a
     // construct-only property a construction gives, to the support file's
     // builder. Each thunk is `{prefix}{kind}__{name}`.
-    for (prefix, callee) in [("nts_gobject_prop_", "g_object_set"), ("nts_gobject_with_", "nts_gobject_with_builder_add")] {
+    for (prefix, callee) in [
+        ("nts_gobject_prop_", "g_object_set"),
+        ("nts_gobject_with_", "nts_gobject_with_builder_add"),
+    ] {
         let mut done = std::collections::BTreeSet::new();
-        for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
-            OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with(prefix) && defined_here(&target.name) => Some((func, target)),
-            _ => None,
-        }) {
+        for (func, target) in program
+            .funcs
+            .iter()
+            .flat_map(|func| func.values.iter().map(move |op| (func, op)))
+            .filter_map(|(func, op)| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Native(target),
+                    ..
+                } if target.name.starts_with(prefix) && defined_here(&target.name) => {
+                    Some((func, target))
+                }
+                _ => None,
+            })
+        {
             if !done.insert(target.name.clone()) {
                 continue;
             }
-            let Some((_, property)) = target.name.trim_start_matches(prefix).split_once("__") else {
-                return Err(refuse(func, "a property thunk whose name does not say its property"));
+            let Some((_, property)) = target.name.trim_start_matches(prefix).split_once("__")
+            else {
+                return Err(refuse(
+                    func,
+                    "a property thunk whose name does not say its property",
+                ));
             };
             if target.parameters.len() != 2 {
-                return Err(refuse(func, "a property thunk that does not take an object and a value"));
+                return Err(refuse(
+                    func,
+                    "a property thunk that does not take an object and a value",
+                ));
             }
             if done.len() == 1 {
                 let _ = writeln!(out, "declare void @{callee}(ptr, ptr, ...)");
             }
             let thunk = &target.name;
-            bytes_constant(&mut out, &format!("{thunk}.name"), &property.replace('_', "-"));
+            bytes_constant(
+                &mut out,
+                &format!("{thunk}.name"),
+                &property.replace('_', "-"),
+            );
             let value = ty_of(&target.parameters[1].abi(platform.abi), func)?.to_owned();
             let mut body = String::new();
             let passed = promoted(&mut body, 1, &value, &target.parameters[1]);
@@ -591,21 +814,40 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
 fn get_by_name(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
-    for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if target.name.starts_with("nts_gobject_propget_") => Some((func, target)),
-        _ => None,
-    }) {
+    for (func, target) in program
+        .funcs
+        .iter()
+        .flat_map(|func| func.values.iter().map(move |op| (func, op)))
+        .filter_map(|(func, op)| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if target.name.starts_with("nts_gobject_propget_") => Some((func, target)),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((_, property)) = target.name.trim_start_matches("nts_gobject_propget_").split_once("__") else {
-            return Err(refuse(func, "a property thunk whose name does not say its property"));
+        let Some((_, property)) = target
+            .name
+            .trim_start_matches("nts_gobject_propget_")
+            .split_once("__")
+        else {
+            return Err(refuse(
+                func,
+                "a property thunk whose name does not say its property",
+            ));
         };
         if done.len() == 1 {
             out.push_str("declare void @g_object_get(ptr, ptr, ...)\n");
         }
         let thunk = &target.name;
-        bytes_constant(&mut out, &format!("{thunk}.name"), &property.replace('_', "-"));
+        bytes_constant(
+            &mut out,
+            &format!("{thunk}.name"),
+            &property.replace('_', "-"),
+        );
         let value = ty_of(&target.result.abi(platform.abi), func)?.to_owned();
         let zero = match value.as_str() {
             "float" | "double" => "0.0",
@@ -622,32 +864,74 @@ fn get_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
 
 /// Each chain-up thunk the program calls (`super.vfunc_clicked()`): the
 /// parent's slot at the offset its name carries, called if it is there.
-fn chains(program: &Program, platform: Platform, parents: &mut std::collections::BTreeSet<String>) -> Result<String, Diagnostic> {
+fn chains(
+    program: &Program,
+    platform: Platform,
+    parents: &mut std::collections::BTreeSet<String>,
+) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
-    for (func, target) in program.funcs.iter().flat_map(|func| func.values.iter().map(move |op| (func, op))).filter_map(|(func, op)| match &op.kind {
-        OpKind::Call { callee: Callee::Native(target), .. } if is_chain(&target.name) => Some((func, target)),
-        _ => None,
-    }) {
+    for (func, target) in program
+        .funcs
+        .iter()
+        .flat_map(|func| func.values.iter().map(move |op| (func, op)))
+        .filter_map(|(func, op)| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } if is_chain(&target.name) => Some((func, target)),
+            _ => None,
+        })
+    {
         if !done.insert(target.name.clone()) {
             continue;
         }
         if done.len() == 1 {
             out.push_str("declare ptr @nts_gobject_parent_slot(i64, i64)\n");
         }
-        let Some((class, offset)) = target.name.trim_start_matches("nts_gobject_chain_").rsplit_once('_') else {
-            return Err(refuse(func, "a chain-up whose name does not say its class and slot"));
+        let Some((class, offset)) = target
+            .name
+            .trim_start_matches("nts_gobject_chain_")
+            .rsplit_once('_')
+        else {
+            return Err(refuse(
+                func,
+                "a chain-up whose name does not say its class and slot",
+            ));
         };
-        let Some(parent) = program.foreign_classes.iter().find(|foreign| foreign.family == Family::GObject && foreign.name == class).map(|foreign| foreign.superclass.clone()) else {
-            return Err(refuse(func, "a chain-up in a class this program does not register"));
+        let Some(parent) = program
+            .foreign_classes
+            .iter()
+            .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
+            .map(|foreign| foreign.superclass.clone())
+        else {
+            return Err(refuse(
+                func,
+                "a chain-up in a class this program does not register",
+            ));
         };
-        if !parent.starts_with(PROGRAM_GTYPE) && !called(program, &parent) && parents.insert(parent.clone()) {
+        if !parent.starts_with(PROGRAM_GTYPE)
+            && !called(program, &parent)
+            && parents.insert(parent.clone())
+        {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
-        let types = target.parameters.iter().map(|ty| ty_of(&ty.abi(platform.abi), func).map(str::to_owned)).collect::<Result<Vec<_>, _>>()?;
-        let parameters: Vec<String> = types.iter().enumerate().map(|(at, ty)| format!("{ty} %a{at}")).collect();
+        let types = target
+            .parameters
+            .iter()
+            .map(|ty| ty_of(&ty.abi(platform.abi), func).map(str::to_owned))
+            .collect::<Result<Vec<_>, _>>()?;
+        let parameters: Vec<String> = types
+            .iter()
+            .enumerate()
+            .map(|(at, ty)| format!("{ty} %a{at}"))
+            .collect();
         let result = target.result.abi(platform.abi);
-        let returns = if result == HirType::Void { "void".to_owned() } else { ty_of(&result, func)?.to_owned() };
+        let returns = if result == HirType::Void {
+            "void".to_owned()
+        } else {
+            ty_of(&result, func)?.to_owned()
+        };
         let _ = writeln!(
             out,
             "define {returns} @{}({}) nounwind {{\nentry:\n  %parent = call i64 @{parent}()\n  %slot = call ptr @nts_gobject_parent_slot(i64 %parent, i64 {offset})\n  %none = icmp eq ptr %slot, null\n  br i1 %none, label %skip, label %call\ncall:",
@@ -656,10 +940,22 @@ fn chains(program: &Program, platform: Platform, parents: &mut std::collections:
         );
         let arguments = parameters.join(", ");
         if returns == "void" {
-            let _ = writeln!(out, "  call void %slot({arguments})\n  ret void\nskip:\n  ret void\n}}");
+            let _ = writeln!(
+                out,
+                "  call void %slot({arguments})\n  ret void\nskip:\n  ret void\n}}"
+            );
         } else {
-            let zero = if returns == "ptr" { "null".to_owned() } else if returns.starts_with('i') { "0".to_owned() } else { "0.0".to_owned() };
-            let _ = writeln!(out, "  %r = call {returns} %slot({arguments})\n  ret {returns} %r\nskip:\n  ret {returns} {zero}\n}}");
+            let zero = if returns == "ptr" {
+                "null".to_owned()
+            } else if returns.starts_with('i') {
+                "0".to_owned()
+            } else {
+                "0.0".to_owned()
+            };
+            let _ = writeln!(
+                out,
+                "  %r = call {returns} %slot({arguments})\n  ret {returns} %r\nskip:\n  ret {returns} {zero}\n}}"
+            );
         }
     }
     Ok(out)
@@ -667,17 +963,42 @@ fn chains(program: &Program, platform: Platform, parents: &mut std::collections:
 
 /// One override's entry point, `nts_gobject_<Class>_<at>`: the slot's C
 /// arguments converted to the compiled method's, and its result back.
-fn entry_point(out: &mut String, platform: Platform, entry: &str, method: &ForeignMethod, compiled: &Func) -> Result<(), Diagnostic> {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+fn entry_point(
+    out: &mut String,
+    platform: Platform,
+    entry: &str,
+    method: &ForeignMethod,
+    compiled: &Func,
+) -> Result<(), Diagnostic> {
     if compiled.params.len() != method.signature.parameters.len() {
-        return Err(refuse(compiled, "a GObject virtual function whose entry point and compiled function disagree about arity"));
+        return Err(refuse(
+            compiled,
+            "a GObject virtual function whose entry point and compiled function disagree about arity",
+        ));
     }
-    if method.signature.parameters.iter().chain(std::iter::once(&*method.signature.result)).any(|ty| matches!(ty, Type::Record(_))) {
-        return Err(refuse(compiled, "a GObject virtual function taking or returning a record by value"));
+    if method
+        .signature
+        .parameters
+        .iter()
+        .chain(std::iter::once(&*method.signature.result))
+        .any(|ty| matches!(ty, Type::Record(_)))
+    {
+        return Err(refuse(
+            compiled,
+            "a GObject virtual function taking or returning a record by value",
+        ));
     }
     let mut parameters = Vec::new();
     let mut arguments = Vec::new();
     let mut body = String::new();
-    for (slot, (foreign, want)) in method.signature.parameters.iter().zip(&compiled.params).enumerate() {
+    for (slot, (foreign, want)) in method
+        .signature
+        .parameters
+        .iter()
+        .zip(&compiled.params)
+        .enumerate()
+    {
         let from = foreign.abi(platform.abi);
         let from_ty = ty_of(&from, compiled)?;
         parameters.push(format!("{from_ty} %a{slot}"));
@@ -686,38 +1007,74 @@ fn entry_point(out: &mut String, platform: Platform, entry: &str, method: &Forei
         // `GtkButton *` `this`, which is what the instance is, since GTK
         // calls this class's slot with this class's instances -- is the same
         // pointer.
-        let handles = matches!((&from, &want.ty), (HirType::NativePointer(_), HirType::NativePointer(_)));
+        let handles = matches!(
+            (&from, &want.ty),
+            (HirType::NativePointer(_), HirType::NativePointer(_))
+        );
         if from == want.ty || handles {
             arguments.push(format!("{to_ty} %a{slot}"));
         } else if want.ty == HirType::Bool {
-            let _ = writeln!(body, "  {}", is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}")));
+            let _ = writeln!(
+                body,
+                "  {}",
+                is_not_zero(&format!("%p{slot}"), &from, from_ty, &format!("%a{slot}"))
+            );
             arguments.push(format!("{to_ty} %p{slot}"));
         } else {
             let instruction = conversion(&from, &want.ty, compiled)?;
-            let _ = writeln!(body, "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}");
+            let _ = writeln!(
+                body,
+                "  %p{slot} = {instruction} {from_ty} %a{slot} to {to_ty}"
+            );
             arguments.push(format!("{to_ty} %p{slot}"));
         }
     }
     let want = method.signature.result.abi(platform.abi);
     let have = compiled.return_type.clone();
-    let call = format!("call {} {}({})", ty_of(&have, compiled)?, symbol(&compiled.name), arguments.join(", "));
+    let call = format!(
+        "call {} {}({})",
+        ty_of(&have, compiled)?,
+        symbol(&compiled.name),
+        arguments.join(", ")
+    );
     if want == HirType::Void {
-        let _ = writeln!(out, "define internal void @{entry}({}) nounwind {{", parameters.join(", "));
+        let _ = writeln!(
+            out,
+            "define internal void @{entry}({}) nounwind {{",
+            parameters.join(", ")
+        );
         out.push_str(&body);
-        let _ = writeln!(out, "  call void @nts_callback_enter()\n  {call}\n  call void @nts_callback_leave()\n  ret void\n}}");
+        let _ = writeln!(
+            out,
+            "  call void @nts_callback_enter()\n  {call}\n  call void @nts_callback_leave()\n  ret void\n}}"
+        );
     } else {
         let want_ty = ty_of(&want, compiled)?;
-        let _ = writeln!(out, "define internal {want_ty} @{entry}({}) nounwind {{", parameters.join(", "));
+        let _ = writeln!(
+            out,
+            "define internal {want_ty} @{entry}({}) nounwind {{",
+            parameters.join(", ")
+        );
         out.push_str(&body);
-        let _ = writeln!(out, "  call void @nts_callback_enter()\n  %r = {call}\n  call void @nts_callback_leave()");
+        let _ = writeln!(
+            out,
+            "  call void @nts_callback_enter()\n  %r = {call}\n  call void @nts_callback_leave()"
+        );
         // And back: the method's `GtkLabel *` as the slot's `gpointer`
         // (`GListModelInterface get_item`) is the same pointer.
-        let handles = matches!((&have, &want), (HirType::NativePointer(_), HirType::NativePointer(_)));
+        let handles = matches!(
+            (&have, &want),
+            (HirType::NativePointer(_), HirType::NativePointer(_))
+        );
         if have == want || handles {
             let _ = writeln!(out, "  ret {want_ty} %r\n}}");
         } else {
             let instruction = conversion(&have, &want, compiled)?;
-            let _ = writeln!(out, "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}", ty_of(&have, compiled)?);
+            let _ = writeln!(
+                out,
+                "  %c = {instruction} {} %r to {want_ty}\n  ret {want_ty} %c\n}}",
+                ty_of(&have, compiled)?
+            );
         }
     }
     Ok(())

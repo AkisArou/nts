@@ -47,10 +47,7 @@ pub enum Invalid {
     /// between a base and a class that overrides one of its methods; that is
     /// what overriding *is*, and equality there would refuse every hierarchy
     /// this compiler exists to compile.
-    BrokenBase {
-        layout: String,
-        base: String,
-    },
+    BrokenBase { layout: String, base: String },
     /// One type was laid out two ways, and the merge kept one of them.
     ///
     /// Recorded by `collect_layouts` and reported here rather than there,
@@ -306,7 +303,11 @@ pub enum Invalid {
     /// nothing there, links, loads and calls through a null the first time the
     /// promise settles. `nts_closure_call_slot`'s own documentation says why
     /// guessing is silent; this is the guess being checked instead.
-    UnfilledReaction { func: String, slot: u32, reaction: HirType },
+    UnfilledReaction {
+        func: String,
+        slot: u32,
+        reaction: HirType,
+    },
     /// Two functions in one program share a name.
     ///
     /// The emitted C would define one of them twice, and a call naming it
@@ -332,7 +333,10 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     check_calls(program, &mut problems);
     check_native_calls(program, &mut problems);
     for (at, _, reason) in super::native_storage::check(program) {
-        problems.push(Invalid::NativeStorage { func: program.funcs[at].name.clone(), reason });
+        problems.push(Invalid::NativeStorage {
+            func: program.funcs[at].name.clone(),
+            reason,
+        });
     }
     check_layouts(program, &mut problems);
     check_subscriptions(program, &mut problems);
@@ -346,7 +350,12 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
 /// Every subscribed reaction names the closure slot, and its table fills it.
 fn check_subscriptions(program: &Program, problems: &mut Vec<Invalid>) {
     for func in &program.funcs {
-        for op in func.blocks.iter().flat_map(|block| &block.ops).filter_map(|value| func.values.get(value.0 as usize)) {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .filter_map(|value| func.values.get(value.0 as usize))
+        {
             let OpKind::PromiseSubscribe { reaction, slot, .. } = op.kind else {
                 continue;
             };
@@ -359,7 +368,11 @@ fn check_subscriptions(program: &Program, problems: &mut Vec<Invalid>) {
                     .and_then(|layout| layout.methods.get(slot as usize))
                     .is_some_and(Option::is_some));
             if !filled {
-                problems.push(Invalid::UnfilledReaction { func: func.name.clone(), slot, reaction: held.clone() });
+                problems.push(Invalid::UnfilledReaction {
+                    func: func.name.clone(),
+                    slot,
+                    reaction: held.clone(),
+                });
             }
         }
     }
@@ -385,15 +398,24 @@ fn check_native_calls(program: &Program, problems: &mut Vec<Invalid>) {
                 continue;
             };
             if target.retention.len() != target.argument_types().count()
-                || target.retention.iter().zip(target.argument_types()).any(|(kept, ty)| {
-                    *kept == super::native::Retention::NotRetained
-                        && !matches!(
-                            ty,
-                            super::native::Type::Pointer(_) | super::native::Type::FnPointer(_) | super::native::Type::Record(_)
-                        )
-                })
+                || target
+                    .retention
+                    .iter()
+                    .zip(target.argument_types())
+                    .any(|(kept, ty)| {
+                        *kept == super::native::Retention::NotRetained
+                            && !matches!(
+                                ty,
+                                super::native::Type::Pointer(_)
+                                    | super::native::Type::FnPointer(_)
+                                    | super::native::Type::Record(_)
+                            )
+                    })
             {
-                problems.push(Invalid::NativeStorage { func: func.name.clone(), reason: "invalid native no-escape contract" });
+                problems.push(Invalid::NativeStorage {
+                    func: func.name.clone(),
+                    reason: "invalid native no-escape contract",
+                });
             }
             let result = target.call_result();
             if op.ty != result {
@@ -459,8 +481,7 @@ fn check_layouts(program: &Program, problems: &mut Vec<Invalid>) {
     // name and compared on the fields, because a layout reached twice for the
     // same type is ordinary -- `layout_of` is asked from many places and hands
     // back a clone -- and only a *disagreement* is the defect.
-    let mut by_name: rustc_hash::FxHashMap<&str, &super::Layout> =
-        rustc_hash::FxHashMap::default();
+    let mut by_name: rustc_hash::FxHashMap<&str, &super::Layout> = rustc_hash::FxHashMap::default();
     for layout in &program.layouts {
         match by_name.entry(layout.name.as_str()) {
             std::collections::hash_map::Entry::Vacant(slot) => {
@@ -550,7 +571,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
         check_native_memory(func, problems);
         check_erasures(func, problems);
         check_lengths(func, problems);
-    check_numeric_coercions(func, problems);
+        check_numeric_coercions(func, problems);
         // The ops a block still holds, not every value the lowering ever made.
         //
         // This asks whether a call "reaches the linker as an undefined symbol",
@@ -806,8 +827,14 @@ pub(super) fn compatible(found: &HirType, want: &HirType) -> bool {
 /// field and each decided for itself what it applies to, which is one fact with
 /// three derivations and exactly how that bug got in.
 fn check_erasures(func: &Func, problems: &mut Vec<Invalid>) {
-    for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
-        let OpKind::Erase { value, absent } = &op.kind else { continue };
+    for op in func
+        .blocks
+        .iter()
+        .flat_map(|b| b.ops.iter().map(|v| func.value(*v)))
+    {
+        let OpKind::Erase { value, absent } = &op.kind else {
+            continue;
+        };
         let found = &func.value(*value).ty;
         if *absent != super::Absent::Impossible && !super::tags::payload_is_a_reference(found) {
             problems.push(Invalid::OperandType {
@@ -850,8 +877,14 @@ fn check_erasures(func: &Func, problems: &mut Vec<Invalid>) {
 /// site that forgets is found here instead of by a C compiler. The arm that proves
 /// it can fire is removing that coercion, which puts these back.
 fn check_numeric_coercions(func: &Func, problems: &mut Vec<Invalid>) {
-    for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
-        let OpKind::Unary { op: unary, operand } = &op.kind else { continue };
+    for op in func
+        .blocks
+        .iter()
+        .flat_map(|b| b.ops.iter().map(|v| func.value(*v)))
+    {
+        let OpKind::Unary { op: unary, operand } = &op.kind else {
+            continue;
+        };
         if !matches!(unary, UnOp::ToInt32 | UnOp::ToUint32) {
             continue;
         }
@@ -875,8 +908,14 @@ fn check_numeric_coercions(func: &Func, problems: &mut Vec<Invalid>) {
 }
 
 fn check_lengths(func: &Func, problems: &mut Vec<Invalid>) {
-    for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
-        let OpKind::Length(of) = &op.kind else { continue };
+    for op in func
+        .blocks
+        .iter()
+        .flat_map(|b| b.ops.iter().map(|v| func.value(*v)))
+    {
+        let OpKind::Length(of) = &op.kind else {
+            continue;
+        };
         let found = &func.value(*of).ty;
         if !super::carries_a_length(found) {
             problems.push(Invalid::OperandType {
@@ -888,29 +927,57 @@ fn check_lengths(func: &Func, problems: &mut Vec<Invalid>) {
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
-    for op in func.blocks.iter().flat_map(|b| b.ops.iter().map(|v| func.value(*v))) {
+    for op in func
+        .blocks
+        .iter()
+        .flat_map(|b| b.ops.iter().map(|v| func.value(*v)))
+    {
         let valid = match &op.kind {
-            OpKind::NativeLocal { count } => *count > 0 && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p, super::native::NativeAbi::BOUND).is_some()),
-            OpKind::NativeMalloc { bytes } => func.value(*bytes).ty == HirType::NUMBER
-                && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p, super::native::NativeAbi::BOUND).is_some()),
-            OpKind::NativeFree { pointer } => op.ty == HirType::Void && matches!(func.value(*pointer).ty, HirType::NativePointer(_)),
+            OpKind::NativeLocal { count } => {
+                *count > 0
+                    && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p, super::native::NativeAbi::BOUND).is_some())
+            }
+            OpKind::NativeMalloc { bytes } => {
+                func.value(*bytes).ty == HirType::NUMBER
+                    && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p, super::native::NativeAbi::BOUND).is_some())
+            }
+            OpKind::NativeFree { pointer } => {
+                op.ty == HirType::Void
+                    && matches!(func.value(*pointer).ty, HirType::NativePointer(_))
+            }
             // A layout on the bounding ABI. A backend whose ABI has none
             // (a bit-field record under Win64) refuses it by name.
-            OpKind::NativeSizeOf(storage) => op.ty == HirType::NUMBER && super::layout::native_shape(storage, super::native::NativeAbi::BOUND).is_some(),
+            OpKind::NativeSizeOf(storage) => {
+                op.ty == HirType::NUMBER
+                    && super::layout::native_shape(storage, super::native::NativeAbi::BOUND)
+                        .is_some()
+            }
             _ => true,
         };
-        if !valid { problems.push(Invalid::OperandType { func: func.name.clone(), op: "native storage", found: op.ty.clone() }); }
+        if !valid {
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: "native storage",
+                found: op.ty.clone(),
+            });
+        }
 
         let (pointer, index) = match &op.kind {
-            OpKind::NativeLoad { pointer, index } | OpKind::NativeStore { pointer, index, .. }
+            OpKind::NativeLoad { pointer, index }
+            | OpKind::NativeStore { pointer, index, .. }
             | OpKind::NativeIndexAddress { pointer, index } => (*pointer, Some(*index)),
             OpKind::NativeFieldAddress { pointer, .. } => (*pointer, None),
             _ => continue,
         };
         let found = &func.value(pointer).ty;
         let HirType::NativePointer(element) = found else {
-            problems.push(Invalid::OperandType { func: func.name.clone(), op: "native memory access", found: found.clone() });
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: "native memory access",
+                found: found.clone(),
+            });
             continue;
         };
         let expected = match &op.kind {
@@ -933,22 +1000,28 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
             // it was reached through something that was. Lowering applies both,
             // so this has to.
             OpKind::NativeFieldAddress { field, .. } => match element.viewed() {
-                super::native::Pointee::Record(layout) => layout.fields.get(*field as usize).map(|f| {
-                    let through_packing =
-                        matches!(element, super::native::Pointee::Unaligned(_));
-                    let slot = if layout.packed || through_packing {
-                        super::native::Pointee::Unaligned(Box::new(f.ty.clone()))
-                    } else {
-                        f.ty.clone()
-                    };
-                    HirType::NativePointer(slot)
-                }),
+                super::native::Pointee::Record(layout) => {
+                    layout.fields.get(*field as usize).map(|f| {
+                        let through_packing =
+                            matches!(element, super::native::Pointee::Unaligned(_));
+                        let slot = if layout.packed || through_packing {
+                            super::native::Pointee::Unaligned(Box::new(f.ty.clone()))
+                        } else {
+                            f.ty.clone()
+                        };
+                        HirType::NativePointer(slot)
+                    })
+                }
                 _ => None,
             },
             _ => None,
         };
         let Some(expected) = expected else {
-            problems.push(Invalid::OperandType { func: func.name.clone(), op: "native memory layout", found: found.clone() });
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: "native memory layout",
+                found: found.clone(),
+            });
             continue;
         };
         let actual = match op.kind {
@@ -957,12 +1030,24 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
         };
         let mut report = |what, expected, actual: &HirType| {
             if expected != *actual {
-                problems.push(Invalid::StoreType { func: func.name.clone(), what, expected, found: actual.clone() });
+                problems.push(Invalid::StoreType {
+                    func: func.name.clone(),
+                    what,
+                    expected,
+                    found: actual.clone(),
+                });
             }
         };
         report("native memory element", expected, actual);
         if let Some(index) = index {
-            report("native memory index", HirType::Int { bits: 64, signed: true }, &func.value(index).ty);
+            report(
+                "native memory index",
+                HirType::Int {
+                    bits: 64,
+                    signed: true,
+                },
+                &func.value(index).ty,
+            );
         }
     }
 }
@@ -1038,6 +1123,7 @@ fn check_arms(
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
     let mut report = |what, expected: &HirType, found: &HirType| {
         if !compatible(found, expected) {
@@ -1064,8 +1150,15 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
                     &func.values[array.0 as usize].ty
                 {
                     report("an array element read", element, &op.ty);
-                } else if matches!(func.values[array.0 as usize].ty, HirType::Managed(super::ManagedType::Template)) {
-                    report("a template element read", &HirType::Managed(super::ManagedType::String), &op.ty);
+                } else if matches!(
+                    func.values[array.0 as usize].ty,
+                    HirType::Managed(super::ManagedType::Template)
+                ) {
+                    report(
+                        "a template element read",
+                        &HirType::Managed(super::ManagedType::String),
+                        &op.ty,
+                    );
                 }
             }
             OpKind::ArraySet { array, value, .. } => {
@@ -1077,8 +1170,15 @@ fn check_stores(program: &Program, func: &Func, problems: &mut Vec<Invalid>) {
                         element,
                         &func.values[value.0 as usize].ty,
                     );
-                } else if matches!(func.values[array.0 as usize].ty, HirType::Managed(super::ManagedType::Template)) {
-                    report("writing an immutable template element", &HirType::Never, &func.values[value.0 as usize].ty);
+                } else if matches!(
+                    func.values[array.0 as usize].ty,
+                    HirType::Managed(super::ManagedType::Template)
+                ) {
+                    report(
+                        "writing an immutable template element",
+                        &HirType::Never,
+                        &func.values[value.0 as usize].ty,
+                    );
                 }
             }
             OpKind::GlobalSet { global, value } => {
@@ -1226,13 +1326,20 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
 
 fn check_parameters(func: &Func, problems: &mut Vec<Invalid>) {
     for value in func.blocks.iter().flat_map(|block| &block.ops) {
-        let Some(op) = func.values.get(value.0 as usize) else { continue };
-        let OpKind::Param(position) = op.kind else { continue };
+        let Some(op) = func.values.get(value.0 as usize) else {
+            continue;
+        };
+        let OpKind::Param(position) = op.kind else {
+            continue;
+        };
         let expected = func.params.get(position as usize).map(|param| &param.ty);
         if expected != Some(&op.ty) {
             problems.push(Invalid::ParameterType {
-                func: func.name.clone(), value: *value, position,
-                expected: expected.cloned(), found: op.ty.clone(),
+                func: func.name.clone(),
+                value: *value,
+                position,
+                expected: expected.cloned(),
+                found: op.ty.clone(),
             });
         }
     }
@@ -1351,8 +1458,7 @@ fn check_operands(func: &Func, problems: &mut Vec<Invalid>) {
         // rather than borrowed. `HirType`'s own `may_hold_a_reference` neighbour
         // writes `is_scalar() || ... || matches!(self, Self::BigInt)` for the same
         // reason.
-        let has_a_width =
-            |ty: &HirType| ty.is_scalar() || matches!(ty, HirType::BigInt);
+        let has_a_width = |ty: &HirType| ty.is_scalar() || matches!(ty, HirType::BigInt);
         let widths_differ = left != right
             && has_a_width(&left)
             && has_a_width(&right)
@@ -1721,7 +1827,10 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
             destination: first,
             source: second,
         } => vec![*first, *second],
-        OpKind::Await { promise, rejects_to } => {
+        OpKind::Await {
+            promise,
+            rejects_to,
+        } => {
             let mut read = vec![*promise];
             // Every argument the rejection edge owes its handler is read here,
             // which is what keeps them live to this point. Without it the
@@ -1734,7 +1843,9 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         }
         OpKind::CellReady { cell, .. } => vec![*cell],
         OpKind::Suspend { promise, frame, .. } => vec![*promise, *frame],
-        OpKind::PromiseSubscribe { promise, reaction, .. } => vec![*promise, *reaction],
+        OpKind::PromiseSubscribe {
+            promise, reaction, ..
+        } => vec![*promise, *reaction],
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
@@ -1764,14 +1875,21 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ObjcSelector { .. }
         | OpKind::DelegateInvoke { .. } => vec![],
         OpKind::NativeBridge { closure, .. } => vec![*closure],
-        OpKind::NativeBlock { invoke, context, .. } => vec![*invoke, *context],
+        OpKind::NativeBlock {
+            invoke, context, ..
+        } => vec![*invoke, *context],
         OpKind::NativeMalloc { bytes } => vec![*bytes],
         OpKind::NativeFieldAddress { pointer, .. }
         | OpKind::NativeBitLoad { pointer, .. }
         | OpKind::NativeFree { pointer } => vec![*pointer],
-        OpKind::NativeIndexAddress { pointer, index }
-        | OpKind::NativeLoad { pointer, index } => vec![*pointer, *index],
-        OpKind::NativeStore { pointer, index, value } => vec![*pointer, *index, *value],
+        OpKind::NativeIndexAddress { pointer, index } | OpKind::NativeLoad { pointer, index } => {
+            vec![*pointer, *index]
+        }
+        OpKind::NativeStore {
+            pointer,
+            index,
+            value,
+        } => vec![*pointer, *index, *value],
         OpKind::NativeBitStore { pointer, value, .. } => vec![*pointer, *value],
         OpKind::ArrayGet { array, index, .. } => vec![*array, *index],
         OpKind::ArraySet {
@@ -1834,15 +1952,25 @@ mod tests {
     }
 
     fn func(values: Vec<Op>, blocks: Vec<Block>) -> Program {
-        let params = values.iter().filter_map(|op| match op.kind {
-            OpKind::Param(at) => Some((at, Param {
-                name: format!("arg{at}"), ty: op.ty.clone(), origin: op.origin.clone(),
-                shape: super::super::ParamShape::Ordinary,
-                known: super::super::facts::Facts::TOP,
-                written: None,
-            })),
-            _ => None,
-        }).collect::<std::collections::BTreeMap<_, _>>().into_values().collect();
+        let params = values
+            .iter()
+            .filter_map(|op| match op.kind {
+                OpKind::Param(at) => Some((
+                    at,
+                    Param {
+                        name: format!("arg{at}"),
+                        ty: op.ty.clone(),
+                        origin: op.origin.clone(),
+                        shape: super::super::ParamShape::Ordinary,
+                        known: super::super::facts::Facts::TOP,
+                        written: None,
+                    },
+                )),
+                _ => None,
+            })
+            .collect::<std::collections::BTreeMap<_, _>>()
+            .into_values()
+            .collect();
         Program {
             layouts: Vec::new(),
             globals: Vec::new(),
@@ -1895,9 +2023,8 @@ mod tests {
 
         // And the object leniency it must not disturb: two object types are two
         // pointers, which is what makes an upcast free.
-        let object = |id: u32| {
-            HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(id)))
-        };
+        let object =
+            |id: u32| HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(id)));
         assert!(compatible(&object(1), &object(2)));
     }
 
@@ -1966,9 +2093,13 @@ mod tests {
             panic!("a store the block runs must be caught, and nothing was reported");
         };
         assert!(
-            problems
-                .iter()
-                .any(|p| matches!(p, Invalid::StoreType { what: "a field", .. })),
+            problems.iter().any(|p| matches!(
+                p,
+                Invalid::StoreType {
+                    what: "a field",
+                    ..
+                }
+            )),
             "a store the block runs must be caught: {problems:#?}"
         );
 
@@ -2010,7 +2141,10 @@ mod tests {
             interfaces: Vec::new(),
             fields: vec![Field {
                 name: "count".to_owned(),
-                ty: HirType::Int { bits: 32, signed: true },
+                ty: HirType::Int {
+                    bits: 32,
+                    signed: true,
+                },
                 readonly: false,
                 declared_by: None,
                 written: None,
@@ -2027,7 +2161,10 @@ mod tests {
                 origin: origin(),
             },
             Op {
-                kind: OpKind::FieldGet { object: ValueId(0), field: 0 },
+                kind: OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 0,
+                },
                 ty: HirType::Float { bits: 64 },
                 origin: origin(),
             },
@@ -2045,9 +2182,13 @@ mod tests {
             panic!("a field read of the wrong type must be caught, and nothing was reported");
         };
         assert!(
-            problems
-                .iter()
-                .any(|p| matches!(p, Invalid::StoreType { what: "a field read", .. })),
+            problems.iter().any(|p| matches!(
+                p,
+                Invalid::StoreType {
+                    what: "a field read",
+                    ..
+                }
+            )),
             "the read must be reported against the layout: {problems:#?}"
         );
     }
@@ -2064,7 +2205,11 @@ mod tests {
         let program = |slot: u32, filled: bool| {
             let values = vec![
                 Op {
-                    kind: OpKind::Call { callee: Callee::External("nts_promise_new".to_owned()), args: Vec::new(), frame: None },
+                    kind: OpKind::Call {
+                        callee: Callee::External("nts_promise_new".to_owned()),
+                        args: Vec::new(),
+                        frame: None,
+                    },
                     ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
                     origin: origin(),
                 },
@@ -2074,14 +2219,22 @@ mod tests {
                     origin: origin(),
                 },
                 Op {
-                    kind: OpKind::PromiseSubscribe { promise: ValueId(0), reaction: ValueId(1), slot },
+                    kind: OpKind::PromiseSubscribe {
+                        promise: ValueId(0),
+                        reaction: ValueId(1),
+                        slot,
+                    },
                     ty: HirType::Void,
                     origin: origin(),
                 },
             ];
             let mut program = func(
                 values,
-                vec![block(Vec::new(), vec![ValueId(0), ValueId(1), ValueId(2)], Terminator::Return(None))],
+                vec![block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1), ValueId(2)],
+                    Terminator::Return(None),
+                )],
             );
             program.closure_slot = Some(0);
             program.layouts = vec![Layout {
@@ -2102,8 +2255,14 @@ mod tests {
                 .any(|problem| matches!(problem, Invalid::UnfilledReaction { .. }))
         };
         assert!(!unfilled(&program(0, true)), "the control must verify");
-        assert!(unfilled(&program(1, true)), "a slot other than the closure slot must be caught");
-        assert!(unfilled(&program(0, false)), "a table with nothing at the slot must be caught");
+        assert!(
+            unfilled(&program(1, true)),
+            "a slot other than the closure slot must be caught"
+        );
+        assert!(
+            unfilled(&program(0, false)),
+            "a table with nothing at the slot must be caught"
+        );
     }
 
     /// An open read's arms may disagree about *where* and never about *what*.
@@ -2125,7 +2284,10 @@ mod tests {
             declared_by: None,
             written: None,
         };
-        let integer = HirType::Int { bits: 32, signed: true };
+        let integer = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
         let laid_out = |id: u32, name: &str, fields: Vec<Field>| Layout {
             types: vec![TypeId(id)],
             name: name.to_owned(),
@@ -2142,12 +2304,21 @@ mod tests {
             laid_out(
                 2,
                 "Tagged",
-                vec![field("tag", integer.clone()), field("count", integer.clone())],
+                vec![
+                    field("tag", integer.clone()),
+                    field("count", integer.clone()),
+                ],
             ),
         ];
         let arms = vec![
-            FieldArm { ty: TypeId(1), field: 0 },
-            FieldArm { ty: TypeId(2), field: 1 },
+            FieldArm {
+                ty: TypeId(1),
+                field: 0,
+            },
+            FieldArm {
+                ty: TypeId(2),
+                field: 1,
+            },
         ];
 
         let built = |layouts: Vec<Layout>, read: HirType| {
@@ -2181,7 +2352,15 @@ mod tests {
             Ok(()) => Vec::new(),
             Err(problems) => problems
                 .into_iter()
-                .filter(|p| matches!(p, Invalid::StoreType { what: "an open field read", .. }))
+                .filter(|p| {
+                    matches!(
+                        p,
+                        Invalid::StoreType {
+                            what: "an open field read",
+                            ..
+                        }
+                    )
+                })
                 .collect(),
         };
 

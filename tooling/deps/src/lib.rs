@@ -130,7 +130,6 @@ pub struct Options {
     pub tsgo: Option<Utf8PathBuf>,
 }
 
-
 /// A sibling package in the same repository, pointed at where it lives.
 ///
 /// `None` when the package is installed from a registry, or when it is a
@@ -180,7 +179,9 @@ fn as_workspace_package(
 ///
 /// Only packages whose recorded source is still on disk. A seed that outlived
 /// its source would keep a package in the graph after it was uninstalled.
-fn seeded_from_lock(workspace: &Utf8Path) -> Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)> {
+fn seeded_from_lock(
+    workspace: &Utf8Path,
+) -> Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)> {
     emit::read_lock(workspace)
         .packages
         .into_iter()
@@ -345,8 +346,9 @@ pub fn acquire(
         {
             complaints = diagnostics;
             for (package, specifiers) in packages {
-                if let Some((_, known)) =
-                    discovered.iter_mut().find(|(known, _)| known.dir == package.dir)
+                if let Some((_, known)) = discovered
+                    .iter_mut()
+                    .find(|(known, _)| known.dir == package.dir)
                 {
                     for entry in specifiers {
                         if !known.iter().any(|(name, _)| *name == entry.0) {
@@ -438,7 +440,10 @@ fn work_list(
             // to choose. Point at it.
             for (specifier, file) in local {
                 paths.insert(specifier.clone(), vec![relative(project, file)]);
-                if !packages.iter().any(|report: &PackageReport| report.name == *specifier) {
+                if !packages
+                    .iter()
+                    .any(|report: &PackageReport| report.name == *specifier)
+                {
                     let version = package_version_at(file);
                     packages.push(PackageReport {
                         name: specifier.clone(),
@@ -479,7 +484,12 @@ fn work_list(
                 ));
             }
         }
-        None => queue.extend(closure.packages.iter().map(|installed| (installed.clone(), None))),
+        None => queue.extend(
+            closure
+                .packages
+                .iter()
+                .map(|installed| (installed.clone(), None)),
+        ),
     }
 
     queue
@@ -587,7 +597,9 @@ fn attribute(
         }
     }
     for package in &mut acquisition.packages {
-        package.complaints.sort_by_key(|complaint| std::cmp::Reverse(complaint.count));
+        package
+            .complaints
+            .sort_by_key(|complaint| std::cmp::Reverse(complaint.count));
     }
 }
 
@@ -652,7 +664,10 @@ fn record(
             mapped: mapped
                 .iter()
                 .filter_map(|(specifier, at)| {
-                    Some((specifier.clone(), at.strip_prefix(package_root).ok()?.to_string()))
+                    Some((
+                        specifier.clone(),
+                        at.strip_prefix(package_root).ok()?.to_string(),
+                    ))
                 })
                 .collect(),
             resolved,
@@ -799,7 +814,15 @@ fn acquire_package(
     // package rewritten in place under an unchanged version is not detected,
     // which is the same contract a lockfile has; deleting `.nts/vendor` is the
     // way out.
-    if let Some(report) = remembered(installed, traced, &package_root, &patterns, pass, lock, paths) {
+    if let Some(report) = remembered(
+        installed,
+        traced,
+        &package_root,
+        &patterns,
+        pass,
+        lock,
+        paths,
+    ) {
         return Ok((report, 0));
     }
 
@@ -833,7 +856,18 @@ fn acquire_package(
         }
     }
 
-    record(installed, &route, &recovery, &mapped, &package_root, traced, digest, lock, paths, pass);
+    record(
+        installed,
+        &route,
+        &recovery,
+        &mapped,
+        &package_root,
+        traced,
+        digest,
+        lock,
+        paths,
+        pass,
+    );
 
     Ok((
         PackageReport {
@@ -842,9 +876,9 @@ fn acquire_package(
             origin: Origin::Registry,
             route,
             depth: installed.depth,
-            imported: traced.map(|specifiers| {
-                specifiers.iter().map(|(name, _)| name.clone()).collect()
-            }).unwrap_or_default(),
+            imported: traced
+                .map(|specifiers| specifiers.iter().map(|(name, _)| name.clone()).collect())
+                .unwrap_or_default(),
             mapped,
             files: recovery.files.len(),
             patterns,
@@ -908,9 +942,8 @@ fn acquire_once(
         packages.push(report);
     }
 
-    packages.sort_by(|a, b| {
-        (!a.acquired(), a.depth, &a.name).cmp(&(!b.acquired(), b.depth, &b.name))
-    });
+    packages
+        .sort_by(|a, b| (!a.acquired(), a.depth, &a.name).cmp(&(!b.acquired(), b.depth, &b.name)));
 
     let lock_unchanged = lock.packages == previous.packages;
     let mut pruned = Vec::new();
@@ -921,7 +954,8 @@ fn acquire_once(
     // that only re-states `extends` is a file the developer did not ask for and
     // has to wonder about.
     if !options.dry_run && !paths.is_empty() {
-        let (removed, config) = finish(&project, tsconfig, &workspace, &vendor_root, &lock, &paths)?;
+        let (removed, config) =
+            finish(&project, tsconfig, &workspace, &vendor_root, &lock, &paths)?;
         pruned = removed;
         written_tsconfig = Some(config);
     }
@@ -985,7 +1019,9 @@ fn package_version_at(file: &Utf8Path) -> String {
 }
 
 fn is_source(path: &str) -> bool {
-    [".ts", ".tsx", ".mts", ".cts"].iter().any(|ext| path.ends_with(ext))
+    [".ts", ".tsx", ".mts", ".cts"]
+        .iter()
+        .any(|ext| path.ends_with(ext))
         && !path.ends_with(".d.ts")
         && !path.ends_with(".d.mts")
         && !path.ends_with(".d.cts")
@@ -1031,7 +1067,13 @@ fn inherited_paths(tsconfig: &Utf8Path) -> BTreeMap<String, Vec<String>> {
     };
     serde_json::from_str::<serde_json::Value>(&strip_jsonc(&text))
         .ok()
-        .and_then(|value| value.get("compilerOptions")?.get("paths")?.as_object().cloned())
+        .and_then(|value| {
+            value
+                .get("compilerOptions")?
+                .get("paths")?
+                .as_object()
+                .cloned()
+        })
         .map(|map| {
             map.into_iter()
                 .filter_map(|(key, value)| {

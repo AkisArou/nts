@@ -45,7 +45,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -81,7 +85,9 @@ fn run(example: &str, body: &str) -> Option<String> {
     )
     .expect("a UTF-8 path");
 
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).expect("snapshot");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot");
     assert!(!snapshot.has_errors(), "{example} should typecheck");
 
     // `NoGc`, which is what this lane ships: the platform collector owns these
@@ -89,7 +95,10 @@ fn run(example: &str, body: &str) -> Option<String> {
     // emitted as nothing.
     let prepared = hir::prepare_with(
         &snapshot,
-        &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() },
+        &hir::Options {
+            provider: hir::Provider::NoGc,
+            ..hir::Options::default()
+        },
     )
     .expect("prepared HIR should verify");
 
@@ -98,11 +107,15 @@ fn run(example: &str, body: &str) -> Option<String> {
         emitted.diagnostics.is_empty(),
         "the backend declined {} function(s) in {example}: {}",
         emitted.diagnostics.len(),
-        emitted.diagnostics.iter().map(|it| it.message.clone()).collect::<Vec<_>>().join("; ")
+        emitted
+            .diagnostics
+            .iter()
+            .map(|it| it.message.clone())
+            .collect::<Vec<_>>()
+            .join("; ")
     );
 
-    let dir = std::env::temp_dir()
-        .join(format!("nts-execute-{example}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("nts-execute-{example}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("a temp dir");
     for class in &emitted.classes {
@@ -114,8 +127,11 @@ fn run(example: &str, body: &str) -> Option<String> {
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).expect("write the jar");
 
     let driver = dir.join("Drive.java");
-    std::fs::write(&driver, format!("public class Drive {{ public static void main(String[] a) {{\n{body}\n}} }}\n"))
-        .expect("write the driver");
+    std::fs::write(
+        &driver,
+        format!("public class Drive {{ public static void main(String[] a) {{\n{body}\n}} }}\n"),
+    )
+    .expect("write the driver");
     let compiled = Command::new(&javac)
         .args(["--release", "8", "-Xlint:all,-options", "-Werror", "-cp"])
         .arg(format!("{}:{}", dir.display(), jar.display()))

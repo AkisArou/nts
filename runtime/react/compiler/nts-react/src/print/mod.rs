@@ -13,10 +13,12 @@
 
 use std::fmt::Write as _;
 
+use react_compiler::entrypoint::BindingRenameInfo;
 use react_compiler_ast::File;
 use react_compiler_ast::common::{BaseNode, RawNode};
 use react_compiler_ast::declarations::{
-    Declaration, ExportDefaultDecl, ExportKind, ExportSpecifier, ImportKind, ImportSpecifier, ModuleExportName,
+    Declaration, ExportDefaultDecl, ExportKind, ExportSpecifier, ImportKind, ImportSpecifier,
+    ModuleExportName,
 };
 use react_compiler_ast::expressions::{
     ArrowFunctionBody, Expression, Identifier, ObjectExpressionProperty, ObjectMethodKind,
@@ -26,13 +28,15 @@ use react_compiler_ast::jsx::{
     JSXExpressionContainerExpr, JSXFragment, JSXMemberExprObject, JSXMemberExpression,
 };
 use react_compiler_ast::literals::StringLiteral;
-use react_compiler_ast::operators::{AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator, UpdateOperator};
-use react_compiler_ast::patterns::{ObjectPatternProperty, PatternLike};
-use react_compiler_ast::statements::{
-    BlockStatement, ClassDeclaration, ForInOfLeft, ForInit, Statement, VariableDeclaration, VariableDeclarationKind,
+use react_compiler_ast::operators::{
+    AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator, UpdateOperator,
 };
-use react_compiler::entrypoint::BindingRenameInfo;
+use react_compiler_ast::patterns::{ObjectPatternProperty, PatternLike};
 use react_compiler_ast::scope::BindingId;
+use react_compiler_ast::statements::{
+    BlockStatement, ClassDeclaration, ForInOfLeft, ForInit, Statement, VariableDeclaration,
+    VariableDeclarationKind,
+};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serialize;
 use serde_json::Value;
@@ -131,13 +135,24 @@ pub fn print_file(
         restoring: None,
         assigning: false,
         lower_jsx: options.lower_jsx,
-        jsx_spans: if options.lower_jsx { jsx_spans } else { Vec::new() },
+        jsx_spans: if options.lower_jsx {
+            jsx_spans
+        } else {
+            Vec::new()
+        },
         jsx_imports: jsx::JsxImports::default(),
-        classes: if options.lower_jsx { class::ClassComponents::new(original) } else { class::ClassComponents::default() },
+        classes: if options.lower_jsx {
+            class::ClassComponents::new(original)
+        } else {
+            class::ClassComponents::default()
+        },
         as_written: &options.as_written,
         functions: Vec::new(),
         caches: Caches {
-            callee: options.typed_cache.then(|| cache_callee(compiled)).flatten(),
+            callee: options
+                .typed_cache
+                .then(|| cache_callee(compiled))
+                .flatten(),
             forced_array: options.array_cache.clone(),
             ..Caches::default()
         },
@@ -154,8 +169,18 @@ pub fn print_file(
     for function in &mut functions {
         function.typed_cache = printer.caches.typed_spans.contains(&function.original);
     }
-    let segments = rewritten_segments(&printer.out, source, &printer.copied, &printer.functions, &printer.printed_nodes);
-    Printed { text: printer.out, functions, segments }
+    let segments = rewritten_segments(
+        &printer.out,
+        source,
+        &printer.copied,
+        &printer.functions,
+        &printer.printed_nodes,
+    );
+    Printed {
+        text: printer.out,
+        functions,
+        segments,
+    }
 }
 
 /// A copied stretch shorter than this is not looked for: it could be found in
@@ -192,7 +217,10 @@ fn rewritten_segments(
             cursor = at + text.len();
         }
     }
-    let printed = functions.iter().map(|((start, _), range)| (*start, *range)).chain(printed_nodes.iter().copied());
+    let printed = functions
+        .iter()
+        .map(|((start, _), range)| (*start, *range))
+        .chain(printed_nodes.iter().copied());
     for (start, (from, to)) in printed {
         segments.push(nts_diagnostics::RewrittenSegment {
             rewritten: bytes(from),
@@ -274,23 +302,39 @@ fn class_declaration(statement: &Statement) -> Option<&ClassDeclaration> {
 /// The printed functions' output ranges, from byte offsets into `text` to
 /// UTF-16 units, as tsgo counts them.
 fn utf16_ranges(text: &str, functions: &[OutputFunction]) -> Vec<PrintedFunction> {
-    let mut offsets: Vec<usize> = functions.iter().flat_map(|(_, (start, end))| [*start, *end]).collect();
+    let mut offsets: Vec<usize> = functions
+        .iter()
+        .flat_map(|(_, (start, end))| [*start, *end])
+        .collect();
     offsets.sort_unstable();
     offsets.dedup();
     let mut units = FxHashMap::default();
     let (mut at, mut counted) = (0usize, 0u32);
     for offset in offsets {
-        counted += text.get(at..offset).map_or(0, |part| u32::try_from(part.encode_utf16().count()).unwrap_or(u32::MAX));
+        counted += text.get(at..offset).map_or(0, |part| {
+            u32::try_from(part.encode_utf16().count()).unwrap_or(u32::MAX)
+        });
         at = offset;
         units.insert(offset, counted);
     }
-    functions.iter().map(|(original, (start, end))| PrintedFunction { original: *original, output: (units[start], units[end]), typed_cache: false }).collect()
+    functions
+        .iter()
+        .map(|(original, (start, end))| PrintedFunction {
+            original: *original,
+            output: (units[start], units[end]),
+            typed_cache: false,
+        })
+        .collect()
 }
 
 /// Every node of the original program with a span, by that span, outermost
 /// first: the compiler's output keeps the spans of what it came from, which
 /// is how each of its nodes finds the syntax the user wrote.
-fn index_spans(value: &Value, into: &mut FxHashMap<(u32, u32), Vec<Value>>, definite: &mut FxHashSet<(u32, u32)>) {
+fn index_spans(
+    value: &Value,
+    into: &mut FxHashMap<(u32, u32), Vec<Value>>,
+    definite: &mut FxHashSet<(u32, u32)>,
+) {
     match value {
         Value::Object(map) => {
             // `let x!: T`: the definite `!` sits on the declarator, and the
@@ -300,8 +344,10 @@ fn index_spans(value: &Value, into: &mut FxHashMap<(u32, u32), Vec<Value>>, defi
             {
                 definite.insert(span);
             }
-            if let (Some(start), Some(end)) = (map.get("start").and_then(Value::as_u64), map.get("end").and_then(Value::as_u64))
-                && let (Ok(start), Ok(end)) = (u32::try_from(start), u32::try_from(end))
+            if let (Some(start), Some(end)) = (
+                map.get("start").and_then(Value::as_u64),
+                map.get("end").and_then(Value::as_u64),
+            ) && let (Ok(start), Ok(end)) = (u32::try_from(start), u32::try_from(end))
             {
                 into.entry((start, end)).or_default().push(value.clone());
             }
@@ -311,7 +357,9 @@ fn index_spans(value: &Value, into: &mut FxHashMap<(u32, u32), Vec<Value>>, defi
                 }
             }
         }
-        Value::Array(items) => items.iter().for_each(|item| index_spans(item, into, definite)),
+        Value::Array(items) => items
+            .iter()
+            .for_each(|item| index_spans(item, into, definite)),
         _ => {}
     }
 }
@@ -326,7 +374,10 @@ fn span_of(value: &Value) -> Option<(u32, u32)> {
 /// compiled program, to the binding declared at the rename's position under
 /// its original name. The Babel plugin applies the compiler's renames the same
 /// way, with Babel's `scope.rename` over the compiled program.
-fn renamed_references(compiled: &File, renames: &[BindingRenameInfo]) -> (FxHashMap<usize, String>, Vec<u32>) {
+fn renamed_references(
+    compiled: &File,
+    renames: &[BindingRenameInfo],
+) -> (FxHashMap<usize, String>, Vec<u32>) {
     if renames.is_empty() {
         return (FxHashMap::default(), Vec::new());
     }
@@ -334,7 +385,9 @@ fn renamed_references(compiled: &File, renames: &[BindingRenameInfo]) -> (FxHash
     let mut new_names: FxHashMap<BindingId, &str> = FxHashMap::default();
     for rename in renames {
         for binding in &resolution.info.bindings {
-            if binding.name == rename.original && binding.declaration_start == Some(rename.declaration_start) {
+            if binding.name == rename.original
+                && binding.declaration_start == Some(rename.declaration_start)
+            {
                 new_names.insert(binding.id, &rename.renamed);
             }
         }
@@ -361,8 +414,10 @@ fn index_nodes(value: &Value, into: &mut FxHashMap<u64, Value>, jsx: &mut Vec<(u
         Value::Object(map) => {
             if let Some(id) = map.get("_nodeId").and_then(Value::as_u64) {
                 into.entry(id).or_insert_with(|| value.clone());
-                if matches!(map.get("type").and_then(Value::as_str), Some("JSXElement" | "JSXFragment"))
-                    && let Some((start, end)) = span_of(value)
+                if matches!(
+                    map.get("type").and_then(Value::as_str),
+                    Some("JSXElement" | "JSXFragment")
+                ) && let Some((start, end)) = span_of(value)
                 {
                     jsx.push((start, end, id));
                 }
@@ -460,7 +515,11 @@ impl Printer<'_> {
     fn unchanged<T: Serialize>(&mut self, node: &T, base: &BaseNode) -> Option<String> {
         let (id, start, end) = (base.node_id?, base.start?, base.end?);
         let first_inside = self.renamed_starts.partition_point(|at| *at < start);
-        if self.renamed_starts.get(first_inside).is_some_and(|at| *at < end) {
+        if self
+            .renamed_starts
+            .get(first_inside)
+            .is_some_and(|at| *at < end)
+        {
             return None;
         }
         let original = self.originals.get(&u64::from(id))?;
@@ -488,11 +547,18 @@ impl Printer<'_> {
         }
         let outer = std::mem::take(&mut self.out);
         let mut cursor = start;
-        while let Some(&(jsx_start, jsx_end, id)) = self.jsx_spans.get(at).filter(|(s, ..)| *s < end) {
+        while let Some(&(jsx_start, jsx_end, id)) =
+            self.jsx_spans.get(at).filter(|(s, ..)| *s < end)
+        {
             let text = self.source.slice(cursor, jsx_start);
             self.copied.push((cursor, text.clone()));
             self.out.push_str(&text);
-            match self.originals.get(&id).cloned().map(serde_json::from_value::<Expression>) {
+            match self
+                .originals
+                .get(&id)
+                .cloned()
+                .map(serde_json::from_value::<Expression>)
+            {
                 Some(Ok(Expression::JSXElement(element))) => self.jsx_lower_element(&element),
                 Some(Ok(Expression::JSXFragment(fragment))) => self.jsx_lower_fragment(&fragment),
                 _ => self.out.push_str(&self.source.slice(jsx_start, jsx_end)),
@@ -512,7 +578,9 @@ impl Printer<'_> {
     /// An identifier's name as printed: its new name if the compiler renamed
     /// the binding it resolves to.
     fn name<'n>(&'n self, base: &BaseNode, name: &'n str) -> &'n str {
-        self.renamed.get(&crate::scope::address(base)).map_or(name, String::as_str)
+        self.renamed
+            .get(&crate::scope::address(base))
+            .map_or(name, String::as_str)
     }
 
     // ---- restoration ------------------------------------------------------
@@ -528,7 +596,9 @@ impl Printer<'_> {
 
     /// The original nodes spanning exactly `base`'s span.
     fn originals_at(&self, base: &BaseNode) -> &[Value] {
-        span_of_base(base, self.source).and_then(|span| self.by_span.get(&span)).map_or(&[], Vec::as_slice)
+        span_of_base(base, self.source)
+            .and_then(|span| self.by_span.get(&span))
+            .map_or(&[], Vec::as_slice)
     }
 
     /// The tsgo node `base` is: its own id, or, for a node the compiler
@@ -536,7 +606,10 @@ impl Printer<'_> {
     /// its span -- how a checker question about compiled code is asked.
     fn original_id(&self, base: &BaseNode) -> Option<u32> {
         base.node_id.or_else(|| {
-            self.originals_at(base).iter().find_map(|node| node.get("_nodeId").and_then(Value::as_u64)).and_then(|id| u32::try_from(id).ok())
+            self.originals_at(base)
+                .iter()
+                .find_map(|node| node.get("_nodeId").and_then(Value::as_u64))
+                .and_then(|id| u32::try_from(id).ok())
         })
     }
 
@@ -559,14 +632,19 @@ impl Printer<'_> {
     /// attribute string's spelling is between its quotes.
     fn jsx_spelling(&self, base: &BaseNode, value: &str) -> Option<String> {
         let (start, end) = span_of_base(base, self.source)?;
-        let node = self.by_span.get(&(start, end))?.iter().find_map(|node| node.get("type").and_then(Value::as_str))?;
+        let node = self
+            .by_span
+            .get(&(start, end))?
+            .iter()
+            .find_map(|node| node.get("type").and_then(Value::as_str))?;
         let (start, end) = match node {
             "JSXText" => (start, end),
             "StringLiteral" => (start + 1, end.saturating_sub(1)),
             _ => return None,
         };
         let spelling = self.source.slice(start, end);
-        (spelling.contains('&') && crate::jsx_text::decode_entities(&spelling) == value).then_some(spelling)
+        (spelling.contains('&') && crate::jsx_text::decode_entities(&spelling) == value)
+            .then_some(spelling)
     }
 
     /// Whether the original binding spanning `base`'s span was optional (`a?`).
@@ -574,16 +652,21 @@ impl Printer<'_> {
     fn originally_optional(&self, base: &BaseNode) -> bool {
         !self.assigning
             && self.originals_at(base).iter().any(|node| {
-            node.get("type").and_then(Value::as_str).is_none_or(|kind| kind == "Identifier")
-                && node.get("name").is_some()
-                && node.get("optional").and_then(Value::as_bool) == Some(true)
-        })
+                node.get("type")
+                    .and_then(Value::as_str)
+                    .is_none_or(|kind| kind == "Identifier")
+                    && node.get("name").is_some()
+                    && node.get("optional").and_then(Value::as_bool) == Some(true)
+            })
     }
 
     /// The checker's type for a compiler-introduced binding: the type of the
     /// original node its span names.
     fn checker_type(&mut self, base: &BaseNode) -> Option<String> {
-        let node = self.originals_at(base).iter().find_map(|node| node.get("_nodeId").and_then(Value::as_u64))?;
+        let node = self
+            .originals_at(base)
+            .iter()
+            .find_map(|node| node.get("_nodeId").and_then(Value::as_u64))?;
         let node = u32::try_from(node).ok()? & !crate::convert::SECOND_NODE;
         self.types.type_at(node)
     }
@@ -596,36 +679,53 @@ impl Printer<'_> {
             return None;
         }
         // The wrapper starts where its operand does and ends later.
-        self.by_span.iter().find_map(|((wrapper_start, wrapper_end), nodes)| {
-            if *wrapper_start != start || *wrapper_end <= end {
-                return None;
-            }
-            nodes.iter().find_map(|node| {
-                let operand = node.get("expression").and_then(span_of)?;
-                if operand != (start, end) {
+        self.by_span
+            .iter()
+            .find_map(|((wrapper_start, wrapper_end), nodes)| {
+                if *wrapper_start != start || *wrapper_end <= end {
                     return None;
                 }
-                match node.get("type").and_then(Value::as_str)? {
-                    "TSNonNullExpression" => Some("!".to_owned()),
-                    "TSInstantiationExpression" => node.get("typeParameters").and_then(span_of).map(|(s, e)| self.source.slice(s, e)),
-                    _ => None,
-                }
+                nodes.iter().find_map(|node| {
+                    let operand = node.get("expression").and_then(span_of)?;
+                    if operand != (start, end) {
+                        return None;
+                    }
+                    match node.get("type").and_then(Value::as_str)? {
+                        "TSNonNullExpression" => Some("!".to_owned()),
+                        "TSInstantiationExpression" => node
+                            .get("typeParameters")
+                            .and_then(span_of)
+                            .map(|(s, e)| self.source.slice(s, e)),
+                        _ => None,
+                    }
+                })
             })
-        })
     }
 
     /// The local `type` and `interface` declarations of the original function
     /// spanning `base`'s span: code generation drops them from a compiled body,
     /// and the body's annotations name them.
     fn dropped_local_types(&self, base: &BaseNode) -> Vec<String> {
-        let Some(function) = self.originals_at(base).iter().find(|node| node.get("body").is_some()) else {
+        let Some(function) = self
+            .originals_at(base)
+            .iter()
+            .find(|node| node.get("body").is_some())
+        else {
             return Vec::new();
         };
-        let statements = function.get("body").and_then(|body| body.get("body")).and_then(Value::as_array);
+        let statements = function
+            .get("body")
+            .and_then(|body| body.get("body"))
+            .and_then(Value::as_array);
         statements
             .into_iter()
             .flatten()
-            .filter(|statement| matches!(statement.get("type").and_then(Value::as_str), Some("TSTypeAliasDeclaration" | "TSInterfaceDeclaration")))
+            .filter(|statement| {
+                matches!(
+                    statement.get("type").and_then(Value::as_str),
+                    Some("TSTypeAliasDeclaration" | "TSInterfaceDeclaration")
+                )
+            })
             .filter_map(span_of)
             .map(|(start, end)| self.source.slice(start, end))
             .collect()
@@ -649,7 +749,12 @@ impl Printer<'_> {
     /// one printed in the original's place, a new one printed where it stands.
     fn program(&mut self, original: &File, compiled: &File) {
         let mut cursor = 0u32;
-        let first_start = original.program.body.first().and_then(|s| statement_base(s).start).unwrap_or(0);
+        let first_start = original
+            .program
+            .body
+            .first()
+            .and_then(|s| statement_base(s).start)
+            .unwrap_or(0);
         // The file's leading comments (a license, `// @flow`) stay first.
         let header_end = self.source.token_start(0).min(first_start);
         if header_end > 0 {
@@ -676,7 +781,11 @@ impl Printer<'_> {
         self.write_copy(cursor, self.source.len());
         let imports = self.jsx_imports.declarations();
         if !imports.is_empty() {
-            self.edits.push(Edit { at: imports_at, remove: 0, insert: imports });
+            self.edits.push(Edit {
+                at: imports_at,
+                remove: 0,
+                insert: imports,
+            });
         }
         self.import_cache_runtime(imports_at);
         self.apply_edits();
@@ -692,11 +801,19 @@ impl Printer<'_> {
             && let Some(close) = self.out.rfind('}').filter(|close| *close >= at)
         {
             self.jsx_imports.class_type = true;
-            self.edits.push(Edit { at: close, remove: 0, insert: member });
+            self.edits.push(Edit {
+                at: close,
+                remove: 0,
+                insert: member,
+            });
         }
         if !self.hoists.is_empty() {
             let insert = self.hoists.drain(..).map(|hoist| hoist + "\n\n").collect();
-            self.edits.push(Edit { at, remove: 0, insert });
+            self.edits.push(Edit {
+                at,
+                remove: 0,
+                insert,
+            });
         }
     }
 
@@ -707,15 +824,31 @@ impl Printer<'_> {
             return;
         }
         let callee = self.caches.callee.clone().unwrap_or_default();
-        let typed = if self.caches.shape_type { "cacheOf as _cacheOf, type MemoCacheShape as _MemoCacheShape" } else { "cacheOf as _cacheOf" };
+        let typed = if self.caches.shape_type {
+            "cacheOf as _cacheOf, type MemoCacheShape as _MemoCacheShape"
+        } else {
+            "cacheOf as _cacheOf"
+        };
         match self.caches.runtime_import {
             Some((start, end)) => {
                 let printed = self.out[start..end].to_owned();
                 let array = format!("c as {callee}");
-                let names = if self.caches.array { format!("{array}, {typed}") } else { typed.to_owned() };
-                self.edits.push(Edit { at: start, remove: end - start, insert: printed.replacen(&array, &names, 1) });
+                let names = if self.caches.array {
+                    format!("{array}, {typed}")
+                } else {
+                    typed.to_owned()
+                };
+                self.edits.push(Edit {
+                    at: start,
+                    remove: end - start,
+                    insert: printed.replacen(&array, &names, 1),
+                });
             }
-            None => self.edits.push(Edit { at: imports_at, remove: 0, insert: format!("import {{ {typed} }} from \"react/compiler-runtime\";\n") }),
+            None => self.edits.push(Edit {
+                at: imports_at,
+                remove: 0,
+                insert: format!("import {{ {typed} }} from \"react/compiler-runtime\";\n"),
+            }),
         }
     }
 
@@ -734,7 +867,8 @@ impl Printer<'_> {
         let mut edits = std::mem::take(&mut self.edits);
         edits.sort_by_key(|edit| (std::cmp::Reverse(edit.at), std::cmp::Reverse(edit.remove)));
         for edit in edits {
-            self.out.replace_range(edit.at..edit.at + edit.remove, &edit.insert);
+            self.out
+                .replace_range(edit.at..edit.at + edit.remove, &edit.insert);
             let after = edit.at + edit.remove;
             for (_, (start, end)) in &mut self.functions {
                 if *start >= after {
@@ -836,7 +970,11 @@ impl Printer<'_> {
 
     /// The typed cache for a compiled function's body, if it has a cache and
     /// every slot's type can be named.
-    fn cache_plan(&mut self, function: &BaseNode, body: &BlockStatement) -> Option<cache::CachePlan> {
+    fn cache_plan(
+        &mut self,
+        function: &BaseNode,
+        body: &BlockStatement,
+    ) -> Option<cache::CachePlan> {
         let callee = self.caches.callee.clone()?;
         let json = serde_json::to_value(body).ok()?;
         let found = cache::find(&json, &callee)?;
@@ -902,16 +1040,31 @@ impl Printer<'_> {
     /// The type parameters and local types of the original function spanning
     /// `function`'s span.
     fn local_type_names(&self, function: &BaseNode) -> Vec<String> {
-        let Some(node) = self.originals_at(function).iter().find(|node| node.get("body").is_some()) else {
+        let Some(node) = self
+            .originals_at(function)
+            .iter()
+            .find(|node| node.get("body").is_some())
+        else {
             return Vec::new();
         };
-        let parameters = node.get("typeParameters").and_then(|p| p.get("params")).and_then(Value::as_array);
-        let locals = node.get("body").and_then(|body| body.get("body")).and_then(Value::as_array);
+        let parameters = node
+            .get("typeParameters")
+            .and_then(|p| p.get("params"))
+            .and_then(Value::as_array);
+        let locals = node
+            .get("body")
+            .and_then(|body| body.get("body"))
+            .and_then(Value::as_array);
         parameters
             .into_iter()
             .flatten()
             .filter_map(|parameter| parameter.get("name").and_then(Value::as_str))
-            .chain(locals.into_iter().flatten().filter_map(|statement| statement.get("id").and_then(|id| id.get("name")).and_then(Value::as_str)))
+            .chain(locals.into_iter().flatten().filter_map(|statement| {
+                statement
+                    .get("id")
+                    .and_then(|id| id.get("name"))
+                    .and_then(Value::as_str)
+            }))
             .map(str::to_owned)
             .collect()
     }
@@ -1006,7 +1159,9 @@ impl Printer<'_> {
                 }
                 self.write(") ");
                 match (&scope, s.consequent.as_ref()) {
-                    (Some(scope), Statement::BlockStatement(block)) => self.block_with_epilogue(block, &scope.fill),
+                    (Some(scope), Statement::BlockStatement(block)) => {
+                        self.block_with_epilogue(block, &scope.fill);
+                    }
                     _ => self.statement(&s.consequent),
                 }
                 if let Some(alternate) = &s.alternate {
@@ -1134,7 +1289,9 @@ impl Printer<'_> {
             Statement::ImportDeclaration(import) => self.import(import),
             Statement::ExportNamedDeclaration(export) => {
                 self.write("export ");
-                if matches!(export.export_kind, Some(ExportKind::Type)) && export.declaration.is_none() {
+                if matches!(export.export_kind, Some(ExportKind::Type))
+                    && export.declaration.is_none()
+                {
                     self.write("type ");
                 }
                 if let Some(declaration) = &export.declaration {
@@ -1218,7 +1375,12 @@ impl Printer<'_> {
         self.variable_declaration_in(declaration, in_for, false);
     }
 
-    fn variable_declaration_in(&mut self, declaration: &VariableDeclaration, in_for: bool, head: bool) {
+    fn variable_declaration_in(
+        &mut self,
+        declaration: &VariableDeclaration,
+        in_for: bool,
+        head: bool,
+    ) {
         if let Some(text) = self.unchanged(declaration, &declaration.base) {
             // A copied declaration statement carries its own `;`.
             self.write(text.trim_end_matches(';'));
@@ -1236,13 +1398,17 @@ impl Printer<'_> {
                 self.write(", ");
             }
             if let PatternLike::Identifier(identifier) = &declarator.id
-                && (identifier.type_annotation.is_some() || self.original_part(&identifier.base, "typeAnnotation").is_some())
+                && (identifier.type_annotation.is_some()
+                    || self
+                        .original_part(&identifier.base, "typeAnnotation")
+                        .is_some())
             {
                 let name = self.name(&identifier.base, &identifier.name).to_owned();
                 self.typed_locals.insert(name);
             }
             if let PatternLike::Identifier(identifier) = &declarator.id
-                && span_of_base(&identifier.base, self.source).is_some_and(|span| self.definite.contains(&span))
+                && span_of_base(&identifier.base, self.source)
+                    .is_some_and(|span| self.definite.contains(&span))
                 && self.unchanged(identifier, &identifier.base).is_none()
             {
                 // `let x!: T`, whose `!` the output dropped.
@@ -1261,7 +1427,9 @@ impl Printer<'_> {
                 && !head
                 && let PatternLike::Identifier(identifier) = &declarator.id
                 && identifier.type_annotation.is_none()
-                && self.original_part(&identifier.base, "typeAnnotation").is_none()
+                && self
+                    .original_part(&identifier.base, "typeAnnotation")
+                    .is_none()
                 && let Some(text) = self.checker_type(&identifier.base)
             {
                 let _ = write!(self.out, ": {text}");
@@ -1372,7 +1540,10 @@ impl Printer<'_> {
     fn export_specifier(&mut self, specifier: &ExportSpecifier) {
         match specifier {
             ExportSpecifier::ExportSpecifier(s) => {
-                let (local, exported) = (module_export_name(&s.local), module_export_name(&s.exported));
+                let (local, exported) = (
+                    module_export_name(&s.local),
+                    module_export_name(&s.exported),
+                );
                 if matches!(s.export_kind, Some(ExportKind::Type)) {
                     self.write("type ");
                 }
@@ -1396,7 +1567,9 @@ impl Printer<'_> {
             self.write(&text);
             return;
         }
-        let Some(started) = self.function_start(&f.base) else { return };
+        let Some(started) = self.function_start(&f.base) else {
+            return;
+        };
         self.function_declaration_compiled(f);
         self.function_end(&f.base, started);
     }
@@ -1419,23 +1592,43 @@ impl Printer<'_> {
         }
     }
 
-    fn function_declaration_compiled(&mut self, f: &react_compiler_ast::statements::FunctionDeclaration) {
+    fn function_declaration_compiled(
+        &mut self,
+        f: &react_compiler_ast::statements::FunctionDeclaration,
+    ) {
         if f.is_async {
             self.write("async ");
         }
-        self.write(if f.generator { "function* " } else { "function " });
+        self.write(if f.generator {
+            "function* "
+        } else {
+            "function "
+        });
         if let Some(id) = &f.id {
             self.write(&id.name);
         }
-        self.function_rest(&f.base, f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+        self.function_rest(
+            &f.base,
+            f.type_parameters.as_ref(),
+            &f.params,
+            f.return_type.as_ref(),
+        );
         self.write(" ");
         self.function_body(&f.base, &f.body);
     }
 
     /// `<T>(params): R`, the part every function form shares. Type parameters
     /// and a return type the output dropped come back from the original.
-    fn function_rest(&mut self, function: &BaseNode, type_parameters: Option<&RawNode>, params: &[PatternLike], return_type: Option<&RawNode>) {
-        let type_parameters = type_parameters.and_then(|t| self.raw(t)).or_else(|| self.original_part(function, "typeParameters"));
+    fn function_rest(
+        &mut self,
+        function: &BaseNode,
+        type_parameters: Option<&RawNode>,
+        params: &[PatternLike],
+        return_type: Option<&RawNode>,
+    ) {
+        let type_parameters = type_parameters
+            .and_then(|t| self.raw(t))
+            .or_else(|| self.original_part(function, "typeParameters"));
         if let Some(text) = type_parameters {
             self.write(&text);
         }
@@ -1447,7 +1640,9 @@ impl Printer<'_> {
             self.parameter(param);
         }
         self.write(")");
-        let return_type = return_type.and_then(|t| self.raw(t)).or_else(|| self.original_part(function, "returnType"));
+        let return_type = return_type
+            .and_then(|t| self.raw(t))
+            .or_else(|| self.original_part(function, "returnType"));
         if let Some(text) = return_type {
             self.write(&text);
         }
@@ -1460,16 +1655,29 @@ impl Printer<'_> {
         // optional, and typed as the original's left side.
         if let PatternLike::Identifier(identifier) = param
             && identifier.type_annotation.is_none()
-            && let Some(defaulted) = self.originals_at(&identifier.base).iter().find(|node| node.get("type").and_then(Value::as_str) == Some("AssignmentPattern"))
+            && let Some(defaulted) = self
+                .originals_at(&identifier.base)
+                .iter()
+                .find(|node| node.get("type").and_then(Value::as_str) == Some("AssignmentPattern"))
         {
-            let annotation = defaulted.get("left").and_then(|left| left.get("typeAnnotation")).and_then(span_of).map(|(s, e)| self.source.slice(s, e));
-            let left = defaulted.get("left").and_then(|left| left.get("_nodeId")).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok());
+            let annotation = defaulted
+                .get("left")
+                .and_then(|left| left.get("typeAnnotation"))
+                .and_then(span_of)
+                .map(|(s, e)| self.source.slice(s, e));
+            let left = defaulted
+                .get("left")
+                .and_then(|left| left.get("_nodeId"))
+                .and_then(Value::as_u64)
+                .and_then(|n| u32::try_from(n).ok());
             let name = self.name(&identifier.base, &identifier.name).to_owned();
             self.write(&name);
             self.write("?");
             if let Some(text) = annotation {
                 self.write(&text);
-            } else if let Some(text) = left.and_then(|node| self.types.type_at(node & !crate::convert::SECOND_NODE)) {
+            } else if let Some(text) =
+                left.and_then(|node| self.types.type_at(node & !crate::convert::SECOND_NODE))
+            {
                 let _ = write!(self.out, ": {text}");
             }
             return;
@@ -1477,7 +1685,9 @@ impl Printer<'_> {
         if let PatternLike::Identifier(identifier) = param
             && identifier.type_annotation.is_none()
             && self.unchanged(identifier, &identifier.base).is_none()
-            && self.original_part(&identifier.base, "typeAnnotation").is_none()
+            && self
+                .original_part(&identifier.base, "typeAnnotation")
+                .is_none()
         {
             // No annotation to copy: a contextually typed parameter takes the
             // checker's type.
@@ -1508,12 +1718,17 @@ impl Printer<'_> {
         if identifier.optional == Some(true) || self.originally_optional(&identifier.base) {
             self.write("?");
         }
-        let annotation = identifier.type_annotation.as_ref().and_then(|a| self.raw(a)).or_else(|| self.original_part(&identifier.base, "typeAnnotation"));
+        let annotation = identifier
+            .type_annotation
+            .as_ref()
+            .and_then(|a| self.raw(a))
+            .or_else(|| self.original_part(&identifier.base, "typeAnnotation"));
         if let Some(text) = annotation {
             self.write(&text);
         }
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn pattern(&mut self, pattern: &PatternLike) {
         match pattern {
             PatternLike::Identifier(identifier) => {
@@ -1538,9 +1753,13 @@ impl Printer<'_> {
                             let shorthand = p.shorthand
                                 && match (p.key.as_ref(), p.value.as_ref()) {
                                     (Expression::Identifier(k), PatternLike::Identifier(v)) => {
-                                        k.name == self.name(&v.base, &v.name) && v.type_annotation.is_none()
+                                        k.name == self.name(&v.base, &v.name)
+                                            && v.type_annotation.is_none()
                                     }
-                                    (Expression::Identifier(k), PatternLike::AssignmentPattern(a)) => {
+                                    (
+                                        Expression::Identifier(k),
+                                        PatternLike::AssignmentPattern(a),
+                                    ) => {
                                         matches!(a.left.as_ref(), PatternLike::Identifier(l) if k.name == self.name(&l.base, &l.name))
                                     }
                                     _ => false,
@@ -1559,8 +1778,16 @@ impl Printer<'_> {
                         }
                     }
                 }
-                self.write(if object.properties.is_empty() { "}" } else { " }" });
-                let annotation = object.type_annotation.as_ref().and_then(|a| self.raw(a)).or_else(|| self.original_part(&object.base, "typeAnnotation"));
+                self.write(if object.properties.is_empty() {
+                    "}"
+                } else {
+                    " }"
+                });
+                let annotation = object
+                    .type_annotation
+                    .as_ref()
+                    .and_then(|a| self.raw(a))
+                    .or_else(|| self.original_part(&object.base, "typeAnnotation"));
                 if let Some(text) = annotation {
                     self.write(&text);
                 }
@@ -1595,11 +1822,21 @@ impl Printer<'_> {
                 self.pattern(&rest.argument);
                 self.annotation(rest.type_annotation.as_ref());
             }
-            PatternLike::MemberExpression(member) => self.expression(&Expression::MemberExpression(member.clone()), CALL),
-            PatternLike::TSAsExpression(e) => self.expression(&Expression::TSAsExpression(e.clone()), CALL),
-            PatternLike::TSSatisfiesExpression(e) => self.expression(&Expression::TSSatisfiesExpression(e.clone()), CALL),
-            PatternLike::TSNonNullExpression(e) => self.expression(&Expression::TSNonNullExpression(e.clone()), CALL),
-            PatternLike::TSTypeAssertion(e) => self.expression(&Expression::TSTypeAssertion(e.clone()), CALL),
+            PatternLike::MemberExpression(member) => {
+                self.expression(&Expression::MemberExpression(member.clone()), CALL);
+            }
+            PatternLike::TSAsExpression(e) => {
+                self.expression(&Expression::TSAsExpression(e.clone()), CALL);
+            }
+            PatternLike::TSSatisfiesExpression(e) => {
+                self.expression(&Expression::TSSatisfiesExpression(e.clone()), CALL);
+            }
+            PatternLike::TSNonNullExpression(e) => {
+                self.expression(&Expression::TSNonNullExpression(e.clone()), CALL);
+            }
+            PatternLike::TSTypeAssertion(e) => {
+                self.expression(&Expression::TSTypeAssertion(e.clone()), CALL);
+            }
             PatternLike::TypeCastExpression(e) => self.expression(&e.expression, CALL),
         }
     }
@@ -1646,7 +1883,8 @@ impl Printer<'_> {
         let wrapper = self.dropped_wrapper(base);
         // A restored `!` or `<T>` binds like a member access: an operand of
         // lower precedence is parenthesised under it.
-        let parenthesise = precedence(expression) < min || (wrapper.is_some() && precedence(expression) < CALL);
+        let parenthesise =
+            precedence(expression) < min || (wrapper.is_some() && precedence(expression) < CALL);
         if parenthesise {
             self.write("(");
         }
@@ -1676,7 +1914,9 @@ impl Printer<'_> {
             }
             Expression::StringLiteral(literal) => self.write(&quote(&literal.value.code_units())),
             Expression::NumericLiteral(literal) => self.write(&number(literal.value)),
-            Expression::BooleanLiteral(literal) => self.write(if literal.value { "true" } else { "false" }),
+            Expression::BooleanLiteral(literal) => {
+                self.write(if literal.value { "true" } else { "false" });
+            }
             Expression::NullLiteral(_) => self.write("null"),
             Expression::BigIntLiteral(literal) => {
                 let _ = write!(self.out, "{}n", literal.value);
@@ -1743,7 +1983,10 @@ impl Printer<'_> {
                 // cast where it is stored (see the assignment below); a
                 // comparison needs no cast.
                 if let Some(at) = self.cache_slot(expression) {
-                    let name = self.cache().map_or("$", |plan| plan.name.as_str()).to_owned();
+                    let name = self
+                        .cache()
+                        .map_or("$", |plan| plan.name.as_str())
+                        .to_owned();
                     let _ = write!(self.out, "{name}.s{at}");
                     return;
                 }
@@ -1756,7 +1999,11 @@ impl Printer<'_> {
             }
             Expression::CallExpression(c) => {
                 self.member_object(&c.callee, false);
-                let arguments = c.type_parameters.as_ref().and_then(|p| self.raw(p)).or_else(|| self.original_part(&c.base, "typeParameters"));
+                let arguments = c
+                    .type_parameters
+                    .as_ref()
+                    .and_then(|p| self.raw(p))
+                    .or_else(|| self.original_part(&c.base, "typeParameters"));
                 if let Some(text) = arguments {
                     self.write(&text);
                 }
@@ -1769,7 +2016,11 @@ impl Printer<'_> {
                 if c.optional {
                     self.write("?.");
                 }
-                let arguments = c.type_parameters.as_ref().and_then(|p| self.raw(p)).or_else(|| self.original_part(&c.base, "typeParameters"));
+                let arguments = c
+                    .type_parameters
+                    .as_ref()
+                    .and_then(|p| self.raw(p))
+                    .or_else(|| self.original_part(&c.base, "typeParameters"));
                 if let Some(text) = arguments {
                     self.write(&text);
                 }
@@ -1788,7 +2039,11 @@ impl Printer<'_> {
                 } else {
                     self.expression(&n.callee, CALL);
                 }
-                let arguments = n.type_parameters.as_ref().and_then(|p| self.raw(p)).or_else(|| self.original_part(&n.base, "typeParameters"));
+                let arguments = n
+                    .type_parameters
+                    .as_ref()
+                    .and_then(|p| self.raw(p))
+                    .or_else(|| self.original_part(&n.base, "typeParameters"));
                 if let Some(text) = arguments {
                     self.write(&text);
                 }
@@ -1801,13 +2056,20 @@ impl Printer<'_> {
                 self.write(operator);
                 let word = operator.chars().all(char::is_alphabetic);
                 let argument_start = Self::leading_char(&u.argument);
-                if word || (operator.ends_with('-') && argument_start == Some('-')) || (operator.ends_with('+') && argument_start == Some('+')) {
+                if word
+                    || (operator.ends_with('-') && argument_start == Some('-'))
+                    || (operator.ends_with('+') && argument_start == Some('+'))
+                {
                     self.write(" ");
                 }
                 self.expression(&u.argument, UNARY);
             }
             Expression::UpdateExpression(u) => {
-                let operator = if matches!(u.operator, UpdateOperator::Increment) { "++" } else { "--" };
+                let operator = if matches!(u.operator, UpdateOperator::Increment) {
+                    "++"
+                } else {
+                    "--"
+                };
                 if u.prefix {
                     self.write(operator);
                     self.expression(&u.argument, UNARY);
@@ -1829,9 +2091,21 @@ impl Printer<'_> {
             }
             Expression::BinaryExpression(b) => {
                 let level = binary_precedence(&b.operator);
-                let (left_min, right_min) = if matches!(b.operator, BinaryOperator::Exp) { (level + 1, level) } else { (level, level + 1) };
+                let (left_min, right_min) = if matches!(b.operator, BinaryOperator::Exp) {
+                    (level + 1, level)
+                } else {
+                    (level, level + 1)
+                };
                 // `-a ** b` is a syntax error: a unary on the left of `**` is wrapped.
-                let left_min = if matches!(b.operator, BinaryOperator::Exp) && matches!(b.left.as_ref(), Expression::UnaryExpression(_) | Expression::AwaitExpression(_)) { PRIMARY } else { left_min };
+                let left_min = if matches!(b.operator, BinaryOperator::Exp)
+                    && matches!(
+                        b.left.as_ref(),
+                        Expression::UnaryExpression(_) | Expression::AwaitExpression(_)
+                    ) {
+                    PRIMARY
+                } else {
+                    left_min
+                };
                 self.expression(&b.left, left_min);
                 let _ = write!(self.out, " {} ", binary_operator(&b.operator));
                 self.expression(&b.right, right_min);
@@ -1839,9 +2113,7 @@ impl Printer<'_> {
             Expression::LogicalExpression(l) => {
                 let level = logical_precedence(&l.operator);
                 // `??` cannot sit beside `||` or `&&` without parentheses.
-                let mixes = |e: &Expression| {
-                    matches!(e, Expression::LogicalExpression(inner) if matches!(l.operator, LogicalOperator::NullishCoalescing) != matches!(inner.operator, LogicalOperator::NullishCoalescing))
-                };
+                let mixes = |e: &Expression| matches!(e, Expression::LogicalExpression(inner) if matches!(l.operator, LogicalOperator::NullishCoalescing) != matches!(inner.operator, LogicalOperator::NullishCoalescing));
                 let left_min = if mixes(&l.left) { PRIMARY } else { level };
                 let right_min = if mixes(&l.right) { PRIMARY } else { level + 1 };
                 self.expression(&l.left, left_min);
@@ -1868,7 +2140,8 @@ impl Printer<'_> {
                 self.expression(&a.right, ASSIGN);
                 // `t1 = $[1]` reads an erased cache slot into a typed
                 // temporary. Until the cache is typed (M3.4), the read is cast.
-                if let (PatternLike::Identifier(target), Expression::MemberExpression(read)) = (a.left.as_ref(), a.right.as_ref())
+                if let (PatternLike::Identifier(target), Expression::MemberExpression(read)) =
+                    (a.left.as_ref(), a.right.as_ref())
                     && self.cache().is_none()
                     && matches!(read.object.as_ref(), Expression::Identifier(cache) if cache.name == "$")
                 {
@@ -1887,11 +2160,18 @@ impl Printer<'_> {
                 }
             }
             Expression::ArrowFunctionExpression(f) => {
-                let Some(started) = self.function_start(&f.base) else { return };
+                let Some(started) = self.function_start(&f.base) else {
+                    return;
+                };
                 if f.is_async {
                     self.write("async ");
                 }
-                self.function_rest(&f.base, f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+                self.function_rest(
+                    &f.base,
+                    f.type_parameters.as_ref(),
+                    &f.params,
+                    f.return_type.as_ref(),
+                );
                 self.write(" => ");
                 match f.body.as_ref() {
                     ArrowFunctionBody::BlockStatement(block) => self.function_body(&f.base, block),
@@ -1909,7 +2189,9 @@ impl Printer<'_> {
                 self.function_end(&f.base, started);
             }
             Expression::FunctionExpression(f) => {
-                let Some(started) = self.function_start(&f.base) else { return };
+                let Some(started) = self.function_start(&f.base) else {
+                    return;
+                };
                 if f.is_async {
                     self.write("async ");
                 }
@@ -1917,7 +2199,12 @@ impl Printer<'_> {
                 if let Some(id) = &f.id {
                     let _ = write!(self.out, " {}", id.name);
                 }
-                self.function_rest(&f.base, f.type_parameters.as_ref(), &f.params, f.return_type.as_ref());
+                self.function_rest(
+                    &f.base,
+                    f.type_parameters.as_ref(),
+                    &f.params,
+                    f.return_type.as_ref(),
+                );
                 self.write(" ");
                 self.function_body(&f.base, &f.body);
                 self.function_end(&f.base, started);
@@ -1937,7 +2224,10 @@ impl Printer<'_> {
             }
             // `t0 as const`: the literal moved into `t0`, whose restored type is
             // already the const type, and `as const` on a name is not TypeScript.
-            Expression::TSAsExpression(e) if matches!(e.expression.as_ref(), Expression::Identifier(_)) && is_const_assertion(&e.type_annotation) => {
+            Expression::TSAsExpression(e)
+                if matches!(e.expression.as_ref(), Expression::Identifier(_))
+                    && is_const_assertion(&e.type_annotation) =>
+            {
                 self.expression(&e.expression, min);
             }
             Expression::TSAsExpression(e) => {
@@ -1982,7 +2272,11 @@ impl Printer<'_> {
     /// `1` needs `(1).x`; an optional chain continued outside its chain needs
     /// `(a?.b).c`.
     fn member_object(&mut self, object: &Expression, in_chain: bool) {
-        let chain_ends = !in_chain && matches!(object, Expression::OptionalMemberExpression(_) | Expression::OptionalCallExpression(_));
+        let chain_ends = !in_chain
+            && matches!(
+                object,
+                Expression::OptionalMemberExpression(_) | Expression::OptionalCallExpression(_)
+            );
         let bare_integer = matches!(object, Expression::NumericLiteral(n) if n.value.fract() == 0.0 && self.unchanged(object, expression_base(object)).is_none_or(|t| !t.contains(['.', 'e', 'x', 'o', 'b', 'E', 'X', 'O', 'B'])));
         if chain_ends || bare_integer {
             self.write("(");
@@ -2031,7 +2325,12 @@ impl Printer<'_> {
                     self.write("*");
                 }
                 self.property_key(&m.key, m.computed);
-                self.function_rest(&m.base, m.type_parameters.as_ref(), &m.params, m.return_type.as_ref());
+                self.function_rest(
+                    &m.base,
+                    m.type_parameters.as_ref(),
+                    &m.params,
+                    m.return_type.as_ref(),
+                );
                 self.write(" ");
                 self.function_body(&m.base, &m.body);
             }
@@ -2059,7 +2358,13 @@ impl Printer<'_> {
     fn leading_char(expression: &Expression) -> Option<char> {
         match expression {
             Expression::UnaryExpression(u) => unary_operator(&u.operator).chars().next(),
-            Expression::UpdateExpression(u) if u.prefix => Some(if matches!(u.operator, UpdateOperator::Increment) { '+' } else { '-' }),
+            Expression::UpdateExpression(u) if u.prefix => {
+                Some(if matches!(u.operator, UpdateOperator::Increment) {
+                    '+'
+                } else {
+                    '-'
+                })
+            }
             Expression::NumericLiteral(n) if n.value < 0.0 => Some('-'),
             _ => None,
         }
@@ -2114,7 +2419,9 @@ impl Printer<'_> {
                                     let _ = write!(self.out, "{quote}{text}{quote}");
                                 }
                             }
-                            JSXAttributeValue::JSXExpressionContainer(c) => self.jsx_container(&c.expression),
+                            JSXAttributeValue::JSXExpressionContainer(c) => {
+                                self.jsx_container(&c.expression);
+                            }
                             JSXAttributeValue::JSXElement(e) => self.jsx_element(e),
                             JSXAttributeValue::JSXFragment(f) => self.jsx_fragment(f),
                         }
@@ -2251,7 +2558,11 @@ fn number(value: f64) -> String {
         return "NaN".to_owned();
     }
     if value.is_infinite() {
-        return if value > 0.0 { "Infinity".to_owned() } else { "-Infinity".to_owned() };
+        return if value > 0.0 {
+            "Infinity".to_owned()
+        } else {
+            "-Infinity".to_owned()
+        };
     }
     if value.fract() == 0.0 && value.abs() < 1e21 {
         return format!("{value:.0}");
@@ -2262,14 +2573,32 @@ fn number(value: f64) -> String {
 fn precedence(expression: &Expression) -> u8 {
     match expression {
         Expression::SequenceExpression(_) => SEQUENCE,
-        Expression::AssignmentExpression(_) | Expression::ArrowFunctionExpression(_) | Expression::YieldExpression(_) | Expression::AssignmentPattern(_) => ASSIGN,
+        Expression::AssignmentExpression(_)
+        | Expression::ArrowFunctionExpression(_)
+        | Expression::YieldExpression(_)
+        | Expression::AssignmentPattern(_) => ASSIGN,
         Expression::ConditionalExpression(_) => CONDITIONAL,
         Expression::LogicalExpression(l) => logical_precedence(&l.operator),
         Expression::BinaryExpression(b) => binary_precedence(&b.operator),
         Expression::TSAsExpression(_) | Expression::TSSatisfiesExpression(_) => RELATIONAL,
-        Expression::UnaryExpression(_) | Expression::AwaitExpression(_) | Expression::TSTypeAssertion(_) => UNARY,
-        Expression::UpdateExpression(u) => if u.prefix { UNARY } else { POSTFIX },
-        Expression::CallExpression(_) | Expression::OptionalCallExpression(_) | Expression::MemberExpression(_) | Expression::OptionalMemberExpression(_) | Expression::NewExpression(_) | Expression::TaggedTemplateExpression(_) | Expression::TSNonNullExpression(_) | Expression::TSInstantiationExpression(_) => CALL,
+        Expression::UnaryExpression(_)
+        | Expression::AwaitExpression(_)
+        | Expression::TSTypeAssertion(_) => UNARY,
+        Expression::UpdateExpression(u) => {
+            if u.prefix {
+                UNARY
+            } else {
+                POSTFIX
+            }
+        }
+        Expression::CallExpression(_)
+        | Expression::OptionalCallExpression(_)
+        | Expression::MemberExpression(_)
+        | Expression::OptionalMemberExpression(_)
+        | Expression::NewExpression(_)
+        | Expression::TaggedTemplateExpression(_)
+        | Expression::TSNonNullExpression(_)
+        | Expression::TSInstantiationExpression(_) => CALL,
         _ => PRIMARY,
     }
 }
@@ -2386,8 +2715,13 @@ fn starts_ambiguously(expression: &Expression, statement: bool) -> bool {
         Expression::BinaryExpression(b) => starts_ambiguously(&b.left, statement),
         Expression::LogicalExpression(l) => starts_ambiguously(&l.left, statement),
         Expression::ConditionalExpression(c) => starts_ambiguously(&c.test, statement),
-        Expression::SequenceExpression(s) => s.expressions.first().is_some_and(|e| starts_ambiguously(e, statement)),
-        Expression::AssignmentExpression(a) => matches!(a.left.as_ref(), PatternLike::ObjectPattern(_)),
+        Expression::SequenceExpression(s) => s
+            .expressions
+            .first()
+            .is_some_and(|e| starts_ambiguously(e, statement)),
+        Expression::AssignmentExpression(a) => {
+            matches!(a.left.as_ref(), PatternLike::ObjectPattern(_))
+        }
         Expression::UpdateExpression(u) if !u.prefix => starts_ambiguously(&u.argument, statement),
         Expression::TSAsExpression(e) => starts_ambiguously(&e.expression, statement),
         Expression::TSSatisfiesExpression(e) => starts_ambiguously(&e.expression, statement),
@@ -2409,9 +2743,19 @@ fn contains_call(expression: &Expression) -> bool {
 
 fn contains_top_level_in(expression: &Expression) -> bool {
     match expression {
-        Expression::BinaryExpression(b) => matches!(b.operator, BinaryOperator::In) || contains_top_level_in(&b.left) || contains_top_level_in(&b.right),
-        Expression::LogicalExpression(l) => contains_top_level_in(&l.left) || contains_top_level_in(&l.right),
-        Expression::ConditionalExpression(c) => contains_top_level_in(&c.test) || contains_top_level_in(&c.consequent) || contains_top_level_in(&c.alternate),
+        Expression::BinaryExpression(b) => {
+            matches!(b.operator, BinaryOperator::In)
+                || contains_top_level_in(&b.left)
+                || contains_top_level_in(&b.right)
+        }
+        Expression::LogicalExpression(l) => {
+            contains_top_level_in(&l.left) || contains_top_level_in(&l.right)
+        }
+        Expression::ConditionalExpression(c) => {
+            contains_top_level_in(&c.test)
+                || contains_top_level_in(&c.consequent)
+                || contains_top_level_in(&c.alternate)
+        }
         Expression::AssignmentExpression(a) => contains_top_level_in(&a.right),
         Expression::SequenceExpression(s) => s.expressions.iter().any(contains_top_level_in),
         _ => false,
@@ -2525,7 +2869,11 @@ fn span_of_base(base: &BaseNode, source: &SourceText) -> Option<(u32, u32)> {
         return Some((start, end));
     }
     let loc = base.loc.as_ref()?;
-    let at = |position: &react_compiler_ast::common::Position| position.index.or_else(|| source.offset(position.line, position.column));
+    let at = |position: &react_compiler_ast::common::Position| {
+        position
+            .index
+            .or_else(|| source.offset(position.line, position.column))
+    };
     Some((at(&loc.start)?, at(&loc.end)?))
 }
 
@@ -2533,5 +2881,9 @@ fn span_of_base(base: &BaseNode, source: &SourceText) -> Option<(u32, u32)> {
 fn is_const_assertion(annotation: &RawNode) -> bool {
     let value = annotation.parse_value();
     value.get("type").and_then(Value::as_str) == Some("TSTypeReference")
-        && value.get("typeName").and_then(|name| name.get("name")).and_then(Value::as_str) == Some("const")
+        && value
+            .get("typeName")
+            .and_then(|name| name.get("name"))
+            .and_then(Value::as_str)
+            == Some("const")
 }

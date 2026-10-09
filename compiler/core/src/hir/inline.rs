@@ -106,7 +106,9 @@ fn worth_merging(program: &Program, by_name: &FxHashMap<String, usize>) -> FxHas
                 && !func.values.iter().any(|op| {
                     matches!(
                         op.kind,
-                        OpKind::Suspend { .. } | OpKind::Await { .. } | OpKind::CellReady { .. }
+                        OpKind::Suspend { .. }
+                            | OpKind::Await { .. }
+                            | OpKind::CellReady { .. }
                             | OpKind::NativeLocal { .. }
                     )
                 })
@@ -141,10 +143,7 @@ fn worth_merging(program: &Program, by_name: &FxHashMap<String, usize>) -> FxHas
 /// Widening this needs the duty attached to the frame rather than to the value.
 /// Until then the restriction is the defect, written down.
 fn hands_back_plain_storage(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
-    if !matches!(
-        func.values[value.0 as usize].kind,
-        OpKind::ObjectNew { .. }
-    ) {
+    if !matches!(func.values[value.0 as usize].kind, OpKind::ObjectNew { .. }) {
         return false;
     }
     let HirType::Managed(ManagedType::Object(id)) = &func.values[value.0 as usize].ty else {
@@ -279,7 +278,9 @@ fn copied_block(
                 },
                 kept => kept.clone(),
             };
-            substitute_terminator(&mut moved, |value| map.get(&value).copied().unwrap_or(value));
+            substitute_terminator(&mut moved, |value| {
+                map.get(&value).copied().unwrap_or(value)
+            });
             moved
         }
     };
@@ -355,7 +356,8 @@ fn splice(into: &mut Func, from: &Func, block: usize, at: usize) {
     };
 
     for source in &from.blocks {
-        into.blocks.push(copied_block(from, source, &map, body, onward));
+        into.blocks
+            .push(copied_block(from, source, &map, body, onward));
     }
     into.blocks.push(Block {
         params: carried,

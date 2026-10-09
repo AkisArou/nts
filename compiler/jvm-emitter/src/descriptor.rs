@@ -184,7 +184,11 @@ mod tests {
     fn a_malformed_descriptor_is_not_guessed_at() {
         assert_eq!(call_effect("D)V"), None, "no opening paren");
         assert_eq!(call_effect("(D"), None, "no closing paren");
-        assert_eq!(call_effect("(Ljava/lang/String)V"), None, "unterminated class");
+        assert_eq!(
+            call_effect("(Ljava/lang/String)V"),
+            None,
+            "unterminated class"
+        );
         assert_eq!(call_effect("(D)Q"), None, "unknown return type");
         assert_eq!(call_effect("(D)DD"), None, "two return types");
     }

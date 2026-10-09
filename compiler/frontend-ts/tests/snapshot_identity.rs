@@ -25,8 +25,14 @@ fn the_questions_asked_are_part_of_the_identity() {
         .with_call_resolution(Budget::DEFAULT)
         .with_constant_folding(Budget::DEFAULT)
         .identity();
-    assert_ne!(bare, compiling, "a build asks more than a bare `nts frontend`");
-    assert_ne!(compiling, everything, "constant folding is a different snapshot");
+    assert_ne!(
+        bare, compiling,
+        "a build asks more than a bare `nts frontend`"
+    );
+    assert_ne!(
+        compiling, everything,
+        "constant folding is a different snapshot"
+    );
     assert_ne!(bare, everything, "and so is asking for all three");
 }
 
@@ -40,9 +46,14 @@ fn a_budget_is_part_of_the_identity() {
         .with_decomposition(Budget::DEFAULT)
         .identity();
     let wider = TsgoApi::new("tsgo")
-        .with_decomposition(Budget { per_seed: Budget::DEFAULT.per_seed + 48 })
+        .with_decomposition(Budget {
+            per_seed: Budget::DEFAULT.per_seed + 48,
+        })
         .identity();
-    assert_ne!(default, wider, "a wider budget reaches further, so it is a different snapshot");
+    assert_ne!(
+        default, wider,
+        "a wider budget reaches further, so it is a different snapshot"
+    );
 }
 
 /// And two sources asking the same questions still share an entry, which is the

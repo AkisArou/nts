@@ -14,8 +14,11 @@ use crate::{Acquisition, Origin, PackageReport};
 pub fn render(acquisition: &Acquisition, verbose: bool) -> String {
     let mut out = String::new();
     let total = acquisition.packages.len();
-    let acquired: Vec<&PackageReport> =
-        acquisition.packages.iter().filter(|p| p.acquired()).collect();
+    let acquired: Vec<&PackageReport> = acquisition
+        .packages
+        .iter()
+        .filter(|p| p.acquired())
+        .collect();
     let refused: Vec<&PackageReport> = acquisition
         .packages
         .iter()
@@ -76,7 +79,9 @@ pub fn render(acquisition: &Acquisition, verbose: bool) -> String {
             // not provide`, and nothing in that sentence says which import it
             // came from. Until the lowerer can say so, this is where the two
             // can be connected.
-            if package.imported.len() > 1 || package.imported.first().is_some_and(|s| *s != package.name) {
+            if package.imported.len() > 1
+                || package.imported.first().is_some_and(|s| *s != package.name)
+            {
                 let _ = writeln!(out, "      imported as {}", package.imported.join(", "));
             }
         }
@@ -163,7 +168,6 @@ fn notes(acquisition: &Acquisition, acquired: &[&PackageReport], out: &mut Strin
             );
         }
     }
-
 }
 
 /// What the checker said about one package's recovered source.

@@ -92,7 +92,10 @@ fn a_set_reads_its_key_for_both_parameters() {
         "a `Set` has no values to read: {calls:?}",
     );
     assert_eq!(
-        calls.iter().filter(|name| **name == "nts_map_key_at").count(),
+        calls
+            .iter()
+            .filter(|name| **name == "nts_map_key_at")
+            .count(),
         2,
         "it reads the key twice, once per parameter: {calls:?}",
     );
@@ -113,12 +116,7 @@ fn the_walk_allocates_nothing() {
         func(&lowered, name)
             .values
             .iter()
-            .filter(|op| {
-                matches!(
-                    op.kind,
-                    OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-                )
-            })
+            .filter(|op| matches!(op.kind, OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }))
             .count()
     };
     // Against `empty`, which builds a table and walks nothing, so the
@@ -147,7 +145,8 @@ fn the_table_parameter_is_refused() {
         .collect();
     assert!(
         reasons.iter().any(|reason| {
-            reason.contains("callback taking 3 parameters") && reason.contains("the value and the key")
+            reason.contains("callback taking 3 parameters")
+                && reason.contains("the value and the key")
         }),
         "the refusal names what a table callback may take: {reasons:?}",
     );
@@ -208,7 +207,10 @@ fn the_first_parameter_is_the_value() {
             continue;
         };
         let operands = [source_of(lhs.0), source_of(rhs.0)];
-        if !operands.iter().any(|at| values.contains(at) || keys.contains(at)) {
+        if !operands
+            .iter()
+            .any(|at| values.contains(at) || keys.contains(at))
+        {
             continue;
         }
         checked += 1;

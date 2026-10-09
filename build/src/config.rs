@@ -198,7 +198,9 @@ pub fn claim_covers(claim: &str, id: &str, floor: Option<&str>) -> bool {
     // target `tooling/config` builds carries `minimumVersion`; a hand-written
     // target literal need not, and the honest reading of "no floor declared" is
     // the one it compiles against rather than a lower number nobody wrote.
-    let have = floor.and_then(|value| value.split('.').next()?.parse().ok()).unwrap_or(surface);
+    let have = floor
+        .and_then(|value| value.split('.').next()?.parse().ok())
+        .unwrap_or(surface);
     needs <= have
 }
 
@@ -223,7 +225,9 @@ impl NativeSources {
     /// Whether this root is compiled for a target.
     #[must_use]
     pub fn covers(&self, id: &str, floor: Option<&str>) -> bool {
-        self.targets.as_ref().is_none_or(|ids| ids.iter().any(|it| claim_covers(it, id, floor)))
+        self.targets
+            .as_ref()
+            .is_none_or(|ids| ids.iter().any(|it| claim_covers(it, id, floor)))
     }
 }
 
@@ -365,7 +369,11 @@ pub fn above(file: &Utf8Path) -> Option<Utf8PathBuf> {
 /// parent's and build nothing.
 #[must_use]
 pub fn beside(tsconfig: &Utf8Path) -> Option<Utf8PathBuf> {
-    let directory = if tsconfig.is_dir() { tsconfig } else { tsconfig.parent()? };
+    let directory = if tsconfig.is_dir() {
+        tsconfig
+    } else {
+        tsconfig.parent()?
+    };
     let candidate = directory.join(FILE_NAME);
     candidate.exists().then_some(candidate)
 }
@@ -466,7 +474,10 @@ fn remember(absolute: &Utf8Path, resolved: &Resolved) {
 /// brownfield apps are one each, but a shared library beside a static archive of
 /// the same code is two -- and picking either silently would emit an artifact
 /// nobody asked for under a name that says otherwise.
-pub fn product<'a>(resolved: &'a Resolved, named: Option<&str>) -> Result<Option<(&'a str, &'a Product)>> {
+pub fn product<'a>(
+    resolved: &'a Resolved,
+    named: Option<&str>,
+) -> Result<Option<(&'a str, &'a Product)>> {
     if let Some(name) = named {
         let Some((key, value)) = resolved.products.get_key_value(name) else {
             let known: Vec<&str> = resolved.products.keys().map(String::as_str).collect();
@@ -523,20 +534,32 @@ mod tests {
     #[test]
     fn one_product_needs_no_name() {
         let resolved = with(&["hello"]);
-        assert_eq!(product(&resolved, None).expect("one product needs no name").map(|(n, _)| n), Some("hello"));
+        assert_eq!(
+            product(&resolved, None)
+                .expect("one product needs no name")
+                .map(|(n, _)| n),
+            Some("hello")
+        );
     }
 
     #[test]
     fn no_products_is_not_an_error() {
         // A package, or a workspace root. It declares no build and that is a
         // legitimate config rather than a broken one.
-        assert_eq!(product(&Resolved::default(), None).expect("no products is legitimate").map(|(n, _)| n), None);
+        assert_eq!(
+            product(&Resolved::default(), None)
+                .expect("no products is legitimate")
+                .map(|(n, _)| n),
+            None
+        );
     }
 
     #[test]
     fn several_products_refuse_to_be_guessed() {
         let resolved = with(&["sdk", "sdkStatic"]);
-        let why = product(&resolved, None).expect_err("two products cannot be guessed").to_string();
+        let why = product(&resolved, None)
+            .expect_err("two products cannot be guessed")
+            .to_string();
         assert!(why.contains("--product"), "{why}");
         assert!(why.contains("sdkStatic"), "{why}");
     }
@@ -544,7 +567,9 @@ mod tests {
     #[test]
     fn a_named_product_that_is_not_there_says_what_is() {
         let resolved = with(&["sdk"]);
-        let why = product(&resolved, Some("addon")).expect_err("no such product").to_string();
+        let why = product(&resolved, Some("addon"))
+            .expect_err("no such product")
+            .to_string();
         assert!(why.contains("addon") && why.contains("sdk"), "{why}");
     }
 
@@ -618,7 +643,10 @@ mod tests {
             targets: vec!["android-29".to_owned()],
             path: "manifests/android.xml".to_owned(),
         };
-        assert!(fragment.covers("android-36", Some("29")), "the USE_BIOMETRIC fragment was dropped");
+        assert!(
+            fragment.covers("android-36", Some("29")),
+            "the USE_BIOMETRIC fragment was dropped"
+        );
         assert!(!fragment.covers("android-36", Some("21")));
 
         let sources = NativeSources {
@@ -626,13 +654,19 @@ mod tests {
             targets: Some(vec!["android-29".to_owned()]),
             header: None,
         };
-        assert!(sources.covers("android-36", Some("29")), "the Java half was dropped");
+        assert!(
+            sources.covers("android-36", Some("29")),
+            "the Java half was dropped"
+        );
         assert!(!sources.covers("ios-18", Some("18.0")));
 
         // No claim is every target, which is the other half of `covers` and is
         // untouched by any of this.
-        let everywhere =
-            NativeSources { dir: "native".to_owned(), targets: None, header: None };
+        let everywhere = NativeSources {
+            dir: "native".to_owned(),
+            targets: None,
+            header: None,
+        };
         assert!(everywhere.covers("windows", None));
     }
 }

@@ -75,7 +75,10 @@ fn an_abstract_method_is_a_signature_terminated_as_unreachable() {
         .map(|op| format!("{:?}", area.values[op.0 as usize].kind))
         .filter(|kind| !kind.starts_with("Param"))
         .collect();
-    assert!(doing.is_empty(), "an abstract method has no body: {doing:?}");
+    assert!(
+        doing.is_empty(),
+        "an abstract method has no body: {doing:?}"
+    );
 }
 
 /// A declaration with parameters carries them, and a non-numeric return type
@@ -91,7 +94,12 @@ fn an_abstract_declaration_carries_its_whole_signature() {
     };
     // `abstract scale(by: number, plus: number): number` — receiver and two.
     let scale = find(&lowered, "Scaler#scale");
-    assert_eq!(scale.params.len(), 3, "receiver and two: {:?}", scale.params);
+    assert_eq!(
+        scale.params.len(),
+        3,
+        "receiver and two: {:?}",
+        scale.params
+    );
     assert_eq!(scale.return_type, HirType::Float { bits: 64 });
 
     // `abstract label(): string` — a managed return, not a double.
@@ -112,7 +120,12 @@ fn the_overrides_have_bodies() {
     let Some(lowered) = lowered("abstract-methods") else {
         return;
     };
-    for name in ["Circle#area", "Square#area", "Doubler#scale", "Halver#scale"] {
+    for name in [
+        "Circle#area",
+        "Square#area",
+        "Doubler#scale",
+        "Halver#scale",
+    ] {
         let func = find(&lowered, name);
         assert!(
             func.blocks

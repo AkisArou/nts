@@ -33,7 +33,10 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
         binding.module.replace([':', '.', '-'], "_")
     ));
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    let probe = dir.join(format!("{}.c", binding.module.replace([':', '.', '-'], "_")));
+    let probe = dir.join(format!(
+        "{}.c",
+        binding.module.replace([':', '.', '-'], "_")
+    ));
     // One pass. Each line is an assertion that declares nothing, so one
     // failing cannot make another fail, and `-ferror-limit=0` reports every
     // one: dropping what clang reported leaves only lines that passed. An
@@ -45,36 +48,48 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
     // declared in, beside the probe, as the build writes them beside the
     // witness.
     for (name, text) in [
-        (nts_codegen_c::GOBJECT_HEADER_NAME, nts_codegen_c::GOBJECT_HEADER),
+        (
+            nts_codegen_c::GOBJECT_HEADER_NAME,
+            nts_codegen_c::GOBJECT_HEADER,
+        ),
         (nts_codegen_c::GTK_HEADER_NAME, nts_codegen_c::GTK_HEADER),
     ] {
         let header = dir.join(name);
         std::fs::write(&header, text).with_context(|| format!("writing {}", header.display()))?;
     }
-    let output = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
-        .args(["-std=c11", "-fsyntax-only", "-ferror-limit=0", "-w"])
-        .arg("-I")
-        .arg(&dir)
-        .args(cflags)
-        .arg(&probe)
-        .output()
-        .context("running clang on the binding's self-check")?;
+    let output =
+        std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
+            .args(["-std=c11", "-fsyntax-only", "-ferror-limit=0", "-w"])
+            .arg("-I")
+            .arg(&dir)
+            .args(cflags)
+            .arg(&probe)
+            .output()
+            .context("running clang on the binding's self-check")?;
     let _ = std::fs::remove_dir_all(&dir);
     if output.status.success() {
         return Ok(());
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let name = probe.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    let name = probe
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
     let mut rejected: BTreeMap<String, Reason> = BTreeMap::new();
     for line in stderr.lines() {
         // `<probe>:<line>:<col>: error: <message>`
-        let Some(rest) = line.split_once(name).map(|(_, rest)| rest) else { continue };
+        let Some(rest) = line.split_once(name).map(|(_, rest)| rest) else {
+            continue;
+        };
         let mut fields = rest.trim_start_matches(':').splitn(3, ':');
         let (Some(number), _, Some(message)) = (fields.next(), fields.next(), fields.next()) else {
             continue;
         };
-        let Some(message) = message.trim().strip_prefix("error:") else { continue };
-        if let Some((symbol, prototype)) = number.parse::<usize>().ok().and_then(|n| lines.get(&n)) {
+        let Some(message) = message.trim().strip_prefix("error:") else {
+            continue;
+        };
+        if let Some((symbol, prototype)) = number.parse::<usize>().ok().and_then(|n| lines.get(&n))
+        {
             // Clang's words and the prototype they were about, so a report
             // line says what was declared and not only that it was wrong. An
             // undeclared name is its own reason: nothing disagreed, the
@@ -95,19 +110,30 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
             binding.module
         );
     }
-    binding.functions.retain(|f| !rejected.contains_key(&f.name));
+    binding
+        .functions
+        .retain(|f| !rejected.contains_key(&f.name));
     // A downcast calls its class's `get_type`, so it goes where that goes:
     // `g_settings_backend_get_type` is declared only in a header `gio.h`
     // leaves out, and `asGSettingsBackend` would import a name nothing binds.
-    let bound: BTreeSet<&str> = binding.functions.iter().map(|f| f.symbol.as_str()).collect();
-    binding.casts.retain(|cast| bound.contains(cast.get_type.as_str()));
+    let bound: BTreeSet<&str> = binding
+        .functions
+        .iter()
+        .map(|f| f.symbol.as_str())
+        .collect();
+    binding
+        .casts
+        .retain(|cast| bound.contains(cast.get_type.as_str()));
     // And a boxed record is boxed by its `GType`: one whose `get_type` the
     // headers do not declare -- `g_date_time_get_type` is GObject's, not
     // GLib's -- is the plain handle it was before, which the program cannot
     // hold in a box.
     for decl in &mut binding.types {
         let super::map::TypeDecl::Class { boxed, .. } = decl;
-        if boxed.as_ref().is_some_and(|(get_type, _)| !bound.contains(get_type.as_str())) {
+        if boxed
+            .as_ref()
+            .is_some_and(|(get_type, _)| !bound.contains(get_type.as_str()))
+        {
             *boxed = None;
         }
     }
@@ -126,7 +152,11 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
     // parameter list is scoped to it and would name a different struct.
     let mut tags = BTreeSet::new();
     for function in &binding.functions {
-        for ty in function.c_parameters.iter().chain(std::iter::once(&function.result.c)) {
+        for ty in function
+            .c_parameters
+            .iter()
+            .chain(std::iter::once(&function.result.c))
+        {
             collect_tags(ty, &mut tags);
         }
     }
@@ -140,7 +170,12 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
         let parameters = if function.c_parameters.is_empty() {
             "void".to_owned()
         } else {
-            function.c_parameters.iter().map(Type::c_type_expanded).collect::<Vec<_>>().join(", ")
+            function
+                .c_parameters
+                .iter()
+                .map(Type::c_type_expanded)
+                .collect::<Vec<_>>()
+                .join(", ")
         };
         let result = function.result.c.c_type_expanded();
         let symbol = &function.symbol;
@@ -156,7 +191,13 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
         }
         // A virtual function is its class struct's member, whose type is the
         // pointer this compares against.
-        if let Some(super::map::Vfunc { class_struct, member, offset, .. }) = &function.vfunc {
+        if let Some(super::map::Vfunc {
+            class_struct,
+            member,
+            offset,
+            ..
+        }) = &function.vfunc
+        {
             let _ = writeln!(
                 out,
                 "_Static_assert(__builtin_types_compatible_p(__typeof__((({class_struct} *)0)->{member}), {result} (*)({parameters})) \
@@ -169,7 +210,13 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
             );
         }
         line += 1;
-        lines.insert(line, (function.name.clone(), format!("{result} {symbol}({parameters})")));
+        lines.insert(
+            line,
+            (
+                function.name.clone(),
+                format!("{result} {symbol}({parameters})"),
+            ),
+        );
     }
     (out, lines)
 }
@@ -178,7 +225,11 @@ fn collect_tags(ty: &Type, into: &mut BTreeSet<String>) {
     match ty {
         Type::Pointer(pointee) => collect_pointee(pointee, into),
         Type::FnPointer(signature) => {
-            for ty in signature.parameters.iter().chain(std::iter::once(&*signature.result)) {
+            for ty in signature
+                .parameters
+                .iter()
+                .chain(std::iter::once(&*signature.result))
+            {
                 collect_tags(ty, into);
             }
         }

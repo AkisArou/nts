@@ -441,9 +441,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         // arguments reaches the C spelling.
         HirType::Managed(
             ManagedType::Map(_, _) | ManagedType::Table(_, _) | ManagedType::Set(_),
-        ) => {
-            "NtsMap *".to_owned()
-        }
+        ) => "NtsMap *".to_owned(),
         HirType::Managed(ManagedType::Object(id)) => {
             layouts.iter().find(|l| l.types.contains(id)).map_or_else(
                 || "void *".to_owned(),
@@ -1610,7 +1608,10 @@ fn crossings_of(
         if at + 1 != func.params.len() {
             return Err(Skipped {
                 function: func.name.clone(),
-                reason: format!("takes a rest parameter `{}` that is not last", parameter.name),
+                reason: format!(
+                    "takes a rest parameter `{}` that is not last",
+                    parameter.name
+                ),
             });
         }
     }
@@ -1651,7 +1652,6 @@ fn crossings_of(
     Ok((ret, crossings))
 }
 
-
 /// The scalar an optional parameter admits, where the surface recorded one.
 ///
 /// `number`, `boolean` or `string`, spelled as node spells it in
@@ -1687,7 +1687,10 @@ fn published_arity(func: &hir::Func) -> u32 {
         func.params
             .iter()
             .take_while(|p| {
-                matches!(p.shape, hir::ParamShape::Ordinary | hir::ParamShape::Optional)
+                matches!(
+                    p.shape,
+                    hir::ParamShape::Ordinary | hir::ParamShape::Optional
+                )
             })
             .count(),
     )
@@ -1751,7 +1754,8 @@ fn defined_classes<'a>(
         .public_api
         .iter()
         .filter(|(emitted, _)| {
-            classes.contains(emitted) && program.layouts.iter().any(|layout| layout.name == *emitted)
+            classes.contains(emitted)
+                && program.layouts.iter().any(|layout| layout.name == *emitted)
         })
         .map(|(emitted, publish)| (emitted.as_str(), publish.as_str()))
         .collect()
@@ -1832,10 +1836,7 @@ fn member_crossings(
         if matches!(crossing, Cross::Object(_) | Cross::Bytes | Cross::Void) {
             return Err(Skipped {
                 function: func.name.clone(),
-                reason: format!(
-                    "takes {}, which crosses outward only",
-                    spell(&parameter.ty)
-                ),
+                reason: format!("takes {}, which crosses outward only", spell(&parameter.ty)),
             });
         }
         crossings.push(crossing);
@@ -1894,7 +1895,9 @@ fn member_callback(
     );
 
     let mut args: Vec<String> = vec!["nts_self".to_owned()];
-    for (index, (crossing, parameter)) in crossings.iter().zip(func.params.iter().skip(1)).enumerate() {
+    for (index, (crossing, parameter)) in
+        crossings.iter().zip(func.params.iter().skip(1)).enumerate()
+    {
         let name = format!("a{index}");
         out.push_str(&declare_argument(crossing, &parameter.ty, layouts, &name));
         args.push(name);
@@ -1906,7 +1909,14 @@ fn member_callback(
         .zip(args.iter().skip(1))
         .enumerate()
     {
-        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index, &parameter.name));
+        out.push_str(&unmarshal(
+            crossing,
+            &parameter.ty,
+            layouts,
+            name,
+            index,
+            &parameter.name,
+        ));
     }
     out.push_str(
         "    NtsLanding nts_landing;\n    if (setjmp(nts_landing.frame) != 0) {\n        nts_napi_raise(env, &nts_landing);\n        out = NULL;\n        goto nts_napi_cleanup;\n    }\n    nts_landing_push(&nts_landing);\n",
@@ -1998,7 +2008,14 @@ fn constructor_callback(
         .zip(args.iter().skip(1))
         .enumerate()
     {
-        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index, &parameter.name));
+        out.push_str(&unmarshal(
+            crossing,
+            &parameter.ty,
+            layouts,
+            name,
+            index,
+            &parameter.name,
+        ));
     }
     let _ = write!(
         out,
@@ -2065,7 +2082,10 @@ fn class_definition(
         // the message that exists for a class and so read as unchanged.
         let absent = "is a class whose constructor was not compiled";
         let reason = why_uncompiled(program, &format!("{class}#constructor"), absent);
-        skipped.push(Skipped { function: class.to_owned(), reason });
+        skipped.push(Skipped {
+            function: class.to_owned(),
+            reason,
+        });
         return None;
     };
     // The receiver's C type is the struct the factory allocates. Taken from the
@@ -2200,7 +2220,9 @@ fn error_classes(program: &hir::Program) -> Vec<(String, String, String)> {
         let mut root = None;
         for _ in 0..16 {
             let Some(ty) = at else { break };
-            let Some(above) = program.layout(ty) else { break };
+            let Some(above) = program.layout(ty) else {
+                break;
+            };
             if roots.contains(&above.name.as_str()) {
                 root = Some(above.name.clone());
                 break;
@@ -2266,10 +2288,12 @@ static const NtsNapiErrorClass nts_napi_error_classes[] = {
     }
     // A sentinel, because a zero-length array is not C and a program with no
     // error classes at all is an ordinary program.
-    out.push_str("    { 0, 0, 0 }
+    out.push_str(
+        "    { 0, 0, 0 }
 };
 
-");
+",
+    );
     out
 }
 
@@ -2398,11 +2422,8 @@ fn wrapper(
         args.push(name);
     }
     out.push_str("    napi_value out = NULL;\n");
-    for (index, ((crossing, parameter), name)) in crossings
-        .iter()
-        .zip(&func.params)
-        .zip(&args)
-        .enumerate()
+    for (index, ((crossing, parameter), name)) in
+        crossings.iter().zip(&func.params).zip(&args).enumerate()
     {
         if gathered == Some(index) {
             let strings = matches!(
@@ -2425,7 +2446,14 @@ fn wrapper(
                 "    if (!nts_napi_optional_scalar(env, argv[{index}], {}, \"{expected}\", &{name})) goto nts_napi_cleanup;\n",
                 c_string_literal(&parameter.name)
             ),
-            _ => unmarshal(crossing, &parameter.ty, layouts, name, index, &parameter.name),
+            _ => unmarshal(
+                crossing,
+                &parameter.ty,
+                layouts,
+                name,
+                index,
+                &parameter.name,
+            ),
         };
         if index < required {
             out.push_str(&read);
@@ -2438,7 +2466,11 @@ fn wrapper(
         // carries the tag, which is why the lowering types an optional `number`
         // parameter `erased` and an optional `string` parameter as an ordinary
         // pointer.
-        out.push_str(&optional_argument(&read, &absent_argument(crossing, name), index));
+        out.push_str(&optional_argument(
+            &read,
+            &absent_argument(crossing, name),
+            index,
+        ));
     }
 
     // The landing pad, so a `throw` that reaches the edge becomes a catchable
@@ -2450,12 +2482,8 @@ fn wrapper(
     );
 
     let call = format!("{symbol}({})", args.join(", "));
-    let after_call = forget_consumed_arguments(
-        &crossings,
-        &args,
-        release_managed,
-        consumed_parameters,
-    );
+    let after_call =
+        forget_consumed_arguments(&crossings, &args, release_managed, consumed_parameters);
     out.push_str(&marshal(
         &ret,
         &func.return_type,
@@ -2526,11 +2554,9 @@ fn optional_argument(read: &str, absent: &str, index: usize) -> String {
 /// next crossing to be added is decided about instead of joining a list.
 fn absent_argument(crossing: &Cross, name: &str) -> String {
     match crossing {
-        Cross::Str
-        | Cross::Bytes
-        | Cross::Elements(_)
-        | Cross::Entries
-        | Cross::Object(_) => format!("{name} = NULL;"),
+        Cross::Str | Cross::Bytes | Cross::Elements(_) | Cross::Entries | Cross::Object(_) => {
+            format!("{name} = NULL;")
+        }
         Cross::Number => format!("{name} = 0.0;"),
         Cross::BigInt => format!("{name} = 0;"),
         Cross::Bool => format!("{name} = false;"),
@@ -2592,12 +2618,7 @@ fn release_argument(crossing: &Cross, name: &str) -> String {
 /// Declare every argument before converting any of them, so a conversion
 /// failure can jump to one cleanup block without observing an uninitialized
 /// managed pointer.
-fn declare_argument(
-    crossing: &Cross,
-    ty: &HirType,
-    layouts: &[hir::Layout],
-    name: &str,
-) -> String {
+fn declare_argument(crossing: &Cross, ty: &HirType, layouts: &[hir::Layout], name: &str) -> String {
     match crossing {
         // Undefined until read, which is also what an omitted optional argument
         // leaves it as -- so the two paths need no separate initialisation.
@@ -2720,9 +2741,7 @@ fn numeric_guard(ty: &HirType, name: &str) -> String {
             bits: 32,
             signed: false,
         } => Some(("0.0", "4294967295.0")),
-        HirType::Int { signed: true, .. } => {
-            Some(("-9007199254740991.0", "9007199254740991.0"))
-        }
+        HirType::Int { signed: true, .. } => Some(("-9007199254740991.0", "9007199254740991.0")),
         HirType::Int { signed: false, .. } => Some(("0.0", "9007199254740991.0")),
         HirType::Float { bits: 32 } => {
             return format!(
@@ -2904,10 +2923,7 @@ fn emit_object_helper(out: &mut String, layout: &hir::Layout, layouts: &[hir::La
                     .iter()
                     .find(|l| l.types.contains(&id))
                     .expect("a nested object layout cross checked without a layout");
-                format!(
-                    "{}(env, result->{member}, &value)",
-                    object_helper(nested)
-                )
+                format!("{}(env, result->{member}, &value)", object_helper(nested))
             }
             _ => unreachable!("a field shape `object_crosses` admits and this does not build"),
         };
@@ -3170,8 +3186,10 @@ fn declare_namespace_values(
     refused: &[String],
 ) -> String {
     let mut out = String::new();
-    let mut written: FxHashSet<&str> =
-        values.iter().map(|(global, _, _)| global.name.as_str()).collect();
+    let mut written: FxHashSet<&str> = values
+        .iter()
+        .map(|(global, _, _)| global.name.as_str())
+        .collect();
     for (_, properties) in &program.public_namespaces {
         for (property, emitted) in properties {
             if !written.insert(emitted.as_str())
@@ -3439,9 +3457,7 @@ fn report_unpublished_modules(program: &hir::Program, skipped: &mut Vec<Skipped>
     let named: Vec<String> = ranked
         .iter()
         .take(3)
-        .map(|(module, importer, exports)| {
-            format!("{module} ({exports}, imported by {importer})")
-        })
+        .map(|(module, importer, exports)| format!("{module} ({exports}, imported by {importer})"))
         .collect();
     let more = ranked.len().saturating_sub(named.len());
     let tail = if more == 0 {
@@ -3536,8 +3552,7 @@ fn report_unrepresentable_exports(
                                  reported above as an NTS2xxx against the function"
                                     .to_owned()
                             } else {
-                                "is exported and no function of that name was compiled"
-                                    .to_owned()
+                                "is exported and no function of that name was compiled".to_owned()
                             }
                         },
                         |(_, why)| format!("is exported and was not compiled: {why}"),
@@ -3602,9 +3617,7 @@ fn report_unrepresentable_exports(
             // does not fix"*, and this printed "is not a function this backend
             // can name" about a function. Wrong twice over, and the Node lane
             // said so twice before the cause was found.
-            } else if let Some((_, why)) =
-                program.uncompiled.iter().find(|(at, _)| at == name)
-            {
+            } else if let Some((_, why)) = program.uncompiled.iter().find(|(at, _)| at == name) {
                 format!("is exported and was not compiled: {why}")
             // **A value whose initializer the backend refused.** `deferred`
             // means "written by `module#init`", so when this backend declines
@@ -3774,7 +3787,10 @@ fn field_accessors(
         "static bool nts_napi_define_{instance}_fields(napi_env env, napi_value self) {{"
     );
     if descriptors.is_empty() {
-        let _ = write!(out, "    (void)env;\n    (void)self;\n    return true;\n}}\n");
+        let _ = write!(
+            out,
+            "    (void)env;\n    (void)self;\n    return true;\n}}\n"
+        );
     } else {
         let _ = write!(
             out,
@@ -3825,7 +3841,10 @@ fn publish_value_exports(
     for (global, publish, crossing) in values {
         let symbol = format!(
             "{}()",
-            value_reader(&c_global(&global.name, functions.iter().map(String::as_str)))
+            value_reader(&c_global(
+                &global.name,
+                functions.iter().map(String::as_str)
+            ))
         );
         let key = c_string_literal(publish);
         // `value_exports` refuses `Void`, so a `None` here is a bug in it
@@ -3880,10 +3899,11 @@ pub fn emit(program: &hir::Program) -> Addon {
 /// `program.c`, reports `use of undeclared identifier 'sep17'`.
 fn value_export_text(program: &hir::Program, refused: &[String]) -> (String, String) {
     let values = value_exports(program, refused);
-    let functions: Vec<String> =
-        program.funcs.iter().map(|func| func.name.clone()).collect();
+    let functions: Vec<String> = program.funcs.iter().map(|func| func.name.clone()).collect();
     let mut declarations = declare_value_exports(&values, &program.layouts, &functions);
-    declarations.push_str(&declare_namespace_values(program, &values, &functions, refused));
+    declarations.push_str(&declare_namespace_values(
+        program, &values, &functions, refused,
+    ));
     let publishing = publish_value_exports(&values, &program.layouts, &functions);
     (declarations, publishing)
 }
@@ -3949,7 +3969,11 @@ fn emit_layouts(
     // NtsObj_Reading;` and no body, and the getters were `incomplete definition
     // of type`. The class emitter wrote that typedef itself, which is why the
     // *methods* linked: they pass the pointer through without reading it.
-    let mut structs: Vec<usize> = needed.iter().copied().chain(structs_only.iter().copied()).collect();
+    let mut structs: Vec<usize> = needed
+        .iter()
+        .copied()
+        .chain(structs_only.iter().copied())
+        .collect();
     structs.sort_unstable();
     structs.dedup();
 
@@ -4035,12 +4059,7 @@ fn emit_layouts(
 /// Only quantities that can be stated exactly are stated. A namespace's own
 /// members are published on the namespace object and are in none of these
 /// counts, which is why that is said rather than folded in.
-fn totals_banner(
-    functions: usize,
-    classes: usize,
-    namespaces: usize,
-    declined: usize,
-) -> String {
+fn totals_banner(functions: usize, classes: usize, namespaces: usize, declined: usize) -> String {
     format!(
         "\n/* This module publishes {functions} top-level function(s), {classes} class(es) \
          and {namespaces} namespace(s),\n\
@@ -4086,7 +4105,11 @@ fn converted_layouts(
         // `export const constants: OsConstants` is a global, and without this
         // its helper was never emitted and the publication named a function
         // nothing declared.
-        .chain(value_exports(program, refused).into_iter().map(|(global, _, _)| &global.ty))
+        .chain(
+            value_exports(program, refused)
+                .into_iter()
+                .map(|(global, _, _)| &global.ty),
+        )
         // And the returns of every wrapped class *member*, which the class
         // emitter's wrappers convert and which nothing here could see. The
         // filter above is `published`, which matches an exported name: `Entry`
@@ -4156,9 +4179,10 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
         let names = published(program, func);
         // A namespace member needs a wrapper too, and is registered on the
         // object rather than on `exports`.
-        let in_namespace = program.public_namespaces.iter().any(|(_, properties)| {
-            properties.iter().any(|(_, emitted)| *emitted == func.name)
-        });
+        let in_namespace = program
+            .public_namespaces
+            .iter()
+            .any(|(_, properties)| properties.iter().any(|(_, emitted)| *emitted == func.name));
         if names.is_empty() && !in_namespace {
             continue;
         }
@@ -4200,8 +4224,14 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
         }
     }
 
-    let (class_inits, published_classes) =
-        emit_classes(program, &classes, &ownership, release_managed, &mut skipped, &mut out);
+    let (class_inits, published_classes) = emit_classes(
+        program,
+        &classes,
+        &ownership,
+        release_managed,
+        &mut skipped,
+        &mut out,
+    );
 
     let (value_declarations, value_publishing) = value_export_text(program, refused);
     out.push_str(&value_declarations);
@@ -4276,7 +4306,10 @@ mod tests {
         let leaves = [
             HirType::Bool,
             HirType::NUMBER,
-            HirType::Int { bits: 32, signed: true },
+            HirType::Int {
+                bits: 32,
+                signed: true,
+            },
             HirType::BigInt,
             HirType::Managed(ManagedType::String),
         ];
@@ -4309,13 +4342,19 @@ mod tests {
     #[test]
     fn native_pointers_have_no_javascript_marshalling_path() {
         use nts_core::hir::native::{Pointee, Scalar};
-        for pointee in [Pointee::Opaque("Counter".into()), Pointee::Scalar(Scalar::UInt8)] {
+        for pointee in [
+            Pointee::Opaque("Counter".into()),
+            Pointee::Scalar(Scalar::UInt8),
+        ] {
             let pointer = HirType::NativePointer(pointee);
             assert!(cross(&pointer, &[], &FxHashSet::default()).is_none());
             let array = HirType::Managed(ManagedType::Array(Box::new(pointer)));
             assert!(cross(&array, &[], &FxHashSet::default()).is_none());
         }
-        assert!(matches!(cross(&HirType::NUMBER, &[], &FxHashSet::default()), Some(Cross::Number)));
+        assert!(matches!(
+            cross(&HirType::NUMBER, &[], &FxHashSet::default()),
+            Some(Cross::Number)
+        ));
     }
 
     #[test]
@@ -4388,15 +4427,7 @@ mod tests {
         let owned = marshal(&Cross::Str, &string, "make()", "", &[], true, false);
         assert!(owned.contains("nts_release((NtsHeader *)result)"));
 
-        let borrowed = marshal(
-            &Cross::Str,
-            &string,
-            "echo(a0)",
-            "",
-            &[],
-            true,
-            true,
-        );
+        let borrowed = marshal(&Cross::Str, &string, "echo(a0)", "", &[], true, true);
         assert!(!borrowed.contains("nts_release((NtsHeader *)result)"));
     }
 

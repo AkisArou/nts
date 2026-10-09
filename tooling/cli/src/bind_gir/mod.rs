@@ -21,11 +21,11 @@
 
 mod check;
 mod emit;
+mod facts;
 mod map;
 mod model;
 mod naming;
 mod parse;
-mod facts;
 mod prerequisites;
 
 use std::collections::BTreeMap;
@@ -48,7 +48,9 @@ pub(crate) fn closure_files(root: &str, search: &[Utf8PathBuf]) -> Result<Vec<Ut
 
 /// The namespaces of `root`'s closure (`parse::closure`), cairo included.
 pub(crate) fn closure_namespaces(root: &str, search: &[Utf8PathBuf]) -> Vec<String> {
-    parse::closure(root, search).map(|(_, namespaces)| namespaces).unwrap_or_default()
+    parse::closure(root, search)
+        .map(|(_, namespaces)| namespaces)
+        .unwrap_or_default()
 }
 
 /// Where GIR files are looked for, in order: `GI_GIR_PATH` (colon-separated,
@@ -62,10 +64,14 @@ pub(crate) fn search_path() -> Vec<Utf8PathBuf> {
         }
     };
     if let Ok(dirs) = std::env::var("GI_GIR_PATH") {
-        dirs.split(':').filter(|d| !d.is_empty()).for_each(|d| add(Utf8PathBuf::from(d)));
+        dirs.split(':')
+            .filter(|d| !d.is_empty())
+            .for_each(|d| add(Utf8PathBuf::from(d)));
     }
     if let Ok(dirs) = std::env::var("XDG_DATA_DIRS") {
-        dirs.split(':').filter(|d| !d.is_empty()).for_each(|d| add(Utf8PathBuf::from(d).join("gir-1.0")));
+        dirs.split(':')
+            .filter(|d| !d.is_empty())
+            .for_each(|d| add(Utf8PathBuf::from(d).join("gir-1.0")));
     }
     for dir in ["/usr/share/gir-1.0", "/usr/local/share/gir-1.0"] {
         add(Utf8PathBuf::from(dir));
@@ -87,7 +93,10 @@ pub(crate) fn namespace_of(module: &str, search: &[Utf8PathBuf]) -> Option<Strin
         && name.chars().all(|c| c.is_ascii_alphanumeric())
         && version.chars().all(|c| c.is_ascii_digit() || c == '.');
     // cairo is the binder's own (`parse::CAIRO`), shipped or not.
-    let known = spec == "cairo-1.0" || search.iter().any(|dir| dir.join(format!("{spec}.gir")).exists());
+    let known = spec == "cairo-1.0"
+        || search
+            .iter()
+            .any(|dir| dir.join(format!("{spec}.gir")).exists());
     (plausible && known).then(|| spec.to_owned())
 }
 
@@ -98,7 +107,12 @@ pub(crate) fn newest(name: &str, pinned: Option<&str>, search: &[Utf8PathBuf]) -
     if name == "cairo" {
         return Some("cairo-1.0".to_owned());
     }
-    let version = |text: &str| text.split('.').map(str::parse::<u32>).collect::<Result<Vec<_>, _>>().ok();
+    let version = |text: &str| {
+        text.split('.')
+            .map(str::parse::<u32>)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()
+    };
     let mut found: Vec<(Vec<u32>, String)> = search
         .iter()
         .flat_map(|dir| std::fs::read_dir(dir).into_iter().flatten().flatten())
@@ -106,7 +120,8 @@ pub(crate) fn newest(name: &str, pinned: Option<&str>, search: &[Utf8PathBuf]) -
         .filter_map(|file| {
             let stem = file.strip_suffix(".gir")?;
             let (namespace, at) = stem.split_once('-')?;
-            let wanted = namespace.to_ascii_lowercase() == name && pinned.is_none_or(|pinned| pinned == at);
+            let wanted =
+                namespace.to_ascii_lowercase() == name && pinned.is_none_or(|pinned| pinned == at);
             wanted.then(|| Some((version(at)?, stem.to_owned())))?
         })
         .collect();
@@ -147,16 +162,27 @@ pub(crate) const FUNDAMENTAL_TYPES: &[&str] = &[
     "G_TYPE_VARIANT",
 ];
 
-fn namespace_facts(repository: &model::Repository, namespace: &model::Namespace) -> Result<facts::Facts> {
+fn namespace_facts(
+    repository: &model::Repository,
+    namespace: &model::Namespace,
+) -> Result<facts::Facts> {
     let structs: Vec<&str> = namespace
         .classes
         .iter()
         .filter_map(|c| c.c_type.as_deref())
         .chain(
-            namespace.records.iter().filter(|r| !r.class_struct).filter_map(|r| r.c_type.as_deref()),
+            namespace
+                .records
+                .iter()
+                .filter(|r| !r.class_struct)
+                .filter_map(|r| r.c_type.as_deref()),
         )
         .collect();
-    let enums: Vec<&str> = namespace.enums.iter().filter_map(|e| e.c_type.as_deref()).collect();
+    let enums: Vec<&str> = namespace
+        .enums
+        .iter()
+        .filter_map(|e| e.c_type.as_deref())
+        .collect();
     let slots = vfunc_slots(namespace);
     // Each boxed record, for its size.
     let sized: Vec<&str> = namespace
@@ -174,9 +200,20 @@ fn namespace_facts(repository: &model::Repository, namespace: &model::Namespace)
         .filter_map(|r| r.get_type.as_deref())
         .filter(|name| *name != "intern")
         .collect();
-    let macros: &[&str] = if namespace.name == "GObject" { FUNDAMENTAL_TYPES } else { &[] };
+    let macros: &[&str] = if namespace.name == "GObject" {
+        FUNDAMENTAL_TYPES
+    } else {
+        &[]
+    };
     let flags = pkg_config(repository, namespace, "--cflags");
-    let asked = facts::Asked { structs: &structs, enums: &enums, slots: &slots, sized: &sized, functions: &functions, macros };
+    let asked = facts::Asked {
+        structs: &structs,
+        enums: &enums,
+        slots: &slots,
+        sized: &sized,
+        functions: &functions,
+        macros,
+    };
     let mut facts = facts::resolve(&namespace.headers, &asked, &flags)?;
     // The interfaces GIR gives no prerequisite, which the
     // type system is asked about instead.
@@ -212,7 +249,10 @@ pub(crate) struct Generated {
 
 /// The closure of `root`, bound: each namespace's texts, the GIR files read,
 /// and the namespaces no GIR file was found for. Nothing is written.
-pub(crate) fn generate(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Generated>, Vec<Utf8PathBuf>, Vec<String>)> {
+pub(crate) fn generate(
+    root: &str,
+    search: &[Utf8PathBuf],
+) -> Result<(Vec<Generated>, Vec<Utf8PathBuf>, Vec<String>)> {
     let repository = parse::repository(root, search)?;
     let command = format!("nts bind-gir {root}");
     // Every struct tag first, because a namespace's signatures name the types
@@ -229,7 +269,9 @@ pub(crate) fn generate(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Genera
             .collect();
         let mut all = facts::Facts::default();
         for run in runs {
-            let one = run.join().map_err(|_| anyhow::anyhow!("a thread reading the headers panicked"))??;
+            let one = run
+                .join()
+                .map_err(|_| anyhow::anyhow!("a thread reading the headers panicked"))??;
             all.merge(one);
         }
         Ok::<_, anyhow::Error>(all)
@@ -242,13 +284,19 @@ pub(crate) fn generate(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Genera
                 let (repository, facts) = (&repository, &facts);
                 scope.spawn(move || {
                     let mut binding = map::bind(repository, namespace, facts);
-                    check::against_headers(&mut binding, &pkg_config(repository, namespace, "--cflags"))?;
+                    check::against_headers(
+                        &mut binding,
+                        &pkg_config(repository, namespace, "--cflags"),
+                    )?;
                     Ok::<_, anyhow::Error>(binding)
                 })
             })
             .collect();
         runs.into_iter()
-            .map(|run| run.join().map_err(|_| anyhow::anyhow!("a binding thread panicked"))?)
+            .map(|run| {
+                run.join()
+                    .map_err(|_| anyhow::anyhow!("a binding thread panicked"))?
+            })
             .collect::<Result<Vec<_>>>()
     })?;
     let names = naming::Names::of(&repository);
@@ -265,18 +313,34 @@ pub(crate) fn generate(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Genera
                 refused: report(binding),
                 promises: promises_report(&census),
                 bound: binding.functions.len(),
-                refusals: binding.refused.iter().map(|(_, reason)| reason.kind()).collect(),
+                refusals: binding
+                    .refused
+                    .iter()
+                    .map(|(_, reason)| reason.kind())
+                    .collect(),
                 asyncs: census.len(),
-                promised: census.iter().filter(|(_, outcome)| *outcome == "promise").count(),
+                promised: census
+                    .iter()
+                    .filter(|(_, outcome)| *outcome == "promise")
+                    .count(),
             }
         })
         .collect();
-    Ok((generated, repository.files, repository.missing.iter().cloned().collect()))
+    Ok((
+        generated,
+        repository.files,
+        repository.missing.iter().cloned().collect(),
+    ))
 }
 
 /// Bind `root` and its closure into `out`, returning the GIR files read. The
 /// summary is printed in full when asked for, and in one line otherwise.
-fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) -> Result<Vec<Utf8PathBuf>> {
+fn bind(
+    root: &str,
+    search: &[Utf8PathBuf],
+    out: &Utf8PathBuf,
+    verbose: bool,
+) -> Result<Vec<Utf8PathBuf>> {
     let (generated, files, missing) = generate(root, search)?;
     if verbose {
         for missing in &missing {
@@ -292,7 +356,12 @@ fn bind(root: &str, search: &[Utf8PathBuf], out: &Utf8PathBuf, verbose: bool) ->
         asyncs += namespace.asyncs;
         promised += namespace.promised;
         if verbose {
-            println!("  {:<16} {:>5} bound, {:>5} refused", namespace.stem, namespace.bound, namespace.refusals.len());
+            println!(
+                "  {:<16} {:>5} bound, {:>5} refused",
+                namespace.stem,
+                namespace.bound,
+                namespace.refusals.len()
+            );
         }
         bound += namespace.bound;
         refused += namespace.refusals.len();
@@ -329,7 +398,11 @@ fn print_ranking(totals: BTreeMap<String, usize>) {
 /// the package its scanner ran against, which is not always one this machine
 /// has a `.pc` for under that name; if the headers then fail to compile, the
 /// self-check says so with clang's own message.
-fn pkg_config(repository: &model::Repository, namespace: &model::Namespace, what: &str) -> Vec<String> {
+fn pkg_config(
+    repository: &model::Repository,
+    namespace: &model::Namespace,
+    what: &str,
+) -> Vec<String> {
     let mut packages: Vec<String> = Vec::new();
     let mut pending = vec![namespace];
     let mut seen = std::collections::BTreeSet::new();
@@ -338,7 +411,11 @@ fn pkg_config(repository: &model::Repository, namespace: &model::Namespace, what
             continue;
         }
         packages.extend(ns.packages.iter().cloned());
-        pending.extend(ns.includes.iter().filter_map(|(name, _)| repository.namespaces.get(name)));
+        pending.extend(
+            ns.includes
+                .iter()
+                .filter_map(|(name, _)| repository.namespaces.get(name)),
+        );
     }
     let mut flags = Vec::new();
     for package in packages {
@@ -366,7 +443,12 @@ fn pkg_config_of(what: &str, package: &str) -> Vec<String> {
         .output()
         .ok()
         .filter(|output| output.status.success())
-        .map(|output| String::from_utf8_lossy(&output.stdout).split_whitespace().map(str::to_owned).collect())
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect()
+        })
         .unwrap_or_default();
     if let Ok(mut asked) = asked.lock() {
         asked.insert(key, flags.clone());
@@ -385,7 +467,10 @@ fn write_namespace(out: &Utf8PathBuf, namespace: &Generated) -> Result<()> {
     // the module then fails to resolve.
     write(&out.join(format!("{stem}.values.ts")), &namespace.values)?;
     write(&out.join(format!("{stem}.refused.txt")), &namespace.refused)?;
-    write(&out.join(format!("{stem}.promises.txt")), &namespace.promises)
+    write(
+        &out.join(format!("{stem}.promises.txt")),
+        &namespace.promises,
+    )
 }
 
 /// Every async method and its Promise form or why it has none, one per line.
@@ -393,7 +478,10 @@ fn promises_report(census: &[(String, &'static str)]) -> String {
     if census.is_empty() {
         return String::new();
     }
-    let mut lines: Vec<String> = census.iter().map(|(name, outcome)| format!("{name}\t{outcome}")).collect();
+    let mut lines: Vec<String> = census
+        .iter()
+        .map(|(name, outcome)| format!("{name}\t{outcome}"))
+        .collect();
     lines.sort();
     lines.join("\n") + "\n"
 }
@@ -405,7 +493,11 @@ fn report(binding: &map::Binding) -> String {
         .refused
         .iter()
         .map(|(name, reason)| {
-            let deprecated = if binding.deprecated.contains(name) { "\tdeprecated" } else { "" };
+            let deprecated = if binding.deprecated.contains(name) {
+                "\tdeprecated"
+            } else {
+                ""
+            };
             format!("{name}\t{reason}{deprecated}")
         })
         .collect();
@@ -424,9 +516,17 @@ fn vfunc_slots(namespace: &model::Namespace) -> Vec<(String, String)> {
         .classes
         .iter()
         .filter_map(|class| {
-            let record = namespace.records.iter().find(|r| Some(&r.name) == class.type_struct.as_ref())?;
+            let record = namespace
+                .records
+                .iter()
+                .find(|r| Some(&r.name) == class.type_struct.as_ref())?;
             Some((record.c_type.clone()?, class))
         })
-        .flat_map(|(class_struct, class)| class.vfuncs.iter().map(move |v| (class_struct.clone(), v.name.clone())))
+        .flat_map(|(class_struct, class)| {
+            class
+                .vfuncs
+                .iter()
+                .map(move |v| (class_struct.clone(), v.name.clone()))
+        })
         .collect()
 }

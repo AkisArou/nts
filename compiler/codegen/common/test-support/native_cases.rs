@@ -30,15 +30,40 @@ pub(crate) const CASES: &[(&str, &str, &str, &str)] = &[
 /// measured, with a correct `int64_t` prototype at both ends. The TypeScript
 /// literal carries `n`; the C literal is spelled for its own type.
 pub(crate) const WIDE_CASES: &[(&str, &str, &str, &str)] = &[
-    ("c_int64", "int64_t", "9007199254740993n", "9007199254740993LL"),
+    (
+        "c_int64",
+        "int64_t",
+        "9007199254740993n",
+        "9007199254740993LL",
+    ),
     ("c_int64", "int64_t", "-9223372036854775808n", "INT64_MIN"),
     ("c_int64", "int64_t", "9223372036854775807n", "INT64_MAX"),
-    ("c_uint64", "uint64_t", "18446744073709551615n", "UINT64_MAX"),
-    ("c_uint64", "uint64_t", "9007199254740993n", "9007199254740993ULL"),
+    (
+        "c_uint64",
+        "uint64_t",
+        "18446744073709551615n",
+        "UINT64_MAX",
+    ),
+    (
+        "c_uint64",
+        "uint64_t",
+        "9007199254740993n",
+        "9007199254740993ULL",
+    ),
     ("c_long", "long", "-9223372036854775808n", "INT64_MIN"),
-    ("c_ulong", "unsigned long", "18446744073709551615n", "UINT64_MAX"),
+    (
+        "c_ulong",
+        "unsigned long",
+        "18446744073709551615n",
+        "UINT64_MAX",
+    ),
     ("c_size_t", "size_t", "18446744073709551615n", "SIZE_MAX"),
-    ("c_ptrdiff_t", "ptrdiff_t", "9223372036854775807n", "PTRDIFF_MAX"),
+    (
+        "c_ptrdiff_t",
+        "ptrdiff_t",
+        "9223372036854775807n",
+        "PTRDIFF_MAX",
+    ),
 ];
 
 /// The brands that exist only where C's `long` is 32 bits: Windows' `LONG` and

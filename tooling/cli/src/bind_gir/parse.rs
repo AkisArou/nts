@@ -5,8 +5,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use roxmltree::Node;
 
 use super::model::{
-    ArrayRef, Callable, CallableKind, Callback, Class, Constant, Direction, Enum, Member, Namespace, Param, Property,
-    Record, Repository, Scope, Signal, Signature, Transfer, TypeRef,
+    ArrayRef, Callable, CallableKind, Callback, Class, Constant, Direction, Enum, Member,
+    Namespace, Param, Property, Record, Repository, Scope, Signal, Signature, Transfer, TypeRef,
 };
 
 const CORE: &str = "http://www.gtk.org/introspection/core/1.0";
@@ -32,7 +32,11 @@ pub(crate) fn repository(root: &str, search: &[Utf8PathBuf]) -> Result<Repositor
             continue;
         }
         let file = format!("{name}-{version}.gir");
-        let Some(path) = search.iter().map(|dir| dir.join(&file)).find(|path| path.exists()) else {
+        let Some(path) = search
+            .iter()
+            .map(|dir| dir.join(&file))
+            .find(|path| path.exists())
+        else {
             // The namespace asked for must exist. One it merely includes may
             // not -- `cairo-1.0.gir` ships separately on some systems -- and
             // then the functions naming its types are refused as unknown,
@@ -40,7 +44,11 @@ pub(crate) fn repository(root: &str, search: &[Utf8PathBuf]) -> Result<Repositor
             if name == root.0 {
                 bail!(
                     "no `{file}` in {}; install the package that ships it, or pass `--gir-dir`",
-                    search.iter().map(|dir| dir.as_str()).collect::<Vec<_>>().join(", ")
+                    search
+                        .iter()
+                        .map(|dir| dir.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
             repository.missing.insert(name);
@@ -64,7 +72,10 @@ pub(crate) fn closure_files(root: &str, search: &[Utf8PathBuf]) -> Result<Vec<Ut
 
 /// `root`'s closure: the GIR files read, and every namespace in it as
 /// `Name-Version` -- cairo among them, which is no file.
-pub(crate) fn closure(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Utf8PathBuf>, Vec<String>)> {
+pub(crate) fn closure(
+    root: &str,
+    search: &[Utf8PathBuf],
+) -> Result<(Vec<Utf8PathBuf>, Vec<String>)> {
     let mut files = Vec::new();
     let mut namespaces = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
@@ -78,13 +89,27 @@ pub(crate) fn closure(root: &str, search: &[Utf8PathBuf]) -> Result<(Vec<Utf8Pat
             CAIRO.to_owned()
         } else {
             let file = format!("{name}-{version}.gir");
-            let Some(path) = search.iter().map(|dir| dir.join(&file)).find(|path| path.exists()) else { continue };
+            let Some(path) = search
+                .iter()
+                .map(|dir| dir.join(&file))
+                .find(|path| path.exists())
+            else {
+                continue;
+            };
             let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
             files.push(path);
             text
         };
-        for line in text.lines().map(str::trim_start).filter(|line| line.starts_with("<include ")) {
-            let attribute = |key: &str| line.split_once(&format!("{key}=\"")).and_then(|(_, rest)| rest.split_once('"')).map(|(value, _)| value.to_owned());
+        for line in text
+            .lines()
+            .map(str::trim_start)
+            .filter(|line| line.starts_with("<include "))
+        {
+            let attribute = |key: &str| {
+                line.split_once(&format!("{key}=\""))
+                    .and_then(|(_, rest)| rest.split_once('"'))
+                    .map(|(value, _)| value.to_owned())
+            };
             if let (Some(name), Some(version)) = (attribute("name"), attribute("version")) {
                 pending.push((name, version));
             }
@@ -107,12 +132,13 @@ fn namespace(path: &Utf8Path) -> Result<Namespace> {
     namespace_of_text(&text, path.as_str())
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
     let document =
         roxmltree::Document::parse(text).with_context(|| format!("parsing {path} as XML"))?;
     let repository = document.root_element();
-    let element = child(repository, "namespace")
-        .ok_or_else(|| anyhow!("{path} has no <namespace>"))?;
+    let element =
+        child(repository, "namespace").ok_or_else(|| anyhow!("{path} has no <namespace>"))?;
     let mut namespace = Namespace {
         name: attribute(element, "name").unwrap_or_default().to_owned(),
         version: attribute(element, "version").unwrap_or_default().to_owned(),
@@ -129,10 +155,14 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
                 attribute(node, "version").unwrap_or_default().to_owned(),
             )),
             (Some(CORE), "package") => {
-                namespace.packages.extend(attribute(node, "name").map(str::to_owned));
+                namespace
+                    .packages
+                    .extend(attribute(node, "name").map(str::to_owned));
             }
             (Some(C), "include") => {
-                namespace.headers.extend(attribute(node, "name").map(str::to_owned));
+                namespace
+                    .headers
+                    .extend(attribute(node, "name").map(str::to_owned));
             }
             _ => {}
         }
@@ -149,7 +179,11 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
                 // every instance of it also is -- `GObject` for `GFile` -- so it
                 // is the parent a handle upcasts to.
                 parent: attribute(node, "parent")
-                    .or_else(|| node.children().find(|n| is(*n, "prerequisite")).and_then(|n| attribute(n, "name")))
+                    .or_else(|| {
+                        node.children()
+                            .find(|n| is(*n, "prerequisite"))
+                            .and_then(|n| attribute(n, "name"))
+                    })
                     .map(str::to_owned),
                 interface: kind == "interface",
                 is_abstract: attribute(node, "abstract") == Some("1"),
@@ -202,7 +236,9 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
                 signature: signature(node),
             }),
-            "function" => namespace.functions.push(callable(node, CallableKind::Function)),
+            "function" => namespace
+                .functions
+                .push(callable(node, CallableKind::Function)),
             "constant" => namespace.constants.extend(constant(node)),
             _ => {}
         }
@@ -213,7 +249,10 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
 /// An `<alias>`: its name and the type it names.
 fn alias(node: Node<'_, '_>) -> Option<(String, String)> {
     let target = child(node, "type").and_then(|ty| attribute(ty, "name"))?;
-    Some((attribute(node, "name").unwrap_or_default().to_owned(), target.to_owned()))
+    Some((
+        attribute(node, "name").unwrap_or_default().to_owned(),
+        target.to_owned(),
+    ))
 }
 
 /// A class's `<glib:signal>` elements.
@@ -233,13 +272,19 @@ fn signals(class: Node<'_, '_>) -> Vec<Signal> {
 /// of `GdkSnapshot`, and GIR leaves the attribute out. Its `glib:type-name`
 /// is the same spelling, and the header says what struct is behind it.
 fn class_c_type(class: Node<'_, '_>) -> Option<String> {
-    c_attribute(class, "type").or_else(|| class.attribute((GLIB, "type-name"))).map(str::to_owned)
+    c_attribute(class, "type")
+        .or_else(|| class.attribute((GLIB, "type-name")))
+        .map(str::to_owned)
 }
 
 /// A class's `<virtual-method>` elements: its class struct's function
 /// members, each named as its member is.
 fn vfuncs(class: Node<'_, '_>) -> Vec<Callable> {
-    class.children().filter(|n| is(*n, "virtual-method")).map(|n| callable(n, CallableKind::Method)).collect()
+    class
+        .children()
+        .filter(|n| is(*n, "virtual-method"))
+        .map(|n| callable(n, CallableKind::Method))
+        .collect()
 }
 
 /// A `<constant>`, where GIR names its C macro, its type and its value.
@@ -271,8 +316,9 @@ fn properties(class: Node<'_, '_>) -> Vec<Property> {
                 .then(|| param(property, false)),
                 get_by_name: (attribute(property, "readable") != Some("0") && getter.is_none())
                     .then(|| param(property, false)),
-                constructed: (attribute(property, "construct-only") == Some("1") && attribute(property, "writable") == Some("1"))
-                    .then(|| param(property, false)),
+                constructed: (attribute(property, "construct-only") == Some("1")
+                    && attribute(property, "writable") == Some("1"))
+                .then(|| param(property, false)),
                 getter,
                 setter,
             })
@@ -286,7 +332,12 @@ fn properties(class: Node<'_, '_>) -> Vec<Property> {
 /// annotation, which names the method by its C symbol. `GtkImage:file` is
 /// written through `gtk_image_set_from_file`, which takes `NULL`; the by-name
 /// thunk it fell to without this took only a string.
-fn accessor_method(class: Node<'_, '_>, property: Node<'_, '_>, attr: &str, annotation: &str) -> Option<String> {
+fn accessor_method(
+    class: Node<'_, '_>,
+    property: Node<'_, '_>,
+    attr: &str,
+    annotation: &str,
+) -> Option<String> {
     if let Some(name) = attribute(property, attr) {
         return Some(name.to_owned());
     }
@@ -322,7 +373,10 @@ fn callable(node: Node<'_, '_>, kind: CallableKind) -> Callable {
         // An entry that `shadows` another -- `g_list_model_get_object`
         // shadows the unintrospectable `get_item` -- is bound under that
         // other's name, as GJS binds it: `model.get_item(i)`.
-        name: attribute(node, "shadows").or_else(|| attribute(node, "name")).unwrap_or_default().to_owned(),
+        name: attribute(node, "shadows")
+            .or_else(|| attribute(node, "name"))
+            .unwrap_or_default()
+            .to_owned(),
         c_identifier: c_attribute(node, "identifier").map(str::to_owned),
         kind,
         signature: signature(node),
@@ -330,9 +384,14 @@ fn callable(node: Node<'_, '_>, kind: CallableKind) -> Callable {
         deprecated: attribute(node, "deprecated") == Some("1"),
         shadowed: attribute(node, "shadowed-by").is_some() || attribute(node, "moved-to").is_some(),
         // GIR's own pairing, or GLib's naming convention where it is absent.
-        finish: node.attribute((GLIB, "finish-func")).map(str::to_owned).or_else(|| {
-            attribute(node, "name").and_then(|name| name.strip_suffix("_async")).map(|base| format!("{base}_finish"))
-        }),
+        finish: node
+            .attribute((GLIB, "finish-func"))
+            .map(str::to_owned)
+            .or_else(|| {
+                attribute(node, "name")
+                    .and_then(|name| name.strip_suffix("_async"))
+                    .map(|base| format!("{base}_finish"))
+            }),
     }
 }
 
@@ -364,7 +423,12 @@ fn signature(node: Node<'_, '_>) -> Signature {
             }
         }
     }
-    Signature { instance, parameters, result, throws: attribute(node, "throws") == Some("1") }
+    Signature {
+        instance,
+        parameters,
+        result,
+        throws: attribute(node, "throws") == Some("1"),
+    }
 }
 
 fn param(node: Node<'_, '_>, result: bool) -> Param {
@@ -377,7 +441,9 @@ fn param(node: Node<'_, '_>, result: bool) -> Param {
         let length = attribute(array, "length").and_then(|v| v.parse().ok());
         let fixed = attribute(array, "fixed-size").is_some();
         TypeRef::Array(ArrayRef {
-            element: child(array, "type").and_then(|ty| attribute(ty, "name")).map(str::to_owned),
+            element: child(array, "type")
+                .and_then(|ty| attribute(ty, "name"))
+                .map(str::to_owned),
             c_type: c_attribute(array, "type").map(str::to_owned),
             length,
             // GIR's default: terminated unless it says otherwise, or gives the
@@ -411,7 +477,8 @@ fn param(node: Node<'_, '_>, result: bool) -> Param {
         nullable: attribute(node, "nullable") == Some("1")
             || attribute(node, "allow-none") == Some("1"),
         // `allow-none` is the older spelling, and meant both.
-        optional: attribute(node, "optional") == Some("1") || attribute(node, "allow-none") == Some("1"),
+        optional: attribute(node, "optional") == Some("1")
+            || attribute(node, "allow-none") == Some("1"),
         caller_allocates: attribute(node, "caller-allocates") == Some("1"),
         scope: match attribute(node, "scope") {
             Some("call") => Some(Scope::Call),

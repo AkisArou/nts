@@ -22,8 +22,8 @@ use std::fmt;
 use nts_core::hir::native::{FnPointer, Handle, Pointee, Scalar, Type};
 
 use super::model::{
-    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Namespace, Param, Repository, Scope,
-    Transfer, TypeRef,
+    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Namespace, Param, Repository,
+    Scope, Transfer, TypeRef,
 };
 
 /// A type named from another module, or this one: `(module, name)`, the module
@@ -42,7 +42,10 @@ pub(crate) const EMIT: &str = "nts_gobject_emit";
 /// `gtk_cclosure_expression_new`, bound as GJS's closure expression makes one
 /// (`Mapper::cclosure_expression`), through the runtime's
 /// `nts_gtk_cclosure_expression_new` (`nts_gtk.h`).
-const CCLOSURE_EXPRESSION: (&str, &str) = ("gtk_cclosure_expression_new", "nts_gtk_cclosure_expression_new");
+const CCLOSURE_EXPRESSION: (&str, &str) = (
+    "gtk_cclosure_expression_new",
+    "nts_gtk_cclosure_expression_new",
+);
 /// What a property with no setter method is written through: a thunk the
 /// backend defines per property, `nts_gobject_prop_{kind}__{name}`, as
 /// `g_object_set`.
@@ -281,32 +284,46 @@ pub(crate) enum Shape {
     Other,
     /// A handle to `class` (`GtkBox`, through `Const<…>` too), and whether it
     /// admits `null`.
-    Handle { class: String, nullable: bool },
+    Handle {
+        class: String,
+        nullable: bool,
+    },
     /// A callback C calls once, after the call returns: a `OnceClosure`,
     /// which a Promise form stands in for.
     Once,
     /// An array lent for the call (`CStrings`, `Counted<CBytes>`), which the
     /// program holds as `program` -- `readonly string[]`, `Uint8Array` -- and
     /// which only a foreign function's own parameter can be declared as.
-    Lent { program: String },
+    Lent {
+        program: String,
+    },
     /// A slot C writes a scalar through, typed `value` as the program reads
     /// it back: what a GJS-style method returns rather than takes. Only a
     /// scalar, since a handle read out of a slot has an ownership to settle
     /// that a number does not.
-    Out { value: String },
+    Out {
+        value: String,
+    },
     /// Storage the caller allocates and C fills, a boxed record's
     /// (`GtkTextIter`): passed as the record, and what a GJS-style method
     /// makes with `new class()` and returns, as `get_bounds()` does. Only an
     /// out: an inout's storage holds what C reads, which the caller gives.
-    Filled { class: String },
+    Filled {
+        class: String,
+    },
     /// Bytes C hands back with their length in another out slot, `length`:
     /// the call's result or an out slot of its own, which a GJS-style method
     /// returns as the `Uint8Array` it copies them into (`bytesFrom`), freeing
     /// C's buffer after where it is the caller's (`owned`).
-    Bytes { length: String, owned: bool },
+    Bytes {
+        length: String,
+        owned: bool,
+    },
     /// The out slot holding a `Bytes`'s length, typed `value`: made and read
     /// by the values form, and not a value it returns.
-    Length { value: String },
+    Length {
+        value: String,
+    },
 }
 
 /// A signal's handler parameters as TypeScript spells them, and the named
@@ -364,12 +381,25 @@ impl fmt::Display for Reason {
             Self::NoSymbol => write!(f, "no C symbol"),
             Self::Throws => write!(f, "reports errors through a `GError **`"),
             Self::OwnedString => write!(f, "a string parameter the callee takes ownership of"),
-            Self::WritableBuffer => write!(f, "a `char *` buffer the callee may write into, which GIR calls a string"),
-            Self::OutParameter => write!(f, "an out parameter of a type written through no slot here"),
-            Self::NoSlot => write!(f, "a virtual function whose class struct member the headers do not place"),
-            Self::BoxedTakenOver => write!(f, "a boxed record a parameter hands over, which the program's box would also free"),
+            Self::WritableBuffer => write!(
+                f,
+                "a `char *` buffer the callee may write into, which GIR calls a string"
+            ),
+            Self::OutParameter => {
+                write!(f, "an out parameter of a type written through no slot here")
+            }
+            Self::NoSlot => write!(
+                f,
+                "a virtual function whose class struct member the headers do not place"
+            ),
+            Self::BoxedTakenOver => write!(
+                f,
+                "a boxed record a parameter hands over, which the program's box would also free"
+            ),
             Self::StringOut => write!(f, "a string out parameter"),
-            Self::CallerAllocates => write!(f, "an out parameter whose storage the caller allocates"),
+            Self::CallerAllocates => {
+                write!(f, "an out parameter whose storage the caller allocates")
+            }
             Self::Array => write!(f, "an array"),
             Self::Varargs => write!(f, "variadic"),
             Self::Gpointer => write!(f, "a `gpointer`"),
@@ -379,11 +409,17 @@ impl fmt::Display for Reason {
             Self::CallbackShape(why) => write!(f, "a callback whose {why}"),
             Self::StringInCallback => write!(f, "a callback taking or returning a string"),
             Self::Unknown(name) => write!(f, "`{name}`, a type this binder does not know"),
-            Self::NoTag(c) => write!(f, "`{c}`, which the headers do not define as a tagged struct"),
+            Self::NoTag(c) => write!(
+                f,
+                "`{c}`, which the headers do not define as a tagged struct"
+            ),
             Self::Header(error) => write!(f, "the header disagrees: {error}"),
             Self::Undeclared => write!(f, "declared by none of the headers GIR names"),
             Self::CountedByCompiler => write!(f, "a reference count the compiler keeps itself"),
-            Self::NameClash(name) => write!(f, "`{name}` on the gi: surface, a name the module already has"),
+            Self::NameClash(name) => write!(
+                f,
+                "`{name}` on the gi: surface, a name the module already has"
+            ),
         }
     }
 }
@@ -405,21 +441,31 @@ impl Reason {
 
 /// The functions a program would count a `GObject` with, which the compiler
 /// calls itself: bound, a program could release what it does not own.
-const COUNTING: [&str; 6] =
-    ["g_object_ref", "g_object_unref", "g_object_ref_sink", "g_object_take_ref", "g_object_force_floating", "g_clear_object"];
+const COUNTING: [&str; 6] = [
+    "g_object_ref",
+    "g_object_unref",
+    "g_object_ref_sink",
+    "g_object_take_ref",
+    "g_object_force_floating",
+    "g_clear_object",
+];
 
 /// Whether `name` can be a TypeScript type name as it is.
 fn is_type_name(name: &str) -> bool {
-    name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// A constructor or function GIR declares on a class, as a member of the
 /// class's value: `(class, name)`.
 fn static_of(callable: &Callable, owner: Option<&Class>) -> Option<(String, String)> {
-    matches!(callable.kind, CallableKind::Constructor | CallableKind::Function)
-        .then(|| owner.and_then(|class| class.c_type.clone()))
-        .flatten()
-        .map(|class| (class, callable.name.clone()))
+    matches!(
+        callable.kind,
+        CallableKind::Constructor | CallableKind::Function
+    )
+    .then(|| owner.and_then(|class| class.c_type.clone()))
+    .flatten()
+    .map(|class| (class, callable.name.clone()))
 }
 
 /// The properties a constructor takes, where every parameter is a property
@@ -429,11 +475,21 @@ fn static_of(callable: &Callable, owner: Option<&Class>) -> Option<(String, Stri
 /// cannot name it; the constructor that does is called as itself.
 fn constructs_from(class: &Class, callable: &Callable) -> Option<Vec<String>> {
     let name = |property: &str| identifier(&property.replace('-', "_"));
-    let construct_only: Vec<String> = class.properties.iter().filter(|p| p.construct_only).map(|p| name(&p.name)).collect();
+    let construct_only: Vec<String> = class
+        .properties
+        .iter()
+        .filter(|p| p.construct_only)
+        .map(|p| name(&p.name))
+        .collect();
     if construct_only.is_empty() || callable.signature.parameters.is_empty() {
         return None;
     }
-    let taken: Vec<String> = callable.signature.parameters.iter().map(|p| identifier(&p.name)).collect();
+    let taken: Vec<String> = callable
+        .signature
+        .parameters
+        .iter()
+        .map(|p| identifier(&p.name))
+        .collect();
     let known = |taken: &String| class.properties.iter().any(|p| name(&p.name) == *taken);
     (taken.iter().all(known) && construct_only.iter().any(|c| taken.contains(c))).then_some(taken)
 }
@@ -520,6 +576,7 @@ const COMPARES_ITEMS: [&str; 5] = [
 
 /// Bind one namespace of `repository`.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(crate) fn bind<'a>(
     repository: &'a Repository,
     namespace: &'a Namespace,
@@ -528,7 +585,11 @@ pub(crate) fn bind<'a>(
     let mut c_types = BTreeMap::new();
     for ns in repository.namespaces.values() {
         let classes = ns.classes.iter().filter_map(|c| c.c_type.as_deref());
-        let records = ns.records.iter().filter(|r| !r.class_struct).filter_map(|r| r.c_type.as_deref());
+        let records = ns
+            .records
+            .iter()
+            .filter(|r| !r.class_struct)
+            .filter_map(|r| r.c_type.as_deref());
         for c_type in classes.chain(records) {
             c_types.entry(c_type).or_insert(ns);
         }
@@ -552,21 +613,38 @@ pub(crate) fn bind<'a>(
     // returns whatever its return type says.
     // A record's, with the record's C type: its constructors and functions
     // are statics of its value, `cairo_t.create(surface)`, as a class's are.
-    let mut callables: Vec<(&Callable, Option<&Class>, Option<&str>)> = namespace.functions.iter().map(|f| (f, None, None)).collect();
+    let mut callables: Vec<(&Callable, Option<&Class>, Option<&str>)> = namespace
+        .functions
+        .iter()
+        .map(|f| (f, None, None))
+        .collect();
     for class in &namespace.classes {
         callables.extend(class.callables.iter().map(|c| (c, Some(class), None)));
     }
     for record in namespace.records.iter().filter(|r| !r.class_struct) {
-        callables.extend(record.callables.iter().map(|c| (c, None, record.c_type.as_deref())));
+        callables.extend(
+            record
+                .callables
+                .iter()
+                .map(|c| (c, None, record.c_type.as_deref())),
+        );
     }
     for (callable, owner, record) in callables {
-        let name = callable.c_identifier.clone().unwrap_or_else(|| callable.name.clone());
+        let name = callable
+            .c_identifier
+            .clone()
+            .unwrap_or_else(|| callable.name.clone());
         match mapper.function(callable, owner) {
             Ok(mut function) => {
-                function.gir_name = (owner.is_none() && record.is_none() && function.method.is_none()).then(|| callable.name.clone());
+                function.gir_name =
+                    (owner.is_none() && record.is_none() && function.method.is_none())
+                        .then(|| callable.name.clone());
                 if let Some(record) = record
                     && function.method.is_none()
-                    && matches!(callable.kind, CallableKind::Constructor | CallableKind::Function)
+                    && matches!(
+                        callable.kind,
+                        CallableKind::Constructor | CallableKind::Function
+                    )
                 {
                     function.statics = Some((record.to_owned(), callable.name.clone()));
                 }
@@ -578,11 +656,18 @@ pub(crate) fn bind<'a>(
                     && let Some(c_type) = class.c_type.clone()
                 {
                     // One that throws is no `new`: it could not report why.
-                    if let Some(from) = constructs_from(class, callable).filter(|_| function.throws.is_none()) {
+                    if let Some(from) =
+                        constructs_from(class, callable).filter(|_| function.throws.is_none())
+                    {
                         // Each, the one taking the fewest first: which a
                         // construction calls is the lowering's, by what its
                         // literal writes.
-                        let made = Constructor { function: function.name.clone(), get_type: None, from, alternatives: Vec::new() };
+                        let made = Constructor {
+                            function: function.name.clone(),
+                            get_type: None,
+                            from,
+                            alternatives: Vec::new(),
+                        };
                         match mapper.binding.constructors.get_mut(&c_type) {
                             Some(first) if !first.from.is_empty() => {
                                 let mut all = std::mem::take(&mut first.alternatives);
@@ -590,7 +675,12 @@ pub(crate) fn bind<'a>(
                                 all.push((made.function, made.from));
                                 all.sort_by_key(|(_, from)| from.len());
                                 let (function, from) = all.remove(0);
-                                *first = Constructor { function, get_type: None, from, alternatives: all };
+                                *first = Constructor {
+                                    function,
+                                    get_type: None,
+                                    from,
+                                    alternatives: all,
+                                };
                             }
                             _ => {
                                 mapper.binding.constructors.insert(c_type, made);
@@ -600,7 +690,15 @@ pub(crate) fn bind<'a>(
                         && callable.signature.parameters.is_empty()
                         && !class.properties.iter().any(|p| p.construct_only)
                     {
-                        mapper.binding.constructors.insert(c_type, Constructor { function: function.name.clone(), get_type: None, from: Vec::new(), alternatives: Vec::new() });
+                        mapper.binding.constructors.insert(
+                            c_type,
+                            Constructor {
+                                function: function.name.clone(),
+                                get_type: None,
+                                from: Vec::new(),
+                                alternatives: Vec::new(),
+                            },
+                        );
                     }
                 }
                 mapper.binding.functions.push(function);
@@ -632,14 +730,21 @@ pub(crate) fn bind<'a>(
 fn signals<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
     for class in &namespace.classes {
         for signal in &class.signals {
-            let label = format!("{}::{}", class.c_type.as_deref().unwrap_or(&class.name), signal.name);
+            let label = format!(
+                "{}::{}",
+                class.c_type.as_deref().unwrap_or(&class.name),
+                signal.name
+            );
             match mapper.signal(class, signal) {
                 Ok((connect, emit)) => {
                     // `connect_after`: the same call with `G_CONNECT_AFTER`.
                     let after = Function {
                         name: connect.name.replacen("_connect_", "_connect_after_", 1),
                         omissible: BTreeMap::from([("connect_flags".to_owned(), "1")]),
-                        method: connect.method.as_ref().map(|(class, _)| (class.clone(), "connect_after".to_owned())),
+                        method: connect
+                            .method
+                            .as_ref()
+                            .map(|(class, _)| (class.clone(), "connect_after".to_owned())),
                         ..connect.clone()
                     };
                     mapper.binding.functions.extend([connect, after]);
@@ -662,7 +767,9 @@ fn signals<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
 /// `d` a `double` or `float`, `p` a pointer. Anything else is refused.
 fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
     for class in &namespace.classes {
-        let Some(c_type) = class.c_type.clone() else { continue };
+        let Some(c_type) = class.c_type.clone() else {
+            continue;
+        };
         if class.interface || !mapper.facts.tags.contains_key(&c_type) {
             continue;
         }
@@ -670,10 +777,16 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
             if let Some(param) = &property.get_by_name {
                 get_by_name(mapper, class, &c_type, &property.name, param);
             }
-            let Some(param) = &property.set_by_name else { continue };
+            let Some(param) = &property.set_by_name else {
+                continue;
+            };
             let ident = member(&property.name);
             let mut method = format!("set_{ident}");
-            if class.callables.iter().any(|callable| member(&callable.name) == method) {
+            if class
+                .callables
+                .iter()
+                .any(|callable| member(&callable.name) == method)
+            {
                 continue;
             }
             if mapper.inherits_method(namespace, class, &method) {
@@ -682,7 +795,11 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
             let label = format!("{c_type}:{}", property.name);
             let param = mapper.with_c_type(&spelled_string(param, "const gchar*"));
             // A string as an in parameter's is (`value`), lent for the call.
-            let value = match if is_string(&param) { mapper.value(&param) } else { mapper.typed(&param) } {
+            let value = match if is_string(&param) {
+                mapper.value(&param)
+            } else {
+                mapper.typed(&param)
+            } {
                 Ok(value) => mapper.truth(&param, value),
                 Err(reason) => {
                     mapper.binding.refused.push((label, reason));
@@ -690,15 +807,29 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 }
             };
             let Some(kind) = value_kind(&value.c) else {
-                mapper.binding.refused.push((label, Reason::Unknown(format!("a property value of C type {:?}", value.c))));
+                mapper.binding.refused.push((
+                    label,
+                    Reason::Unknown(format!("a property value of C type {:?}", value.c)),
+                ));
                 continue;
             };
-            let this = Mapped { shape: Shape::Other, ts: c_type.clone(), c: Type::Pointer(Pointee::Void) };
+            let this = Mapped {
+                shape: Shape::Other,
+                ts: c_type.clone(),
+                c: Type::Pointer(Pointee::Void),
+            };
             mapper.binding.functions.push(Function {
                 name: format!("{c_type}_{method}_by_name"),
                 symbol: format!("{SET_BY_NAME}{kind}__{}", property.name.replace('-', "_")),
-                parameters: vec![("self".to_owned(), this.clone()), ("value".to_owned(), value.clone())],
-                result: Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
+                parameters: vec![
+                    ("self".to_owned(), this.clone()),
+                    ("value".to_owned(), value.clone()),
+                ],
+                result: Mapped {
+                    shape: Shape::Other,
+                    ts: "void".to_owned(),
+                    c: Type::Void,
+                },
                 c_parameters: vec![this.c, value.c],
                 deprecated: false,
                 free: None,
@@ -713,8 +844,11 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 vfunc: None,
                 gir_name: None,
             });
-            if let Some(accessor) =
-                mapper.binding.properties.get_mut(&c_type).and_then(|all| all.iter_mut().find(|accessor| accessor.name == ident))
+            if let Some(accessor) = mapper
+                .binding
+                .properties
+                .get_mut(&c_type)
+                .and_then(|all| all.iter_mut().find(|accessor| accessor.name == ident))
             {
                 accessor.setter = Some(method);
             }
@@ -724,11 +858,19 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
 
 /// A function the binding declares itself, calling what `symbol` names with
 /// `parameters` as they are.
-fn plain_function(name: String, symbol: String, parameters: Vec<(String, Mapped)>, result: Mapped) -> Function {
+fn plain_function(
+    name: String,
+    symbol: String,
+    parameters: Vec<(String, Mapped)>,
+    result: Mapped,
+) -> Function {
     Function {
         name,
         symbol,
-        c_parameters: parameters.iter().map(|(_, mapped)| mapped.c.clone()).collect(),
+        c_parameters: parameters
+            .iter()
+            .map(|(_, mapped)| mapped.c.clone())
+            .collect(),
         parameters,
         result,
         deprecated: false,
@@ -769,12 +911,17 @@ fn is_string(param: &Param) -> bool {
 /// `COMPARES_ITEMS`, as the `GObject` it is: typed as GIR types a
 /// `GtkCustomFilterFunc`'s item, `GObject.Object` passed as `gpointer`.
 fn item_of_list(param: &Param) -> Option<Param> {
-    let TypeRef::Named { name, .. } = &param.ty else { return None };
+    let TypeRef::Named { name, .. } = &param.ty else {
+        return None;
+    };
     if name != "gpointer" && name != "gconstpointer" {
         return None;
     }
     let mut item = param.clone();
-    item.ty = TypeRef::Named { name: "GObject.Object".to_owned(), c_type: Some("gpointer".to_owned()) };
+    item.ty = TypeRef::Named {
+        name: "GObject.Object".to_owned(),
+        c_type: Some("gpointer".to_owned()),
+    };
     // A model's item is never NULL.
     item.nullable = false;
     Some(item)
@@ -784,7 +931,8 @@ fn item_of_list(param: &Param) -> Option<Param> {
 /// thunk's name says it (see `set_by_name`). `None` for any other C type.
 fn value_kind(c: &Type) -> Option<char> {
     Some(match c {
-        Type::Scalar(Scalar::Int | Scalar::Int32 | Scalar::Int16 | Scalar::Int8 | Scalar::Char) | Type::Bool => 'i',
+        Type::Scalar(Scalar::Int | Scalar::Int32 | Scalar::Int16 | Scalar::Int8 | Scalar::Char)
+        | Type::Bool => 'i',
         Type::Scalar(Scalar::UInt | Scalar::UInt32 | Scalar::UInt16 | Scalar::UInt8) => 'u',
         Type::Scalar(Scalar::Int64 | Scalar::Long) => 'l',
         Type::Scalar(Scalar::UInt64 | Scalar::ULong) => 'L',
@@ -798,10 +946,20 @@ fn value_kind(c: &Type) -> Option<char> {
 /// (`GET_BY_NAME`): `get_width_request`. A number or a boolean, a string --
 /// copied, and freed once read -- or a `GObject`, owned. Anything else is left
 /// unreadable, as it was: the lowering refuses a read no `@ntsGet` names.
-fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &str, param: &Param) {
+fn get_by_name(
+    mapper: &mut Mapper<'_>,
+    class: &Class,
+    c_type: &str,
+    property: &str,
+    param: &Param,
+) {
     let ident = member(property);
     let mut method = format!("get_{ident}");
-    if class.callables.iter().any(|callable| member(&callable.name) == method) {
+    if class
+        .callables
+        .iter()
+        .any(|callable| member(&callable.name) == method)
+    {
         return;
     }
     if mapper.inherits_method(mapper.namespace, class, &method) {
@@ -810,11 +968,22 @@ fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &
     let raw = param;
     let param = mapper.with_c_type(&spelled_string(raw, "const gchar*"));
     let (value, kind) = if is_string(&param) {
-        (Mapped { shape: Shape::Other, ts: String::new(), c: Type::Pointer(Pointee::Void) }, 'p')
+        (
+            Mapped {
+                shape: Shape::Other,
+                ts: String::new(),
+                c: Type::Pointer(Pointee::Void),
+            },
+            'p',
+        )
     } else {
-        let Ok(value) = mapper.typed(&param) else { return };
+        let Ok(value) = mapper.typed(&param) else {
+            return;
+        };
         let value = mapper.truth(&param, value);
-        let Some(kind) = value_kind(&value.c) else { return };
+        let Some(kind) = value_kind(&value.c) else {
+            return;
+        };
         (value, kind)
     };
     // A pointer comes back owned: a string `g_object_get` copied, which the
@@ -825,17 +994,30 @@ fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &
         result.direction = Direction::Out;
         result.transfer = Transfer::Full;
         result.nullable = true;
-        let Ok((read, free)) = mapper.result(&result) else { return };
+        let Ok((read, free)) = mapper.result(&result) else {
+            return;
+        };
         let read = mapper.truth(&result, read);
         let string = read.ts.starts_with("string");
         if !string && !matches!(read.shape, Shape::Handle { .. }) {
             return;
         }
-        (if string { read } else { mapper.owned(read, true) }, free)
+        (
+            if string {
+                read
+            } else {
+                mapper.owned(read, true)
+            },
+            free,
+        )
     } else {
         (value, None)
     };
-    let this = Mapped { shape: Shape::Other, ts: c_type.to_owned(), c: Type::Pointer(Pointee::Void) };
+    let this = Mapped {
+        shape: Shape::Other,
+        ts: c_type.to_owned(),
+        c: Type::Pointer(Pointee::Void),
+    };
     mapper.binding.functions.push(Function {
         name: format!("{c_type}_{method}_by_name"),
         symbol: format!("{GET_BY_NAME}{kind}__{}", property.replace('-', "_")),
@@ -855,7 +1037,12 @@ fn get_by_name(mapper: &mut Mapper<'_>, class: &Class, c_type: &str, property: &
         vfunc: None,
         gir_name: None,
     });
-    if let Some(accessor) = mapper.binding.properties.get_mut(c_type).and_then(|all| all.iter_mut().find(|accessor| accessor.name == ident)) {
+    if let Some(accessor) = mapper
+        .binding
+        .properties
+        .get_mut(c_type)
+        .and_then(|all| all.iter_mut().find(|accessor| accessor.name == ident))
+    {
         accessor.getter = Some(method);
     }
 }
@@ -877,8 +1064,16 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
             let label = format!("{class_struct}.{}", vfunc.name);
             // Mapped as the method it is, under the name it gets here, since
             // there is no C identifier to map it under.
-            let named = Callable { c_identifier: Some(format!("{class_struct}_{}", vfunc.name)), ..vfunc.clone() };
-            let Some(offset) = mapper.facts.offsets.get(&(class_struct.clone(), vfunc.name.clone())).copied() else {
+            let named = Callable {
+                c_identifier: Some(format!("{class_struct}_{}", vfunc.name)),
+                ..vfunc.clone()
+            };
+            let Some(offset) = mapper
+                .facts
+                .offsets
+                .get(&(class_struct.clone(), vfunc.name.clone()))
+                .copied()
+            else {
                 mapper.binding.refused.push((label, Reason::NoSlot));
                 continue;
             };
@@ -897,7 +1092,12 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                         method_only: true,
                         statics: None,
                         finish: None,
-                        vfunc: Some(Vfunc { class_struct: class_struct.clone(), member: vfunc.name.clone(), offset, outs }),
+                        vfunc: Some(Vfunc {
+                            class_struct: class_struct.clone(),
+                            member: vfunc.name.clone(),
+                            offset,
+                            outs,
+                        }),
                         ..function
                     });
                 }
@@ -918,8 +1118,17 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
 /// parameter is a scalar and all of them trail the ins.
 fn vfunc_tuple(function: &mut Function) -> Vec<(String, bool)> {
     let is_out = |mapped: &Mapped| matches!(mapped.shape, Shape::Out { .. });
-    let Some(first) = function.parameters.iter().position(|(_, mapped)| is_out(mapped)) else { return Vec::new() };
-    if !function.parameters[first..].iter().all(|(_, mapped)| is_out(mapped)) {
+    let Some(first) = function
+        .parameters
+        .iter()
+        .position(|(_, mapped)| is_out(mapped))
+    else {
+        return Vec::new();
+    };
+    if !function.parameters[first..]
+        .iter()
+        .all(|(_, mapped)| is_out(mapped))
+    {
         return Vec::new();
     }
     let outs = function.parameters.split_off(first);
@@ -931,10 +1140,23 @@ fn vfunc_tuple(function: &mut Function) -> Vec<(String, bool)> {
         Shape::Out { value } => Some(value.clone()),
         _ => None,
     }));
-    let ts = if elements.len() == 1 { elements.remove(0) } else { format!("[{}]", elements.join(", ")) };
-    function.result = Mapped { shape: Shape::Other, ts, c: function.result.c.clone() };
-    let names: Vec<(String, bool)> = outs.into_iter().map(|(name, mapped)| (name, mapped.ts.ends_with(" | null"))).collect();
-    function.no_escape.retain(|name| !names.iter().any(|(out, _)| out == name));
+    let ts = if elements.len() == 1 {
+        elements.remove(0)
+    } else {
+        format!("[{}]", elements.join(", "))
+    };
+    function.result = Mapped {
+        shape: Shape::Other,
+        ts,
+        c: function.result.c.clone(),
+    };
+    let names: Vec<(String, bool)> = outs
+        .into_iter()
+        .map(|(name, mapped)| (name, mapped.ts.ends_with(" | null")))
+        .collect();
+    function
+        .no_escape
+        .retain(|name| !names.iter().any(|(out, _)| out == name));
     for (name, _) in &names {
         function.omissible.remove(name);
     }
@@ -977,7 +1199,11 @@ enum Resolved<'a> {
 
 impl<'a> Mapper<'a> {
     fn qualify(&self, name: &str) -> String {
-        if name.contains('.') { name.to_owned() } else { format!("{}.{name}", self.namespace.name) }
+        if name.contains('.') {
+            name.to_owned()
+        } else {
+            format!("{}.{name}", self.namespace.name)
+        }
     }
 
     /// The type an alias names, followed to the end of a chain of aliases:
@@ -992,7 +1218,10 @@ impl<'a> Mapper<'a> {
         for _ in 0..8 {
             let (ns, local) = at.split_once('.')?;
             let namespace = self.repository.namespaces.get(ns)?;
-            let Some((_, target)) = namespace.aliases.iter().find(|(alias, _)| alias == local) else { break };
+            let Some((_, target)) = namespace.aliases.iter().find(|(alias, _)| alias == local)
+            else {
+                break;
+            };
             let target = if target.contains('.') || SCALARS.iter().any(|(gir, ..)| gir == target) {
                 target.clone()
             } else {
@@ -1030,7 +1259,11 @@ impl<'a> Mapper<'a> {
             } else {
                 e.members.iter().any(|m| m.value < 0)
             };
-            return Some(Resolved::Enum(namespace, e, if signed { Scalar::Int } else { Scalar::UInt }));
+            return Some(Resolved::Enum(
+                namespace,
+                e,
+                if signed { Scalar::Int } else { Scalar::UInt },
+            ));
         }
         namespace
             .callbacks
@@ -1056,29 +1289,52 @@ impl<'a> Mapper<'a> {
     /// empty when it is this one, and imported otherwise.
     fn reference(&mut self, namespace: &'a Namespace, c_type: &str) -> (String, String) {
         let name = self.name_in(namespace, c_type);
-        let module = if namespace.name == self.namespace.name { String::new() } else { module_of(namespace) };
+        let module = if namespace.name == self.namespace.name {
+            String::new()
+        } else {
+            module_of(namespace)
+        };
         (module, name)
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn types(&mut self) {
         for class in &self.namespace.classes {
-            let Some(c_type) = &class.c_type else { continue };
-            let Some(tag) = self.facts.tags.get(c_type).cloned() else { continue };
+            let Some(c_type) = &class.c_type else {
+                continue;
+            };
+            let Some(tag) = self.facts.tags.get(c_type).cloned() else {
+                continue;
+            };
             // An interface's base is the first class above it, and the
             // interfaces between are ones it implements.
-            let (parent, implied) = if class.interface { self.interface_base(class) } else { (self.parent_of(class), Vec::new()) };
+            let (parent, implied) = if class.interface {
+                self.interface_base(class)
+            } else {
+                (self.parent_of(class), Vec::new())
+            };
             // The parent's methods come with it, from its own module.
             if let Some((module, name)) = &parent
                 && !module.is_empty()
             {
-                self.binding.imports.entry(module.clone()).or_default().insert(format!("{name}Methods"));
-                self.binding.imports.entry(module.clone()).or_default().insert(format!("{name}Props"));
+                self.binding
+                    .imports
+                    .entry(module.clone())
+                    .or_default()
+                    .insert(format!("{name}Methods"));
+                self.binding
+                    .imports
+                    .entry(module.clone())
+                    .or_default()
+                    .insert(format!("{name}Props"));
             }
             self.binding.brands.insert("Class");
             if let Some(get_type) = &class.get_type
                 && class.interface
             {
-                self.binding.interface_types.insert(c_type.clone(), get_type.clone());
+                self.binding
+                    .interface_types
+                    .insert(c_type.clone(), get_type.clone());
             }
             if let Some(get_type) = &class.get_type
                 && !class.interface
@@ -1086,18 +1342,31 @@ impl<'a> Mapper<'a> {
             {
                 self.binding.functions.push(get_type_function(get_type));
                 self.binding.brands.insert("c_size_t");
-                self.binding.casts.push(Cast { class: c_type.clone(), get_type: get_type.clone() });
+                self.binding.casts.push(Cast {
+                    class: c_type.clone(),
+                    get_type: get_type.clone(),
+                });
                 // A class `new GtkLabel({ … })` can make by its `GType`; its
                 // own `new`, where that takes nothing, replaces this below.
                 if !class.is_abstract && self.counted(self.namespace, class) {
                     match self.construct(class, c_type) {
                         Ok(view) => {
-                            let constructor = Constructor { function: view.name.clone(), get_type: Some(get_type.clone()), from: Vec::new(), alternatives: Vec::new() };
-                            self.binding.constructors.insert(c_type.clone(), constructor);
+                            let constructor = Constructor {
+                                function: view.name.clone(),
+                                get_type: Some(get_type.clone()),
+                                from: Vec::new(),
+                                alternatives: Vec::new(),
+                            };
+                            self.binding
+                                .constructors
+                                .insert(c_type.clone(), constructor);
                             self.construct_with(class, c_type, &view.result);
                             self.binding.functions.push(view);
                         }
-                        Err(reason) => self.binding.refused.push((format!("{c_type}_construct"), reason)),
+                        Err(reason) => self
+                            .binding
+                            .refused
+                            .push((format!("{c_type}_construct"), reason)),
                     }
                 }
             }
@@ -1108,11 +1377,17 @@ impl<'a> Mapper<'a> {
                 class
                     .properties
                     .iter()
-                    .map(|p| Accessor { name: member(&p.name), getter: p.getter.clone(), setter: p.setter.clone() })
+                    .map(|p| Accessor {
+                        name: member(&p.name),
+                        getter: p.getter.clone(),
+                        setter: p.setter.clone(),
+                    })
                     .collect(),
             );
             if counted {
-                self.binding.brands.extend(["GObjectClass", "SignalMap", "Signalled"]);
+                self.binding
+                    .brands
+                    .extend(["GObjectClass", "SignalMap", "Signalled"]);
             }
             let implements = if counted {
                 let mut implements = self.implements(class);
@@ -1125,14 +1400,26 @@ impl<'a> Mapper<'a> {
             if interface {
                 self.binding.brands.insert("GObjectInterface");
             }
-            self.binding.types.push(TypeDecl::Class { name: c_type.clone(), tag, parent, counted, interface, implements, boxed: None });
+            self.binding.types.push(TypeDecl::Class {
+                name: c_type.clone(),
+                tag,
+                parent,
+                counted,
+                interface,
+                implements,
+                boxed: None,
+            });
         }
         // Records are roots: nothing derives from one by GIR's account, and a
         // root `Class` is an opaque handle that can also anchor a chain, which
         // `GTypeInstance` has to.
         for record in self.namespace.records.iter().filter(|r| !r.class_struct) {
-            let Some(c_type) = &record.c_type else { continue };
-            let Some(tag) = self.facts.tags.get(c_type) else { continue };
+            let Some(c_type) = &record.c_type else {
+                continue;
+            };
+            let Some(tag) = self.facts.tags.get(c_type) else {
+                continue;
+            };
             self.binding.brands.insert("Class");
             let boxed = self.boxed_record(c_type);
             // A boxed record's `GType`, which the compiler boxes and copies it
@@ -1160,15 +1447,23 @@ impl<'a> Mapper<'a> {
         let mut implied = Vec::new();
         let (mut namespace, mut at) = (self.namespace, class);
         for _ in 0..64 {
-            let Some((next_namespace, next)) = self.parent_class(namespace, at) else { break };
-            let Some(c_type) = next.c_type.clone() else { break };
+            let Some((next_namespace, next)) = self.parent_class(namespace, at) else {
+                break;
+            };
+            let Some(c_type) = next.c_type.clone() else {
+                break;
+            };
             if !next.interface {
                 return (Some(self.reference(next_namespace, &c_type)), implied);
             }
             if let Some(tag) = self.facts.tags.get(&c_type).cloned() {
                 let (module, local) = self.reference(next_namespace, &c_type);
                 if !module.is_empty() {
-                    self.binding.imports.entry(module).or_default().extend([format!("{local}Methods"), format!("{local}Props")]);
+                    self.binding
+                        .imports
+                        .entry(module)
+                        .or_default()
+                        .extend([format!("{local}Methods"), format!("{local}Props")]);
                 }
                 implied.push((local, tag));
             }
@@ -1180,15 +1475,26 @@ impl<'a> Mapper<'a> {
     /// The interfaces `class`, of `namespace`, declares whose methods the
     /// binding merges into its own: an interface, tagged by the headers, and
     /// counted.
-    fn merged_interfaces(&self, namespace: &'a Namespace, class: &'a Class) -> Vec<(&'a Namespace, &'a Class)> {
+    fn merged_interfaces(
+        &self,
+        namespace: &'a Namespace,
+        class: &'a Class,
+    ) -> Vec<(&'a Namespace, &'a Class)> {
         class
             .implements
             .iter()
             .filter_map(|name| {
-                let qualified = if name.contains('.') { name.clone() } else { format!("{}.{name}", namespace.name) };
-                let Some(Resolved::Class(namespace, interface)) = self.resolve(&qualified) else { return None };
+                let qualified = if name.contains('.') {
+                    name.clone()
+                } else {
+                    format!("{}.{name}", namespace.name)
+                };
+                let Some(Resolved::Class(namespace, interface)) = self.resolve(&qualified) else {
+                    return None;
+                };
                 let tagged = self.facts.tags.contains_key(interface.c_type.as_deref()?);
-                (tagged && interface.interface && self.counted(namespace, interface)).then_some((namespace, interface))
+                (tagged && interface.interface && self.counted(namespace, interface))
+                    .then_some((namespace, interface))
             })
             .collect()
     }
@@ -1201,7 +1507,12 @@ impl<'a> Mapper<'a> {
     /// be another thing entirely -- `GtkShortcutsShortcut`'s `direction`
     /// property is not `gtk_widget_get_direction`.
     fn inherits_method(&self, namespace: &'a Namespace, class: &'a Class, method: &str) -> bool {
-        let named = |class: &Class| class.callables.iter().any(|callable| member(&callable.name) == method);
+        let named = |class: &Class| {
+            class
+                .callables
+                .iter()
+                .any(|callable| member(&callable.name) == method)
+        };
         let mut interfaces = self.merged_interfaces(namespace, class);
         let mut at = self.parent_class(namespace, class);
         // Bounded, so a cycle in malformed GIR ends.
@@ -1209,7 +1520,9 @@ impl<'a> Mapper<'a> {
             if interfaces.iter().any(|(_, interface)| named(interface)) {
                 return true;
             }
-            let Some((namespace, class)) = at else { return false };
+            let Some((namespace, class)) = at else {
+                return false;
+            };
             if named(class) {
                 return true;
             }
@@ -1227,11 +1540,19 @@ impl<'a> Mapper<'a> {
     fn implements(&mut self, class: &'a Class) -> Vec<Implemented> {
         let mut found = Vec::new();
         for (namespace, interface) in self.merged_interfaces(self.namespace, class) {
-            let Some(c_type) = interface.c_type.as_deref() else { continue };
-            let Some(tag) = self.facts.tags.get(c_type).cloned() else { continue };
+            let Some(c_type) = interface.c_type.as_deref() else {
+                continue;
+            };
+            let Some(tag) = self.facts.tags.get(c_type).cloned() else {
+                continue;
+            };
             let (module, local) = self.reference(namespace, c_type);
             if !module.is_empty() {
-                self.binding.imports.entry(module).or_default().extend([format!("{local}Methods"), format!("{local}Props")]);
+                self.binding
+                    .imports
+                    .entry(module)
+                    .or_default()
+                    .extend([format!("{local}Methods"), format!("{local}Props")]);
             }
             found.push((local, tag));
         }
@@ -1256,23 +1577,35 @@ impl<'a> Mapper<'a> {
         let mut at = self.parent_class(self.namespace, class);
         // Bounded, so a cycle in malformed GIR ends.
         for _ in 0..64 {
-            let Some((namespace, ancestor)) = at else { break };
+            let Some((namespace, ancestor)) = at else {
+                break;
+            };
             if !std::ptr::eq(namespace, self.namespace) {
                 break;
             }
             chain.push(ancestor);
             at = self.parent_class(namespace, ancestor);
         }
-        let builder = Mapped { shape: Shape::Other, ts: "Ptr<unknown>".to_owned(), c: Type::Pointer(Pointee::Void) };
+        let builder = Mapped {
+            shape: Shape::Other,
+            ts: "Ptr<unknown>".to_owned(),
+            c: Type::Pointer(Pointee::Void),
+        };
         let mut own = Vec::new();
         let mut names = Vec::new();
         let mut withs = Vec::new();
         for (depth, declarer) in chain.iter().enumerate() {
             for property in &declarer.properties {
-                let Some(param) = &property.constructed else { continue };
+                let Some(param) = &property.constructed else {
+                    continue;
+                };
                 let label = format!("{c_type}:{} (construct-only)", property.name);
                 let param = self.with_c_type(&spelled_string(param, "const gchar*"));
-                let value = match if is_string(&param) { self.value(&param) } else { self.typed(&param) } {
+                let value = match if is_string(&param) {
+                    self.value(&param)
+                } else {
+                    self.typed(&param)
+                } {
                     Ok(value) => self.truth(&param, value),
                     Err(reason) => {
                         self.binding.refused.push((label, reason));
@@ -1280,18 +1613,38 @@ impl<'a> Mapper<'a> {
                     }
                 };
                 let Some(kind) = value_kind(&value.c) else {
-                    self.binding.refused.push((label, Reason::Unknown(format!("a property value of C type {:?}", value.c))));
+                    self.binding.refused.push((
+                        label,
+                        Reason::Unknown(format!("a property value of C type {:?}", value.c)),
+                    ));
                     continue;
                 };
                 let ident = member(&property.name);
                 if depth == 0 {
-                    own.push((ident.clone(), value.ts.strip_suffix(" | null").unwrap_or(&value.ts).to_owned()));
+                    own.push((
+                        ident.clone(),
+                        value
+                            .ts
+                            .strip_suffix(" | null")
+                            .unwrap_or(&value.ts)
+                            .to_owned(),
+                    ));
                 }
                 withs.push(plain_function(
                     format!("{c_type}_with_{ident}"),
-                    format!("{CONSTRUCT_WITH}{kind}__{}", property.name.replace('-', "_")),
-                    vec![("builder".to_owned(), builder.clone()), ("value".to_owned(), value)],
-                    Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
+                    format!(
+                        "{CONSTRUCT_WITH}{kind}__{}",
+                        property.name.replace('-', "_")
+                    ),
+                    vec![
+                        ("builder".to_owned(), builder.clone()),
+                        ("value".to_owned(), value),
+                    ],
+                    Mapped {
+                        shape: Shape::Other,
+                        ts: "void".to_owned(),
+                        c: Type::Void,
+                    },
                 ));
                 names.push(ident);
             }
@@ -1300,7 +1653,11 @@ impl<'a> Mapper<'a> {
             return;
         }
         self.binding.brands.extend(["Ptr", "c_size_t"]);
-        let object_type = Mapped { shape: Shape::Other, ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) };
+        let object_type = Mapped {
+            shape: Shape::Other,
+            ts: "c_size_t".to_owned(),
+            c: Type::Scalar(Scalar::Size),
+        };
         self.binding.functions.push(plain_function(
             format!("{c_type}_builder"),
             format!("{CONSTRUCT_WITH}builder_new"),
@@ -1314,7 +1671,9 @@ impl<'a> Mapper<'a> {
             vec![("builder".to_owned(), builder)],
             made.clone(),
         ));
-        self.binding.constructed.insert(c_type.to_owned(), Constructed { own, names });
+        self.binding
+            .constructed
+            .insert(c_type.to_owned(), Constructed { own, names });
     }
 
     /// The class's parent: GIR's `parent`, or for a root its first field when
@@ -1327,12 +1686,22 @@ impl<'a> Mapper<'a> {
             let c_type = parent.c_type.clone()?;
             return Some(self.reference(namespace, &c_type));
         }
-        let Some(TypeRef::Named { c_type: Some(c_type), .. }) = &class.first_field else { return None };
+        let Some(TypeRef::Named {
+            c_type: Some(c_type),
+            ..
+        }) = &class.first_field
+        else {
+            return None;
+        };
         if c_type.contains('*') {
             return None;
         }
         let namespace = self.c_types.get(c_type.as_str()).copied()?;
-        namespace.records.iter().any(|r| r.c_type.as_deref() == Some(c_type)).then(|| self.reference(namespace, c_type))?
+        namespace
+            .records
+            .iter()
+            .any(|r| r.c_type.as_deref() == Some(c_type))
+            .then(|| self.reference(namespace, c_type))?
             .into()
     }
 
@@ -1347,12 +1716,19 @@ impl<'a> Mapper<'a> {
                         parent.clone()
                     } else {
                         // Parents are named relative to the class's own namespace.
-                        let owner = self.repository.namespaces.values().find(|ns| {
-                            ns.classes.iter().any(|c| std::ptr::eq(c, current))
-                        });
-                        format!("{}.{parent}", owner.map_or(self.namespace.name.as_str(), |ns| ns.name.as_str()))
+                        let owner = self
+                            .repository
+                            .namespaces
+                            .values()
+                            .find(|ns| ns.classes.iter().any(|c| std::ptr::eq(c, current)));
+                        format!(
+                            "{}.{parent}",
+                            owner.map_or(self.namespace.name.as_str(), |ns| ns.name.as_str())
+                        )
                     };
-                    let Some(Resolved::Class(_, next)) = self.resolve(&qualified) else { return false };
+                    let Some(Resolved::Class(_, next)) = self.resolve(&qualified) else {
+                        return false;
+                    };
                     current = next;
                 }
                 None => {
@@ -1369,16 +1745,32 @@ impl<'a> Mapper<'a> {
     /// and two declarations of one C enum are two unrelated types to a
     /// program that meets both. The included one owns it -- the header that
     /// defines it is its -- and the other refers to it.
-    fn enum_owner(&self, namespace: &'a Namespace, e: &'a super::model::Enum) -> (&'a Namespace, &'a super::model::Enum) {
-        let Some(c_type) = e.c_type.as_deref() else { return (namespace, e) };
-        let mut pending: Vec<&str> = namespace.includes.iter().map(|(name, _)| name.as_str()).collect();
+    fn enum_owner(
+        &self,
+        namespace: &'a Namespace,
+        e: &'a super::model::Enum,
+    ) -> (&'a Namespace, &'a super::model::Enum) {
+        let Some(c_type) = e.c_type.as_deref() else {
+            return (namespace, e);
+        };
+        let mut pending: Vec<&str> = namespace
+            .includes
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
         let mut seen: BTreeSet<&str> = BTreeSet::new();
         while let Some(name) = pending.pop() {
             if !seen.insert(name) {
                 continue;
             }
-            let Some(included) = self.repository.namespaces.get(name) else { continue };
-            if let Some(owned) = included.enums.iter().find(|other| other.c_type.as_deref() == Some(c_type)) {
+            let Some(included) = self.repository.namespaces.get(name) else {
+                continue;
+            };
+            if let Some(owned) = included
+                .enums
+                .iter()
+                .find(|other| other.c_type.as_deref() == Some(c_type))
+            {
                 return self.enum_owner(included, owned);
             }
             pending.extend(included.includes.iter().map(|(name, _)| name.as_str()));
@@ -1395,13 +1787,15 @@ impl<'a> Mapper<'a> {
     /// module they are declared in is refused as one with code in it.
     fn constants(&mut self) {
         for constant in &self.namespace.constants {
-            let Some((_, brand, _)) = SCALARS
-                .iter()
-                .find(|(gir, _, scalar)| *gir == constant.ty && !matches!(scalar, Scalar::Float | Scalar::Double | Scalar::Size))
-            else {
+            let Some((_, brand, _)) = SCALARS.iter().find(|(gir, _, scalar)| {
+                *gir == constant.ty
+                    && !matches!(scalar, Scalar::Float | Scalar::Double | Scalar::Size)
+            }) else {
                 continue;
             };
-            let Some(value) = exact_integer(&constant.value) else { continue };
+            let Some(value) = exact_integer(&constant.value) else {
+                continue;
+            };
             let c = brand.strip_prefix("c_").unwrap_or(brand);
             self.binding.brands.insert("CNumber");
             self.binding.constants.push(ConstantDecl {
@@ -1419,7 +1813,12 @@ impl<'a> Mapper<'a> {
                 self.binding.brands.insert("c_size_t");
                 // GJS's `GObject.TYPE_STRING`: the macro without its prefix.
                 let gir_name = name.strip_prefix("G_").unwrap_or(name).to_owned();
-                self.binding.constants.push(ConstantDecl { name: (*name).to_owned(), gir_name, ts: "c_size_t".to_owned(), value: value.to_string() });
+                self.binding.constants.push(ConstantDecl {
+                    name: (*name).to_owned(),
+                    gir_name,
+                    ts: "c_size_t".to_owned(),
+                    value: value.to_string(),
+                });
             }
         }
     }
@@ -1442,7 +1841,12 @@ impl<'a> Mapper<'a> {
         }
     }
 
-    fn function(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<Function, Reason> {
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+    fn function(
+        &mut self,
+        callable: &Callable,
+        owner: Option<&'a Class>,
+    ) -> Result<Function, Reason> {
         let symbol = bindable_symbol(callable)?;
         if symbol == CCLOSURE_EXPRESSION.0 {
             return self.cclosure_expression(callable, owner);
@@ -1491,11 +1895,16 @@ impl<'a> Mapper<'a> {
                 let mapped = self.out(param)?;
                 c_parameters.push(mapped.c.clone());
                 no_escape.push(identifier(&param.name));
-                omissible.extend(self.omissible(param).map(|value| (identifier(&param.name), value)));
+                omissible.extend(
+                    self.omissible(param)
+                        .map(|value| (identifier(&param.name), value)),
+                );
                 parameters.push((identifier(&param.name), mapped));
                 continue;
             }
-            if let Some((mapped, slots)) = self.callback_parameter(param, at, &signature.parameters)? {
+            if let Some((mapped, slots)) =
+                self.callback_parameter(param, at, &signature.parameters)?
+            {
                 hidden.extend(at + 1..at + 1 + (slots.len() - 1));
                 c_parameters.extend(slots);
                 parameters.push((identifier(&param.name), mapped));
@@ -1521,7 +1930,11 @@ impl<'a> Mapper<'a> {
         let throws = signature.throws.then(|| "error".to_owned());
         let returns = self.constructed(callable);
         let method = method_of(callable, &parameters);
-        let statics = if method.is_none() { static_of(callable, owner) } else { None };
+        let statics = if method.is_none() {
+            static_of(callable, owner)
+        } else {
+            None
+        };
         Ok(Function {
             name: symbol.clone(),
             symbol,
@@ -1559,7 +1972,9 @@ impl<'a> Mapper<'a> {
         if param.direction != Direction::In {
             return None;
         }
-        let TypeRef::Named { name, c_type } = &param.ty else { return None };
+        let TypeRef::Named { name, c_type } = &param.ty else {
+            return None;
+        };
         let pointer = c_type.as_deref().is_some_and(|c| c.contains('*'));
         let qualified = self.qualify(name);
         if qualified == "Gio.Cancellable" && pointer && param.nullable {
@@ -1569,16 +1984,27 @@ impl<'a> Mapper<'a> {
             return Some("0");
         }
         let (namespace, local) = qualified.split_once('.')?;
-        let flags = self.repository.namespaces.get(namespace)?.enums.iter().any(|e| e.name == local && e.flags);
+        let flags = self
+            .repository
+            .namespaces
+            .get(namespace)?
+            .enums
+            .iter()
+            .any(|e| e.name == local && e.flags);
         (flags && !pointer).then_some("0")
     }
 
     /// The result, and for a string the caller owns, what frees it.
     fn result(&mut self, result: &Param) -> Result<(Mapped, Option<String>), Reason> {
         match &result.ty {
-            TypeRef::Named { name, .. } if name == "none" => {
-                Ok((Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void }, None))
-            }
+            TypeRef::Named { name, .. } if name == "none" => Ok((
+                Mapped {
+                    shape: Shape::Other,
+                    ts: "void".to_owned(),
+                    c: Type::Void,
+                },
+                None,
+            )),
             // A returned string is copied at the call. Transfer-full is
             // GLib's `g_malloc`, so `g_free` releases it, and it is spelled
             // `char *` -- which the self-check confirms against the header.
@@ -1589,11 +2015,33 @@ impl<'a> Mapper<'a> {
                     Transfer::Container => return Err(Reason::OwnedString),
                 };
                 let char = Pointee::Scalar(Scalar::Char);
-                let c = if owned { Type::Pointer(char) } else { Type::Pointer(Pointee::Const(Box::new(char))) };
-                let ts = if result.nullable { "string | null" } else { "string" };
-                Ok((Mapped { shape: Shape::Other, ts: ts.to_owned(), c }, owned.then(|| "g_free".to_owned())))
+                let c = if owned {
+                    Type::Pointer(char)
+                } else {
+                    Type::Pointer(Pointee::Const(Box::new(char)))
+                };
+                let ts = if result.nullable {
+                    "string | null"
+                } else {
+                    "string"
+                };
+                Ok((
+                    Mapped {
+                        shape: Shape::Other,
+                        ts: ts.to_owned(),
+                        c,
+                    },
+                    owned.then(|| "g_free".to_owned()),
+                ))
             }
-            TypeRef::Missing => Ok((Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void }, None)),
+            TypeRef::Missing => Ok((
+                Mapped {
+                    shape: Shape::Other,
+                    ts: "void".to_owned(),
+                    c: Type::Void,
+                },
+                None,
+            )),
             TypeRef::Array(array) => Self::returned_strings(result, array),
             _ => self.typed(result).map(|mapped| (mapped, None)),
         }
@@ -1611,7 +2059,11 @@ impl<'a> Mapper<'a> {
             return self.caller_allocated(param);
         }
         let TypeRef::Named { name, c_type } = &param.ty else {
-            return Err(if matches!(param.ty, TypeRef::Array(_)) { Reason::Array } else { Reason::OutParameter });
+            return Err(if matches!(param.ty, TypeRef::Array(_)) {
+                Reason::Array
+            } else {
+                Reason::OutParameter
+            });
         };
         if name == "utf8" || name == "filename" {
             // Only an optional one, which the caller leaves out (`omissible`):
@@ -1619,15 +2071,24 @@ impl<'a> Mapper<'a> {
             if !param.optional {
                 return Err(Reason::StringOut);
             }
-            let constant = c_type.as_deref().is_some_and(|c| c.trim_start().starts_with("const"));
+            let constant = c_type
+                .as_deref()
+                .is_some_and(|c| c.trim_start().starts_with("const"));
             let char = Pointee::Scalar(Scalar::Char);
             let (ts, char) = if constant {
-                ("Ptr<ConstPtr<c_char>> | null", Pointee::Const(Box::new(char)))
+                (
+                    "Ptr<ConstPtr<c_char>> | null",
+                    Pointee::Const(Box::new(char)),
+                )
             } else {
                 ("Ptr<Ptr<c_char>> | null", char)
             };
             self.binding.brands.extend(["Ptr", "ConstPtr", "c_char"]);
-            return Ok(Mapped { shape: Shape::Other, ts: ts.to_owned(), c: Type::Pointer(Pointee::Pointer(Box::new(char))) });
+            return Ok(Mapped {
+                shape: Shape::Other,
+                ts: ts.to_owned(),
+                c: Type::Pointer(Pointee::Pointer(Box::new(char))),
+            });
         }
         if name == "gpointer" || name == "gconstpointer" {
             return Err(Reason::Gpointer);
@@ -1637,23 +2098,40 @@ impl<'a> Mapper<'a> {
             return Err(Reason::OutParameter);
         };
         let value = Param {
-            ty: TypeRef::Named { name: name.clone(), c_type: Some(value_type.trim_end().to_owned()) },
+            ty: TypeRef::Named {
+                name: name.clone(),
+                c_type: Some(value_type.trim_end().to_owned()),
+            },
             direction: Direction::In,
             nullable: false,
             ..param.clone()
         };
         let mapped = self.typed(&value)?;
         let (slot, pointee, shape) = match mapped.c {
-            Type::Scalar(scalar) => {
-                (mapped.ts.clone(), Pointee::Scalar(scalar), Shape::Out { value: mapped.ts })
-            }
-            Type::Pointer(pointee) => (format!("{} | null", mapped.ts), Pointee::Pointer(Box::new(pointee)), Shape::Other),
+            Type::Scalar(scalar) => (
+                mapped.ts.clone(),
+                Pointee::Scalar(scalar),
+                Shape::Out { value: mapped.ts },
+            ),
+            Type::Pointer(pointee) => (
+                format!("{} | null", mapped.ts),
+                Pointee::Pointer(Box::new(pointee)),
+                Shape::Other,
+            ),
             _ => return Err(Reason::OutParameter),
         };
         self.binding.brands.insert("Ptr");
         let ts = format!("Ptr<{slot}>");
-        let ts = if param.optional { format!("{ts} | null") } else { ts };
-        Ok(Mapped { shape, ts, c: Type::Pointer(pointee) })
+        let ts = if param.optional {
+            format!("{ts} | null")
+        } else {
+            ts
+        };
+        Ok(Mapped {
+            shape,
+            ts,
+            c: Type::Pointer(pointee),
+        })
     }
 
     /// An out parameter whose storage the caller allocates: for a boxed
@@ -1666,13 +2144,23 @@ impl<'a> Mapper<'a> {
         }
         // A storage the caller may leave out is `null` when it does:
         // `gdk_rectangle_intersect(a, b)` asks only whether they meet.
-        let value = Param { direction: Direction::In, nullable: param.optional || param.nullable, optional: false, ..param.clone() };
+        let value = Param {
+            direction: Direction::In,
+            nullable: param.optional || param.nullable,
+            optional: false,
+            ..param.clone()
+        };
         let mapped = self.typed(&value)?;
         match &mapped.shape {
-            Shape::Handle { class, .. } if self.boxed_record(class).is_some_and(|(_, size)| size > 0) => {
+            Shape::Handle { class, .. }
+                if self.boxed_record(class).is_some_and(|(_, size)| size > 0) =>
+            {
                 if param.direction == Direction::Out {
                     let class = class.clone();
-                    return Ok(Mapped { shape: Shape::Filled { class }, ..mapped });
+                    return Ok(Mapped {
+                        shape: Shape::Filled { class },
+                        ..mapped
+                    });
                 }
                 Ok(mapped)
             }
@@ -1689,7 +2177,13 @@ impl<'a> Mapper<'a> {
     /// Only transfer-none: the callee borrows the array, which is what lets
     /// the compiler lend one for the call. Every other array stays refused as
     /// one.
-    fn array_parameter(&mut self, param: &Param, array: &ArrayRef, at: usize, parameters: &[Param]) -> Result<Mapped, Reason> {
+    fn array_parameter(
+        &mut self,
+        param: &Param,
+        array: &ArrayRef,
+        at: usize,
+        parameters: &[Param],
+    ) -> Result<Mapped, Reason> {
         let length = match array.length {
             Some(index) => {
                 let side = if index == at + 1 {
@@ -1699,7 +2193,10 @@ impl<'a> Mapper<'a> {
                 } else {
                     return Err(Reason::Array);
                 };
-                Some((self.value(parameters.get(index).ok_or(Reason::Array)?)?, side))
+                Some((
+                    self.value(parameters.get(index).ok_or(Reason::Array)?)?,
+                    side,
+                ))
             }
             None => None,
         };
@@ -1707,36 +2204,59 @@ impl<'a> Mapper<'a> {
         if param.transfer != Transfer::None {
             return Err(Reason::Array);
         }
-        let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.split_whitespace().collect();
+        let spelling: String = array
+            .c_type
+            .as_deref()
+            .ok_or(Reason::Array)?
+            .split_whitespace()
+            .collect();
         let char = Pointee::Scalar(Scalar::Char);
         let (ts, c, program) = match element {
             "utf8" | "filename" if array.zero_terminated || length.is_some() => {
                 let (qualifier, c) = match spelling.replace("gchar", "char").as_str() {
                     "char**" => ("char", Type::Pointer(Pointee::Pointer(Box::new(char)))),
-                    "constchar**" => ("const", Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char)))))),
+                    "constchar**" => (
+                        "const",
+                        Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))),
+                    ),
                     "constchar*const*" => (
                         "const const",
-                        Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))),
+                        Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(
+                            Pointee::Const(Box::new(char)),
+                        ))))),
                     ),
                     _ => return Err(Reason::Array),
                 };
                 self.binding.brands.insert("CStrings");
-                (format!("CStrings<\"{qualifier}\">"), c, "readonly string[]".to_owned())
+                (
+                    format!("CStrings<\"{qualifier}\">"),
+                    c,
+                    "readonly string[]".to_owned(),
+                )
             }
             // Bytes have no terminator to find their end by, so only with a
             // length. `guchar` is `uint8_t` on every target GLib runs on; the
             // self-check compiles the prototype against the header either way.
             "guint8" if length.is_some() => {
                 let (qualifier, pointee) = match spelling.as_str() {
-                    "constguint8*" | "constguchar*" => ("const uint8_t", Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt8)))),
+                    "constguint8*" | "constguchar*" => (
+                        "const uint8_t",
+                        Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt8))),
+                    ),
                     "guint8*" | "guchar*" => ("uint8_t", Pointee::Scalar(Scalar::UInt8)),
                     "constgchar*" | "constchar*" => ("const char", Pointee::Const(Box::new(char))),
-                    "gconstpointer" | "constvoid*" => ("const void", Pointee::Const(Box::new(Pointee::Void))),
+                    "gconstpointer" | "constvoid*" => {
+                        ("const void", Pointee::Const(Box::new(Pointee::Void)))
+                    }
                     "gpointer" | "void*" => ("void", Pointee::Void),
                     _ => return Err(Reason::Array),
                 };
                 self.binding.brands.insert("CBytes");
-                (format!("CBytes<\"{qualifier}\">"), Type::Pointer(pointee), "Uint8Array".to_owned())
+                (
+                    format!("CBytes<\"{qualifier}\">"),
+                    Type::Pointer(pointee),
+                    "Uint8Array".to_owned(),
+                )
             }
             _ if length.is_some() => self.handles_parameter(param, element, &spelling)?,
             _ => return Err(Reason::Array),
@@ -1752,7 +2272,11 @@ impl<'a> Mapper<'a> {
             ts.push_str(" | null");
             program.push_str(" | null");
         }
-        Ok(Mapped { shape: Shape::Lent { program }, ts, c })
+        Ok(Mapped {
+            shape: Shape::Lent { program },
+            ts,
+            c,
+        })
     }
 
     /// An array of objects C borrows for the call -- `GFile **files`, or
@@ -1763,11 +2287,18 @@ impl<'a> Mapper<'a> {
     /// where GIR states the transfer as none: a borrow read into an array
     /// C keeps, or one whose elements it takes, would be wrong in the
     /// direction nothing reports.
-    fn handles_parameter(&mut self, param: &Param, element: &str, spelling: &str) -> Result<(String, Type, String), Reason> {
+    fn handles_parameter(
+        &mut self,
+        param: &Param,
+        element: &str,
+        spelling: &str,
+    ) -> Result<(String, Type, String), Reason> {
         if !param.transfer_stated {
             return Err(Reason::Array);
         }
-        let Some(Resolved::Class(_, class)) = self.resolve(&self.qualify(element)) else { return Err(Reason::Array) };
+        let Some(Resolved::Class(_, class)) = self.resolve(&self.qualify(element)) else {
+            return Err(Reason::Array);
+        };
         let c_type = class.c_type.clone().ok_or(Reason::Array)?;
         let void = match spelling {
             "gpointer*" | "void**" => true,
@@ -1775,13 +2306,18 @@ impl<'a> Mapper<'a> {
             _ => return Err(Reason::Array),
         };
         let value = Param {
-            ty: TypeRef::Named { name: element.to_owned(), c_type: Some(format!("{c_type}*")) },
+            ty: TypeRef::Named {
+                name: element.to_owned(),
+                c_type: Some(format!("{c_type}*")),
+            },
             direction: Direction::In,
             nullable: false,
             ..param.clone()
         };
         let mapped = self.typed(&value)?;
-        let (Shape::Handle { .. }, Type::Pointer(pointee)) = (&mapped.shape, mapped.c) else { return Err(Reason::Array) };
+        let (Shape::Handle { .. }, Type::Pointer(pointee)) = (&mapped.shape, mapped.c) else {
+            return Err(Reason::Array);
+        };
         let pointee = if void { Pointee::Void } else { pointee };
         self.binding.brands.insert("CHandles");
         let qualifier = if void { "void" } else { "element" };
@@ -1814,54 +2350,115 @@ impl<'a> Mapper<'a> {
     /// compiler's for the two ownerships, and they are what GIR says for
     /// nearly every such result; any other is refused rather than declared
     /// in a spelling the header would contradict.
-    fn returned_strings(result: &Param, array: &ArrayRef) -> Result<(Mapped, Option<String>), Reason> {
+    fn returned_strings(
+        result: &Param,
+        array: &ArrayRef,
+    ) -> Result<(Mapped, Option<String>), Reason> {
         let element = array.element.as_deref().ok_or(Reason::Array)?;
-        if !(element == "utf8" || element == "filename") || !array.zero_terminated || array.length.is_some() {
+        if !(element == "utf8" || element == "filename")
+            || !array.zero_terminated
+            || array.length.is_some()
+        {
             return Err(Reason::Array);
         }
-        let spelling: String =
-            array.c_type.as_deref().ok_or(Reason::Array)?.replace("gchar", "char").replace("GStrv", "char**").split_whitespace().collect();
+        let spelling: String = array
+            .c_type
+            .as_deref()
+            .ok_or(Reason::Array)?
+            .replace("gchar", "char")
+            .replace("GStrv", "char**")
+            .split_whitespace()
+            .collect();
         let char = Pointee::Scalar(Scalar::Char);
         let (c, free) = match (result.transfer, spelling.as_str()) {
-            (Transfer::Full, "char**") => (Type::Pointer(Pointee::Pointer(Box::new(char))), Some("g_strfreev".to_owned())),
+            (Transfer::Full, "char**") => (
+                Type::Pointer(Pointee::Pointer(Box::new(char))),
+                Some("g_strfreev".to_owned()),
+            ),
             (Transfer::None, "constchar*const*") => (
-                Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))))),
+                Type::Pointer(Pointee::Const(Box::new(Pointee::Pointer(Box::new(
+                    Pointee::Const(Box::new(char)),
+                ))))),
                 None,
             ),
             _ => return Err(Reason::Array),
         };
-        let ts = if result.nullable { "string[] | null" } else { "string[]" };
-        Ok((Mapped { shape: Shape::Other, ts: ts.to_owned(), c }, free))
+        let ts = if result.nullable {
+            "string[] | null"
+        } else {
+            "string[]"
+        };
+        Ok((
+            Mapped {
+                shape: Shape::Other,
+                ts: ts.to_owned(),
+                c,
+            },
+            free,
+        ))
     }
 
     /// Bytes C returns, their length in the out slot `length`: C's own
     /// pointer, which the values form copies (`Shape::Bytes`), and frees where
     /// the transfer makes it the caller's.
-    fn returned_bytes(&mut self, result: &Param, array: &ArrayRef, parameters: &[Param]) -> Result<Mapped, Reason> {
-        let length = array.length.and_then(|index| parameters.get(index)).map(|param| identifier(&param.name)).ok_or(Reason::Array)?;
+    fn returned_bytes(
+        &mut self,
+        result: &Param,
+        array: &ArrayRef,
+        parameters: &[Param],
+    ) -> Result<Mapped, Reason> {
+        let length = array
+            .length
+            .and_then(|index| parameters.get(index))
+            .map(|param| identifier(&param.name))
+            .ok_or(Reason::Array)?;
         let owned = match result.transfer {
             Transfer::None => false,
             Transfer::Full => true,
             Transfer::Container => return Err(Reason::Array),
         };
-        let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.split_whitespace().collect();
+        let spelling: String = array
+            .c_type
+            .as_deref()
+            .ok_or(Reason::Array)?
+            .split_whitespace()
+            .collect();
         let (ts, pointee) = match spelling.as_str() {
-            "gconstpointer" | "constvoid*" => ("ConstPtr<void> | null", Pointee::Const(Box::new(Pointee::Void))),
-            "constguint8*" | "constguchar*" => ("ConstPtr<c_uint8> | null", Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt8)))),
+            "gconstpointer" | "constvoid*" => (
+                "ConstPtr<void> | null",
+                Pointee::Const(Box::new(Pointee::Void)),
+            ),
+            "constguint8*" | "constguchar*" => (
+                "ConstPtr<c_uint8> | null",
+                Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt8))),
+            ),
             "guint8*" | "guchar*" => ("Ptr<c_uint8> | null", Pointee::Scalar(Scalar::UInt8)),
             "gchar*" | "char*" => ("Ptr<c_char> | null", Pointee::Scalar(Scalar::Char)),
             _ => return Err(Reason::Array),
         };
-        self.binding.brands.extend(["Ptr", "ConstPtr", "c_uint8", "c_char"]);
-        Ok(Mapped { shape: Shape::Bytes { length, owned }, ts: ts.to_owned(), c: Type::Pointer(pointee) })
+        self.binding
+            .brands
+            .extend(["Ptr", "ConstPtr", "c_uint8", "c_char"]);
+        Ok(Mapped {
+            shape: Shape::Bytes { length, owned },
+            ts: ts.to_owned(),
+            c: Type::Pointer(pointee),
+        })
     }
 
     /// The result, and what frees it: bytes C hands back (`returned_bytes`),
     /// or any other (`function_result`).
-    fn result_or_bytes(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<(Mapped, Option<String>), Reason> {
+    fn result_or_bytes(
+        &mut self,
+        callable: &Callable,
+        owner: Option<&'a Class>,
+    ) -> Result<(Mapped, Option<String>), Reason> {
         let signature = &callable.signature;
         match &signature.result.ty {
-            TypeRef::Array(array) if is_bytes(array) => Ok((self.returned_bytes(&signature.result, array, &signature.parameters)?, None)),
+            TypeRef::Array(array) if is_bytes(array) => Ok((
+                self.returned_bytes(&signature.result, array, &signature.parameters)?,
+                None,
+            )),
             _ => self.function_result(callable, owner),
         }
     }
@@ -1882,13 +2479,23 @@ impl<'a> Mapper<'a> {
         if let TypeRef::Array(array) = &param.ty
             && is_bytes(array)
         {
-            let length = array.length.and_then(|index| signature.parameters.get(index)).ok_or(Reason::Array)?;
-            return self.out_bytes(param, array, &identifier(&length.name)).map(Some);
+            let length = array
+                .length
+                .and_then(|index| signature.parameters.get(index))
+                .ok_or(Reason::Array)?;
+            return self
+                .out_bytes(param, array, &identifier(&length.name))
+                .map(Some);
         }
         if byte_lengths.contains(&at) {
             let mapped = self.out(param)?;
-            let Shape::Out { value } = mapped.shape else { return Err(Reason::Array) };
-            return Ok(Some(Mapped { shape: Shape::Length { value }, ..mapped }));
+            let Shape::Out { value } = mapped.shape else {
+                return Err(Reason::Array);
+            };
+            return Ok(Some(Mapped {
+                shape: Shape::Length { value },
+                ..mapped
+            }));
         }
         Ok(None)
     }
@@ -1896,13 +2503,23 @@ impl<'a> Mapper<'a> {
     /// An out slot C writes bytes' address into, their length in the out slot
     /// `length`: `Ptr<Ptr<c_char> | null>`, the `char **` C declares, which
     /// the values form makes, reads and copies (`Shape::Bytes`).
-    fn out_bytes(&mut self, param: &Param, array: &ArrayRef, length: &str) -> Result<Mapped, Reason> {
+    fn out_bytes(
+        &mut self,
+        param: &Param,
+        array: &ArrayRef,
+        length: &str,
+    ) -> Result<Mapped, Reason> {
         let owned = match param.transfer {
             Transfer::None => false,
             Transfer::Full => true,
             Transfer::Container => return Err(Reason::Array),
         };
-        let spelling: String = array.c_type.as_deref().ok_or(Reason::Array)?.split_whitespace().collect();
+        let spelling: String = array
+            .c_type
+            .as_deref()
+            .ok_or(Reason::Array)?
+            .split_whitespace()
+            .collect();
         let (ts, element) = match spelling.as_str() {
             "gchar**" | "char**" => ("Ptr<Ptr<c_char> | null>", Scalar::Char),
             "guint8**" | "guchar**" => ("Ptr<Ptr<c_uint8> | null>", Scalar::UInt8),
@@ -1910,7 +2527,10 @@ impl<'a> Mapper<'a> {
         };
         self.binding.brands.extend(["Ptr", "c_uint8", "c_char"]);
         Ok(Mapped {
-            shape: Shape::Bytes { length: length.to_owned(), owned },
+            shape: Shape::Bytes {
+                length: length.to_owned(),
+                owned,
+            },
             ts: ts.to_owned(),
             c: Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(element)))),
         })
@@ -1939,7 +2559,12 @@ impl<'a> Mapper<'a> {
             }
             return Ok(Mapped {
                 shape: Shape::Other,
-                ts: if param.nullable { "string | null" } else { "string" }.to_owned(),
+                ts: if param.nullable {
+                    "string | null"
+                } else {
+                    "string"
+                }
+                .to_owned(),
                 c: Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char)))),
             });
         }
@@ -1948,6 +2573,7 @@ impl<'a> Mapper<'a> {
 
     /// A scalar, enum, handle or record pointer -- the shapes that need no
     /// conversion at the call.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn typed(&mut self, param: &Param) -> Result<Mapped, Reason> {
         let (name, c_type) = match &param.ty {
             TypeRef::Named { name, c_type } => (name.as_str(), c_type.as_deref().unwrap_or("")),
@@ -1970,10 +2596,19 @@ impl<'a> Mapper<'a> {
         // `gconstpointer` would need a const `void *` TypeScript has no
         // spelling for yet, and a returned `gpointer` says nothing about what
         // it points at; both stay refused.
-        if name == "gpointer" && param.direction == Direction::In && c_type != "gconstpointer" && !c_type.starts_with("const") {
+        if name == "gpointer"
+            && param.direction == Direction::In
+            && c_type != "gconstpointer"
+            && !c_type.starts_with("const")
+        {
             return Ok(Mapped {
                 shape: Shape::Other,
-                ts: if param.nullable { "object | null" } else { "object" }.to_owned(),
+                ts: if param.nullable {
+                    "object | null"
+                } else {
+                    "object"
+                }
+                .to_owned(),
                 c: Type::Pointer(Pointee::Void),
             });
         }
@@ -1983,7 +2618,11 @@ impl<'a> Mapper<'a> {
         // C99's `bool`, which GIR's scanner reports as `gboolean` -- an `int`
         // -- although the ABI is one byte. `c:type` says which it is.
         if c_type == "bool" || c_type == "_Bool" {
-            return Ok(Mapped { shape: Shape::Other, ts: "boolean".to_owned(), c: Type::Bool });
+            return Ok(Mapped {
+                shape: Shape::Other,
+                ts: "boolean".to_owned(),
+                c: Type::Bool,
+            });
         }
         let depth = c_type.matches('*').count();
         // A scalar only where C passes one: `const guint8 *` is named `guint8`
@@ -1997,11 +2636,19 @@ impl<'a> Mapper<'a> {
             // identifier, not a quantity, and keeps every bit as a `bigint`.
             if name == "GType" {
                 self.binding.brands.insert(brand);
-                return Ok(Mapped { shape: Shape::Other, ts: (*brand).to_owned(), c: Type::Scalar(*scalar) });
+                return Ok(Mapped {
+                    shape: Shape::Other,
+                    ts: (*brand).to_owned(),
+                    c: Type::Scalar(*scalar),
+                });
             }
             self.binding.brands.insert("CNumber");
             let c = brand.strip_prefix("c_").unwrap_or(brand);
-            return Ok(Mapped { shape: Shape::Other, ts: format!("CNumber<\"{c}\">"), c: Type::Scalar(*scalar) });
+            return Ok(Mapped {
+                shape: Shape::Other,
+                ts: format!("CNumber<\"{c}\">"),
+                c: Type::Scalar(*scalar),
+            });
         }
         let qualified = self.qualify(name);
         // A handle is what C says it points at. GIR's name can be more
@@ -2026,44 +2673,76 @@ impl<'a> Mapper<'a> {
             let local = self.name_in(namespace, &class_type);
             self.binding.brands.insert("Erased");
             let ts = format!("Erased<{local}>");
-            let ts = if param.nullable { format!("{ts} | null") } else { ts };
+            let ts = if param.nullable {
+                format!("{ts} | null")
+            } else {
+                ts
+            };
             let shape = if param.direction == Direction::In {
                 Shape::Other
             } else {
-                Shape::Handle { class: local, nullable: param.nullable }
+                Shape::Handle {
+                    class: local,
+                    nullable: param.nullable,
+                }
             };
-            return Ok(Mapped { shape, ts, c: Type::Pointer(Pointee::Void) });
+            return Ok(Mapped {
+                shape,
+                ts,
+                c: Type::Pointer(Pointee::Void),
+            });
         }
         if depth == 1
             && let Some(namespace) = self.c_types.get(base).copied()
         {
-            let tag = self.facts.tags.get(base).cloned().ok_or_else(|| Reason::NoTag(base.to_owned()))?;
+            let tag = self
+                .facts
+                .tags
+                .get(base)
+                .cloned()
+                .ok_or_else(|| Reason::NoTag(base.to_owned()))?;
             let local = self.name_in(namespace, base);
             return Ok(self.handle(local, &tag, constant, param.nullable));
         }
         match self.resolve(&qualified) {
             Some(Resolved::Enum(namespace, e, scalar)) if depth == 0 => {
-                let brand = if scalar == Scalar::Int { "c_int" } else { "c_uint" };
+                let brand = if scalar == Scalar::Int {
+                    "c_int"
+                } else {
+                    "c_uint"
+                };
                 self.binding.brands.insert(brand);
                 // `CEnum<GtkOrientation, c_uint>`, so the enum's members pass
                 // without a cast; by its C name, which `enums` declares beside
                 // the enum as an alias, since two namespaces can share a short one.
-                let ts = match e.c_type.as_deref().filter(|c| is_type_name(c) && *c != e.name) {
+                let ts = match e
+                    .c_type
+                    .as_deref()
+                    .filter(|c| is_type_name(c) && *c != e.name)
+                {
                     Some(c_type) => {
                         self.binding.brands.insert("CEnum");
                         if namespace.name != self.namespace.name {
-                            self.binding.imports.entry(module_of(namespace)).or_default().insert(c_type.to_owned());
+                            self.binding
+                                .imports
+                                .entry(module_of(namespace))
+                                .or_default()
+                                .insert(c_type.to_owned());
                         }
                         format!("CEnum<{c_type}, {brand}>")
                     }
                     None => brand.to_owned(),
                 };
-                Ok(Mapped { shape: Shape::Other, ts, c: Type::Scalar(scalar) })
+                Ok(Mapped {
+                    shape: Shape::Other,
+                    ts,
+                    c: Type::Scalar(scalar),
+                })
             }
             Some(Resolved::Record) if depth == 0 => Err(Reason::RecordByValue),
-            Some(Resolved::Callback(_)) => {
-                Err(Reason::CallbackShape("closure data is not annotated where it is passed"))
-            }
+            Some(Resolved::Callback(_)) => Err(Reason::CallbackShape(
+                "closure data is not annotated where it is passed",
+            )),
             Some(_) => Err(Reason::PointerDepth(c_type.to_owned())),
             None => Err(Reason::Unknown(qualified)),
         }
@@ -2077,12 +2756,20 @@ impl<'a> Mapper<'a> {
     /// reads a `GSimpleAction`, where the class declaring `notify` is
     /// `GObject`. A signal's view is only ever a method (`method_only`), so
     /// `this` always has a receiver to name.
-    fn signal_parameters(&mut self, signal: &super::model::Signal) -> Result<SignalParameters, Reason> {
+    fn signal_parameters(
+        &mut self,
+        signal: &super::model::Signal,
+    ) -> Result<SignalParameters, Reason> {
         let mut ts_parameters = vec!["self: this".to_owned()];
         let mut emitted = Vec::new();
         // GIR gives a signal's parameters no C type; each spelled from its
         // name, for an array's length to be read at.
-        let spelled: Vec<Param> = signal.signature.parameters.iter().map(|param| self.with_c_type(param)).collect();
+        let spelled: Vec<Param> = signal
+            .signature
+            .parameters
+            .iter()
+            .map(|param| self.with_c_type(param))
+            .collect();
         // An array's length rides in its array (`Counted`), not as a
         // parameter of its own.
         let lengths: Vec<usize> = signal
@@ -2115,10 +2802,21 @@ impl<'a> Mapper<'a> {
             // handler's bridge copies it (`native::abi_type`). A `filename`
             // is in the file system's encoding, which a `string` is not.
             if matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8") {
-                let ts = if param.nullable { "string | null" } else { "string" };
+                let ts = if param.nullable {
+                    "string | null"
+                } else {
+                    "string"
+                };
                 ts_parameters.push(format!("{}: {ts}", identifier(&param.name)));
                 let c = Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char))));
-                emitted.push((identifier(&param.name), Mapped { shape: Shape::Other, ts: ts.to_owned(), c }));
+                emitted.push((
+                    identifier(&param.name),
+                    Mapped {
+                        shape: Shape::Other,
+                        ts: ts.to_owned(),
+                        c,
+                    },
+                ));
                 continue;
             }
             if matches!(&param.ty, TypeRef::Named { name, .. } if name == "filename") {
@@ -2129,7 +2827,10 @@ impl<'a> Mapper<'a> {
             // value the signal marshals; the handler is passed the array's
             // address, `gpointer *`, which is what the bridge declares.
             if let TypeRef::Array(array) = &param.ty {
-                let array = super::model::ArrayRef { c_type: Some("gpointer*".to_owned()), ..array.clone() };
+                let array = super::model::ArrayRef {
+                    c_type: Some("gpointer*".to_owned()),
+                    ..array.clone()
+                };
                 let mapped = self.array_parameter(param, &array, at, &spelled)?;
                 ts_parameters.push(format!("{}: {}", identifier(&param.name), mapped.ts));
                 emitted.push((identifier(&param.name), mapped));
@@ -2157,11 +2858,26 @@ impl<'a> Mapper<'a> {
     /// (`g_value_take_string`), so the bridge answers it owned
     /// (`native::owned_string`). A string is the one answer typed until a port
     /// needs another.
-    fn cclosure_expression(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<Function, Reason> {
-        if !self.binding.headers.iter().any(|header| header == nts_codegen_c::GTK_HEADER_NAME) {
-            self.binding.headers.push(nts_codegen_c::GTK_HEADER_NAME.to_owned());
+    fn cclosure_expression(
+        &mut self,
+        callable: &Callable,
+        owner: Option<&'a Class>,
+    ) -> Result<Function, Reason> {
+        if !self
+            .binding
+            .headers
+            .iter()
+            .any(|header| header == nts_codegen_c::GTK_HEADER_NAME)
+        {
+            self.binding
+                .headers
+                .push(nts_codegen_c::GTK_HEADER_NAME.to_owned());
         }
-        let value_type = callable.signature.parameters.first().ok_or(Reason::CallbackShape("no value type"))?;
+        let value_type = callable
+            .signature
+            .parameters
+            .first()
+            .ok_or(Reason::CallbackShape("no value type"))?;
         let (value, _) = self.plain(value_type)?;
         let objects = self
             .repository
@@ -2170,17 +2886,30 @@ impl<'a> Mapper<'a> {
             .ok_or_else(|| Reason::Unknown("GObject".to_owned()))?;
         let (_, object) = self.reference(objects, "GObject");
         let (_, gclosure) = self.reference(objects, "GClosure");
-        let closure_tag = self.facts.tags.get("GClosure").cloned().ok_or_else(|| Reason::NoTag("GClosure".to_owned()))?;
+        let closure_tag = self
+            .facts
+            .tags
+            .get("GClosure")
+            .cloned()
+            .ok_or_else(|| Reason::NoTag("GClosure".to_owned()))?;
         self.binding.brands.extend(["ErasedClosure", "Ptr"]);
         let context = Type::Pointer(Pointee::Void);
-        let erased = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void)));
+        let erased = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+            Vec::new(),
+            Type::Void,
+        )));
         let notify = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
-            vec![context.clone(), Type::Pointer(Pointee::Opaque(Handle::from(closure_tag)))],
+            vec![
+                context.clone(),
+                Type::Pointer(Pointee::Opaque(Handle::from(closure_tag))),
+            ],
             Type::Void,
         )));
         let callback = Mapped {
             shape: Shape::Other,
-            ts: format!("ErasedClosure<(this_: {object} | null) => string | null, (data: Ptr<unknown>, closure: {gclosure}) => void>"),
+            ts: format!(
+                "ErasedClosure<(this_: {object} | null) => string | null, (data: Ptr<unknown>, closure: {gclosure}) => void>"
+            ),
             c: erased.clone(),
         };
         let (result, free) = self.result_or_bytes(callable, owner)?;
@@ -2188,7 +2917,10 @@ impl<'a> Mapper<'a> {
         Ok(Function {
             name: CCLOSURE_EXPRESSION.0.to_owned(),
             symbol: CCLOSURE_EXPRESSION.1.to_owned(),
-            parameters: vec![("value_type".to_owned(), value), ("callback".to_owned(), callback)],
+            parameters: vec![
+                ("value_type".to_owned(), value),
+                ("callback".to_owned(), callback),
+            ],
             result,
             c_parameters,
             deprecated: callable.deprecated,
@@ -2229,10 +2961,25 @@ impl<'a> Mapper<'a> {
     /// the signal's parameters after its name, answering the handlers'
     /// result where that is a number or a boolean -- `keys.emit("key-pressed",
     /// ...)` is whether one handled it. A signal answering a pointer has none.
-    fn signal(&mut self, class: &'a Class, signal: &super::model::Signal) -> Result<(Function, Option<Function>), Reason> {
-        let c_type = class.c_type.clone().ok_or_else(|| Reason::Unknown(class.name.clone()))?;
-        if !self.binding.headers.iter().any(|header| header == nts_codegen_c::GOBJECT_HEADER_NAME) {
-            self.binding.headers.push(nts_codegen_c::GOBJECT_HEADER_NAME.to_owned());
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+    fn signal(
+        &mut self,
+        class: &'a Class,
+        signal: &super::model::Signal,
+    ) -> Result<(Function, Option<Function>), Reason> {
+        let c_type = class
+            .c_type
+            .clone()
+            .ok_or_else(|| Reason::Unknown(class.name.clone()))?;
+        if !self
+            .binding
+            .headers
+            .iter()
+            .any(|header| header == nts_codegen_c::GOBJECT_HEADER_NAME)
+        {
+            self.binding
+                .headers
+                .push(nts_codegen_c::GOBJECT_HEADER_NAME.to_owned());
         }
         // `self: GtkButton` names the class's handle, which exists only for a
         // tagged struct.
@@ -2241,11 +2988,19 @@ impl<'a> Mapper<'a> {
         }
         let prefix = class.symbol_prefix.as_deref().ok_or(Reason::NoSymbol)?;
         let local = c_type.clone();
-        self.binding.brands.extend(["Erased", "ErasedClosure", "c_uint", "CNumber"]);
+        self.binding
+            .brands
+            .extend(["Erased", "ErasedClosure", "c_uint", "CNumber"]);
         let (ts_parameters, emitted) = self.signal_parameters(signal)?;
         let result = match &signal.signature.result.ty {
-            TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
-            TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => return Err(Reason::StringInCallback),
+            TypeRef::Named { name, .. } if name == "none" => Mapped {
+                shape: Shape::Other,
+                ts: "void".to_owned(),
+                c: Type::Void,
+            },
+            TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => {
+                return Err(Reason::StringInCallback);
+            }
             _ => {
                 let result = self.with_c_type(&signal.signature.result);
                 let mapped = self.typed(&result)?;
@@ -2256,12 +3011,23 @@ impl<'a> Mapper<'a> {
         // The handler's C signature is the compiler's to derive from the
         // TypeScript one; mapping the parameters above is what refuses a
         // signal whose parameters have no C type here.
-        let erased = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(Vec::new(), Type::Void)));
+        let erased = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+            Vec::new(),
+            Type::Void,
+        )));
         // `GClosureNotify`: `void (*)(gpointer, GClosure *)`, which the header
         // declares exactly and the self-check compares.
-        let closure_tag = self.facts.tags.get("GClosure").cloned().ok_or_else(|| Reason::NoTag("GClosure".to_owned()))?;
+        let closure_tag = self
+            .facts
+            .tags
+            .get("GClosure")
+            .cloned()
+            .ok_or_else(|| Reason::NoTag("GClosure".to_owned()))?;
         let closure = Type::Pointer(Pointee::Opaque(Handle::from(closure_tag)));
-        let notify = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context.clone(), closure], Type::Void)));
+        let notify = Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+            vec![context.clone(), closure],
+            Type::Void,
+        )));
         let objects = self
             .repository
             .namespaces
@@ -2279,8 +3045,22 @@ impl<'a> Mapper<'a> {
             name,
             symbol: CONNECT.to_owned(),
             parameters: vec![
-                ("instance".to_owned(), Mapped { shape: Shape::Other, ts: format!("Erased<{local}>"), c: context.clone() }),
-                ("detailed_signal".to_owned(), Mapped { shape: Shape::Other, ts: detailed_name(signal), c: string.clone() }),
+                (
+                    "instance".to_owned(),
+                    Mapped {
+                        shape: Shape::Other,
+                        ts: format!("Erased<{local}>"),
+                        c: context.clone(),
+                    },
+                ),
+                (
+                    "detailed_signal".to_owned(),
+                    Mapped {
+                        shape: Shape::Other,
+                        ts: detailed_name(signal),
+                        c: string.clone(),
+                    },
+                ),
                 (
                     "handler".to_owned(),
                     Mapped {
@@ -2293,12 +3073,30 @@ impl<'a> Mapper<'a> {
                         c: erased.clone(),
                     },
                 ),
-                ("connect_flags".to_owned(), Mapped { shape: Shape::Other, ts: "c_uint".to_owned(), c: Type::Scalar(Scalar::UInt) }),
+                (
+                    "connect_flags".to_owned(),
+                    Mapped {
+                        shape: Shape::Other,
+                        ts: "c_uint".to_owned(),
+                        c: Type::Scalar(Scalar::UInt),
+                    },
+                ),
             ],
             // A handler id, a number as GJS returns it, which
             // `g_signal_handler_disconnect` takes back.
-            result: Mapped { shape: Shape::Other, ts: "CNumber<\"ulong\">".to_owned(), c: Type::Scalar(Scalar::ULong) },
-            c_parameters: vec![context.clone(), string, erased, context, notify, Type::Scalar(Scalar::UInt)],
+            result: Mapped {
+                shape: Shape::Other,
+                ts: "CNumber<\"ulong\">".to_owned(),
+                c: Type::Scalar(Scalar::ULong),
+            },
+            c_parameters: vec![
+                context.clone(),
+                string,
+                erased,
+                context,
+                notify,
+                Type::Scalar(Scalar::UInt),
+            ],
             deprecated: false,
             free: None,
             no_escape: Vec::new(),
@@ -2342,9 +3140,19 @@ impl<'a> Mapper<'a> {
                     .iter()
                     .find(|c| c.name == local)
                     .and_then(|c| c.c_type.clone())
-                    .or_else(|| namespace.records.iter().find(|r| r.name == local).and_then(|r| r.c_type.clone()));
+                    .or_else(|| {
+                        namespace
+                            .records
+                            .iter()
+                            .find(|r| r.name == local)
+                            .and_then(|r| r.c_type.clone())
+                    });
                 *c_type = pointer.map(|c| format!("{c}*")).or_else(|| {
-                    namespace.enums.iter().find(|e| e.name == local).and_then(|e| e.c_type.clone())
+                    namespace
+                        .enums
+                        .iter()
+                        .find(|e| e.name == local)
+                        .and_then(|e| e.c_type.clone())
                 });
             }
             if c_type.is_none() {
@@ -2358,14 +3166,23 @@ impl<'a> Mapper<'a> {
     /// The result, and what frees it. A constructor returns its class: GIR
     /// says so by where it declares one, and its return type says what C
     /// does -- `Gtk.Widget` for `gtk_box_new`.
-    fn function_result(&mut self, callable: &Callable, owner: Option<&'a Class>) -> Result<(Mapped, Option<String>), Reason> {
+    fn function_result(
+        &mut self,
+        callable: &Callable,
+        owner: Option<&'a Class>,
+    ) -> Result<(Mapped, Option<String>), Reason> {
         let (result, free) = self.result(&callable.signature.result)?;
         let result = match owner {
-            Some(class) if callable.kind == CallableKind::Constructor => self.declared(result, class),
+            Some(class) if callable.kind == CallableKind::Constructor => {
+                self.declared(result, class)
+            }
             _ => result,
         };
         let result = self.truth(&callable.signature.result, result);
-        Ok((self.owned(result, callable.signature.result.transfer == Transfer::Full), free))
+        Ok((
+            self.owned(result, callable.signature.result.transfer == Transfer::Full),
+            free,
+        ))
     }
 
     /// A `gboolean` as the boolean it means: `CBool<c_int>`, where C still
@@ -2378,7 +3195,10 @@ impl<'a> Mapper<'a> {
             return mapped;
         }
         self.binding.brands.extend(["CBool", "c_int"]);
-        Mapped { ts: "CBool<c_int>".to_owned(), ..mapped }
+        Mapped {
+            ts: "CBool<c_int>".to_owned(),
+            ..mapped
+        }
     }
 
     /// A parameter passed as it is -- a scalar, an enum, a handle -- with what
@@ -2394,7 +3214,10 @@ impl<'a> Mapper<'a> {
         {
             return Err(Reason::BoxedTakenOver);
         }
-        Ok((self.handed_over(value, param.transfer == Transfer::Full), self.omissible(param)))
+        Ok((
+            self.handed_over(value, param.transfer == Transfer::Full),
+            self.omissible(param),
+        ))
     }
 
     /// A counted handle the caller receives a reference with -- GIR's
@@ -2410,12 +3233,17 @@ impl<'a> Mapper<'a> {
     }
 
     fn branded(&mut self, mapped: Mapped, full: bool, brand: &'static str) -> Mapped {
-        let Shape::Handle { class, nullable } = &mapped.shape else { return mapped };
+        let Shape::Handle { class, nullable } = &mapped.shape else {
+            return mapped;
+        };
         // A boxed record handed over is the box's to free: `Owned`, as a
         // counted handle is. (A boxed record C takes over is refused before
         // here, in `plain`.)
         let boxed = brand == "Owned" && self.boxed_record(class).is_some();
-        if !full || matches!(mapped.c, Type::Pointer(Pointee::Const(_))) || !(self.counted_c_type(class) || boxed) {
+        if !full
+            || matches!(mapped.c, Type::Pointer(Pointee::Const(_)))
+            || !(self.counted_c_type(class) || boxed)
+        {
             return mapped;
         }
         let inner = mapped.ts.strip_suffix(" | null").unwrap_or(&mapped.ts);
@@ -2429,9 +3257,17 @@ impl<'a> Mapper<'a> {
     /// says every instance of it also is (`GObject` for `GFile`, probed).
     /// The one derivation of a class's parent, which the chain, the counting
     /// and a constructor's class all walk.
-    fn parent_class(&self, namespace: &'a Namespace, class: &'a Class) -> Option<(&'a Namespace, &'a Class)> {
+    fn parent_class(
+        &self,
+        namespace: &'a Namespace,
+        class: &'a Class,
+    ) -> Option<(&'a Namespace, &'a Class)> {
         if let Some(parent) = &class.parent {
-            let qualified = if parent.contains('.') { parent.clone() } else { format!("{}.{parent}", namespace.name) };
+            let qualified = if parent.contains('.') {
+                parent.clone()
+            } else {
+                format!("{}.{parent}", namespace.name)
+            };
             return match self.resolve(&qualified) {
                 Some(Resolved::Class(namespace, parent)) => Some((namespace, parent)),
                 _ => None,
@@ -2440,9 +3276,15 @@ impl<'a> Mapper<'a> {
         if !class.interface {
             return None;
         }
-        let prerequisite = class.c_type.as_deref().and_then(|c| self.facts.prerequisites.get(c))?;
+        let prerequisite = class
+            .c_type
+            .as_deref()
+            .and_then(|c| self.facts.prerequisites.get(c))?;
         let namespace = self.c_types.get(prerequisite.as_str()).copied()?;
-        let parent = namespace.classes.iter().find(|c| c.c_type.as_deref() == Some(prerequisite.as_str()))?;
+        let parent = namespace
+            .classes
+            .iter()
+            .find(|c| c.c_type.as_deref() == Some(prerequisite.as_str()))?;
         Some((namespace, parent))
     }
 
@@ -2455,7 +3297,9 @@ impl<'a> Mapper<'a> {
             if namespace.name == "GObject" && class.name == "Object" {
                 return true;
             }
-            let Some(parent) = self.parent_class(namespace, class) else { return false };
+            let Some(parent) = self.parent_class(namespace, class) else {
+                return false;
+            };
             (namespace, class) = parent;
         }
         false
@@ -2467,23 +3311,37 @@ impl<'a> Mapper<'a> {
     /// declares it. `None` for anything else.
     fn boxed_record(&self, c_type: &str) -> Option<(String, u64)> {
         let namespace = self.c_types.get(c_type).copied()?;
-        let record = namespace.records.iter().find(|r| !r.class_struct && r.c_type.as_deref() == Some(c_type))?;
+        let record = namespace
+            .records
+            .iter()
+            .find(|r| !r.class_struct && r.c_type.as_deref() == Some(c_type))?;
         // `intern` is GIR's word for a type GLib registers itself, with no
         // function to name.
-        let get_type = record.get_type.clone().filter(|name| name != "intern" && self.facts.declared.contains(name))?;
+        let get_type = record
+            .get_type
+            .clone()
+            .filter(|name| name != "intern" && self.facts.declared.contains(name))?;
         Some((get_type, self.facts.sizes.get(c_type).copied().unwrap_or(0)))
     }
 
     fn counted_c_type(&self, c_type: &str) -> bool {
-        let Some(namespace) = self.c_types.get(c_type).copied() else { return false };
-        namespace.classes.iter().find(|class| class.c_type.as_deref() == Some(c_type)).is_some_and(|class| self.counted(namespace, class))
+        let Some(namespace) = self.c_types.get(c_type).copied() else {
+            return false;
+        };
+        namespace
+            .classes
+            .iter()
+            .find(|class| class.c_type.as_deref() == Some(c_type))
+            .is_some_and(|class| self.counted(namespace, class))
     }
 
     /// What a constructor returns, as GIR names it (`Gtk.Button`), where C's
     /// type may be an ancestor's.
     fn constructed(&self, callable: &Callable) -> Option<String> {
         match &callable.signature.result.ty {
-            TypeRef::Named { name, .. } if callable.kind == CallableKind::Constructor => Some(self.qualify(name)),
+            TypeRef::Named { name, .. } if callable.kind == CallableKind::Constructor => {
+                Some(self.qualify(name))
+            }
             _ => None,
         }
     }
@@ -2511,7 +3369,13 @@ impl<'a> Mapper<'a> {
             .namespaces
             .get("GObject")
             .ok_or_else(|| Reason::Unknown("GObject".to_owned()))?;
-        let tag = |name: &str| self.facts.tags.get(name).cloned().ok_or_else(|| Reason::NoTag(name.to_owned()));
+        let tag = |name: &str| {
+            self.facts
+                .tags
+                .get(name)
+                .cloned()
+                .ok_or_else(|| Reason::NoTag(name.to_owned()))
+        };
         let (object_tag, value_tag) = (tag("GObject")?, tag("GValue")?);
         let object = self.name_in(objects, "GObject");
         let value = self.name_in(objects, "GValue");
@@ -2520,10 +3384,26 @@ impl<'a> Mapper<'a> {
         let floating = self.descends(self.namespace, class, "GInitiallyUnowned");
         let result = self.owned(result, !floating);
         let char = Pointee::Scalar(Scalar::Char);
-        self.binding.brands.extend(["Ptr", "ConstPtr", "c_char", "c_size_t", "c_uint"]);
+        self.binding
+            .brands
+            .extend(["Ptr", "ConstPtr", "c_char", "c_size_t", "c_uint"]);
         let parameters = vec![
-            ("object_type".to_owned(), Mapped { shape: Shape::Other, ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) }),
-            ("n_properties".to_owned(), Mapped { shape: Shape::Other, ts: "c_uint".to_owned(), c: Type::Scalar(Scalar::UInt) }),
+            (
+                "object_type".to_owned(),
+                Mapped {
+                    shape: Shape::Other,
+                    ts: "c_size_t".to_owned(),
+                    c: Type::Scalar(Scalar::Size),
+                },
+            ),
+            (
+                "n_properties".to_owned(),
+                Mapped {
+                    shape: Shape::Other,
+                    ts: "c_uint".to_owned(),
+                    c: Type::Scalar(Scalar::UInt),
+                },
+            ),
             (
                 "names".to_owned(),
                 Mapped {
@@ -2532,12 +3412,18 @@ impl<'a> Mapper<'a> {
                     c: Type::Pointer(Pointee::Pointer(Box::new(Pointee::Const(Box::new(char))))),
                 },
             ),
-            ("values".to_owned(), self.handle(value, &value_tag, true, true)),
+            (
+                "values".to_owned(),
+                self.handle(value, &value_tag, true, true),
+            ),
         ];
         Ok(Function {
             name: format!("{c_type}_construct"),
             symbol: "g_object_new_with_properties".to_owned(),
-            c_parameters: parameters.iter().map(|(_, mapped)| mapped.c.clone()).collect(),
+            c_parameters: parameters
+                .iter()
+                .map(|(_, mapped)| mapped.c.clone())
+                .collect(),
             parameters,
             result,
             deprecated: false,
@@ -2565,16 +3451,37 @@ impl<'a> Mapper<'a> {
     /// GIR's word is trusted, as gtk-rs trusts it; anything else -- the same
     /// class, or one GIR does not say descends from C's -- is left as C has it.
     fn declared(&mut self, result: Mapped, class: &'a Class) -> Mapped {
-        let Shape::Handle { class: declared, nullable } = result.shape.clone() else { return result };
+        let Shape::Handle {
+            class: declared,
+            nullable,
+        } = result.shape.clone()
+        else {
+            return result;
+        };
         let namespace = self.namespace;
-        let Some(c_type) = class.c_type.as_deref() else { return result };
-        if c_type == declared || !self.facts.tags.contains_key(c_type) || !self.descends(namespace, class, &declared) {
+        let Some(c_type) = class.c_type.as_deref() else {
+            return result;
+        };
+        if c_type == declared
+            || !self.facts.tags.contains_key(c_type)
+            || !self.descends(namespace, class, &declared)
+        {
             return result;
         }
         let local = self.name_in(namespace, c_type);
         self.binding.brands.insert("Declared");
-        let ts = format!("Declared<{local}, {declared}>{}", if nullable { " | null" } else { "" });
-        Mapped { shape: Shape::Handle { class: local, nullable }, ts, c: result.c }
+        let ts = format!(
+            "Declared<{local}, {declared}>{}",
+            if nullable { " | null" } else { "" }
+        );
+        Mapped {
+            shape: Shape::Handle {
+                class: local,
+                nullable,
+            },
+            ts,
+            c: result.c,
+        }
     }
 
     /// Whether GIR says `class` descends from the class C calls `ancestor`.
@@ -2582,7 +3489,9 @@ impl<'a> Mapper<'a> {
         let (mut namespace, mut class) = (namespace, class);
         // Bounded, so a cycle in malformed GIR ends.
         for _ in 0..64 {
-            let Some((next_namespace, next)) = self.parent_class(namespace, class) else { return false };
+            let Some((next_namespace, next)) = self.parent_class(namespace, class) else {
+                return false;
+            };
             if next.c_type.as_deref() == Some(ancestor) {
                 return true;
             }
@@ -2600,21 +3509,32 @@ impl<'a> Mapper<'a> {
         } else {
             (pointee, local)
         };
-        let ts = if nullable { format!("{local} | null") } else { local };
-        Mapped { shape: Shape::Handle { class, nullable }, ts, c: Type::Pointer(pointee) }
+        let ts = if nullable {
+            format!("{local} | null")
+        } else {
+            local
+        };
+        Mapped {
+            shape: Shape::Handle { class, nullable },
+            ts,
+            c: Type::Pointer(pointee),
+        }
     }
 
     /// A callback parameter, with the C slots that travel with it: the
     /// function pointer taking its context last, the context, and for a
     /// notified one the destroy function. `None` for anything that is not a
     /// callback.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn callback_parameter(
         &mut self,
         param: &Param,
         at: usize,
         all: &[Param],
     ) -> Result<Option<(Mapped, Vec<Type>)>, Reason> {
-        let TypeRef::Named { name, .. } = &param.ty else { return Ok(None) };
+        let TypeRef::Named { name, .. } = &param.ty else {
+            return Ok(None);
+        };
         let qualified = self.qualify(name);
         let Some(Resolved::Callback(callback)) = self.resolve(&qualified) else {
             return Ok(None);
@@ -2634,10 +3554,14 @@ impl<'a> Mapper<'a> {
         if scope == Scope::Notified {
             let destroy = param.destroy.and_then(|d| all.get(d));
             if param.destroy != Some(at + 2) || destroy.is_none() {
-                return Err(Reason::CallbackShape("destroy function is not the parameter after its context"));
+                return Err(Reason::CallbackShape(
+                    "destroy function is not the parameter after its context",
+                ));
             }
         } else if param.destroy.is_some() {
-            return Err(Reason::CallbackShape("destroy function is annotated on a scoped callback"));
+            return Err(Reason::CallbackShape(
+                "destroy function is annotated on a scoped callback",
+            ));
         }
         // The callback's own signature: its context must be its last
         // parameter, which is where the bridge takes its receiver from.
@@ -2648,26 +3572,31 @@ impl<'a> Mapper<'a> {
         // user data, and GLib passes it last. A mark anywhere else still
         // refuses.
         let signature = &callback.signature;
-        let last_is_data = signature.parameters.last().is_some_and(|p| {
-            matches!(&p.ty, TypeRef::Named { name, .. } if name == "gpointer")
-        });
+        let last_is_data = signature
+            .parameters
+            .last()
+            .is_some_and(|p| matches!(&p.ty, TypeRef::Named { name, .. } if name == "gpointer"));
         let context = signature
             .parameters
             .iter()
             .position(|p| p.closure.is_some())
             .or_else(|| last_is_data.then(|| signature.parameters.len() - 1));
-        if context != Some(signature.parameters.len().saturating_sub(1)) || signature.parameters.is_empty() {
+        if context != Some(signature.parameters.len().saturating_sub(1))
+            || signature.parameters.is_empty()
+        {
             return Err(Reason::CallbackShape("context is not its last parameter"));
         }
         let visible = &signature.parameters[..signature.parameters.len() - 1];
         let mut ts_parameters = Vec::new();
         let mut c_parameters = Vec::new();
         for p in visible {
-            if matches!(&p.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename") {
+            if matches!(&p.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename")
+            {
                 return Err(Reason::StringInCallback);
             }
             let item = self.comparing_items.then(|| item_of_list(p)).flatten();
-            let constant = item.is_some() && matches!(&p.ty, TypeRef::Named { c_type: Some(c), .. } if c.starts_with("gconst") || c.starts_with("const"));
+            let constant = item.is_some()
+                && matches!(&p.ty, TypeRef::Named { c_type: Some(c), .. } if c.starts_with("gconst") || c.starts_with("const"));
             let p = item.as_ref().unwrap_or(p);
             let mapped = self.typed(p)?;
             let mut mapped = self.truth(p, mapped);
@@ -2682,15 +3611,31 @@ impl<'a> Mapper<'a> {
             ts_parameters.push(format!("{}: {}", identifier(&p.name), mapped.ts));
         }
         let result = match &signature.result.ty {
-            TypeRef::Named { name, .. } if name == "none" => Mapped { shape: Shape::Other, ts: "void".to_owned(), c: Type::Void },
+            TypeRef::Named { name, .. } if name == "none" => Mapped {
+                shape: Shape::Other,
+                ts: "void".to_owned(),
+                c: Type::Void,
+            },
             // A string C takes over, `GtkScaleFormatValueFunc`'s: the bridge
             // answers a `malloc`ed copy (`native::owned_string`). One C only
             // borrows would have no point at which to be given back.
-            TypeRef::Named { name, .. } if name == "utf8" && signature.result.transfer == Transfer::Full => {
-                let ts = if signature.result.nullable { "string | null" } else { "string" };
-                Mapped { shape: Shape::Other, ts: ts.to_owned(), c: Type::Pointer(Pointee::Scalar(Scalar::Char)) }
+            TypeRef::Named { name, .. }
+                if name == "utf8" && signature.result.transfer == Transfer::Full =>
+            {
+                let ts = if signature.result.nullable {
+                    "string | null"
+                } else {
+                    "string"
+                };
+                Mapped {
+                    shape: Shape::Other,
+                    ts: ts.to_owned(),
+                    c: Type::Pointer(Pointee::Scalar(Scalar::Char)),
+                }
             }
-            TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => return Err(Reason::StringInCallback),
+            TypeRef::Named { name, .. } if name == "utf8" || name == "filename" => {
+                return Err(Reason::StringInCallback);
+            }
             _ => {
                 let mapped = self.typed(&signature.result)?;
                 self.truth(&signature.result, mapped)
@@ -2700,18 +3645,35 @@ impl<'a> Mapper<'a> {
         let mut callback_c = c_parameters;
         callback_c.push(context.clone());
         let mut slots = vec![
-            Type::FnPointer(std::sync::Arc::new(FnPointer::spell(callback_c, result.c.clone()))),
+            Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+                callback_c,
+                result.c.clone(),
+            ))),
             context.clone(),
         ];
         if scope == Scope::Notified {
-            slots.push(Type::FnPointer(std::sync::Arc::new(FnPointer::spell(vec![context], Type::Void))));
+            slots.push(Type::FnPointer(std::sync::Arc::new(FnPointer::spell(
+                vec![context],
+                Type::Void,
+            ))));
         }
         self.binding.brands.insert(wrapper);
         let ts = format!("{wrapper}<({}) => {}>", ts_parameters.join(", "), result.ts);
         // The Mapped's C type is the function pointer alone; the slots carry
         // the rest.
-        let shape = if scope == Scope::Async { Shape::Once } else { Shape::Other };
-        Ok(Some((Mapped { shape, ts, c: slots[0].clone() }, slots)))
+        let shape = if scope == Scope::Async {
+            Shape::Once
+        } else {
+            Shape::Other
+        };
+        Ok(Some((
+            Mapped {
+                shape,
+                ts,
+                c: slots[0].clone(),
+            },
+            slots,
+        )))
     }
 }
 
@@ -2744,11 +3706,52 @@ fn member(name: &str) -> String {
 /// `delete_`.
 pub(crate) fn identifier(name: &str) -> String {
     const RESERVED: &[&str] = &[
-        "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
-        "do", "else", "enum", "export", "extends", "false", "finally", "for", "function", "if",
-        "import", "in", "instanceof", "new", "null", "return", "super", "switch", "this", "throw",
-        "true", "try", "typeof", "var", "void", "while", "with", "yield", "let", "static",
-        "implements", "interface", "package", "private", "protected", "public", "await",
+        "break",
+        "case",
+        "catch",
+        "class",
+        "const",
+        "continue",
+        "debugger",
+        "default",
+        "delete",
+        "do",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "false",
+        "finally",
+        "for",
+        "function",
+        "if",
+        "import",
+        "in",
+        "instanceof",
+        "new",
+        "null",
+        "return",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "typeof",
+        "var",
+        "void",
+        "while",
+        "with",
+        "yield",
+        "let",
+        "static",
+        "implements",
+        "interface",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "await",
     ];
     if name.is_empty() {
         "arg".to_owned()
@@ -2766,7 +3769,11 @@ fn get_type_function(get_type: &str) -> Function {
         name: get_type.to_owned(),
         symbol: get_type.to_owned(),
         parameters: Vec::new(),
-        result: Mapped { shape: Shape::Other, ts: "c_size_t".to_owned(), c: Type::Scalar(Scalar::Size) },
+        result: Mapped {
+            shape: Shape::Other,
+            ts: "c_size_t".to_owned(),
+            c: Type::Scalar(Scalar::Size),
+        },
         c_parameters: Vec::new(),
         deprecated: false,
         free: None,
@@ -2791,7 +3798,12 @@ fn get_type_function(get_type: &str) -> Function {
 /// A signal's `emit` view, made from its `connect`: the instance and the
 /// signal's plain name -- a detail (`notify::label`) would be part of the
 /// thunk's -- then the signal's parameters, answering the signal's result.
-fn emit_view(connect: &Function, signal: &str, emitted: Vec<(String, Mapped)>, result: Mapped) -> Function {
+fn emit_view(
+    connect: &Function,
+    signal: &str,
+    emitted: Vec<(String, Mapped)>,
+    result: Mapped,
+) -> Function {
     let mut parameters = connect.parameters[..2].to_vec();
     parameters[1].1.ts = format!("\"{signal}\"");
     let mut c_parameters = connect.c_parameters[..2].to_vec();
@@ -2805,7 +3817,10 @@ fn emit_view(connect: &Function, signal: &str, emitted: Vec<(String, Mapped)>, r
         parameters,
         result,
         c_parameters,
-        method: connect.method.as_ref().map(|(class, _)| (class.clone(), "emit".to_owned())),
+        method: connect
+            .method
+            .as_ref()
+            .map(|(class, _)| (class.clone(), "emit".to_owned())),
         omissible: BTreeMap::new(),
         ..connect.clone()
     }
@@ -2851,7 +3866,11 @@ fn byte_lengths(signature: &super::model::Signature) -> BTreeSet<usize> {
 
 /// An array of bytes: `guint8`, or a `gchar` array that is not a string.
 fn is_bytes(array: &ArrayRef) -> bool {
-    matches!(array.element.as_deref(), Some("guint8" | "gchar" | "guchar")) && !array.zero_terminated && array.length.is_some()
+    matches!(
+        array.element.as_deref(),
+        Some("guint8" | "gchar" | "guchar")
+    ) && !array.zero_terminated
+        && array.length.is_some()
 }
 
 #[cfg(test)]
@@ -2873,5 +3892,3 @@ mod tests {
         }
     }
 }
-
-

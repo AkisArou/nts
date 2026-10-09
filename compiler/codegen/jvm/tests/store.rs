@@ -34,10 +34,17 @@ fn repository() -> PathBuf {
 fn runtime_jar() -> PathBuf {
     static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     JAR.get_or_init(|| {
-        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
-        let mine = std::env::temp_dir().join(format!("nts-runtime-store-{}.jar", std::process::id()));
-        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR").map_or_else(
+            || repository().join("runtime/jvm/nts-runtime.jar"),
+            PathBuf::from,
+        );
+        let mine =
+            std::env::temp_dir().join(format!("nts-runtime-store-{}.jar", std::process::id()));
+        if std::fs::copy(&source, &mine).is_ok() {
+            mine
+        } else {
+            source
+        }
     })
     .clone()
 }
@@ -49,7 +56,11 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh").arg("-c").arg(format!("command -v {name}")).output().ok()?;
+    let found = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {name}"))
+        .output()
+        .ok()?;
     found
         .status
         .success()
@@ -58,7 +69,9 @@ fn tool(name: &str) -> Option<PathBuf> {
 
 #[test]
 fn a_value_is_whole_or_absent_and_a_name_cannot_escape() {
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-store-{}", std::process::id()));
     let store = dir.join("store");
@@ -181,18 +194,33 @@ fn a_commit_syncs_the_file_then_renames_then_syncs_the_directory() {
         .arg(&store)
         .output()
         .unwrap();
-    assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
 
     let said = String::from_utf8_lossy(&ran.stderr);
     let calls: Vec<&str> = said
         .lines()
         .filter_map(|line| line.strip_prefix("SHIM "))
-        .map(|line| if line.starts_with("rename") { "rename" } else if line.contains(".nts-partial") { "fsync file" } else { "fsync directory" })
+        .map(|line| {
+            if line.starts_with("rename") {
+                "rename"
+            } else if line.contains(".nts-partial") {
+                "fsync file"
+            } else {
+                "fsync directory"
+            }
+        })
         .collect();
     // If the shim saw nothing at all, `LD_PRELOAD` did not take -- which every
     // assertion below would read as "the calls are absent". The two are
     // opposite conclusions from the same silence, so they are told apart here.
-    assert!(!calls.is_empty(), "the shim observed nothing; LD_PRELOAD did not take:\n{said}");
+    assert!(
+        !calls.is_empty(),
+        "the shim observed nothing; LD_PRELOAD did not take:\n{said}"
+    );
     assert_eq!(
         calls,
         vec!["fsync file", "rename", "fsync directory"],
@@ -269,7 +297,9 @@ fn the_sabotages_break_what_they_name_and_nothing_else() {
         ),
     ];
 
-    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
     for entry in SABOTAGE {
         one_sabotage(&javac, &java, entry);
     }
@@ -281,14 +311,21 @@ fn the_sabotages_break_what_they_name_and_nothing_else() {
 /// the shared lane's own bug, reopening by path on every read — needs a field
 /// to stop being `final` and a path to be kept. A sabotage approximated to fit
 /// its harness is a sabotage aimed at something else.
-type Sabotage = (&'static str, &'static [(&'static str, &'static str)], &'static [&'static str]);
+type Sabotage = (
+    &'static str,
+    &'static [(&'static str, &'static str)],
+    &'static [&'static str],
+);
 
 fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
     let (name, edits, must_fail) = entry;
     let root = repository();
     {
-        let dir = std::env::temp_dir()
-            .join(format!("nts-sabotage-{}-{}", std::process::id(), name.len()));
+        let dir = std::env::temp_dir().join(format!(
+            "nts-sabotage-{}-{}",
+            std::process::id(),
+            name.len()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         let src = dir.join("src");
         // The copy, never the checkout. Three sessions build from this tree, and
@@ -300,14 +337,19 @@ fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
         let store = src.join("nts/rt/NtsStore.java");
         let mut text = std::fs::read_to_string(&store).unwrap();
         for (from, to) in *edits {
-            assert!(text.contains(from), "the sabotage `{name}` no longer matches `{from}`");
+            assert!(
+                text.contains(from),
+                "the sabotage `{name}` no longer matches `{from}`"
+            );
             text = text.replace(from, to);
         }
         std::fs::write(&store, text).unwrap();
 
         let classes = dir.join("classes");
         let mut compile = Command::new(javac);
-        compile.args(["--release", "8", "-Xlint:-options", "-d"]).arg(&classes);
+        compile
+            .args(["--release", "8", "-Xlint:-options", "-d"])
+            .arg(&classes);
         for entry in std::fs::read_dir(src.join("nts/rt")).unwrap().flatten() {
             compile.arg(entry.path());
         }
@@ -325,7 +367,10 @@ fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
             .arg(root.join("compiler/codegen/jvm/tests/store/StoreTest.java"))
             .output()
             .unwrap();
-        assert!(built.status.success(), "the driver did not compile under `{name}`");
+        assert!(
+            built.status.success(),
+            "the driver did not compile under `{name}`"
+        );
 
         let ran = Command::new(java)
             .arg("-cp")
@@ -335,7 +380,10 @@ fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
             .output()
             .unwrap();
         let said = String::from_utf8_lossy(&ran.stdout);
-        let failed: Vec<&str> = said.lines().filter_map(|it| it.strip_prefix("FAIL ")).collect();
+        let failed: Vec<&str> = said
+            .lines()
+            .filter_map(|it| it.strip_prefix("FAIL "))
+            .collect();
 
         if name.starts_with("drop the directory") {
             // Two ways to be visible and they are different sentences, which is

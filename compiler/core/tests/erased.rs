@@ -272,9 +272,7 @@ fn written_for(directory: &camino::Utf8Path) -> Option<camino::Utf8PathBuf> {
     let tsconfig = out.join("tsconfig.json");
     std::fs::write(
         &tsconfig,
-        format!(
-            "{{\"extends\": \"{fixtures}\", \"include\": [\"{directory}/**/*.ts\"]}}"
-        ),
+        format!("{{\"extends\": \"{fixtures}\", \"include\": [\"{directory}/**/*.ts\"]}}"),
     )
     .ok()?;
     Some(tsconfig)
@@ -371,33 +369,64 @@ fn an_array_of_two_kinds_keeps_its_tags() {
 
 #[test]
 fn recovering_array_storage_requires_initialized_reads() {
-    let Some(prepared) = prepared_at("../../examples/an-erased-array-read-keeps-missing-elements") else {
+    let Some(prepared) = prepared_at("../../examples/an-erased-array-read-keeps-missing-elements")
+    else {
         return;
     };
     let erased = HirType::Managed(ManagedType::Array(Box::new(HirType::Erased)));
-    let named = |name: &str| prepared.program.funcs.iter().find(|f| f.name == name)
-        .unwrap_or_else(|| panic!("{name} must stay admitted"));
-    let keeps_erased = |name: &str| named(name).values.iter()
-        .any(|op| matches!(op.kind, OpKind::ArrayNew { .. }) && op.ty == erased);
-    let answers = |name: &str| named(name).blocks.iter().flat_map(|b| &b.ops).any(|id|
+    let named = |name: &str| {
+        prepared
+            .program
+            .funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name} must stay admitted"))
+    };
+    let keeps_erased = |name: &str| {
+        named(name)
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::ArrayNew { .. }) && op.ty == erased)
+    };
+    let answers = |name: &str| {
+        named(name).blocks.iter().flat_map(|b| &b.ops).any(|id|
         matches!(&named(name).value(*id).kind, OpKind::Call { callee: hir::Callee::External(helper), .. }
-            if helper == "nts_array_element"));
+            if helper == "nts_array_element"))
+    };
     // A read that may see a slot nothing wrote keeps the erased array, whose
     // zeroed slot reads `undefined`; narrowing it would read a typed zero.
-    for name in ["hole", "numberedHole", "conditionalStore", "partialFill",
-        "skippedFill", "interruptedFill", "readBeforeFill", "freshOnEachIteration"] {
+    for name in [
+        "hole",
+        "numberedHole",
+        "conditionalStore",
+        "partialFill",
+        "skippedFill",
+        "interruptedFill",
+        "readBeforeFill",
+        "freshOnEachIteration",
+    ] {
         assert!(keeps_erased(name), "{name} must keep its erased array");
     }
     // A read that may be out of range is answered by the runtime, which gives
     // `undefined` rather than trapping (`bounds::answer_erased_reads`).
     for name in ["missing", "globalPastTheEnd"] {
-        assert!(answers(name), "{name} needs the read that answers past the end");
+        assert!(
+            answers(name),
+            "{name} needs the read that answers past the end"
+        );
     }
-    for name in ["sameSlotControl", "completeFillControl", "mixedLiteralControl"] {
+    for name in [
+        "sameSlotControl",
+        "completeFillControl",
+        "mixedLiteralControl",
+    ] {
         assert!(!answers(name), "{name} proves its reads in range");
     }
     for name in ["sameSlotControl", "completeFillControl"] {
-        assert!(!keeps_erased(name), "{name} proves its reads initialized, so it narrows");
+        assert!(
+            !keeps_erased(name),
+            "{name} proves its reads initialized, so it narrows"
+        );
     }
 }
 
@@ -552,55 +581,91 @@ fn the_narrowing_count_matches_what_changed() {
 /// Equal payload storage cannot remove the independently carried absence tag.
 #[test]
 fn nullable_reference_recovery_keeps_its_tags_at_every_boundary() {
-    let Some(prepared) = prepared_at(
-        "../../examples/a-recovered-erased-value-keeps-its-absence",
-    ) else {
+    let Some(prepared) = prepared_at("../../examples/a-recovered-erased-value-keeps-its-absence")
+    else {
         return;
     };
     let named = |name: &str| {
-        prepared.program.funcs.iter().find(|func| func.name == name)
+        prepared
+            .program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
             .unwrap_or_else(|| panic!("no function {name}"))
     };
-    assert_eq!(named("describe").params[0].ty, HirType::Erased,
-        "a string payload may also carry null or undefined at the call");
+    assert_eq!(
+        named("describe").params[0].ty,
+        HirType::Erased,
+        "a string payload may also carry null or undefined at the call"
+    );
     for name in ["erasedMaybe", "erasedNull"] {
-        assert_eq!(named(name).return_type, HirType::Erased,
-            "{name} must preserve the producer's absence on return");
+        assert_eq!(
+            named(name).return_type,
+            HirType::Erased,
+            "{name} must preserve the producer's absence on return"
+        );
     }
     for name in ["arrayUndefined", "arrayNull"] {
-        assert!(named(name).values.iter().any(|value| matches!(&value.ty,
+        assert!(
+            named(name).values.iter().any(|value| matches!(&value.ty,
             HirType::Managed(hir::ManagedType::Array(element)) if **element == HirType::Erased)),
-            "{name} must keep the element tag beside its string storage");
+            "{name} must keep the element tag beside its string storage"
+        );
     }
-    assert_eq!(named("describeKnown").params[0].ty,
+    assert_eq!(
+        named("describeKnown").params[0].ty,
         HirType::Managed(hir::ManagedType::String),
-        "the nonnullable control still recovers string storage");
+        "the nonnullable control still recovers string storage"
+    );
 }
 
 /// A callable face retains FUNCTION when its erased wrapper is removed.
 #[test]
 fn recovered_signature_faces_keep_their_runtime_callable_tag() {
-    let Some(prepared) = prepared_at(
-        "../../examples/a-recovered-callable-keeps-its-function-tag",
-    ) else { return; };
-    let named = |name: &str| prepared.program.funcs.iter()
-        .find(|func| func.name == name).unwrap_or_else(|| panic!("no function {name}"));
+    let Some(prepared) = prepared_at("../../examples/a-recovered-callable-keeps-its-function-tag")
+    else {
+        return;
+    };
+    let named = |name: &str| {
+        prepared
+            .program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .unwrap_or_else(|| panic!("no function {name}"))
+    };
     let HirType::Managed(hir::ManagedType::Object(face)) = named("describe").params[0].ty else {
         panic!("the parameter did not recover its callable storage");
     };
     assert!(prepared.program.signature_faces.contains_key(&face));
-    assert!(!hir::is_closure_type(face), "a signature face is not a closure instance");
+    assert!(
+        !hir::is_closure_type(face),
+        "a signature face is not a closure instance"
+    );
     for name in ["describe", "returned", "array"] {
         let func = named(name);
-        let equality = func.blocks.iter().flat_map(|block| &block.ops)
+        let equality = func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
             .find_map(|value| match func.value(*value).kind {
-                OpKind::Binary { op: hir::BinOp::Eq, lhs, rhs } => Some((lhs, rhs)),
+                OpKind::Binary {
+                    op: hir::BinOp::Eq,
+                    lhs,
+                    rhs,
+                } => Some((lhs, rhs)),
                 _ => None,
-            }).unwrap_or_else(|| panic!("no callable test in {name}"));
-        assert!(matches!(func.value(equality.0).kind,
+            })
+            .unwrap_or_else(|| panic!("no callable test in {name}"));
+        assert!(
+            matches!(func.value(equality.0).kind,
             OpKind::ConstInt(tag) if tag == i128::from(hir::tags::FUNCTION)),
-            "{name}'s recovered callable is still a function at runtime");
+            "{name}'s recovered callable is still a function at runtime"
+        );
     }
-    assert_eq!(named("mixed").return_type, HirType::Erased,
-        "callable and nominal object values keep independent tags");
+    assert_eq!(
+        named("mixed").return_type,
+        HirType::Erased,
+        "callable and nominal object values keep independent tags"
+    );
 }

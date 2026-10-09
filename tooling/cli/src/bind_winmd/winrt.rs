@@ -44,7 +44,8 @@ pub(crate) const WINAPPSDK_VERSION: &str = "1.8.260804001";
 /// (`WinUI`), and `Microsoft.UI`'s windowing and dispatching
 /// (`InteractiveExperiences`). The metapackage names these exact versions.
 /// `tooling/windows/fetch-winappsdk.sh` reads this line.
-pub(crate) const WINAPPSDK_PACKAGES: &str = "foundation=1.8.260803002 winui=1.8.260803003 interactiveexperiences=1.8.260708001";
+pub(crate) const WINAPPSDK_PACKAGES: &str =
+    "foundation=1.8.260803002 winui=1.8.260803003 interactiveexperiences=1.8.260708001";
 
 /// `Microsoft.Web.WebView2`, as `id=version`: the metadata of
 /// `Microsoft.Web.WebView2.Core`, whose `CoreWebView2` `WinUI`'s `WebView2`
@@ -59,9 +60,15 @@ pub(crate) const WEBVIEW2_PACKAGE: &str = "microsoft.web.webview2=1.0.3179.45";
 /// names them instead, as a path list.
 pub(crate) fn default_metadata() -> Vec<Utf8PathBuf> {
     if let Some(paths) = std::env::var_os("NTS_WINRT_METADATA") {
-        return std::env::split_paths(&paths).filter_map(|path| Utf8PathBuf::from_path_buf(path).ok()).collect();
+        return std::env::split_paths(&paths)
+            .filter_map(|path| Utf8PathBuf::from_path_buf(path).ok())
+            .collect();
     }
-    let mut directories = vec![crate::windows_root().join("metadata").join(format!("winrt-{WINRT_METADATA_VERSION}"))];
+    let mut directories = vec![
+        crate::windows_root()
+            .join("metadata")
+            .join(format!("winrt-{WINRT_METADATA_VERSION}")),
+    ];
     let sdk = winappsdk();
     if sdk.is_dir() {
         directories.push(sdk);
@@ -73,7 +80,9 @@ pub(crate) fn default_metadata() -> Vec<Utf8PathBuf> {
 /// `.winmd`s, and `native/` holding the bootstrap DLL a program ships beside
 /// itself.
 pub(crate) fn winappsdk() -> Utf8PathBuf {
-    crate::windows_root().join("metadata").join(format!("winappsdk-{WINAPPSDK_VERSION}"))
+    crate::windows_root()
+        .join("metadata")
+        .join(format!("winappsdk-{WINAPPSDK_VERSION}"))
 }
 
 /// The Windows App SDK's bootstrapper: what an unpackaged program loads to
@@ -88,14 +97,18 @@ pub(crate) const BOOTSTRAPPER: &str = "Microsoft.WindowsAppRuntime.Bootstrap.dll
 pub(crate) fn shipped() -> Result<Vec<Utf8PathBuf>> {
     let native = winappsdk().join("native");
     let mut files: Vec<Utf8PathBuf> = std::fs::read_dir(&native)
-        .with_context(|| format!("reading {native}: fetch it with tooling/windows/fetch-winappsdk.sh"))?
+        .with_context(|| {
+            format!("reading {native}: fetch it with tooling/windows/fetch-winappsdk.sh")
+        })?
         .filter_map(Result::ok)
         .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.path()).ok())
         .filter(|path| path.extension() == Some("dll"))
         .collect();
     files.sort();
     anyhow::ensure!(
-        files.iter().any(|path| path.file_name() == Some(BOOTSTRAPPER)),
+        files
+            .iter()
+            .any(|path| path.file_name() == Some(BOOTSTRAPPER)),
         "no {BOOTSTRAPPER} in {native}: fetch it with tooling/windows/fetch-winappsdk.sh"
     );
     Ok(files)
@@ -125,7 +138,8 @@ pub(crate) fn uses_winappsdk(program: &nts_core::hir::Program) -> bool {
 pub(crate) fn is_winrt(namespace: &str) -> bool {
     // `Microsoft.*` is the Windows App SDK's: WinUI 3 (`Microsoft.UI.Xaml`),
     // its windowing and dispatching (`Microsoft.UI`), described the same way.
-    (namespace.starts_with("Windows.") && !namespace.starts_with("Windows.Win32.")) || namespace.starts_with("Microsoft.")
+    (namespace.starts_with("Windows.") && !namespace.starts_with("Windows.Win32."))
+        || namespace.starts_with("Microsoft.")
 }
 
 /// Every `.winmd` in `directories`, as one index.
@@ -137,19 +151,32 @@ pub(crate) fn index(directories: &[Utf8PathBuf]) -> Result<&'static Index> {
         })?;
         for entry in entries {
             let path = entry?.path();
-            if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("winmd")) {
-                files.push(File::read(&path).with_context(|| format!("reading {}", path.display()))?);
+            if path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("winmd"))
+            {
+                files.push(
+                    File::read(&path).with_context(|| format!("reading {}", path.display()))?,
+                );
             }
         }
     }
-    anyhow::ensure!(!files.is_empty(), "no .winmd in {directories:?}: fetch it with tooling/windows/fetch-winrt-metadata.sh");
+    anyhow::ensure!(
+        !files.is_empty(),
+        "no .winmd in {directories:?}: fetch it with tooling/windows/fetch-winrt-metadata.sh"
+    );
     Ok(Index::new(files).leak())
 }
 
 /// Bind `namespaces` into `out`: `<namespace>.d.ts`, and beside it
 /// `<namespace>.refused.txt` naming each item not bound and why. One summary
 /// line each.
-pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8Path, command: &str) -> Result<Vec<String>> {
+pub(crate) fn write(
+    namespaces: &[String],
+    metadata: &[Utf8PathBuf],
+    out: &Utf8Path,
+    command: &str,
+) -> Result<Vec<String>> {
     let modules = generate(namespaces, metadata, command)?;
     std::fs::create_dir_all(out).with_context(|| format!("creating {out}"))?;
     let mut lines = Vec::new();
@@ -162,16 +189,22 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
         // for a stale `@ntsCall` to find.
         let values_path = out.join(format!("{namespace}.values.ts"));
         match &module.values {
-            Some(values) => std::fs::write(&values_path, values).with_context(|| format!("writing {values_path}"))?,
-            None if values_path.is_file() => std::fs::remove_file(&values_path).with_context(|| format!("removing {values_path}"))?,
+            Some(values) => std::fs::write(&values_path, values)
+                .with_context(|| format!("writing {values_path}"))?,
+            None if values_path.is_file() => std::fs::remove_file(&values_path)
+                .with_context(|| format!("removing {values_path}"))?,
             None => {}
         }
-        let refused = module.refused.iter().fold(String::new(), |mut text, (what, why)| {
-            let _ = writeln!(text, "{what}\t{why}");
-            text
-        });
+        let refused = module
+            .refused
+            .iter()
+            .fold(String::new(), |mut text, (what, why)| {
+                let _ = writeln!(text, "{what}\t{why}");
+                text
+            });
         let refused_path = out.join(format!("{namespace}.refused.txt"));
-        std::fs::write(&refused_path, refused).with_context(|| format!("writing {refused_path}"))?;
+        std::fs::write(&refused_path, refused)
+            .with_context(|| format!("writing {refused_path}"))?;
         lines.push(format!(
             "winrt:{}: {} interfaces, {} classes, {} methods; {} refused (see {namespace}.refused.txt)",
             module.namespace,
@@ -186,7 +219,11 @@ pub(crate) fn write(namespaces: &[String], metadata: &[Utf8PathBuf], out: &Utf8P
 
 /// The modules binding `namespaces` makes: each asked for bound whole, and
 /// each of those names bound for the types named, to a fixed point.
-pub(crate) fn generate(namespaces: &[String], metadata: &[Utf8PathBuf], command: &str) -> Result<Vec<Module>> {
+pub(crate) fn generate(
+    namespaces: &[String],
+    metadata: &[Utf8PathBuf],
+    command: &str,
+) -> Result<Vec<Module>> {
     let index = index(metadata)?;
     for namespace in namespaces {
         let fetch = if namespace.starts_with("Microsoft.") {
@@ -204,8 +241,10 @@ pub(crate) fn generate(namespaces: &[String], metadata: &[Utf8PathBuf], command:
     // Foundation.Collections` for `IVectorView<T>` -- gets the types named,
     // and whatever those name in turn, to a fixed point. Closing over whole
     // namespaces instead reached most of the SDK from `Windows.Globalization`.
-    let mut wanted: std::collections::BTreeMap<String, Option<BTreeSet<String>>> =
-        namespaces.iter().map(|namespace| (namespace.clone(), None)).collect();
+    let mut wanted: std::collections::BTreeMap<String, Option<BTreeSet<String>>> = namespaces
+        .iter()
+        .map(|namespace| (namespace.clone(), None))
+        .collect();
     let modules = loop {
         let mut modules = Vec::new();
         let mut grew = false;
@@ -213,7 +252,10 @@ pub(crate) fn generate(namespaces: &[String], metadata: &[Utf8PathBuf], command:
         for (namespace, only) in &current {
             let module = bind(index, namespace, only.as_ref(), command);
             for (other, names) in &module.references {
-                match wanted.entry(other.clone()).or_insert_with(|| Some(BTreeSet::new())) {
+                match wanted
+                    .entry(other.clone())
+                    .or_insert_with(|| Some(BTreeSet::new()))
+                {
                     None => {}
                     Some(set) => {
                         for name in names {
@@ -232,13 +274,45 @@ pub(crate) fn generate(namespaces: &[String], metadata: &[Utf8PathBuf], command:
 }
 
 /// The brands `c:types` declares, beside its `c_` scalars.
-const C_BRANDS: &[&str] = &["CBool", "CEnum", "CNumber", "Struct", "ByValue", "Fields", "Counted", "CBytes", "CElements", "CHandles", "ConstPtr"];
+const C_BRANDS: &[&str] = &[
+    "CBool",
+    "CEnum",
+    "CNumber",
+    "Struct",
+    "ByValue",
+    "Fields",
+    "Counted",
+    "CBytes",
+    "CElements",
+    "CHandles",
+    "ConstPtr",
+];
 /// The brands `winrt:types` declares.
-const WINRT_BRANDS: &[&str] = &["ComClass", "HString", "HStrings", "Copied", "CopiedArray", "FilledHandles", "FilledStrings", "FilledArray", "Booleans", "FilledBooleans", "IInspectable", "Inspectable", "Delegate", "Event", "EventRegistrationToken", "Guid"];
+const WINRT_BRANDS: &[&str] = &[
+    "ComClass",
+    "HString",
+    "HStrings",
+    "Copied",
+    "CopiedArray",
+    "FilledHandles",
+    "FilledStrings",
+    "FilledArray",
+    "Booleans",
+    "FilledBooleans",
+    "IInspectable",
+    "Inspectable",
+    "Delegate",
+    "Event",
+    "EventRegistrationToken",
+    "Guid",
+];
 
 /// The namespace a `winrt:` module names.
 pub(crate) fn namespace_of(module: &str) -> Option<String> {
-    module.strip_prefix("winrt:").filter(|namespace| is_winrt(namespace)).map(str::to_owned)
+    module
+        .strip_prefix("winrt:")
+        .filter(|namespace| is_winrt(namespace))
+        .map(str::to_owned)
 }
 
 /// The files whose fingerprints stand for the metadata in a stamp: one per
@@ -247,11 +321,14 @@ pub(crate) fn metadata_markers(directories: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> 
     directories
         .iter()
         .map(|directory| {
-            ["Windows.Foundation.UniversalApiContract.winmd", "Microsoft.UI.Xaml.winmd"]
-                .iter()
-                .map(|marker| directory.join(marker))
-                .find(|marker| marker.is_file())
-                .unwrap_or_else(|| directory.clone())
+            [
+                "Windows.Foundation.UniversalApiContract.winmd",
+                "Microsoft.UI.Xaml.winmd",
+            ]
+            .iter()
+            .map(|marker| directory.join(marker))
+            .find(|marker| marker.is_file())
+            .unwrap_or_else(|| directory.clone())
         })
         .collect()
 }
@@ -276,7 +353,13 @@ pub(crate) struct Module {
 /// `namespace` as a `winrt:` module.
 /// `namespace` as a `winrt:` module: every type in it, or only those `only`
 /// names.
-pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String>>, command: &str) -> Module {
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub(crate) fn bind(
+    index: &Index,
+    namespace: &str,
+    only: Option<&BTreeSet<String>>,
+    command: &str,
+) -> Module {
     let mut writer = Writer {
         index,
         namespace,
@@ -325,34 +408,76 @@ pub(crate) fn bind(index: &Index, namespace: &str, only: Option<&BTreeSet<String
         }
     }
     let mut text = String::new();
-    let _ = writeln!(text, "// Generated by `{command}` from the Windows Runtime's metadata");
+    let _ = writeln!(
+        text,
+        "// Generated by `{command}` from the Windows Runtime's metadata"
+    );
     if namespace.starts_with("Microsoft.") {
-        let _ = writeln!(text, "// (Microsoft.WindowsAppSDK {WINAPPSDK_VERSION}: {WINAPPSDK_PACKAGES}; {WEBVIEW2_PACKAGE}). Edit the command, not this file.");
+        let _ = writeln!(
+            text,
+            "// (Microsoft.WindowsAppSDK {WINAPPSDK_VERSION}: {WINAPPSDK_PACKAGES}; {WEBVIEW2_PACKAGE}). Edit the command, not this file."
+        );
     } else {
-        let _ = writeln!(text, "// (Microsoft.Windows.SDK.Contracts {WINRT_METADATA_VERSION}). Edit the command, not this file.");
+        let _ = writeln!(
+            text,
+            "// (Microsoft.Windows.SDK.Contracts {WINRT_METADATA_VERSION}). Edit the command, not this file."
+        );
     }
     let _ = writeln!(text, "//");
-    let _ = writeln!(text, "// Each method is the slot of its interface's table the metadata gives it, named");
-    let _ = writeln!(text, "// as the metadata names that slot; the compiler refuses the two disagreeing.");
+    let _ = writeln!(
+        text,
+        "// Each method is the slot of its interface's table the metadata gives it, named"
+    );
+    let _ = writeln!(
+        text,
+        "// as the metadata names that slot; the compiler refuses the two disagreeing."
+    );
     let _ = writeln!(text, "declare module \"winrt:{namespace}\" {{");
-    let c_types: Vec<&str> =
-        writer.brands.iter().copied().filter(|brand| brand.starts_with("c_") || C_BRANDS.contains(brand)).collect();
+    let c_types: Vec<&str> = writer
+        .brands
+        .iter()
+        .copied()
+        .filter(|brand| brand.starts_with("c_") || C_BRANDS.contains(brand))
+        .collect();
     if !c_types.is_empty() {
-        let _ = writeln!(text, "  import type {{ {} }} from \"c:types\";", c_types.join(", "));
+        let _ = writeln!(
+            text,
+            "  import type {{ {} }} from \"c:types\";",
+            c_types.join(", ")
+        );
     }
-    let winrt: Vec<&str> = writer.brands.iter().copied().filter(|brand| WINRT_BRANDS.contains(brand)).collect();
+    let winrt: Vec<&str> = writer
+        .brands
+        .iter()
+        .copied()
+        .filter(|brand| WINRT_BRANDS.contains(brand))
+        .collect();
     if !winrt.is_empty() {
-        let _ = writeln!(text, "  import type {{ {} }} from \"winrt:types\";", winrt.join(", "));
+        let _ = writeln!(
+            text,
+            "  import type {{ {} }} from \"winrt:types\";",
+            winrt.join(", ")
+        );
     }
-    for (other, names) in writer.references.iter().filter(|(other, _)| other.as_str() != namespace) {
+    for (other, names) in writer
+        .references
+        .iter()
+        .filter(|(other, _)| other.as_str() != namespace)
+    {
         let names: Vec<String> = names
             .iter()
-            .map(|name| match writer.spelled.get(&(other.clone(), name.clone())) {
-                Some(spelled) if spelled != name => format!("{name} as {spelled}"),
-                _ => name.clone(),
-            })
+            .map(
+                |name| match writer.spelled.get(&(other.clone(), name.clone())) {
+                    Some(spelled) if spelled != name => format!("{name} as {spelled}"),
+                    _ => name.clone(),
+                },
+            )
             .collect();
-        let _ = writeln!(text, "  import type {{ {} }} from \"winrt:{other}\";", names.join(", "));
+        let _ = writeln!(
+            text,
+            "  import type {{ {} }} from \"winrt:{other}\";",
+            names.join(", ")
+        );
     }
     text.push('\n');
     text.push_str(&body);
@@ -422,8 +547,15 @@ impl Writer<'_> {
         // TypeScript generic is the whole of it here. The instantiation's own
         // IID is computed (`iid::parameterized`) only where one is asked for.
         let name = generic_base(def.name());
-        self.generics = def.generic_params().map(|param| param.name().to_owned()).collect();
-        let parameters = if self.generics.is_empty() { String::new() } else { format!("<{}>", self.generics.join(", ")) };
+        self.generics = def
+            .generic_params()
+            .map(|param| param.name().to_owned())
+            .collect();
+        let parameters = if self.generics.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", self.generics.join(", "))
+        };
         let this = format!("{name}{parameters}");
         let Some(iid) = iid(def) else {
             self.refuse(name, "an interface with no GuidAttribute");
@@ -432,7 +564,11 @@ impl Writer<'_> {
         // A class's default interface extends its base class's: `IButton` is
         // an `IButtonBase`, whose methods it has and whose place it takes --
         // the compiler asks the object for that interface where it does.
-        let base = self.bases.get(name).cloned().map(|(namespace, interface)| self.named(&namespace, &interface));
+        let base = self
+            .bases
+            .get(name)
+            .cloned()
+            .map(|(namespace, interface)| self.named(&namespace, &interface));
         // Its base interfaces' methods, flat -- `IButtonBaseMethods &
         // IContentControlMethods & ...` -- rather than the base types, whose
         // chains would intersect and cost the checker a nested intersection
@@ -468,7 +604,10 @@ impl Writer<'_> {
             let required: Vec<Type> = def
                 .interface_impls()
                 .map(|implemented| implemented.interface(&own))
-                .filter(|interface| self.generics.is_empty() || matches!(interface, Type::ClassName(named) if named.generics.is_empty()))
+                .filter(|interface| {
+                    self.generics.is_empty()
+                        || matches!(interface, Type::ClassName(named) if named.generics.is_empty())
+                })
                 .collect();
             methods.push_str(&self.queries(name, &this, &required));
         }
@@ -507,7 +646,10 @@ impl Writer<'_> {
             let _ = writeln!(body, "  /**\n   * @ntsQuery {iid}\n   */");
         }
         if let Some(base) = &base {
-            let _ = write!(body, "  export type {this} = ComClass<\"{tag}\", {base}> & {name}Methods{parameters}");
+            let _ = write!(
+                body,
+                "  export type {this} = ComClass<\"{tag}\", {base}> & {name}Methods{parameters}"
+            );
             for methods in &inherited {
                 let _ = write!(body, " & {methods}");
             }
@@ -518,7 +660,10 @@ impl Writer<'_> {
             // parent: any object goes where any object is taken
             // (`button.content = textBlock`).
             self.brands.insert("IInspectable");
-            let _ = writeln!(body, "  export type {this} = ComClass<\"{tag}\", IInspectable> & {name}Methods{parameters}{surface};");
+            let _ = writeln!(
+                body,
+                "  export type {this} = ComClass<\"{tag}\", IInspectable> & {name}Methods{parameters}{surface};"
+            );
         }
         self.generics.clear();
         true
@@ -531,8 +676,17 @@ impl Writer<'_> {
     /// is asked for. Events are left to its `add_`/`remove_`: their
     /// listener's delegate is itself an instantiation.
     fn generic_members(&mut self, def: TypeDef, this: &str) -> String {
-        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def.methods().enumerate().map(|(index, method)| (6 + index, method)).collect();
-        let slot_of = |wanted: &str| methods.iter().find(|(_, method)| method_name(*method) == wanted).map(|(slot, method)| (*slot, *method));
+        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def
+            .methods()
+            .enumerate()
+            .map(|(index, method)| (6 + index, method))
+            .collect();
+        let slot_of = |wanted: &str| {
+            methods
+                .iter()
+                .find(|(_, method)| method_name(*method) == wanted)
+                .map(|(slot, method)| (*slot, *method))
+        };
         let mut out = String::new();
         for &(slot, method) in &methods {
             let abi = method_name(method);
@@ -540,13 +694,17 @@ impl Writer<'_> {
                 continue;
             }
             if let Some(property) = abi.strip_prefix("get_") {
-                if let Some(text) = self.property(method, slot, slot_of(&format!("put_{property}")), None) {
+                if let Some(text) =
+                    self.property(method, slot, slot_of(&format!("put_{property}")), None)
+                {
                     out.push_str(&text);
                 }
                 continue;
             }
             let js = nts_core::hir::native::js_name(&abi);
-            if let Ok(text) = self.method_named(method, slot, Receiver::Instance(this), Some(&js), None) {
+            if let Ok(text) =
+                self.method_named(method, slot, Receiver::Instance(this), Some(&js), None)
+            {
                 out.push_str(&text);
             }
         }
@@ -554,9 +712,15 @@ impl Writer<'_> {
         // an array is: `for (const child of panel.children)`; any other
         // iterable by its iterator.
         if let (Some(_), Some((_, at))) = (slot_of("get_Size"), slot_of("GetAt"))
-            && let Ok(element) = self.spell(&at.signature(&self.signature_arguments()).return_type, false)
+            && let Ok(element) = self.spell(
+                &at.signature(&self.signature_arguments()).return_type,
+                false,
+            )
         {
-            let _ = writeln!(out, "    /**\n     * @ntsIterate get_Size GetAt\n     */\n    [Symbol.iterator](): Iterator<{element}>;");
+            let _ = writeln!(
+                out,
+                "    /**\n     * @ntsIterate get_Size GetAt\n     */\n    [Symbol.iterator](): Iterator<{element}>;"
+            );
         } else if let Some((_, first)) = slot_of("First")
             // Any other iterable -- `IIterable<T>` -- by the iterator its
             // `First` makes: `get_Current`, then `MoveNext`, as C# walks one.
@@ -564,7 +728,10 @@ impl Writer<'_> {
             && let Some(element) = iterator.generics.first()
             && let Ok(element) = self.spell(element, false)
         {
-            let _ = writeln!(out, "    /**\n     * @ntsIterate First\n     */\n    [Symbol.iterator](): Iterator<{element}>;");
+            let _ = writeln!(
+                out,
+                "    /**\n     * @ntsIterate First\n     */\n    [Symbol.iterator](): Iterator<{element}>;"
+            );
         }
         out
     }
@@ -577,9 +744,14 @@ impl Writer<'_> {
         let mut queries = String::new();
         let mut asked: BTreeSet<String> = BTreeSet::new();
         for interface in interfaces {
-            let Type::ClassName(named) = interface else { continue };
+            let Type::ClassName(named) = interface else {
+                continue;
+            };
             let base = generic_base(&named.name).to_owned();
-            let spelled = match self.spell(interface, false).and_then(|spelled| Ok((spelled, self.interface_iid(interface)?))) {
+            let spelled = match self
+                .spell(interface, false)
+                .and_then(|spelled| Ok((spelled, self.interface_iid(interface)?)))
+            {
                 Ok(spelled) => spelled,
                 Err(why) => {
                     self.refuse(&format!("{owner} as {base}"), &why);
@@ -608,13 +780,24 @@ impl Writer<'_> {
             return self.bases.get(interface).cloned();
         }
         let index = self.index;
-        self.other_bases.entry(namespace.to_owned()).or_insert_with(|| default_interface_bases(index, namespace)).get(interface).cloned()
+        self.other_bases
+            .entry(namespace.to_owned())
+            .or_insert_with(|| default_interface_bases(index, namespace))
+            .get(interface)
+            .cloned()
     }
 
     /// A static of a class, and its idiomatic name beside it:
     /// `StorageFolder.GetFolderFromPathAsync` and
     /// `StorageFolder.getFolderFromPathAsync`, one slot.
-    fn static_member(&mut self, class: &str, method: windows_metadata::reader::MethodDef, slot: usize, receiver: Receiver<'_>, statics: &mut String) {
+    fn static_member(
+        &mut self,
+        class: &str,
+        method: windows_metadata::reader::MethodDef,
+        slot: usize,
+        receiver: Receiver<'_>,
+        statics: &mut String,
+    ) {
         match self.method(method, slot, receiver) {
             Ok(text) => {
                 statics.push_str(&text);
@@ -650,7 +833,9 @@ impl Writer<'_> {
         let answered = self.answered(&read.return_type).ok()?;
         let writable = setter.and_then(|(slot, put)| {
             let written = put.signature(&[]);
-            let [ty] = written.types.as_slice() else { return None };
+            let [ty] = written.types.as_slice() else {
+                return None;
+            };
             (self.spell(ty, true).ok()? == answered).then_some(slot)
         });
         let property = method_name(getter);
@@ -694,6 +879,7 @@ impl Writer<'_> {
     /// Not yet: generic interfaces (`IVector<T>`). A name two interfaces give
     /// as methods is overloaded; one either gives as a property is left out
     /// and reported, not given to whichever came first.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn members(&mut self, class: &str, def: TypeDef, default: Option<&Type>) -> String {
         let mut declared: BTreeMap<String, usize> = BTreeMap::new();
         let mut texts: Vec<(String, String)> = Vec::new();
@@ -701,19 +887,37 @@ impl Writer<'_> {
         let mut events: Vec<(String, String)> = Vec::new();
         let own = def
             .interface_impls()
-            .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"))
+            .filter(|implemented| {
+                !implemented.has_attribute("ProtectedAttribute")
+                    && !implemented.has_attribute("OverridableAttribute")
+            })
             .filter(|implemented| !implemented.has_attribute("DefaultAttribute"))
             .map(|implemented| implemented.interface(&[]));
-        for (interface, is_default) in default.cloned().map(|ty| (ty, true)).into_iter().chain(own.map(|ty| (ty, false))) {
-            let Type::ClassName(named) = &interface else { continue };
+        for (interface, is_default) in default
+            .cloned()
+            .map(|ty| (ty, true))
+            .into_iter()
+            .chain(own.map(|ty| (ty, false)))
+        {
+            let Type::ClassName(named) = &interface else {
+                continue;
+            };
             if !named.generics.is_empty() {
                 continue;
             }
-            let Some(interface_def) = self.index.get(&named.namespace, &named.name).next() else { continue };
-            let Some(iid) = iid(interface_def) else { continue };
+            let Some(interface_def) = self.index.get(&named.namespace, &named.name).next() else {
+                continue;
+            };
+            let Some(iid) = iid(interface_def) else {
+                continue;
+            };
             // The default interface's handle tag, which an instance of the
             // class -- or of a class the program writes over it -- carries.
-            let via = if is_default { format!("{iid} {}_{}", named.namespace.replace('.', "_"), named.name) } else { iid };
+            let via = if is_default {
+                format!("{iid} {}_{}", named.namespace.replace('.', "_"), named.name)
+            } else {
+                iid
+            };
             for (name, text) in self.interface_members(interface_def, &via) {
                 *declared.entry(name.clone()).or_default() += 1;
                 texts.push((name, text));
@@ -725,14 +929,22 @@ impl Writer<'_> {
         }
         let base = def
             .extends()
-            .filter(|base| self.index.get(base.namespace(), base.name()).next().is_some_and(|parent| parent.category() == TypeCategory::Class))
+            .filter(|base| {
+                self.index
+                    .get(base.namespace(), base.name())
+                    .next()
+                    .is_some_and(|parent| parent.category() == TypeCategory::Class)
+            })
             .map(|base| {
                 // The class itself too, so that a namespace bound only for the
                 // names it is asked for declares the base -- and its surface --
                 // this one extends.
                 self.named(base.namespace(), base.name());
                 let events = self.named(base.namespace(), &format!("{}EventMap", base.name()));
-                (self.named(base.namespace(), &format!("{}Members", base.name())), events)
+                (
+                    self.named(base.namespace(), &format!("{}Members", base.name())),
+                    events,
+                )
             });
         // A name a base's surface gives already. Methods on both sides are
         // overloads, as C#'s are (`menuFlyout.showAt(target, point)` beside
@@ -744,9 +956,16 @@ impl Writer<'_> {
         // refuses the two when their types differ.
         let inherited = self.inherited_member_names(def);
         let mut rejoined: Vec<(String, String)> = Vec::new();
-        let names: Vec<String> = declared.keys().filter(|name| inherited.contains(*name)).cloned().collect();
+        let names: Vec<String> = declared
+            .keys()
+            .filter(|name| inherited.contains(*name))
+            .cloned()
+            .collect();
         for name in names {
-            let own_methods = texts.iter().filter(|(given, _)| *given == name).all(|(_, text)| text.contains("@ntsVtable"));
+            let own_methods = texts
+                .iter()
+                .filter(|(given, _)| *given == name)
+                .all(|(_, text)| text.contains("@ntsVtable"));
             if let Some(bases) = self.inherited_methods(def, &name).filter(|_| own_methods) {
                 rejoined.extend(bases.into_iter().map(|text| (name.clone(), text)));
             } else {
@@ -761,7 +980,10 @@ impl Writer<'_> {
         let inherited = self.inherited_event_names(def);
         for (name, count) in &raised {
             if inherited.contains(name) {
-                self.refuse(&format!("{class}.{name}"), "an event a base class raises already; added through its interface's `add_`");
+                self.refuse(
+                    &format!("{class}.{name}"),
+                    "an event a base class raises already; added through its interface's `add_`",
+                );
             } else if *count > 1 {
                 self.refuse(&format!("{class}.{name}"), "an event two of the class's interfaces raise; each is added through its interface's `add_`");
             }
@@ -769,7 +991,9 @@ impl Writer<'_> {
         raised.retain(|name, count| *count == 1 && !inherited.contains(name));
         let mut out = String::new();
         let (members_base, events_base) = base.unzip();
-        let extends = members_base.map(|base| format!(" extends {base}")).unwrap_or_default();
+        let extends = members_base
+            .map(|base| format!(" extends {base}"))
+            .unwrap_or_default();
         let _ = writeln!(out, "  export interface {class}Members{extends} {{");
         // A name several interfaces give as methods is declared once per
         // interface, as overloads, as C#'s projection overloads it
@@ -778,7 +1002,12 @@ impl Writer<'_> {
         // made through the interface whose tags that declaration carries.
         // A property cannot be overloaded, so a name any of them gives as
         // one stays out.
-        let overloadable = |name: &str| texts.iter().filter(|(given, _)| given == name).all(|(_, text)| text.contains("@ntsVtable"));
+        let overloadable = |name: &str| {
+            texts
+                .iter()
+                .filter(|(given, _)| given == name)
+                .all(|(_, text)| text.contains("@ntsVtable"))
+        };
         let mut kept: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for (name, text) in &texts {
             let count = declared.get(name).copied().unwrap_or_default();
@@ -807,7 +1036,9 @@ impl Writer<'_> {
         // The events, by the name `addEventListener` takes -- the metadata's,
         // lower-cased, as the Windows Runtime's JavaScript projection named
         // them (`click`, `pointerentered`) -- each the listener it takes.
-        let extends = events_base.map(|base| format!(" extends {base}")).unwrap_or_default();
+        let extends = events_base
+            .map(|base| format!(" extends {base}"))
+            .unwrap_or_default();
         let _ = writeln!(out, "  export interface {class}EventMap{extends} {{");
         for (name, text) in events {
             if raised.contains_key(&name) {
@@ -823,22 +1054,46 @@ impl Writer<'_> {
     /// `add_`'s delegate as an `Event` (`winrt:types`) naming the interface
     /// and the two slots, which the runtime calls.
     fn interface_events(&mut self, def: TypeDef) -> Vec<(String, String)> {
-        let Some(iid) = iid(def) else { return Vec::new() };
-        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def.methods().enumerate().map(|(index, method)| (6 + index, method)).collect();
+        let Some(iid) = iid(def) else {
+            return Vec::new();
+        };
+        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def
+            .methods()
+            .enumerate()
+            .map(|(index, method)| (6 + index, method))
+            .collect();
         let mut events = Vec::new();
         for &(add, method) in &methods {
             let abi = method_name(method);
-            let Some(event) = abi.strip_prefix("add_") else { continue };
-            let Some(remove) = methods.iter().find(|(_, method)| method_name(*method) == format!("remove_{event}")).map(|(slot, _)| *slot) else {
+            let Some(event) = abi.strip_prefix("add_") else {
+                continue;
+            };
+            let Some(remove) = methods
+                .iter()
+                .find(|(_, method)| method_name(*method) == format!("remove_{event}"))
+                .map(|(slot, _)| *slot)
+            else {
                 continue;
             };
             let signature = method.signature(&[]);
-            let [handler] = signature.types.as_slice() else { continue };
-            let Ok(delegate) = self.spell(handler, true) else { continue };
-            let Some(function) = delegate.strip_prefix("Delegate<").and_then(|rest| rest.strip_suffix('>')) else { continue };
+            let [handler] = signature.types.as_slice() else {
+                continue;
+            };
+            let Ok(delegate) = self.spell(handler, true) else {
+                continue;
+            };
+            let Some(function) = delegate
+                .strip_prefix("Delegate<")
+                .and_then(|rest| rest.strip_suffix('>'))
+            else {
+                continue;
+            };
             self.brands.insert("Event");
             let name = event.to_lowercase();
-            events.push((name.clone(), format!("    {name}: Event<{function}, \"{iid} {add} {remove}\">;\n")));
+            events.push((
+                name.clone(),
+                format!("    {name}: Event<{function}, \"{iid} {add} {remove}\">;\n"),
+            ));
         }
         events
     }
@@ -848,17 +1103,31 @@ impl Writer<'_> {
         let mut names = BTreeSet::new();
         let mut base = def.extends();
         for _ in 0..32 {
-            let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) else { break };
+            let Some(parent) =
+                base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next())
+            else {
+                break;
+            };
             if parent.category() != TypeCategory::Class {
                 break;
             }
-            let public = parent
-                .interface_impls()
-                .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"));
+            let public = parent.interface_impls().filter(|implemented| {
+                !implemented.has_attribute("ProtectedAttribute")
+                    && !implemented.has_attribute("OverridableAttribute")
+            });
             for implemented in public {
-                let Type::ClassName(declared) = implemented.interface(&[]) else { continue };
-                let Some(interface) = self.index.get(&declared.namespace, &declared.name).next() else { continue };
-                names.extend(interface.methods().filter_map(|method| method_name(method).strip_prefix("add_").map(str::to_lowercase)));
+                let Type::ClassName(declared) = implemented.interface(&[]) else {
+                    continue;
+                };
+                let Some(interface) = self.index.get(&declared.namespace, &declared.name).next()
+                else {
+                    continue;
+                };
+                names.extend(interface.methods().filter_map(|method| {
+                    method_name(method)
+                        .strip_prefix("add_")
+                        .map(str::to_lowercase)
+                }));
             }
             base = parent.extends();
         }
@@ -876,23 +1145,46 @@ impl Writer<'_> {
         let mut texts = Vec::new();
         let mut base = def.extends();
         for _ in 0..32 {
-            let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) else { break };
+            let Some(parent) =
+                base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next())
+            else {
+                break;
+            };
             if parent.category() != TypeCategory::Class {
                 break;
             }
             let public: Vec<(Type, bool)> = parent
                 .interface_impls()
-                .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"))
-                .map(|implemented| (implemented.interface(&[]), implemented.has_attribute("DefaultAttribute")))
+                .filter(|implemented| {
+                    !implemented.has_attribute("ProtectedAttribute")
+                        && !implemented.has_attribute("OverridableAttribute")
+                })
+                .map(|implemented| {
+                    (
+                        implemented.interface(&[]),
+                        implemented.has_attribute("DefaultAttribute"),
+                    )
+                })
                 .collect();
             for (interface, is_default) in public {
-                let Type::ClassName(named) = &interface else { continue };
+                let Type::ClassName(named) = &interface else {
+                    continue;
+                };
                 if !named.generics.is_empty() {
                     continue;
                 }
-                let Some(interface_def) = self.index.get(&named.namespace, &named.name).next() else { continue };
-                let Some(iid) = iid(interface_def) else { continue };
-                let via = if is_default { format!("{iid} {}_{}", named.namespace.replace('.', "_"), named.name) } else { iid };
+                let Some(interface_def) = self.index.get(&named.namespace, &named.name).next()
+                else {
+                    continue;
+                };
+                let Some(iid) = iid(interface_def) else {
+                    continue;
+                };
+                let via = if is_default {
+                    format!("{iid} {}_{}", named.namespace.replace('.', "_"), named.name)
+                } else {
+                    iid
+                };
                 for (given, text) in self.interface_members(interface_def, &via) {
                     if given == name {
                         if !text.contains("@ntsVtable") {
@@ -911,22 +1203,35 @@ impl Writer<'_> {
         let mut names = BTreeSet::new();
         let mut base = def.extends();
         for _ in 0..32 {
-            let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) else { break };
+            let Some(parent) =
+                base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next())
+            else {
+                break;
+            };
             if parent.category() != TypeCategory::Class {
                 break;
             }
-            let public = parent
-                .interface_impls()
-                .filter(|implemented| !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute"));
+            let public = parent.interface_impls().filter(|implemented| {
+                !implemented.has_attribute("ProtectedAttribute")
+                    && !implemented.has_attribute("OverridableAttribute")
+            });
             for implemented in public {
-                let Type::ClassName(declared) = implemented.interface(&[]) else { continue };
-                let Some(interface) = self.index.get(&declared.namespace, &declared.name).next() else { continue };
+                let Type::ClassName(declared) = implemented.interface(&[]) else {
+                    continue;
+                };
+                let Some(interface) = self.index.get(&declared.namespace, &declared.name).next()
+                else {
+                    continue;
+                };
                 for method in interface.methods() {
                     let abi = method_name(method);
                     if abi.starts_with("add_") || abi.starts_with("remove_") {
                         continue;
                     }
-                    let member = abi.strip_prefix("get_").or_else(|| abi.strip_prefix("put_")).unwrap_or(&abi);
+                    let member = abi
+                        .strip_prefix("get_")
+                        .or_else(|| abi.strip_prefix("put_"))
+                        .unwrap_or(&abi);
                     names.insert(nts_core::hir::native::js_name(member));
                 }
             }
@@ -938,8 +1243,17 @@ impl Writer<'_> {
     /// One interface's members as [`Self::members`] declares them: `(name,
     /// text)` for each property and method it can declare.
     fn interface_members(&mut self, def: TypeDef, via: &str) -> Vec<(String, String)> {
-        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def.methods().enumerate().map(|(index, method)| (6 + index, method)).collect();
-        let slot_of = |wanted: &str| methods.iter().find(|(_, method)| method_name(*method) == wanted).map(|(slot, method)| (*slot, *method));
+        let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = def
+            .methods()
+            .enumerate()
+            .map(|(index, method)| (6 + index, method))
+            .collect();
+        let slot_of = |wanted: &str| {
+            methods
+                .iter()
+                .find(|(_, method)| method_name(*method) == wanted)
+                .map(|(slot, method)| (*slot, *method))
+        };
         let mut members = Vec::new();
         for &(slot, method) in &methods {
             let abi = method_name(method);
@@ -954,7 +1268,9 @@ impl Writer<'_> {
                 continue;
             }
             let js = nts_core::hir::native::js_name(&abi);
-            if let Ok(text) = self.method_named(method, slot, Receiver::Member, Some(&js), Some(via)) {
+            if let Ok(text) =
+                self.method_named(method, slot, Receiver::Member, Some(&js), Some(via))
+            {
                 members.push((js, text));
             }
         }
@@ -987,7 +1303,9 @@ impl Writer<'_> {
         let taken = match setter {
             Some((_, put)) => {
                 let written = put.signature(&arguments);
-                let [ty] = written.types.as_slice() else { return None };
+                let [ty] = written.types.as_slice() else {
+                    return None;
+                };
                 match self.reference_parameter(ty).ok()? {
                     Some((value, iid, kind)) => {
                         reference = Some(format!("@ntsReference value {iid} {kind}"));
@@ -1045,31 +1363,53 @@ impl Writer<'_> {
     fn constructors(&mut self, def: TypeDef, class_name: &str, default: Option<&Type>) -> String {
         let name = def.name();
         let mut constructors = String::new();
-        for attribute in def.attributes().filter(|attribute| attribute.ctor().parent().name() == "ActivatableAttribute") {
-            let values: Vec<Value> = attribute.value().into_iter().map(|(_, value)| value).collect();
+        for attribute in def
+            .attributes()
+            .filter(|attribute| attribute.ctor().parent().name() == "ActivatableAttribute")
+        {
+            let values: Vec<Value> = attribute
+                .value()
+                .into_iter()
+                .map(|(_, value)| value)
+                .collect();
             let Some(Value::TypeName(interface)) = values.first() else {
                 // The default constructor, activated.
                 if let Some(interface @ Type::ClassName(_)) = default
                     && let Ok(default_iid) = self.interface_iid(interface)
                 {
-                    let _ = writeln!(constructors, "    /**\n     * @ntsActivate {class_name} {default_iid}\n     */");
+                    let _ = writeln!(
+                        constructors,
+                        "    /**\n     * @ntsActivate {class_name} {default_iid}\n     */"
+                    );
                     let _ = writeln!(constructors, "    constructor();");
                     self.methods += 1;
                 }
                 continue;
             };
             let Some(factory) = self.index.get(&interface.namespace, &interface.name).next() else {
-                self.refuse(&format!("{name} constructors"), &format!("`{}` is not in the metadata read", interface.name));
+                self.refuse(
+                    &format!("{name} constructors"),
+                    &format!("`{}` is not in the metadata read", interface.name),
+                );
                 continue;
             };
             let Some(iid) = iid(factory) else { continue };
             for (index, method) in factory.methods().enumerate() {
-                match self.method(method, 6 + index, Receiver::Constructor { class: class_name, iid: &iid }) {
+                match self.method(
+                    method,
+                    6 + index,
+                    Receiver::Constructor {
+                        class: class_name,
+                        iid: &iid,
+                    },
+                ) {
                     Ok(text) => {
                         constructors.push_str(&text);
                         self.methods += 1;
                     }
-                    Err(why) => self.refuse(&format!("{name} constructor {}", method_name(method)), &why),
+                    Err(why) => {
+                        self.refuse(&format!("{name} constructor {}", method_name(method)), &why);
+                    }
                 }
             }
         }
@@ -1081,8 +1421,14 @@ impl Writer<'_> {
     /// not generic themselves, whose IID does not depend on its arguments --
     /// the rule `interface` writes them by.
     fn required_query_names(&self, interface: &Type) -> BTreeSet<String> {
-        let Type::ClassName(named) = interface else { return BTreeSet::new() };
-        let Some(def) = self.index.get(&named.namespace, generic_base(&named.name)).next() else {
+        let Type::ClassName(named) = interface else {
+            return BTreeSet::new();
+        };
+        let Some(def) = self
+            .index
+            .get(&named.namespace, generic_base(&named.name))
+            .next()
+        else {
             return BTreeSet::new();
         };
         let generic = !named.generics.is_empty();
@@ -1091,12 +1437,19 @@ impl Writer<'_> {
         let own: Vec<Type> = def
             .generic_params()
             .enumerate()
-            .map(|(at, param)| Type::Generic(param.name().to_owned(), u16::try_from(at).unwrap_or(u16::MAX)))
+            .map(|(at, param)| {
+                Type::Generic(
+                    param.name().to_owned(),
+                    u16::try_from(at).unwrap_or(u16::MAX),
+                )
+            })
             .collect();
         def.interface_impls()
             .map(|implemented| implemented.interface(&own))
             .filter_map(|required| match required {
-                Type::ClassName(required) if !generic || required.generics.is_empty() => Some(generic_base(&required.name).to_owned()),
+                Type::ClassName(required) if !generic || required.generics.is_empty() => {
+                    Some(generic_base(&required.name).to_owned())
+                }
                 _ => None,
             })
             .collect()
@@ -1104,29 +1457,42 @@ impl Writer<'_> {
 
     fn answered_interfaces(&self, def: TypeDef) -> Vec<Type> {
         let public = |implemented: &windows_metadata::reader::InterfaceImpl| {
-            !implemented.has_attribute("ProtectedAttribute") && !implemented.has_attribute("OverridableAttribute")
+            !implemented.has_attribute("ProtectedAttribute")
+                && !implemented.has_attribute("OverridableAttribute")
         };
         let mut others: Vec<Type> = def
             .interface_impls()
-            .filter(|implemented| !implemented.has_attribute("DefaultAttribute") && public(implemented))
+            .filter(|implemented| {
+                !implemented.has_attribute("DefaultAttribute") && public(implemented)
+            })
             .map(|implemented| implemented.interface(&[]))
             .collect();
         let mut base = def.extends();
         let mut depth = 0;
-        while let Some(parent) = base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next()) {
+        while let Some(parent) =
+            base.and_then(|parent| self.index.get(parent.namespace(), parent.name()).next())
+        {
             if parent.category() != TypeCategory::Class || depth > 16 {
                 break;
             }
-            others.extend(parent.interface_impls().filter(public).map(|implemented| implemented.interface(&[])));
+            others.extend(
+                parent
+                    .interface_impls()
+                    .filter(public)
+                    .map(|implemented| implemented.interface(&[])),
+            );
             base = parent.extends();
             depth += 1;
         }
         others
     }
 
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn class(&mut self, def: TypeDef, body: &mut String) -> bool {
         let name = def.name();
-        let default = def.interface_impls().find(|implemented| implemented.has_attribute("DefaultAttribute"));
+        let default = def
+            .interface_impls()
+            .find(|implemented| implemented.has_attribute("DefaultAttribute"));
         // Before anything that can refuse the class: a subclass's surface
         // extends this one whether or not the class itself is declared.
         let default_interface = default.map(|implemented| implemented.interface(&[]));
@@ -1138,12 +1504,18 @@ impl Writer<'_> {
             Some(interface @ Type::ClassName(_)) => match self.spell(&interface, false) {
                 Ok(spelled) => spelled,
                 Err(why) => {
-                    self.refuse(name, &format!("a runtime class whose default interface is {why}"));
+                    self.refuse(
+                        name,
+                        &format!("a runtime class whose default interface is {why}"),
+                    );
                     return false;
                 }
             },
             Some(_) => {
-                self.refuse(name, "a runtime class whose default interface is not an interface");
+                self.refuse(
+                    name,
+                    "a runtime class whose default interface is not an interface",
+                );
                 return false;
             }
             // A static-only class (`Windows.Globalization.ApplicationLanguages`)
@@ -1155,29 +1527,58 @@ impl Writer<'_> {
         let mut constructors = self.constructors(def, &class_name, default_interface.as_ref());
         // Statics, and a composable class's factory: methods of an interface
         // the class's factory answers as.
-        for attribute in def.attributes().filter(|attribute| matches!(attribute.ctor().parent().name(), "StaticAttribute" | "ComposableAttribute")) {
-            let values: Vec<Value> = attribute.value().into_iter().map(|(_, value)| value).collect();
-            let Some(Value::TypeName(interface)) = values.first() else { continue };
+        for attribute in def.attributes().filter(|attribute| {
+            matches!(
+                attribute.ctor().parent().name(),
+                "StaticAttribute" | "ComposableAttribute"
+            )
+        }) {
+            let values: Vec<Value> = attribute
+                .value()
+                .into_iter()
+                .map(|(_, value)| value)
+                .collect();
+            let Some(Value::TypeName(interface)) = values.first() else {
+                continue;
+            };
             // A composable class's factory: `CreateInstance(..., outer, out
             // inner)`, which a subclass calls with itself as the outer object.
             // Only a public one constructs the class as it is; a protected one
             // is for subclasses alone.
             let composable = attribute.ctor().parent().name() == "ComposableAttribute";
             // `CompositionType.Public` is 2.
-            if composable && !matches!(values.get(1), Some(Value::EnumValue(_, public)) if **public == Value::I32(2)) {
+            if composable
+                && !matches!(values.get(1), Some(Value::EnumValue(_, public)) if **public == Value::I32(2))
+            {
                 continue;
             }
-            let Some(statics_def) = self.index.get(&interface.namespace, &interface.name).next() else {
-                self.refuse(&format!("{name} statics"), &format!("`{}` is not in the metadata read", interface.name));
+            let Some(statics_def) = self.index.get(&interface.namespace, &interface.name).next()
+            else {
+                self.refuse(
+                    &format!("{name} statics"),
+                    &format!("`{}` is not in the metadata read", interface.name),
+                );
                 continue;
             };
-            let Some(iid) = iid(statics_def) else { continue };
-            let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = statics_def.methods().enumerate().map(|(index, method)| (6 + index, method)).collect();
+            let Some(iid) = iid(statics_def) else {
+                continue;
+            };
+            let methods: Vec<(usize, windows_metadata::reader::MethodDef)> = statics_def
+                .methods()
+                .enumerate()
+                .map(|(index, method)| (6 + index, method))
+                .collect();
             for &(slot, method) in &methods {
                 let receiver = if composable {
-                    Receiver::Composable { class: &class_name, iid: &iid }
+                    Receiver::Composable {
+                        class: &class_name,
+                        iid: &iid,
+                    }
                 } else {
-                    Receiver::Factory { class: &class_name, iid: &iid }
+                    Receiver::Factory {
+                        class: &class_name,
+                        iid: &iid,
+                    }
                 };
                 // A property of the class itself, `ApplicationLanguages.
                 // languages`: a variable of its namespace, beside the ABI's
@@ -1189,8 +1590,16 @@ impl Writer<'_> {
                         self.methods += 1;
                     }
                     if let Some(property) = abi.strip_prefix("get_") {
-                        let setter = methods.iter().find(|(_, m)| method_name(*m) == format!("put_{property}")).copied();
-                        if let Some(text) = self.static_property(method, slot, setter, &format!("{class_name} {iid}")) {
+                        let setter = methods
+                            .iter()
+                            .find(|(_, m)| method_name(*m) == format!("put_{property}"))
+                            .copied();
+                        if let Some(text) = self.static_property(
+                            method,
+                            slot,
+                            setter,
+                            &format!("{class_name} {iid}"),
+                        ) {
                             statics.push_str(&text);
                         }
                     }
@@ -1202,7 +1611,10 @@ impl Writer<'_> {
         // What the default interface already asks for its own required
         // interfaces is the class's already: declared again on the class, the
         // two `as_X` would disagree about `this`.
-        let inherited = default_interface.as_ref().map(|interface| self.required_query_names(interface)).unwrap_or_default();
+        let inherited = default_interface
+            .as_ref()
+            .map(|interface| self.required_query_names(interface))
+            .unwrap_or_default();
         let mut others = self.answered_interfaces(def);
         others.retain(|interface| !matches!(interface, Type::ClassName(named) if inherited.contains(generic_base(&named.name))));
         let queries = self.queries(name, name, &others);
@@ -1220,8 +1632,15 @@ impl Writer<'_> {
             && let Some(subclassing) = self.subclassing(def, &class_name)
         {
             body.push_str(&subclassing);
-            let interfaces = if queries.is_empty() { String::new() } else { format!(", {name}Interfaces") };
-            let _ = writeln!(body, "  export interface {name} extends {spelled}{interfaces}, {name}Members {{}}");
+            let interfaces = if queries.is_empty() {
+                String::new()
+            } else {
+                format!(", {name}Interfaces")
+            };
+            let _ = writeln!(
+                body,
+                "  export interface {name} extends {spelled}{interfaces}, {name}Members {{}}"
+            );
         } else if !spelled.is_empty() {
             // A sealed class: a TypeScript class of its constructors, so
             // `new` and `instanceof` name a value, merged with the interface
@@ -1235,8 +1654,15 @@ impl Writer<'_> {
             let _ = writeln!(body, "  export class {name} {{");
             body.push_str(&constructors);
             let _ = writeln!(body, "  }}");
-            let interfaces = if queries.is_empty() { String::new() } else { format!(", {name}Interfaces") };
-            let _ = writeln!(body, "  export interface {name} extends {spelled}{interfaces}, {name}Members {{}}");
+            let interfaces = if queries.is_empty() {
+                String::new()
+            } else {
+                format!(", {name}Interfaces")
+            };
+            let _ = writeln!(
+                body,
+                "  export interface {name} extends {spelled}{interfaces}, {name}Members {{}}"
+            );
         }
         if !statics.is_empty() {
             let _ = writeln!(body, "  export namespace {name} {{");
@@ -1273,16 +1699,26 @@ impl Writer<'_> {
                 // projection named a struct's fields (`size.width`,
                 // `measure({ width: 100, height: 40 })`): nothing but the
                 // compiler defines the struct, so the C names are its own.
-                Ok(spelled) => fields.push(format!("{}: {spelled}", nts_core::hir::native::js_name(field.name()))),
+                Ok(spelled) => fields.push(format!(
+                    "{}: {spelled}",
+                    nts_core::hir::native::js_name(field.name())
+                )),
                 Err(why) => {
-                    self.refuse(name, &format!("a struct with a field `{}` that is {why}", field.name()));
+                    self.refuse(
+                        name,
+                        &format!("a struct with a field `{}` that is {why}", field.name()),
+                    );
                     return;
                 }
             }
         }
         self.brands.insert("Struct");
         let tag = format!("{}_{name}", self.namespace.replace('.', "_"));
-        let _ = writeln!(body, "  export type {name} = Struct<{{ {} }}, \"{tag}\">;", fields.join("; "));
+        let _ = writeln!(
+            body,
+            "  export type {name} = Struct<{{ {} }}, \"{tag}\">;",
+            fields.join("; ")
+        );
     }
 
     /// Why `structure` refuses a struct, if it does: a field that is not a C
@@ -1295,13 +1731,27 @@ impl Writer<'_> {
                 // A string makes the struct one the program holds as a plain
                 // object, copied at the call (`Copied<T>`).
                 // And a boolean, one byte read as one (`CBool<c_uint8>`).
-                Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 | Type::String | Type::Bool => None,
+                Type::I8
+                | Type::U8
+                | Type::I16
+                | Type::U16
+                | Type::Char
+                | Type::I32
+                | Type::U32
+                | Type::I64
+                | Type::U64
+                | Type::F32
+                | Type::F64
+                | Type::String
+                | Type::Bool => None,
                 Type::ValueName(named) if is_guid(named) => None,
                 Type::ValueName(named) => match self.find(&named.namespace, &named.name) {
                     Ok(inner) if inner.category() == TypeCategory::Enum => None,
                     // A struct holds its structs, so the graph has no cycle;
                     // the bound is against a malformed file.
-                    Ok(inner) if inner.category() == TypeCategory::Struct && depth < 8 => self.struct_refusal(inner, depth + 1),
+                    Ok(inner) if inner.category() == TypeCategory::Struct && depth < 8 => {
+                        self.struct_refusal(inner, depth + 1)
+                    }
                     Ok(_) => Some(format!("`{}`", named.name)),
                     Err(why) => Some(why),
                 },
@@ -1310,14 +1760,28 @@ impl Writer<'_> {
                 // by value (`by_value_record_is_passable` refuses the copy a
                 // second owner would be), but it is declared, and so is what
                 // names it: `HttpClient.GetStringAsync`'s operation.
-                Type::ClassName(named) => match self.index.get(&named.namespace, generic_base(&named.name)).next() {
-                    Some(inner) if matches!(inner.category(), TypeCategory::Interface | TypeCategory::Class) => None,
+                Type::ClassName(named) => match self
+                    .index
+                    .get(&named.namespace, generic_base(&named.name))
+                    .next()
+                {
+                    Some(inner)
+                        if matches!(
+                            inner.category(),
+                            TypeCategory::Interface | TypeCategory::Class
+                        ) =>
+                    {
+                        None
+                    }
                     _ => Some(format!("`{}`", named.name)),
                 },
                 other => Some(format!("{other:?}")),
             };
             if let Some(why) = why {
-                return Some(format!("a struct with a field `{}` that is {why}", field.name()));
+                return Some(format!(
+                    "a struct with a field `{}` that is {why}",
+                    field.name()
+                ));
             }
         }
         None
@@ -1346,10 +1810,16 @@ impl Writer<'_> {
                 Ok("Guid".to_owned())
             }
             Type::ValueName(named) => {
-                let def = self.find(&named.namespace, &named.name).map_err(|_| format!("`{}`, not in the metadata read", named.name))?;
+                let def = self
+                    .find(&named.namespace, &named.name)
+                    .map_err(|_| format!("`{}`, not in the metadata read", named.name))?;
                 match def.category() {
                     TypeCategory::Enum => {
-                        let underlying = if matches!(def.underlying_type(), Some(Type::U32)) { "c_uint32" } else { "c_int32" };
+                        let underlying = if matches!(def.underlying_type(), Some(Type::U32)) {
+                            "c_uint32"
+                        } else {
+                            "c_int32"
+                        };
                         let enumeration = self.named(&named.namespace, &named.name);
                         self.brands.insert("CEnum");
                         self.brands.insert(underlying);
@@ -1383,9 +1853,13 @@ impl Writer<'_> {
     fn holds_string(&self, def: TypeDef, depth: u32) -> bool {
         def.fields().any(|field| match field.ty() {
             Type::String => true,
-            Type::ValueName(named) if !is_guid(&named) => self
-                .find(&named.namespace, &named.name)
-                .is_ok_and(|inner| inner.category() == TypeCategory::Struct && depth < 8 && self.holds_string(inner, depth + 1)),
+            Type::ValueName(named) if !is_guid(&named) => {
+                self.find(&named.namespace, &named.name).is_ok_and(|inner| {
+                    inner.category() == TypeCategory::Struct
+                        && depth < 8
+                        && self.holds_string(inner, depth + 1)
+                })
+            }
             _ => false,
         })
     }
@@ -1394,7 +1868,9 @@ impl Writer<'_> {
     fn enumeration(def: TypeDef, body: &mut String) {
         let _ = writeln!(body, "  export const enum {} {{", def.name());
         for field in def.fields() {
-            let Some(constant) = field.constant() else { continue };
+            let Some(constant) = field.constant() else {
+                continue;
+            };
             let value = match constant.value() {
                 Value::I32(value) => i64::from(value),
                 Value::U32(value) => i64::from(value),
@@ -1423,7 +1899,9 @@ impl Writer<'_> {
             self.generics
                 .iter()
                 .enumerate()
-                .map(|(at, name)| Type::Generic(name.clone(), u16::try_from(at).unwrap_or(u16::MAX)))
+                .map(|(at, name)| {
+                    Type::Generic(name.clone(), u16::try_from(at).unwrap_or(u16::MAX))
+                })
                 .collect()
         })
     }
@@ -1431,6 +1909,7 @@ impl Writer<'_> {
     /// [`Self::method`], declared under `display` where the idiomatic surface
     /// names it (`getFolderFromPathAsync`), and called through the interface
     /// `via` names where a class declares it from one of its others.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn method_named(
         &mut self,
         method: windows_metadata::reader::MethodDef,
@@ -1440,8 +1919,17 @@ impl Writer<'_> {
         via: Option<&str>,
     ) -> Result<String, String> {
         let signature = method.signature(&self.signature_arguments());
-        let named = method.params_by_sequence(signature.types.len()).map_err(|_| "a method whose parameters the metadata numbers wrongly".to_owned())?;
-        let out = |at: usize| named.params().get(at).copied().flatten().is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out));
+        let named = method
+            .params_by_sequence(signature.types.len())
+            .map_err(|_| "a method whose parameters the metadata numbers wrongly".to_owned())?;
+        let out = |at: usize| {
+            named
+                .params()
+                .get(at)
+                .copied()
+                .flatten()
+                .is_some_and(|row| row.flags().contains(windows_metadata::ParamAttributes::Out))
+        };
         let declared = declared_parameters(&signature.types, out, &receiver)?;
         let mut parameters: Vec<String> = Vec::new();
         if let Receiver::Instance(this) = receiver {
@@ -1468,7 +1956,9 @@ impl Writer<'_> {
                 if !outs.is_empty() {
                     return Err("an `in` parameter after an `out` one".to_owned());
                 }
-                parameters.push(format!("{name}: Counted<{lent_as}, CNumber<\"uint32\">, \"before\">"));
+                parameters.push(format!(
+                    "{name}: Counted<{lent_as}, CNumber<\"uint32\">, \"before\">"
+                ));
                 lent.push(name);
                 continue;
             }
@@ -1478,7 +1968,12 @@ impl Writer<'_> {
                     // `GetMany`'s buffer, which the caller allocates and the
                     // callee fills: lent in place above where it holds bytes
                     // or numbers.
-                    Type::Array(element) => return Err(format!("an array the callee fills, of {}", element_name(element))),
+                    Type::Array(element) => {
+                        return Err(format!(
+                            "an array the callee fills, of {}",
+                            element_name(element)
+                        ));
+                    }
                     _ => return Err("an `out` parameter not written through a pointer".to_owned()),
                 };
                 if name == "returnValue" {
@@ -1526,16 +2021,29 @@ impl Writer<'_> {
             Type::Void => format!("{{ {} }}", outs.join("; ")),
             other if outs.is_empty() && overriding => self.spell(other, false)?,
             other if outs.is_empty() => self.answered(other)?,
-            other => format!("{{ {}; returnValue: {} }}", outs.join("; "), self.spell(other, false)?),
+            other => format!(
+                "{{ {}; returnValue: {} }}",
+                outs.join("; "),
+                self.spell(other, false)?
+            ),
         };
         let mut text = String::new();
         let _ = writeln!(text, "    /**");
         if let Receiver::Override { iid } = receiver {
-            let _ = writeln!(text, "     * @ntsOverride {iid} {slot} {}", method_name(method));
+            let _ = writeln!(
+                text,
+                "     * @ntsOverride {iid} {slot} {}",
+                method_name(method)
+            );
             let _ = writeln!(text, "     */");
             // Written in camelCase as every member of the surface is
             // (`onLaunched`); the tag keeps the slot's own name.
-            let _ = writeln!(text, "    {}({}): {result};", nts_core::hir::native::js_name(&method_name(method)), parameters.join(", "));
+            let _ = writeln!(
+                text,
+                "    {}({}): {result};",
+                nts_core::hir::native::js_name(&method_name(method)),
+                parameters.join(", ")
+            );
             return Ok(text);
         }
         let _ = writeln!(text, "     * @ntsVtable {slot} {}", method_name(method));
@@ -1557,14 +2065,23 @@ impl Writer<'_> {
             let _ = writeln!(text, "    constructor({});", parameters.join(", "));
             return Ok(text);
         }
-        let keyword = if matches!(receiver, Receiver::Instance(_) | Receiver::Member) { "" } else { "function " };
+        let keyword = if matches!(receiver, Receiver::Instance(_) | Receiver::Member) {
+            ""
+        } else {
+            "function "
+        };
         let name = display.map_or_else(|| method_name(method), str::to_owned);
-        let _ = writeln!(text, "    {keyword}{name}({}): {result};", parameters.join(", "));
+        let _ = writeln!(
+            text,
+            "    {keyword}{name}({}): {result};",
+            parameters.join(", ")
+        );
         Ok(text)
     }
 
     /// The TypeScript for one Windows Runtime type, as a parameter (`argument`) or a
     /// result.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn spell(&mut self, ty: &Type, argument: bool) -> Result<String, String> {
         let scalar = |brand: &'static str, writer: &mut Self| {
             writer.brands.insert(brand);
@@ -1594,12 +2111,20 @@ impl Writer<'_> {
             // One byte, 0 or 1: C's `bool`.
             Type::Bool => Ok("boolean".to_owned()),
             // A parameter of the generic interface being written, by name.
-            Type::Generic(name, _) if self.generics.iter().any(|known| known == name) => Ok(name.clone()),
-            Type::Generic(name, _) => Err(format!("`{name}`, a type parameter of something not being written")),
+            Type::Generic(name, _) if self.generics.iter().any(|known| known == name) => {
+                Ok(name.clone())
+            }
+            Type::Generic(name, _) => Err(format!(
+                "`{name}`, a type parameter of something not being written"
+            )),
             Type::ClassName(name) => {
                 // The index keys a generic type by its name without the tick:
                 // ``IVectorView`1`` is found as `IVectorView`.
-                let Some(def) = self.index.get(&name.namespace, generic_base(&name.name)).next() else {
+                let Some(def) = self
+                    .index
+                    .get(&name.namespace, generic_base(&name.name))
+                    .next()
+                else {
                     return Err(format!("`{}`, not in the metadata read", name.name));
                 };
                 if def.category() == TypeCategory::Delegate {
@@ -1614,7 +2139,10 @@ impl Writer<'_> {
                         .map(|implemented| implemented.interface(&[]))
                     && let Err(why) = self.spell(&interface, false)
                 {
-                    return Err(format!("`{}`, a runtime class whose default interface is {why}", name.name));
+                    return Err(format!(
+                        "`{}`, a runtime class whose default interface is {why}",
+                        name.name
+                    ));
                 }
                 // A class where one is taken is its default interface, which is
                 // what the ABI passes: so an instance of it, or of a class
@@ -1639,17 +2167,26 @@ impl Writer<'_> {
                 let spelled = if name.generics.is_empty() {
                     base
                 } else {
-                    let arguments = name.generics.iter().map(|argument| self.spell(argument, false)).collect::<Result<Vec<_>, _>>()?;
+                    let arguments = name
+                        .generics
+                        .iter()
+                        .map(|argument| self.spell(argument, false))
+                        .collect::<Result<Vec<_>, _>>()?;
                     let instantiation = format!("{base}<{}>", arguments.join(", "));
                     if def.category() == TypeCategory::Interface {
-                        self.specialize(def, name, &instantiation).unwrap_or(instantiation)
+                        self.specialize(def, name, &instantiation)
+                            .unwrap_or(instantiation)
                     } else {
                         instantiation
                     }
                 };
                 // An object may be null where it is passed, as WinRT's
                 // projections all allow; a result is what C wrote.
-                Ok(if argument { format!("{spelled} | null") } else { spelled })
+                Ok(if argument {
+                    format!("{spelled} | null")
+                } else {
+                    spelled
+                })
             }
             Type::ValueName(name) if is_guid(name) => {
                 self.brands.insert("Guid");
@@ -1661,10 +2198,17 @@ impl Writer<'_> {
             Type::RefConst(inner) if argument && matches!(&**inner, Type::ValueName(_)) => {
                 let by_value = self.spell(inner, true)?;
                 if by_value.starts_with("Copied<") {
-                    return Err(format!("{ty:?}, a reference to a struct holding a string, which is copied only by value"));
+                    return Err(format!(
+                        "{ty:?}, a reference to a struct holding a string, which is copied only by value"
+                    ));
                 }
-                let Some(record) = by_value.strip_prefix("ByValue<").and_then(|rest| rest.strip_suffix('>')) else {
-                    return Err(format!("{ty:?}, a reference to something other than a struct"));
+                let Some(record) = by_value
+                    .strip_prefix("ByValue<")
+                    .and_then(|rest| rest.strip_suffix('>'))
+                else {
+                    return Err(format!(
+                        "{ty:?}, a reference to something other than a struct"
+                    ));
                 };
                 self.brands.insert("ConstPtr");
                 Ok(format!("ConstPtr<{record}>"))
@@ -1685,7 +2229,9 @@ impl Writer<'_> {
             }
             // Lent in place by `method_named` where it is one `lent_array`
             // builds; any other is refused here.
-            Type::Array(element) => Err(format!("an array passed in, of {}", element_name(element))),
+            Type::Array(element) => {
+                Err(format!("an array passed in, of {}", element_name(element)))
+            }
             Type::RefMut(_) => Err("an `out` parameter".to_owned()),
             other => Err(format!("{other:?}, a type WinRT does not use here")),
         }
@@ -1716,7 +2262,10 @@ impl Writer<'_> {
     /// ABI type from, and not a `Guid`, which nobody writes as its four
     /// fields. Any other type is itself.
     fn or_fields(&mut self, spelled: String) -> String {
-        match spelled.strip_prefix("ByValue<").and_then(|rest| rest.strip_suffix('>')) {
+        match spelled
+            .strip_prefix("ByValue<")
+            .and_then(|rest| rest.strip_suffix('>'))
+        {
             Some(record) if record != "Guid" => {
                 self.brands.insert("Fields");
                 format!("{spelled} | Fields<{record}>")
@@ -1790,16 +2339,29 @@ impl Writer<'_> {
     /// and for a `Guid`, which nobody reads as its four fields: those stay
     /// the reference.
     fn referenced(&mut self, ty: &Type) -> Result<Option<String>, String> {
-        let Type::ClassName(named) = ty else { return Ok(None) };
-        let [value] = named.generics.as_slice() else { return Ok(None) };
+        let Type::ClassName(named) = ty else {
+            return Ok(None);
+        };
+        let [value] = named.generics.as_slice() else {
+            return Ok(None);
+        };
         if named.namespace != "Windows.Foundation" || generic_base(&named.name) != "IReference" {
             return Ok(None);
         }
         Ok(Some(match value {
             Type::Bool => "boolean".to_owned(),
-            Type::String | Type::I8 | Type::U8 | Type::I16 | Type::U16 | Type::Char | Type::I32 | Type::U32 | Type::I64 | Type::U64 | Type::F32 | Type::F64 => {
-                self.spell(value, false)?
-            }
+            Type::String
+            | Type::I8
+            | Type::U8
+            | Type::I16
+            | Type::U16
+            | Type::Char
+            | Type::I32
+            | Type::U32
+            | Type::I64
+            | Type::U64
+            | Type::F32
+            | Type::F64 => self.spell(value, false)?,
             Type::ValueName(name) if is_guid(name) => return Ok(None),
             Type::ValueName(name) => {
                 let def = self.find(&name.namespace, &name.name)?;
@@ -1823,12 +2385,18 @@ impl Writer<'_> {
     /// for, which the runtime makes a reference of itself. `None` where it
     /// stays the reference: a string, and whatever `referenced` leaves.
     fn reference_parameter(&mut self, ty: &Type) -> Result<Option<(String, String, u8)>, String> {
-        let Type::ClassName(named) = ty else { return Ok(None) };
-        let [value] = named.generics.as_slice() else { return Ok(None) };
+        let Type::ClassName(named) = ty else {
+            return Ok(None);
+        };
+        let [value] = named.generics.as_slice() else {
+            return Ok(None);
+        };
         if matches!(value, Type::String) {
             return Ok(None);
         }
-        let Some(spelled) = self.referenced(ty)? else { return Ok(None) };
+        let Some(spelled) = self.referenced(ty)? else {
+            return Ok(None);
+        };
         let kind = match value {
             Type::U8 => 1,
             Type::I16 => 2,
@@ -1841,14 +2409,16 @@ impl Writer<'_> {
             Type::F64 => 9,
             Type::Char => 10,
             Type::Bool => 11,
-            Type::ValueName(name) if name.namespace == "Windows.Foundation" => match name.name.as_str() {
-                "DateTime" => 14,
-                "TimeSpan" => 15,
-                "Point" => 17,
-                "Size" => 18,
-                "Rect" => 19,
-                _ => 20,
-            },
+            Type::ValueName(name) if name.namespace == "Windows.Foundation" => {
+                match name.name.as_str() {
+                    "DateTime" => 14,
+                    "TimeSpan" => 15,
+                    "Point" => 17,
+                    "Size" => 18,
+                    "Rect" => 19,
+                    _ => 20,
+                }
+            }
             _ => 20,
         };
         Ok(Some((spelled, self.interface_iid(ty)?, kind)))
@@ -1863,28 +2433,43 @@ impl Writer<'_> {
     /// which would reach the function as an `HSTRING` the bridge does not
     /// convert.
     fn delegate(&mut self, ty: &Type, def: TypeDef, argument: bool) -> Result<String, String> {
-        let Type::ClassName(named) = ty else { return Err("not a delegate".to_owned()) };
+        let Type::ClassName(named) = ty else {
+            return Err("not a delegate".to_owned());
+        };
         let what = generic_base(&named.name);
         if !argument {
             return Err(format!("`{what}`, a delegate as a result"));
         }
-        let invoke = def.methods().find(|method| method.name() == "Invoke").ok_or_else(|| format!("`{what}`, a delegate with no `Invoke`"))?;
+        let invoke = def
+            .methods()
+            .find(|method| method.name() == "Invoke")
+            .ok_or_else(|| format!("`{what}`, a delegate with no `Invoke`"))?;
         let signature = invoke.signature(&named.generics);
         if !matches!(signature.return_type, Type::Void) {
             return Err(format!("`{what}`, a delegate that returns a value"));
         }
-        let rows = invoke.params_by_sequence(signature.types.len()).map_err(|_| format!("`{what}`, whose `Invoke` the metadata numbers wrongly"))?;
+        let rows = invoke
+            .params_by_sequence(signature.types.len())
+            .map_err(|_| format!("`{what}`, whose `Invoke` the metadata numbers wrongly"))?;
         let mut parameters = Vec::new();
         for (at, parameter) in signature.types.iter().enumerate() {
             if matches!(parameter, Type::String) {
                 return Err(format!("`{what}`, a delegate taking a string"));
             }
-            let name = rows.params().get(at).copied().flatten().map_or_else(|| format!("param{at}"), |row| safe(row.name()));
+            let name = rows
+                .params()
+                .get(at)
+                .copied()
+                .flatten()
+                .map_or_else(|| format!("param{at}"), |row| safe(row.name()));
             parameters.push(format!("{name}: {}", self.spell(parameter, false)?));
         }
         let iid = self.interface_iid(ty)?;
         self.brands.insert("Delegate");
-        Ok(format!("Delegate<({}) => void, \"{iid}\">", parameters.join(", ")))
+        Ok(format!(
+            "Delegate<({}) => void, \"{iid}\">",
+            parameters.join(", ")
+        ))
     }
 
     /// An array the callee allocated (`ReceiveArray`), as the program reads
@@ -1909,7 +2494,13 @@ impl Writer<'_> {
             return Ok(format!("Copied<{record}>[]"));
         }
         let object = match element {
-            Type::ClassName(named) if self.index.get(&named.namespace, generic_base(&named.name)).next().is_some_and(|def| def.category() != TypeCategory::Delegate) => {
+            Type::ClassName(named)
+                if self
+                    .index
+                    .get(&named.namespace, generic_base(&named.name))
+                    .next()
+                    .is_some_and(|def| def.category() != TypeCategory::Delegate) =>
+            {
                 self.spell(element, false)?
             }
             Type::Object => {
@@ -1944,10 +2535,18 @@ impl Writer<'_> {
             format!("CBytes<\"{pointee}\">")
         } else if let Some((array, spelled)) = elements_of(&self.enum_as_integer(element)) {
             self.brands.insert("CElements");
-            let spelled = if written { spelled.to_owned() } else { format!("const {spelled}") };
+            let spelled = if written {
+                spelled.to_owned()
+            } else {
+                format!("const {spelled}")
+            };
             format!("CElements<{array}, \"{spelled}\">")
         } else if matches!(element, Type::Bool) {
-            let brand = if written { "FilledBooleans" } else { "Booleans" };
+            let brand = if written {
+                "FilledBooleans"
+            } else {
+                "Booleans"
+            };
             self.brands.insert(brand);
             brand.to_owned()
         } else if matches!(element, Type::String) {
@@ -1980,7 +2579,11 @@ impl Writer<'_> {
             && let Some(def) = self.index.get(&named.namespace, &named.name).next()
             && def.category() == TypeCategory::Enum
         {
-            return if matches!(def.underlying_type(), Some(Type::U32)) { Type::U32 } else { Type::I32 };
+            return if matches!(def.underlying_type(), Some(Type::U32)) {
+                Type::U32
+            } else {
+                Type::I32
+            };
         }
         element.clone()
     }
@@ -1990,18 +2593,28 @@ impl Writer<'_> {
     /// holding a string, whose elements would each lend an `HSTRING`. `None`
     /// for anything that is not a struct; a struct refused, with why.
     fn plain_struct(&mut self, element: &Type) -> Result<Option<String>, String> {
-        let Type::ValueName(value) = element else { return Ok(None) };
+        let Type::ValueName(value) = element else {
+            return Ok(None);
+        };
         if is_guid(value) {
             return Ok(None);
         }
-        let Some(def) = self.index.get(&value.namespace, &value.name).next().filter(|def| def.category() == TypeCategory::Struct) else {
+        let Some(def) = self
+            .index
+            .get(&value.namespace, &value.name)
+            .next()
+            .filter(|def| def.category() == TypeCategory::Struct)
+        else {
             return Ok(None);
         };
         if let Some(why) = self.struct_refusal(def, 0) {
             return Err(format!("`{}`, {why}", value.name));
         }
         if self.holds_string(def, 0) {
-            return Err(format!("an array of `{}`, a struct holding a string", value.name));
+            return Err(format!(
+                "an array of `{}`, a struct holding a string",
+                value.name
+            ));
         }
         Ok(Some(self.named(&value.namespace, &value.name)))
     }
@@ -2010,11 +2623,18 @@ impl Writer<'_> {
     /// strings and all, since each is copied out as a `Copied<T>` result is.
     /// `None` for anything that is not a struct; a struct refused, with why.
     fn filled_struct(&mut self, element: &Type) -> Result<Option<String>, String> {
-        let Type::ValueName(value) = element else { return Ok(None) };
+        let Type::ValueName(value) = element else {
+            return Ok(None);
+        };
         if is_guid(value) {
             return Ok(None);
         }
-        let Some(def) = self.index.get(&value.namespace, &value.name).next().filter(|def| def.category() == TypeCategory::Struct) else {
+        let Some(def) = self
+            .index
+            .get(&value.namespace, &value.name)
+            .next()
+            .filter(|def| def.category() == TypeCategory::Struct)
+        else {
             return Ok(None);
         };
         if let Some(why) = self.struct_refusal(def, 0) {
@@ -2029,7 +2649,11 @@ impl Writer<'_> {
     fn handle_element(&mut self, element: &Type) -> Result<Option<String>, String> {
         Ok(match element {
             Type::ClassName(named)
-                if self.index.get(&named.namespace, generic_base(&named.name)).next().is_some_and(|def| def.category() != TypeCategory::Delegate) =>
+                if self
+                    .index
+                    .get(&named.namespace, generic_base(&named.name))
+                    .next()
+                    .is_some_and(|def| def.category() != TypeCategory::Delegate) =>
             {
                 Some(self.spell(element, false)?)
             }
@@ -2046,18 +2670,28 @@ impl Writer<'_> {
     /// (`Copied<T>`), as `TryGetVector2`'s `value` is. Not a `Guid`, which
     /// nobody reads as its four fields. `None` for anything else.
     fn copied_out(&mut self, written: &Type) -> Result<Option<String>, String> {
-        let Type::ValueName(value) = written else { return Ok(None) };
+        let Type::ValueName(value) = written else {
+            return Ok(None);
+        };
         if is_guid(value) {
             return Err("a `Guid` `out` parameter".to_owned());
         }
-        let Some(def) = self.index.get(&value.namespace, &value.name).next().filter(|def| def.category() == TypeCategory::Struct) else {
+        let Some(def) = self
+            .index
+            .get(&value.namespace, &value.name)
+            .next()
+            .filter(|def| def.category() == TypeCategory::Struct)
+        else {
             return Ok(None);
         };
         if let Some(why) = self.struct_refusal(def, 0) {
             return Err(format!("`{}`, {why}", value.name));
         }
         self.brands.insert("Copied");
-        Ok(Some(format!("Copied<{}>", self.named(&value.namespace, &value.name))))
+        Ok(Some(format!(
+            "Copied<{}>",
+            self.named(&value.namespace, &value.name)
+        )))
     }
 
     /// `DragCompletedEventHandler`: the delegate as a parameter taking one
@@ -2066,7 +2700,11 @@ impl Writer<'_> {
     /// has no one type, and is refused before this.
     fn delegate_type(&mut self, def: TypeDef, body: &mut String) {
         let name = def.name();
-        let ty = Type::ClassName(windows_metadata::TypeName { namespace: self.namespace.to_owned(), name: name.to_owned(), generics: Vec::new() });
+        let ty = Type::ClassName(windows_metadata::TypeName {
+            namespace: self.namespace.to_owned(),
+            name: name.to_owned(),
+            generics: Vec::new(),
+        });
         match self.delegate(&ty, def, true) {
             Ok(spelled) => {
                 let _ = writeln!(body, "  export type {name} = {spelled};");
@@ -2079,10 +2717,13 @@ impl Writer<'_> {
     /// `GuidAttribute`, or the Windows Runtime's hash of the instantiation's
     /// signature (`iid::parameterized`).
     fn interface_iid(&self, ty: &Type) -> Result<String, String> {
-        let Type::ClassName(named) = ty else { return Err("not an interface".to_owned()) };
+        let Type::ClassName(named) = ty else {
+            return Err("not an interface".to_owned());
+        };
         if named.generics.is_empty() {
             let def = self.find(&named.namespace, &named.name)?;
-            return iid(def).ok_or_else(|| format!("`{}`, an interface with no GuidAttribute", named.name));
+            return iid(def)
+                .ok_or_else(|| format!("`{}`, an interface with no GuidAttribute", named.name));
         }
         Ok(super::iid::parameterized(&self.signature(ty)?))
     }
@@ -2105,21 +2746,38 @@ impl Writer<'_> {
             Type::F64 => "f8".to_owned(),
             Type::String => "string".to_owned(),
             Type::Object => "cinterface(IInspectable)".to_owned(),
-            Type::ValueName(named) if named.namespace == "System" && named.name == "Guid" => "g16".to_owned(),
+            Type::ValueName(named) if named.namespace == "System" && named.name == "Guid" => {
+                "g16".to_owned()
+            }
             Type::ValueName(named) => {
                 let def = self.find(&named.namespace, &named.name)?;
                 if def.category() == TypeCategory::Enum {
-                    let underlying = if matches!(def.underlying_type(), Some(Type::U32)) { "u4" } else { "i4" };
+                    let underlying = if matches!(def.underlying_type(), Some(Type::U32)) {
+                        "u4"
+                    } else {
+                        "i4"
+                    };
                     format!("enum({}.{};{underlying})", named.namespace, named.name)
                 } else {
-                    let fields: Vec<String> =
-                        def.fields().map(|field| self.signature(&field.ty())).collect::<Result<_, _>>()?;
-                    format!("struct({}.{};{})", named.namespace, named.name, fields.join(";"))
+                    let fields: Vec<String> = def
+                        .fields()
+                        .map(|field| self.signature(&field.ty()))
+                        .collect::<Result<_, _>>()?;
+                    format!(
+                        "struct({}.{};{})",
+                        named.namespace,
+                        named.name,
+                        fields.join(";")
+                    )
                 }
             }
             Type::ClassName(named) => {
                 let def = self.find(&named.namespace, &named.name)?;
-                let own = || iid(def).map(|iid| format!("{{{}}}", iid.to_lowercase())).ok_or_else(|| format!("`{}` has no IID", named.name));
+                let own = || {
+                    iid(def)
+                        .map(|iid| format!("{{{}}}", iid.to_lowercase()))
+                        .ok_or_else(|| format!("`{}` has no IID", named.name))
+                };
                 if named.generics.is_empty() {
                     match def.category() {
                         TypeCategory::Interface => own()?,
@@ -2128,13 +2786,24 @@ impl Writer<'_> {
                             let default = def
                                 .interface_impls()
                                 .find(|implemented| implemented.has_attribute("DefaultAttribute"))
-                                .ok_or_else(|| format!("`{}`, a class with no default interface", named.name))?;
-                            format!("rc({}.{};{})", named.namespace, named.name, self.signature(&default.interface(&[]))?)
+                                .ok_or_else(|| {
+                                    format!("`{}`, a class with no default interface", named.name)
+                                })?;
+                            format!(
+                                "rc({}.{};{})",
+                                named.namespace,
+                                named.name,
+                                self.signature(&default.interface(&[]))?
+                            )
                         }
                         _ => return Err(format!("`{}`, which has no signature", named.name)),
                     }
                 } else {
-                    let arguments: Vec<String> = named.generics.iter().map(|argument| self.signature(argument)).collect::<Result<_, _>>()?;
+                    let arguments: Vec<String> = named
+                        .generics
+                        .iter()
+                        .map(|argument| self.signature(argument))
+                        .collect::<Result<_, _>>()?;
                     format!("pinterface({};{})", own()?, arguments.join(";"))
                 }
             }
@@ -2143,13 +2812,19 @@ impl Writer<'_> {
     }
 
     fn find(&self, namespace: &str, name: &str) -> Result<TypeDef<'_>, String> {
-        self.index.get(namespace, generic_base(name)).next().ok_or_else(|| format!("`{name}`, not in the metadata read"))
+        self.index
+            .get(namespace, generic_base(name))
+            .next()
+            .ok_or_else(|| format!("`{name}`, not in the metadata read"))
     }
 
     /// A type's name as this module spells it: its own, imported from the
     /// module of the namespace declaring it when that is another.
     fn named(&mut self, namespace: &str, name: &str) -> String {
-        self.references.entry(namespace.to_owned()).or_default().insert(name.to_owned());
+        self.references
+            .entry(namespace.to_owned())
+            .or_default()
+            .insert(name.to_owned());
         if namespace == self.namespace {
             return name.to_owned();
         }
@@ -2161,8 +2836,14 @@ impl Writer<'_> {
         // `Windows.ApplicationModel.Activation.LaunchActivatedEventArgs`: one
         // name, two types.
         let declared_here = self.index.get(self.namespace, name).next().is_some();
-        let imported_already = self.spelled.iter().any(|((other, taken), spelled)| other != namespace && taken == name && spelled == name);
-        let spelled = if declared_here || imported_already { format!("{}_{name}", namespace.replace('.', "_")) } else { name.to_owned() };
+        let imported_already = self.spelled.iter().any(|((other, taken), spelled)| {
+            other != namespace && taken == name && spelled == name
+        });
+        let spelled = if declared_here || imported_already {
+            format!("{}_{name}", namespace.replace('.', "_"))
+        } else {
+            name.to_owned()
+        };
         self.spelled.insert(key, spelled.clone());
         spelled
     }
@@ -2175,7 +2856,12 @@ impl Writer<'_> {
     /// arguments as `IAsyncOperationOfStorageFile`, the instantiation and
     /// those members together. `None` where every member was declared
     /// generically, and the instantiation is spelled as it is.
-    fn specialize(&mut self, def: TypeDef, named: &windows_metadata::TypeName, instantiation: &str) -> Option<String> {
+    fn specialize(
+        &mut self,
+        def: TypeDef,
+        named: &windows_metadata::TypeName,
+        instantiation: &str,
+    ) -> Option<String> {
         // Only for arguments that are types: a parameter standing for one
         // (`IAsyncOperation<TResult>` inside the generic interface) decides
         // nothing yet.
@@ -2183,18 +2869,32 @@ impl Writer<'_> {
             return None;
         }
         let base = generic_base(&named.name);
-        let alias = format!("{base}Of{}", named.generics.iter().map(word).collect::<String>());
+        let alias = format!(
+            "{base}Of{}",
+            named.generics.iter().map(word).collect::<String>()
+        );
         if self.specialized.contains_key(&alias) {
             return Some(alias);
         }
         // Marked before anything is spelled: a member naming the
         // instantiation -- the handler's `asyncInfo` -- finds the name.
         self.specialized.insert(alias.clone(), String::new());
-        let generics = std::mem::replace(&mut self.generics, def.generic_params().map(|param| param.name().to_owned()).collect());
+        let generics = std::mem::replace(
+            &mut self.generics,
+            def.generic_params()
+                .map(|param| param.name().to_owned())
+                .collect(),
+        );
         let arguments = self.arguments.take();
         let this = format!("{base}<{}>", self.generics.join(", "));
-        let generic: Vec<bool> =
-            def.methods().enumerate().map(|(at, method)| self.method(method, 6 + at, Receiver::Instance(&this)).is_ok()).collect();
+        let generic: Vec<bool> = def
+            .methods()
+            .enumerate()
+            .map(|(at, method)| {
+                self.method(method, 6 + at, Receiver::Instance(&this))
+                    .is_ok()
+            })
+            .collect();
         let mut text = String::new();
         if generic.contains(&false) {
             self.generics.clear();
@@ -2216,11 +2916,17 @@ impl Writer<'_> {
             text.push_str(&then);
         }
         let mut declaration = String::new();
-        let _ = writeln!(declaration, "  /** `{instantiation}`, with the members that depend on its arguments. */");
+        let _ = writeln!(
+            declaration,
+            "  /** `{instantiation}`, with the members that depend on its arguments. */"
+        );
         let _ = writeln!(declaration, "  export interface {alias}Methods {{");
         declaration.push_str(&text);
         let _ = writeln!(declaration, "  }}");
-        let _ = writeln!(declaration, "  export type {alias} = {instantiation} & {alias}Methods;");
+        let _ = writeln!(
+            declaration,
+            "  export type {alias} = {instantiation} & {alias}Methods;"
+        );
         self.specialized.insert(alias.clone(), declaration);
         Some(alias)
     }
@@ -2239,7 +2945,12 @@ impl Writer<'_> {
     /// resolves a promise with the operation through it, as the specification
     /// resolves any thenable. `None` for every other instantiation, and for an
     /// operation whose result could not be spelled.
-    fn then(&mut self, def: TypeDef, named: &windows_metadata::TypeName, alias: &str) -> Option<String> {
+    fn then(
+        &mut self,
+        def: TypeDef,
+        named: &windows_metadata::TypeName,
+        alias: &str,
+    ) -> Option<String> {
         let base = generic_base(&named.name);
         if def.namespace() != "Windows.Foundation" {
             return None;
@@ -2257,7 +2968,9 @@ impl Writer<'_> {
         // object of its fields (`Copied<T>`), copied out of it where it is.
         // One holding a string answers that object already.
         if let Type::ValueName(result) = argument
-            && self.find(&result.namespace, &result.name).is_ok_and(|def| def.category() == TypeCategory::Struct)
+            && self
+                .find(&result.namespace, &result.name)
+                .is_ok_and(|def| def.category() == TypeCategory::Struct)
             && !is_guid(result)
         {
             let record = self.named(&result.namespace, &result.name);
@@ -2272,7 +2985,9 @@ impl Writer<'_> {
                 };
                 Then {
                     value: format!("Copied<{record}>"),
-                    fulfil: format!("const result = completed.GetResults();\n        onFulfilled({fields});"),
+                    fulfil: format!(
+                        "const result = completed.GetResults();\n        onFulfilled({fields});"
+                    ),
                 }
             };
             return Some(self.then_declaration(alias, Some(then)));
@@ -2293,7 +3008,9 @@ impl Writer<'_> {
             let value = match field.ty() {
                 Type::ValueName(named) if is_guid(&named) => return None,
                 Type::ValueName(named) => match self.find(&named.namespace, &named.name) {
-                    Ok(inner) if inner.category() == TypeCategory::Struct && depth < 8 => self.copied_literal(inner, &read, depth + 1)?,
+                    Ok(inner) if inner.category() == TypeCategory::Struct && depth < 8 => {
+                        self.copied_literal(inner, &read, depth + 1)?
+                    }
                     _ => read,
                 },
                 _ => read,
@@ -2307,11 +3024,16 @@ impl Writer<'_> {
     /// action's callback takes `void`, which is what `await` on it is -- as
     /// on a `Promise<void>`.
     fn then_declaration(&mut self, alias: &str, result: Option<Then>) -> String {
-        let value = result.as_ref().map_or_else(|| "void".to_owned(), |then| then.value.clone());
+        let value = result
+            .as_ref()
+            .map_or_else(|| "void".to_owned(), |then| then.value.clone());
         self.thens.insert(alias.to_owned(), result);
         let mut text = String::new();
         let _ = writeln!(text, "    /**");
-        let _ = writeln!(text, "     * `await operation`: its result, or the error it completes with.");
+        let _ = writeln!(
+            text,
+            "     * `await operation`: its result, or the error it completes with."
+        );
         let _ = writeln!(text, "     * @ntsCall {}", then_function(alias));
         let _ = writeln!(text, "     */");
         let _ = writeln!(
@@ -2324,6 +3046,7 @@ impl Writer<'_> {
     /// The values module: one function for each `then` this module declares,
     /// importing exactly the names its functions spell, spelled as the
     /// declarations spell them. `None` where it declares none.
+    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn values(&self, command: &str) -> Option<String> {
         if self.thens.is_empty() {
             return None;
@@ -2343,7 +3066,9 @@ impl Writer<'_> {
             let function = then_function(alias);
             let value = result.as_ref().map_or("void", |then| then.value.as_str());
             // An action has no result to read: it completed, and that is all.
-            let fulfil = result.as_ref().map_or("onFulfilled(undefined);", |then| then.fulfil.as_str());
+            let fulfil = result
+                .as_ref()
+                .map_or("onFulfilled(undefined);", |then| then.fulfil.as_str());
             let _ = writeln!(functions);
             let _ = writeln!(functions, "export function {function}(");
             let _ = writeln!(functions, "  operation: {alias},");
@@ -2352,14 +3077,20 @@ impl Writer<'_> {
             let _ = writeln!(functions, "): void {{");
             let _ = writeln!(functions, "  nts_pending_begin();");
             let _ = writeln!(functions, "  try {{");
-            let _ = writeln!(functions, "    operation.put_Completed((completed, status) => {{");
+            let _ = writeln!(
+                functions,
+                "    operation.put_Completed((completed, status) => {{"
+            );
             let _ = writeln!(functions, "      nts_pending_end();");
             let _ = writeln!(functions, "      if (status === AsyncStatus.Completed) {{");
             let _ = writeln!(functions, "        {fulfil}");
             let _ = writeln!(functions, "        return;");
             let _ = writeln!(functions, "      }}");
             let _ = writeln!(functions, "      if (status === AsyncStatus.Canceled) {{");
-            let _ = writeln!(functions, "        const canceled = new Error(\"Canceled\");");
+            let _ = writeln!(
+                functions,
+                "        const canceled = new Error(\"Canceled\");"
+            );
             let _ = writeln!(functions, "        canceled.name = \"Canceled\";");
             let _ = writeln!(functions, "        onRejected(canceled);");
             let _ = writeln!(functions, "        return;");
@@ -2370,7 +3101,10 @@ impl Writer<'_> {
             let _ = writeln!(functions, "        onRejected(error);");
             let _ = writeln!(functions, "        return;");
             let _ = writeln!(functions, "      }}");
-            let _ = writeln!(functions, "      onRejected(new Error(\"the operation ended \" + String(status) + \" and GetResults did not fail\"));");
+            let _ = writeln!(
+                functions,
+                "      onRejected(new Error(\"the operation ended \" + String(status) + \" and GetResults did not fail\"));"
+            );
             let _ = writeln!(functions, "    }});");
             let _ = writeln!(functions, "  }} catch (error) {{");
             let _ = writeln!(functions, "    nts_pending_end();");
@@ -2384,48 +3118,124 @@ impl Writer<'_> {
         // it at run time, so it is not one of these.
         let used: BTreeSet<&str> = functions
             .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-            .filter(|word| word.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_'))
+            .filter(|word| {
+                word.chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            })
             .filter(|word| *word != "AsyncStatus")
             .collect();
         let mut text = String::new();
-        let _ = writeln!(text, "// Generated by `{command}` beside the binding of `winrt:{}`. Edit the command, not this file.", self.namespace);
+        let _ = writeln!(
+            text,
+            "// Generated by `{command}` beside the binding of `winrt:{}`. Edit the command, not this file.",
+            self.namespace
+        );
         let _ = writeln!(text, "//");
-        let _ = writeln!(text, "// Each async operation's `then`, which its binding names with `@ntsCall`:");
-        let _ = writeln!(text, "// `Completed` subscribed, and the result or the failure handed on. Pending");
-        let _ = writeln!(text, "// from the subscription to the completion, so the event loop waits for it.");
-        let _ = writeln!(text, "// Subscribing twice is refused by the operation (E_ILLEGAL_DELEGATE_ASSIGNMENT),");
-        let _ = writeln!(text, "// so a second `await` of one operation rejects with that.");
-        let _ = writeln!(text, "import {{ nts_pending_begin, nts_pending_end }} from \"c:pending\";");
-        let _ = writeln!(text, "import {{ AsyncStatus }} from \"winrt:Windows.Foundation\";");
+        let _ = writeln!(
+            text,
+            "// Each async operation's `then`, which its binding names with `@ntsCall`:"
+        );
+        let _ = writeln!(
+            text,
+            "// `Completed` subscribed, and the result or the failure handed on. Pending"
+        );
+        let _ = writeln!(
+            text,
+            "// from the subscription to the completion, so the event loop waits for it."
+        );
+        let _ = writeln!(
+            text,
+            "// Subscribing twice is refused by the operation (E_ILLEGAL_DELEGATE_ASSIGNMENT),"
+        );
+        let _ = writeln!(
+            text,
+            "// so a second `await` of one operation rejects with that."
+        );
+        let _ = writeln!(
+            text,
+            "import {{ nts_pending_begin, nts_pending_end }} from \"c:pending\";"
+        );
+        let _ = writeln!(
+            text,
+            "import {{ AsyncStatus }} from \"winrt:Windows.Foundation\";"
+        );
         for (module, brands) in [("c:types", C_BRANDS), ("winrt:types", WINRT_BRANDS)] {
-            let scalars = used.iter().copied().filter(|word| module == "c:types" && word.starts_with("c_"));
-            let names: Vec<&str> = brands.iter().copied().filter(|brand| used.contains(brand)).chain(scalars).collect();
+            let scalars = used
+                .iter()
+                .copied()
+                .filter(|word| module == "c:types" && word.starts_with("c_"));
+            let names: Vec<&str> = brands
+                .iter()
+                .copied()
+                .filter(|brand| used.contains(brand))
+                .chain(scalars)
+                .collect();
             if !names.is_empty() {
-                let _ = writeln!(text, "import type {{ {} }} from \"{module}\";", names.join(", "));
+                let _ = writeln!(
+                    text,
+                    "import type {{ {} }} from \"{module}\";",
+                    names.join(", ")
+                );
             }
         }
         // The specialisations are this module's own declarations, imported
         // with the other names it declares.
         let mut own: BTreeSet<String> = self.thens.keys().cloned().collect();
-        own.extend(self.references.get(self.namespace).into_iter().flatten().filter(|name| used.contains(name.as_str())).cloned());
+        own.extend(
+            self.references
+                .get(self.namespace)
+                .into_iter()
+                .flatten()
+                .filter(|name| used.contains(name.as_str()))
+                .cloned(),
+        );
         // And the other specialisations it declares that an operation's
         // result names: an `IAsyncOperation<IVector<HString>>`'s value is
         // this module's `IVectorOfString`.
-        own.extend(self.specialized.keys().filter(|name| used.contains(name.as_str())).cloned());
-        for (namespace, names) in self.references.iter().filter(|(namespace, _)| namespace.as_str() != self.namespace) {
+        own.extend(
+            self.specialized
+                .keys()
+                .filter(|name| used.contains(name.as_str()))
+                .cloned(),
+        );
+        for (namespace, names) in self
+            .references
+            .iter()
+            .filter(|(namespace, _)| namespace.as_str() != self.namespace)
+        {
             let names: Vec<String> = names
                 .iter()
                 .filter_map(|name| {
-                    let spelled = self.spelled.get(&(namespace.clone(), name.clone())).cloned().unwrap_or_else(|| name.clone());
-                    used.contains(spelled.as_str()).then(|| if &spelled == name { spelled } else { format!("{name} as {spelled}") })
+                    let spelled = self
+                        .spelled
+                        .get(&(namespace.clone(), name.clone()))
+                        .cloned()
+                        .unwrap_or_else(|| name.clone());
+                    used.contains(spelled.as_str()).then(|| {
+                        if &spelled == name {
+                            spelled
+                        } else {
+                            format!("{name} as {spelled}")
+                        }
+                    })
                 })
                 .collect();
             if !names.is_empty() {
-                let _ = writeln!(text, "import type {{ {} }} from \"winrt:{namespace}\";", names.join(", "));
+                let _ = writeln!(
+                    text,
+                    "import type {{ {} }} from \"winrt:{namespace}\";",
+                    names.join(", ")
+                );
             }
         }
         let own: Vec<String> = own.into_iter().collect();
-        let _ = writeln!(text, "import type {{ {} }} from \"winrt:{}\";", own.join(", "), self.namespace);
+        let _ = writeln!(
+            text,
+            "import type {{ {} }} from \"winrt:{}\";",
+            own.join(", "),
+            self.namespace
+        );
         text.push_str(&functions);
         Some(text)
     }
@@ -2446,7 +3256,12 @@ fn typed_array(element: &Type) -> Result<String, String> {
         Type::U32 => "Uint32Array",
         Type::F32 => "Float32Array",
         Type::F64 => "Float64Array",
-        other => return Err(format!("an array of {}, which no typed array holds", element_name(other))),
+        other => {
+            return Err(format!(
+                "an array of {}, which no typed array holds",
+                element_name(other)
+            ));
+        }
     }
     .to_owned())
 }
@@ -2469,7 +3284,9 @@ fn elements_of(element: &Type) -> Option<(&'static str, &'static str)> {
 /// rest as the metadata's primitives are called.
 fn element_name(ty: &Type) -> String {
     match ty {
-        Type::ClassName(named) | Type::ValueName(named) => format!("`{}.{}`", named.namespace, named.name),
+        Type::ClassName(named) | Type::ValueName(named) => {
+            format!("`{}.{}`", named.namespace, named.name)
+        }
         Type::String => "strings".to_owned(),
         Type::Object => "objects".to_owned(),
         Type::Bool => "booleans".to_owned(),
@@ -2510,25 +3327,54 @@ impl Writer<'_> {
         let mut overrides = String::new();
         let mut at = Some(def);
         let mut depth = 0;
-        while let Some(class) = at.filter(|class| class.category() == TypeCategory::Class && depth < 16) {
-            for implemented in class.interface_impls().filter(|implemented| implemented.has_attribute("OverridableAttribute")) {
-                let Type::ClassName(named) = implemented.interface(&[]) else { continue };
-                let Some(interface) = self.index.get(&named.namespace, &named.name).next() else { continue };
-                let Some(interface_iid) = iid(interface) else { continue };
+        while let Some(class) =
+            at.filter(|class| class.category() == TypeCategory::Class && depth < 16)
+        {
+            for implemented in class
+                .interface_impls()
+                .filter(|implemented| implemented.has_attribute("OverridableAttribute"))
+            {
+                let Type::ClassName(named) = implemented.interface(&[]) else {
+                    continue;
+                };
+                let Some(interface) = self.index.get(&named.namespace, &named.name).next() else {
+                    continue;
+                };
+                let Some(interface_iid) = iid(interface) else {
+                    continue;
+                };
                 for (index, method) in interface.methods().enumerate() {
-                    match self.method(method, 6 + index, Receiver::Override { iid: &interface_iid }) {
+                    match self.method(
+                        method,
+                        6 + index,
+                        Receiver::Override {
+                            iid: &interface_iid,
+                        },
+                    ) {
                         Ok(text) => overrides.push_str(&text),
-                        Err(why) => self.refuse(&format!("{} override {}", def.name(), method_name(method)), &why),
+                        Err(why) => self.refuse(
+                            &format!("{} override {}", def.name(), method_name(method)),
+                            &why,
+                        ),
                     }
                 }
             }
-            at = class.extends().and_then(|parent| self.index.get(parent.namespace(), parent.name()).next());
+            at = class
+                .extends()
+                .and_then(|parent| self.index.get(parent.namespace(), parent.name()).next());
             depth += 1;
         }
-        let xaml = if class_name == "Microsoft.UI.Xaml.Application" { " xaml" } else { "" };
+        let xaml = if class_name == "Microsoft.UI.Xaml.Application" {
+            " xaml"
+        } else {
+            ""
+        };
         let mut text = String::new();
         let _ = writeln!(text, "  /**");
-        let _ = writeln!(text, "   * @ntsComposable {class_name} {factory} {slot}{xaml}");
+        let _ = writeln!(
+            text,
+            "   * @ntsComposable {class_name} {factory} {slot}{xaml}"
+        );
         let _ = writeln!(text, "   */");
         let _ = writeln!(text, "  export class {} {{", def.name());
         // `new Window()`: the factory's parameterless `CreateInstance`, as the
@@ -2537,7 +3383,11 @@ impl Writer<'_> {
             text,
             "    /**\n     * @ntsVtable {slot} {create}\n     * @ntsHresult composable\n     * @ntsFactory {class_name} {factory}\n     */"
         );
-        let _ = writeln!(text, "    {}constructor();", if public { "" } else { "protected " });
+        let _ = writeln!(
+            text,
+            "    {}constructor();",
+            if public { "" } else { "protected " }
+        );
         text.push_str(&overrides);
         let _ = writeln!(text, "  }}");
         Some(text)
@@ -2549,7 +3399,11 @@ impl Writer<'_> {
 /// `IAsyncOperationOfIVectorViewStorageFile`.
 fn word(ty: &Type) -> String {
     match ty {
-        Type::ClassName(named) => format!("{}{}", generic_base(&named.name), named.generics.iter().map(word).collect::<String>()),
+        Type::ClassName(named) => format!(
+            "{}{}",
+            generic_base(&named.name),
+            named.generics.iter().map(word).collect::<String>()
+        ),
         Type::ValueName(named) => named.name.clone(),
         Type::String => "String".to_owned(),
         Type::Object => "Object".to_owned(),
@@ -2565,7 +3419,10 @@ fn word(ty: &Type) -> String {
         Type::U64 => "UInt64".to_owned(),
         Type::F32 => "Single".to_owned(),
         Type::F64 => "Double".to_owned(),
-        other => format!("{other:?}").chars().filter(char::is_ascii_alphanumeric).collect(),
+        other => format!("{other:?}")
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect(),
     }
 }
 
@@ -2595,7 +3452,10 @@ struct Then {
 impl Then {
     /// A result handed on as `GetResults` answers it.
     fn read(value: String) -> Self {
-        Self { value, fulfil: "onFulfilled(completed.GetResults());".to_owned() }
+        Self {
+            value,
+            fulfil: "onFulfilled(completed.GetResults());".to_owned(),
+        }
     }
 }
 
@@ -2612,21 +3472,32 @@ enum Receiver<'a> {
     /// instance it is inherited by, through the interface its `@ntsVia`
     /// names.
     Member,
-    Factory { class: &'a str, iid: &'a str },
+    Factory {
+        class: &'a str,
+        iid: &'a str,
+    },
     /// A method of a class's activation factory, which is one of its
     /// constructors: `new Uri(text)` is `IUriRuntimeClassFactory.CreateUri`,
     /// called on the class's factory, answering the instance.
-    Constructor { class: &'a str, iid: &'a str },
+    Constructor {
+        class: &'a str,
+        iid: &'a str,
+    },
     /// A method of an interface a composable class lets a subclass override
     /// (`IApplicationOverrides.OnLaunched`), declared on the class for a
     /// subclass to write: no `this` parameter, and the interface and slot the
     /// subclass's table answers it at.
-    Override { iid: &'a str },
+    Override {
+        iid: &'a str,
+    },
     /// A composable class's factory: the method's last two parameters are the
     /// outer object and the inner one it answers, which the compiler supplies
     /// (`@ntsHresult composable`) -- a class constructed as itself has no
     /// outer object, and nothing of the program holds the inner.
-    Composable { class: &'a str, iid: &'a str },
+    Composable {
+        class: &'a str,
+        iid: &'a str,
+    },
 }
 
 /// The name the metadata gives a method's slot: its `OverloadAttribute` where
@@ -2636,14 +3507,24 @@ enum Receiver<'a> {
 /// no default interface, gives none.
 fn default_interface_bases(index: &Index, namespace: &str) -> BTreeMap<String, (String, String)> {
     let default_of = |class: TypeDef| {
-        class.interface_impls().find(|implemented| implemented.has_attribute("DefaultAttribute")).and_then(|implemented| match implemented.interface(&[]) {
-            Type::ClassName(named) if named.generics.is_empty() => Some((named.namespace.clone(), named.name.clone())),
-            _ => None,
-        })
+        class
+            .interface_impls()
+            .find(|implemented| implemented.has_attribute("DefaultAttribute"))
+            .and_then(|implemented| match implemented.interface(&[]) {
+                Type::ClassName(named) if named.generics.is_empty() => {
+                    Some((named.namespace.clone(), named.name.clone()))
+                }
+                _ => None,
+            })
     };
     let mut bases = BTreeMap::new();
-    for class in index.types().filter(|def| def.namespace() == namespace && def.category() == TypeCategory::Class) {
-        let Some((own_namespace, own)) = default_of(class) else { continue };
+    for class in index
+        .types()
+        .filter(|def| def.namespace() == namespace && def.category() == TypeCategory::Class)
+    {
+        let Some((own_namespace, own)) = default_of(class) else {
+            continue;
+        };
         if own_namespace != namespace {
             continue;
         }
@@ -2684,7 +3565,11 @@ fn receiver_tags(text: &mut String, receiver: Receiver<'_>, outs: bool) {
 /// How many of a method's parameters the program passes: all of them, or for
 /// a composable factory's `CreateInstance(..., outer, out inner)` all but the
 /// two objects the runtime composes with.
-fn declared_parameters(types: &[Type], out: impl Fn(usize) -> bool, receiver: &Receiver<'_>) -> Result<usize, String> {
+fn declared_parameters(
+    types: &[Type],
+    out: impl Fn(usize) -> bool,
+    receiver: &Receiver<'_>,
+) -> Result<usize, String> {
     let count = types.len();
     let composed = count >= 2
         && matches!(types[count - 2], Type::Object)
@@ -2693,7 +3578,9 @@ fn declared_parameters(types: &[Type], out: impl Fn(usize) -> bool, receiver: &R
         && out(count - 1);
     if matches!(receiver, Receiver::Composable { .. }) {
         if !composed {
-            return Err("a composable factory method not ending in the outer and inner objects".to_owned());
+            return Err(
+                "a composable factory method not ending in the outer and inner objects".to_owned(),
+            );
         }
         Ok(count - 2)
     } else if composed && matches!(receiver, Receiver::Instance(_) | Receiver::Member) {
@@ -2718,18 +3605,40 @@ fn method_name(method: windows_metadata::reader::MethodDef) -> String {
 
 /// `A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E`, from `GuidAttribute`.
 fn iid(def: TypeDef) -> Option<String> {
-    let values: Vec<Value> = def.find_attribute("GuidAttribute")?.value().into_iter().map(|(_, value)| value).collect();
-    let [Value::U32(a), Value::U16(b), Value::U16(c), Value::U8(d0), Value::U8(d1), Value::U8(d2), Value::U8(d3), Value::U8(d4), Value::U8(d5), Value::U8(d6), Value::U8(d7)] =
-        values.as_slice()
+    let values: Vec<Value> = def
+        .find_attribute("GuidAttribute")?
+        .value()
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect();
+    let [
+        Value::U32(a),
+        Value::U16(b),
+        Value::U16(c),
+        Value::U8(d0),
+        Value::U8(d1),
+        Value::U8(d2),
+        Value::U8(d3),
+        Value::U8(d4),
+        Value::U8(d5),
+        Value::U8(d6),
+        Value::U8(d7),
+    ] = values.as_slice()
     else {
         return None;
     };
-    Some(format!("{a:08X}-{b:04X}-{c:04X}-{d0:02X}{d1:02X}-{d2:02X}{d3:02X}{d4:02X}{d5:02X}{d6:02X}{d7:02X}"))
+    Some(format!(
+        "{a:08X}-{b:04X}-{c:04X}-{d0:02X}{d1:02X}-{d2:02X}{d3:02X}{d4:02X}{d5:02X}{d6:02X}{d7:02X}"
+    ))
 }
 
 /// A parameter name TypeScript accepts.
 fn safe(name: &str) -> String {
-    if is_reserved(name) { format!("{name}_") } else { name.to_owned() }
+    if is_reserved(name) {
+        format!("{name}_")
+    } else {
+        name.to_owned()
+    }
 }
 
 /// A word no binding may be named: JavaScript's reserved words, and the
@@ -2739,10 +3648,51 @@ fn safe(name: &str) -> String {
 fn is_reserved(name: &str) -> bool {
     matches!(
         name,
-        "break" | "case" | "catch" | "class" | "const" | "continue" | "debugger" | "default" | "delete" | "do" | "else" | "enum"
-            | "export" | "extends" | "false" | "finally" | "for" | "function" | "if" | "import" | "in" | "instanceof" | "new"
-            | "null" | "return" | "super" | "switch" | "this" | "throw" | "true" | "try" | "typeof" | "var" | "void" | "while"
-            | "with" | "implements" | "interface" | "let" | "package" | "private" | "protected" | "public" | "static" | "yield"
+        "break"
+            | "case"
+            | "catch"
+            | "class"
+            | "const"
+            | "continue"
+            | "debugger"
+            | "default"
+            | "delete"
+            | "do"
+            | "else"
+            | "enum"
+            | "export"
+            | "extends"
+            | "false"
+            | "finally"
+            | "for"
+            | "function"
+            | "if"
+            | "import"
+            | "in"
+            | "instanceof"
+            | "new"
+            | "null"
+            | "return"
+            | "super"
+            | "switch"
+            | "this"
+            | "throw"
+            | "true"
+            | "try"
+            | "typeof"
+            | "var"
+            | "void"
+            | "while"
+            | "with"
+            | "implements"
+            | "interface"
+            | "let"
+            | "package"
+            | "private"
+            | "protected"
+            | "public"
+            | "static"
+            | "yield"
             | "await"
     )
 }

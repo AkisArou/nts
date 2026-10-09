@@ -19,7 +19,6 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 use nts_jvm_emitter::{class::access, read};
 use std::path::{Path, PathBuf};
 
-
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     from.canonicalize().unwrap_or(from)
@@ -49,11 +48,16 @@ fn prepared() -> Option<hir::Program> {
     )
     .expect("a UTF-8 path");
 
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).expect("snapshot");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot");
     assert!(!snapshot.has_errors(), "ts-from-java should typecheck");
     let prepared = hir::prepare_with(
         &snapshot,
-        &hir::Options { provider: hir::Provider::NoGc, ..hir::Options::default() },
+        &hir::Options {
+            provider: hir::Provider::NoGc,
+            ..hir::Options::default()
+        },
     )
     .expect("prepared HIR should verify");
     Some(prepared.program)
@@ -103,7 +107,11 @@ fn a_methods_static_is_synthetic_and_a_free_functions_is_not() {
         .expect("a Program class");
 
     let flags = |name: &str| {
-        program.methods.iter().find(|m| m.name == name).map(|m| m.access)
+        program
+            .methods
+            .iter()
+            .find(|m| m.name == name)
+            .map(|m| m.access)
     };
 
     // A class method's static: public, static, and **synthetic**, because
@@ -120,7 +128,10 @@ fn a_methods_static_is_synthetic_and_a_free_functions_is_not() {
     // would make it uncallable. A rule that marked every static would pass the
     // assertion above and break every free function in the program.
     let greet = flags("greet").expect("greet");
-    assert!(greet & access::STATIC != 0 && greet & access::PUBLIC != 0, "public static");
+    assert!(
+        greet & access::STATIC != 0 && greet & access::PUBLIC != 0,
+        "public static"
+    );
     assert!(
         greet & access::SYNTHETIC == 0,
         "a free function is the API and must stay referenceable from Java"
@@ -142,10 +153,16 @@ fn a_class_carries_an_instance_method_for_each_of_its_statics() {
             .find(|m| m.name == member)
             .unwrap_or_else(|| panic!("Session.{member}()"));
         assert!(found.access & access::PUBLIC != 0, "{member} is public");
-        assert!(found.access & access::STATIC == 0, "{member} is an instance method");
+        assert!(
+            found.access & access::STATIC == 0,
+            "{member} is an instance method"
+        );
         // The receiver is implicit, so the forwarder takes one fewer argument
         // than the static it calls.
-        assert_eq!(found.descriptor, "()D", "{member} takes no explicit receiver");
+        assert_eq!(
+            found.descriptor, "()D",
+            "{member} takes no explicit receiver"
+        );
     }
 
     // The control: the class has not simply grown every function. `greet` is a
@@ -185,15 +202,25 @@ fn no_emitted_class_names_a_java_collection_interface() {
     // interface -- which is the whole claim in one line. Without this, deleting
     // the scan's body would leave the assertion below passing.
     let names = |needle: &str| {
-        classes.iter().any(|(_, bytes)| bytes.windows(needle.len()).any(|w| w == needle.as_bytes()))
+        classes
+            .iter()
+            .any(|(_, bytes)| bytes.windows(needle.len()).any(|w| w == needle.as_bytes()))
     };
-    assert!(names("nts/rt/NtsMap"), "the emitted code names the concrete Map");
-    assert!(names("nts/rt/NtsSet"), "the emitted code names the concrete Set");
+    assert!(
+        names("nts/rt/NtsMap"),
+        "the emitted code names the concrete Map"
+    );
+    assert!(
+        names("nts/rt/NtsSet"),
+        "the emitted code names the concrete Set"
+    );
 
     for (name, bytes) in &classes {
         for interface in ["java/util/Map", "java/util/Set"] {
             assert!(
-                !bytes.windows(interface.len()).any(|w| w == interface.as_bytes()),
+                !bytes
+                    .windows(interface.len())
+                    .any(|w| w == interface.as_bytes()),
                 "`{name}` names `{interface}` in its constant pool, so it may be dispatching \
                  through the interface where every table operation should be an `invokestatic`"
             );
