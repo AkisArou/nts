@@ -4955,6 +4955,9 @@ struct Throwing {
     any: rustc_hash::FxHashSet<u32>,
     bodily: rustc_hash::FxHashSet<u32>,
     copyable: rustc_hash::FxHashSet<u32>,
+    /// For each raiser `copyable` dropped, the raising callee it dropped it
+    /// for: one dropped in an earlier round, or one never copyable.
+    uncopied_for: rustc_hash::FxHashMap<u32, u32>,
 }
 
 /// What one call in a body reaches, as far as a raise is concerned.
@@ -5565,11 +5568,12 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             break;
         }
     }
-    let copyable = copyable_symbols(snapshot, probe, &set, &calls);
+    let (copyable, uncopied_for) = copyable_symbols(snapshot, probe, &set, &calls);
     Throwing {
         any: set,
         bodily,
         copyable,
+        uncopied_for,
     }
 }
 
@@ -5589,37 +5593,86 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
 /// two are one decision asked twice -- once of a symbol here, once of a call there
 /// -- and they have to give one answer or a `try` names a copy that was never
 /// made.
+///
+/// **And a callee held in a value no longer costs it either**, for the same
+/// reason one level down. `const reconcileChildFibers: ChildReconciler = (…) =>
+/// …` is a name declaring a value that holds a closure, and the call site's own
+/// rule ([`a_value_held_call`]) carries a call through it at the raising slot.
+/// Here it was a raiser no copy can be made of, so every caller lost its copy:
+/// React's whole render path, and the raising gate with it, which is what took
+/// every native React program's `main`. Where the gate is off after all, the
+/// strict node-level pass ([`eligible_declarations`]) still refuses the call, so
+/// being optimistic here costs nothing.
 fn copyable_symbols(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     raises: &rustc_hash::FxHashSet<u32>,
     calls: &rustc_hash::FxHashMap<u32, Vec<Reached>>,
-) -> rustc_hash::FxHashSet<u32> {
+) -> (rustc_hash::FxHashSet<u32>, rustc_hash::FxHashMap<u32, u32>) {
     let mut copyable: rustc_hash::FxHashSet<u32> = raises
         .iter()
         .filter(|symbol| can_be_copied(snapshot, probe, **symbol))
         .copied()
         .collect();
+    let mut uncopied_for = rustc_hash::FxHashMap::default();
     loop {
-        let losing: Vec<u32> = copyable
+        let losing: Vec<(u32, u32)> = copyable
             .iter()
-            .filter(|symbol| {
-                calls.get(*symbol).is_some_and(|reached| {
-                    reached.iter().any(|called| {
-                        called.body().is_some_and(|called| {
-                            raises.contains(&called) && !copyable.contains(&called)
+            .filter_map(|symbol| {
+                calls.get(symbol)?.iter().find_map(|called| {
+                    called
+                        .body()
+                        .filter(|called| {
+                            raises.contains(called)
+                                && !copyable.contains(called)
+                                && !a_value_held_callee(snapshot, probe, *called)
                         })
-                    })
+                        .map(|called| (*symbol, called))
                 })
             })
-            .copied()
             .collect();
         if losing.is_empty() {
-            return copyable;
+            return (copyable, uncopied_for);
         }
-        for symbol in losing {
+        for (symbol, called) in losing {
             copyable.remove(&symbol);
+            uncopied_for.insert(symbol, called);
         }
+    }
+}
+
+/// Why no raising copy can be made of `symbol` at all ([`can_be_copied`]), in
+/// the words that name it.
+fn why_it_cannot_be_copied(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    symbol: u32,
+) -> &'static str {
+    let declarations: Vec<NodeId> = snapshot
+        .symbols
+        .get(symbol as usize)
+        .map(|record| {
+            record
+                .declarations
+                .iter()
+                .map(|at| the_function_of(probe, *at))
+                .collect()
+        })
+        .unwrap_or_default();
+    if declarations.iter().any(|declaration| {
+        probe
+            .node(*declaration)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+    }) {
+        "is `async`, so its `throw` rejects a promise rather than raising"
+    } else if declarations
+        .iter()
+        .any(|declaration| is_generic_function(snapshot, *declaration))
+    {
+        "is a generic method, which has no copy per type it is called at"
+    } else {
+        "is not a function, method, accessor or constructor this compiler copies"
     }
 }
 
@@ -5889,13 +5942,21 @@ fn raising_callees_of(
 /// `value_held_is_carried` is [`a_copy_can_contain`]'s, and it is why this is a function
 /// rather than a block: [`raising_copies`] runs it **twice**, once optimistically and,
 /// where the program-global gate turns out to be off, once strictly.
+///
+/// Also answers, for each declaration the fixpoint drops, the call that dropped
+/// it: a call whose callee fell in an earlier round or never stood, so following
+/// them descends to a cause of its own ([`the_cause_below_the_gate`]).
 fn eligible_declarations(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     throwing: &Throwing,
     value_held_is_carried: bool,
-) -> rustc_hash::FxHashSet<NodeId> {
+) -> (
+    rustc_hash::FxHashSet<NodeId>,
+    rustc_hash::FxHashMap<NodeId, NodeId>,
+) {
     let mut eligible: rustc_hash::FxHashSet<NodeId> = rustc_hash::FxHashSet::default();
+    let mut dropped_by: rustc_hash::FxHashMap<NodeId, NodeId> = rustc_hash::FxHashMap::default();
     for symbol in &throwing.copyable {
         let Some(record) = snapshot.symbols.get(*symbol as usize) else {
             continue;
@@ -5925,29 +5986,30 @@ fn eligible_declarations(
         }
     }
     loop {
-        let losing: Vec<NodeId> = eligible
+        let losing: Vec<(NodeId, NodeId)> = eligible
             .iter()
-            .filter(|declaration| {
-                calls_in_the_body_of(probe, **declaration)
+            .filter_map(|declaration| {
+                calls_in_the_body_of(probe, *declaration)
                     .into_iter()
-                    .any(|call| {
+                    .find(|call| {
                         !a_copy_can_contain(
                             snapshot,
                             probe,
                             throwing,
                             &eligible,
                             value_held_is_carried,
-                            call,
+                            *call,
                         )
                     })
+                    .map(|call| (*declaration, call))
             })
-            .copied()
             .collect();
         if losing.is_empty() {
-            return eligible;
+            return (eligible, dropped_by);
         }
-        for declaration in losing {
+        for (declaration, call) in losing {
             eligible.remove(&declaration);
+            dropped_by.insert(declaration, call);
         }
     }
 }
@@ -5989,7 +6051,7 @@ fn raising_copies(
     // Optimistically: a call through a value is carried by the raising uniform entry,
     // which is true wherever `what_holds_the_gate_off` is. Recomputed strictly
     // below where it is not -- see the `carry` branch.
-    let eligible = eligible_declarations(snapshot, probe, throwing, true);
+    let (eligible, dropped_by) = eligible_declarations(snapshot, probe, throwing, true);
     // Seeded by what a `try` reaches, then closed over what those reach: a copy
     // names its callees' copies, so a callee of a copy needs one too.
     let (guarded, guarded_a_call, guarded_calls) = calls_guarded_by_a_try(snapshot, probe);
@@ -6075,7 +6137,12 @@ fn raising_copies(
             guarded_calls,
         };
     };
-    let gate_holder = Some(describe_gate_holder(probe, holder, call));
+    let gate_holder = Some(describe_gate_holder(
+        probe,
+        holder,
+        call,
+        &the_cause_below_the_gate(probe, throwing, (&eligible, &dropped_by, &copies), call),
+    ));
     // **Where it is off, the extra seeds are dropped with it.** They exist to serve
     // the raising variant of a *closure*, and no closure gets one when no site can
     // dispatch at the slot -- so keeping them would emit thousands of `@raises`
@@ -6096,7 +6163,7 @@ fn raising_copies(
     // Two passes rather than a fixpoint over the gate, because the gate is monotone in
     // one direction only: turning it off can never make a body *more* carriable, so the
     // strict set is a subset of the optimistic one and a third pass would find nothing.
-    let eligible = eligible_declarations(snapshot, probe, throwing, false);
+    let (eligible, _) = eligible_declarations(snapshot, probe, throwing, false);
     let narrow = calls_guarded_by_a_try(snapshot, probe)
         .0
         .into_iter()
@@ -6216,12 +6283,166 @@ fn what_holds_the_gate_off(
         .map(|declaration| (declaration, declaration))
 }
 
+/// Why the call holding the gate off cannot be carried, **as though the gate
+/// were on**: the cause the gate's own refusals hide.
+///
+/// With the gate off, every body that calls through a function value loses its
+/// copy, and each refusal it causes names that call -- "`callback`, through a
+/// function value" -- as its leaf. That is the gate's symptom, not its cause: a
+/// lane following the chain went round it, from `flushMutationEffects` back to
+/// the closure holding the gate. So this walks the *optimistic* fixpoint, the
+/// one where a value-held call is carried, down from the callee: each step is
+/// the first call its declaration could not contain there, and the walk ends at
+/// a call that fails for its own reason. Empty where nothing can be said.
+fn the_cause_below_the_gate(
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+    (eligible, dropped_by, copies): (
+        &rustc_hash::FxHashSet<NodeId>,
+        &rustc_hash::FxHashMap<NodeId, NodeId>,
+        &rustc_hash::FxHashSet<NodeId>,
+    ),
+    call: NodeId,
+) -> String {
+    let named = |at: NodeId| {
+        probe
+            .children(at)
+            .into_iter()
+            .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|name| probe.node(name).text.clone())
+            .unwrap_or_else(|| "a function".to_owned())
+    };
+    let callee_of = |call: NodeId| {
+        probe
+            .snapshot
+            .call_targets
+            .get(&call)
+            .and_then(|target| target.callee)
+            .map(|declaration| probe.implementation_of(the_function_of(probe, declaration)))
+    };
+    // A function used as a value holds the gate as itself (`holder == call`
+    // in `what_holds_the_gate_off`), so the walk starts at it.
+    let start = callee_of(call).or_else(|| {
+        (probe.kind_of(call) == Some(syntax::FUNCTION_DECLARATION))
+            .then(|| probe.implementation_of(call))
+    });
+    let Some(mut declaration) = start else {
+        return String::new();
+    };
+    // Eligible, and still not copied: nothing below it is the cause, and the
+    // seeding that should have reached it is.
+    if eligible.contains(&declaration) {
+        return if copies.contains(&declaration) {
+            String::new()
+        } else {
+            format!(
+                ": `{}` could have a raising copy and none was made",
+                named(declaration)
+            )
+        };
+    }
+    // Each step is the call that dropped the declaration, whose callee fell in
+    // an earlier round or never stood: the walk descends, and ends at a call
+    // that fails for its own reason. `seen` only guards that argument.
+    let mut path = Vec::new();
+    let mut seen = rustc_hash::FxHashSet::default();
+    while seen.insert(declaration) {
+        let Some(&dropping) = dropped_by.get(&declaration) else {
+            // Never in the node-level running: its symbol was dropped one level
+            // up, for a raising callee by symbol, and that chain ends at one no
+            // copy can be made of at all.
+            return format!(
+                "{}{}",
+                via(&path),
+                the_symbol_cause(probe, throwing, declaration, &named)
+            );
+        };
+        path.push(named(declaration));
+        match (probe.reason_without_a_leaf(dropping), callee_of(dropping)) {
+            (None, Some(next)) if !eligible.contains(&next) => declaration = next,
+            (why, _) => {
+                let why = why.unwrap_or("its callee cannot be copied");
+                return format!(
+                    "{}: in `{}`, a call that cannot be carried: {why}",
+                    via(&path[..path.len() - 1]),
+                    named(declaration)
+                );
+            }
+        }
+    }
+    format!("{}: the calls that dropped them form a cycle", via(&path))
+}
+
+/// Why `declaration`'s symbol is not copyable, followed down
+/// [`Throwing::uncopied_for`] to a symbol no copy can be made of.
+fn the_symbol_cause(
+    probe: &FuncBuilder,
+    throwing: &Throwing,
+    declaration: NodeId,
+    named: &dyn Fn(NodeId) -> String,
+) -> String {
+    let snapshot = probe.snapshot;
+    let symbol_of = |declaration: NodeId| {
+        snapshot
+            .symbols
+            .iter()
+            .position(|record| record.declarations.contains(&declaration))
+            .and_then(|at| u32::try_from(at).ok())
+    };
+    let name_of = |symbol: u32| {
+        snapshot
+            .symbols
+            .get(symbol as usize)
+            .map_or_else(|| "a function".to_owned(), |record| record.name.clone())
+    };
+    let Some(mut symbol) = symbol_of(declaration) else {
+        return format!(
+            ": `{}` cannot have a raising copy made of it",
+            named(declaration)
+        );
+    };
+    let mut path = vec![name_of(symbol)];
+    let mut seen = rustc_hash::FxHashSet::default();
+    while seen.insert(symbol) {
+        if let Some(&called) = throwing.uncopied_for.get(&symbol) {
+            symbol = called;
+            path.push(name_of(symbol));
+        } else {
+            let last = path.pop().unwrap_or_default();
+            let why = if throwing.copyable.contains(&symbol) {
+                "can be copied, and its copy is not one this body may name"
+            } else {
+                why_it_cannot_be_copied(snapshot, probe, symbol)
+            };
+            return format!("{}: `{last}` {why}", via(&path));
+        }
+    }
+    format!("{}: the raisers that dropped them form a cycle", via(&path))
+}
+
+/// The declarations a cause was reached through, for the sentence.
+fn via(path: &[String]) -> String {
+    if path.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ", through {}",
+            path.iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        )
+    }
+}
+
 /// The sentence a refusal gives for a program whose raising gate is off: which
 /// closure holds it off, and the call that does -- the names in backticks, so a
-/// census grouping by message still sees one row. A closure has no name of its
-/// own, so it is named by the function it is written in; a function used as a
-/// value whose copy was not made (`holder == call`) is named itself.
-fn describe_gate_holder(probe: &FuncBuilder, holder: NodeId, call: NodeId) -> String {
+/// census grouping by message still sees one row -- then, after them, what
+/// holds that call off even with the gate on ([`the_cause_below_the_gate`]). A
+/// closure has no name of its own, so it is named by the function it is
+/// written in; a function used as a value whose copy was not made
+/// (`holder == call`) is named itself.
+fn describe_gate_holder(probe: &FuncBuilder, holder: NodeId, call: NodeId, cause: &str) -> String {
     let named = |at: NodeId| {
         probe
             .children(at)
@@ -6231,7 +6452,9 @@ fn describe_gate_holder(probe: &FuncBuilder, holder: NodeId, call: NodeId) -> St
     };
     if holder == call {
         let name = named(holder).unwrap_or_else(|| "a function".to_owned());
-        return format!("`{name}` is used as a value and can throw, and has no raising copy");
+        return format!(
+            "`{name}` is used as a value and can throw, and has no raising copy{cause}"
+        );
     }
     let within = std::iter::successors(probe.node(holder).parent, |at| probe.node(*at).parent)
         .filter(|at| {
@@ -6268,7 +6491,7 @@ fn describe_gate_holder(probe: &FuncBuilder, holder: NodeId, call: NodeId) -> St
                 .or_else(|| last_text(callee))
         })
         .unwrap_or_else(|| "a function value".to_owned());
-    format!("a closure in {within} calls `{callee}`, whose own `throw` cannot be carried")
+    format!("a closure in {within} calls `{callee}`, whose own `throw` cannot be carried{cause}")
 }
 
 /// Every declaration that lowering turns into a **wrapper** closure when it is used
@@ -6373,7 +6596,24 @@ fn a_copy_can_contain(
     // and [`raising_copies`] for why this is a parameter rather than a constant -- the
     // entry it would dispatch at is one the program-global gate can withhold, and a
     // copy naming an entry that was withheld would dangle.
-    if a_value_held_call(snapshot, probe, call) {
+    //
+    // **And so is a function written as a value and called on the spot**, which a
+    // raising body dispatches at the raising slot as it does a held value
+    // ([`FuncBuilder::calls_a_closure`]). React's `UnknownOwner` calls an arrow it
+    // writes; asked only about held values, the call read as one no copy could
+    // contain, and a function used as a value with no copy held the raising gate
+    // off for the whole program. The strict pass refuses it where the gate is off
+    // after all, as it does a held value.
+    //
+    // **Only that, not every call `calls_a_closure` answers for.** It also counts
+    // a call with no target at all, which includes a method read off an erased
+    // value -- `value.toFixed(digits)` with `value: any` -- and the real lowering
+    // cannot dispatch that one at the raising slot: asked here, it made
+    // `fixed@raises` a copy that then refused
+    // (`examples/a-closed-call-recovers-an-erased-parameter`, 9 refusals to 10).
+    if a_value_held_call(snapshot, probe, call)
+        || probe.reason_without_a_leaf(call) == Some(A_FUNCTION_WRITTEN_AS_A_VALUE)
+    {
         return value_held_is_carried;
     }
     // [`raising_callees_of`], because `eligible` holds implementations: asking with the
@@ -6518,6 +6758,14 @@ fn a_value_held_callee(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol:
 /// it. So the checker's target decides: a method's declaration or signature is a
 /// method call, and anything else -- the function-type annotation `queue[i]!()`
 /// resolves to, an arrow, a function stored as a value -- is a value.
+///
+/// **And so is a call's result.** `specialFiberFor(type)!(props, mode, lanes, key)`
+/// calls the function another call returned: its access has no symbol, and the
+/// checker's target is the function type the first call is declared to return, a
+/// node with no body. Asked as neither, the call read as one no copy could
+/// contain, `createFiberFromTypeAndProps` lost its copy, and React's render path
+/// held the raising gate off below it. A function a call returns is a value
+/// whatever its declared type, never a method call.
 fn a_value_held_call(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: NodeId) -> bool {
     if probe.reads_an_accessor(call) {
         return false;
@@ -6531,6 +6779,7 @@ fn a_value_held_call(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: Nod
     };
     match probe.node(callee).symbol {
         Some(symbol) => a_value_held_callee(snapshot, probe, probe.denoted_symbol(symbol).0),
+        None if probe.kind_of(callee) == Some(syntax::CALL_EXPRESSION) => true,
         None => {
             probe.kind_of(callee) == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
                 && !snapshot
