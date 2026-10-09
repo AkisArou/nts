@@ -1688,6 +1688,81 @@ fn a_kind_is_the_librarys_label_and_no_other() {
     );
 }
 
+/// `CBool` and `CEnum` are `c:types`' labels and nothing else spelled like
+/// them, as a kind is `@nts/scalars'`: each names the integer a value crosses
+/// as, which the strict check holds it to. The library's cross as that
+/// integer; a program's own `__c_bool` or `__c_enum` is an ordinary property,
+/// so a function taking one has no native ABI.
+#[test]
+fn a_cbool_and_a_cenum_are_c_types_labels_and_no_other() {
+    let kept = "import type { CBool, CEnum } from \"c:types\";\n\
+         enum Mode { On = 1, Off = 2 }\n\
+         declare function flag(v: CBool<c_int>): CBool<c_int>;\n\
+         declare function mode(v: CEnum<Mode, c_uint>): c_int;\n\
+         export function f(): number { return (flag(true) ? 1 : 0) + mode(Mode.On); }\n";
+    let Some(read) = snapshot("c-types-label", kept) else {
+        return;
+    };
+    let prepared =
+        hir::prepare(&read).unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let natives: Vec<String> = prepared
+        .program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            hir::OpKind::Call {
+                callee: hir::Callee::Native(target),
+                ..
+            } => Some(format!(
+                "{}({})",
+                target.name,
+                target
+                    .parameters
+                    .iter()
+                    .map(hir::native::Type::c_type)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            _ => None,
+        })
+        .collect();
+    for expected in ["flag(int)", "mode(unsigned int)"] {
+        assert!(
+            natives.iter().any(|native| native == expected),
+            "no {expected} in {natives:?}"
+        );
+    }
+
+    let spoof = "enum Mode { On = 1 }\n\
+         type FakeBool = boolean & { readonly __c_bool?: c_int };\n\
+         type FakeEnum = Mode & { readonly __c_enum?: c_uint };\n\
+         declare function fake_flag(v: FakeBool): c_int;\n\
+         declare function fake_mode(v: FakeEnum): c_int;\n\
+         export function g(): number { return fake_flag(true); }\n\
+         export function h(): number { return fake_mode(Mode.On); }\n";
+    let Some(read) = snapshot("c-types-label-spoof", spoof) else {
+        return;
+    };
+    let prepared =
+        hir::prepare(&read).unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
+    for function in ["fake_flag", "fake_mode"] {
+        assert!(
+            prepared
+                .diagnostics
+                .iter()
+                .any(|refused| refused.message.contains(function)),
+            "a look-alike `c:types` label crossed as one for {function}: {:?}",
+            prepared.diagnostics
+        );
+    }
+}
+
 /// `native::SCALARS` is what `scalars.d.ts` exports, so a generator importing
 /// a name from the module that list names imports it from where it is.
 #[test]

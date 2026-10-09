@@ -588,8 +588,22 @@ It lands in three pieces:
    clang's `-funsigned-char`: a `char` of 200 from C reaches the program as 200
    and goes back to C as 200 on both backends. The signed row's `program.c`
    refuses to compile under that flag, and ignoring the row reads -56 on LLVM.
-3. **`CBool` and `CEnum` join `@nts/scalars`**, recognised by the library's
-   label as the numbers are.
+3. **`CBool` and `CEnum` are recognised by their library's label** (built). Each
+   names the integer a value crosses as, which the strict check holds the value
+   to, so each now counts only when declared in `c:types`, as a number kind
+   counts only from `@nts/scalars`. A program's own `__c_bool` is an ordinary
+   property, and a function taking one has no native ABI.
+
+   They stay in `c:types` rather than moving into the library. They describe
+   how C represents a boolean or an enum, which is `c:types`' subject, and
+   moving them would have changed every binding's imports again for no gain.
+
+   The rest of `c:types`' labels (`__c_struct`, `__c_erased` and about fifty
+   more) are not covered, because generated bindings write some of them inline:
+   the GIR emitter's `__c_gtype`, Chromium's `__c_implements`. Holding all of
+   them to the declaring module means either a rule for which modules may
+   declare one or the generators naming them through `c:types` aliases. That is
+   a hardening item of its own, not part of the numbers.
 
 **3. The operations** (F):
 - as compiler operations, with the node package and the oracle;

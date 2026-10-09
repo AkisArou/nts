@@ -4789,7 +4789,8 @@ pub(crate) fn is_branded_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
                 |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
             let brand = |id: TypeId| {
                 matches!(kind(id), Some(TypeKind::Object { properties })
-                    if matches!(properties.as_slice(), [p] if p.name == "___c_bool" && p.optional && p.readonly))
+                    if matches!(properties.as_slice(), [p] if p.name == "___c_bool" && p.optional && p.readonly
+                        && declared_in(snapshot, p, TYPES_MODULE)))
             };
             (literal(*a) && brand(*b)) || (literal(*b) && brand(*a))
         }
@@ -5559,7 +5560,9 @@ fn labelled(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
                 let [property] = properties.as_slice() else {
                     continue;
                 };
-                if !property.readonly || !property.optional || !from_the_library(snapshot, property)
+                if !property.readonly
+                    || !property.optional
+                    || !declared_in(snapshot, property, SCALARS_MODULE)
                 {
                     continue;
                 }
@@ -5597,10 +5600,14 @@ enum Carrier {
     BigInt,
 }
 
-/// Whether `property` is declared inside `declare module "@nts/scalars"`.
-fn from_the_library(
+/// Whether `property` is declared inside `declare module "{module}"`: one of
+/// the compiler's own modules, [`SCALARS_MODULE`] or [`TYPES_MODULE`], whose
+/// labels are its vocabulary. The same property written anywhere else is a
+/// property like any other.
+fn declared_in(
     snapshot: &SemanticSnapshot,
     property: &nts_semantic_schema::PropertyRecord,
+    module: &str,
 ) -> bool {
     let mut at = property.declaration;
     while let Some(id) = at {
@@ -5616,7 +5623,7 @@ fn from_the_library(
                 .filter_map(|child| snapshot.nodes.get(child.0 as usize))
                 .any(|child| {
                     child.kind == NodeKind::Syntax(nts_semantic_schema::syntax::STRING_LITERAL)
-                        && child.text.as_deref() == Some(SCALARS_MODULE)
+                        && child.text.as_deref() == Some(module)
                 });
         }
         at = node.parent;
@@ -5737,11 +5744,15 @@ fn branded_members(
     let [property] = properties.as_slice() else {
         return None;
     };
-    // tsgo's escaped name: a source name beginning `__` has one more `_`.
+    // tsgo's escaped name: a source name beginning `__` has one more `_`. And
+    // `c:types`' own label, as a scalar kind is `@nts/scalars'`: the integer a
+    // `CEnum` or a `CBool` crosses as is a kind the strict check holds a value
+    // to, so a property a program wrote under the same name is not one.
     if property.name != brand_name
         || !property.readonly
         || !property.optional
         || property.kind != MemberKind::Field
+        || !declared_in(snapshot, property, TYPES_MODULE)
     {
         return None;
     }
