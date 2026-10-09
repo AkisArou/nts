@@ -2385,19 +2385,28 @@ impl Slot {
 /// A join is where `Towers#pushDisk` lives: it reads the slot, tests two things
 /// about what it found, and stores in the block after both arms come back
 /// together. One predecessor at a time could never get a take that far.
+///
+/// `rank` is each block's place in reverse postorder, which is the order the
+/// walk visits them in.
 fn arriving_at(
     func: &Func,
     at: usize,
     incoming: &[Vec<(BlockId, Vec<ValueId>)>],
+    rank: &[usize],
     leaving: &[rustc_hash::FxHashMap<Slot, ValueId>],
     known_absent: &[rustc_hash::FxHashSet<ValueId>],
 ) -> rustc_hash::FxHashMap<Slot, ValueId> {
-    let mut arriving: Option<rustc_hash::FxHashMap<Slot, ValueId>> = None;
+    let mut ways_in = Vec::with_capacity(incoming[at].len());
     for (from, _) in &incoming[at] {
         let before = from.0 as usize;
-        // A predecessor not yet reached is a back edge: it carries nothing, and
-        // the meet below drops whatever it cannot vouch for.
-        let carried: rustc_hash::FxHashMap<Slot, ValueId> = if before < at {
+        // A predecessor not yet visited is a back edge: it carries nothing, and
+        // the meet below drops whatever it cannot vouch for. Visited means
+        // earlier in reverse postorder, not lower-numbered: a block's number
+        // is the order the lowering made it in, and `a && b` makes the test of
+        // `b` after the block both tests' false edges reach -- which read as a
+        // loop and lost the take in `Towers#pushDisk`.
+        let reached = rank[before] < rank[at];
+        let carried: rustc_hash::FxHashMap<Slot, ValueId> = if reached {
             let elsewhere: Vec<BlockId> = func.blocks[before]
                 .terminator
                 .successors()
@@ -2429,20 +2438,25 @@ fn arriving_at(
             rustc_hash::FxHashMap::default()
         };
         let mut absent_here = proves_null(func, *from, at);
-        if before < at {
+        if reached {
             absent_here.extend(known_absent[before].iter().copied());
         }
-        arriving = Some(match arriving {
-            None => carried,
-            Some(so_far) => so_far
-                .into_iter()
-                .filter(|(slot, pending)| {
-                    carried.get(slot) == Some(pending) || absent_here.contains(pending)
-                })
-                .collect(),
-        });
+        ways_in.push((carried, absent_here));
     }
-    arriving.unwrap_or_default()
+    // A take some way in carries, which every way in either carries too or
+    // proves absent on its own edge. Whichever predecessor comes first is no
+    // starting point: one where the value is null carries nothing and gives up
+    // nothing, and starting from it lost the take on every path that did carry
+    // one.
+    let agreed = |slot: &Slot, pending: &ValueId| {
+        ways_in.iter().all(|(carried, absent)| carried.get(slot) == Some(pending) || absent.contains(pending))
+    };
+    ways_in
+        .iter()
+        .flat_map(|(carried, _)| carried.iter())
+        .filter(|(slot, pending)| agreed(slot, pending))
+        .map(|(slot, pending)| (*slot, *pending))
+        .collect()
 }
 
 /// Loads that take the slot's reference rather than copying it.
@@ -2484,8 +2498,16 @@ fn taking(
     let known_absent = absent_on_entry(func);
     let mut leaving: Vec<rustc_hash::FxHashMap<Slot, ValueId>> =
         vec![rustc_hash::FxHashMap::default(); func.blocks.len()];
+    // Unreachable blocks rank last and are never walked, so nothing they hold
+    // reaches anything.
+    let order = super::verify::reverse_postorder(func);
+    let mut rank = vec![usize::MAX; func.blocks.len()];
+    for (place, block) in order.iter().enumerate() {
+        rank[block.0 as usize] = place;
+    }
 
-    for (at, block) in func.blocks.iter().enumerate() {
+    for at in order.iter().map(|block| block.0 as usize) {
+        let block = &func.blocks[at];
         // A take says the slot has given up what it held. If the store that
         // overwrites the slot does not happen on some path, the slot still holds
         // the reference while the value claims it, and one of the two loses --
@@ -2497,7 +2519,7 @@ fn taking(
         // That is the whole of `popDiskFrom`: read `slots[at]`, return early if
         // it is null, and otherwise overwrite the slot in the block after the
         // branch. See `arriving_at`.
-        let mut held = arriving_at(func, at, &incoming, &leaving, &known_absent);
+        let mut held = arriving_at(func, at, &incoming, &rank, &leaving, &known_absent);
         for &value in &block.ops {
         // A borrow may not also take. `crossing` says nothing releases this
         // value and no edge retains for it; taking would make it owned, and

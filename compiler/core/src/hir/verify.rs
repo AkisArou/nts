@@ -1625,7 +1625,7 @@ fn intersect(
     a
 }
 
-fn reverse_postorder(func: &Func) -> Vec<BlockId> {
+pub(super) fn reverse_postorder(func: &Func) -> Vec<BlockId> {
     let mut order = Vec::new();
     let mut seen = FxHashSet::default();
     postorder(func, BlockId(0), &mut seen, &mut order);
