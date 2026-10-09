@@ -28,7 +28,7 @@ import {
 } from "objc:UIKit";
 import { selector } from "objc:runtime";
 import { exit } from "c:stdlib";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 
 // Swift's `class Controller: NSObject` with an `@objc func pressed(_:)`.
 class Controller extends NSObject {

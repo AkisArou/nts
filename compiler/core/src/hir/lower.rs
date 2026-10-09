@@ -58,7 +58,7 @@ impl FuncBuilder<'_> {
         arrivals
             .at_signature
             .append(&mut self.arrivals.at_signature);
-        arrivals.sequence_arrays.append(&mut self.sequence_arrays);
+        arrivals.conversions.append(&mut self.conversions);
     }
 }
 
@@ -71,21 +71,29 @@ pub struct Arrivals {
     /// disagree about and the pointer passes -- and the one thing that differs is
     /// the `#call` descriptor, which that predicate does not look at.
     pub at_signature: Vec<Arrival>,
-    /// Functions bridges call to make an array of a sequence C passes. See
-    /// [`SequenceArray`].
-    pub sequence_arrays: Vec<SequenceArray>,
+    /// Functions bridges call to convert an argument C passes. See
+    /// [`Conversion`].
+    pub conversions: Vec<Conversion>,
 }
 
-/// A function a bridge calls to make an array of a sequence C passes
-/// (`Bridging::sequences`): requested where the bridge is made, and made once
-/// per name after every body is lowered (`lower_sequence_arrays`).
+/// A function a bridge calls to convert an argument C passes
+/// (`Bridging::converted`): requested where the bridge is made, and made once
+/// per name after every body is lowered (`lower_conversions`).
 #[derive(Debug)]
-pub struct SequenceArray {
+pub struct Conversion {
     pub name: String,
-    sequence: TypeId,
-    array: HirType,
+    converts: Converts,
     /// The closure whose bridge asked, for what the function reports against.
     site: NodeId,
+}
+
+#[derive(Debug)]
+enum Converts {
+    /// A sequence (`length` and `item`) made the array of its items.
+    SequenceArray { sequence: TypeId, array: HirType },
+    /// A 64-bit integer read as a number (`AsNumber`), exactly
+    /// ([`FuncBuilder::exact_as_number`]).
+    ExactNumber { integer: HirType },
 }
 
 /// Closures whose `#call` disagrees with a slot they were admitted into.
@@ -12651,17 +12659,17 @@ fn lower_module_initializer(
     }
 }
 
-/// The functions bridges call to make an array of a sequence C passes
-/// ([`SequenceArray`]), one per name. One that does not lower is uncompiled,
-/// and `bridges::check` refuses each bridge that would call it.
-fn lower_sequence_arrays(
+/// The functions bridges call to convert an argument C passes
+/// ([`Conversion`]), one per name. One that does not lower is uncompiled, and
+/// `bridges::check` refuses each bridge that would call it.
+fn lower_conversions(
     snapshot: &SemanticSnapshot,
     shared: &Shared,
     lowered: &mut Lowered,
     wanted: &mut std::collections::BTreeSet<usize>,
 ) {
     let mut made = rustc_hash::FxHashSet::default();
-    for request in std::mem::take(&mut lowered.arrivals.sequence_arrays) {
+    for request in std::mem::take(&mut lowered.arrivals.conversions) {
         if !made.insert(request.name.clone()) {
             continue;
         }
@@ -12670,7 +12678,7 @@ fn lower_sequence_arrays(
             NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default),
             Copy::default(),
         );
-        match builder.lower_sequence_array(&request) {
+        match builder.lower_conversion(&request) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => {
                 lowered
@@ -14033,7 +14041,7 @@ fn lower_wanted_closures(
     // And the functions bridges call to make an array of a sequence, which
     // a closure lowered just above may have asked for; and what a host
     // rejects a promise with.
-    lower_sequence_arrays(snapshot, shared, lowered, wanted);
+    lower_conversions(snapshot, shared, lowered, wanted);
     lower_reject_error(snapshot, shared, lowered, wanted);
 }
 
@@ -18075,7 +18083,7 @@ enum Decided {
 fn decided_representation(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Decided> {
     if let Some(brand) = super::native::scalar(snapshot, ty) {
         // What the program holds is what TypeScript says it is: a `number`
-        // over any brand is a number -- `CNumber<"size_t">`, Swift's `Int` --
+        // over any brand is a number -- `AsNumber<c_size_t>`, Swift's `Int` --
         // and C's width is the boundary's to convert to. Only a `bigint` base
         // is a `bigint`, which `brand_representation` asks of the brand.
         if !super::native::over_bigint(snapshot, ty) {
@@ -19450,9 +19458,9 @@ struct FuncBuilder<'a> {
     /// that declares one thing this compiler cannot represent should not be
     /// reported as failing on it unless something reaches it.
     used_closures: Vec<usize>,
-    /// Functions this body's bridges call to make an array of a sequence:
-    /// harvested into [`Arrivals::sequence_arrays`].
-    sequence_arrays: Vec<SequenceArray>,
+    /// Functions this body's bridges call to convert an argument: harvested
+    /// into [`Arrivals::conversions`].
+    conversions: Vec<Conversion>,
     /// See [`Arrivals`]; drained by [`FuncBuilder::harvest`].
     arrivals: Arrivals,
 }
@@ -19626,7 +19634,7 @@ impl<'a> FuncBuilder<'a> {
             class_tokens: rustc_hash::FxHashMap::default(),
             written_order: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
-            sequence_arrays: Vec::new(),
+            conversions: Vec::new(),
             arrivals: Arrivals::default(),
             substitution: Substitution::default(),
             sources: super::generics::Sources::default(),
@@ -25733,7 +25741,7 @@ impl<'a> FuncBuilder<'a> {
         // call and the only pointer conversion it does without being asked. One
         // direction: `void *` back to a typed pointer is where the mistakes
         // live, and it stays refused here. TypeScript refuses it too, since
-        // `Ptr<unknown>` is not assignable to `Ptr<c_uint8>` -- this is the
+        // `Ptr<unknown>` is not assignable to `Ptr<Uint8>` -- this is the
         // second of the two, not the only one.
         //
         // A `Convert` rather than a relabel: the address is unchanged, but the
@@ -32756,7 +32764,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The kind each position of a tuple a function's return type was
-    /// **written** as (`[CNumber<"int">, CNumber<"int">]`); empty for any other
+    /// **written** as (`[c_int, c_int]`); empty for any other
     /// return type, or one not annotated.
     fn written_tuple_return(&self, declaration: NodeId) -> Vec<Option<super::native::Scalar>> {
         if !self.annotated(declaration) {
@@ -43349,6 +43357,7 @@ impl<'a> FuncBuilder<'a> {
             result_as: None,
             vtable: None,
             hresult: false,
+            result_as_number: false,
         };
         let origin = self.origin(id);
         let handle = self.push(
@@ -54401,7 +54410,7 @@ impl<'a> FuncBuilder<'a> {
                     _ => None,
                 })
                 .or_else(|| self.literal_name(*member))
-            && super::native::Scalar::from_brand(&name).is_some()
+            && (super::native::Scalar::from_label(&name).is_some() || name == "__AsNumber")
         {
             return Err(
                 self.unsupported(id, "reading a native ABI brand, which has no runtime value")
@@ -61764,7 +61773,7 @@ impl<'a> FuncBuilder<'a> {
         //     jsx(1, 10)
         //
         //     foreign function `prod`'s parameter `t` (which wants a c_int or
-        //     c_double brand, a boolean, or a string), a type with no native ABI
+        //     Float64 brand, a boolean, or a string), a type with no native ABI
         //
         // -- a C ABI refused for a TypeScript function defined two lines up. The
         // React lane reported it from `export const jsx = isDevelopment ? jsxDEV
@@ -61912,6 +61921,11 @@ impl<'a> FuncBuilder<'a> {
             ),
             _ => (None, sent),
         };
+        // `AsNumber<C>`: the function whose 64-bit result is read exactly.
+        let as_number = match &callee {
+            Callee::Native(target) if target.result_as_number => Some(target.name.clone()),
+            _ => None,
+        };
         let result_as = match &callee {
             Callee::Native(target) => target
                 .result_as
@@ -62007,11 +62021,80 @@ impl<'a> FuncBuilder<'a> {
             }
             // The handle GIR says it is, from the ancestor C declares.
             (None, Some(ty)) => self.push(OpKind::Convert(call), ty, self.origin(id)),
-            (None, None) => call,
+            (None, None) => match &as_number {
+                Some(function) => {
+                    self.exact_as_number(id, call, &format!("`{function}` answered"))?
+                }
+                None => call,
+            },
         };
         let value = destination.unwrap_or(value);
         self.give_back(id, lent)?;
         Ok(value)
+    }
+
+    /// A 64-bit integer C hands the program as a `number` (`AsNumber<C>`), a
+    /// call's result or a callback's argument: exactly, and a `RangeError`
+    /// past 2^53, where no number holds every integer. `source` says where it
+    /// came from, for the error's message.
+    fn exact_as_number(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        source: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let integer = self.values[value.0 as usize].ty.clone();
+        let HirType::Int { signed, .. } = integer else {
+            return Ok(value);
+        };
+        let (throws, fits) = (self.new_block(), self.new_block());
+        let greatest = self.push(OpKind::ConstInt(1 << 53), integer.clone(), origin.clone());
+        let above = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: value,
+                rhs: greatest,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let below_or_fits = if signed { self.new_block() } else { fits };
+        self.terminate(Terminator::Branch {
+            cond: above,
+            then_target: throws,
+            then_args: Vec::new(),
+            else_target: below_or_fits,
+            else_args: Vec::new(),
+        });
+        if signed {
+            self.switch_to(below_or_fits);
+            let least = self.push(OpKind::ConstInt(-(1 << 53)), integer, origin.clone());
+            let below = self.push(
+                OpKind::Binary {
+                    op: BinOp::Lt,
+                    lhs: value,
+                    rhs: least,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            self.terminate(Terminator::Branch {
+                cond: below,
+                then_target: throws,
+                then_args: Vec::new(),
+                else_target: fits,
+                else_args: Vec::new(),
+            });
+        }
+        self.switch_to(throws);
+        let message = format!("{source} an integer past 2^53, which a number cannot hold exactly");
+        self.throw_provided_error(id, "RangeError", &message)?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Unreachable);
+        }
+        self.switch_to(fits);
+        Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin))
     }
 
     /// A negative HRESULT `status` thrown, as an `Error` carrying the
@@ -62680,6 +62763,7 @@ impl<'a> FuncBuilder<'a> {
             result_as: None,
             vtable: None,
             hresult: false,
+            result_as_number: false,
         });
         let char_pointer = super::native::Type::Pointer(super::native::Pointee::Scalar(
             super::native::Scalar::Char,
@@ -65213,6 +65297,7 @@ impl<'a> FuncBuilder<'a> {
                 result_as: None,
                 vtable: None,
                 hresult: false,
+                result_as_number: false,
             };
             self.push(
                 OpKind::Call {
@@ -65442,7 +65527,7 @@ impl<'a> FuncBuilder<'a> {
                 "a closure passed to C whose body is not known here: write the function or arrow at the call, or bind it with `const` in the same function",
             ));
         }
-        let bridging = self.with_sequence_arrays(closure, bridge, bridging);
+        let bridging = self.with_conversions(closure, bridge, bridging);
         let bridged = self.push(
             OpKind::NativeBridge {
                 closure,
@@ -65465,18 +65550,23 @@ impl<'a> FuncBuilder<'a> {
     /// closure lent for the call (a callee that keeps the block copies it and
     /// lends it again), and the block in this frame holding both.
     /// `None` for an argument the call does not pass.
-    /// `bridging`, with an array made for each sequence C passes where the
-    /// closure takes an array: lib.dom's `MutationObserver` callback
-    /// `(records: MutationRecord[]) => void`, where nts:dom passes a
-    /// `MutationRecordSequence`. The array is made by a function of this
-    /// program's ([`SequenceArray`], requested here and made once each), a new
-    /// one each call, as `WebIDL` makes one of a `sequence<T>` for page script.
+    /// `bridging`, with a function of this program's ([`Conversion`],
+    /// requested here and made once each) converting each argument C passes
+    /// that the closure takes as something else:
     ///
-    /// Read off the closure's arrow, its parameters as lib.dom types them: the
-    /// bridge carries only C's types, and what the closure takes is the
+    /// - a sequence where the closure takes an array: lib.dom's
+    ///   `MutationObserver` callback `(records: MutationRecord[]) => void`,
+    ///   where nts:dom passes a `MutationRecordSequence` -- a new array each
+    ///   call, as `WebIDL` makes one of a `sequence<T>` for page script;
+    /// - a 64-bit integer where the closure takes a number (`AsNumber<C>`,
+    ///   GIO's `FileProgressCallback`): exactly, or a `RangeError` past 2^53,
+    ///   as a call's result is read.
+    ///
+    /// Read off the closure's arrow, its parameters as the program types them:
+    /// the bridge carries only C's types, and what the closure takes is the
     /// program's. A sequence whose type is not found, or whose element is not
     /// a handle, is left as it was, and `bridges::check` refuses it.
-    fn with_sequence_arrays(
+    fn with_conversions(
         &mut self,
         closure: ValueId,
         bridge: &super::native::FnPointer,
@@ -65527,24 +65617,70 @@ impl<'a> FuncBuilder<'a> {
                 continue;
             };
             let function = format!("nts_sequence_{}_as_{}", handle.tag, element.tag);
-            if !self
-                .sequence_arrays
-                .iter()
-                .any(|request| request.name == function)
-            {
-                self.sequence_arrays.push(SequenceArray {
-                    name: function.clone(),
-                    sequence,
-                    array,
-                    site: arrow,
-                });
-            }
-            bridging.sequences.push(super::SequenceParameter {
-                at: u32::try_from(at).unwrap_or(u32::MAX),
+            self.request_conversion(
+                &mut bridging,
+                at,
                 function,
-            });
+                Converts::SequenceArray { sequence, array },
+                arrow,
+            );
+        }
+        for (at, foreign) in bridge.parameters.iter().enumerate() {
+            let super::native::Type::Scalar(kind) = foreign else {
+                continue;
+            };
+            if !kind.needs_exact_integer() {
+                continue;
+            }
+            let Some(parameter) = bridging
+                .parameter(at)
+                .and_then(|parameter| parameters.get(parameter))
+            else {
+                continue;
+            };
+            if self.represent(parameter.ty) != Some(HirType::NUMBER) {
+                continue;
+            }
+            let integer = foreign.representation();
+            let HirType::Int { signed, .. } = integer else {
+                continue;
+            };
+            let function = format!("nts_exact_number_{}", if signed { "i64" } else { "u64" });
+            self.request_conversion(
+                &mut bridging,
+                at,
+                function,
+                Converts::ExactNumber { integer },
+                arrow,
+            );
         }
         bridging
+    }
+
+    /// C's argument `at` converted by `function`, made once per program.
+    fn request_conversion(
+        &mut self,
+        bridging: &mut super::Bridging,
+        at: usize,
+        function: String,
+        converts: Converts,
+        site: NodeId,
+    ) {
+        if !self
+            .conversions
+            .iter()
+            .any(|request| request.name == function)
+        {
+            self.conversions.push(Conversion {
+                name: function.clone(),
+                converts,
+                site,
+            });
+        }
+        bridging.converted.push(super::ConvertedParameter {
+            at: u32::try_from(at).unwrap_or(u32::MAX),
+            function,
+        });
     }
 
     /// The type whose handle `handle` is, where it is a sequence: `length`
@@ -65611,13 +65747,43 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.finish(REJECT_ERROR.to_owned(), params, HirType::Void, origin, true))
     }
 
-    /// A function made to turn a sequence into an array for a bridge
-    /// ([`Self::with_sequence_arrays`]): its one parameter the sequence, its
-    /// result the array of its items.
-    fn lower_sequence_array(&mut self, request: &SequenceArray) -> Result<Func, Diagnostic> {
+    /// A function made to convert an argument C passes to a bridge
+    /// ([`Self::with_conversions`]): its one parameter what C passes, its
+    /// result what the closure takes.
+    fn lower_conversion(&mut self, request: &Conversion) -> Result<Func, Diagnostic> {
+        match &request.converts {
+            Converts::SequenceArray { sequence, array } => {
+                self.lower_sequence_array(request, *sequence, array.clone())
+            }
+            Converts::ExactNumber { integer } => {
+                let origin = self.origin(request.site);
+                let params = vec![Param {
+                    name: "integer".to_owned(),
+                    shape: ParamShape::Ordinary,
+                    ty: integer.clone(),
+                    origin: origin.clone(),
+                    known: Facts::TOP,
+                    written: None,
+                }];
+                let passed = self.push(OpKind::Param(0), integer.clone(), origin.clone());
+                let number = self.exact_as_number(request.site, passed, "C passed a callback")?;
+                self.terminate(Terminator::Return(Some(number)));
+                Ok(self.finish(request.name.clone(), params, HirType::NUMBER, origin, false))
+            }
+        }
+    }
+
+    /// The array of a sequence's items, for a bridge: its one parameter the
+    /// sequence.
+    fn lower_sequence_array(
+        &mut self,
+        request: &Conversion,
+        sequence: TypeId,
+        array: HirType,
+    ) -> Result<Func, Diagnostic> {
         let origin = self.origin(request.site);
         let taken = self
-            .represent(request.sequence)
+            .represent(sequence)
             .ok_or_else(|| self.unrepresentable(request.site, "a sequence a bridge passes"))?;
         let params = vec![Param {
             name: "sequence".to_owned(),
@@ -65627,21 +65793,10 @@ impl<'a> FuncBuilder<'a> {
             known: Facts::TOP,
             written: None,
         }];
-        let sequence = self.push(OpKind::Param(0), taken, origin.clone());
-        let array = self.array_of_sequence(
-            request.site,
-            sequence,
-            request.sequence,
-            request.array.clone(),
-        )?;
-        self.terminate(Terminator::Return(Some(array)));
-        Ok(self.finish(
-            request.name.clone(),
-            params,
-            request.array.clone(),
-            origin,
-            false,
-        ))
+        let passed = self.push(OpKind::Param(0), taken, origin.clone());
+        let made = self.array_of_sequence(request.site, passed, sequence, array.clone())?;
+        self.terminate(Terminator::Return(Some(made)));
+        Ok(self.finish(request.name.clone(), params, array, origin, false))
     }
 
     fn lend_block(
@@ -66854,13 +67009,14 @@ impl<'a> FuncBuilder<'a> {
             // let a closure's heap address reach C as something to call, before
             // bridges existed -- a `void *` says nothing a wrong value would
             // contradict.
+            let bridging = self.with_conversions(*argument, signature, super::Bridging::default());
             *argument = self.push(
                 OpKind::NativeBridge {
                     closure: *argument,
                     signature: signature.clone(),
                     context: false,
                     once: false,
-                    bridging: super::Bridging::default(),
+                    bridging,
                 },
                 HirType::NativePointer(super::native::Pointee::FnPointer(signature.clone())),
                 origin,
@@ -67663,7 +67819,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// ```ts
     /// declare module "objc:Foundation" {
-    ///   export type Size = Struct<{ width: c_double; height: c_double }, "Size">;
+    ///   export type Size = Struct<{ width: Float64; height: Float64 }, "Size">;
     /// ```
     ///
     /// `width` is a field of a struct read by offset, not a selector sent to an
@@ -69105,10 +69261,13 @@ impl<'a> FuncBuilder<'a> {
         // which is what the call's own value is; the caller copies it into the
         // string the program sees (`read_native_string`).
         // And one whose result C declares as an ancestor (`Declared`), which
-        // is that ancestor until `finish_call` converts it.
+        // is that ancestor until `finish_call` converts it, and a 64-bit
+        // integer read as a number (`AsNumber`), which `finish_call` checks.
         let native_string = match &callee {
             Callee::Native(target)
-                if target.returns_string.is_some() || target.result_as.is_some() =>
+                if target.returns_string.is_some()
+                    || target.result_as.is_some()
+                    || target.result_as_number =>
             {
                 Some(target.result.representation())
             }
@@ -78991,6 +79150,7 @@ fn synthesized(
         result_as: None,
         vtable: None,
         hresult: false,
+        result_as_number: false,
     }
 }
 

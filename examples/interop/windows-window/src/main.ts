@@ -17,7 +17,8 @@
 // swapped, or as a pointer, answers `hit=0 miss=0` instead.
 import { local } from "c:memory";
 import { malloc } from "c:stdlib";
-import type { ConstPtr, c_int, c_long32, c_uint, c_uint16, c_uint64 } from "c:types";
+import type { ConstPtr } from "c:types";
+import type { c_int, c_long32, c_uint, Uint16, BigUint64 } from "@nts/scalars";
 import type { HWND, LPARAM, LRESULT, POINT, WPARAM } from "c:Windows.Win32.Foundation";
 import { GetModuleHandleW } from "c:Windows.Win32.System.LibraryLoader";
 import {
@@ -36,11 +37,11 @@ let miss = 0;
 
 // A struct member keeps its pointer past any one call, which a lent string
 // cannot promise, so `WNDCLASSEXW.lpszClassName` gets UTF-16 units of its own.
-function classNameUnits(text: string): ConstPtr<c_uint16> {
-  const out = malloc<c_uint16>((text.length + 1) * 2);
+function classNameUnits(text: string): ConstPtr<Uint16> {
+  const out = malloc<Uint16>((text.length + 1) * 2);
   if (out === null) return classNameUnits("");
-  for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) as c_uint16;
-  out[text.length] = 0 as c_uint16;
+  for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) as Uint16;
+  out[text.length] = 0 as Uint16;
   return out;
 }
 
@@ -48,7 +49,7 @@ async function closeLater(hwnd: HWND): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(() => resolve(), 30));
   if (closedBy !== "nothing") return;
   closedBy = "typescript";
-  KillTimer(hwnd, 1n as c_uint64);
+  KillTimer(hwnd, 1n as BigUint64);
   DestroyWindow(hwnd);
 }
 
@@ -100,7 +101,7 @@ function main(): void {
   below[0].y = 290 as c_long32;
   if (ChildWindowFromPointEx(hwnd, inside, CWP_FLAGS.CWP_ALL) === hwnd) hit = 1;
   if (ChildWindowFromPointEx(hwnd, below, CWP_FLAGS.CWP_ALL) === null) miss = 1;
-  SetTimer(hwnd, 1n as c_uint64, 10 as c_uint, null);
+  SetTimer(hwnd, 1n as BigUint64, 10 as c_uint, null);
   void closeLater(hwnd);
   const msg = local<MSG>();
   while (GetMessageW(msg, null, 0 as c_uint, 0 as c_uint) > 0) {

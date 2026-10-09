@@ -23,7 +23,7 @@ fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSna
     std::fs::write(dir.join("tsconfig.json"), format!(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
     )).unwrap();
-    std::fs::write(dir.join("main.ts"), format!("{}{}", "import type { c_int, c_uint, c_int8, c_uint8, c_int16, c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, c_float, c_double } from \"c:types\";\n", source)).unwrap();
+    std::fs::write(dir.join("main.ts"), format!("{}{}", "import type { c_int, c_uint, Int8, Uint8, Int16, Uint16, Int32, Uint32, BigInt64, BigUint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, Float32, Float64 } from \"@nts/scalars\";\n", source)).unwrap();
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
@@ -42,8 +42,8 @@ fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSna
 #[test]
 fn a_narrow_brand_has_number_semantics_in_both_signature_positions() {
     for name in [
-        "c_int", "c_uint", "c_int8", "c_uint8", "c_int16", "c_uint16", "c_int32", "c_uint32",
-        "c_float", "c_double",
+        "c_int", "c_uint", "Int8", "Uint8", "Int16", "Uint16", "Int32", "Uint32", "Float32",
+        "Float64",
     ] {
         let Some(snapshot) = snapshot(
             name,
@@ -109,7 +109,7 @@ fn phantom_brand_property_reads_are_explicitly_refused() {
     ] {
         let Some(snapshot) = snapshot(
             name,
-            &format!("export function read(n: c_int): symbol {{ return {read}; }}"),
+            &format!("export function read(n: c_int): true | undefined {{ return {read}; }}"),
         ) else {
             return;
         };
@@ -277,12 +277,12 @@ fn opaque_pointee_identity_does_not_depend_on_signature_position() {
 
 #[test]
 fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
-    let declarations = "import type { Ptr } from \"c:types\"; type Bytes = Ptr<c_uint8>; declare function make(): Bytes;";
+    let declarations = "import type { Ptr } from \"c:types\"; type Bytes = Ptr<Uint8>; declare function make(): Bytes;";
     for (name, body) in [
         ("erase", "export function bad(): unknown { return make(); }"),
         (
             "brand",
-            "export function bad(): c_uint8 { return make().__c_pointer; }",
+            "export function bad(): Uint8 { return make().__c_pointer; }",
         ),
         (
             "in",
@@ -293,7 +293,7 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
         // guard it exists for.
         (
             "forged",
-            "export function bad(): Bytes { return { __c_pointer: 0 as c_uint8, __c_writable: true }; }",
+            "export function bad(): Bytes { return { __c_pointer: 0 as Uint8, __c_writable: true }; }",
         ),
         (
             "cast",
@@ -301,7 +301,7 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
         ),
         (
             "reinterpret",
-            "export function bad(): Ptr<c_double> { return make() as unknown as Ptr<c_double>; }",
+            "export function bad(): Ptr<Float64> { return make() as unknown as Ptr<Float64>; }",
         ),
         (
             "array",
@@ -331,7 +331,7 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
 fn native_memory_verifier_rejects_corrupted_widths_and_indices() {
     let Some(snapshot) = snapshot(
         "native-memory-verifier",
-        "import type { Ptr } from \"c:types\"; export function run(p: Ptr<c_uint8>, n: c_uint8): number { p[0] = n; return p[1]; }",
+        "import type { Ptr } from \"c:types\"; export function run(p: Ptr<Uint8>, n: Uint8): number { p[0] = n; return p[1]; }",
     ) else {
         return;
     };
@@ -390,22 +390,22 @@ fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
     for brand in [
         "c_int",
         "c_uint",
-        "c_int8",
-        "c_uint8",
-        "c_int16",
-        "c_uint16",
-        "c_int32",
-        "c_uint32",
-        "c_int64",
-        "c_uint64",
+        "Int8",
+        "Uint8",
+        "Int16",
+        "Uint16",
+        "Int32",
+        "Uint32",
+        "BigInt64",
+        "BigUint64",
         "c_long",
         "c_ulong",
         "c_size_t",
         "c_ptrdiff_t",
-        "c_float",
-        "c_double",
+        "Float32",
+        "Float64",
     ] {
-        for witness in ["", "type Unused = Ptr<c_double>;"] {
+        for witness in ["", "type Unused = Ptr<Float64>;"] {
             let source = format!(
                 "import type {{ Ptr }} from \"c:types\"; declare function make(): Ptr<{brand}>;
                 // `void` rather than `number`: an element of a 64-bit brand is a
@@ -423,7 +423,7 @@ fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
                 prepared.diagnostics
             );
             let expected = HirType::NativePointer(hir::native::Pointee::Scalar(
-                hir::native::Scalar::from_brand(&format!("__{brand}")).unwrap(),
+                hir::native::Scalar::from_label(&format!("__{brand}")).unwrap(),
             ));
             let run = prepared
                 .program
@@ -449,7 +449,7 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
         import { local, sizeof, addrOf } from "c:memory";
         import { malloc, free } from "c:stdlib";
         import type { Ptr, Struct } from "c:types";
-        type Request = Struct<{ fd: c_int; events: c_int16; revents: c_int16 }, "pollfd">;
+        type Request = Struct<{ fd: c_int; events: Int16; revents: Int16 }, "pollfd">;
         /** Poll only borrows the request array.
          * @ntsNoEscape p
          */
@@ -888,9 +888,9 @@ fn a_copy_survives_and_is_refused_between_two_types() {
 #[test]
 fn a_promoted_variadic_tail_is_refused_with_the_type_to_declare() {
     for (tail, promoted) in [
-        ("c_uint16", Some("int")),
-        ("c_float", Some("double")),
-        ("c_uint32", None),
+        ("Uint16", Some("int")),
+        ("Float32", Some("double")),
+        ("Uint32", None),
     ] {
         let Some(snapshot) = snapshot(
             &format!("variadic-{tail}"),
@@ -930,8 +930,8 @@ fn a_promoted_variadic_tail_is_refused_with_the_type_to_declare() {
 /// The C spelling a brand stands for, which is what the diagnostic uses.
 fn tail_c_name(brand: &str) -> &'static str {
     match brand {
-        "c_uint16" => "uint16_t",
-        "c_float" => "float",
+        "Uint16" => "uint16_t",
+        "Float32" => "float",
         other => panic!("no C spelling recorded for {other}"),
     }
 }
@@ -1102,7 +1102,7 @@ fn snapshot_allowing_errors(
     .unwrap();
     std::fs::write(
         dir.join("main.ts"),
-        format!("import type {{ c_int }} from \"c:types\";\n{source}"),
+        format!("import type {{ c_int }} from \"@nts/scalars\";\n{source}"),
     )
     .unwrap();
     let snapshot = TsgoApi::for_compilation(tsgo)
@@ -1127,31 +1127,31 @@ fn snapshot_allowing_errors(
 /// mechanism that stops working otherwise hides behind the other.
 #[test]
 fn a_const_view_reads_and_does_not_write() {
-    let header = "import type { ConstPtr, Ptr, c_uint8, c_size_t } from \"c:types\";\n\
+    let header = "import type { ConstPtr, Ptr } from \"c:types\"; import type { Uint8, c_size_t } from \"@nts/scalars\";\n\
          import { addrOf, local } from \"c:memory\";\n\
          /** @ntsNoEscape p */\n\
          declare function wantsConst(p: ConstPtr<unknown>, n: c_size_t): void;\n\
          /** @ntsNoEscape p */\n\
-         declare function wantsMutable(p: Ptr<c_uint8>, n: c_size_t): void;\n";
+         declare function wantsMutable(p: Ptr<Uint8>, n: c_size_t): void;\n";
     for (name, body, expected) in [
         (
             "mutable-satisfies-const",
-            "export function go(): void { const b = local<c_uint8>(4); wantsConst(b, 4n as c_size_t); }",
+            "export function go(): void { const b = local<Uint8>(4); wantsConst(b, 4n as c_size_t); }",
             None,
         ),
         (
             "read-through-const",
-            "export function go(p: ConstPtr<c_uint8>): number { return p[0]; }",
+            "export function go(p: ConstPtr<Uint8>): number { return p[0]; }",
             None,
         ),
         (
             "const-does-not-satisfy-mutable",
-            "export function go(p: ConstPtr<c_uint8>): void { wantsMutable(p, 4n as c_size_t); }",
+            "export function go(p: ConstPtr<Uint8>): void { wantsMutable(p, 4n as c_size_t); }",
             Some("typescript"),
         ),
         (
             "write-through-const",
-            "export function go(p: ConstPtr<c_uint8>): void { p[0] = 1; }",
+            "export function go(p: ConstPtr<Uint8>): void { p[0] = 1; }",
             Some("typescript"),
         ),
         // An address taken out of a const view would have to carry the
@@ -1159,7 +1159,7 @@ fn a_const_view_reads_and_does_not_write() {
         // rather than laundering it.
         (
             "address-of-a-const-member",
-            "export function go(p: ConstPtr<c_uint8>): void { wantsMutable(addrOf(p[1]), 1n as c_size_t); }",
+            "export function go(p: ConstPtr<Uint8>): void { wantsMutable(addrOf(p[1]), 1n as c_size_t); }",
             Some("lowering"),
         ),
     ] {
@@ -1254,8 +1254,8 @@ fn a_native_declaration_contributes_its_no_escape_contract() {
 #[test]
 fn a_wide_brand_has_bigint_semantics_in_both_signature_positions() {
     for name in [
-        "c_int64",
-        "c_uint64",
+        "BigInt64",
+        "BigUint64",
         "c_long",
         "c_ulong",
         "c_size_t",
@@ -1512,11 +1512,11 @@ fn refusals(name: &str, source: &str) -> Option<Vec<(String, String)>> {
 fn each_proof_is_refused_without_the_fact_it_rests_on() {
     // The kinds a plain `number` reaches without an `as`, as a binding
     // spells them.
-    let declarations = "import type { CNumber } from \"c:types\";\n\
-         type I32 = CNumber<\"int32\">;\n\
-         declare function seen_i32(v: I32): CNumber<\"double\">;\n\
-         declare function seen_u16(v: CNumber<\"uint16\">): CNumber<\"double\">;\n\
-         declare function seen_float(v: CNumber<\"float\">): CNumber<\"double\">;\n";
+    // The test's header imports the library's names.
+    let declarations = "type I32 = Int32;\n\
+         declare function seen_i32(v: I32): Float64;\n\
+         declare function seen_u16(v: Uint16): Float64;\n\
+         declare function seen_float(v: Float32): Float64;\n";
     let cases = [
         // A code unit read below its string's length is never NaN.
         (
@@ -1607,4 +1607,102 @@ fn each_proof_is_refused_without_the_fact_it_rests_on() {
             "{name}: {refused:?}"
         );
     }
+}
+
+/// A kind is the label `@nts/scalars` declares, and nothing else spelled
+/// like it: the library's `Int32` crosses as `int32_t`, a program's own brand
+/// on one keeps the kind, `AsNumber<c_size_t>` is `size_t` carried as a
+/// number -- and a property named `__Int32` the program writes itself is an
+/// ordinary property, so a function taking one has no native ABI.
+#[test]
+fn a_kind_is_the_librarys_label_and_no_other() {
+    // The test's header imports the rest of the library's names.
+    let library = "import type { AsNumber, c_long as Long, c_size_t as Size } from \"@nts/scalars\";\n\
+         type UserId = Int32 & { readonly __user?: true };\n\
+         declare function takes_label(v: Int32): Int32;\n\
+         declare function takes_owned(v: UserId): Int32;\n\
+         declare function count(): AsNumber<Size>;\n\
+         declare function wide(v: Long): Long;\n";
+    let kept = format!(
+        "{library}export function f(): number {{ return takes_label(1) + takes_owned(2) + count() + Number(wide(3n)); }}\n"
+    );
+    let Some(read) = snapshot("library-label", &kept) else {
+        return;
+    };
+    let prepared =
+        hir::prepare(&read).unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let natives: Vec<String> = prepared
+        .program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            hir::OpKind::Call {
+                callee: hir::Callee::Native(target),
+                ..
+            } => Some(format!(
+                "{}({})",
+                target.name,
+                target
+                    .parameters
+                    .iter()
+                    .map(hir::native::Type::c_type)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+            _ => None,
+        })
+        .collect();
+    for expected in [
+        "takes_label(int32_t)",
+        "takes_owned(int32_t)",
+        "count()",
+        "wide(long)",
+    ] {
+        assert!(
+            natives.iter().any(|native| native == expected),
+            "no {expected} in {natives:?}"
+        );
+    }
+
+    let spoof = "type Fake = number & { readonly __Int32?: true };\n\
+         declare function takes_fake(v: Fake): number;\n\
+         export function g(): number { return takes_fake(1); }\n";
+    let Some(read) = snapshot("library-label-spoof", spoof) else {
+        return;
+    };
+    let prepared =
+        hir::prepare(&read).unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
+    assert!(
+        prepared
+            .diagnostics
+            .iter()
+            .any(|refused| refused.message.contains("takes_fake")),
+        "a look-alike label crossed as a kind: {:?}",
+        prepared.diagnostics
+    );
+}
+
+/// `native::SCALARS` is what `scalars.d.ts` exports, so a generator importing
+/// a name from the module that list names imports it from where it is.
+#[test]
+fn the_list_of_scalar_names_is_the_librarys() {
+    let library = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../runtime/native/scalars.d.ts"
+    ));
+    let mut exported: Vec<&str> = library
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("export type "))
+        .filter_map(|rest| rest.split([' ', '<', '=']).next())
+        .collect();
+    exported.sort_unstable();
+    let mut listed = hir::native::SCALARS.to_vec();
+    listed.sort_unstable();
+    assert_eq!(exported, listed);
 }

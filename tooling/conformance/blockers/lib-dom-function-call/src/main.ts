@@ -4,7 +4,7 @@
 // of a lib.dom.d.ts function the overlay binds (`declare function
 // requestAnimationFrame`, `@ntsBoundBy "nts:dom" requestAnimationFrame`)
 // lowers as the bound nts:dom function, at that function's parameters: the
-// callback bridged at `Closure<(time: CNumber<"double">) => void>`, the id an
+// callback bridged at `Closure<(time: Float64) => void>`, the id an
 // `int32`.
 //
 // **Kept as a guard from the day it was written (2026-10-07)**: found by MainClaude

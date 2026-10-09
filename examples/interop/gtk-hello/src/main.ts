@@ -19,7 +19,7 @@ import {
   hello_report,
   hello_unref,
 } from "c:gtk-hello";
-import type { c_int, c_uint } from "c:types";
+import type { c_int, c_uint } from "@nts/scalars";
 
 // Inside a function because a module-scope variable cannot hold a native
 // pointer (NTS1001).

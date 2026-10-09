@@ -57,7 +57,8 @@
 //   the one before. `column=true` says XAML laid the window out through both,
 //   and `stacked=true` that the text sits at the button's height.
 // - `after` is printed once `Start` returns, so the line shows the loop ended.
-import type { ByValue, c_int64 } from "c:types";
+import type { ByValue } from "c:types";
+import type { BigInt64 } from "@nts/scalars";
 import { local } from "c:memory";
 import type { Size } from "winrt:Windows.Foundation";
 import { Application, FocusState, Window } from "winrt:Microsoft.UI.Xaml";
@@ -338,7 +339,7 @@ class App extends Application {
     const set = toggle.isChecked;
     toggle.isChecked = null;
     const cleared = toggle.isChecked;
-    picker.date = { universalTime: 133000000000000000n as c_int64 };
+    picker.date = { universalTime: 133000000000000000n as BigInt64 };
     const dated = picker.date;
     const bar = window.appWindow.titleBar;
     bar.backgroundColor = { a: 255, r: 1, g: 2, b: 3 };

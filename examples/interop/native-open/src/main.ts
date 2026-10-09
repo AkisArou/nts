@@ -1,6 +1,7 @@
 import { close, open, unlink, write, type Flags, type Mode } from "c:fcntl";
 import { local } from "c:memory";
-import type { Ptr, c_char, c_size_t } from "c:types";
+import type { Ptr } from "c:types";
+import type { c_char, c_size_t } from "@nts/scalars";
 
 // `O_CREAT | O_WRONLY | O_TRUNC` and `0o600`. Macros, so no binding can carry
 // them; `native/caller.c` asserts each against the real one.

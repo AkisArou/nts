@@ -54,7 +54,8 @@ import {
 import { ApplicationFlags, type GListModel, type GListModelImplementation, GListStore, g_file_new_for_path } from "c:Gio-2.0";
 import { GdkFileList } from "c:Gdk-4.0";
 import { GObject } from "c:GObject-2.0";
-import type { CNumber, Erased, Owned, c_size_t } from "c:types";
+import type { Erased, Owned } from "c:types";
+import type { c_uint, c_size_t } from "@nts/scalars";
 import { g_getenv, g_timeout_add_full } from "c:GLib-2.0";
 
 class Task extends GObject {
@@ -122,14 +123,14 @@ function spliced(): string {
 
 // A model the program writes: `count` rows of `GtkStringObject`, none held.
 class Range extends GObject<{}, GListModelImplementation> {
-  count: CNumber<"uint"> = 1_000_000;
-  vfunc_get_n_items(): CNumber<"uint"> {
+  count: c_uint = 1_000_000;
+  vfunc_get_n_items(): c_uint {
     return this.count;
   }
   vfunc_get_item_type(): c_size_t {
     return gtk_string_object_get_type();
   }
-  vfunc_get_item(position: CNumber<"uint">): Owned<Erased<GObject>> | null {
+  vfunc_get_item(position: c_uint): Owned<Erased<GObject>> | null {
     return position < this.count ? GtkStringObject.new("line " + String(position)) : null;
   }
 }

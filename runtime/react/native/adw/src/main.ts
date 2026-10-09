@@ -128,7 +128,7 @@ import {
 import { DragAction } from "c:Gdk-4.0";
 import { ApplicationFlags } from "c:Gio-2.0";
 import { g_main_context_iteration, g_main_loop_new, g_timeout_add_full } from "c:GLib-2.0";
-import type { CNumber } from "c:types";
+import type { c_uint } from "@nts/scalars";
 import { GtkAdjustment, GtkButton, GtkLabel, GtkStringList, GtkWindow, type GtkWidget } from "c:Gtk-4.0";
 import { react_gtk_emit, react_gtk_emit_choice, react_gtk_log } from "c:react-gtk-shim";
 import { setAfterEvent } from "../../../packages/react-gtk/src/HostNode.ts";
@@ -178,7 +178,7 @@ function buttonLabels(widget: GtkWidget, into: string[]): void {
 
 // Runs the main loop for `ms`: what waits on the frame clock, as a layout
 // pass does, has run by the end.
-function settle(ms: CNumber<"uint">): void {
+function settle(ms: c_uint): void {
   const loop = g_main_loop_new(null, false);
   g_timeout_add_full(0, ms, () => {
     loop.quit();

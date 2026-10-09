@@ -3,7 +3,7 @@
 // through prepared buffers that show what the string costs.
 import * as testing from "nts:dom-testing";
 import type { Node } from "nts:dom";
-import type { c_uint32 } from "c:types";
+import type { Uint32 } from "@nts/scalars";
 
 export interface ChromiumBenchmarkState {
   aUnits: Uint16Array;
@@ -11,8 +11,8 @@ export interface ChromiumBenchmarkState {
   aBytes: Uint8Array;
   bBytes: Uint8Array;
   prefix: string;
-  aAtom: c_uint32;
-  bAtom: c_uint32;
+  aAtom: Uint32;
+  bAtom: Uint32;
 }
 // Prepared buffers: the controls a view is measured against. Built once,
 // outside the timed loop, so they show the cost of the call and Blink's copy
@@ -38,7 +38,7 @@ export function ntsChromiumPrepareBenchmark(a: string, b: string): ChromiumBench
 // an id. The controls return a status; `textContent` would throw.
 export function ntsChromiumBenchmarkLoop(node: Node,
   state: ChromiumBenchmarkState, a: string, b: string, iterations: number, mode: number): number {
-  const length = a.length as c_uint32;
+  const length = a.length as Uint32;
   let failed = 0;
   if (mode === 0) {
     for (let i = 0; i < iterations; ++i) {

@@ -4,9 +4,9 @@
 // typed here. The brands are the author's claim, as they are in a binding.
 // sys/epoll.h
 
-import type { c_int, c_uint32 } from "c:types";
+import type { Uint32, c_int } from "@nts/scalars";
 
 /** `EPOLLIN`, from the headers above. */
-export const READABLE = 1 as c_uint32;
+export const READABLE = 1 as Uint32;
 /** `EPOLL_CTL_ADD`, from the headers above. */
 export const EPOLL_CTL_ADD = 1 as c_int;

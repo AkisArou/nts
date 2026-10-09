@@ -1,16 +1,16 @@
 import { read, write, type Fd, type Count } from "c:unistd";
 import { local } from "c:memory";
-import type { c_uint, c_uint8 } from "c:types";
+import type { c_uint, Uint8 } from "@nts/scalars";
 
-// `read` takes `void *`. `Ptr<c_uint8>` converts to it the way C converts at
+// `read` takes `void *`. `Ptr<Uint8>` converts to it the way C converts at
 // the call, and the reverse does not typecheck -- `Ptr<unknown>` is not
-// assignable to `Ptr<c_uint8>`, which is the direction mistakes live in.
+// assignable to `Ptr<Uint8>`, which is the direction mistakes live in.
 const CAPACITY = 64;
 
 // How many bytes arrived, straight through: negative is the error outcome and
 // zero is end of file, both of which the caller checks.
 export function readCount(fd: Fd, max: c_uint): number {
-  const buf = local<c_uint8>(CAPACITY);
+  const buf = local<Uint8>(CAPACITY);
   if (max > CAPACITY) return -1;
   // `size_t` and `ssize_t` are 64 bits here, so both are bigint-branded: the
   // count converts on the way in and the result on the way out, and neither
@@ -21,7 +21,7 @@ export function readCount(fd: Fd, max: c_uint): number {
 // Reads into storage TS owns and then reads it back, so a buffer that arrived
 // empty is distinguishable from one that was never written.
 export function readSum(fd: Fd, max: c_uint): number {
-  const buf = local<c_uint8>(CAPACITY);
+  const buf = local<Uint8>(CAPACITY);
   if (max > CAPACITY) return -1;
   const got = Number(read(fd as Fd, buf, BigInt(max) as Count));
   if (got < 0) return got;
@@ -33,8 +33,8 @@ export function readSum(fd: Fd, max: c_uint): number {
 // Writes bytes TS owns out to a descriptor. `write` takes `const void *`, so
 // the same buffer that `read` fills can be handed to it -- a `Ptr<T>` satisfies
 // a `ConstPtr<T>` and not the reverse, which is C's rule and, here, TypeScript's.
-export function writeBytes(fd: Fd, first: c_uint8, second: c_uint8): number {
-  const buf = local<c_uint8>(CAPACITY);
+export function writeBytes(fd: Fd, first: Uint8, second: Uint8): number {
+  const buf = local<Uint8>(CAPACITY);
   buf[0] = first;
   buf[1] = second;
   return Number(write(fd as Fd, buf, 2n as Count));

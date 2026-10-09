@@ -2154,6 +2154,12 @@ impl<'a> Model<'a> {
     }
 
     fn import(&mut self, module: &'static str, name: &'static str) {
+        // The C vocabulary's scalars are `@nts/scalars`', whoever names them.
+        let module = if module == "c:types" {
+            nts_core::hir::native::vocabulary_module(name)
+        } else {
+            module
+        };
         self.imports.entry(module).or_default().insert(name);
     }
 

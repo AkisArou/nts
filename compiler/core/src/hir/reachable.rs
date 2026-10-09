@@ -471,13 +471,13 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
                     callee: Callee::Direct(target),
                     ..
                 } => targets.push(target.as_str()),
-                // What a bridge calls to make an array of a sequence C passes.
+                // What a bridge calls to convert an argument C passes.
                 OpKind::NativeBridge { bridging, .. } => {
                     targets.extend(
                         bridging
-                            .sequences
+                            .converted
                             .iter()
-                            .map(|sequence| sequence.function.as_str()),
+                            .map(|converted| converted.function.as_str()),
                     );
                 }
                 OpKind::Call {

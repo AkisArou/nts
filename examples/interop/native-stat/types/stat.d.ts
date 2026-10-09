@@ -8,7 +8,8 @@
  * @ntsDefine _GNU_SOURCE
  */
 declare module "c:sys/stat" {
-  import type { CArray, ConstPtr, Ptr, Struct, c_char, c_int, c_long, c_uint, c_ulong } from "c:types";
+  import type { c_char, c_int, c_long, c_uint, c_ulong } from "@nts/scalars";
+  import type { CArray, ConstPtr, Ptr, Struct } from "c:types";
   export type Stat = Struct<{
     st_dev: c_ulong;
     st_ino: c_ulong;

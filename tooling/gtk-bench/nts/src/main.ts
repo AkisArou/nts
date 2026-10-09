@@ -17,7 +17,8 @@ import {
 import { ApplicationFlags, type GListModelImplementation } from "c:Gio-2.0";
 import { GObject } from "c:GObject-2.0";
 import { bench_case, bench_log, bench_now } from "c:bench";
-import type { CEnum, CNumber, Erased, Owned, c_size_t, c_uint } from "c:types";
+import type { CEnum, Erased, Owned } from "c:types";
+import type { c_int, c_uint, c_size_t } from "@nts/scalars";
 import { local } from "c:memory";
 
 function best(name: string, n: number, run: (n: number) => void): void {
@@ -98,7 +99,7 @@ function outs(): void {
 // program writes. `for_size` cycles through more values than GTK's size
 // cache holds, so every call reaches the override.
 class Square extends GtkWidget {
-  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<"int">): [CNumber<"int">, CNumber<"int">, CNumber<"int">, CNumber<"int">] {
+  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: c_int): [c_int, c_int, c_int, c_int] {
     void orientation;
     void for_size;
     return [42, 42, -1, -1];
@@ -109,7 +110,7 @@ function vfunc(): void {
   const square = new Square({});
   let total = 0;
   best("vfunc", 200000, (n) => {
-    const size = local<CNumber<"int">>();
+    const size = local<c_int>();
     for (let i = 0; i < n; i++) {
       gtk_widget_measure(square, Orientation.HORIZONTAL, 100 + (i % 1000), size);
       total += size[0];
@@ -121,13 +122,13 @@ function vfunc(): void {
 // An interface's virtual function, which Gio calls through the interface's
 // table: `get_n_items` on a list model whose class the program writes.
 class Model extends GObject<{}, GListModelImplementation> {
-  vfunc_get_n_items(): CNumber<"uint"> {
+  vfunc_get_n_items(): c_uint {
     return 7;
   }
   vfunc_get_item_type(): c_size_t {
     return GObject.$gtype;
   }
-  vfunc_get_item(_position: CNumber<"uint">): Owned<Erased<GObject>> | null {
+  vfunc_get_item(_position: c_uint): Owned<Erased<GObject>> | null {
     return null;
   }
 }

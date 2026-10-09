@@ -52,23 +52,32 @@ pub(super) fn check(program: &Program) -> Vec<(usize, ValueId, String)> {
                 else {
                     continue;
                 };
+                // What a function lowering made converts -- which has to be
+                // there to be called.
+                for converted in &bridging.converted {
+                    if !by_name.contains_key(converted.function.as_str()) {
+                        problems.push((
+                            at,
+                            value,
+                            format!(
+                                "a callback whose argument {} is converted by `{}`, which did not compile",
+                                converted.at, converted.function
+                            ),
+                        ));
+                    }
+                }
                 // Each of C's arguments where the closure takes it -- after its
                 // receiver, and past an array's length, which rides with the
                 // array -- except what the bridge itself converts: an array of
-                // handles, a boxed record.
+                // handles, a boxed record, a sequence.
                 for (c_at, foreign) in signature.parameters.iter().enumerate() {
                     let Type::Pointer(Pointee::Opaque(passed)) = foreign else {
                         continue;
                     };
-                    if bridging.array(c_at).is_some() || bridging.boxed(c_at).is_some() {
-                        continue;
-                    }
-                    // A sequence the bridge makes an array of, by a function
-                    // lowering made -- which has to be there to be called.
-                    if let Some(sequence) = bridging.sequence(c_at) {
-                        if !by_name.contains_key(sequence.function.as_str()) {
-                            problems.push((at, value, format!("a callback whose `{}` is passed as an array by `{}`, which did not compile", passed.tag, sequence.function)));
-                        }
+                    if bridging.array(c_at).is_some()
+                        || bridging.boxed(c_at).is_some()
+                        || bridging.converted(c_at).is_some()
+                    {
                         continue;
                     }
                     let Some(taken) = bridging

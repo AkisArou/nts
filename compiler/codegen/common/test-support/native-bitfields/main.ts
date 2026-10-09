@@ -1,5 +1,6 @@
 import type { IpHeader } from "c:netinet/ip";
-import type { Ptr, Struct, Packed, Bits, c_uint, c_uint8 } from "c:types";
+import type { Ptr, Struct, Packed, Bits } from "c:types";
+import type { c_uint, Uint8 } from "@nts/scalars";
 
 // Two bit-fields sharing byte 0 of a real `struct iphdr`, and one ordinary
 // member after them. The C backend emits `h->version` and lets the header do
@@ -20,7 +21,7 @@ export function setTtl(h: Ptr<IpHeader>, n: number): void { h.ttl = n & 0xff; }
 // begins six bits in and ends at bit 35 -- four bits past the 32-bit unit it is
 // declared in. A reader that loads "the unit containing it" returns 26 of its
 // 30 bits, and `caller.c` also compares C's own view of the same struct.
-type Flags = Packed<Struct<{ p: Bits<c_uint8, 6>; q: Bits<c_uint, 30> }, "flags">>;
+type Flags = Packed<Struct<{ p: Bits<Uint8, 6>; q: Bits<c_uint, 30> }, "flags">>;
 export function pOf(f: Ptr<Flags>): number { return f.p; }
 export function qOf(f: Ptr<Flags>): number { return f.q; }
 export function setP(f: Ptr<Flags>, n: number): void { f.p = n & 0x3f; }

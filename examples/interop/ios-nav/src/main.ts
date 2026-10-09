@@ -29,7 +29,7 @@ import {
   type UIApplicationDelegate,
 } from "objc:UIKit";
 import { exit } from "c:stdlib";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 
 // Swift's `class ListController: UIViewController`.
 class ListController extends UIViewController {

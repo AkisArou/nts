@@ -1,5 +1,5 @@
 declare module "c:report" {
-  import type { c_double, c_uint } from "c:types";
+  import type { Float64, c_uint } from "@nts/scalars";
   // How many runtime classes the Windows Runtime has activated so far.
   export function activations(): c_uint;
   // How many COM references the program has released so far.
@@ -13,7 +13,7 @@ declare module "c:report" {
   export function quit_message_loop(): void;
   export function quit_message_loop_after(ms: c_uint): void;
   // The process's CPU time so far, in milliseconds.
-  export function process_cpu_ms(): c_double;
+  export function process_cpu_ms(): Float64;
   // How many operations the program awaits are outstanding.
   export function pending(): c_uint;
   // Calls `handler` with `sender` on a thread of its own after 100 ms, and

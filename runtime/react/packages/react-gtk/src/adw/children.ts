@@ -44,7 +44,7 @@ import {
   type AdwViewStackPage,
 } from "c:Adw-1";
 import { g_signal_handler_disconnect } from "c:GObject-2.0";
-import type { CNumber } from "c:types";
+import type { AsNumber, c_int, c_ulong } from "@nts/scalars";
 import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
@@ -342,8 +342,8 @@ function selectByReact(view: AdwTabView, page: AdwTabPage): void {
 export class TabViewPageNode extends PlacedNode {
   private readonly state: TabState = new TabState();
   // Handler ids as GObject made them, a `gulong` each, for disconnecting.
-  private closeHandler: CNumber<"ulong"> = 0;
-  private selectHandler: CNumber<"ulong"> = 0;
+  private closeHandler: AsNumber<c_ulong> = 0;
+  private selectHandler: AsNumber<c_ulong> = 0;
 
   protected attach(owner: WidgetNode, widget: GtkWidget): void {
     const view = owner.widget;
@@ -430,7 +430,7 @@ export class TabViewPageNode extends PlacedNode {
   // The index of the tab React's order puts after this one (past the end of
   // the region, with none), kept to the tab's region: libadwaita keeps pinned
   // tabs before the others.
-  private target(owner: WidgetNode, view: AdwTabView, pinned: boolean): CNumber<"int"> {
+  private target(owner: WidgetNode, view: AdwTabView, pinned: boolean): c_int {
     const pinnedCount = view.get_n_pinned_pages();
     const next = owner.elementAfter(this);
     const at = next === null ? (pinned ? pinnedCount : view.get_n_pages()) : view.get_page_position(view.get_page(next));

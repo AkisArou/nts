@@ -14,18 +14,19 @@
  * @ntsDefine _GNU_SOURCE=1
  */
 declare module "c:netinet/ip" {
-  import type { Bits, Struct, c_uint, c_uint16, c_uint32, c_uint8 } from "c:types";
+  import type { Bits, Struct } from "c:types";
+  import type { c_uint, Uint16, Uint32, Uint8 } from "@nts/scalars";
   export type IpHeader = Struct<{
     ihl: Bits<c_uint, 4>;
     version: Bits<c_uint, 4>;
-    tos: c_uint8;
-    tot_len: c_uint16;
-    id: c_uint16;
-    frag_off: c_uint16;
-    ttl: c_uint8;
-    protocol: c_uint8;
-    check: c_uint16;
-    saddr: c_uint32;
-    daddr: c_uint32;
+    tos: Uint8;
+    tot_len: Uint16;
+    id: Uint16;
+    frag_off: Uint16;
+    ttl: Uint8;
+    protocol: Uint8;
+    check: Uint16;
+    saddr: Uint32;
+    daddr: Uint32;
   }, "iphdr">;
 }

@@ -460,9 +460,9 @@ type ValueKind =
   // classes that implement it for an interface.
   | { kind: "object"; type: string; classes: string[]; nullable: boolean }
   | { kind: "boolean" }
-  // `c` is the C type the setter takes (`CNumber<"int">` is "int"), which
-  // decides the conversion the value makes on its way in (src/numbers.ts).
-  | { kind: "number"; c: string }
+  // `scalar` is the kind the setter takes (`c_int`, `Float32`), which decides
+  // the conversion the value makes on its way in (src/numbers.ts).
+  | { kind: "number"; scalar: string }
   // `base` is the integer C takes the enum as: `c_int` or `c_uint`.
   | { kind: "enum"; type: string; base: string };
 
@@ -505,7 +505,7 @@ interface Signal {
 
 /**
  * A handler parameter's type as an app writes it: an object, a string, a
- * number, a boolean or an enum, without the C spelling (`CNumber<"double">` is
+ * number, a boolean or an enum, without the C spelling (`Float64` is
  * `number`); null for one a handler cannot be written against yet. An object
  * is any class, interface or boxed record the bindings declare, in any
  * namespace (a ListBox's row, a TabView's AdwTabPage, a TreeView's
@@ -520,7 +520,7 @@ function handlerType(type: string, types: Set<string>, bindings: Bindings): stri
     return type;
   }
   if (type === "string" || type === "string | null") return type;
-  if (/^CNumber<"\w+">$/.test(type)) return "number";
+  if (numberKind(type) !== null) return "number";
   if (/^CBool<\w+>$/.test(type)) return "boolean";
   const enumType = /^CEnum<(\w+), \w+>$/.exec(type);
   if (enumType !== null) {
@@ -782,9 +782,9 @@ function valueKind(type: string, bindings: Bindings, reference = false): ValueKi
   if (/^CBool<\w+>$/.test(type)) {
     return { kind: "boolean" };
   }
-  const number = /^CNumber<"(\w+)">$/.exec(type);
-  if (number !== null) {
-    return { kind: "number", c: number[1]! };
+  const scalar = numberKind(type);
+  if (scalar !== null) {
+    return { kind: "number", scalar };
   }
   const enumType = /^CEnum<(\w+), (\w+)>$/.exec(type);
   if (enumType !== null) {
@@ -1651,22 +1651,51 @@ function emit(m: Model, target: Target): string {
 
 /**
  * `expression`, a number the app wrote, converted for a setter that takes the
- * C type `c` (src/numbers.ts): checked into an `int` or `unsigned int`,
- * rounded to a `float`. A `double` holds any number as it is.
+ * kind `scalar` (src/numbers.ts): checked into an `int` or `unsigned int`,
+ * rounded to a `float`. A `Float64` holds any number as it is.
  */
-function convert(c: string, expression: string, prop: string): string {
-  switch (c) {
-    case "int":
-    case "int32":
+function convert(scalar: string, expression: string, prop: string): string {
+  switch (scalar) {
+    case "c_int":
+    case "Int32":
       return `cInt(${expression}, "${prop}")`;
-    case "uint":
-    case "uint32":
+    case "c_uint":
+    case "Uint32":
       return `cUint(${expression}, "${prop}")`;
-    case "float":
+    case "Float32":
       return `cFloat(${expression})`;
     default:
       return expression;
   }
+}
+
+/** The kinds of `@nts/scalars` a binding carries as a number. */
+const NUMBER_KINDS = new Set([
+  "c_char",
+  "c_int",
+  "c_uint",
+  "c_long32",
+  "c_ulong32",
+  "Int8",
+  "Uint8",
+  "Int16",
+  "Uint16",
+  "Int32",
+  "Uint32",
+  "Float32",
+  "Float64",
+]);
+
+/**
+ * The kind a binding's type is, where the binding carries it as a number --
+ * `c_int`, `Float64`, or `AsNumber<c_ulong>` (a 64-bit integer handed over as
+ * a number) -- or null for any other type.
+ */
+function numberKind(type: string): string | null {
+  if (NUMBER_KINDS.has(type) || /^AsNumber<\w+>$/.test(type)) {
+    return type;
+  }
+  return null;
 }
 
 /** The type an ancestor of `t` declares its prop `jsx` with, or null when none does. */
@@ -1728,9 +1757,9 @@ function assign(p: Prop): string {
   const test = p.value.kind === "enum" ? "number" : p.value.kind;
   const valueOf =
     p.value.kind === "enum"
-      ? `${convert(p.value.base === "c_int" ? "int" : "uint", "value", p.jsx)} as ${p.value.type}`
+      ? `${convert(p.value.base, "value", p.jsx)} as ${p.value.type}`
       : p.value.kind === "number"
-        ? convert(p.value.c, "value", p.jsx)
+        ? convert(p.value.scalar, "value", p.jsx)
         : "value";
   if (p.reset === null) {
     return `if (typeof value === "${test}") gtk.${p.setter}(${valueOf});`;

@@ -1,5 +1,5 @@
 import { text_broken_promise, text_byte, text_dup, text_dup_unfreed, text_greek, text_is_null, text_length, text_maybe, text_overlong, text_total } from "c:text";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 
 // Built at run time rather than written as one literal, so the string C sees
 // is one this program made and not one the compiler could have laid out.

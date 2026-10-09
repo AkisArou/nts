@@ -51,7 +51,7 @@ fn binding(extra: &str, functions: &str) -> String {
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {{
-  import type {{ Class, c_ulong }} from "c:types";
+  import type {{ Class }} from "c:types"; import type {{ c_ulong }} from "@nts/scalars";
   import type {{ CString }} from "objc:types";
   export interface NSStringOwnMethods {{
     /**
@@ -235,7 +235,7 @@ fn a_malformed_message_is_refused_by_name() {
         };
         let source = format!(
             "import {{ stringWithUTF8String{import} }} from \"objc:Foundation\";\n\
-             import type {{ c_ulong }} from \"c:types\";\n\
+             import type {{ c_ulong }} from \"@nts/scalars\";\n\
              export function run(): void {{\n  const a = stringWithUTF8String(\"a\");\n  {call}\n}}\n"
         );
         let Some((_, prepared)) = prepare(
@@ -267,7 +267,7 @@ fn a_closure_crosses_as_a_stack_block() {
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { c_int } from "c:types";
+  import type { c_int } from "@nts/scalars";
   import type { Block, ObjcClass } from "objc:types";
   export interface NSThingOwnMethods {
     /**
@@ -590,20 +590,20 @@ fn labels_are_passed_without_building_an_object() {
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { c_double } from "c:types";
+  import type { Float64 } from "@nts/scalars";
   /** @ntsClass NSView */
   export class NSView {
     /** @ntsSelector init */
     constructor();
     /** @ntsSelector moveView:toX:y: */
-    move(other: NSView, labels: { x: c_double; y: c_double }): void;
+    move(other: NSView, labels: { x: Float64; y: Float64 }): void;
   }
 }
 "#;
     let source = "import { NSView } from \"objc:Foundation\";\n\
-                  import type { c_double } from \"c:types\";\n\
-                  export function first(): c_double { return 1 as c_double; }\n\
-                  export function second(): c_double { return 2 as c_double; }\n\
+                  import type { Float64 } from \"@nts/scalars\";\n\
+                  export function first(): Float64 { return 1 as Float64; }\n\
+                  export function second(): Float64 { return 2 as Float64; }\n\
                   export function run(view: NSView): void {\n  view.move(view, { y: second(), x: first() });\n}\n";
     let Some((_, prepared)) = prepare("labels", binding, source) else {
         eprintln!("skipped: no tsgo");
@@ -665,17 +665,17 @@ fn labels_that_are_not_a_literal_are_read_from_their_fields() {
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { c_double } from "c:types";
+  import type { Float64 } from "@nts/scalars";
   /** @ntsClass NSView */
   export class NSView {
     /** @ntsSelector setX:y: */
-    move(labels: { x: c_double; y: c_double }): void;
+    move(labels: { x: Float64; y: Float64 }): void;
   }
 }
 "#;
     let source = "import { NSView } from \"objc:Foundation\";\n\
-                  import type { c_double } from \"c:types\";\n\
-                  export function run(view: NSView, at: { y: c_double; x: c_double }): void {\n  view.move(at);\n}\n";
+                  import type { Float64 } from \"@nts/scalars\";\n\
+                  export function run(view: NSView, at: { y: Float64; x: Float64 }): void {\n  view.move(at);\n}\n";
     let Some((_, prepared)) = prepare("labels-variable", binding, source) else {
         eprintln!("skipped: no tsgo");
         return;
@@ -733,7 +733,7 @@ fn swift_numbers_take_plain_numbers_and_cross_as_c_types() {
 }
 "#;
     let source = "import { NSScaler } from \"objc:Foundation\";\n\
-                  import type { c_int } from \"c:types\";\n\
+                  import type { c_int } from \"@nts/scalars\";\n\
                   export function run(s: NSScaler, n: c_int): number {\n  return s.scale(n + 1, { by: 1.5, at: 2 }) * 2;\n}\n";
     let Some((_, prepared)) = prepare("swift-numbers", binding, source) else {
         eprintln!("skipped: no tsgo");
@@ -874,8 +874,9 @@ fn a_class_extending_an_objective_c_class_is_registered_with_the_runtime() {
 #[test]
 fn an_override_takes_the_selector_it_replaces_and_a_record_by_value() {
     let binding = r#"declare module "objc:Foundation" {
-  import type { ByValue, Struct, c_double } from "c:types";
-  export type Size = Struct<{ width: c_double; height: c_double }, "Size">;
+  import type { ByValue, Struct } from "c:types";
+  import type { Float64 } from "@nts/scalars";
+  export type Size = Struct<{ width: Float64; height: Float64 }, "Size">;
   export type Box = Struct<{ origin: Size; size: Size }, "Box">;
   /** @ntsClass NSObject */
   export class NSObject {

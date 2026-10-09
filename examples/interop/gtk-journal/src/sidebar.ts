@@ -14,7 +14,8 @@ import {
   type GtkOrdering,
   GtkListItem,
 } from "c:Gtk-4.0";
-import type { CEnum, c_int } from "c:types";
+import type { CEnum } from "c:types";
+import type { c_int } from "@nts/scalars";
 import { GListStore } from "c:Gio-2.0";
 import { Entry } from "./model.ts";
 

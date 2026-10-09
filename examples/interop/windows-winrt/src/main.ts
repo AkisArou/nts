@@ -96,7 +96,7 @@ import type { IJsonValue } from "winrt:Windows.Data.Json";
 import { CameraIntrinsics } from "winrt:Windows.Media.Devices.Core";
 import { QueryOptions } from "winrt:Windows.Storage.Search";
 import { local } from "c:memory";
-import type { c_int64, c_uint, c_uint32 } from "c:types";
+import type { BigInt64, c_uint, Uint32 } from "@nts/scalars";
 import { GuidHelper, MemoryBuffer, PropertyValue, Uri } from "winrt:Windows.Foundation";
 import { LoggingFields } from "winrt:Windows.Foundation.Diagnostics";
 import { StringMap } from "winrt:Windows.Foundation.Collections";
@@ -120,7 +120,7 @@ import type { BitmapBounds } from "winrt:Windows.Graphics.Imaging";
 function structs(): string {
   const calendar = new Calendar();
   const moment = local<DateTime>();
-  moment[0].universalTime = 132695712000000000n as c_int64;
+  moment[0].universalTime = 132695712000000000n as BigInt64;
   calendar.SetDateTime(moment);
   const year = calendar.get_Year();
   calendar.AddDays(1);
@@ -128,10 +128,10 @@ function structs(): string {
   const days = (later[0].universalTime - moment[0].universalTime) / 864000000000n;
   const transform = new BitmapTransform();
   const bounds = local<BitmapBounds>();
-  bounds[0].x = 1 as c_uint32;
-  bounds[0].y = 2 as c_uint32;
-  bounds[0].width = 300 as c_uint32;
-  bounds[0].height = 400 as c_uint32;
+  bounds[0].x = 1 as Uint32;
+  bounds[0].y = 2 as Uint32;
+  bounds[0].width = 300 as Uint32;
+  bounds[0].height = 400 as Uint32;
   transform.put_Bounds(bounds);
   const back = transform.get_Bounds();
   return String(year) + "+" + String(days) + "d,bounds=" + String(back[0].x) + "," + String(back[0].y) + "," +

@@ -14,21 +14,22 @@
  * @ntsHeader unistd.h
  */
 declare module "c:fcntl" {
-  import type { ConstPtr, c_char, c_int, c_ptrdiff_t, c_size_t, c_uint32 } from "c:types";
+  import type { ConstPtr } from "c:types";
+  import type { c_char, c_int, c_ptrdiff_t, c_size_t, Uint32 } from "@nts/scalars";
 
   export type Fd = c_int;
   export type Flags = c_int;
-  /** `mode_t` is `unsigned int` on this target. It is `c_uint32` and not
-   * `c_uint16`, and that is the binding's whole job here: C promotes anything
+  /** `mode_t` is `unsigned int` on this target. It is `Uint32` and not
+   * `Uint16`, and that is the binding's whole job here: C promotes anything
    * narrower than `int` before `open` sees it, so a binding declaring
-   * `c_uint16` would describe an argument nobody passes. That spelling is
+   * `Uint16` would describe an argument nobody passes. That spelling is
    * refused, with the promoted type named. */
-  export type Mode = c_uint32;
+  export type Mode = Uint32;
 
   export function open(path: ConstPtr<c_char>, flags: Flags, ...mode: Mode[]): Fd;
   export function close(fd: Fd): c_int;
   /** `ssize_t write(int, const void *, size_t)`. The first version of this
-   * file said `c_uint32` and `c_int`, which typechecks, lowers clean, and is
+   * file said `Uint32` and `c_int`, which typechecks, lowers clean, and is
    * two different types from what <unistd.h> declares -- the witness refused
    * it with `conflicting types for 'write'`, which is the entire reason the
    * prototype is re-declared beside the real one.

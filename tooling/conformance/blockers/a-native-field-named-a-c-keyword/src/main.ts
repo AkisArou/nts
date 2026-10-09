@@ -15,7 +15,7 @@
 // Control, one difference -- the member named `inline2`: nothing refused, and
 // the C writes `->inline2`.
 import { scroll } from "c:scroll";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 
 export function go(): number {
   return scroll({ block: 1 as c_int, inline: 2 as c_int });

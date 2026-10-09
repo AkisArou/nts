@@ -32,7 +32,7 @@ import {
 import { nts_pending_begin, nts_pending_end } from "c:pending";
 import { NSOperation } from "objc:Foundation";
 import { arrayWithCapacity, newArray, newObject, scheduledTimer, type NSObject } from "objc:Foundation";
-import type { c_double, c_int, c_int8, c_ulong } from "c:types";
+import type { Float64, c_int, Int8, c_ulong } from "@nts/scalars";
 
 function state(watch: c_int): string {
   return weak_alive(watch) ? "alive" : "gone";
@@ -70,7 +70,7 @@ function enumerate(): void {
   array.enumerateObjectsUsingBlock((object, index, stop) => {
     visited++;
     if (index === 1n) {
-      stop[0] = 1 as c_int8;
+      stop[0] = 1 as Int8;
     }
   });
   console.log("stopped after " + String(visited));
@@ -95,7 +95,7 @@ function enumerate(): void {
 function cancelled(): c_int {
   const sentinel = newObject();
   const watch = weak_watch(sentinel);
-  const timer = scheduledTimer(60 as c_double, false, () => {
+  const timer = scheduledTimer(60 as Float64, false, () => {
     console.log("never " + String(sentinel.hash()));
   });
   timer.invalidate();
@@ -109,7 +109,7 @@ function ticking(): void {
   const sentinel = newObject();
   tickingWatch = weak_watch(sentinel);
   let ticks = 0;
-  scheduledTimer(0.01 as c_double, true, (timer) => {
+  scheduledTimer(0.01 as Float64, true, (timer) => {
     ticks++;
     console.log("tick " + String(ticks) + " " + (sentinel.hash() === 0n ? "?" : "held"));
     if (ticks === 3) {

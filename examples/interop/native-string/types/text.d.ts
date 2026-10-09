@@ -4,7 +4,7 @@
  * @ntsHeader "text.h"
  */
 declare module "c:text" {
-  import type { c_int, c_uint } from "c:types";
+  import type { c_int, c_uint } from "@nts/scalars";
 
   export function text_length(s: string): c_int;
   export function text_byte(s: string, at: c_int): c_int;

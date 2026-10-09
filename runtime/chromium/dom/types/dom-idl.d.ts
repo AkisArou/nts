@@ -2,7 +2,8 @@
 // Do not edit; regenerate.
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {
-  import type { ByValue, CBool, Closure, CNumber, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct, c_double, c_uint8 } from "c:types";
+  import type { ByValue, CBool, Closure, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct } from "c:types";
+  import type { AsNumber, BigInt64, BigUint64, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 } from "@nts/scalars";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
   export type AnimationPlayState = "idle" | "pending" | "running" | "paused" | "finished";
@@ -35,161 +36,161 @@ declare module "nts:dom" {
   export type SlotAssignmentMode = "manual" | "named";
   export type SupportedType = "text/html" | "text/xml" | "application/xml" | "application/xhtml+xml" | "image/svg+xml";
   export type VisibilityState = "hidden" | "visible";
-  export type AnimationEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; animation: Animation | null; animationName: StringView; elapsedTime: c_double; pseudoElement: StringView }, "NtsDomAnimationEventInit">;
-  export type AssignedNodesOptions = Struct<{ flatten: CBool<c_uint8> }, "NtsDomAssignedNodesOptions">;
+  export type AnimationEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; animation: Animation | null; animationName: StringView; elapsedTime: Float64; pseudoElement: StringView }, "NtsDomAnimationEventInit">;
+  export type AssignedNodesOptions = Struct<{ flatten: CBool<Uint8> }, "NtsDomAssignedNodesOptions">;
   export type BoxQuadOptions = Struct<{ box: StringView }, "NtsDomBoxQuadOptions">;
-  export type CSSStyleSheetInit = Struct<{ alternate: CBool<c_uint8>; disabled: CBool<c_uint8> }, "NtsDomCSSStyleSheetInit">;
-  export type CheckVisibilityOptions = Struct<{ checkOpacity: CBool<c_uint8>; checkVisibilityCSS: CBool<c_uint8>; contentVisibilityAuto: CBool<c_uint8>; opacityProperty: CBool<c_uint8>; visibilityProperty: CBool<c_uint8> }, "NtsDomCheckVisibilityOptions">;
-  export type ClipboardEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; clipboardData: DataTransfer | null }, "NtsDomClipboardEventInit">;
-  export type CompositionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; data: StringView }, "NtsDomCompositionEventInit">;
+  export type CSSStyleSheetInit = Struct<{ alternate: CBool<Uint8>; disabled: CBool<Uint8> }, "NtsDomCSSStyleSheetInit">;
+  export type CheckVisibilityOptions = Struct<{ checkOpacity: CBool<Uint8>; checkVisibilityCSS: CBool<Uint8>; contentVisibilityAuto: CBool<Uint8>; opacityProperty: CBool<Uint8>; visibilityProperty: CBool<Uint8> }, "NtsDomCheckVisibilityOptions">;
+  export type ClipboardEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; clipboardData: DataTransfer | null }, "NtsDomClipboardEventInit">;
+  export type CompositionEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; data: StringView }, "NtsDomCompositionEventInit">;
   export type ConvertCoordinateOptions = Struct<{ fromBox: StringView; toBox: StringView }, "NtsDomConvertCoordinateOptions">;
-  export type CustomEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomCustomEventInit">;
-  export type DOMMatrix2DInit = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double; e: c_double; f: c_double; m11: c_double; m12: c_double; m21: c_double; m22: c_double; m41: c_double; m42: c_double }, "NtsDomDOMMatrix2DInit">;
-  export type DOMMatrixInit = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double; e: c_double; f: c_double; m11: c_double; m12: c_double; m21: c_double; m22: c_double; m41: c_double; m42: c_double; is2D: CBool<c_uint8>; m13: c_double; m14: c_double; m23: c_double; m24: c_double; m31: c_double; m32: c_double; m34: c_double; m43: c_double }, "NtsDomDOMMatrixInit">;
-  export type DOMPointInit = Struct<{ x: c_double; y: c_double; z: c_double }, "NtsDomDOMPointInit">;
-  export type DOMRectInit = Struct<{ height: c_double; width: c_double; x: c_double; y: c_double }, "NtsDomDOMRectInit">;
-  export type DocumentTimelineOptions = Struct<{ originTime: c_double }, "NtsDomDocumentTimelineOptions">;
-  export type DragEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; region: StringView; relatedTarget: EventTarget | null; screenX: c_double; screenY: c_double; dataTransfer: DataTransfer | null }, "NtsDomDragEventInit">;
-  export type ErrorEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; colno: c_double; filename: StringView; lineno: c_double; message: StringView }, "NtsDomErrorEventInit">;
-  export type EventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8> }, "NtsDomEventInit">;
-  export type FocusEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; relatedTarget: EventTarget | null }, "NtsDomFocusEventInit">;
-  export type FocusOptions = Struct<{ focusVisible: CBool<c_uint8>; preventScroll: CBool<c_uint8> }, "NtsDomFocusOptions">;
+  export type CustomEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8> }, "NtsDomCustomEventInit">;
+  export type DOMMatrix2DInit = Struct<{ a: Float64; b: Float64; c: Float64; d: Float64; e: Float64; f: Float64; m11: Float64; m12: Float64; m21: Float64; m22: Float64; m41: Float64; m42: Float64 }, "NtsDomDOMMatrix2DInit">;
+  export type DOMMatrixInit = Struct<{ a: Float64; b: Float64; c: Float64; d: Float64; e: Float64; f: Float64; m11: Float64; m12: Float64; m21: Float64; m22: Float64; m41: Float64; m42: Float64; is2D: CBool<Uint8>; m13: Float64; m14: Float64; m23: Float64; m24: Float64; m31: Float64; m32: Float64; m34: Float64; m43: Float64 }, "NtsDomDOMMatrixInit">;
+  export type DOMPointInit = Struct<{ x: Float64; y: Float64; z: Float64 }, "NtsDomDOMPointInit">;
+  export type DOMRectInit = Struct<{ height: Float64; width: Float64; x: Float64; y: Float64 }, "NtsDomDOMRectInit">;
+  export type DocumentTimelineOptions = Struct<{ originTime: Float64 }, "NtsDomDocumentTimelineOptions">;
+  export type DragEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64; dataTransfer: DataTransfer | null }, "NtsDomDragEventInit">;
+  export type ErrorEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; colno: Float64; filename: StringView; lineno: Float64; message: StringView }, "NtsDomErrorEventInit">;
+  export type EventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8> }, "NtsDomEventInit">;
+  export type FocusEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; relatedTarget: EventTarget | null }, "NtsDomFocusEventInit">;
+  export type FocusOptions = Struct<{ focusVisible: CBool<Uint8>; preventScroll: CBool<Uint8> }, "NtsDomFocusOptions">;
   export type FullscreenOptions = Struct<{ navigationUI: StringView }, "NtsDomFullscreenOptions">;
-  export type GetAnimationsOptions = Struct<{ subtree: CBool<c_uint8> }, "NtsDomGetAnimationsOptions">;
-  export type GetHTMLOptions = Struct<{ serializableShadowRoots: CBool<c_uint8> }, "NtsDomGetHTMLOptions">;
-  export type GetRootNodeOptions = Struct<{ composed: CBool<c_uint8> }, "NtsDomGetRootNodeOptions">;
-  export type HashChangeEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; newURL: StringView; oldURL: StringView }, "NtsDomHashChangeEventInit">;
+  export type GetAnimationsOptions = Struct<{ subtree: CBool<Uint8> }, "NtsDomGetAnimationsOptions">;
+  export type GetHTMLOptions = Struct<{ serializableShadowRoots: CBool<Uint8> }, "NtsDomGetHTMLOptions">;
+  export type GetRootNodeOptions = Struct<{ composed: CBool<Uint8> }, "NtsDomGetRootNodeOptions">;
+  export type HashChangeEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; newURL: StringView; oldURL: StringView }, "NtsDomHashChangeEventInit">;
   export type ImageDataSettings = Struct<{ colorSpace: StringView; pixelFormat: StringView }, "NtsDomImageDataSettings">;
-  export type ImportNodeOptions = Struct<{ selfOnly: CBool<c_uint8> }, "NtsDomImportNodeOptions">;
-  export type InputEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; data: StringView; dataTransfer: DataTransfer | null; inputType: StringView; isComposing: CBool<c_uint8> }, "NtsDomInputEventInit">;
-  export type KeyboardEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; charCode: c_double; code: StringView; isComposing: CBool<c_uint8>; key: StringView; keyCode: c_double; location: c_double; repeat: CBool<c_uint8> }, "NtsDomKeyboardEventInit">;
-  export type MouseEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; region: StringView; relatedTarget: EventTarget | null; screenX: c_double; screenY: c_double }, "NtsDomMouseEventInit">;
-  export type MutationObserverInit = Struct<{ attributeOldValue: CBool<c_uint8>; attributes: CBool<c_uint8>; characterData: CBool<c_uint8>; characterDataOldValue: CBool<c_uint8>; childList: CBool<c_uint8>; subtree: CBool<c_uint8> }, "NtsDomMutationObserverInit">;
-  export type OptionalEffectTiming = Struct<{ direction: StringView; easing: StringView; fill: StringView; iterationStart: c_double; iterations: c_double }, "NtsDomOptionalEffectTiming">;
-  export type PageTransitionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; persisted: CBool<c_uint8> }, "NtsDomPageTransitionEventInit">;
-  export type PerformanceMarkOptions = Struct<{ startTime: c_double }, "NtsDomPerformanceMarkOptions">;
-  export type PointerEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; region: StringView; relatedTarget: EventTarget | null; screenX: c_double; screenY: c_double; altitudeAngle: c_double; azimuthAngle: c_double; isPrimary: CBool<c_uint8>; persistentDeviceId: c_double; pointerId: c_double; pointerType: StringView; pressure: c_double; tangentialPressure: c_double; tiltX: c_double; tiltY: c_double; twist: c_double }, "NtsDomPointerEventInit">;
-  export type PointerLockOptions = Struct<{ unadjustedMovement: CBool<c_uint8> }, "NtsDomPointerLockOptions">;
-  export type ProgressEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; lengthComputable: CBool<c_uint8>; loaded: c_double; total: c_double }, "NtsDomProgressEventInit">;
-  export type RequestInit = Struct<{ cache: StringView; credentials: StringView; duplex: StringView; integrity: StringView; keepalive: CBool<c_uint8>; method: StringView; mode: StringView; priority: StringView; redirect: StringView; referrer: StringView; referrerPolicy: StringView; signal: AbortSignal | null }, "NtsDomRequestInit">;
+  export type ImportNodeOptions = Struct<{ selfOnly: CBool<Uint8> }, "NtsDomImportNodeOptions">;
+  export type InputEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; data: StringView; dataTransfer: DataTransfer | null; inputType: StringView; isComposing: CBool<Uint8> }, "NtsDomInputEventInit">;
+  export type KeyboardEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; charCode: Float64; code: StringView; isComposing: CBool<Uint8>; key: StringView; keyCode: Float64; location: Float64; repeat: CBool<Uint8> }, "NtsDomKeyboardEventInit">;
+  export type MouseEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64 }, "NtsDomMouseEventInit">;
+  export type MutationObserverInit = Struct<{ attributeOldValue: CBool<Uint8>; attributes: CBool<Uint8>; characterData: CBool<Uint8>; characterDataOldValue: CBool<Uint8>; childList: CBool<Uint8>; subtree: CBool<Uint8> }, "NtsDomMutationObserverInit">;
+  export type OptionalEffectTiming = Struct<{ direction: StringView; easing: StringView; fill: StringView; iterationStart: Float64; iterations: Float64 }, "NtsDomOptionalEffectTiming">;
+  export type PageTransitionEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; persisted: CBool<Uint8> }, "NtsDomPageTransitionEventInit">;
+  export type PerformanceMarkOptions = Struct<{ startTime: Float64 }, "NtsDomPerformanceMarkOptions">;
+  export type PointerEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64; altitudeAngle: Float64; azimuthAngle: Float64; isPrimary: CBool<Uint8>; persistentDeviceId: Float64; pointerId: Float64; pointerType: StringView; pressure: Float64; tangentialPressure: Float64; tiltX: Float64; tiltY: Float64; twist: Float64 }, "NtsDomPointerEventInit">;
+  export type PointerLockOptions = Struct<{ unadjustedMovement: CBool<Uint8> }, "NtsDomPointerLockOptions">;
+  export type ProgressEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; lengthComputable: CBool<Uint8>; loaded: Float64; total: Float64 }, "NtsDomProgressEventInit">;
+  export type RequestInit = Struct<{ cache: StringView; credentials: StringView; duplex: StringView; integrity: StringView; keepalive: CBool<Uint8>; method: StringView; mode: StringView; priority: StringView; redirect: StringView; referrer: StringView; referrerPolicy: StringView; signal: AbortSignal | null }, "NtsDomRequestInit">;
   export type ResizeObserverOptions = Struct<{ box: StringView }, "NtsDomResizeObserverOptions">;
   export type ScrollIntoViewOptions = Struct<{ behavior: StringView; block: StringView; container: StringView; inline: StringView }, "NtsDomScrollIntoViewOptions">;
-  export type ScrollToOptions = Struct<{ behavior: StringView; left: c_double; top: c_double }, "NtsDomScrollToOptions">;
-  export type SetHTMLUnsafeOptions = Struct<{ runScripts: CBool<c_uint8> }, "NtsDomSetHTMLUnsafeOptions">;
-  export type ShadowRootInit = Struct<{ clonable: CBool<c_uint8>; delegatesFocus: CBool<c_uint8>; mode: StringView; serializable: CBool<c_uint8>; slotAssignment: StringView }, "NtsDomShadowRootInit">;
-  export type SubmitEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; submitter: HTMLElement | null }, "NtsDomSubmitEventInit">;
-  export type TogglePopoverOptions = Struct<{ force: CBool<c_uint8> }, "NtsDomTogglePopoverOptions">;
-  export type TouchEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8> }, "NtsDomTouchEventInit">;
-  export type TransitionEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; animation: Animation | null; elapsedTime: c_double; propertyName: StringView; pseudoElement: StringView }, "NtsDomTransitionEventInit">;
-  export type UIEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null }, "NtsDomUIEventInit">;
-  export type WheelEventInit = Struct<{ bubbles: CBool<c_uint8>; cancelable: CBool<c_uint8>; composed: CBool<c_uint8>; detail: c_double; view: Window | null; altKey: CBool<c_uint8>; ctrlKey: CBool<c_uint8>; metaKey: CBool<c_uint8>; modifierAltGraph: CBool<c_uint8>; modifierCapsLock: CBool<c_uint8>; modifierFn: CBool<c_uint8>; modifierNumLock: CBool<c_uint8>; modifierScrollLock: CBool<c_uint8>; modifierSymbol: CBool<c_uint8>; shiftKey: CBool<c_uint8>; button: c_double; buttons: c_double; clientX: c_double; clientY: c_double; movementX: c_double; movementY: c_double; region: StringView; relatedTarget: EventTarget | null; screenX: c_double; screenY: c_double; deltaMode: c_double; deltaX: c_double; deltaY: c_double; deltaZ: c_double; momentum: CBool<c_uint8>; wheelDeltaX: c_double; wheelDeltaY: c_double }, "NtsDomWheelEventInit">;
+  export type ScrollToOptions = Struct<{ behavior: StringView; left: Float64; top: Float64 }, "NtsDomScrollToOptions">;
+  export type SetHTMLUnsafeOptions = Struct<{ runScripts: CBool<Uint8> }, "NtsDomSetHTMLUnsafeOptions">;
+  export type ShadowRootInit = Struct<{ clonable: CBool<Uint8>; delegatesFocus: CBool<Uint8>; mode: StringView; serializable: CBool<Uint8>; slotAssignment: StringView }, "NtsDomShadowRootInit">;
+  export type SubmitEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; submitter: HTMLElement | null }, "NtsDomSubmitEventInit">;
+  export type TogglePopoverOptions = Struct<{ force: CBool<Uint8> }, "NtsDomTogglePopoverOptions">;
+  export type TouchEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8> }, "NtsDomTouchEventInit">;
+  export type TransitionEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; animation: Animation | null; elapsedTime: Float64; propertyName: StringView; pseudoElement: StringView }, "NtsDomTransitionEventInit">;
+  export type UIEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null }, "NtsDomUIEventInit">;
+  export type WheelEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64; deltaMode: Float64; deltaX: Float64; deltaY: Float64; deltaZ: Float64; momentum: CBool<Uint8>; wheelDeltaX: Float64; wheelDeltaY: Float64 }, "NtsDomWheelEventInit">;
   export type AnimationSequence = HostClass<"NtsDomAnimationSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & AnimationSequenceMethods;
   export interface AnimationSequenceMethods {
     /** @ntsSymbol nts_dom_AnimationSequence_get_length */
-    _get_length(this: AnimationSequence): CNumber<"double">;
+    _get_length(this: AnimationSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_AnimationSequence_item */
-    item(this: AnimationSequence, index: CNumber<"double">): Animation | null;
+    item(this: AnimationSequence, index: Float64): Animation | null;
   }
   export type DOMQuadSequence = HostClass<"NtsDomDOMQuadSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & DOMQuadSequenceMethods;
   export interface DOMQuadSequenceMethods {
     /** @ntsSymbol nts_dom_DOMQuadSequence_get_length */
-    _get_length(this: DOMQuadSequence): CNumber<"double">;
+    _get_length(this: DOMQuadSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_DOMQuadSequence_item */
-    item(this: DOMQuadSequence, index: CNumber<"double">): DOMQuad | null;
+    item(this: DOMQuadSequence, index: Float64): DOMQuad | null;
   }
   export type ElementSequence = HostClass<"NtsDomElementSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & ElementSequenceMethods;
   export interface ElementSequenceMethods {
     /** @ntsSymbol nts_dom_ElementSequence_get_length */
-    _get_length(this: ElementSequence): CNumber<"double">;
+    _get_length(this: ElementSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_ElementSequence_item */
-    item(this: ElementSequence, index: CNumber<"double">): Element | null;
+    item(this: ElementSequence, index: Float64): Element | null;
   }
   export type EventTargetSequence = HostClass<"NtsDomEventTargetSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & EventTargetSequenceMethods;
   export interface EventTargetSequenceMethods {
     /** @ntsSymbol nts_dom_EventTargetSequence_get_length */
-    _get_length(this: EventTargetSequence): CNumber<"double">;
+    _get_length(this: EventTargetSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_EventTargetSequence_item */
-    item(this: EventTargetSequence, index: CNumber<"double">): EventTarget | null;
+    item(this: EventTargetSequence, index: Float64): EventTarget | null;
   }
   export type IntersectionObserverEntrySequence = HostClass<"NtsDomIntersectionObserverEntrySequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & IntersectionObserverEntrySequenceMethods;
   export interface IntersectionObserverEntrySequenceMethods {
     /** @ntsSymbol nts_dom_IntersectionObserverEntrySequence_get_length */
-    _get_length(this: IntersectionObserverEntrySequence): CNumber<"double">;
+    _get_length(this: IntersectionObserverEntrySequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_IntersectionObserverEntrySequence_item */
-    item(this: IntersectionObserverEntrySequence, index: CNumber<"double">): IntersectionObserverEntry | null;
+    item(this: IntersectionObserverEntrySequence, index: Float64): IntersectionObserverEntry | null;
   }
   export type MutationRecordSequence = HostClass<"NtsDomMutationRecordSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & MutationRecordSequenceMethods;
   export interface MutationRecordSequenceMethods {
     /** @ntsSymbol nts_dom_MutationRecordSequence_get_length */
-    _get_length(this: MutationRecordSequence): CNumber<"double">;
+    _get_length(this: MutationRecordSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_MutationRecordSequence_item */
-    item(this: MutationRecordSequence, index: CNumber<"double">): MutationRecord | null;
+    item(this: MutationRecordSequence, index: Float64): MutationRecord | null;
   }
   export type NodeSequence = HostClass<"NtsDomNodeSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & NodeSequenceMethods;
   export interface NodeSequenceMethods {
     /** @ntsSymbol nts_dom_NodeSequence_get_length */
-    _get_length(this: NodeSequence): CNumber<"double">;
+    _get_length(this: NodeSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_NodeSequence_item */
-    item(this: NodeSequence, index: CNumber<"double">): Node | null;
+    item(this: NodeSequence, index: Float64): Node | null;
   }
   export type PerformanceEntrySequence = HostClass<"NtsDomPerformanceEntrySequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & PerformanceEntrySequenceMethods;
   export interface PerformanceEntrySequenceMethods {
     /** @ntsSymbol nts_dom_PerformanceEntrySequence_get_length */
-    _get_length(this: PerformanceEntrySequence): CNumber<"double">;
+    _get_length(this: PerformanceEntrySequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_PerformanceEntrySequence_item */
-    item(this: PerformanceEntrySequence, index: CNumber<"double">): PerformanceEntry | null;
+    item(this: PerformanceEntrySequence, index: Float64): PerformanceEntry | null;
   }
   export type PointerEventSequence = HostClass<"NtsDomPointerEventSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & PointerEventSequenceMethods;
   export interface PointerEventSequenceMethods {
     /** @ntsSymbol nts_dom_PointerEventSequence_get_length */
-    _get_length(this: PointerEventSequence): CNumber<"double">;
+    _get_length(this: PointerEventSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_PointerEventSequence_item */
-    item(this: PointerEventSequence, index: CNumber<"double">): PointerEvent | null;
+    item(this: PointerEventSequence, index: Float64): PointerEvent | null;
   }
   export type ResizeObserverEntrySequence = HostClass<"NtsDomResizeObserverEntrySequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & ResizeObserverEntrySequenceMethods;
   export interface ResizeObserverEntrySequenceMethods {
     /** @ntsSymbol nts_dom_ResizeObserverEntrySequence_get_length */
-    _get_length(this: ResizeObserverEntrySequence): CNumber<"double">;
+    _get_length(this: ResizeObserverEntrySequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_ResizeObserverEntrySequence_item */
-    item(this: ResizeObserverEntrySequence, index: CNumber<"double">): ResizeObserverEntry | null;
+    item(this: ResizeObserverEntrySequence, index: Float64): ResizeObserverEntry | null;
   }
   export type ResizeObserverSizeSequence = HostClass<"NtsDomResizeObserverSizeSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & ResizeObserverSizeSequenceMethods;
   export interface ResizeObserverSizeSequenceMethods {
     /** @ntsSymbol nts_dom_ResizeObserverSizeSequence_get_length */
-    _get_length(this: ResizeObserverSizeSequence): CNumber<"double">;
+    _get_length(this: ResizeObserverSizeSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_ResizeObserverSizeSequence_item */
-    item(this: ResizeObserverSizeSequence, index: CNumber<"double">): ResizeObserverSize | null;
+    item(this: ResizeObserverSizeSequence, index: Float64): ResizeObserverSize | null;
   }
   export type StaticRangeSequence = HostClass<"NtsDomStaticRangeSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & StaticRangeSequenceMethods;
   export interface StaticRangeSequenceMethods {
     /** @ntsSymbol nts_dom_StaticRangeSequence_get_length */
-    _get_length(this: StaticRangeSequence): CNumber<"double">;
+    _get_length(this: StaticRangeSequence): Float64;
     /** @ntsGet _get_length */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /** @ntsSymbol nts_dom_StaticRangeSequence_item */
-    item(this: StaticRangeSequence, index: CNumber<"double">): StaticRange | null;
+    item(this: StaticRangeSequence, index: Float64): StaticRange | null;
   }
   export interface EventTargetOwnMethods {
     /**
@@ -209,11 +210,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Node_get_nodeType
      */
-    _get_nodeType(this: Node): CNumber<"double">;
+    _get_nodeType(this: Node): Float64;
     /**
      * @ntsGet _get_nodeType
      */
-    readonly nodeType: CNumber<"double">;
+    readonly nodeType: Float64;
     /**
      * @ntsSymbol nts_dom_Node_get_nodeName
      */
@@ -353,7 +354,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Node_compareDocumentPosition
      */
-    compareDocumentPosition(this: Node, other: Node): CNumber<"double">;
+    compareDocumentPosition(this: Node, other: Node): Float64;
     /**
      * @ntsSymbol nts_dom_Node_contains
      */
@@ -562,77 +563,77 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Element_get_scrollTop
      */
-    _get_scrollTop(this: Element): CNumber<"double">;
+    _get_scrollTop(this: Element): Float64;
     /**
      * @ntsSymbol nts_dom_Element_set_scrollTop
      */
-    _set_scrollTop(this: Element, value: CNumber<"double">): void;
+    _set_scrollTop(this: Element, value: Float64): void;
     /**
      * @ntsGet _get_scrollTop
      * @ntsSet _set_scrollTop
      */
-    scrollTop: CNumber<"double">;
+    scrollTop: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_scrollLeft
      */
-    _get_scrollLeft(this: Element): CNumber<"double">;
+    _get_scrollLeft(this: Element): Float64;
     /**
      * @ntsSymbol nts_dom_Element_set_scrollLeft
      */
-    _set_scrollLeft(this: Element, value: CNumber<"double">): void;
+    _set_scrollLeft(this: Element, value: Float64): void;
     /**
      * @ntsGet _get_scrollLeft
      * @ntsSet _set_scrollLeft
      */
-    scrollLeft: CNumber<"double">;
+    scrollLeft: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_scrollWidth
      */
-    _get_scrollWidth(this: Element): CNumber<"double">;
+    _get_scrollWidth(this: Element): Float64;
     /**
      * @ntsGet _get_scrollWidth
      */
-    readonly scrollWidth: CNumber<"double">;
+    readonly scrollWidth: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_scrollHeight
      */
-    _get_scrollHeight(this: Element): CNumber<"double">;
+    _get_scrollHeight(this: Element): Float64;
     /**
      * @ntsGet _get_scrollHeight
      */
-    readonly scrollHeight: CNumber<"double">;
+    readonly scrollHeight: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_clientTop
      */
-    _get_clientTop(this: Element): CNumber<"double">;
+    _get_clientTop(this: Element): Float64;
     /**
      * @ntsGet _get_clientTop
      */
-    readonly clientTop: CNumber<"double">;
+    readonly clientTop: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_clientLeft
      */
-    _get_clientLeft(this: Element): CNumber<"double">;
+    _get_clientLeft(this: Element): Float64;
     /**
      * @ntsGet _get_clientLeft
      */
-    readonly clientLeft: CNumber<"double">;
+    readonly clientLeft: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_clientWidth
      */
-    _get_clientWidth(this: Element): CNumber<"double">;
+    _get_clientWidth(this: Element): Float64;
     /**
      * @ntsGet _get_clientWidth
      */
-    readonly clientWidth: CNumber<"double">;
+    readonly clientWidth: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_clientHeight
      */
-    _get_clientHeight(this: Element): CNumber<"double">;
+    _get_clientHeight(this: Element): Float64;
     /**
      * @ntsGet _get_clientHeight
      */
-    readonly clientHeight: CNumber<"double">;
+    readonly clientHeight: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_onbeforecopy
      */
@@ -1402,11 +1403,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Element_get_childElementCount
      */
-    _get_childElementCount(this: Element): CNumber<"double">;
+    _get_childElementCount(this: Element): Float64;
     /**
      * @ntsGet _get_childElementCount
      */
-    readonly childElementCount: CNumber<"double">;
+    readonly childElementCount: Float64;
     /**
      * @ntsSymbol nts_dom_Element_get_previousElementSibling
      */
@@ -1868,7 +1869,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Element_hasPointerCapture
      */
-    hasPointerCapture(this: Element, pointerId: CNumber<"double">): boolean;
+    hasPointerCapture(this: Element, pointerId: Float64): boolean;
     /**
      * @ntsSymbol nts_dom_Element_insertAdjacentElement
      * @ntsThrows error nts_dom_exception_take_message
@@ -2006,7 +2007,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    releasePointerCapture(this: Element, pointerId: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    releasePointerCapture(this: Element, pointerId: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_remove
      * @ntsThrows error nts_dom_exception_take_message
@@ -2236,7 +2237,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Element_scroll_2
      */
-    scroll(this: Element, x: CNumber<"double">, y: CNumber<"double">): void;
+    scroll(this: Element, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Element_scrollBy_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -2250,7 +2251,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Element_scrollBy_2
      */
-    scrollBy(this: Element, x: CNumber<"double">, y: CNumber<"double">): void;
+    scrollBy(this: Element, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Element_scrollIntoView_1_ScrollIntoViewOptions
      * @ntsThrows error nts_dom_exception_take_message
@@ -2286,7 +2287,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Element_scrollTo_2
      */
-    scrollTo(this: Element, x: CNumber<"double">, y: CNumber<"double">): void;
+    scrollTo(this: Element, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Element_setAttribute_2
      * @ntsThrows error nts_dom_exception_take_message
@@ -2334,7 +2335,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setPointerCapture(this: Element, pointerId: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    setPointerCapture(this: Element, pointerId: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_toggleAttribute_2
      * @ntsThrows error nts_dom_exception_take_message
@@ -2395,11 +2396,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CharacterData_get_length
      */
-    _get_length(this: CharacterData): CNumber<"double">;
+    _get_length(this: CharacterData): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_CharacterData_get_previousElementSibling
      */
@@ -2605,13 +2606,13 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    deleteData(this: CharacterData, offset: CNumber<"double">, count: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    deleteData(this: CharacterData, offset: Float64, count: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_insertData
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    insertData(this: CharacterData, offset: CNumber<"double">, data: StringView, error?: Ptr<DOMException | null>): void;
+    insertData(this: CharacterData, offset: Float64, data: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_remove
      * @ntsThrows error nts_dom_exception_take_message
@@ -2623,7 +2624,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    replaceData(this: CharacterData, offset: CNumber<"double">, count: CNumber<"double">, data: StringView, error?: Ptr<DOMException | null>): void;
+    replaceData(this: CharacterData, offset: Float64, count: Float64, data: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CharacterData_replaceWith_sss
      * @ntsThrows error nts_dom_exception_take_message
@@ -2719,7 +2720,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    substringData(this: CharacterData, offset: CNumber<"double">, count: CNumber<"double">, error?: Ptr<DOMException | null>): StringView;
+    substringData(this: CharacterData, offset: Float64, count: Float64, error?: Ptr<DOMException | null>): StringView;
   }
   export type CharacterDataMethods = CharacterDataOwnMethods & NodeMethods & { readonly __c_implements: { readonly NtsDomChildNode: true; readonly NtsDomNonDocumentTypeChildNode: true } };
   export type CharacterData = HostClass<"NtsDomCharacterData", Node> & CharacterDataMethods;
@@ -2831,7 +2832,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    splitText(this: Text, offset: CNumber<"double">, error?: Ptr<DOMException | null>): Text;
+    splitText(this: Text, offset: Float64, error?: Ptr<DOMException | null>): Text;
   }
   export type TextMethods = TextOwnMethods & CharacterDataMethods;
   export type Text = HostClass<"NtsDomText", CharacterData> & TextMethods;
@@ -5436,11 +5437,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Document_get_childElementCount
      */
-    _get_childElementCount(this: Document): CNumber<"double">;
+    _get_childElementCount(this: Document): Float64;
     /**
      * @ntsGet _get_childElementCount
      */
-    readonly childElementCount: CNumber<"double">;
+    readonly childElementCount: Float64;
     /**
      * @ntsSymbol nts_dom_Document_get_activeElement
      */
@@ -5586,15 +5587,15 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    caretPositionFromPoint(this: Document, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): CaretPosition | null;
+    caretPositionFromPoint(this: Document, x: Float64, y: Float64, error?: Ptr<DOMException | null>): CaretPosition | null;
     /**
      * @ntsSymbol nts_dom_Document_caretRangeFromPoint_2
      */
-    caretRangeFromPoint(this: Document, x: CNumber<"double">, y: CNumber<"double">): Range;
+    caretRangeFromPoint(this: Document, x: Float64, y: Float64): Range;
     /**
      * @ntsSymbol nts_dom_Document_caretRangeFromPoint_1
      */
-    caretRangeFromPoint(this: Document, x: CNumber<"double">): Range;
+    caretRangeFromPoint(this: Document, x: Float64): Range;
     /**
      * @ntsSymbol nts_dom_Document_caretRangeFromPoint_0
      */
@@ -5732,7 +5733,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Document_createNodeIterator_2
      */
-    createNodeIterator(this: Document, root: Node, whatToShow: CNumber<"double">): NodeIterator;
+    createNodeIterator(this: Document, root: Node, whatToShow: Float64): NodeIterator;
     /**
      * @ntsSymbol nts_dom_Document_createProcessingInstruction
      * @ntsThrows error nts_dom_exception_take_message
@@ -5750,19 +5751,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Document_createTreeWalker_2
      */
-    createTreeWalker(this: Document, root: Node, whatToShow: CNumber<"double">): TreeWalker;
+    createTreeWalker(this: Document, root: Node, whatToShow: Float64): TreeWalker;
     /**
      * @ntsSymbol nts_dom_Document_elementFromPoint
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    elementFromPoint(this: Document, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): Element | null;
+    elementFromPoint(this: Document, x: Float64, y: Float64, error?: Ptr<DOMException | null>): Element | null;
     /**
      * @ntsSymbol nts_dom_Document_elementsFromPoint
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    elementsFromPoint(this: Document, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): ElementSequence;
+    elementsFromPoint(this: Document, x: Float64, y: Float64, error?: Ptr<DOMException | null>): ElementSequence;
     /**
      * @ntsSymbol nts_dom_Document_execCommand_3
      * @ntsThrows error nts_dom_exception_take_message
@@ -6212,11 +6213,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DocumentFragment_get_childElementCount
      */
-    _get_childElementCount(this: DocumentFragment): CNumber<"double">;
+    _get_childElementCount(this: DocumentFragment): Float64;
     /**
      * @ntsGet _get_childElementCount
      */
-    readonly childElementCount: CNumber<"double">;
+    readonly childElementCount: Float64;
     /**
      * @ntsSymbol nts_dom_DocumentFragment_append_sss
      * @ntsThrows error nts_dom_exception_take_message
@@ -6582,7 +6583,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_hidden_number
      */
-    _set_hidden_number(this: HTMLElement, value: CNumber<"double">): void;
+    _set_hidden_number(this: HTMLElement, value: Float64): void;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_inert
      */
@@ -6734,35 +6735,35 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_offsetTop
      */
-    _get_offsetTop(this: HTMLElement): CNumber<"double">;
+    _get_offsetTop(this: HTMLElement): Float64;
     /**
      * @ntsGet _get_offsetTop
      */
-    readonly offsetTop: CNumber<"double">;
+    readonly offsetTop: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_offsetLeft
      */
-    _get_offsetLeft(this: HTMLElement): CNumber<"double">;
+    _get_offsetLeft(this: HTMLElement): Float64;
     /**
      * @ntsGet _get_offsetLeft
      */
-    readonly offsetLeft: CNumber<"double">;
+    readonly offsetLeft: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_offsetWidth
      */
-    _get_offsetWidth(this: HTMLElement): CNumber<"double">;
+    _get_offsetWidth(this: HTMLElement): Float64;
     /**
      * @ntsGet _get_offsetWidth
      */
-    readonly offsetWidth: CNumber<"double">;
+    readonly offsetWidth: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_offsetHeight
      */
-    _get_offsetHeight(this: HTMLElement): CNumber<"double">;
+    _get_offsetHeight(this: HTMLElement): Float64;
     /**
      * @ntsGet _get_offsetHeight
      */
-    readonly offsetHeight: CNumber<"double">;
+    readonly offsetHeight: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_popover
      */
@@ -8669,16 +8670,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_tabIndex
      */
-    _get_tabIndex(this: HTMLElement): CNumber<"double">;
+    _get_tabIndex(this: HTMLElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLElement_set_tabIndex
      */
-    _set_tabIndex(this: HTMLElement, value: CNumber<"double">): void;
+    _set_tabIndex(this: HTMLElement, value: Float64): void;
     /**
      * @ntsGet _get_tabIndex
      * @ntsSet _set_tabIndex
      */
-    tabIndex: CNumber<"double">;
+    tabIndex: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLElement_get_focusGroup
      */
@@ -8948,16 +8949,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_height
      */
-    _get_height(this: HTMLInputElement): CNumber<"double">;
+    _get_height(this: HTMLInputElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_set_height
      */
-    _set_height(this: HTMLInputElement, value: CNumber<"double">): void;
+    _set_height(this: HTMLInputElement, value: Float64): void;
     /**
      * @ntsGet _get_height
      * @ntsSet _set_height
      */
-    height: CNumber<"double">;
+    height: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_indeterminate
      */
@@ -8995,18 +8996,18 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_maxLength
      */
-    _get_maxLength(this: HTMLInputElement): CNumber<"double">;
+    _get_maxLength(this: HTMLInputElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_set_maxLength
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_maxLength(this: HTMLInputElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_maxLength(this: HTMLInputElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_maxLength
      * @ntsSet _set_maxLength
      */
-    maxLength: CNumber<"double">;
+    maxLength: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_min
      */
@@ -9023,18 +9024,18 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_minLength
      */
-    _get_minLength(this: HTMLInputElement): CNumber<"double">;
+    _get_minLength(this: HTMLInputElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_set_minLength
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_minLength(this: HTMLInputElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_minLength(this: HTMLInputElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_minLength
      * @ntsSet _set_minLength
      */
-    minLength: CNumber<"double">;
+    minLength: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_multiple
      */
@@ -9116,18 +9117,18 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_size
      */
-    _get_size(this: HTMLInputElement): CNumber<"double">;
+    _get_size(this: HTMLInputElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_set_size
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_size(this: HTMLInputElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_size(this: HTMLInputElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_size
      * @ntsSet _set_size
      */
-    size: CNumber<"double">;
+    size: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_src
      */
@@ -9198,31 +9199,31 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_valueAsNumber
      */
-    _get_valueAsNumber(this: HTMLInputElement): CNumber<"double">;
+    _get_valueAsNumber(this: HTMLInputElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_set_valueAsNumber
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_valueAsNumber(this: HTMLInputElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_valueAsNumber(this: HTMLInputElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_valueAsNumber
      * @ntsSet _set_valueAsNumber
      */
-    valueAsNumber: CNumber<"double">;
+    valueAsNumber: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_width
      */
-    _get_width(this: HTMLInputElement): CNumber<"double">;
+    _get_width(this: HTMLInputElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_set_width
      */
-    _set_width(this: HTMLInputElement, value: CNumber<"double">): void;
+    _set_width(this: HTMLInputElement, value: Float64): void;
     /**
      * @ntsGet _get_width
      * @ntsSet _set_width
      */
-    width: CNumber<"double">;
+    width: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_get_willValidate
      */
@@ -9377,25 +9378,25 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setRangeText(this: HTMLInputElement, replacement: StringView, start: CNumber<"double">, end: CNumber<"double">, selectionMode: SelectionMode, error?: Ptr<DOMException | null>): void;
+    setRangeText(this: HTMLInputElement, replacement: StringView, start: Float64, end: Float64, selectionMode: SelectionMode, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_setRangeText_3
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setRangeText(this: HTMLInputElement, replacement: StringView, start: CNumber<"double">, end: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    setRangeText(this: HTMLInputElement, replacement: StringView, start: Float64, end: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_setSelectionRange_3
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setSelectionRange(this: HTMLInputElement, start: CNumber<"double">, end: CNumber<"double">, direction: StringView, error?: Ptr<DOMException | null>): void;
+    setSelectionRange(this: HTMLInputElement, start: Float64, end: Float64, direction: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_setSelectionRange_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setSelectionRange(this: HTMLInputElement, start: CNumber<"double">, end: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    setSelectionRange(this: HTMLInputElement, start: Float64, end: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_showPicker
      * @ntsThrows error nts_dom_exception_take_message
@@ -9407,7 +9408,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    stepDown(this: HTMLInputElement, n: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    stepDown(this: HTMLInputElement, n: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_stepDown_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -9419,7 +9420,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    stepUp(this: HTMLInputElement, n: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    stepUp(this: HTMLInputElement, n: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLInputElement_stepUp_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -10046,11 +10047,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Event_get_eventPhase
      */
-    _get_eventPhase(this: Event): CNumber<"double">;
+    _get_eventPhase(this: Event): Float64;
     /**
      * @ntsGet _get_eventPhase
      */
-    readonly eventPhase: CNumber<"double">;
+    readonly eventPhase: Float64;
     /**
      * @ntsSymbol nts_dom_Event_get_bubbles
      */
@@ -10094,11 +10095,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Event_get_timeStamp
      */
-    _get_timeStamp(this: Event): CNumber<"double">;
+    _get_timeStamp(this: Event): Float64;
     /**
      * @ntsGet _get_timeStamp
      */
-    readonly timeStamp: CNumber<"double">;
+    readonly timeStamp: Float64;
     /**
      * @ntsSymbol nts_dom_Event_get_srcElement
      */
@@ -10184,19 +10185,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_UIEvent_get_detail
      */
-    _get_detail(this: UIEvent): CNumber<"double">;
+    _get_detail(this: UIEvent): Float64;
     /**
      * @ntsGet _get_detail
      */
-    readonly detail: CNumber<"double">;
+    readonly detail: Float64;
     /**
      * @ntsSymbol nts_dom_UIEvent_get_which
      */
-    _get_which(this: UIEvent): CNumber<"double">;
+    _get_which(this: UIEvent): Float64;
     /**
      * @ntsGet _get_which
      */
-    readonly which: CNumber<"double">;
+    readonly which: Float64;
     /**
      * @ntsSymbol nts_dom_UIEvent_get_isTrusted
      */
@@ -10208,7 +10209,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_UIEvent_initUIEvent_5
      */
-    initUIEvent(this: UIEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">): void;
+    initUIEvent(this: UIEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64): void;
     /**
      * @ntsSymbol nts_dom_UIEvent_initUIEvent_4
      */
@@ -10242,35 +10243,35 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_screenX
      */
-    _get_screenX(this: MouseEvent): CNumber<"double">;
+    _get_screenX(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_screenX
      */
-    readonly screenX: CNumber<"double">;
+    readonly screenX: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_screenY
      */
-    _get_screenY(this: MouseEvent): CNumber<"double">;
+    _get_screenY(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_screenY
      */
-    readonly screenY: CNumber<"double">;
+    readonly screenY: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_clientX
      */
-    _get_clientX(this: MouseEvent): CNumber<"double">;
+    _get_clientX(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_clientX
      */
-    readonly clientX: CNumber<"double">;
+    readonly clientX: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_clientY
      */
-    _get_clientY(this: MouseEvent): CNumber<"double">;
+    _get_clientY(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_clientY
      */
-    readonly clientY: CNumber<"double">;
+    readonly clientY: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_ctrlKey
      */
@@ -10306,19 +10307,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_button
      */
-    _get_button(this: MouseEvent): CNumber<"double">;
+    _get_button(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_button
      */
-    readonly button: CNumber<"double">;
+    readonly button: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_buttons
      */
-    _get_buttons(this: MouseEvent): CNumber<"double">;
+    _get_buttons(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_buttons
      */
-    readonly buttons: CNumber<"double">;
+    readonly buttons: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_relatedTarget
      */
@@ -10330,67 +10331,67 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_pageX
      */
-    _get_pageX(this: MouseEvent): CNumber<"double">;
+    _get_pageX(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_pageX
      */
-    readonly pageX: CNumber<"double">;
+    readonly pageX: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_pageY
      */
-    _get_pageY(this: MouseEvent): CNumber<"double">;
+    _get_pageY(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_pageY
      */
-    readonly pageY: CNumber<"double">;
+    readonly pageY: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_x
      */
-    _get_x(this: MouseEvent): CNumber<"double">;
+    _get_x(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_x
      */
-    readonly x: CNumber<"double">;
+    readonly x: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_y
      */
-    _get_y(this: MouseEvent): CNumber<"double">;
+    _get_y(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_y
      */
-    readonly y: CNumber<"double">;
+    readonly y: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_offsetX
      */
-    _get_offsetX(this: MouseEvent): CNumber<"double">;
+    _get_offsetX(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_offsetX
      */
-    readonly offsetX: CNumber<"double">;
+    readonly offsetX: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_offsetY
      */
-    _get_offsetY(this: MouseEvent): CNumber<"double">;
+    _get_offsetY(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_offsetY
      */
-    readonly offsetY: CNumber<"double">;
+    readonly offsetY: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_movementX
      */
-    _get_movementX(this: MouseEvent): CNumber<"double">;
+    _get_movementX(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_movementX
      */
-    readonly movementX: CNumber<"double">;
+    readonly movementX: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_movementY
      */
-    _get_movementY(this: MouseEvent): CNumber<"double">;
+    _get_movementY(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_movementY
      */
-    readonly movementY: CNumber<"double">;
+    readonly movementY: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_fromElement
      */
@@ -10410,19 +10411,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_layerX
      */
-    _get_layerX(this: MouseEvent): CNumber<"double">;
+    _get_layerX(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_layerX
      */
-    readonly layerX: CNumber<"double">;
+    readonly layerX: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_layerY
      */
-    _get_layerY(this: MouseEvent): CNumber<"double">;
+    _get_layerY(this: MouseEvent): Float64;
     /**
      * @ntsGet _get_layerY
      */
-    readonly layerY: CNumber<"double">;
+    readonly layerY: Float64;
     /**
      * @ntsSymbol nts_dom_MouseEvent_get_isTrusted
      */
@@ -10438,47 +10439,47 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_15
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean, button: CNumber<"double">, relatedTarget: EventTarget | null): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64, clientX: Float64, clientY: Float64, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean, button: Float64, relatedTarget: EventTarget | null): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_14
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean, button: CNumber<"double">): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64, clientX: Float64, clientY: Float64, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean, button: Float64): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_13
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64, clientX: Float64, clientY: Float64, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_12
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64, clientX: Float64, clientY: Float64, ctrlKey: boolean, altKey: boolean, shiftKey: boolean): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_11
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean, altKey: boolean): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64, clientX: Float64, clientY: Float64, ctrlKey: boolean, altKey: boolean): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_10
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">, ctrlKey: boolean): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64, clientX: Float64, clientY: Float64, ctrlKey: boolean): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_9
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">, clientY: CNumber<"double">): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64, clientX: Float64, clientY: Float64): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_8
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">, clientX: CNumber<"double">): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64, clientX: Float64): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_7
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">, screenY: CNumber<"double">): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64, screenY: Float64): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_6
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">, screenX: CNumber<"double">): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64, screenX: Float64): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_5
      */
-    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: CNumber<"double">): void;
+    initMouseEvent(this: MouseEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, detail: Float64): void;
     /**
      * @ntsSymbol nts_dom_MouseEvent_initMouseEvent_4
      */
@@ -10528,11 +10529,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_get_location
      */
-    _get_location(this: KeyboardEvent): CNumber<"double">;
+    _get_location(this: KeyboardEvent): Float64;
     /**
      * @ntsGet _get_location
      */
-    readonly location: CNumber<"double">;
+    readonly location: Float64;
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_get_ctrlKey
      */
@@ -10584,19 +10585,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_get_charCode
      */
-    _get_charCode(this: KeyboardEvent): CNumber<"double">;
+    _get_charCode(this: KeyboardEvent): Float64;
     /**
      * @ntsGet _get_charCode
      */
-    readonly charCode: CNumber<"double">;
+    readonly charCode: Float64;
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_get_keyCode
      */
-    _get_keyCode(this: KeyboardEvent): CNumber<"double">;
+    _get_keyCode(this: KeyboardEvent): Float64;
     /**
      * @ntsGet _get_keyCode
      */
-    readonly keyCode: CNumber<"double">;
+    readonly keyCode: Float64;
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_get_isTrusted
      */
@@ -10612,23 +10613,23 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_10
      */
-    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean): void;
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: Float64, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean): void;
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_9
      */
-    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">, ctrlKey: boolean, altKey: boolean, shiftKey: boolean): void;
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: Float64, ctrlKey: boolean, altKey: boolean, shiftKey: boolean): void;
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_8
      */
-    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">, ctrlKey: boolean, altKey: boolean): void;
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: Float64, ctrlKey: boolean, altKey: boolean): void;
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_7
      */
-    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">, ctrlKey: boolean): void;
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: Float64, ctrlKey: boolean): void;
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_6
      */
-    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: CNumber<"double">): void;
+    initKeyboardEvent(this: KeyboardEvent, type: StringView, bubbles: boolean, cancelable: boolean, view: Window | null, keyIdentifier: StringView, location: Float64): void;
     /**
      * @ntsSymbol nts_dom_KeyboardEvent_initKeyboardEvent_5
      */
@@ -10666,11 +10667,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DOMTokenList_get_length
      */
-    _get_length(this: DOMTokenList): CNumber<"double">;
+    _get_length(this: DOMTokenList): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_DOMTokenList_get_value
      */
@@ -10715,7 +10716,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DOMTokenList_item
      */
-    item(this: DOMTokenList, index: CNumber<"double">): StringView | null;
+    item(this: DOMTokenList, index: Float64): StringView | null;
     /**
      * @ntsSymbol nts_dom_DOMTokenList_remove_3
      * @ntsThrows error nts_dom_exception_take_message
@@ -10786,11 +10787,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CSSStyleDeclaration_get_length
      */
-    _get_length(this: CSSStyleDeclaration): CNumber<"double">;
+    _get_length(this: CSSStyleDeclaration): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_CSSStyleDeclaration_get_parentRule
      */
@@ -10825,7 +10826,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CSSStyleDeclaration_item
      */
-    item(this: CSSStyleDeclaration, index: CNumber<"double">): StringView;
+    item(this: CSSStyleDeclaration, index: Float64): StringView;
     /**
      * @ntsSymbol nts_dom_CSSStyleDeclaration_removeProperty
      * @ntsThrows error nts_dom_exception_take_message
@@ -18845,15 +18846,15 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_NodeList_get_length
      */
-    _get_length(this: NodeList): CNumber<"double">;
+    _get_length(this: NodeList): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_NodeList_item
      */
-    item(this: NodeList, index: CNumber<"double">): Node | null;
+    item(this: NodeList, index: Float64): Node | null;
   }
   export type NodeListMethods = NodeListOwnMethods;
   export type NodeList = HostClass<"NtsDomNodeList", null, "nts_dom_retain", "nts_dom_release"> & NodeListMethods;
@@ -18861,15 +18862,15 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLCollection_get_length
      */
-    _get_length(this: HTMLCollection): CNumber<"double">;
+    _get_length(this: HTMLCollection): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLCollection_item
      */
-    item(this: HTMLCollection, index: CNumber<"double">): Element | null;
+    item(this: HTMLCollection, index: Float64): Element | null;
     /**
      * @ntsSymbol nts_dom_HTMLCollection_namedItem
      */
@@ -18885,67 +18886,67 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DOMRectReadOnly_get_x
      */
-    _get_x(this: DOMRectReadOnly): CNumber<"double">;
+    _get_x(this: DOMRectReadOnly): Float64;
     /**
      * @ntsGet _get_x
      */
-    readonly x: CNumber<"double">;
+    readonly x: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRectReadOnly_get_y
      */
-    _get_y(this: DOMRectReadOnly): CNumber<"double">;
+    _get_y(this: DOMRectReadOnly): Float64;
     /**
      * @ntsGet _get_y
      */
-    readonly y: CNumber<"double">;
+    readonly y: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRectReadOnly_get_width
      */
-    _get_width(this: DOMRectReadOnly): CNumber<"double">;
+    _get_width(this: DOMRectReadOnly): Float64;
     /**
      * @ntsGet _get_width
      */
-    readonly width: CNumber<"double">;
+    readonly width: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRectReadOnly_get_height
      */
-    _get_height(this: DOMRectReadOnly): CNumber<"double">;
+    _get_height(this: DOMRectReadOnly): Float64;
     /**
      * @ntsGet _get_height
      */
-    readonly height: CNumber<"double">;
+    readonly height: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRectReadOnly_get_top
      */
-    _get_top(this: DOMRectReadOnly): CNumber<"double">;
+    _get_top(this: DOMRectReadOnly): Float64;
     /**
      * @ntsGet _get_top
      */
-    readonly top: CNumber<"double">;
+    readonly top: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRectReadOnly_get_right
      */
-    _get_right(this: DOMRectReadOnly): CNumber<"double">;
+    _get_right(this: DOMRectReadOnly): Float64;
     /**
      * @ntsGet _get_right
      */
-    readonly right: CNumber<"double">;
+    readonly right: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRectReadOnly_get_bottom
      */
-    _get_bottom(this: DOMRectReadOnly): CNumber<"double">;
+    _get_bottom(this: DOMRectReadOnly): Float64;
     /**
      * @ntsGet _get_bottom
      */
-    readonly bottom: CNumber<"double">;
+    readonly bottom: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRectReadOnly_get_left
      */
-    _get_left(this: DOMRectReadOnly): CNumber<"double">;
+    _get_left(this: DOMRectReadOnly): Float64;
     /**
      * @ntsGet _get_left
      */
-    readonly left: CNumber<"double">;
+    readonly left: Float64;
   }
   export type DOMRectReadOnlyMethods = DOMRectReadOnlyOwnMethods;
   export type DOMRectReadOnly = HostClass<"NtsDomDOMRectReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMRectReadOnlyMethods;
@@ -18960,19 +18961,19 @@ declare module "nts:dom" {
   /**
    * @ntsSymbol nts_dom_new_DOMRectReadOnly_4
    */
-  export function newDOMRectReadOnly(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): DOMRectReadOnly;
+  export function newDOMRectReadOnly(x: Float64, y: Float64, width: Float64, height: Float64): DOMRectReadOnly;
   /**
    * @ntsSymbol nts_dom_new_DOMRectReadOnly_3
    */
-  export function newDOMRectReadOnly(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">): DOMRectReadOnly;
+  export function newDOMRectReadOnly(x: Float64, y: Float64, width: Float64): DOMRectReadOnly;
   /**
    * @ntsSymbol nts_dom_new_DOMRectReadOnly_2
    */
-  export function newDOMRectReadOnly(x: CNumber<"double">, y: CNumber<"double">): DOMRectReadOnly;
+  export function newDOMRectReadOnly(x: Float64, y: Float64): DOMRectReadOnly;
   /**
    * @ntsSymbol nts_dom_new_DOMRectReadOnly_1
    */
-  export function newDOMRectReadOnly(x: CNumber<"double">): DOMRectReadOnly;
+  export function newDOMRectReadOnly(x: Float64): DOMRectReadOnly;
   /**
    * @ntsSymbol nts_dom_new_DOMRectReadOnly_0
    */
@@ -18981,55 +18982,55 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DOMRect_get_x
      */
-    _get_x(this: DOMRect): CNumber<"double">;
+    _get_x(this: DOMRect): Float64;
     /**
      * @ntsSymbol nts_dom_DOMRect_set_x
      */
-    _set_x(this: DOMRect, value: CNumber<"double">): void;
+    _set_x(this: DOMRect, value: Float64): void;
     /**
      * @ntsGet _get_x
      * @ntsSet _set_x
      */
-    x: CNumber<"double">;
+    x: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRect_get_y
      */
-    _get_y(this: DOMRect): CNumber<"double">;
+    _get_y(this: DOMRect): Float64;
     /**
      * @ntsSymbol nts_dom_DOMRect_set_y
      */
-    _set_y(this: DOMRect, value: CNumber<"double">): void;
+    _set_y(this: DOMRect, value: Float64): void;
     /**
      * @ntsGet _get_y
      * @ntsSet _set_y
      */
-    y: CNumber<"double">;
+    y: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRect_get_width
      */
-    _get_width(this: DOMRect): CNumber<"double">;
+    _get_width(this: DOMRect): Float64;
     /**
      * @ntsSymbol nts_dom_DOMRect_set_width
      */
-    _set_width(this: DOMRect, value: CNumber<"double">): void;
+    _set_width(this: DOMRect, value: Float64): void;
     /**
      * @ntsGet _get_width
      * @ntsSet _set_width
      */
-    width: CNumber<"double">;
+    width: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRect_get_height
      */
-    _get_height(this: DOMRect): CNumber<"double">;
+    _get_height(this: DOMRect): Float64;
     /**
      * @ntsSymbol nts_dom_DOMRect_set_height
      */
-    _set_height(this: DOMRect, value: CNumber<"double">): void;
+    _set_height(this: DOMRect, value: Float64): void;
     /**
      * @ntsGet _get_height
      * @ntsSet _set_height
      */
-    height: CNumber<"double">;
+    height: Float64;
   }
   export type DOMRectMethods = DOMRectOwnMethods & DOMRectReadOnlyMethods;
   export type DOMRect = HostClass<"NtsDomDOMRect", DOMRectReadOnly> & DOMRectMethods;
@@ -19046,19 +19047,19 @@ declare module "nts:dom" {
   /**
    * @ntsSymbol nts_dom_new_DOMRect_4
    */
-  export function newDOMRect(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): DOMRect;
+  export function newDOMRect(x: Float64, y: Float64, width: Float64, height: Float64): DOMRect;
   /**
    * @ntsSymbol nts_dom_new_DOMRect_3
    */
-  export function newDOMRect(x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">): DOMRect;
+  export function newDOMRect(x: Float64, y: Float64, width: Float64): DOMRect;
   /**
    * @ntsSymbol nts_dom_new_DOMRect_2
    */
-  export function newDOMRect(x: CNumber<"double">, y: CNumber<"double">): DOMRect;
+  export function newDOMRect(x: Float64, y: Float64): DOMRect;
   /**
    * @ntsSymbol nts_dom_new_DOMRect_1
    */
-  export function newDOMRect(x: CNumber<"double">): DOMRect;
+  export function newDOMRect(x: Float64): DOMRect;
   /**
    * @ntsSymbol nts_dom_new_DOMRect_0
    */
@@ -19191,16 +19192,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLOListElement_get_start
      */
-    _get_start(this: HTMLOListElement): CNumber<"double">;
+    _get_start(this: HTMLOListElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLOListElement_set_start
      */
-    _set_start(this: HTMLOListElement, value: CNumber<"double">): void;
+    _set_start(this: HTMLOListElement, value: Float64): void;
     /**
      * @ntsGet _get_start
      * @ntsSet _set_start
      */
-    start: CNumber<"double">;
+    start: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLOListElement_get_type
      */
@@ -19236,16 +19237,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLLIElement_get_value
      */
-    _get_value(this: HTMLLIElement): CNumber<"double">;
+    _get_value(this: HTMLLIElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLLIElement_set_value
      */
-    _set_value(this: HTMLLIElement, value: CNumber<"double">): void;
+    _set_value(this: HTMLLIElement, value: Float64): void;
     /**
      * @ntsGet _get_value
      * @ntsSet _set_value
      */
-    value: CNumber<"double">;
+    value: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLLIElement_get_type
      */
@@ -19406,11 +19407,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLFormElement_get_length
      */
-    _get_length(this: HTMLFormElement): CNumber<"double">;
+    _get_length(this: HTMLFormElement): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLFormElement_checkValidity
      */
@@ -19521,16 +19522,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_get_size
      */
-    _get_size(this: HTMLSelectElement): CNumber<"double">;
+    _get_size(this: HTMLSelectElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_set_size
      */
-    _set_size(this: HTMLSelectElement, value: CNumber<"double">): void;
+    _set_size(this: HTMLSelectElement, value: Float64): void;
     /**
      * @ntsGet _get_size
      * @ntsSet _set_size
      */
-    size: CNumber<"double">;
+    size: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_get_type
      */
@@ -19542,18 +19543,18 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_get_length
      */
-    _get_length(this: HTMLSelectElement): CNumber<"double">;
+    _get_length(this: HTMLSelectElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_set_length
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_length(this: HTMLSelectElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_length(this: HTMLSelectElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_length
      * @ntsSet _set_length
      */
-    length: CNumber<"double">;
+    length: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_get_selectedOptions
      */
@@ -19565,16 +19566,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_get_selectedIndex
      */
-    _get_selectedIndex(this: HTMLSelectElement): CNumber<"double">;
+    _get_selectedIndex(this: HTMLSelectElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_set_selectedIndex
      */
-    _set_selectedIndex(this: HTMLSelectElement, value: CNumber<"double">): void;
+    _set_selectedIndex(this: HTMLSelectElement, value: Float64): void;
     /**
      * @ntsGet _get_selectedIndex
      * @ntsSet _set_selectedIndex
      */
-    selectedIndex: CNumber<"double">;
+    selectedIndex: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_get_value
      */
@@ -19633,7 +19634,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_item
      */
-    item(this: HTMLSelectElement, index: CNumber<"double">): Element | null;
+    item(this: HTMLSelectElement, index: Float64): Element | null;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_namedItem
      */
@@ -19647,7 +19648,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_remove_1
      */
-    remove(this: HTMLSelectElement, index: CNumber<"double">): void;
+    remove(this: HTMLSelectElement, index: Float64): void;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_reportValidity
      */
@@ -19757,11 +19758,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLOptionElement_get_index
      */
-    _get_index(this: HTMLOptionElement): CNumber<"double">;
+    _get_index(this: HTMLOptionElement): Float64;
     /**
      * @ntsGet _get_index
      */
-    readonly index: CNumber<"double">;
+    readonly index: Float64;
   }
   export type HTMLOptionElementMethods = HTMLOptionElementOwnMethods & HTMLElementMethods;
   export type HTMLOptionElement = HostClass<"NtsDomHTMLOptionElement", HTMLElement> & HTMLOptionElementMethods;
@@ -19784,16 +19785,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_cols
      */
-    _get_cols(this: HTMLTextAreaElement): CNumber<"double">;
+    _get_cols(this: HTMLTextAreaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_set_cols
      */
-    _set_cols(this: HTMLTextAreaElement, value: CNumber<"double">): void;
+    _set_cols(this: HTMLTextAreaElement, value: Float64): void;
     /**
      * @ntsGet _get_cols
      * @ntsSet _set_cols
      */
-    cols: CNumber<"double">;
+    cols: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_dirName
      */
@@ -19831,33 +19832,33 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_maxLength
      */
-    _get_maxLength(this: HTMLTextAreaElement): CNumber<"double">;
+    _get_maxLength(this: HTMLTextAreaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_set_maxLength
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_maxLength(this: HTMLTextAreaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_maxLength(this: HTMLTextAreaElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_maxLength
      * @ntsSet _set_maxLength
      */
-    maxLength: CNumber<"double">;
+    maxLength: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_minLength
      */
-    _get_minLength(this: HTMLTextAreaElement): CNumber<"double">;
+    _get_minLength(this: HTMLTextAreaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_set_minLength
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_minLength(this: HTMLTextAreaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_minLength(this: HTMLTextAreaElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_minLength
      * @ntsSet _set_minLength
      */
-    minLength: CNumber<"double">;
+    minLength: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_name
      */
@@ -19913,16 +19914,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_rows
      */
-    _get_rows(this: HTMLTextAreaElement): CNumber<"double">;
+    _get_rows(this: HTMLTextAreaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_set_rows
      */
-    _set_rows(this: HTMLTextAreaElement, value: CNumber<"double">): void;
+    _set_rows(this: HTMLTextAreaElement, value: Float64): void;
     /**
      * @ntsGet _get_rows
      * @ntsSet _set_rows
      */
-    rows: CNumber<"double">;
+    rows: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_wrap
      */
@@ -19973,11 +19974,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_textLength
      */
-    _get_textLength(this: HTMLTextAreaElement): CNumber<"double">;
+    _get_textLength(this: HTMLTextAreaElement): Float64;
     /**
      * @ntsGet _get_textLength
      */
-    readonly textLength: CNumber<"double">;
+    readonly textLength: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_willValidate
      */
@@ -20013,29 +20014,29 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_selectionStart
      */
-    _get_selectionStart(this: HTMLTextAreaElement): CNumber<"double">;
+    _get_selectionStart(this: HTMLTextAreaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_set_selectionStart
      */
-    _set_selectionStart(this: HTMLTextAreaElement, value: CNumber<"double">): void;
+    _set_selectionStart(this: HTMLTextAreaElement, value: Float64): void;
     /**
      * @ntsGet _get_selectionStart
      * @ntsSet _set_selectionStart
      */
-    selectionStart: CNumber<"double">;
+    selectionStart: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_selectionEnd
      */
-    _get_selectionEnd(this: HTMLTextAreaElement): CNumber<"double">;
+    _get_selectionEnd(this: HTMLTextAreaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_set_selectionEnd
      */
-    _set_selectionEnd(this: HTMLTextAreaElement, value: CNumber<"double">): void;
+    _set_selectionEnd(this: HTMLTextAreaElement, value: Float64): void;
     /**
      * @ntsGet _get_selectionEnd
      * @ntsSet _set_selectionEnd
      */
-    selectionEnd: CNumber<"double">;
+    selectionEnd: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_selectionDirection
      */
@@ -20076,21 +20077,21 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setRangeText(this: HTMLTextAreaElement, replacement: StringView, start: CNumber<"double">, end: CNumber<"double">, selectionMode: SelectionMode, error?: Ptr<DOMException | null>): void;
+    setRangeText(this: HTMLTextAreaElement, replacement: StringView, start: Float64, end: Float64, selectionMode: SelectionMode, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_setRangeText_3
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setRangeText(this: HTMLTextAreaElement, replacement: StringView, start: CNumber<"double">, end: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    setRangeText(this: HTMLTextAreaElement, replacement: StringView, start: Float64, end: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_setSelectionRange_3
      */
-    setSelectionRange(this: HTMLTextAreaElement, start: CNumber<"double">, end: CNumber<"double">, direction: StringView): void;
+    setSelectionRange(this: HTMLTextAreaElement, start: Float64, end: Float64, direction: StringView): void;
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_setSelectionRange_2
      */
-    setSelectionRange(this: HTMLTextAreaElement, start: CNumber<"double">, end: CNumber<"double">): void;
+    setSelectionRange(this: HTMLTextAreaElement, start: Float64, end: Float64): void;
   }
   export type HTMLTextAreaElementMethods = HTMLTextAreaElementOwnMethods & HTMLElementMethods;
   export type HTMLTextAreaElement = HostClass<"NtsDomHTMLTextAreaElement", HTMLElement> & HTMLTextAreaElementMethods;
@@ -20191,45 +20192,45 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_width
      */
-    _get_width(this: HTMLImageElement): CNumber<"double">;
+    _get_width(this: HTMLImageElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_set_width
      */
-    _set_width(this: HTMLImageElement, value: CNumber<"double">): void;
+    _set_width(this: HTMLImageElement, value: Float64): void;
     /**
      * @ntsGet _get_width
      * @ntsSet _set_width
      */
-    width: CNumber<"double">;
+    width: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_height
      */
-    _get_height(this: HTMLImageElement): CNumber<"double">;
+    _get_height(this: HTMLImageElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_set_height
      */
-    _set_height(this: HTMLImageElement, value: CNumber<"double">): void;
+    _set_height(this: HTMLImageElement, value: Float64): void;
     /**
      * @ntsGet _get_height
      * @ntsSet _set_height
      */
-    height: CNumber<"double">;
+    height: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_naturalWidth
      */
-    _get_naturalWidth(this: HTMLImageElement): CNumber<"double">;
+    _get_naturalWidth(this: HTMLImageElement): Float64;
     /**
      * @ntsGet _get_naturalWidth
      */
-    readonly naturalWidth: CNumber<"double">;
+    readonly naturalWidth: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_naturalHeight
      */
-    _get_naturalHeight(this: HTMLImageElement): CNumber<"double">;
+    _get_naturalHeight(this: HTMLImageElement): Float64;
     /**
      * @ntsGet _get_naturalHeight
      */
-    readonly naturalHeight: CNumber<"double">;
+    readonly naturalHeight: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_complete
      */
@@ -20340,29 +20341,29 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_hspace
      */
-    _get_hspace(this: HTMLImageElement): CNumber<"double">;
+    _get_hspace(this: HTMLImageElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_set_hspace
      */
-    _set_hspace(this: HTMLImageElement, value: CNumber<"double">): void;
+    _set_hspace(this: HTMLImageElement, value: Float64): void;
     /**
      * @ntsGet _get_hspace
      * @ntsSet _set_hspace
      */
-    hspace: CNumber<"double">;
+    hspace: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_vspace
      */
-    _get_vspace(this: HTMLImageElement): CNumber<"double">;
+    _get_vspace(this: HTMLImageElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_set_vspace
      */
-    _set_vspace(this: HTMLImageElement, value: CNumber<"double">): void;
+    _set_vspace(this: HTMLImageElement, value: Float64): void;
     /**
      * @ntsGet _get_vspace
      * @ntsSet _set_vspace
      */
-    vspace: CNumber<"double">;
+    vspace: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_longDesc
      */
@@ -20392,19 +20393,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_x
      */
-    _get_x(this: HTMLImageElement): CNumber<"double">;
+    _get_x(this: HTMLImageElement): Float64;
     /**
      * @ntsGet _get_x
      */
-    readonly x: CNumber<"double">;
+    readonly x: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_y
      */
-    _get_y(this: HTMLImageElement): CNumber<"double">;
+    _get_y(this: HTMLImageElement): Float64;
     /**
      * @ntsGet _get_y
      */
-    readonly y: CNumber<"double">;
+    readonly y: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLImageElement_get_attributionSrc
      */
@@ -20431,33 +20432,33 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLCanvasElement_get_width
      */
-    _get_width(this: HTMLCanvasElement): CNumber<"double">;
+    _get_width(this: HTMLCanvasElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLCanvasElement_set_width
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_width(this: HTMLCanvasElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_width(this: HTMLCanvasElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_width
      * @ntsSet _set_width
      */
-    width: CNumber<"double">;
+    width: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLCanvasElement_get_height
      */
-    _get_height(this: HTMLCanvasElement): CNumber<"double">;
+    _get_height(this: HTMLCanvasElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLCanvasElement_set_height
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_height(this: HTMLCanvasElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_height(this: HTMLCanvasElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_height
      * @ntsSet _set_height
      */
-    height: CNumber<"double">;
+    height: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLCanvasElement_toDataURL_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -20679,7 +20680,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    deleteRow(this: HTMLTableElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    deleteRow(this: HTMLTableElement, index: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLTableElement_deleteTFoot
      */
@@ -20693,7 +20694,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    insertRow(this: HTMLTableElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): HTMLTableRowElement;
+    insertRow(this: HTMLTableElement, index: Float64, error?: Ptr<DOMException | null>): HTMLTableRowElement;
     /**
      * @ntsSymbol nts_dom_HTMLTableElement_insertRow_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -20771,13 +20772,13 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    deleteRow(this: HTMLTableSectionElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    deleteRow(this: HTMLTableSectionElement, index: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLTableSectionElement_insertRow_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    insertRow(this: HTMLTableSectionElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): HTMLElement;
+    insertRow(this: HTMLTableSectionElement, index: Float64, error?: Ptr<DOMException | null>): HTMLElement;
     /**
      * @ntsSymbol nts_dom_HTMLTableSectionElement_insertRow_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -20793,19 +20794,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLTableRowElement_get_rowIndex
      */
-    _get_rowIndex(this: HTMLTableRowElement): CNumber<"double">;
+    _get_rowIndex(this: HTMLTableRowElement): Float64;
     /**
      * @ntsGet _get_rowIndex
      */
-    readonly rowIndex: CNumber<"double">;
+    readonly rowIndex: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTableRowElement_get_sectionRowIndex
      */
-    _get_sectionRowIndex(this: HTMLTableRowElement): CNumber<"double">;
+    _get_sectionRowIndex(this: HTMLTableRowElement): Float64;
     /**
      * @ntsGet _get_sectionRowIndex
      */
-    readonly sectionRowIndex: CNumber<"double">;
+    readonly sectionRowIndex: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTableRowElement_get_cells
      */
@@ -20884,13 +20885,13 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    deleteCell(this: HTMLTableRowElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    deleteCell(this: HTMLTableRowElement, index: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_HTMLTableRowElement_insertCell_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    insertCell(this: HTMLTableRowElement, index: CNumber<"double">, error?: Ptr<DOMException | null>): HTMLElement;
+    insertCell(this: HTMLTableRowElement, index: Float64, error?: Ptr<DOMException | null>): HTMLElement;
     /**
      * @ntsSymbol nts_dom_HTMLTableRowElement_insertCell_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -20906,29 +20907,29 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLTableCellElement_get_colSpan
      */
-    _get_colSpan(this: HTMLTableCellElement): CNumber<"double">;
+    _get_colSpan(this: HTMLTableCellElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTableCellElement_set_colSpan
      */
-    _set_colSpan(this: HTMLTableCellElement, value: CNumber<"double">): void;
+    _set_colSpan(this: HTMLTableCellElement, value: Float64): void;
     /**
      * @ntsGet _get_colSpan
      * @ntsSet _set_colSpan
      */
-    colSpan: CNumber<"double">;
+    colSpan: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTableCellElement_get_rowSpan
      */
-    _get_rowSpan(this: HTMLTableCellElement): CNumber<"double">;
+    _get_rowSpan(this: HTMLTableCellElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTableCellElement_set_rowSpan
      */
-    _set_rowSpan(this: HTMLTableCellElement, value: CNumber<"double">): void;
+    _set_rowSpan(this: HTMLTableCellElement, value: Float64): void;
     /**
      * @ntsGet _get_rowSpan
      * @ntsSet _set_rowSpan
      */
-    rowSpan: CNumber<"double">;
+    rowSpan: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTableCellElement_get_headers
      */
@@ -20945,11 +20946,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLTableCellElement_get_cellIndex
      */
-    _get_cellIndex(this: HTMLTableCellElement): CNumber<"double">;
+    _get_cellIndex(this: HTMLTableCellElement): Float64;
     /**
      * @ntsGet _get_cellIndex
      */
-    readonly cellIndex: CNumber<"double">;
+    readonly cellIndex: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLTableCellElement_get_align
      */
@@ -21299,83 +21300,83 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_pointerId
      */
-    _get_pointerId(this: PointerEvent): CNumber<"double">;
+    _get_pointerId(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_pointerId
      */
-    readonly pointerId: CNumber<"double">;
+    readonly pointerId: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_width
      */
-    _get_width(this: PointerEvent): CNumber<"double">;
+    _get_width(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_width
      */
-    readonly width: CNumber<"double">;
+    readonly width: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_height
      */
-    _get_height(this: PointerEvent): CNumber<"double">;
+    _get_height(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_height
      */
-    readonly height: CNumber<"double">;
+    readonly height: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_pressure
      */
-    _get_pressure(this: PointerEvent): CNumber<"double">;
+    _get_pressure(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_pressure
      */
-    readonly pressure: CNumber<"double">;
+    readonly pressure: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_tiltX
      */
-    _get_tiltX(this: PointerEvent): CNumber<"double">;
+    _get_tiltX(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_tiltX
      */
-    readonly tiltX: CNumber<"double">;
+    readonly tiltX: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_tiltY
      */
-    _get_tiltY(this: PointerEvent): CNumber<"double">;
+    _get_tiltY(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_tiltY
      */
-    readonly tiltY: CNumber<"double">;
+    readonly tiltY: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_azimuthAngle
      */
-    _get_azimuthAngle(this: PointerEvent): CNumber<"double">;
+    _get_azimuthAngle(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_azimuthAngle
      */
-    readonly azimuthAngle: CNumber<"double">;
+    readonly azimuthAngle: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_altitudeAngle
      */
-    _get_altitudeAngle(this: PointerEvent): CNumber<"double">;
+    _get_altitudeAngle(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_altitudeAngle
      */
-    readonly altitudeAngle: CNumber<"double">;
+    readonly altitudeAngle: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_tangentialPressure
      */
-    _get_tangentialPressure(this: PointerEvent): CNumber<"double">;
+    _get_tangentialPressure(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_tangentialPressure
      */
-    readonly tangentialPressure: CNumber<"double">;
+    readonly tangentialPressure: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_twist
      */
-    _get_twist(this: PointerEvent): CNumber<"double">;
+    _get_twist(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_twist
      */
-    readonly twist: CNumber<"double">;
+    readonly twist: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_pointerType
      */
@@ -21395,11 +21396,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_persistentDeviceId
      */
-    _get_persistentDeviceId(this: PointerEvent): CNumber<"double">;
+    _get_persistentDeviceId(this: PointerEvent): Float64;
     /**
      * @ntsGet _get_persistentDeviceId
      */
-    readonly persistentDeviceId: CNumber<"double">;
+    readonly persistentDeviceId: Float64;
     /**
      * @ntsSymbol nts_dom_PointerEvent_get_isTrusted
      */
@@ -21433,35 +21434,35 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_deltaX
      */
-    _get_deltaX(this: WheelEvent): CNumber<"double">;
+    _get_deltaX(this: WheelEvent): Float64;
     /**
      * @ntsGet _get_deltaX
      */
-    readonly deltaX: CNumber<"double">;
+    readonly deltaX: Float64;
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_deltaY
      */
-    _get_deltaY(this: WheelEvent): CNumber<"double">;
+    _get_deltaY(this: WheelEvent): Float64;
     /**
      * @ntsGet _get_deltaY
      */
-    readonly deltaY: CNumber<"double">;
+    readonly deltaY: Float64;
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_deltaZ
      */
-    _get_deltaZ(this: WheelEvent): CNumber<"double">;
+    _get_deltaZ(this: WheelEvent): Float64;
     /**
      * @ntsGet _get_deltaZ
      */
-    readonly deltaZ: CNumber<"double">;
+    readonly deltaZ: Float64;
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_deltaMode
      */
-    _get_deltaMode(this: WheelEvent): CNumber<"double">;
+    _get_deltaMode(this: WheelEvent): Float64;
     /**
      * @ntsGet _get_deltaMode
      */
-    readonly deltaMode: CNumber<"double">;
+    readonly deltaMode: Float64;
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_momentum
      */
@@ -21473,27 +21474,27 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_wheelDeltaX
      */
-    _get_wheelDeltaX(this: WheelEvent): CNumber<"double">;
+    _get_wheelDeltaX(this: WheelEvent): Float64;
     /**
      * @ntsGet _get_wheelDeltaX
      */
-    readonly wheelDeltaX: CNumber<"double">;
+    readonly wheelDeltaX: Float64;
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_wheelDeltaY
      */
-    _get_wheelDeltaY(this: WheelEvent): CNumber<"double">;
+    _get_wheelDeltaY(this: WheelEvent): Float64;
     /**
      * @ntsGet _get_wheelDeltaY
      */
-    readonly wheelDeltaY: CNumber<"double">;
+    readonly wheelDeltaY: Float64;
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_wheelDelta
      */
-    _get_wheelDelta(this: WheelEvent): CNumber<"double">;
+    _get_wheelDelta(this: WheelEvent): Float64;
     /**
      * @ntsGet _get_wheelDelta
      */
-    readonly wheelDelta: CNumber<"double">;
+    readonly wheelDelta: Float64;
     /**
      * @ntsSymbol nts_dom_WheelEvent_get_isTrusted
      */
@@ -21701,11 +21702,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_get_length
      */
-    _get_length(this: Window): CNumber<"double">;
+    _get_length(this: Window): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_top
      */
@@ -21757,91 +21758,91 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_get_innerWidth
      */
-    _get_innerWidth(this: Window): CNumber<"double">;
+    _get_innerWidth(this: Window): Float64;
     /**
      * @ntsGet _get_innerWidth
      */
-    readonly innerWidth: CNumber<"double">;
+    readonly innerWidth: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_innerHeight
      */
-    _get_innerHeight(this: Window): CNumber<"double">;
+    _get_innerHeight(this: Window): Float64;
     /**
      * @ntsGet _get_innerHeight
      */
-    readonly innerHeight: CNumber<"double">;
+    readonly innerHeight: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_scrollX
      */
-    _get_scrollX(this: Window): CNumber<"double">;
+    _get_scrollX(this: Window): Float64;
     /**
      * @ntsGet _get_scrollX
      */
-    readonly scrollX: CNumber<"double">;
+    readonly scrollX: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_pageXOffset
      */
-    _get_pageXOffset(this: Window): CNumber<"double">;
+    _get_pageXOffset(this: Window): Float64;
     /**
      * @ntsGet _get_pageXOffset
      */
-    readonly pageXOffset: CNumber<"double">;
+    readonly pageXOffset: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_scrollY
      */
-    _get_scrollY(this: Window): CNumber<"double">;
+    _get_scrollY(this: Window): Float64;
     /**
      * @ntsGet _get_scrollY
      */
-    readonly scrollY: CNumber<"double">;
+    readonly scrollY: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_pageYOffset
      */
-    _get_pageYOffset(this: Window): CNumber<"double">;
+    _get_pageYOffset(this: Window): Float64;
     /**
      * @ntsGet _get_pageYOffset
      */
-    readonly pageYOffset: CNumber<"double">;
+    readonly pageYOffset: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_screenX
      */
-    _get_screenX(this: Window): CNumber<"double">;
+    _get_screenX(this: Window): Float64;
     /**
      * @ntsGet _get_screenX
      */
-    readonly screenX: CNumber<"double">;
+    readonly screenX: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_screenY
      */
-    _get_screenY(this: Window): CNumber<"double">;
+    _get_screenY(this: Window): Float64;
     /**
      * @ntsGet _get_screenY
      */
-    readonly screenY: CNumber<"double">;
+    readonly screenY: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_outerWidth
      */
-    _get_outerWidth(this: Window): CNumber<"double">;
+    _get_outerWidth(this: Window): Float64;
     /**
      * @ntsGet _get_outerWidth
      */
-    readonly outerWidth: CNumber<"double">;
+    readonly outerWidth: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_outerHeight
      */
-    _get_outerHeight(this: Window): CNumber<"double">;
+    _get_outerHeight(this: Window): Float64;
     /**
      * @ntsGet _get_outerHeight
      */
-    readonly outerHeight: CNumber<"double">;
+    readonly outerHeight: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_devicePixelRatio
      */
-    _get_devicePixelRatio(this: Window): CNumber<"double">;
+    _get_devicePixelRatio(this: Window): Float64;
     /**
      * @ntsGet _get_devicePixelRatio
      */
-    readonly devicePixelRatio: CNumber<"double">;
+    readonly devicePixelRatio: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_onpageswap
      */
@@ -21897,19 +21898,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_get_screenLeft
      */
-    _get_screenLeft(this: Window): CNumber<"double">;
+    _get_screenLeft(this: Window): Float64;
     /**
      * @ntsGet _get_screenLeft
      */
-    readonly screenLeft: CNumber<"double">;
+    readonly screenLeft: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_screenTop
      */
-    _get_screenTop(this: Window): CNumber<"double">;
+    _get_screenTop(this: Window): Float64;
     /**
      * @ntsGet _get_screenTop
      */
-    readonly screenTop: CNumber<"double">;
+    readonly screenTop: Float64;
     /**
      * @ntsSymbol nts_dom_Window_get_onsearch
      */
@@ -24031,11 +24032,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_cancelAnimationFrame
      */
-    cancelAnimationFrame(this: Window, handle: CNumber<"double">): void;
+    cancelAnimationFrame(this: Window, handle: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_cancelIdleCallback
      */
-    cancelIdleCallback(this: Window, handle: CNumber<"double">): void;
+    cancelIdleCallback(this: Window, handle: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_captureEvents
      */
@@ -24043,7 +24044,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_clearInterval_1
      */
-    clearInterval(this: Window, handle: CNumber<"double">): void;
+    clearInterval(this: Window, handle: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_clearInterval_0
      */
@@ -24051,7 +24052,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_clearTimeout_1
      */
-    clearTimeout(this: Window, handle: CNumber<"double">): void;
+    clearTimeout(this: Window, handle: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_clearTimeout_0
      */
@@ -24131,11 +24132,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_moveBy
      */
-    moveBy(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    moveBy(this: Window, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_moveTo
      */
-    moveTo(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    moveTo(this: Window, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_open_3
      * @ntsThrows error nts_dom_exception_take_message
@@ -24191,13 +24192,13 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    resizeBy(this: Window, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    resizeBy(this: Window, x: Float64, y: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Window_resizeTo
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    resizeTo(this: Window, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    resizeTo(this: Window, x: Float64, y: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Window_scroll_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -24211,7 +24212,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_scroll_2
      */
-    scroll(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    scroll(this: Window, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_scrollBy_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -24225,7 +24226,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_scrollBy_2
      */
-    scrollBy(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    scrollBy(this: Window, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_scrollTo_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -24239,7 +24240,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_scrollTo_2
      */
-    scrollTo(this: Window, x: CNumber<"double">, y: CNumber<"double">): void;
+    scrollTo(this: Window, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Window_stop
      */
@@ -24247,7 +24248,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Window_webkitCancelAnimationFrame
      */
-    webkitCancelAnimationFrame(this: Window, id: CNumber<"double">): void;
+    webkitCancelAnimationFrame(this: Window, id: Float64): void;
   }
   export type WindowMethods = WindowOwnMethods & EventTargetMethods;
   export type Window = HostClass<"NtsDomWindow", EventTarget> & WindowMethods;
@@ -24257,11 +24258,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Performance_get_timeOrigin
      */
-    _get_timeOrigin(this: Performance): CNumber<"double">;
+    _get_timeOrigin(this: Performance): Float64;
     /**
      * @ntsGet _get_timeOrigin
      */
-    readonly timeOrigin: CNumber<"double">;
+    readonly timeOrigin: Float64;
     /**
      * @ntsSymbol nts_dom_Performance_get_onresourcetimingbufferfull
      */
@@ -24283,11 +24284,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Performance_get_interactionCount
      */
-    _get_interactionCount(this: Performance): CNumber<"double">;
+    _get_interactionCount(this: Performance): Float64;
     /**
      * @ntsGet _get_interactionCount
      */
-    readonly interactionCount: CNumber<"double">;
+    readonly interactionCount: Float64;
     /**
      * @ntsSymbol nts_dom_Performance_clearMarks_1
      */
@@ -24345,11 +24346,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Performance_now
      */
-    now(this: Performance): CNumber<"double">;
+    now(this: Performance): Float64;
     /**
      * @ntsSymbol nts_dom_Performance_setResourceTimingBufferSize
      */
-    setResourceTimingBufferSize(this: Performance, maxSize: CNumber<"double">): void;
+    setResourceTimingBufferSize(this: Performance, maxSize: Float64): void;
   }
   export type PerformanceMethods = PerformanceOwnMethods & EventTargetMethods;
   export type Performance = HostClass<"NtsDomPerformance", EventTarget> & PerformanceMethods;
@@ -24553,11 +24554,11 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _get_length(this: History, error?: Ptr<DOMException | null>): CNumber<"double">;
+    _get_length(this: History, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_History_get_scrollRestoration
      * @ntsThrows error nts_dom_exception_take_message
@@ -24592,7 +24593,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    go(this: History, delta: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    go(this: History, delta: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_History_go_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -24606,67 +24607,67 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Screen_get_availWidth
      */
-    _get_availWidth(this: Screen): CNumber<"double">;
+    _get_availWidth(this: Screen): Float64;
     /**
      * @ntsGet _get_availWidth
      */
-    readonly availWidth: CNumber<"double">;
+    readonly availWidth: Float64;
     /**
      * @ntsSymbol nts_dom_Screen_get_availHeight
      */
-    _get_availHeight(this: Screen): CNumber<"double">;
+    _get_availHeight(this: Screen): Float64;
     /**
      * @ntsGet _get_availHeight
      */
-    readonly availHeight: CNumber<"double">;
+    readonly availHeight: Float64;
     /**
      * @ntsSymbol nts_dom_Screen_get_width
      */
-    _get_width(this: Screen): CNumber<"double">;
+    _get_width(this: Screen): Float64;
     /**
      * @ntsGet _get_width
      */
-    readonly width: CNumber<"double">;
+    readonly width: Float64;
     /**
      * @ntsSymbol nts_dom_Screen_get_height
      */
-    _get_height(this: Screen): CNumber<"double">;
+    _get_height(this: Screen): Float64;
     /**
      * @ntsGet _get_height
      */
-    readonly height: CNumber<"double">;
+    readonly height: Float64;
     /**
      * @ntsSymbol nts_dom_Screen_get_colorDepth
      */
-    _get_colorDepth(this: Screen): CNumber<"double">;
+    _get_colorDepth(this: Screen): Float64;
     /**
      * @ntsGet _get_colorDepth
      */
-    readonly colorDepth: CNumber<"double">;
+    readonly colorDepth: Float64;
     /**
      * @ntsSymbol nts_dom_Screen_get_pixelDepth
      */
-    _get_pixelDepth(this: Screen): CNumber<"double">;
+    _get_pixelDepth(this: Screen): Float64;
     /**
      * @ntsGet _get_pixelDepth
      */
-    readonly pixelDepth: CNumber<"double">;
+    readonly pixelDepth: Float64;
     /**
      * @ntsSymbol nts_dom_Screen_get_availLeft
      */
-    _get_availLeft(this: Screen): CNumber<"double">;
+    _get_availLeft(this: Screen): Float64;
     /**
      * @ntsGet _get_availLeft
      */
-    readonly availLeft: CNumber<"double">;
+    readonly availLeft: Float64;
     /**
      * @ntsSymbol nts_dom_Screen_get_availTop
      */
-    _get_availTop(this: Screen): CNumber<"double">;
+    _get_availTop(this: Screen): Float64;
     /**
      * @ntsGet _get_availTop
      */
-    readonly availTop: CNumber<"double">;
+    readonly availTop: Float64;
     /**
      * @ntsSymbol nts_dom_Screen_get_onchange
      */
@@ -24763,7 +24764,7 @@ declare module "nts:dom" {
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
    */
-  export function AbortSignal_timeout(milliseconds: CNumber<"double">, error?: Ptr<DOMException | null>): AbortSignal;
+  export function AbortSignal_timeout(milliseconds: Float64, error?: Ptr<DOMException | null>): AbortSignal;
   export interface URLOwnMethods {
     /**
      * @ntsSymbol nts_dom_URL_get_origin
@@ -24962,11 +24963,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_URLSearchParams_get_size
      */
-    _get_size(this: URLSearchParams): CNumber<"double">;
+    _get_size(this: URLSearchParams): Float64;
     /**
      * @ntsGet _get_size
      */
-    readonly size: CNumber<"double">;
+    readonly size: Float64;
     /**
      * @ntsSymbol nts_dom_URLSearchParams_append
      */
@@ -25182,19 +25183,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_ResizeObserverSize_get_inlineSize
      */
-    _get_inlineSize(this: ResizeObserverSize): CNumber<"double">;
+    _get_inlineSize(this: ResizeObserverSize): Float64;
     /**
      * @ntsGet _get_inlineSize
      */
-    readonly inlineSize: CNumber<"double">;
+    readonly inlineSize: Float64;
     /**
      * @ntsSymbol nts_dom_ResizeObserverSize_get_blockSize
      */
-    _get_blockSize(this: ResizeObserverSize): CNumber<"double">;
+    _get_blockSize(this: ResizeObserverSize): Float64;
     /**
      * @ntsGet _get_blockSize
      */
-    readonly blockSize: CNumber<"double">;
+    readonly blockSize: Float64;
   }
   export type ResizeObserverSizeMethods = ResizeObserverSizeOwnMethods;
   export type ResizeObserverSize = HostClass<"NtsDomResizeObserverSize", null, "nts_dom_retain", "nts_dom_release"> & ResizeObserverSizeMethods;
@@ -25226,11 +25227,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_IntersectionObserver_get_delay
      */
-    _get_delay(this: IntersectionObserver): CNumber<"double">;
+    _get_delay(this: IntersectionObserver): Float64;
     /**
      * @ntsGet _get_delay
      */
-    readonly delay: CNumber<"double">;
+    readonly delay: Float64;
     /**
      * @ntsSymbol nts_dom_IntersectionObserver_get_trackVisibility
      */
@@ -25270,11 +25271,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_IntersectionObserverEntry_get_time
      */
-    _get_time(this: IntersectionObserverEntry): CNumber<"double">;
+    _get_time(this: IntersectionObserverEntry): Float64;
     /**
      * @ntsGet _get_time
      */
-    readonly time: CNumber<"double">;
+    readonly time: Float64;
     /**
      * @ntsSymbol nts_dom_IntersectionObserverEntry_get_rootBounds
      */
@@ -25318,11 +25319,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_IntersectionObserverEntry_get_intersectionRatio
      */
-    _get_intersectionRatio(this: IntersectionObserverEntry): CNumber<"double">;
+    _get_intersectionRatio(this: IntersectionObserverEntry): Float64;
     /**
      * @ntsGet _get_intersectionRatio
      */
-    readonly intersectionRatio: CNumber<"double">;
+    readonly intersectionRatio: Float64;
     /**
      * @ntsSymbol nts_dom_IntersectionObserverEntry_get_target
      */
@@ -25489,16 +25490,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_globalAlpha
      */
-    _get_globalAlpha(this: CanvasRenderingContext2D): CNumber<"double">;
+    _get_globalAlpha(this: CanvasRenderingContext2D): Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_globalAlpha
      */
-    _set_globalAlpha(this: CanvasRenderingContext2D, value: CNumber<"double">): void;
+    _set_globalAlpha(this: CanvasRenderingContext2D, value: Float64): void;
     /**
      * @ntsGet _get_globalAlpha
      * @ntsSet _set_globalAlpha
      */
-    globalAlpha: CNumber<"double">;
+    globalAlpha: Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_globalCompositeOperation
      */
@@ -25549,42 +25550,42 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_shadowOffsetX
      */
-    _get_shadowOffsetX(this: CanvasRenderingContext2D): CNumber<"double">;
+    _get_shadowOffsetX(this: CanvasRenderingContext2D): Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_shadowOffsetX
      */
-    _set_shadowOffsetX(this: CanvasRenderingContext2D, value: CNumber<"double">): void;
+    _set_shadowOffsetX(this: CanvasRenderingContext2D, value: Float64): void;
     /**
      * @ntsGet _get_shadowOffsetX
      * @ntsSet _set_shadowOffsetX
      */
-    shadowOffsetX: CNumber<"double">;
+    shadowOffsetX: Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_shadowOffsetY
      */
-    _get_shadowOffsetY(this: CanvasRenderingContext2D): CNumber<"double">;
+    _get_shadowOffsetY(this: CanvasRenderingContext2D): Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_shadowOffsetY
      */
-    _set_shadowOffsetY(this: CanvasRenderingContext2D, value: CNumber<"double">): void;
+    _set_shadowOffsetY(this: CanvasRenderingContext2D, value: Float64): void;
     /**
      * @ntsGet _get_shadowOffsetY
      * @ntsSet _set_shadowOffsetY
      */
-    shadowOffsetY: CNumber<"double">;
+    shadowOffsetY: Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_shadowBlur
      */
-    _get_shadowBlur(this: CanvasRenderingContext2D): CNumber<"double">;
+    _get_shadowBlur(this: CanvasRenderingContext2D): Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_shadowBlur
      */
-    _set_shadowBlur(this: CanvasRenderingContext2D, value: CNumber<"double">): void;
+    _set_shadowBlur(this: CanvasRenderingContext2D, value: Float64): void;
     /**
      * @ntsGet _get_shadowBlur
      * @ntsSet _set_shadowBlur
      */
-    shadowBlur: CNumber<"double">;
+    shadowBlur: Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_shadowColor
      */
@@ -25601,16 +25602,16 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_lineWidth
      */
-    _get_lineWidth(this: CanvasRenderingContext2D): CNumber<"double">;
+    _get_lineWidth(this: CanvasRenderingContext2D): Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_lineWidth
      */
-    _set_lineWidth(this: CanvasRenderingContext2D, value: CNumber<"double">): void;
+    _set_lineWidth(this: CanvasRenderingContext2D, value: Float64): void;
     /**
      * @ntsGet _get_lineWidth
      * @ntsSet _set_lineWidth
      */
-    lineWidth: CNumber<"double">;
+    lineWidth: Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_lineCap
      */
@@ -25640,47 +25641,47 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_miterLimit
      */
-    _get_miterLimit(this: CanvasRenderingContext2D): CNumber<"double">;
+    _get_miterLimit(this: CanvasRenderingContext2D): Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_miterLimit
      */
-    _set_miterLimit(this: CanvasRenderingContext2D, value: CNumber<"double">): void;
+    _set_miterLimit(this: CanvasRenderingContext2D, value: Float64): void;
     /**
      * @ntsGet _get_miterLimit
      * @ntsSet _set_miterLimit
      */
-    miterLimit: CNumber<"double">;
+    miterLimit: Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_get_lineDashOffset
      */
-    _get_lineDashOffset(this: CanvasRenderingContext2D): CNumber<"double">;
+    _get_lineDashOffset(this: CanvasRenderingContext2D): Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_set_lineDashOffset
      */
-    _set_lineDashOffset(this: CanvasRenderingContext2D, value: CNumber<"double">): void;
+    _set_lineDashOffset(this: CanvasRenderingContext2D, value: Float64): void;
     /**
      * @ntsGet _get_lineDashOffset
      * @ntsSet _set_lineDashOffset
      */
-    lineDashOffset: CNumber<"double">;
+    lineDashOffset: Float64;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_arc_6
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    arc(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, radius: CNumber<"double">, startAngle: CNumber<"double">, endAngle: CNumber<"double">, anticlockwise: boolean, error?: Ptr<DOMException | null>): void;
+    arc(this: CanvasRenderingContext2D, x: Float64, y: Float64, radius: Float64, startAngle: Float64, endAngle: Float64, anticlockwise: boolean, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_arc_5
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    arc(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, radius: CNumber<"double">, startAngle: CNumber<"double">, endAngle: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    arc(this: CanvasRenderingContext2D, x: Float64, y: Float64, radius: Float64, startAngle: Float64, endAngle: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_arcTo
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    arcTo(this: CanvasRenderingContext2D, x1: CNumber<"double">, y1: CNumber<"double">, x2: CNumber<"double">, y2: CNumber<"double">, radius: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    arcTo(this: CanvasRenderingContext2D, x1: Float64, y1: Float64, x2: Float64, y2: Float64, radius: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_beginPath
      */
@@ -25688,11 +25689,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_bezierCurveTo
      */
-    bezierCurveTo(this: CanvasRenderingContext2D, cp1x: CNumber<"double">, cp1y: CNumber<"double">, cp2x: CNumber<"double">, cp2y: CNumber<"double">, x: CNumber<"double">, y: CNumber<"double">): void;
+    bezierCurveTo(this: CanvasRenderingContext2D, cp1x: Float64, cp1y: Float64, cp2x: Float64, cp2y: Float64, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_clearRect
      */
-    clearRect(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): void;
+    clearRect(this: CanvasRenderingContext2D, x: Float64, y: Float64, width: Float64, height: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_clip_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -25722,7 +25723,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    createConicGradient(this: CanvasRenderingContext2D, startAngle: CNumber<"double">, cx: CNumber<"double">, cy: CNumber<"double">, error?: Ptr<DOMException | null>): CanvasGradient;
+    createConicGradient(this: CanvasRenderingContext2D, startAngle: Float64, cx: Float64, cy: Float64, error?: Ptr<DOMException | null>): CanvasGradient;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_createImageData_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -25734,19 +25735,19 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    createImageData(this: CanvasRenderingContext2D, sw: CNumber<"double">, sh: CNumber<"double">, error?: Ptr<DOMException | null>): ImageData;
+    createImageData(this: CanvasRenderingContext2D, sw: Float64, sh: Float64, error?: Ptr<DOMException | null>): ImageData;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_createImageData_3
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    createImageData(this: CanvasRenderingContext2D, sw: CNumber<"double">, sh: CNumber<"double">, imageDataSettings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
+    createImageData(this: CanvasRenderingContext2D, sw: Float64, sh: Float64, imageDataSettings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_createLinearGradient
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    createLinearGradient(this: CanvasRenderingContext2D, x0: CNumber<"double">, y0: CNumber<"double">, x1: CNumber<"double">, y1: CNumber<"double">, error?: Ptr<DOMException | null>): CanvasGradient;
+    createLinearGradient(this: CanvasRenderingContext2D, x0: Float64, y0: Float64, x1: Float64, y1: Float64, error?: Ptr<DOMException | null>): CanvasGradient;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_createPattern_HTMLCanvasElement
      * @ntsThrows error nts_dom_exception_take_message
@@ -25770,7 +25771,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    createRadialGradient(this: CanvasRenderingContext2D, x0: CNumber<"double">, y0: CNumber<"double">, r0: CNumber<"double">, x1: CNumber<"double">, y1: CNumber<"double">, r1: CNumber<"double">, error?: Ptr<DOMException | null>): CanvasGradient;
+    createRadialGradient(this: CanvasRenderingContext2D, x0: Float64, y0: Float64, r0: Float64, x1: Float64, y1: Float64, r1: Float64, error?: Ptr<DOMException | null>): CanvasGradient;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawFocusIfNeeded_1
      */
@@ -25784,67 +25785,67 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLCanvasElement, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLCanvasElement, x: Float64, y: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_3_HTMLImageElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLImageElement, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLImageElement, x: Float64, y: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_3_HTMLVideoElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, x: Float64, y: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_5_HTMLCanvasElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLCanvasElement, x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLCanvasElement, x: Float64, y: Float64, width: Float64, height: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_5_HTMLImageElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLImageElement, x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLImageElement, x: Float64, y: Float64, width: Float64, height: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_5_HTMLVideoElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, x: Float64, y: Float64, width: Float64, height: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_9_HTMLCanvasElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLCanvasElement, sx: CNumber<"double">, sy: CNumber<"double">, sw: CNumber<"double">, sh: CNumber<"double">, dx: CNumber<"double">, dy: CNumber<"double">, dw: CNumber<"double">, dh: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLCanvasElement, sx: Float64, sy: Float64, sw: Float64, sh: Float64, dx: Float64, dy: Float64, dw: Float64, dh: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_9_HTMLImageElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLImageElement, sx: CNumber<"double">, sy: CNumber<"double">, sw: CNumber<"double">, sh: CNumber<"double">, dx: CNumber<"double">, dy: CNumber<"double">, dw: CNumber<"double">, dh: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLImageElement, sx: Float64, sy: Float64, sw: Float64, sh: Float64, dx: Float64, dy: Float64, dw: Float64, dh: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_9_HTMLVideoElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, sx: CNumber<"double">, sy: CNumber<"double">, sw: CNumber<"double">, sh: CNumber<"double">, dx: CNumber<"double">, dy: CNumber<"double">, dw: CNumber<"double">, dh: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, sx: Float64, sy: Float64, sw: Float64, sh: Float64, dx: Float64, dy: Float64, dw: Float64, dh: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_ellipse_8
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    ellipse(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, radiusX: CNumber<"double">, radiusY: CNumber<"double">, rotation: CNumber<"double">, startAngle: CNumber<"double">, endAngle: CNumber<"double">, anticlockwise: boolean, error?: Ptr<DOMException | null>): void;
+    ellipse(this: CanvasRenderingContext2D, x: Float64, y: Float64, radiusX: Float64, radiusY: Float64, rotation: Float64, startAngle: Float64, endAngle: Float64, anticlockwise: boolean, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_ellipse_7
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    ellipse(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, radiusX: CNumber<"double">, radiusY: CNumber<"double">, rotation: CNumber<"double">, startAngle: CNumber<"double">, endAngle: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    ellipse(this: CanvasRenderingContext2D, x: Float64, y: Float64, radiusX: Float64, radiusY: Float64, rotation: Float64, startAngle: Float64, endAngle: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_fill_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -25868,27 +25869,27 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_fillRect
      */
-    fillRect(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): void;
+    fillRect(this: CanvasRenderingContext2D, x: Float64, y: Float64, width: Float64, height: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_fillText_4
      */
-    fillText(this: CanvasRenderingContext2D, text: StringView, x: CNumber<"double">, y: CNumber<"double">, maxWidth: CNumber<"double">): void;
+    fillText(this: CanvasRenderingContext2D, text: StringView, x: Float64, y: Float64, maxWidth: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_fillText_3
      */
-    fillText(this: CanvasRenderingContext2D, text: StringView, x: CNumber<"double">, y: CNumber<"double">): void;
+    fillText(this: CanvasRenderingContext2D, text: StringView, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_getImageData_4
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    getImageData(this: CanvasRenderingContext2D, sx: CNumber<"double">, sy: CNumber<"double">, sw: CNumber<"double">, sh: CNumber<"double">, error?: Ptr<DOMException | null>): ImageData;
+    getImageData(this: CanvasRenderingContext2D, sx: Float64, sy: Float64, sw: Float64, sh: Float64, error?: Ptr<DOMException | null>): ImageData;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_getImageData_5
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    getImageData(this: CanvasRenderingContext2D, sx: CNumber<"double">, sy: CNumber<"double">, sw: CNumber<"double">, sh: CNumber<"double">, imageDataSettings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
+    getImageData(this: CanvasRenderingContext2D, sx: Float64, sy: Float64, sw: Float64, sh: Float64, imageDataSettings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_isContextLost
      */
@@ -25898,33 +25899,33 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    isPointInPath(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, winding: CanvasFillRule, error?: Ptr<DOMException | null>): boolean;
+    isPointInPath(this: CanvasRenderingContext2D, x: Float64, y: Float64, winding: CanvasFillRule, error?: Ptr<DOMException | null>): boolean;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_isPointInPath_2
      */
-    isPointInPath(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">): boolean;
+    isPointInPath(this: CanvasRenderingContext2D, x: Float64, y: Float64): boolean;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_isPointInPath_4
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    isPointInPath(this: CanvasRenderingContext2D, path: Path2D, x: CNumber<"double">, y: CNumber<"double">, winding: CanvasFillRule, error?: Ptr<DOMException | null>): boolean;
+    isPointInPath(this: CanvasRenderingContext2D, path: Path2D, x: Float64, y: Float64, winding: CanvasFillRule, error?: Ptr<DOMException | null>): boolean;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_isPointInPath_3x
      */
-    isPointInPath(this: CanvasRenderingContext2D, path: Path2D, x: CNumber<"double">, y: CNumber<"double">): boolean;
+    isPointInPath(this: CanvasRenderingContext2D, path: Path2D, x: Float64, y: Float64): boolean;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_isPointInStroke_2
      */
-    isPointInStroke(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">): boolean;
+    isPointInStroke(this: CanvasRenderingContext2D, x: Float64, y: Float64): boolean;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_isPointInStroke_3
      */
-    isPointInStroke(this: CanvasRenderingContext2D, path: Path2D, x: CNumber<"double">, y: CNumber<"double">): boolean;
+    isPointInStroke(this: CanvasRenderingContext2D, path: Path2D, x: Float64, y: Float64): boolean;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_lineTo
      */
-    lineTo(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">): void;
+    lineTo(this: CanvasRenderingContext2D, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_measureText
      */
@@ -25932,27 +25933,27 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_moveTo
      */
-    moveTo(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">): void;
+    moveTo(this: CanvasRenderingContext2D, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_putImageData_3
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    putImageData(this: CanvasRenderingContext2D, imagedata: ImageData, dx: CNumber<"double">, dy: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    putImageData(this: CanvasRenderingContext2D, imagedata: ImageData, dx: Float64, dy: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_putImageData_7
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    putImageData(this: CanvasRenderingContext2D, imagedata: ImageData, dx: CNumber<"double">, dy: CNumber<"double">, dirtyX: CNumber<"double">, dirtyY: CNumber<"double">, dirtyWidth: CNumber<"double">, dirtyHeight: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    putImageData(this: CanvasRenderingContext2D, imagedata: ImageData, dx: Float64, dy: Float64, dirtyX: Float64, dirtyY: Float64, dirtyWidth: Float64, dirtyHeight: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_quadraticCurveTo
      */
-    quadraticCurveTo(this: CanvasRenderingContext2D, cpx: CNumber<"double">, cpy: CNumber<"double">, x: CNumber<"double">, y: CNumber<"double">): void;
+    quadraticCurveTo(this: CanvasRenderingContext2D, cpx: Float64, cpy: Float64, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_rect
      */
-    rect(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): void;
+    rect(this: CanvasRenderingContext2D, x: Float64, y: Float64, width: Float64, height: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_reset
      */
@@ -25970,13 +25971,13 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_rotate
      */
-    rotate(this: CanvasRenderingContext2D, angle: CNumber<"double">): void;
+    rotate(this: CanvasRenderingContext2D, angle: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_roundRect_4
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    roundRect(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, w: CNumber<"double">, h: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    roundRect(this: CanvasRenderingContext2D, x: Float64, y: Float64, w: Float64, h: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_save
      */
@@ -25984,11 +25985,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_scale
      */
-    scale(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">): void;
+    scale(this: CanvasRenderingContext2D, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_setTransform_6
      */
-    setTransform(this: CanvasRenderingContext2D, a: CNumber<"double">, b: CNumber<"double">, c: CNumber<"double">, d: CNumber<"double">, e: CNumber<"double">, f: CNumber<"double">): void;
+    setTransform(this: CanvasRenderingContext2D, a: Float64, b: Float64, c: Float64, d: Float64, e: Float64, f: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_setTransform_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -26012,23 +26013,23 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_strokeRect
      */
-    strokeRect(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): void;
+    strokeRect(this: CanvasRenderingContext2D, x: Float64, y: Float64, width: Float64, height: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_strokeText_4
      */
-    strokeText(this: CanvasRenderingContext2D, text: StringView, x: CNumber<"double">, y: CNumber<"double">, maxWidth: CNumber<"double">): void;
+    strokeText(this: CanvasRenderingContext2D, text: StringView, x: Float64, y: Float64, maxWidth: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_strokeText_3
      */
-    strokeText(this: CanvasRenderingContext2D, text: StringView, x: CNumber<"double">, y: CNumber<"double">): void;
+    strokeText(this: CanvasRenderingContext2D, text: StringView, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_transform
      */
-    transform(this: CanvasRenderingContext2D, a: CNumber<"double">, b: CNumber<"double">, c: CNumber<"double">, d: CNumber<"double">, e: CNumber<"double">, f: CNumber<"double">): void;
+    transform(this: CanvasRenderingContext2D, a: Float64, b: Float64, c: Float64, d: Float64, e: Float64, f: Float64): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_translate
      */
-    translate(this: CanvasRenderingContext2D, x: CNumber<"double">, y: CNumber<"double">): void;
+    translate(this: CanvasRenderingContext2D, x: Float64, y: Float64): void;
   }
   export type CanvasRenderingContext2DMethods = CanvasRenderingContext2DOwnMethods;
   export type CanvasRenderingContext2D = HostClass<"NtsDomCanvasRenderingContext2D", null, "nts_dom_retain", "nts_dom_release"> & CanvasRenderingContext2DMethods;
@@ -26038,7 +26039,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    addColorStop(this: CanvasGradient, offset: CNumber<"double">, color: StringView, error?: Ptr<DOMException | null>): void;
+    addColorStop(this: CanvasGradient, offset: Float64, color: StringView, error?: Ptr<DOMException | null>): void;
   }
   export type CanvasGradientMethods = CanvasGradientOwnMethods;
   export type CanvasGradient = HostClass<"NtsDomCanvasGradient", null, "nts_dom_retain", "nts_dom_release"> & CanvasGradientMethods;
@@ -26060,23 +26061,23 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    arc(this: Path2D, x: CNumber<"double">, y: CNumber<"double">, radius: CNumber<"double">, startAngle: CNumber<"double">, endAngle: CNumber<"double">, anticlockwise: boolean, error?: Ptr<DOMException | null>): void;
+    arc(this: Path2D, x: Float64, y: Float64, radius: Float64, startAngle: Float64, endAngle: Float64, anticlockwise: boolean, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Path2D_arc_5
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    arc(this: Path2D, x: CNumber<"double">, y: CNumber<"double">, radius: CNumber<"double">, startAngle: CNumber<"double">, endAngle: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    arc(this: Path2D, x: Float64, y: Float64, radius: Float64, startAngle: Float64, endAngle: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Path2D_arcTo
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    arcTo(this: Path2D, x1: CNumber<"double">, y1: CNumber<"double">, x2: CNumber<"double">, y2: CNumber<"double">, radius: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    arcTo(this: Path2D, x1: Float64, y1: Float64, x2: Float64, y2: Float64, radius: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Path2D_bezierCurveTo
      */
-    bezierCurveTo(this: Path2D, cp1x: CNumber<"double">, cp1y: CNumber<"double">, cp2x: CNumber<"double">, cp2y: CNumber<"double">, x: CNumber<"double">, y: CNumber<"double">): void;
+    bezierCurveTo(this: Path2D, cp1x: Float64, cp1y: Float64, cp2x: Float64, cp2y: Float64, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Path2D_closePath
      */
@@ -26086,35 +26087,35 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    ellipse(this: Path2D, x: CNumber<"double">, y: CNumber<"double">, radiusX: CNumber<"double">, radiusY: CNumber<"double">, rotation: CNumber<"double">, startAngle: CNumber<"double">, endAngle: CNumber<"double">, anticlockwise: boolean, error?: Ptr<DOMException | null>): void;
+    ellipse(this: Path2D, x: Float64, y: Float64, radiusX: Float64, radiusY: Float64, rotation: Float64, startAngle: Float64, endAngle: Float64, anticlockwise: boolean, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Path2D_ellipse_7
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    ellipse(this: Path2D, x: CNumber<"double">, y: CNumber<"double">, radiusX: CNumber<"double">, radiusY: CNumber<"double">, rotation: CNumber<"double">, startAngle: CNumber<"double">, endAngle: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    ellipse(this: Path2D, x: Float64, y: Float64, radiusX: Float64, radiusY: Float64, rotation: Float64, startAngle: Float64, endAngle: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Path2D_lineTo
      */
-    lineTo(this: Path2D, x: CNumber<"double">, y: CNumber<"double">): void;
+    lineTo(this: Path2D, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Path2D_moveTo
      */
-    moveTo(this: Path2D, x: CNumber<"double">, y: CNumber<"double">): void;
+    moveTo(this: Path2D, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Path2D_quadraticCurveTo
      */
-    quadraticCurveTo(this: Path2D, cpx: CNumber<"double">, cpy: CNumber<"double">, x: CNumber<"double">, y: CNumber<"double">): void;
+    quadraticCurveTo(this: Path2D, cpx: Float64, cpy: Float64, x: Float64, y: Float64): void;
     /**
      * @ntsSymbol nts_dom_Path2D_rect
      */
-    rect(this: Path2D, x: CNumber<"double">, y: CNumber<"double">, width: CNumber<"double">, height: CNumber<"double">): void;
+    rect(this: Path2D, x: Float64, y: Float64, width: Float64, height: Float64): void;
     /**
      * @ntsSymbol nts_dom_Path2D_roundRect_4
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    roundRect(this: Path2D, x: CNumber<"double">, y: CNumber<"double">, w: CNumber<"double">, h: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    roundRect(this: Path2D, x: Float64, y: Float64, w: Float64, h: Float64, error?: Ptr<DOMException | null>): void;
   }
   export type Path2DMethods = Path2DOwnMethods;
   export type Path2D = HostClass<"NtsDomPath2D", null, "nts_dom_retain", "nts_dom_release"> & Path2DMethods;
@@ -26130,83 +26131,83 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_width
      */
-    _get_width(this: TextMetrics): CNumber<"double">;
+    _get_width(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_width
      */
-    readonly width: CNumber<"double">;
+    readonly width: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_actualBoundingBoxLeft
      */
-    _get_actualBoundingBoxLeft(this: TextMetrics): CNumber<"double">;
+    _get_actualBoundingBoxLeft(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_actualBoundingBoxLeft
      */
-    readonly actualBoundingBoxLeft: CNumber<"double">;
+    readonly actualBoundingBoxLeft: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_actualBoundingBoxRight
      */
-    _get_actualBoundingBoxRight(this: TextMetrics): CNumber<"double">;
+    _get_actualBoundingBoxRight(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_actualBoundingBoxRight
      */
-    readonly actualBoundingBoxRight: CNumber<"double">;
+    readonly actualBoundingBoxRight: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_fontBoundingBoxAscent
      */
-    _get_fontBoundingBoxAscent(this: TextMetrics): CNumber<"double">;
+    _get_fontBoundingBoxAscent(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_fontBoundingBoxAscent
      */
-    readonly fontBoundingBoxAscent: CNumber<"double">;
+    readonly fontBoundingBoxAscent: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_fontBoundingBoxDescent
      */
-    _get_fontBoundingBoxDescent(this: TextMetrics): CNumber<"double">;
+    _get_fontBoundingBoxDescent(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_fontBoundingBoxDescent
      */
-    readonly fontBoundingBoxDescent: CNumber<"double">;
+    readonly fontBoundingBoxDescent: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_actualBoundingBoxAscent
      */
-    _get_actualBoundingBoxAscent(this: TextMetrics): CNumber<"double">;
+    _get_actualBoundingBoxAscent(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_actualBoundingBoxAscent
      */
-    readonly actualBoundingBoxAscent: CNumber<"double">;
+    readonly actualBoundingBoxAscent: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_actualBoundingBoxDescent
      */
-    _get_actualBoundingBoxDescent(this: TextMetrics): CNumber<"double">;
+    _get_actualBoundingBoxDescent(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_actualBoundingBoxDescent
      */
-    readonly actualBoundingBoxDescent: CNumber<"double">;
+    readonly actualBoundingBoxDescent: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_hangingBaseline
      */
-    _get_hangingBaseline(this: TextMetrics): CNumber<"double">;
+    _get_hangingBaseline(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_hangingBaseline
      */
-    readonly hangingBaseline: CNumber<"double">;
+    readonly hangingBaseline: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_alphabeticBaseline
      */
-    _get_alphabeticBaseline(this: TextMetrics): CNumber<"double">;
+    _get_alphabeticBaseline(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_alphabeticBaseline
      */
-    readonly alphabeticBaseline: CNumber<"double">;
+    readonly alphabeticBaseline: Float64;
     /**
      * @ntsSymbol nts_dom_TextMetrics_get_ideographicBaseline
      */
-    _get_ideographicBaseline(this: TextMetrics): CNumber<"double">;
+    _get_ideographicBaseline(this: TextMetrics): Float64;
     /**
      * @ntsGet _get_ideographicBaseline
      */
-    readonly ideographicBaseline: CNumber<"double">;
+    readonly ideographicBaseline: Float64;
   }
   export type TextMetricsMethods = TextMetricsOwnMethods;
   export type TextMetrics = HostClass<"NtsDomTextMetrics", null, "nts_dom_retain", "nts_dom_release"> & TextMetricsMethods;
@@ -26337,13 +26338,13 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    elementFromPoint(this: ShadowRoot, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): Element | null;
+    elementFromPoint(this: ShadowRoot, x: Float64, y: Float64, error?: Ptr<DOMException | null>): Element | null;
     /**
      * @ntsSymbol nts_dom_ShadowRoot_elementsFromPoint
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    elementsFromPoint(this: ShadowRoot, x: CNumber<"double">, y: CNumber<"double">, error?: Ptr<DOMException | null>): ElementSequence;
+    elementsFromPoint(this: ShadowRoot, x: Float64, y: Float64, error?: Ptr<DOMException | null>): ElementSequence;
     /**
      * @ntsSymbol nts_dom_ShadowRoot_getAnimations
      */
@@ -26705,13 +26706,13 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    compareBoundaryPoints(this: Range, how: CNumber<"double">, sourceRange: Range, error?: Ptr<DOMException | null>): CNumber<"double">;
+    compareBoundaryPoints(this: Range, how: Float64, sourceRange: Range, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_Range_comparePoint
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    comparePoint(this: Range, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    comparePoint(this: Range, node: Node, offset: Float64, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_Range_createContextualFragment
      * @ntsThrows error nts_dom_exception_take_message
@@ -26771,7 +26772,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    isPointInRange(this: Range, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): boolean;
+    isPointInRange(this: Range, node: Node, offset: Float64, error?: Ptr<DOMException | null>): boolean;
     /**
      * @ntsSymbol nts_dom_Range_selectNode
      * @ntsThrows error nts_dom_exception_take_message
@@ -26789,7 +26790,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setEnd(this: Range, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    setEnd(this: Range, node: Node, offset: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Range_setEndAfter
      * @ntsThrows error nts_dom_exception_take_message
@@ -26807,7 +26808,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setStart(this: Range, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    setStart(this: Range, node: Node, offset: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Range_setStartAfter
      * @ntsThrows error nts_dom_exception_take_message
@@ -26843,19 +26844,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_AbstractRange_get_startOffset
      */
-    _get_startOffset(this: AbstractRange): CNumber<"double">;
+    _get_startOffset(this: AbstractRange): Float64;
     /**
      * @ntsGet _get_startOffset
      */
-    readonly startOffset: CNumber<"double">;
+    readonly startOffset: Float64;
     /**
      * @ntsSymbol nts_dom_AbstractRange_get_endOffset
      */
-    _get_endOffset(this: AbstractRange): CNumber<"double">;
+    _get_endOffset(this: AbstractRange): Float64;
     /**
      * @ntsGet _get_endOffset
      */
-    readonly endOffset: CNumber<"double">;
+    readonly endOffset: Float64;
     /**
      * @ntsSymbol nts_dom_AbstractRange_get_collapsed
      */
@@ -26885,11 +26886,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Selection_get_anchorOffset
      */
-    _get_anchorOffset(this: Selection): CNumber<"double">;
+    _get_anchorOffset(this: Selection): Float64;
     /**
      * @ntsGet _get_anchorOffset
      */
-    readonly anchorOffset: CNumber<"double">;
+    readonly anchorOffset: Float64;
     /**
      * @ntsSymbol nts_dom_Selection_get_focusNode
      */
@@ -26901,11 +26902,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Selection_get_focusOffset
      */
-    _get_focusOffset(this: Selection): CNumber<"double">;
+    _get_focusOffset(this: Selection): Float64;
     /**
      * @ntsGet _get_focusOffset
      */
-    readonly focusOffset: CNumber<"double">;
+    readonly focusOffset: Float64;
     /**
      * @ntsSymbol nts_dom_Selection_get_isCollapsed
      */
@@ -26917,11 +26918,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Selection_get_rangeCount
      */
-    _get_rangeCount(this: Selection): CNumber<"double">;
+    _get_rangeCount(this: Selection): Float64;
     /**
      * @ntsGet _get_rangeCount
      */
-    readonly rangeCount: CNumber<"double">;
+    readonly rangeCount: Float64;
     /**
      * @ntsSymbol nts_dom_Selection_get_type
      */
@@ -26949,11 +26950,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Selection_get_baseOffset
      */
-    _get_baseOffset(this: Selection): CNumber<"double">;
+    _get_baseOffset(this: Selection): Float64;
     /**
      * @ntsGet _get_baseOffset
      */
-    readonly baseOffset: CNumber<"double">;
+    readonly baseOffset: Float64;
     /**
      * @ntsSymbol nts_dom_Selection_get_extentNode
      */
@@ -26965,11 +26966,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Selection_get_extentOffset
      */
-    _get_extentOffset(this: Selection): CNumber<"double">;
+    _get_extentOffset(this: Selection): Float64;
     /**
      * @ntsGet _get_extentOffset
      */
-    readonly extentOffset: CNumber<"double">;
+    readonly extentOffset: Float64;
     /**
      * @ntsSymbol nts_dom_Selection_addRange
      */
@@ -26979,7 +26980,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    collapse(this: Selection, node: Node | null, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    collapse(this: Selection, node: Node | null, offset: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Selection_collapse_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -27019,7 +27020,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    extend(this: Selection, node: Node, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    extend(this: Selection, node: Node, offset: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Selection_extend_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -27035,7 +27036,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    getRangeAt(this: Selection, index: CNumber<"double">, error?: Ptr<DOMException | null>): Range;
+    getRangeAt(this: Selection, index: Float64, error?: Ptr<DOMException | null>): Range;
     /**
      * @ntsSymbol nts_dom_Selection_modify_3
      */
@@ -27073,13 +27074,13 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setBaseAndExtent(this: Selection, baseNode: Node | null, baseOffset: CNumber<"double">, extentNode: Node | null, extentOffset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    setBaseAndExtent(this: Selection, baseNode: Node | null, baseOffset: Float64, extentNode: Node | null, extentOffset: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Selection_setPosition_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    setPosition(this: Selection, node: Node | null, offset: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    setPosition(this: Selection, node: Node | null, offset: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Selection_setPosition_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -27121,19 +27122,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Navigator_get_maxTouchPoints
      */
-    _get_maxTouchPoints(this: Navigator): CNumber<"double">;
+    _get_maxTouchPoints(this: Navigator): Float64;
     /**
      * @ntsGet _get_maxTouchPoints
      */
-    readonly maxTouchPoints: CNumber<"double">;
+    readonly maxTouchPoints: Float64;
     /**
      * @ntsSymbol nts_dom_Navigator_get_cpuPerformance
      */
-    _get_cpuPerformance(this: Navigator): CNumber<"double">;
+    _get_cpuPerformance(this: Navigator): Float64;
     /**
      * @ntsGet _get_cpuPerformance
      */
-    readonly cpuPerformance: CNumber<"double">;
+    readonly cpuPerformance: Float64;
     /**
      * @ntsSymbol nts_dom_Navigator_get_clipboard
      */
@@ -27145,11 +27146,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Navigator_get_hardwareConcurrency
      */
-    _get_hardwareConcurrency(this: Navigator): CNumber<"double">;
+    _get_hardwareConcurrency(this: Navigator): Float64;
     /**
      * @ntsGet _get_hardwareConcurrency
      */
-    readonly hardwareConcurrency: CNumber<"double">;
+    readonly hardwareConcurrency: Float64;
     /**
      * @ntsSymbol nts_dom_Navigator_get_cookieEnabled
      */
@@ -27161,11 +27162,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Navigator_get_deviceMemory
      */
-    _get_deviceMemory(this: Navigator): CNumber<"double">;
+    _get_deviceMemory(this: Navigator): Float64;
     /**
      * @ntsGet _get_deviceMemory
      */
-    readonly deviceMemory: CNumber<"double">;
+    readonly deviceMemory: Float64;
     /**
      * @ntsSymbol nts_dom_Navigator_get_appCodeName
      */
@@ -27264,15 +27265,15 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_StyleSheetList_get_length
      */
-    _get_length(this: StyleSheetList): CNumber<"double">;
+    _get_length(this: StyleSheetList): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_StyleSheetList_item
      */
-    item(this: StyleSheetList, index: CNumber<"double">): StyleSheet | null;
+    item(this: StyleSheetList, index: Float64): StyleSheet | null;
     /**
      * @ntsSymbol nts_dom_StyleSheetList_named_get
      */
@@ -27371,49 +27372,49 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    addRule(this: CSSStyleSheet, selector: StringView, style: StringView, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    addRule(this: CSSStyleSheet, selector: StringView, style: StringView, index: Float64, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_CSSStyleSheet_addRule_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    addRule(this: CSSStyleSheet, selector: StringView, style: StringView, error?: Ptr<DOMException | null>): CNumber<"double">;
+    addRule(this: CSSStyleSheet, selector: StringView, style: StringView, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_CSSStyleSheet_addRule_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    addRule(this: CSSStyleSheet, selector: StringView, error?: Ptr<DOMException | null>): CNumber<"double">;
+    addRule(this: CSSStyleSheet, selector: StringView, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_CSSStyleSheet_addRule_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    addRule(this: CSSStyleSheet, error?: Ptr<DOMException | null>): CNumber<"double">;
+    addRule(this: CSSStyleSheet, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_CSSStyleSheet_deleteRule
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    deleteRule(this: CSSStyleSheet, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    deleteRule(this: CSSStyleSheet, index: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CSSStyleSheet_insertRule_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    insertRule(this: CSSStyleSheet, rule: StringView, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    insertRule(this: CSSStyleSheet, rule: StringView, index: Float64, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_CSSStyleSheet_insertRule_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    insertRule(this: CSSStyleSheet, rule: StringView, error?: Ptr<DOMException | null>): CNumber<"double">;
+    insertRule(this: CSSStyleSheet, rule: StringView, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_CSSStyleSheet_removeRule_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    removeRule(this: CSSStyleSheet, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    removeRule(this: CSSStyleSheet, index: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CSSStyleSheet_removeRule_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -27451,15 +27452,15 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CSSRuleList_get_length
      */
-    _get_length(this: CSSRuleList): CNumber<"double">;
+    _get_length(this: CSSRuleList): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_CSSRuleList_item
      */
-    item(this: CSSRuleList, index: CNumber<"double">): CSSRule | null;
+    item(this: CSSRuleList, index: Float64): CSSRule | null;
   }
   export type CSSRuleListMethods = CSSRuleListOwnMethods;
   export type CSSRuleList = HostClass<"NtsDomCSSRuleList", null, "nts_dom_retain", "nts_dom_release"> & CSSRuleListMethods;
@@ -27467,11 +27468,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CSSRule_get_type
      */
-    _get_type(this: CSSRule): CNumber<"double">;
+    _get_type(this: CSSRule): Float64;
     /**
      * @ntsGet _get_type
      */
-    readonly type: CNumber<"double">;
+    readonly type: Float64;
     /**
      * @ntsSymbol nts_dom_CSSRule_get_cssText
      */
@@ -27539,19 +27540,19 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    deleteRule(this: CSSStyleRule, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    deleteRule(this: CSSStyleRule, index: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CSSStyleRule_insertRule_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    insertRule(this: CSSStyleRule, rule: StringView, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    insertRule(this: CSSStyleRule, rule: StringView, index: Float64, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_CSSStyleRule_insertRule_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    insertRule(this: CSSStyleRule, rule: StringView, error?: Ptr<DOMException | null>): CNumber<"double">;
+    insertRule(this: CSSStyleRule, rule: StringView, error?: Ptr<DOMException | null>): Float64;
   }
   export type CSSStyleRuleMethods = CSSStyleRuleOwnMethods & CSSRuleMethods;
   export type CSSStyleRule = HostClass<"NtsDomCSSStyleRule", CSSRule> & CSSStyleRuleMethods;
@@ -27561,35 +27562,35 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DOMPointReadOnly_get_x
      */
-    _get_x(this: DOMPointReadOnly): CNumber<"double">;
+    _get_x(this: DOMPointReadOnly): Float64;
     /**
      * @ntsGet _get_x
      */
-    readonly x: CNumber<"double">;
+    readonly x: Float64;
     /**
      * @ntsSymbol nts_dom_DOMPointReadOnly_get_y
      */
-    _get_y(this: DOMPointReadOnly): CNumber<"double">;
+    _get_y(this: DOMPointReadOnly): Float64;
     /**
      * @ntsGet _get_y
      */
-    readonly y: CNumber<"double">;
+    readonly y: Float64;
     /**
      * @ntsSymbol nts_dom_DOMPointReadOnly_get_z
      */
-    _get_z(this: DOMPointReadOnly): CNumber<"double">;
+    _get_z(this: DOMPointReadOnly): Float64;
     /**
      * @ntsGet _get_z
      */
-    readonly z: CNumber<"double">;
+    readonly z: Float64;
     /**
      * @ntsSymbol nts_dom_DOMPointReadOnly_get_w
      */
-    _get_w(this: DOMPointReadOnly): CNumber<"double">;
+    _get_w(this: DOMPointReadOnly): Float64;
     /**
      * @ntsGet _get_w
      */
-    readonly w: CNumber<"double">;
+    readonly w: Float64;
     /**
      * @ntsSymbol nts_dom_DOMPointReadOnly_matrixTransform_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -27616,19 +27617,19 @@ declare module "nts:dom" {
   /**
    * @ntsSymbol nts_dom_new_DOMPointReadOnly_4
    */
-  export function newDOMPointReadOnly(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">, w: CNumber<"double">): DOMPointReadOnly;
+  export function newDOMPointReadOnly(x: Float64, y: Float64, z: Float64, w: Float64): DOMPointReadOnly;
   /**
    * @ntsSymbol nts_dom_new_DOMPointReadOnly_3
    */
-  export function newDOMPointReadOnly(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">): DOMPointReadOnly;
+  export function newDOMPointReadOnly(x: Float64, y: Float64, z: Float64): DOMPointReadOnly;
   /**
    * @ntsSymbol nts_dom_new_DOMPointReadOnly_2
    */
-  export function newDOMPointReadOnly(x: CNumber<"double">, y: CNumber<"double">): DOMPointReadOnly;
+  export function newDOMPointReadOnly(x: Float64, y: Float64): DOMPointReadOnly;
   /**
    * @ntsSymbol nts_dom_new_DOMPointReadOnly_1
    */
-  export function newDOMPointReadOnly(x: CNumber<"double">): DOMPointReadOnly;
+  export function newDOMPointReadOnly(x: Float64): DOMPointReadOnly;
   /**
    * @ntsSymbol nts_dom_new_DOMPointReadOnly_0
    */
@@ -27637,55 +27638,55 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DOMPoint_get_x
      */
-    _get_x(this: DOMPoint): CNumber<"double">;
+    _get_x(this: DOMPoint): Float64;
     /**
      * @ntsSymbol nts_dom_DOMPoint_set_x
      */
-    _set_x(this: DOMPoint, value: CNumber<"double">): void;
+    _set_x(this: DOMPoint, value: Float64): void;
     /**
      * @ntsGet _get_x
      * @ntsSet _set_x
      */
-    x: CNumber<"double">;
+    x: Float64;
     /**
      * @ntsSymbol nts_dom_DOMPoint_get_y
      */
-    _get_y(this: DOMPoint): CNumber<"double">;
+    _get_y(this: DOMPoint): Float64;
     /**
      * @ntsSymbol nts_dom_DOMPoint_set_y
      */
-    _set_y(this: DOMPoint, value: CNumber<"double">): void;
+    _set_y(this: DOMPoint, value: Float64): void;
     /**
      * @ntsGet _get_y
      * @ntsSet _set_y
      */
-    y: CNumber<"double">;
+    y: Float64;
     /**
      * @ntsSymbol nts_dom_DOMPoint_get_z
      */
-    _get_z(this: DOMPoint): CNumber<"double">;
+    _get_z(this: DOMPoint): Float64;
     /**
      * @ntsSymbol nts_dom_DOMPoint_set_z
      */
-    _set_z(this: DOMPoint, value: CNumber<"double">): void;
+    _set_z(this: DOMPoint, value: Float64): void;
     /**
      * @ntsGet _get_z
      * @ntsSet _set_z
      */
-    z: CNumber<"double">;
+    z: Float64;
     /**
      * @ntsSymbol nts_dom_DOMPoint_get_w
      */
-    _get_w(this: DOMPoint): CNumber<"double">;
+    _get_w(this: DOMPoint): Float64;
     /**
      * @ntsSymbol nts_dom_DOMPoint_set_w
      */
-    _set_w(this: DOMPoint, value: CNumber<"double">): void;
+    _set_w(this: DOMPoint, value: Float64): void;
     /**
      * @ntsGet _get_w
      * @ntsSet _set_w
      */
-    w: CNumber<"double">;
+    w: Float64;
   }
   export type DOMPointMethods = DOMPointOwnMethods & DOMPointReadOnlyMethods;
   export type DOMPoint = HostClass<"NtsDomDOMPoint", DOMPointReadOnly> & DOMPointMethods;
@@ -27702,19 +27703,19 @@ declare module "nts:dom" {
   /**
    * @ntsSymbol nts_dom_new_DOMPoint_4
    */
-  export function newDOMPoint(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">, w: CNumber<"double">): DOMPoint;
+  export function newDOMPoint(x: Float64, y: Float64, z: Float64, w: Float64): DOMPoint;
   /**
    * @ntsSymbol nts_dom_new_DOMPoint_3
    */
-  export function newDOMPoint(x: CNumber<"double">, y: CNumber<"double">, z: CNumber<"double">): DOMPoint;
+  export function newDOMPoint(x: Float64, y: Float64, z: Float64): DOMPoint;
   /**
    * @ntsSymbol nts_dom_new_DOMPoint_2
    */
-  export function newDOMPoint(x: CNumber<"double">, y: CNumber<"double">): DOMPoint;
+  export function newDOMPoint(x: Float64, y: Float64): DOMPoint;
   /**
    * @ntsSymbol nts_dom_new_DOMPoint_1
    */
-  export function newDOMPoint(x: CNumber<"double">): DOMPoint;
+  export function newDOMPoint(x: Float64): DOMPoint;
   /**
    * @ntsSymbol nts_dom_new_DOMPoint_0
    */
@@ -27795,15 +27796,15 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DOMRectList_get_length
      */
-    _get_length(this: DOMRectList): CNumber<"double">;
+    _get_length(this: DOMRectList): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_DOMRectList_item
      */
-    item(this: DOMRectList, index: CNumber<"double">): DOMRect | null;
+    item(this: DOMRectList, index: Float64): DOMRect | null;
   }
   export type DOMRectListMethods = DOMRectListOwnMethods;
   export type DOMRectList = HostClass<"NtsDomDOMRectList", null, "nts_dom_retain", "nts_dom_release"> & DOMRectListMethods;
@@ -27811,11 +27812,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_NamedNodeMap_get_length
      */
-    _get_length(this: NamedNodeMap): CNumber<"double">;
+    _get_length(this: NamedNodeMap): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_NamedNodeMap_getNamedItem
      */
@@ -27827,7 +27828,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_NamedNodeMap_item
      */
-    item(this: NamedNodeMap, index: CNumber<"double">): Attr | null;
+    item(this: NamedNodeMap, index: Float64): Attr | null;
     /**
      * @ntsSymbol nts_dom_NamedNodeMap_removeNamedItem
      * @ntsThrows error nts_dom_exception_take_message
@@ -27955,41 +27956,41 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLProgressElement_get_value
      */
-    _get_value(this: HTMLProgressElement): CNumber<"double">;
+    _get_value(this: HTMLProgressElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLProgressElement_set_value
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_value(this: HTMLProgressElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_value(this: HTMLProgressElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_value
      * @ntsSet _set_value
      */
-    value: CNumber<"double">;
+    value: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLProgressElement_get_max
      */
-    _get_max(this: HTMLProgressElement): CNumber<"double">;
+    _get_max(this: HTMLProgressElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLProgressElement_set_max
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_max(this: HTMLProgressElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_max(this: HTMLProgressElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_max
      * @ntsSet _set_max
      */
-    max: CNumber<"double">;
+    max: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLProgressElement_get_position
      */
-    _get_position(this: HTMLProgressElement): CNumber<"double">;
+    _get_position(this: HTMLProgressElement): Float64;
     /**
      * @ntsGet _get_position
      */
-    readonly position: CNumber<"double">;
+    readonly position: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLProgressElement_get_labels
      */
@@ -28007,93 +28008,93 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_get_value
      */
-    _get_value(this: HTMLMeterElement): CNumber<"double">;
+    _get_value(this: HTMLMeterElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_set_value
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_value(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_value(this: HTMLMeterElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_value
      * @ntsSet _set_value
      */
-    value: CNumber<"double">;
+    value: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_get_min
      */
-    _get_min(this: HTMLMeterElement): CNumber<"double">;
+    _get_min(this: HTMLMeterElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_set_min
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_min(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_min(this: HTMLMeterElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_min
      * @ntsSet _set_min
      */
-    min: CNumber<"double">;
+    min: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_get_max
      */
-    _get_max(this: HTMLMeterElement): CNumber<"double">;
+    _get_max(this: HTMLMeterElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_set_max
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_max(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_max(this: HTMLMeterElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_max
      * @ntsSet _set_max
      */
-    max: CNumber<"double">;
+    max: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_get_low
      */
-    _get_low(this: HTMLMeterElement): CNumber<"double">;
+    _get_low(this: HTMLMeterElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_set_low
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_low(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_low(this: HTMLMeterElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_low
      * @ntsSet _set_low
      */
-    low: CNumber<"double">;
+    low: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_get_high
      */
-    _get_high(this: HTMLMeterElement): CNumber<"double">;
+    _get_high(this: HTMLMeterElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_set_high
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_high(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_high(this: HTMLMeterElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_high
      * @ntsSet _set_high
      */
-    high: CNumber<"double">;
+    high: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_get_optimum
      */
-    _get_optimum(this: HTMLMeterElement): CNumber<"double">;
+    _get_optimum(this: HTMLMeterElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_set_optimum
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_optimum(this: HTMLMeterElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_optimum(this: HTMLMeterElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_optimum
      * @ntsSet _set_optimum
      */
-    optimum: CNumber<"double">;
+    optimum: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMeterElement_get_labels
      */
@@ -28432,7 +28433,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DataTransfer_setDragImage
      */
-    setDragImage(this: DataTransfer, image: Element, x: CNumber<"double">, y: CNumber<"double">): void;
+    setDragImage(this: DataTransfer, image: Element, x: Float64, y: Float64): void;
   }
   export type DataTransferMethods = DataTransferOwnMethods;
   export type DataTransfer = HostClass<"NtsDomDataTransfer", null, "nts_dom_retain", "nts_dom_release"> & DataTransferMethods;
@@ -28468,11 +28469,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_DataTransferItemList_get_length
      */
-    _get_length(this: DataTransferItemList): CNumber<"double">;
+    _get_length(this: DataTransferItemList): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_DataTransferItemList_add_2
      * @ntsThrows error nts_dom_exception_take_message
@@ -28492,7 +28493,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    remove(this: DataTransferItemList, index: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    remove(this: DataTransferItemList, index: Float64, error?: Ptr<DOMException | null>): void;
   }
   export type DataTransferItemListMethods = DataTransferItemListOwnMethods;
   export type DataTransferItemList = HostClass<"NtsDomDataTransferItemList", null, "nts_dom_retain", "nts_dom_release"> & DataTransferItemListMethods;
@@ -28658,11 +28659,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Touch_get_identifier
      */
-    _get_identifier(this: Touch): CNumber<"double">;
+    _get_identifier(this: Touch): Float64;
     /**
      * @ntsGet _get_identifier
      */
-    readonly identifier: CNumber<"double">;
+    readonly identifier: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_target
      */
@@ -28674,83 +28675,83 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Touch_get_screenX
      */
-    _get_screenX(this: Touch): CNumber<"double">;
+    _get_screenX(this: Touch): Float64;
     /**
      * @ntsGet _get_screenX
      */
-    readonly screenX: CNumber<"double">;
+    readonly screenX: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_screenY
      */
-    _get_screenY(this: Touch): CNumber<"double">;
+    _get_screenY(this: Touch): Float64;
     /**
      * @ntsGet _get_screenY
      */
-    readonly screenY: CNumber<"double">;
+    readonly screenY: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_clientX
      */
-    _get_clientX(this: Touch): CNumber<"double">;
+    _get_clientX(this: Touch): Float64;
     /**
      * @ntsGet _get_clientX
      */
-    readonly clientX: CNumber<"double">;
+    readonly clientX: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_clientY
      */
-    _get_clientY(this: Touch): CNumber<"double">;
+    _get_clientY(this: Touch): Float64;
     /**
      * @ntsGet _get_clientY
      */
-    readonly clientY: CNumber<"double">;
+    readonly clientY: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_pageX
      */
-    _get_pageX(this: Touch): CNumber<"double">;
+    _get_pageX(this: Touch): Float64;
     /**
      * @ntsGet _get_pageX
      */
-    readonly pageX: CNumber<"double">;
+    readonly pageX: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_pageY
      */
-    _get_pageY(this: Touch): CNumber<"double">;
+    _get_pageY(this: Touch): Float64;
     /**
      * @ntsGet _get_pageY
      */
-    readonly pageY: CNumber<"double">;
+    readonly pageY: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_radiusX
      */
-    _get_radiusX(this: Touch): CNumber<"double">;
+    _get_radiusX(this: Touch): Float64;
     /**
      * @ntsGet _get_radiusX
      */
-    readonly radiusX: CNumber<"double">;
+    readonly radiusX: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_radiusY
      */
-    _get_radiusY(this: Touch): CNumber<"double">;
+    _get_radiusY(this: Touch): Float64;
     /**
      * @ntsGet _get_radiusY
      */
-    readonly radiusY: CNumber<"double">;
+    readonly radiusY: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_rotationAngle
      */
-    _get_rotationAngle(this: Touch): CNumber<"double">;
+    _get_rotationAngle(this: Touch): Float64;
     /**
      * @ntsGet _get_rotationAngle
      */
-    readonly rotationAngle: CNumber<"double">;
+    readonly rotationAngle: Float64;
     /**
      * @ntsSymbol nts_dom_Touch_get_force
      */
-    _get_force(this: Touch): CNumber<"double">;
+    _get_force(this: Touch): Float64;
     /**
      * @ntsGet _get_force
      */
-    readonly force: CNumber<"double">;
+    readonly force: Float64;
   }
   export type TouchMethods = TouchOwnMethods;
   export type Touch = HostClass<"NtsDomTouch", null, "nts_dom_retain", "nts_dom_release"> & TouchMethods;
@@ -28758,15 +28759,15 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_TouchList_get_length
      */
-    _get_length(this: TouchList): CNumber<"double">;
+    _get_length(this: TouchList): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_TouchList_item
      */
-    item(this: TouchList, index: CNumber<"double">): Touch | null;
+    item(this: TouchList, index: Float64): Touch | null;
   }
   export type TouchListMethods = TouchListOwnMethods;
   export type TouchList = HostClass<"NtsDomTouchList", null, "nts_dom_retain", "nts_dom_release"> & TouchListMethods;
@@ -28812,11 +28813,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_AnimationEvent_get_elapsedTime
      */
-    _get_elapsedTime(this: AnimationEvent): CNumber<"double">;
+    _get_elapsedTime(this: AnimationEvent): Float64;
     /**
      * @ntsGet _get_elapsedTime
      */
-    readonly elapsedTime: CNumber<"double">;
+    readonly elapsedTime: Float64;
     /**
      * @ntsSymbol nts_dom_AnimationEvent_get_pseudoElement
      */
@@ -28866,11 +28867,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_TransitionEvent_get_elapsedTime
      */
-    _get_elapsedTime(this: TransitionEvent): CNumber<"double">;
+    _get_elapsedTime(this: TransitionEvent): Float64;
     /**
      * @ntsGet _get_elapsedTime
      */
-    readonly elapsedTime: CNumber<"double">;
+    readonly elapsedTime: Float64;
     /**
      * @ntsSymbol nts_dom_TransitionEvent_get_pseudoElement
      */
@@ -29018,19 +29019,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_ProgressEvent_get_loaded
      */
-    _get_loaded(this: ProgressEvent): CNumber<"double">;
+    _get_loaded(this: ProgressEvent): Float64;
     /**
      * @ntsGet _get_loaded
      */
-    readonly loaded: CNumber<"double">;
+    readonly loaded: Float64;
     /**
      * @ntsSymbol nts_dom_ProgressEvent_get_total
      */
-    _get_total(this: ProgressEvent): CNumber<"double">;
+    _get_total(this: ProgressEvent): Float64;
     /**
      * @ntsGet _get_total
      */
-    readonly total: CNumber<"double">;
+    readonly total: Float64;
     /**
      * @ntsSymbol nts_dom_ProgressEvent_get_isTrusted
      */
@@ -29072,19 +29073,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_ErrorEvent_get_lineno
      */
-    _get_lineno(this: ErrorEvent): CNumber<"double">;
+    _get_lineno(this: ErrorEvent): Float64;
     /**
      * @ntsGet _get_lineno
      */
-    readonly lineno: CNumber<"double">;
+    readonly lineno: Float64;
     /**
      * @ntsSymbol nts_dom_ErrorEvent_get_colno
      */
-    _get_colno(this: ErrorEvent): CNumber<"double">;
+    _get_colno(this: ErrorEvent): Float64;
     /**
      * @ntsGet _get_colno
      */
-    readonly colno: CNumber<"double">;
+    readonly colno: Float64;
     /**
      * @ntsSymbol nts_dom_ErrorEvent_get_isTrusted
      */
@@ -29206,11 +29207,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_networkState
      */
-    _get_networkState(this: HTMLMediaElement): CNumber<"double">;
+    _get_networkState(this: HTMLMediaElement): Float64;
     /**
      * @ntsGet _get_networkState
      */
-    readonly networkState: CNumber<"double">;
+    readonly networkState: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_preload
      */
@@ -29248,11 +29249,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_readyState
      */
-    _get_readyState(this: HTMLMediaElement): CNumber<"double">;
+    _get_readyState(this: HTMLMediaElement): Float64;
     /**
      * @ntsGet _get_readyState
      */
-    readonly readyState: CNumber<"double">;
+    readonly readyState: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_seeking
      */
@@ -29264,26 +29265,26 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_currentTime
      */
-    _get_currentTime(this: HTMLMediaElement): CNumber<"double">;
+    _get_currentTime(this: HTMLMediaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_set_currentTime
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_currentTime(this: HTMLMediaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_currentTime(this: HTMLMediaElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_currentTime
      * @ntsSet _set_currentTime
      */
-    currentTime: CNumber<"double">;
+    currentTime: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_duration
      */
-    _get_duration(this: HTMLMediaElement): CNumber<"double">;
+    _get_duration(this: HTMLMediaElement): Float64;
     /**
      * @ntsGet _get_duration
      */
-    readonly duration: CNumber<"double">;
+    readonly duration: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_paused
      */
@@ -29295,33 +29296,33 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_defaultPlaybackRate
      */
-    _get_defaultPlaybackRate(this: HTMLMediaElement): CNumber<"double">;
+    _get_defaultPlaybackRate(this: HTMLMediaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_set_defaultPlaybackRate
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_defaultPlaybackRate(this: HTMLMediaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_defaultPlaybackRate(this: HTMLMediaElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_defaultPlaybackRate
      * @ntsSet _set_defaultPlaybackRate
      */
-    defaultPlaybackRate: CNumber<"double">;
+    defaultPlaybackRate: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_playbackRate
      */
-    _get_playbackRate(this: HTMLMediaElement): CNumber<"double">;
+    _get_playbackRate(this: HTMLMediaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_set_playbackRate
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_playbackRate(this: HTMLMediaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_playbackRate(this: HTMLMediaElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_playbackRate
      * @ntsSet _set_playbackRate
      */
-    playbackRate: CNumber<"double">;
+    playbackRate: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_played
      */
@@ -29409,18 +29410,18 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_volume
      */
-    _get_volume(this: HTMLMediaElement): CNumber<"double">;
+    _get_volume(this: HTMLMediaElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_set_volume
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_volume(this: HTMLMediaElement, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_volume(this: HTMLMediaElement, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_volume
      * @ntsSet _set_volume
      */
-    volume: CNumber<"double">;
+    volume: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_muted
      */
@@ -29450,19 +29451,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_webkitAudioDecodedByteCount
      */
-    _get_webkitAudioDecodedByteCount(this: HTMLMediaElement): CNumber<"double">;
+    _get_webkitAudioDecodedByteCount(this: HTMLMediaElement): Float64;
     /**
      * @ntsGet _get_webkitAudioDecodedByteCount
      */
-    readonly webkitAudioDecodedByteCount: CNumber<"double">;
+    readonly webkitAudioDecodedByteCount: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_get_webkitVideoDecodedByteCount
      */
-    _get_webkitVideoDecodedByteCount(this: HTMLMediaElement): CNumber<"double">;
+    _get_webkitVideoDecodedByteCount(this: HTMLMediaElement): Float64;
     /**
      * @ntsGet _get_webkitVideoDecodedByteCount
      */
-    readonly webkitVideoDecodedByteCount: CNumber<"double">;
+    readonly webkitVideoDecodedByteCount: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLMediaElement_canPlayType
      */
@@ -29488,45 +29489,45 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_get_width
      */
-    _get_width(this: HTMLVideoElement): CNumber<"double">;
+    _get_width(this: HTMLVideoElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_set_width
      */
-    _set_width(this: HTMLVideoElement, value: CNumber<"double">): void;
+    _set_width(this: HTMLVideoElement, value: Float64): void;
     /**
      * @ntsGet _get_width
      * @ntsSet _set_width
      */
-    width: CNumber<"double">;
+    width: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_get_height
      */
-    _get_height(this: HTMLVideoElement): CNumber<"double">;
+    _get_height(this: HTMLVideoElement): Float64;
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_set_height
      */
-    _set_height(this: HTMLVideoElement, value: CNumber<"double">): void;
+    _set_height(this: HTMLVideoElement, value: Float64): void;
     /**
      * @ntsGet _get_height
      * @ntsSet _set_height
      */
-    height: CNumber<"double">;
+    height: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_get_videoWidth
      */
-    _get_videoWidth(this: HTMLVideoElement): CNumber<"double">;
+    _get_videoWidth(this: HTMLVideoElement): Float64;
     /**
      * @ntsGet _get_videoWidth
      */
-    readonly videoWidth: CNumber<"double">;
+    readonly videoWidth: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_get_videoHeight
      */
-    _get_videoHeight(this: HTMLVideoElement): CNumber<"double">;
+    _get_videoHeight(this: HTMLVideoElement): Float64;
     /**
      * @ntsGet _get_videoHeight
      */
-    readonly videoHeight: CNumber<"double">;
+    readonly videoHeight: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_get_poster
      */
@@ -29543,19 +29544,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_get_webkitDecodedFrameCount
      */
-    _get_webkitDecodedFrameCount(this: HTMLVideoElement): CNumber<"double">;
+    _get_webkitDecodedFrameCount(this: HTMLVideoElement): Float64;
     /**
      * @ntsGet _get_webkitDecodedFrameCount
      */
-    readonly webkitDecodedFrameCount: CNumber<"double">;
+    readonly webkitDecodedFrameCount: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_get_webkitDroppedFrameCount
      */
-    _get_webkitDroppedFrameCount(this: HTMLVideoElement): CNumber<"double">;
+    _get_webkitDroppedFrameCount(this: HTMLVideoElement): Float64;
     /**
      * @ntsGet _get_webkitDroppedFrameCount
      */
-    readonly webkitDroppedFrameCount: CNumber<"double">;
+    readonly webkitDroppedFrameCount: Float64;
     /**
      * @ntsSymbol nts_dom_HTMLVideoElement_get_playsInline
      */
@@ -29584,23 +29585,23 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_TimeRanges_get_length
      */
-    _get_length(this: TimeRanges): CNumber<"double">;
+    _get_length(this: TimeRanges): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_TimeRanges_end
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    end(this: TimeRanges, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    end(this: TimeRanges, index: Float64, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsSymbol nts_dom_TimeRanges_start
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    start(this: TimeRanges, index: CNumber<"double">, error?: Ptr<DOMException | null>): CNumber<"double">;
+    start(this: TimeRanges, index: Float64, error?: Ptr<DOMException | null>): Float64;
   }
   export type TimeRangesMethods = TimeRangesOwnMethods;
   export type TimeRanges = HostClass<"NtsDomTimeRanges", null, "nts_dom_retain", "nts_dom_release"> & TimeRangesMethods;
@@ -29608,11 +29609,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_MediaError_get_code
      */
-    _get_code(this: MediaError): CNumber<"double">;
+    _get_code(this: MediaError): Float64;
     /**
      * @ntsGet _get_code
      */
-    readonly code: CNumber<"double">;
+    readonly code: Float64;
     /**
      * @ntsSymbol nts_dom_MediaError_get_message
      */
@@ -30473,11 +30474,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_TreeWalker_get_whatToShow
      */
-    _get_whatToShow(this: TreeWalker): CNumber<"double">;
+    _get_whatToShow(this: TreeWalker): Float64;
     /**
      * @ntsGet _get_whatToShow
      */
-    readonly whatToShow: CNumber<"double">;
+    readonly whatToShow: Float64;
     /**
      * @ntsSymbol nts_dom_TreeWalker_get_currentNode
      */
@@ -30564,11 +30565,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_NodeIterator_get_whatToShow
      */
-    _get_whatToShow(this: NodeIterator): CNumber<"double">;
+    _get_whatToShow(this: NodeIterator): Float64;
     /**
      * @ntsGet _get_whatToShow
      */
-    readonly whatToShow: CNumber<"double">;
+    readonly whatToShow: Float64;
     /**
      * @ntsSymbol nts_dom_NodeIterator_detach
      */
@@ -30990,7 +30991,7 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_IdleDeadline_timeRemaining
      */
-    timeRemaining(this: IdleDeadline): CNumber<"double">;
+    timeRemaining(this: IdleDeadline): Float64;
   }
   export type IdleDeadlineMethods = IdleDeadlineOwnMethods;
   export type IdleDeadline = HostClass<"NtsDomIdleDeadline", null, "nts_dom_retain", "nts_dom_release"> & IdleDeadlineMethods;
@@ -30998,11 +30999,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Blob_get_size
      */
-    _get_size(this: Blob): CNumber<"double">;
+    _get_size(this: Blob): Float64;
     /**
      * @ntsGet _get_size
      */
-    readonly size: CNumber<"double">;
+    readonly size: Float64;
     /**
      * @ntsSymbol nts_dom_Blob_get_type
      */
@@ -31016,13 +31017,13 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    slice(this: Blob, start: CNumber<"double">, end: CNumber<"double">, contentType: StringView, error?: Ptr<DOMException | null>): Blob;
+    slice(this: Blob, start: Float64, end: Float64, contentType: StringView, error?: Ptr<DOMException | null>): Blob;
     /**
      * @ntsSymbol nts_dom_Blob_slice_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    slice(this: Blob, start: CNumber<"double">, end: CNumber<"double">, error?: Ptr<DOMException | null>): Blob;
+    slice(this: Blob, start: Float64, end: Float64, error?: Ptr<DOMException | null>): Blob;
     /**
      * @ntsSymbol nts_dom_Blob_text
      */
@@ -31046,11 +31047,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_File_get_lastModified
      */
-    _get_lastModified(this: File): CNumber<"double">;
+    _get_lastModified(this: File): Float64;
     /**
      * @ntsGet _get_lastModified
      */
-    readonly lastModified: CNumber<"double">;
+    readonly lastModified: Float64;
     /**
      * @ntsSymbol nts_dom_File_get_webkitRelativePath
      */
@@ -31068,15 +31069,15 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_FileList_get_length
      */
-    _get_length(this: FileList): CNumber<"double">;
+    _get_length(this: FileList): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_FileList_item
      */
-    item(this: FileList, index: CNumber<"double">): File | null;
+    item(this: FileList, index: Float64): File | null;
   }
   export type FileListMethods = FileListOwnMethods;
   export type FileList = HostClass<"NtsDomFileList", null, "nts_dom_retain", "nts_dom_release"> & FileListMethods;
@@ -31084,19 +31085,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_ImageData_get_width
      */
-    _get_width(this: ImageData): CNumber<"double">;
+    _get_width(this: ImageData): Float64;
     /**
      * @ntsGet _get_width
      */
-    readonly width: CNumber<"double">;
+    readonly width: Float64;
     /**
      * @ntsSymbol nts_dom_ImageData_get_height
      */
-    _get_height(this: ImageData): CNumber<"double">;
+    _get_height(this: ImageData): Float64;
     /**
      * @ntsGet _get_height
      */
-    readonly height: CNumber<"double">;
+    readonly height: Float64;
     /**
      * @ntsSymbol nts_dom_ImageData_get_colorSpace
      */
@@ -31121,13 +31122,13 @@ declare module "nts:dom" {
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
    */
-  export function newImageData(sw: CNumber<"double">, sh: CNumber<"double">, error?: Ptr<DOMException | null>): ImageData;
+  export function newImageData(sw: Float64, sh: Float64, error?: Ptr<DOMException | null>): ImageData;
   /**
    * @ntsSymbol nts_dom_new_ImageData_3
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
    */
-  export function newImageData(sw: CNumber<"double">, sh: CNumber<"double">, settings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
+  export function newImageData(sw: Float64, sh: Float64, settings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
   export interface HTMLHeadElementOwnMethods {
   }
   export type HTMLHeadElementMethods = HTMLHeadElementOwnMethods & HTMLElementMethods;
@@ -31154,19 +31155,19 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_PerformanceEntry_get_startTime
      */
-    _get_startTime(this: PerformanceEntry): CNumber<"double">;
+    _get_startTime(this: PerformanceEntry): Float64;
     /**
      * @ntsGet _get_startTime
      */
-    readonly startTime: CNumber<"double">;
+    readonly startTime: Float64;
     /**
      * @ntsSymbol nts_dom_PerformanceEntry_get_duration
      */
-    _get_duration(this: PerformanceEntry): CNumber<"double">;
+    _get_duration(this: PerformanceEntry): Float64;
     /**
      * @ntsGet _get_duration
      */
-    readonly duration: CNumber<"double">;
+    readonly duration: Float64;
   }
   export type PerformanceEntryMethods = PerformanceEntryOwnMethods;
   export type PerformanceEntry = HostClass<"NtsDomPerformanceEntry", null, "nts_dom_retain", "nts_dom_release"> & PerformanceEntryMethods;
@@ -31236,18 +31237,18 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Animation_get_playbackRate
      */
-    _get_playbackRate(this: Animation): CNumber<"double">;
+    _get_playbackRate(this: Animation): Float64;
     /**
      * @ntsSymbol nts_dom_Animation_set_playbackRate
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _set_playbackRate(this: Animation, value: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    _set_playbackRate(this: Animation, value: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsGet _get_playbackRate
      * @ntsSet _set_playbackRate
      */
-    playbackRate: CNumber<"double">;
+    playbackRate: Float64;
     /**
      * @ntsSymbol nts_dom_Animation_get_playState
      */
@@ -31398,7 +31399,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    updatePlaybackRate(this: Animation, playback_rate: CNumber<"double">, error?: Ptr<DOMException | null>): void;
+    updatePlaybackRate(this: Animation, playback_rate: Float64, error?: Ptr<DOMException | null>): void;
   }
   export type AnimationMethods = AnimationOwnMethods & EventTargetMethods;
   export type Animation = HostClass<"NtsDomAnimation", EventTarget> & AnimationMethods;
@@ -31521,11 +31522,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_CaretPosition_get_offset
      */
-    _get_offset(this: CaretPosition): CNumber<"double">;
+    _get_offset(this: CaretPosition): Float64;
     /**
      * @ntsGet _get_offset
      */
-    readonly offset: CNumber<"double">;
+    readonly offset: Float64;
     /**
      * @ntsSymbol nts_dom_CaretPosition_getClientRect
      */
@@ -31539,11 +31540,11 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    _get_length(this: Storage, error?: Ptr<DOMException | null>): CNumber<"double">;
+    _get_length(this: Storage, error?: Ptr<DOMException | null>): Float64;
     /**
      * @ntsGet _get_length
      */
-    readonly length: CNumber<"double">;
+    readonly length: Float64;
     /**
      * @ntsSymbol nts_dom_Storage_clear
      * @ntsThrows error nts_dom_exception_take_message
@@ -31561,7 +31562,7 @@ declare module "nts:dom" {
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    key(this: Storage, index: CNumber<"double">, error?: Ptr<DOMException | null>): StringView | null;
+    key(this: Storage, index: Float64, error?: Ptr<DOMException | null>): StringView | null;
     /**
      * @ntsSymbol nts_dom_Storage_removeItem
      * @ntsThrows error nts_dom_exception_take_message
@@ -31623,11 +31624,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_Response_get_status
      */
-    _get_status(this: Response): CNumber<"double">;
+    _get_status(this: Response): Float64;
     /**
      * @ntsGet _get_status
      */
-    readonly status: CNumber<"double">;
+    readonly status: Float64;
     /**
      * @ntsSymbol nts_dom_Response_get_ok
      */
@@ -31690,7 +31691,7 @@ declare module "nts:dom" {
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
    */
-  export function Response_redirect(url: StringView, status: CNumber<"double">, error?: Ptr<DOMException | null>): Response;
+  export function Response_redirect(url: StringView, status: Float64, error?: Ptr<DOMException | null>): Response;
   /**
    * @ntsSymbol nts_dom_Response_redirect_1
    * @ntsThrows error nts_dom_exception_take_message
@@ -32297,11 +32298,11 @@ declare module "nts:dom" {
     /**
      * @ntsSymbol nts_dom_ParentNode_get_childElementCount
      */
-    _get_childElementCount(this: ParentNode): CNumber<"double">;
+    _get_childElementCount(this: ParentNode): Float64;
     /**
      * @ntsGet _get_childElementCount
      */
-    readonly childElementCount: CNumber<"double">;
+    readonly childElementCount: Float64;
     /**
      * @ntsSymbol nts_dom_ParentNode_append_sss
      * @ntsThrows error nts_dom_exception_take_message

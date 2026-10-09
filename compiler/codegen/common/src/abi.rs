@@ -69,8 +69,8 @@ pub fn unrepresentable_constants(program: &Program, abi: NativeAbi) -> Vec<Diagn
                         "NTS2007",
                         format!(
                             "the constant {constant} does not fit a {bits}-bit {} C `long` on this \
-                             target (Win64 is LLP64), and would be truncated; use `c_int64` or \
-                             `c_uint64` for a value this wide",
+                             target (Win64 is LLP64), and would be truncated; use `BigInt64` or \
+                             `BigUint64` for a value this wide",
                             if signed { "signed" } else { "unsigned" }
                         ),
                         op.origin.location,

@@ -5,7 +5,8 @@
  * @ntsHeader "hello.h"
  */
 declare module "c:gtk-hello" {
-  import type { Class, Closure, Ptr, c_char, c_int, c_uint, c_ulong } from "c:types";
+  import type { Class, Closure, Ptr } from "c:types";
+  import type { c_char, c_int, c_uint, c_ulong } from "@nts/scalars";
 
   // The instance hierarchy, root first, as GObject lays it out. GTK spells
   // these `typedef struct _GtkWidget GtkWidget`, so each tag is the

@@ -9,7 +9,8 @@
  * @ntsHeader "library.h"
  */
 declare module "c:library" {
-  import type { ConstPtr, Ptr, Struct, c_int, c_int64 } from "c:types";
+  import type { ConstPtr, Ptr, Struct } from "c:types";
+  import type { c_int, BigInt64 } from "@nts/scalars";
   // The context the C library hands back. It never looks inside; only this
   // program does, which is what an opaque context is for.
   export type Counter = Struct<{ total: c_int }, "counter">;
@@ -40,7 +41,7 @@ declare module "c:library" {
 
   /** The same at 64 bits, where the conversion has something to lose.
    * @ntsNoEscape f */
-  export function apply_wide(f: (n: c_int64) => c_int64, x: c_int64): c_int64;
+  export function apply_wide(f: (n: BigInt64) => BigInt64, x: BigInt64): BigInt64;
   /** Takes the same callback and never calls it.
    * @ntsNoEscape f
    */

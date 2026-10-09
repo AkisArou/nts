@@ -169,18 +169,18 @@ struct Spelled {
 fn scalar(c: &str) -> Option<(&'static str, &'static str)> {
     Some(match c {
         "char" => ("c_char", "char"),
-        "signed char" => ("c_int8", "int8_t"),
-        "unsigned char" => ("c_uint8", "uint8_t"),
-        "short" => ("c_int16", "int16_t"),
-        "unsigned short" => ("c_uint16", "uint16_t"),
+        "signed char" => ("Int8", "int8_t"),
+        "unsigned char" => ("Uint8", "uint8_t"),
+        "short" => ("Int16", "int16_t"),
+        "unsigned short" => ("Uint16", "uint16_t"),
         "int" => ("c_int", "int"),
         "unsigned int" => ("c_uint", "unsigned int"),
         "long" => LONG,
         "unsigned long" => ULONG,
-        "long long" => ("c_int64", "int64_t"),
-        "unsigned long long" => ("c_uint64", "uint64_t"),
-        "float" => ("c_float", "float"),
-        "double" => ("c_double", "double"),
+        "long long" => ("BigInt64", "int64_t"),
+        "unsigned long long" => ("BigUint64", "uint64_t"),
+        "float" => ("Float32", "float"),
+        "double" => ("Float64", "double"),
         "_Bool" => ("boolean", "bool"),
         _ => return None,
     })
@@ -422,9 +422,9 @@ impl Mapper<'_> {
             ("Ptr", "uint16_t *")
         };
         self.brands.insert(wrapper);
-        self.brands.insert("c_uint16");
+        self.brands.insert("Uint16");
         Ok(Spelled {
-            ts: nullable(format!("{wrapper}<c_uint16>"), how.optional || how.stored),
+            ts: nullable(format!("{wrapper}<Uint16>"), how.optional || how.stored),
             c: c_spelled.into(),
             uses: BTreeSet::new(),
         })
@@ -773,10 +773,10 @@ pub(crate) fn number(value: &Value) -> Option<String> {
 
 fn constant_brand(meta: &Type) -> Option<&'static str> {
     Some(match meta {
-        Type::I8 => "c_int8",
-        Type::U8 => "c_uint8",
-        Type::I16 => "c_int16",
-        Type::U16 => "c_uint16",
+        Type::I8 => "Int8",
+        Type::U8 => "Uint8",
+        Type::I16 => "Int16",
+        Type::U16 => "Uint16",
         Type::I32 => "c_int",
         Type::U32 => "c_uint",
         _ => return None,

@@ -36,7 +36,7 @@ import {
   loop_quit,
   loop_unref,
 } from "c:gtk-loop";
-import type { c_int, c_uint } from "c:types";
+import type { c_int, c_uint } from "@nts/scalars";
 
 // Logs `line` from a promise job: the `await` suspends, and what follows it
 // runs as a microtask. (`Promise.prototype.then` is not lowered yet.)

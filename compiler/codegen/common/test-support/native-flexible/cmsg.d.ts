@@ -14,11 +14,12 @@
  * @ntsDefine _GNU_SOURCE=1
  */
 declare module "c:sys/socket" {
-  import type { Flexible, Struct, c_int, c_size_t, c_uint8 } from "c:types";
+  import type { Flexible, Struct } from "c:types";
+  import type { c_int, c_size_t, Uint8 } from "@nts/scalars";
   export type CmsgHdr = Struct<{
     cmsg_len: c_size_t;
     cmsg_level: c_int;
     cmsg_type: c_int;
-    __cmsg_data: Flexible<c_uint8>;
+    __cmsg_data: Flexible<Uint8>;
   }, "cmsghdr">;
 }

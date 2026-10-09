@@ -5,7 +5,7 @@
 // `nts.config.ts` names. The import is what says which module and which
 // function; the config says where the header is; neither repeats the other.
 import { digest_step } from "c:digest";
-import type { c_uint32 } from "c:types";
+import type { Uint32 } from "@nts/scalars";
 
 /** The FNV offset basis, which a chain of `digest` calls starts from. */
 export const seed = 2166136261;
@@ -13,5 +13,5 @@ export const seed = 2166136261;
 // FNV works on 32-bit words, so each operand is one: `>>> 0` is the word a
 // number wraps to, which is what lets C's `uint32_t` take it.
 export function digest(from: number, value: number): number {
-  return digest_step((from >>> 0) as c_uint32, (value >>> 0) as c_uint32);
+  return digest_step((from >>> 0) as Uint32, (value >>> 0) as Uint32);
 }

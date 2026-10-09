@@ -40,7 +40,8 @@ import {
 } from "c:support";
 import { selector } from "objc:runtime";
 import { local } from "c:memory";
-import type { ByValue, Ptr, c_double } from "c:types";
+import type { ByValue, Ptr } from "c:types";
+import type { Float64 } from "@nts/scalars";
 
 let presses = 0;
 let ticks = 0;
@@ -281,7 +282,7 @@ function main(): void {
   console.log(`hit ${hitX} ${found === canvas ? "the canvas" : "something else"}`);
   // `drawRect:` sent with a rectangle whose size is known: AppKit's own
   // draws pass what it chooses, which since macOS 14 may exceed the bounds.
-  send_draw_rect(canvas, 1 as c_double, 2 as c_double, 40 as c_double, 30 as c_double);
+  send_draw_rect(canvas, 1 as Float64, 2 as Float64, 40 as Float64, 30 as Float64);
   console.log(`drawn ${drawnWidth}x${drawnHeight}`);
   // And a plain view, which is not: the override is the canvas's alone.
   console.log(`flipped ${canvas.isFlipped} ${view_is_flipped(canvas)} ${content === null ? "none" : view_is_flipped(content)}`);

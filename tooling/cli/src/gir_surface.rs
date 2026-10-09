@@ -570,7 +570,7 @@ export function made(): number {
             ("@nts/gi-gtk", "    append(this: Box, child: Widget): void;"),
             (
                 "@nts/gi-gtk",
-                "     * @ntsVfuncOut minimum? natural? minimumBaseline? naturalBaseline?\n     */\n    vfuncMeasure(this: Widget, orientation: CEnum<Orientation, c_uint>, forSize: CNumber<\"int\">): [CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">];",
+                "     * @ntsVfuncOut minimum? natural? minimumBaseline? naturalBaseline?\n     */\n    vfuncMeasure(this: Widget, orientation: CEnum<Orientation, c_uint>, forSize: c_int): [c_int, c_int, c_int, c_int];",
             ),
             (
                 "@nts/gi-gtk",
@@ -580,10 +580,7 @@ export function made(): number {
                 "@nts/gi-gtk",
                 "   * @ntsSymbol gtk_init\n   */\n  export function init(): void;",
             ),
-            (
-                "@nts/gi-glib",
-                "  export const PRIORITY_DEFAULT: CNumber<\"int\">;",
-            ),
+            ("@nts/gi-glib", "  export const PRIORITY_DEFAULT: c_int;"),
             (
                 "@nts/gi-glib",
                 "  export type GError = Class<\"_GError\"> & GErrorMethods;",
@@ -613,8 +610,8 @@ export function made(): number {
 
     fn pinned_vfunc_tuples(gtk: &Package) {
         for present in [
-            "     * @ntsVfuncOut minimum? natural? minimum_baseline? natural_baseline?\n     */\n    vfunc_measure(this: GtkWidget, orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<\"int\">): [CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">, CNumber<\"int\">];",
-            "vfunc_get_section?(this: GtkSectionModel, position: CNumber<\"uint\">): [CNumber<\"uint\">, CNumber<\"uint\">];",
+            "     * @ntsVfuncOut minimum? natural? minimum_baseline? natural_baseline?\n     */\n    vfunc_measure(this: GtkWidget, orientation: CEnum<GtkOrientation, c_uint>, for_size: c_int): [c_int, c_int, c_int, c_int];",
+            "vfunc_get_section?(this: GtkSectionModel, position: c_uint): [c_uint, c_uint];",
         ] {
             assert!(gtk.declarations.contains(present), "missing: {present}");
         }
@@ -631,8 +628,8 @@ export function made(): number {
             .find(|p| p.name == "@nts/gir-glib-2.0")
             .unwrap();
         for present in [
-            "/** @ntsConstant 0 */\n  export const G_PRIORITY_DEFAULT: CNumber<\"int\">;",
-            "/** @ntsConstant -2147483648 */\n  export const G_MININT32: CNumber<\"int32\">;",
+            "/** @ntsConstant 0 */\n  export const G_PRIORITY_DEFAULT: c_int;",
+            "/** @ntsConstant -2147483648 */\n  export const G_MININT32: Int32;",
         ] {
             assert!(glib.declarations.contains(present), "missing: {present}");
         }

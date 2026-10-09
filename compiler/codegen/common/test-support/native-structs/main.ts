@@ -1,7 +1,8 @@
-import type { Ptr, Struct, c_uint8, c_uint16, c_int32, c_double } from "c:types";
+import type { Ptr, Struct } from "c:types";
+import type { Uint8, Uint16, Int32, Float64 } from "@nts/scalars";
 import { addrOf as address } from "c:memory";
-type State = Struct<{ marker: c_uint8; total: c_double; count: c_uint16; tail: c_int32; data: Ptr<c_uint8> }, "NativeState">;
-declare function stamp(p: Ptr<c_uint16>): void;
+type State = Struct<{ marker: Uint8; total: Float64; count: Uint16; tail: Int32; data: Ptr<Uint8> }, "NativeState">;
+declare function stamp(p: Ptr<Uint16>): void;
 export function run(p: Ptr<State>): number {
     const alias = p;
     alias.total = 7.5;
@@ -12,7 +13,7 @@ export function run(p: Ptr<State>): number {
     return p.total + p.count + p.data[0];
 }
 
-type Keys = Struct<{ key: c_int32; count: c_int32 }, "KeyState">;
+type Keys = Struct<{ key: Int32; count: Int32 }, "KeyState">;
 let keyCalls = 0;
 function chooseKey(): "count" { keyCalls++; return "count"; }
 export function computedKey(p: Ptr<Keys>): number {

@@ -273,11 +273,10 @@ pub(crate) fn generate(
     Ok(modules)
 }
 
-/// The brands `c:types` declares, beside its `c_` scalars.
+/// The brands `c:types` declares; the scalars are `@nts/scalars`'.
 const C_BRANDS: &[&str] = &[
     "CBool",
     "CEnum",
-    "CNumber",
     "Struct",
     "ByValue",
     "Fields",
@@ -433,18 +432,33 @@ pub(crate) fn bind(
         "// as the metadata names that slot; the compiler refuses the two disagreeing."
     );
     let _ = writeln!(text, "declare module \"winrt:{namespace}\" {{");
-    let c_types: Vec<&str> = writer
-        .brands
-        .iter()
-        .copied()
-        .filter(|brand| brand.starts_with("c_") || C_BRANDS.contains(brand))
-        .collect();
-    if !c_types.is_empty() {
-        let _ = writeln!(
-            text,
-            "  import type {{ {} }} from \"c:types\";",
-            c_types.join(", ")
-        );
+    for (module, names) in [
+        (
+            "c:types",
+            writer
+                .brands
+                .iter()
+                .copied()
+                .filter(|brand| C_BRANDS.contains(brand))
+                .collect::<Vec<_>>(),
+        ),
+        (
+            nts_core::hir::native::SCALARS_MODULE,
+            writer
+                .brands
+                .iter()
+                .copied()
+                .filter(|brand| nts_core::hir::native::SCALARS.contains(brand))
+                .collect(),
+        ),
+    ] {
+        if !names.is_empty() {
+            let _ = writeln!(
+                text,
+                "  import type {{ {} }} from \"{module}\";",
+                names.join(", ")
+            );
+        }
     }
     let winrt: Vec<&str> = writer
         .brands
@@ -1730,7 +1744,7 @@ impl Writer<'_> {
             let why = match &ty {
                 // A string makes the struct one the program holds as a plain
                 // object, copied at the call (`Copied<T>`).
-                // And a boolean, one byte read as one (`CBool<c_uint8>`).
+                // And a boolean, one byte read as one (`CBool<Uint8>`).
                 Type::I8
                 | Type::U8
                 | Type::I16
@@ -1795,16 +1809,16 @@ impl Writer<'_> {
             Ok(brand.to_owned())
         };
         match ty {
-            Type::I8 => brand("c_int8", self),
-            Type::U8 => brand("c_uint8", self),
-            Type::I16 => brand("c_int16", self),
-            Type::U16 | Type::Char => brand("c_uint16", self),
-            Type::I32 => brand("c_int32", self),
-            Type::U32 => brand("c_uint32", self),
-            Type::I64 => brand("c_int64", self),
-            Type::U64 => brand("c_uint64", self),
-            Type::F32 => brand("c_float", self),
-            Type::F64 => brand("c_double", self),
+            Type::I8 => brand("Int8", self),
+            Type::U8 => brand("Uint8", self),
+            Type::I16 => brand("Int16", self),
+            Type::U16 | Type::Char => brand("Uint16", self),
+            Type::I32 => brand("Int32", self),
+            Type::U32 => brand("Uint32", self),
+            Type::I64 => brand("BigInt64", self),
+            Type::U64 => brand("BigUint64", self),
+            Type::F32 => brand("Float32", self),
+            Type::F64 => brand("Float64", self),
             Type::ValueName(named) if is_guid(named) => {
                 self.brands.insert("Guid");
                 Ok("Guid".to_owned())
@@ -1816,9 +1830,9 @@ impl Writer<'_> {
                 match def.category() {
                     TypeCategory::Enum => {
                         let underlying = if matches!(def.underlying_type(), Some(Type::U32)) {
-                            "c_uint32"
+                            "Uint32"
                         } else {
-                            "c_int32"
+                            "Int32"
                         };
                         let enumeration = self.named(&named.namespace, &named.name);
                         self.brands.insert("CEnum");
@@ -1834,8 +1848,8 @@ impl Writer<'_> {
             }
             Type::Bool => {
                 self.brands.insert("CBool");
-                self.brands.insert("c_uint8");
-                Ok("CBool<c_uint8>".to_owned())
+                self.brands.insert("Uint8");
+                Ok("CBool<Uint8>".to_owned())
             }
             // An object's handle, which may be null.
             Type::ClassName(_) => Ok(format!("{} | null", self.spell(ty, false)?)),
@@ -1956,9 +1970,7 @@ impl Writer<'_> {
                 if !outs.is_empty() {
                     return Err("an `in` parameter after an `out` one".to_owned());
                 }
-                parameters.push(format!(
-                    "{name}: Counted<{lent_as}, CNumber<\"uint32\">, \"before\">"
-                ));
+                parameters.push(format!("{name}: Counted<{lent_as}, Uint32, \"before\">"));
                 lent.push(name);
                 continue;
             }
@@ -2087,23 +2099,19 @@ impl Writer<'_> {
             writer.brands.insert(brand);
             Ok(brand.to_owned())
         };
-        // A plain `number` wherever a double holds every value, as `bind-gir`
-        // spells them; a 64-bit integer keeps its exact `bigint` brand.
-        let number = |c: &str, writer: &mut Self| {
-            writer.brands.insert("CNumber");
-            Ok(format!("CNumber<\"{c}\">"))
-        };
+        // Each a fixed width: a number to 32 bits and for both floats, and a
+        // 64-bit integer an exact `bigint`.
         match ty {
-            Type::I8 => number("int8", self),
-            Type::U8 => number("uint8", self),
-            Type::I16 => number("int16", self),
-            Type::U16 | Type::Char => number("uint16", self),
-            Type::I32 => number("int32", self),
-            Type::U32 => number("uint32", self),
-            Type::I64 => scalar("c_int64", self),
-            Type::U64 => scalar("c_uint64", self),
-            Type::F32 => number("float", self),
-            Type::F64 => number("double", self),
+            Type::I8 => scalar("Int8", self),
+            Type::U8 => scalar("Uint8", self),
+            Type::I16 => scalar("Int16", self),
+            Type::U16 | Type::Char => scalar("Uint16", self),
+            Type::I32 => scalar("Int32", self),
+            Type::U32 => scalar("Uint32", self),
+            Type::I64 => scalar("BigInt64", self),
+            Type::U64 => scalar("BigUint64", self),
+            Type::F32 => scalar("Float32", self),
+            Type::F64 => scalar("Float64", self),
             Type::String => {
                 self.brands.insert("HString");
                 Ok("HString".to_owned())
@@ -2305,8 +2313,8 @@ impl Writer<'_> {
         }
         let enumeration = self.named(&name.namespace, &name.name);
         let underlying = match def.underlying_type() {
-            Some(Type::U32) => "c_uint32",
-            _ => "c_int32",
+            Some(Type::U32) => "Uint32",
+            _ => "Int32",
         };
         self.brands.insert("CEnum");
         self.brands.insert(underlying);
@@ -2567,7 +2575,7 @@ impl Writer<'_> {
             return Ok(None);
         };
         self.brands.insert("Counted");
-        self.brands.insert("CNumber");
+        self.brands.insert("Uint32");
         Ok(Some(lent_as))
     }
 
@@ -3160,16 +3168,18 @@ impl Writer<'_> {
             text,
             "import {{ AsyncStatus }} from \"winrt:Windows.Foundation\";"
         );
-        for (module, brands) in [("c:types", C_BRANDS), ("winrt:types", WINRT_BRANDS)] {
-            let scalars = used
-                .iter()
-                .copied()
-                .filter(|word| module == "c:types" && word.starts_with("c_"));
+        for (module, brands) in [
+            ("c:types", C_BRANDS),
+            (
+                nts_core::hir::native::SCALARS_MODULE,
+                nts_core::hir::native::SCALARS,
+            ),
+            ("winrt:types", WINRT_BRANDS),
+        ] {
             let names: Vec<&str> = brands
                 .iter()
                 .copied()
                 .filter(|brand| used.contains(brand))
-                .chain(scalars)
                 .collect();
             if !names.is_empty() {
                 let _ = writeln!(

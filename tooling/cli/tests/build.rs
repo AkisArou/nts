@@ -769,7 +769,7 @@ export default defineConfig({
     );
     std::fs::write(
         project.join("src/main.ts"),
-        "import type { c_int } from \"c:types\";\nexport function half(n: c_int): number { return n / 2; }\n",
+        "import type { c_int } from \"@nts/scalars\";\nexport function half(n: c_int): number { return n / 2; }\n",
     )
     .expect("entry");
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1099,7 +1099,7 @@ fn native_fixture(name: &str) -> PathBuf {
     .expect("the body");
     std::fs::write(
         project.join("src/main.ts"),
-        "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: c_uint32): number {\n  return digest_step(2166136261 as c_uint32, value);\n}\n",
+        "import { digest_step } from \"c:digest\";\nimport type { Uint32 } from \"@nts/scalars\";\n\nexport function digestOf(value: Uint32): number {\n  return digest_step(2166136261 as Uint32, value);\n}\n",
     )
     .expect("the program");
     std::fs::write(
@@ -1155,7 +1155,7 @@ fn a_c_import_is_bound_and_the_package_c_is_linked_in() {
     let project = native_fixture("build-binding");
     std::fs::write(
         project.join("src/main.ts"),
-        "import { digest_step } from \"c:digest\";\nimport type { c_uint32 } from \"c:types\";\n\nexport function digestOf(value: c_uint32): number {\n  return digest_step(2166136261 as c_uint32, value);\n}\n",
+        "import { digest_step } from \"c:digest\";\nimport type { Uint32 } from \"@nts/scalars\";\n\nexport function digestOf(value: Uint32): number {\n  return digest_step(2166136261 as Uint32, value);\n}\n",
     )
     .expect("the program");
     std::fs::write(
@@ -1986,14 +1986,16 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
     );
 }
 
-/// `c:types` is the compiler's, and the refusal says where to get it.
+/// `c:types` and `@nts/scalars` are the compiler's, and the refusal says where
+/// to get them.
 ///
 /// **The message it replaced was true and unusable.** Trying to bind the brand
 /// module from a package's header failed with ``no complete definition of
-/// `c_uint32` in these headers`` -- a correct sentence about a symbol the reader
+/// `Uint32` in these headers`` -- a correct sentence about a symbol the reader
 /// never asked for, in a module their package was never supposed to declare.
 /// `examples/workspace/apps/node-brownfield` sat behind it, and the thing to do
-/// was add one path to a tsconfig.
+/// was add one path to a tsconfig. The scalar library is the same mistake, and
+/// was TypeScript's bare `Cannot find module` until it said so too.
 #[test]
 fn the_scalar_brand_module_is_not_bound_from_a_header() {
     let frontend =
@@ -2002,9 +2004,23 @@ fn the_scalar_brand_module_is_not_bound_from_a_header() {
         skip("the tsgo frontend");
         return;
     }
-    let project = fixture(
-        "build-c-brands",
-        r#"
+    for (name, module, entry) in [
+        (
+            "build-c-scalars",
+            "@nts/scalars",
+            "import type { c_int } from '@nts/scalars';\n\
+             export function one(n: c_int): number { return n as unknown as number; }\n",
+        ),
+        (
+            "build-c-types",
+            "c:types",
+            "import type { Ptr } from 'c:types';\n\
+             export function one(p: Ptr<number>): number { return p === null ? 0 : 1; }\n",
+        ),
+    ] {
+        let project = fixture(
+            name,
+            r#"
 import { defineConfig, library, sources, target } from "@nts/config";
 export default defineConfig({
   products: {
@@ -2013,31 +2029,31 @@ export default defineConfig({
   native: [sources({ dir: "native", header: "native/thing.h" })],
 });
 "#,
-    );
-    std::fs::create_dir_all(project.join("native")).expect("native dir");
-    std::fs::write(project.join("native/thing.h"), "int thing(int n);\n").expect("header");
-    // Imports the brands and does not put `libc.d.ts` in the program, which is
-    // the whole of the mistake being reported.
-    std::fs::write(
-        project.join("src/main.ts"),
-        "import type { c_int } from 'c:types';\n\
-         export function one(n: c_int): number { return n as unknown as number; }\n",
-    )
-    .expect("entry");
+        );
+        std::fs::create_dir_all(project.join("native")).expect("native dir");
+        std::fs::write(project.join("native/thing.h"), "int thing(int n);\n").expect("header");
+        // Imports the module and does not put `libc.d.ts` in the program,
+        // which is the whole of the mistake being reported.
+        std::fs::write(project.join("src/main.ts"), entry).expect("entry");
 
-    let run = build(&project, &[]);
-    assert!(!run.ok, "it bound the brand module anyway:\n{}", run.stdout);
-    assert!(
-        run.stderr.contains("libc.d.ts") && run.stderr.contains("c:types"),
-        "the refusal does not name the module and the file to add:\n{}",
-        run.stderr
-    );
-    // And not the old message, which named a symbol nobody wrote.
-    assert!(
-        !run.stderr.contains("no complete definition"),
-        "it still reports the header question:\n{}",
-        run.stderr
-    );
+        let run = build(&project, &[]);
+        assert!(
+            !run.ok,
+            "{module}: it bound the module anyway:\n{}",
+            run.stdout
+        );
+        assert!(
+            run.stderr.contains("libc.d.ts") && run.stderr.contains(&format!("imports `{module}`")),
+            "{module}: the refusal does not name the module and the file to add:\n{}",
+            run.stderr
+        );
+        // And not the old message, which named a symbol nobody wrote.
+        assert!(
+            !run.stderr.contains("no complete definition"),
+            "{module}: it still reports the header question:\n{}",
+            run.stderr
+        );
+    }
 }
 
 const WINDOWS_LIB: &str = r#"
@@ -4899,12 +4915,12 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         "export type DemoThing = Class<\"demo_thing_impl\"> & DemoThingMethods;",
         // GIR's methods, as methods of the handle: `thing.count()` is
         // `demo_thing_count(thing)`, its instance `this`.
-        "     * @ntsSymbol demo_thing_count\n     */\n    count(this: Const<DemoThing>): CNumber<\"int\">;",
+        "     * @ntsSymbol demo_thing_count\n     */\n    count(this: Const<DemoThing>): c_int;",
         "  export type DemoThingMethods = DemoThingOwnMethods;",
         "export function demo_thing_new(name: string): DemoThing;",
-        "export function demo_thing_count(thing: Const<DemoThing>): CNumber<\"int\">;",
-        "export function demo_on_tick(thing: DemoThing, tick: Closure<(thing: DemoThing) => void>): CNumber<\"uint\">;",
-        "export function demo_label_is_null(label: string | null): CNumber<\"int\">;",
+        "export function demo_thing_count(thing: Const<DemoThing>): c_int;",
+        "export function demo_on_tick(thing: DemoThing, tick: Closure<(thing: DemoThing) => void>): c_uint;",
+        "export function demo_label_is_null(label: string | null): c_int;",
         // A bitfield's flags, which a caller may leave out: none is `0`. The
         // enum is declared in the module by its GIR name and aliased by its
         // C name, which is what the signature spells.
@@ -4913,15 +4929,15 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         // Out parameters: a slot each, both stack storage the callee may not
         // keep, and the optional one left out unless a slot is given.
         "   * @ntsNoEscape width\n   * @ntsNoEscape height\n   * @ntsDefault height=null\n   */\n  \
-         export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<CNumber<\"int\">>, height?: Ptr<CNumber<\"int\">> | null): void;",
+         export function demo_thing_size(thing: Const<DemoThing>, width: Ptr<c_int>, height?: Ptr<c_int> | null): void;",
         // Bytes borrowed in place, their length after them and hidden.
         "   * @ntsNoEscape data\n   */\n  \
-         export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, CNumber<\"size_t\">, \"after\">): CNumber<\"int\">;",
+         export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, AsNumber<c_size_t>, \"after\">): c_int;",
         // A returned `gchar **` the caller frees.
         "   * @ntsFree g_strfreev\n   */\n  export function demo_split(text: string): string[];",
         // `argc` before `argv`: hidden, and filled from the array.
         "   * @ntsNoEscape argv\n   */\n  \
-         export function demo_count_args(argv: Counted<CStrings<\"char\">, CNumber<\"int\">, \"before\"> | null): CNumber<\"int\">;",
+         export function demo_count_args(argv: Counted<CStrings<\"char\">, c_int, \"before\"> | null): c_int;",
     ] {
         assert!(
             binding.contains(expected),
@@ -4935,15 +4951,15 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     assert!(
         binding.contains(
             "     * @ntsCall demo_thing_size_values\n     */\n    \
-             size(this: Const<DemoThing>): [CNumber<\"int\">, CNumber<\"int\">];\n    /**\n     * @ntsNoEscape width"
+             size(this: Const<DemoThing>): [c_int, c_int];\n    /**\n     * @ntsNoEscape width"
         ),
         "no values form before `size`:\n{binding}"
     );
     let values = std::fs::read_to_string(out.join("Demo-1.0.values.ts")).expect("the companion");
     assert!(
         values.contains(
-            "export function demo_thing_size_values(thing: Const<DemoThing>): [CNumber<\"int\">, CNumber<\"int\">] {\n  \
-             const width = local<CNumber<\"int\">>();\n  const height = local<CNumber<\"int\">>();\n  \
+            "export function demo_thing_size_values(thing: Const<DemoThing>): [c_int, c_int] {\n  \
+             const width = local<c_int>();\n  const height = local<c_int>();\n  \
              demo_thing_size(thing, width, height);\n  return [width[0], height[0]];\n}"
         ),
         "no values wrapper for `demo_thing_size`:\n{values}"
@@ -4959,7 +4975,7 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     // prototype, so GIR's `gint` for a `long` member is refused.
     assert!(
         binding.contains(
-            "     * @ntsVfunc DemoWidgetClass measure 8\n     */\n    vfunc_measure(this: DemoWidget, for_size: CNumber<\"int\">): CNumber<\"int\">;"
+            "     * @ntsVfunc DemoWidgetClass measure 8\n     */\n    vfunc_measure(this: DemoWidget, for_size: c_int): c_int;"
         ),
         "no `vfunc_measure`:\n{binding}"
     );

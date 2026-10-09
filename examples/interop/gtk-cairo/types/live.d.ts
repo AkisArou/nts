@@ -3,6 +3,6 @@
  * @ntsHeader "live.h"
  */
 declare module "c:live" {
-  import type { c_size_t } from "c:types";
+  import type { c_size_t } from "@nts/scalars";
   export function cairo_fixture_live(): c_size_t;
 }

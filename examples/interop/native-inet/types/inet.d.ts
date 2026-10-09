@@ -23,16 +23,14 @@
  * @ntsHeader netinet/in.h
  */
 declare module "c:arpa/inet" {
-  import type {
-    CArray, ConstPtr, Ptr, Struct, Union,
-    c_char, c_int, c_uint8, c_uint16, c_uint32,
-  } from "c:types";
+  import type { CArray, ConstPtr, Ptr, Struct, Union } from "c:types";
+  import type { c_char, c_int, Uint8, Uint16, Uint32 } from "@nts/scalars";
 
   export type In6Addr = Struct<{
     __in6_u: Union<{
-      __u6_addr8: CArray<c_uint8, 16>;
-      __u6_addr16: CArray<c_uint16, 8>;
-      __u6_addr32: CArray<c_uint32, 4>;
+      __u6_addr8: CArray<Uint8, 16>;
+      __u6_addr16: CArray<Uint16, 8>;
+      __u6_addr32: CArray<Uint32, 4>;
     }>;
   }, "in6_addr">;
 

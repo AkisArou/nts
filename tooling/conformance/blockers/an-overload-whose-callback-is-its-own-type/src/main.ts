@@ -2,7 +2,7 @@
 //
 // A delegated call chooses among the binding's overloads by each one's own
 // parameters (`overload_signature`), and each overload writes its callback's
-// type -- `Closure<(at: c_double) => void>` twice is two function types. The
+// type -- `Closure<(at: Float64) => void>` twice is two function types. The
 // frontend decomposed only the first overload's types, the checker's type of
 // an overloaded member being its first signature's, and a delegated call is
 // resolved to the program's declaration rather than the binding's, so
@@ -16,7 +16,7 @@
 // overloads, before the lane's binding shared one alias for the callback.
 //
 // Control, one difference -- both overloads naming one alias
-// (`type Callback = Closure<(at: c_double) => void>`): nothing refused before
+// (`type Callback = Closure<(at: Float64) => void>`): nothing refused before
 // this either.
 
 export function go(): number {

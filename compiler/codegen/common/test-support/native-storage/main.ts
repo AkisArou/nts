@@ -1,8 +1,9 @@
 import { local, sizeof, addrOf } from "c:memory";
 import { malloc, free } from "c:stdlib";
-import type { Ptr, Struct, c_int, c_uint8, c_double } from "c:types";
+import type { Ptr, Struct } from "c:types";
+import type { c_int, Uint8, Float64 } from "@nts/scalars";
 
-type State = Struct<{ flag: c_uint8; value: c_double; count: c_int; next: Ptr<c_int> | null }, "StorageState">;
+type State = Struct<{ flag: Uint8; value: Float64; count: c_int; next: Ptr<c_int> | null }, "StorageState">;
 /** This witness reads every field before TS initializes them, and checks alignment.
  * @ntsNoEscape states
  */

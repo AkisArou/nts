@@ -4,61 +4,62 @@
 // the document an entry runs in, and listening with a compiled closure.
 // Contract: abi/dom_abi.h.
 declare module "nts:dom" {
-  import type { CNumber, Closure, HostClass, Ptr, ScopedClosure, StringView } from "c:types";
+  import type { Closure, HostClass, Ptr, ScopedClosure, StringView } from "c:types";
+  import type { Float64, Int32 } from "@nts/scalars";
   /**
    * `requestAnimationFrame(callback)`: once, before the next frame, with its
    * time, in the queue page script's callbacks share.
    * @ntsSymbol nts_dom_request_animation_frame
    */
-  export function requestAnimationFrame(callback: Closure<(time: CNumber<"double">) => void>): CNumber<"int32">;
+  export function requestAnimationFrame(callback: Closure<(time: Float64) => void>): Int32;
   /** @ntsSymbol nts_dom_cancel_animation_frame */
-  export function cancelAnimationFrame(id: CNumber<"int32">): void;
+  export function cancelAnimationFrame(id: Int32): void;
   /**
    * `requestIdleCallback(callback, { timeout })`: once, in an idle period or
    * once the timeout (ms) passes, with the deadline. Answers the id
    * cancelIdleCallback takes.
    * @ntsSymbol nts_dom_request_idle_callback
    */
-  export function requestIdleCallback(callback: Closure<(deadline: IdleDeadline) => void>, timeout: CNumber<"double">): CNumber<"int32">;
+  export function requestIdleCallback(callback: Closure<(deadline: IdleDeadline) => void>, timeout: Float64): Int32;
   /**
    * `requestIdleCallback(callback)`: no timeout.
    * @ntsSymbol nts_dom_request_idle_callback_default
    */
-  export function requestIdleCallback(callback: Closure<(deadline: IdleDeadline) => void>): CNumber<"int32">;
+  export function requestIdleCallback(callback: Closure<(deadline: IdleDeadline) => void>): Int32;
   /** @ntsSymbol nts_dom_cancel_idle_callback */
-  export function cancelIdleCallback(id: CNumber<"int32">): void;
+  export function cancelIdleCallback(id: Int32): void;
   /**
    * `setTimeout(handler, timeout)`: once, after the timeout, as HTML's timer
    * steps schedule it. Answers the id clearTimeout takes.
    * @ntsSymbol nts_dom_set_timeout
    */
-  export function setTimeout(handler: Closure<() => void>, timeout: CNumber<"double">): CNumber<"int32">;
+  export function setTimeout(handler: Closure<() => void>, timeout: Float64): Int32;
   /**
    * `setTimeout(handler)`: the timeout is 0.
    * @ntsSymbol nts_dom_set_timeout_default
    */
-  export function setTimeout(handler: Closure<() => void>): CNumber<"int32">;
+  export function setTimeout(handler: Closure<() => void>): Int32;
   /**
    * `setInterval(handler, timeout)`: every timeout until cleared.
    * @ntsSymbol nts_dom_set_interval
    */
-  export function setInterval(handler: Closure<() => void>, timeout: CNumber<"double">): CNumber<"int32">;
+  export function setInterval(handler: Closure<() => void>, timeout: Float64): Int32;
   /**
    * `setInterval(handler)`: the timeout is 0, so at least 1 ms.
    * @ntsSymbol nts_dom_set_interval_default
    */
-  export function setInterval(handler: Closure<() => void>): CNumber<"int32">;
+  export function setInterval(handler: Closure<() => void>): Int32;
   /**
    * `clearTimeout(id)`: any number, converted as WebIDL's `long` (ToInt32),
    * as page script's binding converts it.
    * @ntsSymbol nts_dom_clear_timeout
    */
-  export function clearTimeout(id: CNumber<"double">): void;
+  export function clearTimeout(id: Float64): void;
   /**
    * `clearInterval(id)`: as clearTimeout.
    * @ntsSymbol nts_dom_clear_interval
    */
-  export function clearInterval(id: CNumber<"double">): void;
+  export function clearInterval(id: Float64): void;
   /**
    * `new MutationObserver(callback)`: Blink's own observer, delivering to
    * the closure with the records and the observer, at the microtask

@@ -5,7 +5,8 @@
  * @ntsHeader "closures.h"
  */
 declare module "c:closures" {
-  import type { Closure, Opaque, ScopedClosure, c_int } from "c:types";
+  import type { Closure, Opaque, ScopedClosure } from "c:types";
+  import type { c_int } from "@nts/scalars";
 
   export type Item = Opaque<"item">;
 

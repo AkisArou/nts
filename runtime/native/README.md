@@ -9,19 +9,24 @@ not implemented yet.
 ```ts
 import { abs } from "c:stdlib";
 import * as math from "c:math";
-import type { c_int, c_double } from "c:types";
 
 export function calculate(n: number): number {
-  return abs(n as c_int) + math.sqrt(4 as c_double) + 0.25;
+  return abs(n | 0) + math.sqrt(4) + 0.25;
 }
 ```
 
-Branded parameters identify the declared C ABI. The compiler inserts conversions
-at foreign calls; TypeScript functions and arithmetic retain ordinary `number`
-semantics. Results need no `as number` assertion. An assertion does not validate
-range: values must be representable by the requested C conversion. The 64-bit
-integer brands retain JavaScript number precision, so large C results can round.
-Brand properties have no runtime value and their reads are refused.
+The numbers in these declarations are kinds from `@nts/scalars`
+(`scalars.d.ts`, which `libc.d.ts` references): `c_int`, `Float64`, `Uint8`,
+`AsNumber<c_size_t>` and the rest. Each is the C ABI the declaration states. A
+kind is a `number` -- or a `bigint`, where every bit of a 64-bit integer is
+wanted -- with an optional label, so a plain number is written where one is
+wanted, with no cast, and a result needs no `as number`. nts checks the label
+instead: a number reaching a C integer or float must be proven one of the
+kind's values, or the build stops (NTS5001). `n | 0` is proven an `int`; an
+`as` is accepted only where nts proves it. A 64-bit integer handed over as a
+number (`AsNumber<C>`) is exact, and a `RangeError` past 2^53. A label has no
+run-time value, and reading one is refused. `docs/scalar-numbers.md` has the
+whole design.
 
 The initial declarations target LP64; generated C checks `int`, `long`, `size_t`,
 and `ptrdiff_t` widths. Link the C library and `libm` where required. The scalar

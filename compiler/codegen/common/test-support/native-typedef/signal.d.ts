@@ -16,7 +16,8 @@
  * @ntsDefine _GNU_SOURCE=1
  */
 declare module "c:signal" {
-  import type { CArray, ConstPtr, Ptr, Struct, Typedef, c_int, c_ulong } from "c:types";
+  import type { CArray, ConstPtr, Ptr, Struct, Typedef } from "c:types";
+  import type { c_int, c_ulong } from "@nts/scalars";
   export type SigSet = Typedef<Struct<{
     __val: CArray<c_ulong, 16>;
   }, "__sigset_t">>;

@@ -28,7 +28,8 @@ import {
   type Three,
 } from "c:records";
 import { local } from "c:memory";
-import type { Ptr, c_double, c_float, c_int, c_uint64 } from "c:types";
+import type { Ptr } from "c:types";
+import type { Float64, Float32, c_int, BigUint64 } from "@nts/scalars";
 
 function setRect(r: Ptr<Rect>, x: number, y: number, width: number, height: number): void {
   r.origin.x = x;
@@ -64,9 +65,9 @@ function main(): void {
   report(`three ${sum.a} ${sum.b} ${sum.c}`);
 
   const range = local<Range>();
-  range.location = 5n as c_uint64;
-  range.length = 7n as c_uint64;
-  const shifted = range_shift(range, 100n as c_uint64);
+  range.location = 5n as BigUint64;
+  range.length = 7n as BigUint64;
+  const shifted = range_shift(range, 100n as BigUint64);
   report(`range ${shifted.location} ${shifted.length}`);
 
   const pair = local<Pair>();
@@ -84,10 +85,10 @@ function main(): void {
   const colour = rgb_make(250 as c_int, 128 as c_int, 7 as c_int);
   report(`rgb ${colour.r} ${colour.g} ${colour.b}`);
 
-  const transform = transform_scale(2 as c_double, 3 as c_double);
+  const transform = transform_scale(2 as Float64, 3 as Float64);
   report(`transform ${transform.m[0]} ${transform.m[3]} ${transform.m[5]}`);
 
-  const floats = float_pair(0.5 as c_float, 0.25 as c_float);
+  const floats = float_pair(0.5 as Float32, 0.25 as Float32);
   report(`floats ${floats.x} ${floats.y}`);
 
   const small = local<Rect>();

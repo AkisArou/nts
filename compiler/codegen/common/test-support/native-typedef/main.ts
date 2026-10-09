@@ -1,6 +1,6 @@
 import { sigemptyset, sigaddset, sigismember, type SigSet } from "c:signal";
 import { local } from "c:memory";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 
 // `__sigset_t` is `typedef struct { unsigned long __val[16]; } __sigset_t;` --
 // a struct with **no tag**. C spells the type `__sigset_t` and never

@@ -8,7 +8,7 @@ import {
 } from "c:sys/epoll";
 import { local } from "c:memory";
 import { EPOLL_CTL_ADD, READABLE } from "./constants";
-import type { c_int, c_uint64 } from "c:types";
+import type { c_int, BigUint64 } from "@nts/scalars";
 
 // `EPOLL_CTL_ADD` and `EPOLLIN`, which a binding cannot name: one is a macro
 // and the other an enumerator, and neither is a declaration. **Their values are
@@ -59,7 +59,7 @@ export function aliasedLowHalf(value: c_int): number {
   // A 64-bit slot takes a `bigint`, and the cast is not ceremony: `Slot<T>`
   // projects to a plain `number` only for numeric members, so an exact
   // integer keeps its brand and a literal has to say which one it is.
-  event.data.u64 = 0n as c_uint64;
+  event.data.u64 = 0n as BigUint64;
   event.data.fd = value;
   return Number(event.data.u64);
 }

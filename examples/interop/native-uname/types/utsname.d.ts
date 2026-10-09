@@ -15,14 +15,15 @@
  * @ntsDefine _GNU_SOURCE
  */
 declare module "c:sys/utsname" {
-  import type { CArray, Ptr, Struct, c_char, c_int } from "c:types";
+  import type { CArray, Ptr, Struct } from "c:types";
+  import type { c_char, c_int } from "@nts/scalars";
   // Six fixed arrays stored inline. The length is part of the type because it
   // is part of the layout -- this struct is 390 bytes and is nothing without
   // them. glibc's sixth field is `domainname`; a declaration with five would
   // have the wrong size and the witness would say so.
   //
-  // `c_char` and not `c_uint8`: C's `char` is a third type, and the first
-  // version of this file used `c_uint8`. Same size, same alignment, same
+  // `c_char` and not `Uint8`: C's `char` is a third type, and the first
+  // version of this file used `Uint8`. Same size, same alignment, same
   // offsets -- and the witness refused it, which is the whole reason the
   // member's *type* is asserted and not only its position.
   export type UtsName = Struct<{

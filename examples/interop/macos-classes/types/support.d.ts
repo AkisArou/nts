@@ -3,7 +3,7 @@
  * @ntsHeader "support.h"
  */
 declare module "c:support" {
-  import type { c_int } from "c:types";
+  import type { c_int } from "@nts/scalars";
   import type { NSObject, NSString } from "objc:Foundation";
   export function report_string(label: string, text: NSString): void;
   export function weak_watch(object: NSObject): c_int;

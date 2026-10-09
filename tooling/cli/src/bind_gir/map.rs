@@ -128,7 +128,7 @@ pub(crate) struct Constructed {
 /// One numeric `<constant>`, declared by its C name with its type and its
 /// value in a tag, as every binding's constant is (`@ntsConstant`):
 /// `/** @ntsConstant 200 */ export const G_PRIORITY_DEFAULT_IDLE:
-/// CNumber<"int">;`.
+/// c_int;`.
 #[derive(Debug, Clone)]
 pub(crate) struct ConstantDecl {
     pub(crate) name: String,
@@ -502,7 +502,7 @@ pub(crate) fn module_of(namespace: &Namespace) -> String {
 
 /// The GIR scalar names and the brand each is, with the compiler's scalar
 /// behind it. The brand is the `c:types` name, and a test checks each against
-/// `Scalar::from_brand` so the two cannot drift.
+/// `Scalar::from_label` so the two cannot drift.
 pub(crate) const SCALARS: &[(&str, &str, Scalar)] = &[
     // `gboolean` is `int`, not C's `bool`: the ABI is four bytes.
     ("gboolean", "c_int", Scalar::Int),
@@ -510,20 +510,20 @@ pub(crate) const SCALARS: &[(&str, &str, Scalar)] = &[
     ("int", "c_int", Scalar::Int),
     ("guint", "c_uint", Scalar::UInt),
     ("gchar", "c_char", Scalar::Char),
-    ("guchar", "c_uint8", Scalar::UInt8),
-    ("gint8", "c_int8", Scalar::Int8),
-    ("guint8", "c_uint8", Scalar::UInt8),
-    ("gshort", "c_int16", Scalar::Int16),
-    ("gushort", "c_uint16", Scalar::UInt16),
-    ("gint16", "c_int16", Scalar::Int16),
-    ("guint16", "c_uint16", Scalar::UInt16),
-    ("gint32", "c_int32", Scalar::Int32),
-    ("guint32", "c_uint32", Scalar::UInt32),
-    ("gunichar", "c_uint32", Scalar::UInt32),
-    ("GQuark", "c_uint32", Scalar::UInt32),
-    ("gint64", "c_int64", Scalar::Int64),
-    ("guint64", "c_uint64", Scalar::UInt64),
-    ("goffset", "c_int64", Scalar::Int64),
+    ("guchar", "Uint8", Scalar::UInt8),
+    ("gint8", "Int8", Scalar::Int8),
+    ("guint8", "Uint8", Scalar::UInt8),
+    ("gshort", "Int16", Scalar::Int16),
+    ("gushort", "Uint16", Scalar::UInt16),
+    ("gint16", "Int16", Scalar::Int16),
+    ("guint16", "Uint16", Scalar::UInt16),
+    ("gint32", "Int32", Scalar::Int32),
+    ("guint32", "Uint32", Scalar::UInt32),
+    ("gunichar", "Uint32", Scalar::UInt32),
+    ("GQuark", "Uint32", Scalar::UInt32),
+    ("gint64", "BigInt64", Scalar::Int64),
+    ("guint64", "BigUint64", Scalar::UInt64),
+    ("goffset", "BigInt64", Scalar::Int64),
     ("glong", "c_long", Scalar::Long),
     ("gulong", "c_ulong", Scalar::ULong),
     ("gssize", "c_long", Scalar::Long),
@@ -532,13 +532,13 @@ pub(crate) const SCALARS: &[(&str, &str, Scalar)] = &[
     // (`long` on LP64, `__int64` on Windows), `guintptr` a `size_t`'s width.
     // The self-check compiles each prototype against the header, which is
     // what says the spelling is compatible.
-    ("time_t", "c_int64", Scalar::Int64),
+    ("time_t", "BigInt64", Scalar::Int64),
     ("guintptr", "c_size_t", Scalar::Size),
     // `GType` is a `gsize`.
     ("GType", "c_size_t", Scalar::Size),
-    ("gfloat", "c_float", Scalar::Float),
-    ("gdouble", "c_double", Scalar::Double),
-    ("double", "c_double", Scalar::Double),
+    ("gfloat", "Float32", Scalar::Float),
+    ("gdouble", "Float64", Scalar::Double),
+    ("double", "Float64", Scalar::Double),
 ];
 
 struct Mapper<'a> {
@@ -1796,12 +1796,15 @@ impl<'a> Mapper<'a> {
             let Some(value) = exact_integer(&constant.value) else {
                 continue;
             };
-            let c = brand.strip_prefix("c_").unwrap_or(brand);
-            self.binding.brands.insert("CNumber");
+            let ts = nts_core::hir::native::as_number(brand);
+            self.binding.brands.insert(brand);
+            if ts != *brand {
+                self.binding.brands.insert("AsNumber");
+            }
             self.binding.constants.push(ConstantDecl {
                 name: constant.c_name.clone(),
                 gir_name: constant.name.clone(),
-                ts: format!("CNumber<\"{c}\">"),
+                ts,
                 value,
             });
         }
@@ -2429,16 +2432,16 @@ impl<'a> Mapper<'a> {
                 Pointee::Const(Box::new(Pointee::Void)),
             ),
             "constguint8*" | "constguchar*" => (
-                "ConstPtr<c_uint8> | null",
+                "ConstPtr<Uint8> | null",
                 Pointee::Const(Box::new(Pointee::Scalar(Scalar::UInt8))),
             ),
-            "guint8*" | "guchar*" => ("Ptr<c_uint8> | null", Pointee::Scalar(Scalar::UInt8)),
+            "guint8*" | "guchar*" => ("Ptr<Uint8> | null", Pointee::Scalar(Scalar::UInt8)),
             "gchar*" | "char*" => ("Ptr<c_char> | null", Pointee::Scalar(Scalar::Char)),
             _ => return Err(Reason::Array),
         };
         self.binding
             .brands
-            .extend(["Ptr", "ConstPtr", "c_uint8", "c_char"]);
+            .extend(["Ptr", "ConstPtr", "Uint8", "c_char"]);
         Ok(Mapped {
             shape: Shape::Bytes { length, owned },
             ts: ts.to_owned(),
@@ -2522,10 +2525,10 @@ impl<'a> Mapper<'a> {
             .collect();
         let (ts, element) = match spelling.as_str() {
             "gchar**" | "char**" => ("Ptr<Ptr<c_char> | null>", Scalar::Char),
-            "guint8**" | "guchar**" => ("Ptr<Ptr<c_uint8> | null>", Scalar::UInt8),
+            "guint8**" | "guchar**" => ("Ptr<Ptr<Uint8> | null>", Scalar::UInt8),
             _ => return Err(Reason::Array),
         };
-        self.binding.brands.extend(["Ptr", "c_uint8", "c_char"]);
+        self.binding.brands.extend(["Ptr", "Uint8", "c_char"]);
         Ok(Mapped {
             shape: Shape::Bytes {
                 length: length.to_owned(),
@@ -2631,9 +2634,10 @@ impl<'a> Mapper<'a> {
             if depth != 0 {
                 return Err(Reason::PointerDepth(c_type.to_owned()));
             }
-            // A plain `number`, as GJS takes one -- a 64-bit size, length,
-            // offset or handler id rounds past 2^53 there too. `GType` is an
-            // identifier, not a quantity, and keeps every bit as a `bigint`.
+            // A number, as GJS takes one -- a 64-bit size, length, offset or
+            // handler id as `AsNumber<C>`, which is a `RangeError` past 2^53
+            // where GJS rounds. `GType` is an identifier, not a quantity, and
+            // keeps every bit as a `bigint`.
             if name == "GType" {
                 self.binding.brands.insert(brand);
                 return Ok(Mapped {
@@ -2642,11 +2646,14 @@ impl<'a> Mapper<'a> {
                     c: Type::Scalar(*scalar),
                 });
             }
-            self.binding.brands.insert("CNumber");
-            let c = brand.strip_prefix("c_").unwrap_or(brand);
+            let ts = nts_core::hir::native::as_number(brand);
+            self.binding.brands.insert(brand);
+            if ts != *brand {
+                self.binding.brands.insert("AsNumber");
+            }
             return Ok(Mapped {
                 shape: Shape::Other,
-                ts: format!("CNumber<\"{c}\">"),
+                ts,
                 c: Type::Scalar(*scalar),
             });
         }
@@ -2990,7 +2997,7 @@ impl<'a> Mapper<'a> {
         let local = c_type.clone();
         self.binding
             .brands
-            .extend(["Erased", "ErasedClosure", "c_uint", "CNumber"]);
+            .extend(["Erased", "ErasedClosure", "c_uint", "c_ulong", "AsNumber"]);
         let (ts_parameters, emitted) = self.signal_parameters(signal)?;
         let result = match &signal.signature.result.ty {
             TypeRef::Named { name, .. } if name == "none" => Mapped {
@@ -3086,7 +3093,7 @@ impl<'a> Mapper<'a> {
             // `g_signal_handler_disconnect` takes back.
             result: Mapped {
                 shape: Shape::Other,
-                ts: "CNumber<\"ulong\">".to_owned(),
+                ts: "AsNumber<c_ulong>".to_owned(),
                 c: Type::Scalar(Scalar::ULong),
             },
             c_parameters: vec![
@@ -3885,7 +3892,7 @@ mod tests {
     fn every_scalar_brand_reads_back_as_its_scalar() {
         for (gir, brand, scalar) in SCALARS {
             assert_eq!(
-                Scalar::from_brand(&format!("__{brand}")),
+                Scalar::from_label(&format!("__{brand}")),
                 Some(*scalar),
                 "`{gir}` is written as `{brand}`, which the compiler does not read as {scalar:?}"
             );

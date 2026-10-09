@@ -18,7 +18,7 @@
 // it without this module naming a libadwaita class.
 
 import { GtkActionBar, GtkFixed, GtkGrid, GtkHeaderBar, GtkNotebook, GtkOverlay, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
-import type { CNumber } from "c:types";
+import type { c_int } from "@nts/scalars";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { HostNode, insertAt, PlacedNode, type Props, textOf, type WidgetNode, writeAsReact } from "./HostNode.ts";
@@ -30,7 +30,7 @@ function numberProp(props: Props, key: string, fallback: number): number {
 }
 
 /** A number prop as the C `int` GTK takes it (src/numbers.ts), or `fallback` when the prop is not a number. */
-function intProp(props: Props, key: string, fallback: number): CNumber<"int"> {
+function intProp(props: Props, key: string, fallback: number): c_int {
   const value = props[key];
   return cInt(typeof value === "number" ? value : fallback, key);
 }

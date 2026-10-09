@@ -10,7 +10,7 @@
 //   ran is a GLib critical, and a GTK program under test makes those fatal.
 
 import { g_get_monotonic_time, g_idle_add_full, g_source_remove, g_timeout_add_full } from "c:GLib-2.0";
-import type { CNumber } from "c:types";
+import type { c_uint } from "@nts/scalars";
 
 import { cDelay } from "./numbers.ts";
 
@@ -45,7 +45,7 @@ export function postWork(): void {
 }
 
 // A timer is the source id GLib made, a `guint`, which goes back to GLib as one.
-export type Timer = CNumber<"uint">;
+export type Timer = c_uint;
 
 // Timeout sources that have not run yet, by id.
 const pending = new Set<number>();

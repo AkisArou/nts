@@ -1,5 +1,5 @@
 import { deliver, each_upto, item_weight, owned_answers, subscribe, unsubscribe, visit_items } from "c:closures";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 
 // Scoped: the arrow captures `total`, C calls it `upto` times during the
 // call, and the sum is read back after. 1 + 2 + ... + upto.

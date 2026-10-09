@@ -446,6 +446,14 @@ design above became in the code, and the choices made on the way:
 --strict`, the compile errors a build now stops on), over the same 648
 projects, by a release build of the step-1 branch:
 
+- **Correction (2026-10-09, after landing):** those 648 were 648 of the
+  tree's 1,248 projects; the list had left out all of `runtime/react`. Over
+  the other 602, the only strict errors are the five React native programs,
+  253 distinct sites: react-gtk's generated prop setters pass erased props
+  (an "any number") to C, plus handwritten ids, unbounded loop indices and
+  timeouts. Each is program-side (none is a fact the engine lacks); the
+  decisions went to the React lane, which puts the conversions in react-gtk's
+  generator. Everything else, `runtime/node` whole included, is clean.
 - **644 measured, 0 errors.** The last two were the Chromium lane's page
   script (`clearTimeout(state.pending)`, `clearInterval(<a number from an
   attribute>)`): WebIDL converts a timer id with ToInt32, so that lane's
@@ -471,6 +479,61 @@ projects, by a release build of the step-1 branch:
   example and runtime file is rewritten to it, in the same change;
 - written types become facts, obligations and storage widths;
 - strict stores.
+
+**Step 2 plan (2026-10-09).** In this order, each landing through the gate;
+the vocabulary switch (2d) is one landing, with no compatibility layer:
+
+| | Sub-step |
+|---|---|
+| 2a | **The library, `@nts/scalars`, types only** (step 3 adds the operations): the fixed widths as optional labels (`Scalar<K>`), C's own types as per-target tables (`CType<Name, Table>`), `CBool`, `CEnum`, `AsNumber`. Adapted from the playground's `scalars.d.ts`, with nts's decided rules in place of its own: an `as` is verified (D4), a float slot takes only an exact value (Q3), and nothing rounds or throws on its own. |
+| 2b | **Recognition by the library's marker** (S7): a kind is read from the label the library declares, never from a property name a program could write, and a program's own brand on a scalar keeps the kind. |
+| 2c | **Platform tables replace the two ABI models:** the build's targets select each C type's width, the check holds on every target (`Scalar::on` reads the tables), and `NativeAbi` keeps only the calling convention. |
+| 2d | **The switch:** every binding generator emits the library's names (C headers, GIR, Objective-C, WinMD, Java); checked-in bindings regenerated; examples, runtime and tests rewritten; `libc.d.ts`'s scalar brands and `CNumber` deleted. Its memory vocabulary (`Ptr`, `Struct`, `Opaque`, `local`) stays in `c:types`. |
+| 2e | **Q1 made whole:** arrays and functions invariant in their scalar positions (objects already are), `any` or a type parameter into a written slot a store like any other, and `as` on a container refused unless proven. |
+| 2f | **Storage at the written width:** a written field, global, local or array element held at its kind's width in every backend, and a written array as typed storage under S4. **The -0 decision is taken before this**, because a slot that *is* 32 bits cannot hold -0 at all. |
+| 2g | **The JVM's unsigned instructions** (E1), before unsigned widths become common. |
+
+**Step 2's first landing, as built (2026-10-09): 2a, 2b and 2d together,
+and Q4's check for `AsNumber`.**
+
+- **The library** is `runtime/native/scalars.d.ts`, the ambient module
+  `@nts/scalars`, which `libc.d.ts` references. Each kind is its own exported
+  type: a `number`, or a `bigint` where every bit of a 64-bit integer is
+  wanted, with an optional label. The fixed widths are `Int8` ... `Uint32`,
+  `BigInt64`, `BigUint64`, `Float32` and `Float64`. C's own types are
+  `c_char`, `c_int`, `c_uint`, `c_long`, `c_ulong`, `c_long32`, `c_ulong32`,
+  `c_size_t` and `c_ptrdiff_t`. And `AsNumber<C>` is a 64-bit C kind handed
+  over as a number. **Not as planned:** there is no generic `Scalar<K>` or
+  `CType<Name, Table>`. A separate name reads better in a binding and in an
+  error, and the per-target tables are 2c's. `CBool` and `CEnum` stay in
+  `c:types` until 2c moves them.
+- **Recognition (2b):** a kind is the label property declared inside
+  `declare module "@nts/scalars"`. `native::labelled` walks from the
+  property's declaration to its module. The same name written anywhere else
+  is an ordinary property: a test spoofs `__Int32` and is refused.
+- **The switch (2d):** every generator emits the library's names, imported
+  from `@nts/scalars` beside `c:types` (`bind::vocabulary_imports`). That
+  covers C headers, GIR, Objective-C (Swift's `Int` is `AsNumber<c_long>`),
+  WinMD (Win32 and WinRT) and Chromium's bindgen. `CNumber` and the `c_*`
+  brands are gone from `libc.d.ts`, with no alias kept. `runtime/react` moved
+  after the React lane's 829db5c13, and its `gen-widgets` reads the new names.
+- **`AsNumber<C>` is checked where C hands the number in (Q4).** A call's
+  result, and a C callback's argument, is exact up to and including 2^53 in
+  either direction, and a `RangeError` past it, never a rounded number. The
+  caller can catch a result's error. A callback's error stops the program at
+  the bridge, as any throw inside a callback does, since C has nowhere to
+  take it. The rule is written once, `FuncBuilder::exact_as_number`. At a
+  bridge it runs in a function lowering makes (`nts_exact_number_i64` or
+  `_u64`), through the converted-argument mechanism a sequence already used
+  (`Bridging::converted`, which replaced `Bridging::sequences`). The
+  generated GTK bindings have 18 callback types with such an argument, 16 of
+  them GIO's progress callbacks. One fixture runs both paths on C and LLVM
+  under both providers, and a sabotage of either half turns it red.
+- **Measured:** the strict check over 1,212 of the repo's tsconfigs (all but
+  `runtime/react`'s) found no NTS5001, and the projects it could not run are
+  the same ones step 1 could not.
+- **Left for later landings:** 2c, 2e, 2f and 2g as planned, with `CBool` and
+  `CEnum` moving to the library in 2c.
 
 **3. The operations** (F):
 - as compiler operations, with the node package and the oracle;

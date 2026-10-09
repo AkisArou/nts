@@ -36,7 +36,7 @@ this reasoning:
 > right size and the wrong struct.
 
 True, load-bearing, and now something a tool reads rather than something a
-person has to remember. `c_int16` is what the generator emits because that is
+person has to remember. `Int16` is what the generator emits because that is
 what the header says.
 
 **One thing the header does not state, and the tool will not invent.**

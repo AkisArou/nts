@@ -11,7 +11,8 @@
  * @ntsHeader unistd.h
  */
 declare module "c:unistd" {
-  import type { ConstPtr, Ptr, c_int, c_size_t, c_ptrdiff_t } from "c:types";
+  import type { ConstPtr, Ptr } from "c:types";
+  import type { c_int, c_size_t, c_ptrdiff_t } from "@nts/scalars";
   export type Fd = c_int;
   export type Count = c_size_t;
   // `ssize_t` is `ptrdiff_t` on this target; the witness checks that rather

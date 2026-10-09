@@ -5,13 +5,13 @@ and reads the bytes back out. The buffer never becomes a managed array and is
 never copied.
 
 ```ts
-const buf = local<c_uint8>(CAPACITY);
+const buf = local<Uint8>(CAPACITY);
 const got = read(fd as Fd, buf, max as Count);
 ```
 
 ## What this example is for
 
-`read` takes `void *`, and that is the point. `Ptr<c_uint8>` converts to
+`read` takes `void *`, and that is the point. `Ptr<Uint8>` converts to
 `Ptr<unknown>` because TypeScript's own variance says every `Ptr<T>` is a
 `Ptr<unknown>` — which is exactly the conversion C performs at the call. The
 reverse does not typecheck, and that is the direction mistakes live in: turning

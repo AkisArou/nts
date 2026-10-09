@@ -46,7 +46,7 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir:
 fn binding(method: &str, function: &str) -> String {
     format!(
         r#"declare module "winrt:Windows.Data.Json" {{
-  import type {{ c_double }} from "c:types";
+  import type {{ Float64 }} from "@nts/scalars";
   import type {{ ComClass, HString }} from "winrt:types";
   export interface IJsonValueMethods {{
     /**
@@ -58,7 +58,7 @@ fn binding(method: &str, function: &str) -> String {
      * @ntsVtable 9 GetNumber
      * @ntsHresult
      */
-    GetNumber(this: IJsonValue): c_double;
+    GetNumber(this: IJsonValue): Float64;
 {method}
   }}
   export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
@@ -194,7 +194,7 @@ fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
 fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
     let method_named = |slot_and_name: &str, method: &str| {
         format!(
-            "    /**\n     * @ntsVtable {slot_and_name}\n     * @ntsHresult\n     */\n    {method}(this: IJsonValue): c_double;"
+            "    /**\n     * @ntsVtable {slot_and_name}\n     * @ntsHresult\n     */\n    {method}(this: IJsonValue): Float64;"
         )
     };
     // (name, method spliced in, function spliced in, the call, the refusal)
@@ -222,7 +222,7 @@ fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
         ),
         (
             "factory-on-method",
-            "    /**\n     * @ntsVtable 10 GetBoolean\n     * @ntsHresult\n     * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C\n     */\n    GetBoolean(this: IJsonValue): c_double;".to_owned(),
+            "    /**\n     * @ntsVtable 10 GetBoolean\n     * @ntsHresult\n     * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C\n     */\n    GetBoolean(this: IJsonValue): Float64;".to_owned(),
             String::new(),
             "Parse(\"1\").GetBoolean()",
             "@ntsFactory on a method",
@@ -360,10 +360,11 @@ export function run(): string {
 /// call. `{program}` is spliced into `run`.
 fn copied(program: &str) -> (String, String) {
     let binding = r#"declare module "winrt:Windows.UI.Xaml.Interop" {
-  import type { c_int32, CEnum, Struct } from "c:types";
+  import type { CEnum, Struct } from "c:types";
+  import type { Int32 } from "@nts/scalars";
   import type { ComClass, Copied, HString } from "winrt:types";
   export const enum TypeKind { Primitive = 0, Metadata = 1, Custom = 2 }
-  export type TypeName = Struct<{ name: HString; kind: CEnum<TypeKind, c_int32> }, "Windows_UI_Xaml_Interop_TypeName">;
+  export type TypeName = Struct<{ name: HString; kind: CEnum<TypeKind, Int32> }, "Windows_UI_Xaml_Interop_TypeName">;
   export interface IFrameMethods {
     /**
      * @ntsVtable 10 Navigate
@@ -471,9 +472,10 @@ fn a_struct_holding_a_string_is_copied_at_the_call() {
 #[test]
 fn a_struct_out_parameter_is_copied_into_its_field() {
     let binding = r#"declare module "winrt:Windows.Data.Json" {
-  import type { c_float, Struct } from "c:types";
+  import type { Struct } from "c:types";
+  import type { Float32 } from "@nts/scalars";
   import type { ComClass, Copied, HString } from "winrt:types";
-  export type Vector2 = Struct<{ x: c_float; y: c_float }, "Windows_Foundation_Numerics_Vector2">;
+  export type Vector2 = Struct<{ x: Float32; y: Float32 }, "Windows_Foundation_Numerics_Vector2">;
   export interface IJsonValueMethods {
     /**
      * @ntsVtable 10 TryGetVector2
@@ -579,7 +581,8 @@ export function run(): number {
 #[test]
 fn an_array_of_objects_is_lent_as_the_interface_the_call_takes() {
     let binding = r#"declare module "winrt:Windows.Data.Json" {
-  import type { CHandles, CNumber, Counted } from "c:types";
+  import type { CHandles, Counted } from "c:types";
+  import type { Uint32 } from "@nts/scalars";
   import type { ComClass, HString } from "winrt:types";
   export interface IJsonValueMethods {
     /**
@@ -587,7 +590,7 @@ fn an_array_of_objects_is_lent_as_the_interface_the_call_takes() {
      * @ntsHresult
      * @ntsNoEscape items
      */
-    ReplaceAll(this: IJsonValue, items: Counted<CHandles<IJsonValue>, CNumber<"uint32">, "before">): void;
+    ReplaceAll(this: IJsonValue, items: Counted<CHandles<IJsonValue>, Uint32, "before">): void;
   }
   /**
    * @ntsQuery A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E
@@ -660,7 +663,8 @@ export function run(): number {
 #[test]
 fn a_string_array_is_lent_and_received_as_hstrings() {
     let binding = r#"declare module "winrt:Windows.Data.Json" {
-  import type { CNumber, Counted } from "c:types";
+  import type { Counted } from "c:types";
+  import type { Uint32 } from "@nts/scalars";
   import type { ComClass, HString, HStrings } from "winrt:types";
   export interface IJsonValueMethods {
     /**
@@ -668,7 +672,7 @@ fn a_string_array_is_lent_and_received_as_hstrings() {
      * @ntsHresult
      * @ntsNoEscape names
      */
-    SetNames(this: IJsonValue, names: Counted<HStrings, CNumber<"uint32">, "before">): void;
+    SetNames(this: IJsonValue, names: Counted<HStrings, Uint32, "before">): void;
     /**
      * @ntsVtable 11 GetNames
      * @ntsHresult out
@@ -739,16 +743,17 @@ export function run(): string {
 #[test]
 fn an_array_of_structs_is_copied_both_ways() {
     let binding = r#"declare module "winrt:Windows.Data.Json" {
-  import type { c_float, CNumber, Counted, Struct } from "c:types";
+  import type { Counted, Struct } from "c:types";
+  import type { Float32, Uint32 } from "@nts/scalars";
   import type { ComClass, Copied, CopiedArray, HString } from "winrt:types";
-  export type Point = Struct<{ x: c_float; y: c_float }, "Windows_Foundation_Point">;
+  export type Point = Struct<{ x: Float32; y: Float32 }, "Windows_Foundation_Point">;
   export interface IJsonValueMethods {
     /**
      * @ntsVtable 10 Convert
      * @ntsHresult
      * @ntsNoEscape points
      */
-    Convert(this: IJsonValue, points: Counted<CopiedArray<Point>, CNumber<"uint32">, "before">): Copied<Point>[];
+    Convert(this: IJsonValue, points: Counted<CopiedArray<Point>, Uint32, "before">): Copied<Point>[];
   }
   export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
   /**
@@ -810,25 +815,26 @@ export function run(): number {
 #[test]
 fn arrays_the_callee_fills_are_written_into_the_programs() {
     let binding = r#"declare module "winrt:Windows.Data.Json" {
-  import type { c_float, CNumber, Counted, Struct } from "c:types";
+  import type { Counted, Struct } from "c:types";
+  import type { Float32, Uint32 } from "@nts/scalars";
   import type { ComClass, FilledArray, FilledHandles, FilledStrings, HString } from "winrt:types";
-  export type Point = Struct<{ x: c_float; y: c_float }, "Windows_Foundation_Point">;
+  export type Point = Struct<{ x: Float32; y: Float32 }, "Windows_Foundation_Point">;
   export interface IJsonValueMethods {
     /**
      * @ntsVtable 10 GetMany
      * @ntsHresult
      */
-    GetMany(this: IJsonValue, items: Counted<FilledHandles<IJsonValue>, CNumber<"uint32">, "before">): CNumber<"uint32">;
+    GetMany(this: IJsonValue, items: Counted<FilledHandles<IJsonValue>, Uint32, "before">): Uint32;
     /**
      * @ntsVtable 11 GetStrings
      * @ntsHresult
      */
-    GetStrings(this: IJsonValue, items: Counted<FilledStrings, CNumber<"uint32">, "before">): CNumber<"uint32">;
+    GetStrings(this: IJsonValue, items: Counted<FilledStrings, Uint32, "before">): Uint32;
     /**
      * @ntsVtable 12 GetPoints
      * @ntsHresult
      */
-    GetPoints(this: IJsonValue, items: Counted<FilledArray<Point>, CNumber<"uint32">, "before">): void;
+    GetPoints(this: IJsonValue, items: Counted<FilledArray<Point>, Uint32, "before">): void;
   }
   export type IJsonValue = ComClass<"IJsonValue"> & IJsonValueMethods;
   /**
@@ -898,19 +904,20 @@ export function run(): number {
 #[test]
 fn a_boolean_array_is_lent_in_place_and_received_by_copy() {
     let binding = r#"declare module "winrt:Windows.Data.Json" {
-  import type { CNumber, Counted } from "c:types";
+  import type { Counted } from "c:types";
+  import type { Uint32 } from "@nts/scalars";
   import type { Booleans, ComClass, FilledBooleans, HString } from "winrt:types";
   export interface IJsonValueMethods {
     /**
      * @ntsVtable 10 Take
      * @ntsHresult
      */
-    Take(this: IJsonValue, flags: Counted<Booleans, CNumber<"uint32">, "before">): void;
+    Take(this: IJsonValue, flags: Counted<Booleans, Uint32, "before">): void;
     /**
      * @ntsVtable 11 Fill
      * @ntsHresult
      */
-    Fill(this: IJsonValue, flags: Counted<FilledBooleans, CNumber<"uint32">, "before">): void;
+    Fill(this: IJsonValue, flags: Counted<FilledBooleans, Uint32, "before">): void;
     /**
      * @ntsVtable 12 Give
      * @ntsHresult
@@ -1044,9 +1051,10 @@ export function run(): boolean {
 #[test]
 fn a_reference_is_read_as_its_value_or_null() {
     let binding = r#"declare module "winrt:Windows.Data.Json" {
-  import type { c_float, Struct } from "c:types";
+  import type { Struct } from "c:types";
+  import type { Float32 } from "@nts/scalars";
   import type { ComClass, Copied, HString } from "winrt:types";
-  export type Point = Struct<{ x: c_float; y: c_float }, "Windows_Foundation_Point">;
+  export type Point = Struct<{ x: Float32; y: Float32 }, "Windows_Foundation_Point">;
   export interface IJsonValueMethods {
     /**
      * @ntsVtable 10 get_Checked
@@ -1171,7 +1179,7 @@ export function run(flag: boolean | null): void {
 /// it one. It read as the `0` its slot held, with no diagnostic.
 #[test]
 fn a_declared_number_with_no_value_is_refused() {
-    let binding = "declare module \"c:Probe\" {\n  import type { c_uint } from \"c:types\";\n  export const UNTAGGED: c_uint;\n}\n";
+    let binding = "declare module \"c:Probe\" {\n  import type { c_uint } from \"@nts/scalars\";\n  export const UNTAGGED: c_uint;\n}\n";
     let source = "import { UNTAGGED } from \"c:Probe\";\nexport function run(message: number): boolean {\n  return message === UNTAGGED;\n}\n";
     let Some((_dir, prepared)) = prepare("valueless-constant", binding, source) else {
         eprintln!("skipped: no tsgo");
@@ -1198,7 +1206,7 @@ fn a_declared_number_with_no_value_is_refused() {
 #[test]
 fn a_bound_constant_is_its_number_where_it_is_read() {
     let binding = r#"declare module "c:Windows.Win32.UI.WindowsAndMessaging" {
-  import type { c_uint } from "c:types";
+  import type { c_uint } from "@nts/scalars";
   /** @ntsConstant 15 */
   export const WM_PAINT: c_uint;
   /** @ntsConstant 0x0F */
@@ -1387,10 +1395,10 @@ fn a_struct_holding_a_string_is_never_storage() {
 /// was never passed, and the no-escape marked the factory.
 #[test]
 fn a_static_taking_bytes_passes_the_count_before_them() {
-    let function = "  /**\n   * @ntsVtable 9 FromBytes\n   * @ntsNoEscape value\n   * @ntsHresult\n   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C\n   */\n  export function FromBytes(value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): IJsonValue;";
+    let function = "  /**\n   * @ntsVtable 9 FromBytes\n   * @ntsNoEscape value\n   * @ntsHresult\n   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C\n   */\n  export function FromBytes(value: Counted<CBytes<\"const uint8_t\">, Uint32, \"before\">): IJsonValue;";
     let binding = binding("", function).replace(
-        "import type { c_double } from \"c:types\";",
-        "import type { c_double, CBytes, CNumber, Counted } from \"c:types\";",
+        "import type { Float64 } from \"@nts/scalars\";",
+        "import type { CBytes, Counted } from \"c:types\"; import type { Float64, Int32, Uint32 } from \"@nts/scalars\";",
     );
     let source = "import { FromBytes } from \"winrt:Windows.Data.Json\";\nexport function run(): string {\n  return FromBytes(new Uint8Array([1, 2, 3])).Stringify();\n}\n";
     let Some((dir, prepared)) = prepare("bytes", &binding, source) else {
@@ -1465,7 +1473,7 @@ fn a_handle_at_module_scope_is_a_global() {
 /// written with, refused rather than read as a three-word slot.
 #[test]
 fn tags_on_one_line_are_refused_as_one_tag() {
-    let method = "    /** @ntsVtable 10 GetBoolean @ntsHresult */\n    GetBoolean(this: IJsonValue): c_double;";
+    let method = "    /** @ntsVtable 10 GetBoolean @ntsHresult */\n    GetBoolean(this: IJsonValue): Float64;";
     let source = "import { Parse } from \"winrt:Windows.Data.Json\";\nexport function run(): void {\n  Parse(\"1\").GetBoolean();\n}\n";
     let Some((_, prepared)) = prepare("one-line", &binding(method, ""), source) else {
         eprintln!("skipped: no tsgo");
@@ -1488,14 +1496,14 @@ fn tags_on_one_line_are_refused_as_one_tag() {
 #[test]
 fn a_static_in_a_namespace_is_called_on_its_factory() {
     let binding = r#"declare module "winrt:Windows.Data.Json" {
-  import type { c_double } from "c:types";
+  import type { Float64 } from "@nts/scalars";
   import type { ComClass, HString } from "winrt:types";
   export interface IJsonValueMethods {
     /**
      * @ntsVtable 9 GetNumber
      * @ntsHresult
      */
-    GetNumber(this: IJsonValue): c_double;
+    GetNumber(this: IJsonValue): Float64;
   }
   export type IJsonValue = ComClass<"Windows_Data_Json_IJsonValue"> & IJsonValueMethods;
   export type JsonValue = IJsonValue;
@@ -1536,13 +1544,13 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
         format!(
             r#"declare module "winrt:Windows.Data.Json" {{
   import type {{ ComClass, HString }} from "winrt:types";
-  import type {{ CNumber }} from "c:types";
+  import type {{ Float64 }} from "@nts/scalars";
   export interface IJsonValueMethods {{
     /**
      * @ntsVtable 9 GetNumber
      * @ntsHresult
      */
-    GetNumber(this: IJsonValue): CNumber<"double">;
+    GetNumber(this: IJsonValue): Float64;
   }}
   export type IJsonValue = ComClass<"Windows_Data_Json_IJsonValue"> & IJsonValueMethods;
   export interface JsonValueInterfaces {{
@@ -1587,7 +1595,7 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
     for (name, extra, call, refusal) in [
         (
             "query-args",
-            "    /**\n     * @ntsQuery A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E\n     */\n    as_Other(this: JsonValue, n: CNumber<\"double\">): IJsonValue;",
+            "    /**\n     * @ntsQuery A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E\n     */\n    as_Other(this: JsonValue, n: Float64): IJsonValue;",
             "JsonValue.Parse(\"1\").as_Other(1)",
             "takes arguments beside `this`",
         ),
@@ -1625,14 +1633,14 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
 fn events(handler: &str, iid: &str) -> String {
     format!(
         r#"declare module "winrt:Windows.Foundation" {{
-  import type {{ CNumber }} from "c:types";
+  import type {{ Int32, Uint32 }} from "@nts/scalars";
   import type {{ ComClass, Delegate, EventRegistrationToken, IInspectable }} from "winrt:types";
   export interface IMemoryBufferReferenceMethods {{
     /**
      * @ntsVtable 6 get_Capacity
      * @ntsHresult
      */
-    get_Capacity(this: IMemoryBufferReference): CNumber<"uint32">;
+    get_Capacity(this: IMemoryBufferReference): Uint32;
     /**
      * @ntsVtable 7 add_Closed
      * @ntsHresult
@@ -1696,7 +1704,7 @@ fn a_delegate_that_cannot_be_built_is_refused_by_name() {
     for (name, handler, iid, refusal) in [
         (
             "delegate-result",
-            "() => CNumber<\"int32\">",
+            "() => Int32",
             "F4637D4A-0760-5431-BFC0-24EB1D4F6C4F",
             "returns a value",
         ),

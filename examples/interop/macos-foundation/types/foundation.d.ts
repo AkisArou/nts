@@ -15,7 +15,8 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { Opaque, c_ulong } from "c:types";
+  import type { Opaque } from "c:types";
+  import type { c_ulong } from "@nts/scalars";
   import type { CString, ObjcClass } from "objc:types";
 
   /** The class object `+class` answers, which `isKindOfClass:` takes. Not an

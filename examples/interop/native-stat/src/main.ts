@@ -1,6 +1,7 @@
 import { stat, type Stat } from "c:sys/stat";
 import { local } from "c:memory";
-import type { ConstPtr, c_char } from "c:types";
+import type { ConstPtr } from "c:types";
+import type { c_char } from "@nts/scalars";
 
 // `struct stat` is the largest thing this compiler describes: 144 bytes,
 // sixteen members, three of them a nested `struct timespec`, several 64-bit,

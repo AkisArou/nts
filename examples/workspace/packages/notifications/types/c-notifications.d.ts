@@ -7,8 +7,8 @@
  * @ntsHeader /home/akisarou/Projects/nts/examples/workspace/packages/notifications/native/linux/scheduler.h
  */
 declare module "c:notifications" {
-  import type { c_double, c_int32 } from "c:types";
-  export function schedule_at(id: c_int32, delay_millis: c_double): void;
-  export function cancel_by_id(id: c_int32): void;
-  export function set_tap_handler(handler: (arg0: c_int32) => void): void;
+  import type { Float64, Int32 } from "@nts/scalars";
+  export function schedule_at(id: Int32, delay_millis: Float64): void;
+  export function cancel_by_id(id: Int32): void;
+  export function set_tap_handler(handler: (arg0: Int32) => void): void;
 }

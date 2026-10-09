@@ -11,7 +11,8 @@
 // other message lends one. So a binding never declares `retain`, `release`,
 // `autorelease`, `dealloc` or `retainCount`, and a call to one is refused.
 declare module "objc:types" {
-  import type { Class, ClassChain, CNumber } from "c:types";
+  import type { Class, ClassChain } from "c:types";
+  import type { AsNumber, BigInt64, BigUint64, Float32, Float64, Int16, Int32, Int8, Uint16, Uint32, Uint8, c_long, c_ulong } from "@nts/scalars";
   import type { ClassObject } from "objc:runtime";
 
   export type ObjcClass<Tag extends string, Parent extends ClassChain | null = null> = Class<Tag, Parent> & {
@@ -45,32 +46,30 @@ declare module "objc:types" {
   // than answering every message with nil. A class object is never counted.
   export type ObjcMeta<Tag extends string> = ClassObject & { readonly __objc_meta: Tag };
 
-  // Swift's numbers, as a binding spells a parameter or a property: a plain
-  // `number` passes with no cast, and crosses as the C type named, by the one
-  // definition `c:types` gives every binding (`CNumber`). An integer past 2^53
-  // rounds, as it does in any bridge to JavaScript; the `bigint` brands in
-  // `c:types` keep every bit where that matters.
-  export type Double = CNumber<"double">;
-  export type Float = CNumber<"float">;
+  // Swift's numbers, as a binding spells a parameter or a property: the kinds
+  // of `@nts/scalars` under Swift's names, where Swift's differ. A plain
+  // `number` passes with no cast and crosses as the C type the kind is. `Int`,
+  // `UInt` and the 64-bit widths are numbers, as Swift's are to JavaScript:
+  // exact to 2^53, and a value past it that C answers is a RangeError.
+  export type { Int8, Int16, Int32 } from "@nts/scalars";
+  export type Double = Float64;
+  export type Float = Float32;
   /** `CGFloat` is `double` on every 64-bit Apple target. */
   export type CGFloat = Double;
   /** `NSTimeInterval`, seconds. */
   export type TimeInterval = Double;
   /** `NSInteger`, 64 bits. */
-  export type Int = CNumber<"long">;
+  export type Int = AsNumber<c_long>;
   /** `NSUInteger`, 64 bits. */
-  export type UInt = CNumber<"ulong">;
-  export type Int8 = CNumber<"int8">;
+  export type UInt = AsNumber<c_ulong>;
   /** Swift's `ObjCBool`: a `BOOL` in memory, written through a `BOOL *`,
    * one byte that is `0` for `NO`. */
   export type ObjCBool = Int8;
-  export type UInt8 = CNumber<"uint8">;
-  export type Int16 = CNumber<"int16">;
-  export type UInt16 = CNumber<"uint16">;
-  export type Int32 = CNumber<"int32">;
-  export type UInt32 = CNumber<"uint32">;
-  export type Int64 = CNumber<"int64">;
-  export type UInt64 = CNumber<"uint64">;
+  export type UInt8 = Uint8;
+  export type UInt16 = Uint16;
+  export type UInt32 = Uint32;
+  export type Int64 = AsNumber<BigInt64>;
+  export type UInt64 = AsNumber<BigUint64>;
 
   // A C string where an Objective-C message takes a `const char *`: in a
   // message a plain `string` is an `NSString`, as Swift's `String` is, so
@@ -95,7 +94,8 @@ declare module "objc:types" {
 // are ABI-identical on both instead (every handle is a pointer, and `BOOL` is
 // returned as 0 or 1 in the low byte, which `boolean` reads).
 declare module "objc:runtime" {
-  import type { Opaque, c_size_t } from "c:types";
+  import type { Opaque } from "c:types";
+  import type { c_size_t } from "@nts/scalars";
 
   /** A class object: `Class`. Not counted; a class lives as long as the process. */
   export type ClassObject = Opaque<"objc_class">;

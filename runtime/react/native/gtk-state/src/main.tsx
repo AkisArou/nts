@@ -3,7 +3,7 @@
 
 import { gtk_init, GtkLabel, GtkWindow } from "c:Gtk-4.0";
 import { g_main_loop_new, g_timeout_add_full } from "c:GLib-2.0";
-import type { CNumber } from "c:types";
+import type { c_uint } from "@nts/scalars";
 import { react_gtk_emit, react_gtk_log } from "c:react-gtk-shim";
 import { createContainer, updateContainer } from "react-reconciler/ReactFiberReconciler.ts";
 import { ConcurrentRoot } from "react-reconciler/ReactRootTags.ts";
@@ -13,7 +13,7 @@ import { Counter } from "./Counter.tsx";
 function ignoreError(): void {}
 
 // Runs the main loop for `ms`: the scheduler's work and timers run in it.
-function settle(ms: CNumber<"uint">): void {
+function settle(ms: c_uint): void {
   const loop = g_main_loop_new(null, false);
   g_timeout_add_full(0, ms, () => {
     loop.quit();

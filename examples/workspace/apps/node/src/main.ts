@@ -2,7 +2,7 @@
 //
 // **`TextEncoder` is refused by lowering**, so the bytes come from the string
 // itself. `crypto-core.digest` takes a seed and a value because that is what its
-// C takes -- a `Uint8Array` is not a `ConstPtr<c_uint8>`, which a generated
+// C takes -- a `Uint8Array` is not a `ConstPtr<Uint8>`, which a generated
 // binding makes plain and a hand-written signature did not.
 import { digest, seed } from "@workspace/crypto-core";
 import { store } from "@workspace/storage";

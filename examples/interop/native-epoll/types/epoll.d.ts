@@ -20,12 +20,13 @@
  * @ntsHeader unistd.h
  */
 declare module "c:sys/epoll" {
-  import type { Packed, Ptr, Struct, Union, c_int, c_uint32, c_uint64 } from "c:types";
+  import type { Packed, Ptr, Struct, Union } from "c:types";
+  import type { c_int, Uint32, BigUint64 } from "@nts/scalars";
 
   /** `EPOLLIN`. Spelled here rather than imported: a macro is not a
    * declaration, so no binding can name one and the witness cannot check it.
    * The value is asserted against the real macro in `native/caller.c`. */
-  export type Events = c_uint32;
+  export type Events = Uint32;
 
   /** The four spellings of one word the kernel hands back untouched. It never
    * reads this; only the program that set it does. */
@@ -33,8 +34,8 @@ declare module "c:sys/epoll" {
     // `Ptr<unknown>` is C's `void *`.
     ptr: Ptr<unknown>;
     fd: c_int;
-    u32: c_uint32;
-    u64: c_uint64;
+    u32: Uint32;
+    u64: BigUint64;
   }, "epoll_data">;
 
   /** 12 bytes, not 16. `data` is 8 bytes wanting 8-byte alignment and it sits

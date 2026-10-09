@@ -524,7 +524,7 @@ pub struct Func {
     /// reads; [`Self::call_kind`] is what the call itself answers.
     pub written_return: Option<native::Scalar>,
     /// Where the return type is a tuple written with scalar kinds
-    /// (`[CNumber<"int">, CNumber<"int">]`), each position's kind; empty
+    /// (`[c_int, c_int]`), each position's kind; empty
     /// otherwise. Every `return` must prove each element fits, and so a
     /// read of that position of a call's result is the kind's range.
     pub written_return_elements: Vec<Option<native::Scalar>>,
@@ -902,20 +902,25 @@ pub struct HandleArrayParameter {
 pub struct Bridging {
     pub boxed: Vec<BoxedParameter>,
     pub arrays: Vec<HandleArrayParameter>,
-    /// Sequences C passes where the compiled function takes an array. Added
-    /// by lowering, which alone knows what the closure takes.
-    pub sequences: Vec<SequenceParameter>,
+    /// Arguments a function of this program's converts to what the
+    /// compiled function takes. Added by lowering, which alone knows what the
+    /// closure takes.
+    pub converted: Vec<ConvertedParameter>,
 }
 
-/// A parameter a bridge receives as a sequence -- nts:dom's
-/// `MutationRecordSequence`, `length` and `item` -- which the compiled
-/// function takes as an array: lib.dom's `MutationObserver` callback takes
-/// `MutationRecord[]`. `function`, a function of this program's that lowering
-/// made, makes the array -- a new one each call, as `WebIDL` makes one of a
-/// `sequence<T>` for page script -- and the bridge gives it back after the
-/// call, as it does a boxed copy.
+/// An argument C passes that `function`, a function of this program's that
+/// lowering made, converts to the compiled function's parameter, called by
+/// the bridge inside the callback, so what it throws stops there:
+///
+/// - a sequence -- nts:dom's `MutationRecordSequence`, `length` and `item` --
+///   where the closure takes an array (lib.dom's `MutationObserver` callback
+///   takes `MutationRecord[]`): a new array each call, as `WebIDL` makes one of
+///   a `sequence<T>` for page script, given back after the call as a boxed
+///   copy is;
+/// - a 64-bit integer where the closure takes a number (`AsNumber<C>`):
+///   exactly, and a `RangeError` past 2^53, as a call's result is.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SequenceParameter {
+pub struct ConvertedParameter {
     pub at: u32,
     pub function: String,
 }
@@ -953,17 +958,17 @@ impl Bridging {
         self.arrays.iter().find(|array| array.at as usize == at)
     }
 
-    /// The sequence C's argument `at` is, made an array, if it is one.
+    /// The function that converts C's argument `at`, if one does.
     #[must_use]
-    pub fn sequence(&self, at: usize) -> Option<&SequenceParameter> {
-        self.sequences
+    pub fn converted(&self, at: usize) -> Option<&ConvertedParameter> {
+        self.converted
             .iter()
-            .find(|sequence| sequence.at as usize == at)
+            .find(|converted| converted.at as usize == at)
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.boxed.is_empty() && self.arrays.is_empty() && self.sequences.is_empty()
+        self.boxed.is_empty() && self.arrays.is_empty() && self.converted.is_empty()
     }
 }
 

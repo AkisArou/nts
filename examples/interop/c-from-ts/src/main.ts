@@ -1,4 +1,4 @@
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 import {
   counter_clamp, counter_new, counter_destroy, counter_read, counter_bump,
 } from "c:counter";

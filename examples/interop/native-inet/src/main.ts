@@ -1,6 +1,7 @@
 import { inet_pton, type In6Addr } from "c:arpa/inet";
 import { local } from "c:memory";
-import type { ConstPtr, c_char, c_int } from "c:types";
+import type { ConstPtr } from "c:types";
+import type { c_char, c_int } from "@nts/scalars";
 
 // `AF_INET6`. A macro, so no binding can carry it; `native/caller.c` asserts
 // this against the real one.

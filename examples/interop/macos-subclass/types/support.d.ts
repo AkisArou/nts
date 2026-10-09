@@ -6,7 +6,7 @@
  * @ntsFramework CoreFoundation
  */
 declare module "c:support" {
-  import type { c_int } from "c:types";
+  import type { c_int } from "@nts/scalars";
   import type { Block } from "objc:types";
   import type { Implementation } from "objc:runtime";
   import type { NSObject } from "objc:Foundation";

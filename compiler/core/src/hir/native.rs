@@ -1,7 +1,9 @@
 //! Declaration-authored C ABI types. Brands describe a foreign boundary;
 //! inside TypeScript their values retain JavaScript's primitive semantics.
 
-use nts_semantic_schema::{LiteralValue, MemberKind, NodeId, SemanticSnapshot, TypeId, TypeKind};
+use nts_semantic_schema::{
+    LiteralValue, MemberKind, NodeId, NodeKind, SemanticSnapshot, TypeId, TypeKind,
+};
 
 use super::{HirType, ManagedType};
 
@@ -20,7 +22,7 @@ pub struct Function {
     /// ends in `...`.
     ///
     /// Spelled as a TypeScript rest parameter, which is already the right
-    /// signal and needs no tag: `open(path, flags, ...rest: c_uint32[])` is
+    /// signal and needs no tag: `open(path, flags, ...rest: Uint32[])` is
     /// `int open(const char *, int, ...)`.
     ///
     /// **A type, where C has none.** The prototype constrains nothing after the
@@ -99,6 +101,11 @@ pub struct Function {
     /// `Declared<T, D>`: the handle the program receives, `T`, where `result`
     /// is the ancestor `D` C declares. The call's value is converted to it.
     pub result_as: Option<Type>,
+    /// `AsNumber<C>`: `result` is a 64-bit integer the binding hands the
+    /// program as a number -- exactly, so a value past 2^53 is a
+    /// `RangeError` where the call answers it (Q4: the check the binding wrote
+    /// by spelling the result so).
+    pub result_as_number: bool,
     /// `@ntsVtable`: a COM method, called through a slot of the receiver's
     /// function table rather than a symbol. `parameters[0]` is the receiver.
     pub vtable: Option<Vtable>,
@@ -778,7 +785,7 @@ pub(crate) fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(
 /// lane read
 ///
 /// ```text
-/// use a c_int/c_double brand, boolean, or string is not supported by this
+/// use a c_int/Float64 brand, boolean, or string is not supported by this
 /// lowering yet
 /// ```
 ///
@@ -799,7 +806,8 @@ fn no_abi_type(
             "foreign function `{function}`'s {what}, `{record}` as storage -- a struct holding a Windows Runtime string, which is only ever `Copied<T>`,"
         );
     }
-    let wants = "a c_int or c_double brand, a boolean, or a string";
+    let wants =
+        "a kind from `@nts/scalars` (`Int32`, `c_int`, `Float64` ...), a boolean, or a string";
     match parameter {
         Some(name) => format!(
             "foreign function `{function}`'s parameter `{name}` (which wants {wants}), a type with no native ABI"
@@ -845,6 +853,7 @@ impl Function {
                 factory: None,
             }),
             hresult: false,
+            result_as_number: false,
         }
     }
 
@@ -2606,6 +2615,8 @@ impl Function {
             returned(snapshot, &name, signature.return_type, abi)?
         };
         let result = records_checked(&name, &parameters, variadic.is_some(), returned.result)?;
+        let result_as_number = matches!(&result, Type::Scalar(kind) if kind.needs_exact_integer())
+            && !over_bigint(snapshot, signature.return_type);
         Ok(Self {
             name,
             convention: if abi == Some("managed") {
@@ -2632,6 +2643,7 @@ impl Function {
             libraries: Vec::new(),
             defaults: given,
             result_as: returned.program,
+            result_as_number,
             vtable: None,
             hresult: hresult.is_some(),
         })
@@ -5062,7 +5074,7 @@ pub enum Scalar {
     /// `char[65]` member described as `uint8_t[65]` has the same size, the same
     /// alignment and the same offsets, and is a different type -- which is
     /// exactly what the witness caught when `struct utsname` was first written
-    /// with `c_uint8`.
+    /// with `Uint8`.
     Char,
     Int,
     UInt,
@@ -5088,33 +5100,90 @@ pub enum Scalar {
     Double,
     /// A Windows Runtime `boolean` held in a struct: one byte, 0 or 1, and a
     /// boolean to the program -- read as one, written as 0 or 1. Spelled
-    /// `CBool<c_uint8>` as a field (`CorePhysicalKeyStatus.IsExtendedKey`).
+    /// `CBool<Uint8>` as a field (`CorePhysicalKeyStatus.IsExtendedKey`).
     Bool8,
 }
 
+/// Every name `@nts/scalars` exports (`runtime/native/scalars.d.ts`), which is
+/// where a program and every binding generator import them from; everything
+/// else a binding names -- `Ptr`, `Struct`, `Opaque` -- is `c:types`'s.
+pub const SCALARS: &[&str] = &[
+    "Int8",
+    "Uint8",
+    "Int16",
+    "Uint16",
+    "Int32",
+    "Uint32",
+    "BigInt64",
+    "BigUint64",
+    "Float32",
+    "Float64",
+    "c_char",
+    "c_int",
+    "c_uint",
+    "c_long",
+    "c_ulong",
+    "c_long32",
+    "c_ulong32",
+    "c_size_t",
+    "c_ptrdiff_t",
+    "AsNumber",
+];
+
+/// How a binding spells the kind `name` handed to a program as a number: the
+/// kind itself where a number carries it, and `AsNumber<name>` where a bigint
+/// does -- a size, a length, a handler id.
+#[must_use]
+pub fn as_number(name: &str) -> String {
+    let wide = Scalar::from_label(&format!("__{name}")).is_some_and(Scalar::needs_exact_integer);
+    if wide {
+        format!("AsNumber<{name}>")
+    } else {
+        name.to_owned()
+    }
+}
+
+/// The library of scalar kinds, `runtime/native/scalars.d.ts`.
+pub const SCALARS_MODULE: &str = "@nts/scalars";
+
+/// The memory vocabulary (`Ptr`, `Struct`, `Opaque` ...), declared by
+/// `runtime/native/libc.d.ts`, which references the scalar library.
+pub const TYPES_MODULE: &str = "c:types";
+
+/// The module a binding imports one of its vocabulary's names from.
+#[must_use]
+pub fn vocabulary_module(name: &str) -> &'static str {
+    if SCALARS.contains(&name) {
+        SCALARS_MODULE
+    } else {
+        TYPES_MODULE
+    }
+}
+
 impl Scalar {
+    /// The kind `@nts/scalars` names by a label, `__Int32` or `__c_long`.
     #[must_use]
-    pub fn from_brand(name: &str) -> Option<Self> {
+    pub fn from_label(name: &str) -> Option<Self> {
         Some(match name {
+            "__Int8" => Self::Int8,
+            "__Uint8" => Self::UInt8,
+            "__Int16" => Self::Int16,
+            "__Uint16" => Self::UInt16,
+            "__Int32" => Self::Int32,
+            "__Uint32" => Self::UInt32,
+            "__BigInt64" => Self::Int64,
+            "__BigUint64" => Self::UInt64,
+            "__Float32" => Self::Float,
+            "__Float64" => Self::Double,
             "__c_char" => Self::Char,
             "__c_int" => Self::Int,
             "__c_uint" => Self::UInt,
-            "__c_int8" => Self::Int8,
-            "__c_uint8" => Self::UInt8,
-            "__c_int16" => Self::Int16,
-            "__c_uint16" => Self::UInt16,
-            "__c_int32" => Self::Int32,
-            "__c_uint32" => Self::UInt32,
-            "__c_int64" => Self::Int64,
-            "__c_uint64" => Self::UInt64,
             "__c_long" => Self::Long,
             "__c_ulong" => Self::ULong,
             "__c_long32" => Self::Long32,
             "__c_ulong32" => Self::ULong32,
             "__c_size_t" => Self::Size,
             "__c_ptrdiff_t" => Self::Ptrdiff,
-            "__c_float" => Self::Float,
-            "__c_double" => Self::Double,
             _ => return None,
         })
     }
@@ -5275,8 +5344,8 @@ impl Scalar {
     }
 }
 
-/// Whether a scalar brand's TypeScript side is a `bigint` (`c_int64`) rather
-/// than a `number` (`c_int`, `CNumber<"size_t">`, an enum member).
+/// Whether a scalar brand's TypeScript side is a `bigint` (`BigInt64`) rather
+/// than a `number` (`c_int`, `AsNumber<c_size_t>`, an enum member).
 #[must_use]
 pub fn over_bigint(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     let Some(TypeKind::Intersection(parts)) = snapshot.types.get(ty.0 as usize).map(|t| &t.kind)
@@ -5296,97 +5365,125 @@ pub fn scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     if let Some(scalar) = enum_scalar(snapshot, ty) {
         return Some(scalar);
     }
+    labelled(snapshot, ty).or_else(|| slot_of(snapshot, ty))
+}
+
+/// `number & { readonly __c_of?: T }`: a number that is one of `T`'s -- a
+/// native memory slot's (`Slot<T>`), a copied record's field (`Copied<T>`,
+/// `Fields<T>`). A plain number is assignable; the kind is `T`'s, which the
+/// library's label decides like any other.
+fn slot_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     let TypeKind::Intersection(parts) = &snapshot.types.get(ty.0 as usize)?.kind else {
         return None;
     };
-    if parts.len() != 2 {
+    let [first, second] = parts.as_slice() else {
         return None;
-    }
-    let mut base = None;
-    let mut brand = None;
-    let mut optional = false;
-    for part in parts {
+    };
+    let mut of = None;
+    let mut over_number = false;
+    for part in [first, second] {
         match &snapshot.types.get(part.0 as usize)?.kind {
-            TypeKind::Number => base = Some(false),
-            TypeKind::BigInt => base = Some(true),
-            TypeKind::Object { properties } if properties.len() == 1 => {
-                let property = &properties[0];
-                if !property.readonly || property.kind != MemberKind::Field {
+            TypeKind::Number => over_number = true,
+            TypeKind::Object { properties } => {
+                let [property] = properties.as_slice() else {
+                    return None;
+                };
+                if property.name != "___c_of" || !property.readonly || !property.optional {
                     return None;
                 }
-                // `number & { readonly __c_of?: T }`: a number that is one of
-                // `T`'s -- a native memory slot's (`Slot<T>`), a copied
-                // record's field (`Copied<T>`). A plain number is assignable;
-                // the kind is `T`'s.
-                if property.name == "___c_of" && property.optional {
-                    brand = Some(present_scalar(snapshot, property.ty)?);
-                    optional = true;
-                    continue;
-                }
-                // `number & { readonly __c_double?: true }`: the brand as an
-                // optional `true`, which is how `objc:types` spells Swift's
-                // `Double`, `Int` and `CGFloat`. A plain `number` is assignable
-                // to it, so no cast is written, and it crosses as the brand's
-                // C type all the same.
-                if property.optional {
-                    if !is_true(snapshot, property.ty) {
-                        return None;
-                    }
-                    optional = true;
-                }
-                // The snapshot preserves the checker's unique-symbol flag;
-                // accepting ordinary `symbol` would also accept a real slot.
-                else if !matches!(snapshot.types.get(property.ty.0 as usize)?.kind,
-                    TypeKind::Structured { flags } if flags == 1 << 14)
-                {
-                    return None;
-                }
-                // PropertyRecord carries tsgo's escaped symbol name: a source
-                // name beginning `__` has one extra leading underscore.
-                brand = Scalar::from_brand(property.name.strip_prefix('_')?);
+                of = Some(present_scalar(snapshot, property.ty)?);
             }
             _ => return None,
         }
     }
-    // The base has to be the one the brand's range needs, and a mismatch is
-    // refused rather than reinterpreted. A `c_int64` spelled over `number`
-    // would silently be the lossy thing this pairing exists to prevent -- and
-    // it would still emit a correct `int64_t` prototype, so nothing downstream
-    // would notice.
-    let brand = brand?;
-    // A Swift-shaped number is a `number` whatever C's width is: Swift's `Int`
-    // is 64 bits, and a program writes `list.count / 2` without a `bigint` in
-    // sight. What a `number` cannot hold exactly -- an integer past 2^53 --
-    // rounds, as it does in every bridge to JavaScript; the required brands
-    // above keep `bigint` for code that needs every bit.
-    if optional {
-        return (!base?).then_some(brand);
-    }
-    (base? == brand.needs_exact_integer()).then_some(brand)
+    over_number.then_some(of?)
 }
 
-/// Whether a brand's type is `true`, or the `true | undefined` an optional
-/// property of it reads as.
-fn is_true(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    let is = |ty: TypeId| {
-        matches!(
-            snapshot.types.get(ty.0 as usize).map(|t| &t.kind),
-            Some(TypeKind::Literal(LiteralValue::Boolean(true)))
-        )
+/// The kind `@nts/scalars` labels a type with, if it carries one of its
+/// labels and nts can hold it: not a kind over the wrong carrier, and not two
+/// kinds at once.
+///
+/// A label is the library's own (S7): a property of its name declared in
+/// `declare module "@nts/scalars"`. One of the same name written anywhere else
+/// is an ordinary property, so a program cannot spell a kind it did not take
+/// from the library -- and its own brand beside one (`type UserId = Int32 & {
+/// readonly __user: true }`) keeps the kind.
+fn labelled(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
+    let TypeKind::Intersection(parts) = &snapshot.types.get(ty.0 as usize)?.kind else {
+        return None;
     };
-    match snapshot.types.get(ty.0 as usize).map(|t| &t.kind) {
-        Some(TypeKind::Union(parts)) => {
-            parts.iter().any(|part| is(*part))
-                && parts.iter().all(|part| {
-                    is(*part)
-                        || matches!(
-                            snapshot.types.get(part.0 as usize).map(|t| &t.kind),
-                            Some(TypeKind::Undefined)
-                        )
-                })
+    let (mut carrier, mut kind, mut as_number) = (None, None, false);
+    for part in parts {
+        match &snapshot.types.get(part.0 as usize)?.kind {
+            TypeKind::Number => carrier = Some(Carrier::Number),
+            TypeKind::BigInt => carrier = Some(Carrier::BigInt),
+            TypeKind::Object { properties } => {
+                let [property] = properties.as_slice() else {
+                    continue;
+                };
+                if !property.readonly || !property.optional || !from_the_library(snapshot, property)
+                {
+                    continue;
+                }
+                let found = match property.name.strip_prefix('_')? {
+                    // `AsNumber<C>`: a C kind wider than a number holds exactly,
+                    // carried as one.
+                    "__AsNumber" => {
+                        as_number = true;
+                        present_scalar(snapshot, property.ty)
+                    }
+                    label => Scalar::from_label(label),
+                };
+                // Two kinds at once is not a kind nts can hold.
+                if kind.is_some_and(|known| Some(known) != found) {
+                    return None;
+                }
+                kind = found;
+            }
+            _ => return None,
         }
-        _ => is(ty),
     }
+    let kind = kind?;
+    let wanted = if !as_number && kind.needs_exact_integer() {
+        Carrier::BigInt
+    } else {
+        Carrier::Number
+    };
+    (carrier? == wanted).then_some(kind)
+}
+
+/// What a scalar is carried as in the program.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Carrier {
+    Number,
+    BigInt,
+}
+
+/// Whether `property` is declared inside `declare module "@nts/scalars"`.
+fn from_the_library(
+    snapshot: &SemanticSnapshot,
+    property: &nts_semantic_schema::PropertyRecord,
+) -> bool {
+    let mut at = property.declaration;
+    while let Some(id) = at {
+        let Some(node) = snapshot.nodes.get(id.0 as usize) else {
+            return false;
+        };
+        if node.kind == NodeKind::Syntax(nts_semantic_schema::syntax::MODULE_DECLARATION) {
+            // The module's name is its string literal, after its modifiers:
+            // the specifier, without its quotes.
+            return node
+                .children
+                .iter()
+                .filter_map(|child| snapshot.nodes.get(child.0 as usize))
+                .any(|child| {
+                    child.kind == NodeKind::Syntax(nts_semantic_schema::syntax::STRING_LITERAL)
+                        && child.text.as_deref() == Some(SCALARS_MODULE)
+                });
+        }
+        at = node.parent;
+    }
+    false
 }
 
 /// `CEnum<E, B>`: an enum that C takes as the integer brand `B`.

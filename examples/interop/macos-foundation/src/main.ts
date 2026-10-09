@@ -21,7 +21,7 @@ import {
   type NSString,
 } from "objc:Foundation";
 import { unsafeDowncast } from "c:memory";
-import type { c_int, c_ulong } from "c:types";
+import type { c_int, c_ulong } from "@nts/scalars";
 
 function state(watch: c_int): string {
   return weak_alive(watch) ? "alive" : "gone";

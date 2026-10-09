@@ -7,11 +7,12 @@
  * @ntsHeader poll.h
  */
 declare module "c:poll" {
-  import type { Ptr, Struct, c_int, c_int16, c_ulong } from "c:types";
+  import type { Int16, c_int, c_ulong } from "@nts/scalars";
+  import type { Ptr, Struct } from "c:types";
   export type PollFd = Struct<{
     fd: c_int;
-    events: c_int16;
-    revents: c_int16;
+    events: Int16;
+    revents: Int16;
   }, "pollfd">;
   /** Nothing of `fds` outlives the call -- an authored claim, which no header
    * states and this tool did not read anywhere.

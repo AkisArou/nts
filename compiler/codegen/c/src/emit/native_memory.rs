@@ -1131,13 +1131,17 @@ fn bridge_argument(
     // release is the use-after-free. Without counting nothing is given back,
     // a box included: nothing counted a store either, and a release here
     // would run the box's free under a program that kept it.
-    // A sequence C passes, as the array the compiled function takes: made by
-    // the function lowering made for it (`Bridging::sequences`), and given
-    // back after the call under counting, as a boxed copy is.
-    if let Some(sequence) = bridging.sequence(at) {
-        let function = nts_codegen_common::symbols::c_identifier(&sequence.function);
+    // An argument the function lowering made for it converts
+    // (`Bridging::converted`) -- a sequence made an array, a 64-bit integer
+    // read exactly as a number -- inside the callback, so what it throws stops
+    // here. A managed result is given back after the call under counting, as
+    // a boxed copy is.
+    if let Some(converted) = bridging.converted(at) {
+        let function = nts_codegen_common::symbols::c_identifier(&converted.function);
         let _ = write!(copies, " {want} q{at} = ({want}){function}({slot});");
-        if program.provider == nts_core::hir::Provider::ReferenceCounting {
+        if program.provider == nts_core::hir::Provider::ReferenceCounting
+            && matches!(param.ty, HirType::Managed(_))
+        {
             let _ = write!(releases, " nts_release((NtsHeader *)q{at});");
         }
         return Ok(format!("q{at}"));

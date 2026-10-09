@@ -22,7 +22,7 @@ import {
 } from "objc:Foundation";
 import { kvc_watch, kvo_forget, kvo_observe, live_objects, weak_alive, weak_watch } from "c:support";
 import { class_conformsToProtocol, objc_getClass, objc_getProtocol } from "objc:runtime";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 import type { ObjCBool, UInt } from "objc:types";
 import { local } from "c:memory";
 

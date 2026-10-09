@@ -1,6 +1,7 @@
 import { getrusage, type Rusage } from "c:sys/resource";
 import { local } from "c:memory";
-import type { Ptr, c_int, c_long } from "c:types";
+import type { Ptr } from "c:types";
+import type { c_int, c_long } from "@nts/scalars";
 
 // `RUSAGE_SELF` is an enumeration constant, not a macro, so `nts bind-c`
 // refuses to carry it -- a `--const` would emit a global with a name the header

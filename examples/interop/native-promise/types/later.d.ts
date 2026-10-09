@@ -5,9 +5,9 @@
  * @ntsHeader "later.h"
  */
 declare module "c:later" {
-  import type { c_double } from "c:types";
+  import type { Float64 } from "@nts/scalars";
   /** Fulfilled with `x * 2` when `settle` runs. */
-  export function doubled(x: c_double): Promise<number>;
+  export function doubled(x: Float64): Promise<number>;
   /** Fulfilled with nothing when `settle` runs. */
   export function ready(): Promise<void>;
   /** Rejected with a `NotAllowedError` when `settle` runs. */

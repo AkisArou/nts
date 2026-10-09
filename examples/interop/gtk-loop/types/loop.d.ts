@@ -3,7 +3,8 @@
  * @ntsHeader "loop.h"
  */
 declare module "c:gtk-loop" {
-  import type { Class, Closure, Ptr, c_char, c_int, c_uint, c_ulong } from "c:types";
+  import type { Class, Closure, Ptr } from "c:types";
+  import type { c_char, c_int, c_uint, c_ulong } from "@nts/scalars";
 
   export type GObject = Class<"_GObject">;
   export type GApplication = Class<"_GApplication", GObject>;

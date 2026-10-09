@@ -5,7 +5,8 @@
  */
 declare module "c:sub" {
   import type { GObject } from "c:GObject-2.0";
-  import type { CBool, c_int } from "c:types";
+  import type { CBool } from "c:types";
+  import type { c_int } from "@nts/scalars";
 
   export function sub_emit(instance: GObject, signal: string): void;
   export function sub_log(line: string): void;

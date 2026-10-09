@@ -6,7 +6,7 @@
  * @ntsHeader "report.h"
  */
 declare module "c:report" {
-  import type { c_int } from "c:types";
+  import type { c_int } from "@nts/scalars";
   import type { NSObject } from "objc:Foundation";
   /** Starts watching `object`, and answers the watch's number. */
   export function weak_watch(object: NSObject): c_int;

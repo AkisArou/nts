@@ -31,7 +31,7 @@ import {
   type UITextFieldDelegate,
 } from "objc:UIKit";
 import { exit } from "c:stdlib";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 
 // Swift's `class Form: NSObject, UITextFieldDelegate`.
 class Form extends NSObject implements UITextFieldDelegate {

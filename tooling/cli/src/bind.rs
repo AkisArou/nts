@@ -18,7 +18,7 @@
 //! one set of headers under one set of macros, and `native_witness.c` is what
 //! proves it against the headers a consumer actually compiles with. What this
 //! removes is the hand-typing, which is where every binding error found in this
-//! lane came from: `uint8_t` for `char`, `c_int` for `short`, `c_uint32` for
+//! lane came from: `uint8_t` for `char`, `c_int` for `short`, `Uint32` for
 //! `size_t`, a struct one member short.
 
 use anyhow::{Context, Result, bail};
@@ -194,6 +194,23 @@ impl Observed {
 /// nothing to fold and the program nothing to pass. So the binding and the
 /// constants are two files with two jobs, which is what they are.
 pub(crate) fn constants(request: &Request) -> Result<String> {
+    // A `boolean`, or a kind `@nts/scalars` carries as a number: what an
+    // integer literal can be asserted as. A 64-bit kind is a `bigint` there,
+    // and any other name is no kind at all -- either would be written into a
+    // file that does not typecheck.
+    let scalars = nts_core::hir::native::SCALARS;
+    for (name, brand) in &request.constants {
+        if brand != "boolean"
+            && !(scalars.contains(&brand.as_str())
+                && brand != "AsNumber"
+                && nts_core::hir::native::as_number(brand) == *brand)
+        {
+            bail!(
+                "`--const {name}:{brand}`: a constant is a `boolean` or a kind of \
+                 `@nts/scalars` held as a number (`c_int`, `Uint32`, ...), not `{brand}`"
+            );
+        }
+    }
     let dir = tempdir()?;
     let probe = dir.join("nts-bind-constants.c");
     let mut text = preamble(request);
@@ -282,11 +299,8 @@ pub(crate) fn constants(request: &Request) -> Result<String> {
         let _ = writeln!(body, "export const {local} = {value} as {brand};");
     }
     if !brands.is_empty() {
-        let _ = writeln!(
-            out,
-            "\nimport type {{ {} }} from \"c:types\";",
-            brands.iter().copied().collect::<Vec<_>>().join(", ")
-        );
+        out.push('\n');
+        out.push_str(&vocabulary_imports(brands.iter().copied(), ""));
     }
     out.push('\n');
     out.push_str(&body);
@@ -1108,7 +1122,7 @@ impl Binding {
 /// said and is the spelling a binding should keep; `union epoll_data` is what
 /// it means, and is the only form that names a tag. Preferring the written one
 /// and falling back is how `epoll_data_t` becomes a record and `uint32_t` stays
-/// `c_uint32` rather than collapsing to `c_uint`.
+/// `Uint32` rather than collapsing to `c_uint`.
 fn qual_type(node: &serde_json::Value) -> Option<(&str, Option<&str>)> {
     let ty = node.get("type")?;
     Some((
@@ -1131,6 +1145,31 @@ fn shape_of(
     }
 }
 
+/// `import type` lines for names of the C vocabulary, each from the module
+/// that declares it: the scalars from `@nts/scalars`, the rest from `c:types`.
+pub(crate) fn vocabulary_imports<'a>(
+    names: impl IntoIterator<Item = &'a str>,
+    indent: &str,
+) -> String {
+    let mut by_module: std::collections::BTreeMap<&str, Vec<&str>> =
+        std::collections::BTreeMap::new();
+    for name in names {
+        by_module
+            .entry(nts_core::hir::native::vocabulary_module(name))
+            .or_default()
+            .push(name);
+    }
+    let mut lines = String::new();
+    for (module, names) in &by_module {
+        let _ = writeln!(
+            lines,
+            "{indent}import type {{ {} }} from \"{module}\";",
+            names.join(", ")
+        );
+    }
+    lines
+}
+
 /// One C type spelling, mapped onto the surface `c:types` publishes.
 ///
 /// **Refuses by name rather than approximating.** Every wrong binding this lane
@@ -1139,7 +1178,7 @@ fn shape_of(
 /// an error naming the spelling, not a guess.
 ///
 /// The *written* type is preferred over the canonical one where both name a
-/// brand: `uint32_t` is `c_uint32` and `unsigned int` is `c_uint`, and on this
+/// brand: `uint32_t` is `Uint32` and `unsigned int` is `c_uint`, and on this
 /// target they are the same type spelled by two declarations that mean
 /// different things to a reader.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
@@ -1237,25 +1276,25 @@ fn shape(c_type: &str, typedefs: &BTreeMap<String, String>) -> Result<Shape> {
         }
     }
     // The fixed-width and pointer-width typedefs first, by their written name:
-    // a binding saying `c_size_t` says something `c_uint64` does not.
+    // a binding saying `c_size_t` says something `BigUint64` does not.
     let brand = match c_type {
         "char" => "c_char",
-        "signed char" | "int8_t" => "c_int8",
-        "unsigned char" | "uint8_t" => "c_uint8",
-        "short" | "short int" | "int16_t" => "c_int16",
-        "unsigned short" | "short unsigned int" | "uint16_t" => "c_uint16",
+        "signed char" | "int8_t" => "Int8",
+        "unsigned char" | "uint8_t" => "Uint8",
+        "short" | "short int" | "int16_t" => "Int16",
+        "unsigned short" | "short unsigned int" | "uint16_t" => "Uint16",
         "int" => "c_int",
-        "int32_t" => "c_int32",
+        "int32_t" => "Int32",
         "unsigned int" => "c_uint",
-        "uint32_t" => "c_uint32",
+        "uint32_t" => "Uint32",
         "long" | "long int" => "c_long",
         "unsigned long" | "unsigned long int" => "c_ulong",
-        "long long" | "int64_t" => "c_int64",
-        "unsigned long long" | "uint64_t" => "c_uint64",
+        "long long" | "int64_t" => "BigInt64",
+        "unsigned long long" | "uint64_t" => "BigUint64",
         "size_t" => "c_size_t",
         "ssize_t" | "ptrdiff_t" => "c_ptrdiff_t",
-        "float" => "c_float",
-        "double" => "c_double",
+        "float" => "Float32",
+        "double" => "Float64",
         "_Bool" | "bool" => "boolean",
         // A typedef clang recorded, resolved one hop at a time.
         //
@@ -1617,16 +1656,16 @@ impl Binding {
                 (placed.size, placed.align)
             }
             // Exhaustive, with no catch-all. A `_ => (8, 8)` here is how
-            // `c_uint32` -- added to `shape` and not to this -- became eight
+            // `Uint32` -- added to `shape` and not to this -- became eight
             // bytes, which put `epoll_event`'s union at offset 8 and made the
             // struct 16. The self-check below caught it, and would not have
             // had the fallback been an honest 8-byte type.
             Shape::Scalar(brand) => match *brand {
-                "c_char" | "c_int8" | "c_uint8" | "boolean" => (1, 1),
-                "c_int16" | "c_uint16" => (2, 2),
-                "c_int" | "c_uint" | "c_int32" | "c_uint32" | "c_float" => (4, 4),
-                "c_long" | "c_ulong" | "c_int64" | "c_uint64" | "c_size_t" | "c_ptrdiff_t"
-                | "c_double" => (8, 8),
+                "c_char" | "Int8" | "Uint8" | "boolean" => (1, 1),
+                "Int16" | "Uint16" => (2, 2),
+                "c_int" | "c_uint" | "Int32" | "Uint32" | "Float32" => (4, 4),
+                "c_long" | "c_ulong" | "BigInt64" | "BigUint64" | "c_size_t" | "c_ptrdiff_t"
+                | "Float64" => (8, 8),
                 other => bail!(
                     "`{other}` has no size here; every brand `shape` can produce needs one, \
                      and a catch-all would give a wrong answer rather than this message"
@@ -1816,13 +1855,7 @@ impl Binding {
         }
         out.push_str(" */\n");
         let _ = writeln!(out, "declare module \"{}\" {{", request.module);
-        if !needed.is_empty() {
-            let _ = writeln!(
-                out,
-                "  import type {{ {} }} from \"c:types\";",
-                needed.iter().copied().collect::<Vec<_>>().join(", ")
-            );
-        }
+        out.push_str(&vocabulary_imports(needed.iter().copied(), "  "));
         for record in self.records.values() {
             let keyword = if record.union { "Union" } else { "Struct" };
             let members = record
@@ -2023,9 +2056,9 @@ mod tests {
         assert_eq!(shape("char").unwrap(), Shape::Scalar("c_char"));
         // `char` and `uint8_t` are different types with one representation,
         // which is the distinction a hand-written binding got wrong first.
-        assert_eq!(shape("unsigned char").unwrap(), Shape::Scalar("c_uint8"));
+        assert_eq!(shape("unsigned char").unwrap(), Shape::Scalar("Uint8"));
         assert_eq!(shape("size_t").unwrap(), Shape::Scalar("c_size_t"));
-        assert_eq!(shape("short int").unwrap(), Shape::Scalar("c_int16"));
+        assert_eq!(shape("short int").unwrap(), Shape::Scalar("Int16"));
         assert_eq!(
             shape("const char *").unwrap(),
             Shape::Pointer(Box::new(Shape::Scalar("c_char")), true)
@@ -2067,16 +2100,32 @@ mod tests {
         assert!(anonymous.contains("anonymous union"), "{anonymous}");
         // Through a typedef, and through one reached inside an array -- which
         // is the shape with no `desugaredQualType` to fall back on.
-        assert_eq!(shape("cc_t").unwrap(), Shape::Scalar("c_uint8"));
+        assert_eq!(shape("cc_t").unwrap(), Shape::Scalar("Uint8"));
         assert_eq!(
             shape("cc_t[32]").unwrap(),
-            Shape::Array(Box::new(Shape::Scalar("c_uint8")), 32)
+            Shape::Array(Box::new(Shape::Scalar("Uint8")), 32)
         );
         // Refused by name rather than approximated. A near-miss is the failure
         // this tool exists to remove, so an unknown spelling must not become a
         // plausible neighbour.
         let refused = shape("_Complex double").unwrap_err().to_string();
         assert!(refused.contains("_Complex double"), "{refused}");
+    }
+
+    /// A constant's kind is one `@nts/scalars` holds as a number, refused by
+    /// name before the headers are read: a name the library dropped
+    /// (`c_uint32`), a 64-bit kind (a `bigint` there), `AsNumber` itself.
+    #[test]
+    fn a_constant_is_a_number_kind_of_the_library() {
+        for kind in ["c_uint32", "BigUint64", "c_size_t", "AsNumber", "Uint33"] {
+            let mut asked = request(Vec::new());
+            asked.constants = vec![("EPOLLIN".to_owned(), kind.to_owned())];
+            let refused = constants(&asked).unwrap_err().to_string();
+            assert!(
+                refused.contains(&format!("`--const EPOLLIN:{kind}`")),
+                "{refused}"
+            );
+        }
     }
 
     fn record(tag: &str, union: bool, packed: bool, members: &[(&str, Shape)]) -> Record {
@@ -2170,14 +2219,14 @@ mod tests {
             name: "inset".to_owned(),
             parameters: vec![
                 ("r".to_owned(), Shape::Record("rect".to_owned())),
-                ("by".to_owned(), Shape::Scalar("c_double")),
+                ("by".to_owned(), Shape::Scalar("Float64")),
             ],
             result: Some(Shape::Record("rect".to_owned())),
             variadic: false,
         });
         let text = binding.render(&request(Vec::new()));
         assert!(
-            text.contains("export function inset(r: ByValue<Rect>, by: c_double): ByValue<Rect>;"),
+            text.contains("export function inset(r: ByValue<Rect>, by: Float64): ByValue<Rect>;"),
             "{text}"
         );
         assert!(binding.imports_needed().contains("ByValue"), "{text}");
@@ -2252,7 +2301,7 @@ mod tests {
                 &[
                     ("ptr", Shape::VoidPointer(false)),
                     ("fd", Shape::Scalar("c_int")),
-                    ("u64", Shape::Scalar("c_uint64")),
+                    ("u64", Shape::Scalar("BigUint64")),
                 ],
             ),
         );
@@ -2263,7 +2312,7 @@ mod tests {
                 false,
                 true,
                 &[
-                    ("events", Shape::Scalar("c_uint32")),
+                    ("events", Shape::Scalar("Uint32")),
                     ("data", Shape::Record("epoll_data".to_owned())),
                 ],
             ),

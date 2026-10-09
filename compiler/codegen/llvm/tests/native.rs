@@ -104,7 +104,7 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
     )).unwrap();
     std::fs::write(
         dir.join("main.ts"),
-        "import { each_upto } from \"c:closures\";\nimport type { c_int } from \"c:types\";\nlet seen = 0;\nexport function count(): number {\n  each_upto(async (n) => {\n    await 0;\n    seen += n;\n  }, 3 as c_int);\n  return seen;\n}\n",
+        "import { each_upto } from \"c:closures\";\nimport type { c_int } from \"@nts/scalars\";\nlet seen = 0;\nexport function count(): number {\n  each_upto(async (n) => {\n    await 0;\n    seen += n;\n  }, 3 as c_int);\n  return seen;\n}\n",
     )
     .unwrap();
     let snapshot = TsgoApi::for_compilation(tsgo)
@@ -709,7 +709,7 @@ fn a_program_with_every_function_refused_still_emits() {
         "all-refused",
         r#"
         import { local } from "c:memory";
-        import type { c_int } from "c:types";
+        import type { c_int } from "@nts/scalars";
         const slot = local<c_int>();
     "#,
     ) else {
@@ -835,7 +835,7 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
         .map(|case| case.0)
         .collect::<Vec<_>>()
         .join(", ");
-    let mut ts = format!("import type {{ {brands} }} from \"c:types\";\n");
+    let mut ts = format!("import type {{ {brands} }} from \"@nts/scalars\";\n");
     let mut header = "#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n".to_owned();
     let mut implementation = "#include \"native.h\"\n".to_owned();
     let mut prototypes = "#include <stdint.h>\n".to_owned();
@@ -843,7 +843,7 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
     for (i, (brand, c_type, input, expected)) in CASES.iter().enumerate() {
         writeln!(
             ts,
-            "declare function take_{i}(v: {brand}): c_double;
+            "declare function take_{i}(v: {brand}): Float64;
             declare function give_{i}(): {brand};
             export function argument_{i}(v: {brand}): number {{ return take_{i}(v); }}
             export function result_{i}(): number {{ return give_{i}(); }}"
@@ -877,7 +877,7 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
     ts.push_str(
         "import { abs } from \"c:stdlib\"; import * as math from \"c:math\";
         declare function native_not(v: boolean): boolean;
-        export function library(n: c_int): number { return abs(n) + math.sqrt(4 as c_double); }
+        export function library(n: c_int): number { return abs(n) + math.sqrt(4 as Float64); }
         export function toggle(v: boolean): boolean { return native_not(v); }",
     );
     header.push_str("bool native_not(bool);\n");
@@ -1035,7 +1035,7 @@ fn conflicting_abis_and_runtime_collisions_are_refused() {
         ("runtime", "declare function nts_math_pow(v: c_int): c_int;
             export function run(n: c_int): number { return nts_math_pow(n); }", "collides"),
     ] {
-        let source = format!("import type {{ c_int, c_uint }} from \"c:types\";\n{source}");
+        let source = format!("import type {{ c_int, c_uint }} from \"@nts/scalars\";\n{source}");
         let Some((_, prepared)) = prepare(name, &source) else { return; };
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
@@ -1046,10 +1046,10 @@ fn conflicting_abis_and_runtime_collisions_are_refused() {
 
 #[test]
 fn compatible_c_aliases_share_one_symbol_in_both_backends() {
-    let source = "import type { c_int, c_int32 } from \"c:types\";
+    let source = "import type { c_int, Int32 } from \"@nts/scalars\";
         declare function native_identity(v: c_int): c_int;
-        declare function native_identity(v: c_int32): c_int32;
-        export function run(n: c_int, m: c_int32): number {
+        declare function native_identity(v: Int32): Int32;
+        export function run(n: c_int, m: Int32): number {
             return native_identity(n) + native_identity(m) + 0.5;
         }";
     let Some((dir, prepared)) = prepare("compatible-aliases", source) else {
@@ -1115,7 +1115,8 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
 #[test]
 fn a_class_handle_upcasts_to_its_ancestors_on_both_backends() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
 type GObject = Class<"_GObject">;
 type GtkWidget = Class<"_GtkWidget", GObject>;
 type GtkButton = Class<"_GtkButton", GtkWidget>;
@@ -1220,7 +1221,8 @@ int main(void) { return run() == 111.0 ? 0 : 1; }
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn an_unsafe_downcast_follows_its_check_and_refuses_what_no_check_can_fix() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
 import { unsafeDowncast } from "c:memory";
 type Obj = Class<"_Obj">;
 type Widget = Class<"_Widget", Obj>;
@@ -1357,7 +1359,8 @@ export function run(): boolean {{
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn an_object_parameter_takes_any_handle_as_void_and_refuses_a_managed_value() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Obj = Class<"_Obj">;
 type Widget = Class<"_Widget", Obj>;
 declare function a_widget(): Widget;
@@ -1664,6 +1667,113 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
     }
 }
 
+/// `AsNumber<C>`: a 64-bit integer C hands the program as a number -- a
+/// call's result, a callback's argument -- exactly, up to and including 2^53,
+/// and a `RangeError` past it in either direction, never a rounded number. A
+/// result's is the caller's to catch; a callback's stops the program at the
+/// bridge, as any throw inside a callback does, since C has nowhere to take it.
+/// Both backends, both providers: under counting a bridge gives back what its
+/// converter made only where that is a managed value.
+#[test]
+fn a_64_bit_integer_read_as_a_number_is_exact_or_a_range_error() {
+    let fixture = |name: &str| {
+        format!(
+            "{}/../common/test-support/as-number/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        )
+    };
+    let source = std::fs::read_to_string(fixture("main.ts")).unwrap();
+    for (label, provider) in [
+        ("nogc", hir::Provider::NoGc),
+        ("rc", hir::Provider::ReferenceCounting),
+    ] {
+        let Some((dir, prepared)) =
+            prepare_with_provider(&format!("as-number-{label}"), &source, provider)
+        else {
+            return;
+        };
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
+        let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::SysV);
+        assert!(c.is_complete(), "{:?}", c.diagnostics);
+        let llvm =
+            nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+        std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
+        std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
+        for file in c.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        for file in ["native.c", "caller.c"] {
+            std::fs::copy(fixture(file), dir.join(file)).unwrap();
+            clang(
+                &dir,
+                &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
+            );
+        }
+        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+            &["-DNTS_PROVIDER_RC"]
+        } else {
+            &[]
+        };
+        clang(
+            &dir,
+            &[&["-std=c11", "-O2", "-c", "nts_runtime.c"][..], counted].concat(),
+        );
+        for (source, object, executable) in
+            [("program.c", "c.o", "c"), ("program.ll", "llvm.o", "llvm")]
+        {
+            clang(
+                &dir,
+                &[
+                    &["-O2", "-Wno-override-module", "-c", source, "-o", object][..],
+                    counted,
+                ]
+                .concat(),
+            );
+            let run = format!("{executable}-run");
+            clang(
+                &dir,
+                &[
+                    object,
+                    "native.o",
+                    "caller.o",
+                    "nts_runtime.o",
+                    "-lm",
+                    "-o",
+                    &run,
+                ],
+            );
+            let results = Command::new(dir.join(&run)).output().unwrap();
+            assert!(
+                results.status.success(),
+                "{label}/{executable}: {}",
+                String::from_utf8_lossy(&results.stdout)
+            );
+            let exact = Command::new(dir.join(&run)).arg("0").output().unwrap();
+            assert!(
+                exact.status.success(),
+                "{label}/{executable}: {}",
+                String::from_utf8_lossy(&exact.stderr)
+            );
+            // Past 2^53 on either side: the `RangeError` the bridge stops at,
+            // reported by its message as the bridge reports any throw.
+            for past in ["1", "2"] {
+                let stopped = Command::new(dir.join(&run)).arg(past).output().unwrap();
+                let stderr = String::from_utf8_lossy(&stopped.stderr);
+                assert!(
+                    !stopped.status.success() && stderr.contains("an integer past 2^53"),
+                    "{label}/{executable} {past}: {:?} {stderr}",
+                    stopped.status
+                );
+            }
+        }
+    }
+}
+
 /// What a closure crossing to C still may not do.
 ///
 /// A capturing arrow where the declaration says a *plain* function pointer is
@@ -1675,7 +1785,7 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_closure_to_c_keeps_its_refusals_and_its_boundary() {
     let plain = r#"
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function apply_twice(f: (n: c_int) => c_int, x: c_int): c_int;
 export function run(k: number): number {
     return apply_twice((n) => ((n + k) | 0) as c_int, 1 as c_int);
@@ -1693,7 +1803,8 @@ export function run(k: number): number {
     );
 
     let throwing = r#"
-import type { ScopedClosure, c_int } from "c:types";
+import type { ScopedClosure } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function each_upto(f: ScopedClosure<(n: c_int) => void>, upto: c_int): void;
 export function run(limit: number): number {
     let seen = 0;
@@ -1913,7 +2024,8 @@ fn a_string_parameter_crosses_as_utf8_on_both_backends() {
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn opaque_handles_keep_pointer_bits_and_manual_lifetime_on_both_backends() {
     let source = r#"
-import type { Opaque, c_int } from "c:types";
+import type { Opaque } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Counter = Opaque<"Counter">;
 type Wide = Opaque<"_Wide">;
 declare function counter_new(n: c_int): Counter | null;
@@ -2065,7 +2177,9 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
         .map(|case| case.0)
         .collect::<Vec<_>>()
         .join(", ");
-    let mut source = format!("import type {{ Ptr, {brands} }} from \"c:types\";\n");
+    let mut source = format!(
+        "import type {{ Ptr }} from \"c:types\";\nimport type {{ {brands} }} from \"@nts/scalars\";\n"
+    );
     let mut caller = "#include \"program.h\"\nint main(void) {\n".to_owned();
     for (i, (brand, ctype, input, expected)) in CASES.iter().enumerate() {
         writeln!(
@@ -2095,7 +2209,11 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
         .map(|case| case.0)
         .collect::<std::collections::BTreeSet<_>>();
     let wide_brands = wide_brands.into_iter().collect::<Vec<_>>().join(", ");
-    writeln!(source, "import type {{ {wide_brands} }} from \"c:types\";").unwrap();
+    writeln!(
+        source,
+        "import type {{ {wide_brands} }} from \"@nts/scalars\";"
+    )
+    .unwrap();
     for (i, (brand, ctype, literal, c_literal)) in WIDE_CASES.iter().enumerate() {
         writeln!(
             source,
@@ -2115,18 +2233,18 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
         .unwrap();
     }
     source.push_str(
-        "declare function mutate(p: Ptr<c_uint8>): void;
-        export function acrossCall(p: Ptr<c_uint8>, alias: Ptr<c_uint8>): number {
+        "declare function mutate(p: Ptr<Uint8>): void;
+        export function acrossCall(p: Ptr<Uint8>, alias: Ptr<Uint8>): number {
             const before = alias[0]; mutate(p); return before * 100 + alias[0];
         }",
     );
-    // Compile the checked-in example as part of this same two-backend fixture.
-    source.push_str(
-        include_str!("../../../../examples/interop/native-buffer/src/main.ts")
-            .split_once('\n')
-            .unwrap()
-            .1,
-    );
+    // Compile the checked-in example as part of this same two-backend fixture,
+    // without its imports: the fixture's own import the same names.
+    let example = include_str!("../../../../examples/interop/native-buffer/src/main.ts");
+    for line in example.lines().filter(|line| !line.starts_with("import ")) {
+        source.push_str(line);
+        source.push('\n');
+    }
     caller.push_str("uint8_t shared = 2; if (acrossCall(&shared, &shared) != 295) return 40;\n");
     caller.push_str("uint8_t text[] = {'a', 0, 'z', 195, 'Q'};
         if (uppercaseAscii(text, 5) != 2 || text[0] != 'A' || text[1] != 0 || text[2] != 'Z' || text[3] != 195 || text[4] != 'Q') return 41;
@@ -2439,18 +2557,18 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
         "unistd.d.ts",
         "/** @ntsHeader unistd.h */\n\
          declare module \"c:unistd\" {\n\
-         import type { Ptr, c_int, c_size_t, c_ptrdiff_t, c_uint8 } from \"c:types\";\n\
+         import type { Ptr } from \"c:types\"; import type { c_int, c_size_t, c_ptrdiff_t, Uint8 } from \"@nts/scalars\";\n\
          export type Fd = c_int;\n\
          export type Count = c_size_t;\n\
          /** @ntsNoEscape buf */\n\
-         export function read(fd: Fd, buf: Ptr<c_uint8>, count: Count): c_ptrdiff_t;\n\
+         export function read(fd: Fd, buf: Ptr<Uint8>, count: Count): c_ptrdiff_t;\n\
          }\n",
     )];
     let source = "import { read, type Fd, type Count } from \"c:unistd\";\n\
          import { local } from \"c:memory\";\n\
-         import type { c_uint8 } from \"c:types\";\n\
+         import type { Uint8 } from \"@nts/scalars\";\n\
          export function readCount(fd: Fd): number {\n\
-         const buf = local<c_uint8>(8);\n\
+         const buf = local<Uint8>(8);\n\
          return Number(read(fd, buf, 8n as Count));\n\
          }\n";
     let Some((dir, prepared)) = prepare_with_files(
@@ -2515,7 +2633,7 @@ fn an_inline_struct_member_agrees_with_the_system_header() {
           * and this is the only place the claim can live.
           * @ntsHeader sys/time.h
           */
-        import type { Ptr, Struct, c_long } from 'c:types';
+        import type { Ptr, Struct } from 'c:types'; import type { c_long } from '@nts/scalars';
         type TimeVal = Struct<{tv_sec: c_long; tv_usec: c_long}, 'timeval'>;
         type ITimerVal = Struct<{it_interval: TimeVal; it_value: TimeVal}, 'itimerval'>;
         // `long` is 64 bits here and so bigint-branded; the conversion out is
@@ -2680,18 +2798,18 @@ fn native_struct_rejections_preserve_the_valid_arm() {
         ),
         (
             "optional-field",
-            "type Bad = Struct<{count?: c_int32}>; export function bad(p: Ptr<Bad>): number { return p.count ?? 0; }",
+            "type Bad = Struct<{count?: Int32}>; export function bad(p: Ptr<Bad>): number { return p.count ?? 0; }",
         ),
         // A struct stored inline is supported; a struct that contains *itself*
         // by value is not a type C can lay out, and is the limit that replaced
         // this arm when nested members landed.
         (
             "self-nested",
-            "type Loop = Struct<{n: c_int32; self: Loop}, 'loopy'>; export function bad(p: Ptr<Loop>): void { void p; }",
+            "type Loop = Struct<{n: Int32; self: Loop}, 'loopy'>; export function bad(p: Ptr<Loop>): void { void p; }",
         ),
         (
             "mutually-nested",
-            "type L = Struct<{n: c_int32; r: R}, 'l'>; type R = Struct<{n: c_int32; l: L}, 'r'>; export function bad(p: Ptr<L>): void { void p; }",
+            "type L = Struct<{n: Int32; r: R}, 'l'>; type R = Struct<{n: Int32; l: L}, 'r'>; export function bad(p: Ptr<L>): void { void p; }",
         ),
         (
             "schema-value",
@@ -2699,13 +2817,13 @@ fn native_struct_rejections_preserve_the_valid_arm() {
         ),
         (
             "lying-address",
-            "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<c_double>; export function bad(p: Ptr<State>): number { return addrOf(p.count)[0]; }",
+            "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<Float64>; export function bad(p: Ptr<State>): number { return addrOf(p.count)[0]; }",
         ),
     ] {
         // The managed-address case must reach lowering without a TS error;
         // a false intrinsic declaration cannot authorize addressing a TS object.
         let bad = if name == "managed-address" {
-            "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<c_int32>; export function bad(): number { const o = {count: 1}; return addrOf(o.count)[0]; }"
+            "/** @ntsAbi intrinsic */ declare function addrOf(p: unknown): Ptr<Int32>; export function bad(): number { const o = {count: 1}; return addrOf(o.count)[0]; }"
         } else {
             bad
         };
@@ -2715,7 +2833,7 @@ fn native_struct_rejections_preserve_the_valid_arm() {
             "import {addrOf} from 'c:memory';"
         };
         let source = format!(
-            "import type {{Ptr, Struct, c_int32, c_double}} from 'c:types'; {import}\n type State = Struct<{{count: c_int32}}>; export function good(p: Ptr<State>): number {{ return p.count; }} {bad}"
+            "import type {{Ptr, Struct}} from 'c:types'; import type {{Int32, Float64}} from '@nts/scalars'; {import}\n type State = Struct<{{count: Int32}}>; export function good(p: Ptr<State>): number {{ return p.count; }} {bad}"
         );
         let Some((_, prepared)) = prepare(name, &source) else {
             return;
@@ -2736,9 +2854,9 @@ fn native_struct_rejections_preserve_the_valid_arm() {
 
 #[test]
 fn conflicting_native_struct_tags_refuse_in_both_backends() {
-    let source = "import type {Ptr, Struct, c_int32, c_double} from 'c:types';
-        type A = Struct<{x:c_int32}, 'Collision'>;
-        type B = Struct<{x:c_double}, 'Collision'>;
+    let source = "import type {Ptr, Struct} from 'c:types'; import type {Int32, Float64} from '@nts/scalars';
+        type A = Struct<{x:Int32}, 'Collision'>;
+        type B = Struct<{x:Float64}, 'Collision'>;
         export function a(p:Ptr<A>):number {return p.x;}
         export function b(p:Ptr<B>):number {return p.x;}";
     let Some((_, prepared)) = prepare("struct-collision", source) else {
@@ -2763,10 +2881,11 @@ fn conflicting_native_struct_tags_refuse_in_both_backends() {
 
 #[test]
 fn native_address_verifier_rejects_wrong_field_type_and_index() {
-    let source = "import type {Ptr, Struct, c_int32} from 'c:types';
+    let source =
+        "import type {Ptr, Struct} from 'c:types'; import type {Int32} from '@nts/scalars';
         import {addrOf} from 'c:memory';
-        type S = Struct<{x:c_int32}>;
-        export function field(p:Ptr<S>):Ptr<c_int32> {return addrOf(p.x);}
+        type S = Struct<{x:Int32}>;
+        export function field(p:Ptr<S>):Ptr<Int32> {return addrOf(p.x);}
         // An element of a block of structs is already an address, so this is
         // `p + i` and not `&(p + i)`; `addrOf` here would be a Ptr<Ptr<S>>.
         export function item(p:Ptr<S>, i:number):Ptr<S> {return p[i];}";
@@ -2811,9 +2930,10 @@ fn native_address_verifier_rejects_wrong_field_type_and_index() {
 
 #[test]
 fn native_header_alias_survives_an_unrelated_layout_declaration() {
-    let source = "import type {Ptr, Struct, c_int32} from 'c:types';
+    let source =
+        "import type {Ptr, Struct} from 'c:types'; import type {Int32} from '@nts/scalars';
         import {addrOf as address} from 'c:memory';
-        type State = Struct<{count:c_int32}>;
+        type State = Struct<{count:Int32}>;
         function addrOf(n:number):number {return n+2;}
         export function inspectState(p:Ptr<State>):number {return addrOf(address(p.count)[0]);}";
     let caller = "#include \"program.h\"\nint main(void) {inspectState_p_t s={17}; return inspectState(&s)==19 ? 0 : 1;}\n";
@@ -2965,7 +3085,7 @@ fn native_owned_storage_executes_on_c_and_llvm() {
 fn authored_allocator_symbols_cannot_redefine_storage_operations() {
     let source = r"
         import { malloc as allocate, free } from 'c:stdlib';
-        import type { Ptr, c_int, c_size_t } from 'c:types';
+        import type { Ptr } from 'c:types'; import type { c_int, c_size_t } from '@nts/scalars';
         declare function malloc(bytes: c_size_t): Ptr<c_int> | null;
         export function run(): number {
             const a = allocate<c_int>(4);
@@ -3071,7 +3191,8 @@ int main(int argc, char **argv) {
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_typed_signal_view_calls_through_an_erased_callback_on_both_backends() {
     let source = r#"
-import type { Class, Erased, ErasedClosure, Ptr, c_int, c_uint, c_ulong } from "c:types";
+import type { Class, Erased, ErasedClosure, Ptr } from "c:types";
+import type { c_int, c_uint, c_ulong } from "@nts/scalars";
 type Obj = Class<"_Obj">;
 type GClosure = Class<"_GClosure">;
 type Notify = (data: Ptr<unknown>, closure: GClosure) => void;
@@ -3225,7 +3346,7 @@ int main(int argc, char **argv) {
 #[test]
 fn an_out_parameter_of_a_nullable_handle_is_one_slot_on_both_backends() {
     let source = r"
-import type { Class, Ptr, c_int } from 'c:types';
+import type { Class, Ptr } from 'c:types'; import type { c_int } from '@nts/scalars';
 import { local } from 'c:memory';
 type GError = Class<'_GError'>;
 /**
@@ -3450,7 +3571,7 @@ fn expect(values: &str, provider: hir::Provider) -> String {
 #[test]
 fn an_ascii_string_is_lent_to_c_in_place_on_both_backends() {
     let source = r#"
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function same(a: string, b: string): boolean;
 declare function length(a: string): c_int;
 export function ascii(): number { const s = "gtk_label_set_text"; return same(s, s) ? 1 : 0; }
@@ -3518,7 +3639,8 @@ int walked(const char *const *values) {
 #[test]
 fn a_string_array_crosses_as_a_null_terminated_char_pointer_array_on_both_backends() {
     let source = r#"
-import type { CStrings, Counted, c_int } from "c:types";
+import type { CStrings, Counted } from "c:types";
+import type { c_int } from "@nts/scalars";
 /** @ntsNoEscape argv */
 declare function joined(argv: Counted<CStrings<"char">, c_int, "before">): c_int;
 /** @ntsNoEscape argv */
@@ -3565,7 +3687,8 @@ export function many(): number {
     }
 
     let kept = r#"
-import type { CStrings, c_int } from "c:types";
+import type { CStrings } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function walked(values: CStrings): c_int;
 export function run(): number { return walked(["a"]); }
 "#;
@@ -3612,7 +3735,7 @@ const char *const *borrowed(int which) { return which == 0 ? NULL : which == 1 ?
 #[test]
 fn a_returned_string_array_is_copied_and_freed_on_both_backends() {
     let source = r#"
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 /** @ntsFree owned_free */
 declare function owned(): string[];
 declare function freed_count(): c_int;
@@ -3679,7 +3802,8 @@ void bytes_fill(uint8_t *out, int count) { for (int i = 0; i < count; i++) out[i
 #[test]
 fn a_uint8_array_is_borrowed_in_place_on_both_backends() {
     let source = r#"
-import type { CBytes, Counted, c_int, c_size_t } from "c:types";
+import type { CBytes, Counted } from "c:types";
+import type { c_int, c_size_t } from "@nts/scalars";
 /** @ntsNoEscape data */
 declare function bytes_sum(data: Counted<CBytes, c_size_t> | null): c_int;
 /** @ntsNoEscape out */
@@ -3744,11 +3868,12 @@ void f64_fill(double *out, uint32_t n) { for (uint32_t i = 0; i < n; i++) out[i]
 #[test]
 fn a_typed_array_s_elements_are_borrowed_in_place_with_their_count_on_both_backends() {
     let source = r#"
-import type { CElements, Counted, c_int, c_uint32 } from "c:types";
+import type { CElements, Counted } from "c:types";
+import type { c_int, Uint32 } from "@nts/scalars";
 /** @ntsNoEscape xs */
-declare function i32_sum(xs: Counted<CElements<Int32Array, "const int32_t">, c_uint32>): c_int;
+declare function i32_sum(xs: Counted<CElements<Int32Array, "const int32_t">, Uint32>): c_int;
 /** @ntsNoEscape out */
-declare function f64_fill(out: Counted<CElements<Float64Array, "double">, c_uint32>): void;
+declare function f64_fill(out: Counted<CElements<Float64Array, "double">, Uint32>): void;
 export function run(): string {
     const xs = new Int32Array([-7, 65536, 1000]);
     const out = new Float64Array(3);
@@ -3795,20 +3920,21 @@ struct Flags flags_make(uint32_t count, int on) {
 int flags_score(struct Flags flags) { return (int)flags.count * 10 + flags.on * 2 + flags.off; }
 ";
 
-/// A boolean held in one byte of a struct (`CBool<c_uint8>`, the Windows
+/// A boolean held in one byte of a struct (`CBool<Uint8>`, the Windows
 /// Runtime's `boolean` field): read out of a struct C returned as a boolean,
 /// and written as 0 or 1 into one a literal makes -- `true` is the byte 1,
 /// so the score C computes from the bytes says which was written.
 #[test]
 fn a_one_byte_boolean_field_is_read_and_written_as_a_boolean_on_both_backends() {
     let source = r#"
-import type { ByValue, CBool, Fields, Struct, c_int, c_uint8, c_uint32 } from "c:types";
-type Flags = Struct<{ count: c_uint32; on: CBool<c_uint8>; off: CBool<c_uint8> }, "Flags">;
-declare function flags_make(count: c_uint32, on: c_int): ByValue<Flags>;
+import type { ByValue, CBool, Fields, Struct } from "c:types";
+import type { c_int, Uint8, Uint32 } from "@nts/scalars";
+type Flags = Struct<{ count: Uint32; on: CBool<Uint8>; off: CBool<Uint8> }, "Flags">;
+declare function flags_make(count: Uint32, on: c_int): ByValue<Flags>;
 declare function flags_score(flags: ByValue<Flags> | Fields<Flags>): c_int;
 export function run(): string {
-    const a = flags_make(3 as c_uint32, 1 as c_int);
-    const b = flags_make(4 as c_uint32, 0 as c_int);
+    const a = flags_make(3 as Uint32, 1 as c_int);
+    const b = flags_make(4 as Uint32, 0 as c_int);
     return String(a.on) + " " + String(a.off) + " " + String(b.on) + " " + String(b.off) + " " +
         String(flags_score({ count: 5, on: true, off: false }));
 }
@@ -3863,7 +3989,7 @@ void fire_all(void) {
 #[test]
 fn a_once_closure_is_released_after_its_one_call_on_both_backends() {
     let source = r"
-import type { OnceClosure, c_int } from 'c:types';
+import type { OnceClosure } from 'c:types'; import type { c_int } from '@nts/scalars';
 declare function start_async(value: c_int, ready: OnceClosure<(result: c_int) => void>): void;
 declare function fire_all(): void;
 let total = 0;
@@ -3920,7 +4046,7 @@ export function fired(): void { fire_all(); }
 #[test]
 fn a_function_value_reaches_c_through_its_table_on_both_backends() {
     let source = r"
-import type { OnceClosure, c_int } from 'c:types';
+import type { OnceClosure } from 'c:types'; import type { c_int } from '@nts/scalars';
 declare function start_async(value: c_int, ready: OnceClosure<(result: c_int) => void>): void;
 declare function fire_all(): void;
 let total = 0;
@@ -3969,10 +4095,10 @@ export function run(): number {
 #[test]
 fn a_record_by_value_is_written_as_a_literal_on_both_backends() {
     let source = r"
-import type { ByValue, Fields, Struct, c_double, c_int } from 'c:types';
-type Point = Struct<{ x: c_double; y: c_double }, 'point'>;
+import type { ByValue, Fields, Struct } from 'c:types'; import type { Float64, c_int } from '@nts/scalars';
+type Point = Struct<{ x: Float64; y: Float64 }, 'point'>;
 type Rect = Struct<{ origin: Point; size: Point; tag: c_int }, 'rect'>;
-declare function describe(r: ByValue<Rect> | Fields<Rect>): c_double;
+declare function describe(r: ByValue<Rect> | Fields<Rect>): Float64;
 let ticks = 0;
 function tick(): number {
     return ++ticks;
@@ -4049,7 +4175,8 @@ int button_count(struct _Button *self, const char *const *names) { (void)self; i
 #[test]
 fn a_c_function_is_a_method_of_the_handle_it_takes_on_both_backends() {
     let source = r#"
-import type { Class, CStrings, c_int } from "c:types";
+import type { Class, CStrings } from "c:types";
+import type { c_int } from "@nts/scalars";
 interface WidgetOwnMethods {
     /** @ntsSymbol widget_get_width */
     get_width(this: Widget): c_int;
@@ -4105,7 +4232,8 @@ export function run(): number {
 #[test]
 fn an_enum_crosses_to_c_as_its_integer_on_both_backends() {
     let source = r#"
-import type { CEnum, c_int, c_uint } from "c:types";
+import type { CEnum } from "c:types";
+import type { c_int, c_uint } from "@nts/scalars";
 declare const enum Orientation { HORIZONTAL = 0, VERTICAL = 1 }
 declare const enum Sign { NEGATIVE = -3, POSITIVE = 5 }
 declare function orient(orientation: CEnum<Orientation, c_uint>, spacing: c_int): c_int;
@@ -4225,7 +4353,8 @@ int live_objects(void) { return live; }
 #[test]
 fn a_gobject_is_counted_and_seen_by_c_as_its_instance_on_both_backends() {
     let source = r#"
-import type { Class, GObjectClass, Owned, c_int } from "c:types";
+import type { Class, GObjectClass, Owned } from "c:types";
+import type { c_int } from "@nts/scalars";
 type GTypeInstance = Class<"_GTypeInstance">;
 type GObject = GObjectClass<"_GObject", GTypeInstance>;
 type Thing = GObjectClass<"_Thing", GObject>;
@@ -4309,7 +4438,8 @@ int errors_seen(void) { return errors; }
 #[test]
 fn a_host_handle_is_rooted_only_where_it_leaves_the_stack_on_both_backends() {
     let source = r#"
-import type { HostClass, c_int } from "c:types";
+import type { HostClass } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
 type Element = HostClass<"HostElement", Node>;
 declare function node_at(i: c_int): Element;
@@ -4397,7 +4527,8 @@ export function errors(): number { return errors_seen(); }
 #[test]
 fn a_host_handle_needs_the_reference_counting_provider() {
     let source = r#"
-import type { HostClass, c_int } from "c:types";
+import type { HostClass } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
 declare function node_at(i: c_int): Node;
 declare function node_value(n: Node): c_int;
@@ -4431,7 +4562,8 @@ export function local(): number { return node_value(node_at(0 as c_int)); }
 #[test]
 fn a_promise_of_a_gobject_holds_a_reference_on_both_backends() {
     let source = r#"
-import type { Class, GObjectClass, Owned, c_int } from "c:types";
+import type { Class, GObjectClass, Owned } from "c:types";
+import type { c_int } from "@nts/scalars";
 type GTypeInstance = Class<"_GTypeInstance">;
 type GObject = GObjectClass<"_GObject", GTypeInstance>;
 type Thing = GObjectClass<"_Thing", GObject>;
@@ -4491,7 +4623,8 @@ export function errors(): number { return errors_seen(); }
 #[test]
 fn a_consumed_argument_is_handed_over_on_both_backends() {
     let source = r#"
-import type { Class, Consumed, GObjectClass, Owned, c_int } from "c:types";
+import type { Class, Consumed, GObjectClass, Owned } from "c:types";
+import type { c_int } from "@nts/scalars";
 type GTypeInstance = Class<"_GTypeInstance">;
 type GObject = GObjectClass<"_GObject", GTypeInstance>;
 type Thing = GObjectClass<"_Thing", GObject>;
@@ -4541,7 +4674,8 @@ export function errors(): number { return errors_seen(); }
 #[test]
 fn a_native_property_reads_and_writes_through_its_methods_on_both_backends() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
 interface LabelOwnMethods {
     /** @ntsSymbol label_get_text */
     get_text(this: Label): string;
@@ -4633,7 +4767,8 @@ int label_width(struct _Label *self) { return self->width; }
 #[test]
 fn a_c_int_boolean_crosses_as_a_boolean_on_both_backends() {
     let source = r#"
-import type { CBool, c_int } from "c:types";
+import type { CBool } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function remember(on: CBool<c_int>): void;
 declare function remembered(): c_int;
 declare function two(): CBool<c_int>;
@@ -4703,7 +4838,8 @@ int ask(int (*callback)(int)) { return (callback(2) == 0) * 10 + (callback(0) ==
 #[test]
 fn a_handle_is_constructed_with_properties_on_both_backends() {
     let source = r#"
-import type { Class, c_int, c_size_t } from "c:types";
+import type { Class } from "c:types";
+import type { c_int, c_size_t } from "@nts/scalars";
 interface ThingOwnMethods {
     /** @ntsSymbol thing_set_label */
     set_label(this: Thing, label: string): void;
@@ -4837,7 +4973,8 @@ int thing_add(Thing *thing, int amount) { return thing->count + amount; }
 #[test]
 fn an_omitted_argument_takes_the_bindings_default_on_both_backends() {
     let source = r#"
-import type { Class, c_int, c_uint } from "c:types";
+import type { Class } from "c:types";
+import type { c_int, c_uint } from "@nts/scalars";
 interface ThingOwnMethods {
     /**
      * @ntsSymbol thing_add
@@ -4938,7 +5075,7 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
         ),
     ] {
         let refused = format!(
-            "import type {{ c_int, c_uint }} from \"c:types\";\n{declaration}\nexport function run(): number {{ return f(1 as c_int); }}\n"
+            "import type {{ c_int, c_uint }} from \"@nts/scalars\";\n{declaration}\nexport function run(): number {{ return f(1 as c_int); }}\n"
         );
         let Some((_, prepared)) = prepare(&format!("defaults-{label}"), &refused) else {
             return;
@@ -4967,7 +5104,8 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
 #[test]
 fn a_declared_result_is_the_handle_the_binding_says_on_both_backends() {
     let source = r#"
-import type { Class, Declared, c_int } from "c:types";
+import type { Class, Declared } from "c:types";
+import type { c_int } from "@nts/scalars";
 interface WidgetOwnMethods {
     /** @ntsSymbol widget_get_width */
     get_width(this: Widget): c_int;
@@ -5101,7 +5239,8 @@ char *err_take_message(Err *error) {
 #[test]
 fn a_reported_c_error_is_thrown_on_both_backends() {
     let source = r#"
-import type { Class, Ptr, c_int } from "c:types";
+import type { Class, Ptr } from "c:types";
+import type { c_int } from "@nts/scalars";
 import { local } from "c:memory";
 type Err = Class<"_Err">;
 /**
@@ -5179,7 +5318,8 @@ export function run(): number {
     // A tag naming no parameter would leave the call with no slot, and every
     // failure unreported: refused.
     let misnamed = r#"
-import type { Class, Ptr, c_int } from "c:types";
+import type { Class, Ptr } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Err = Class<"_Err">;
 /**
  * @ntsNoEscape error
@@ -5216,7 +5356,8 @@ export function run(): number { return parse_number("1"); }
 #[test]
 fn an_ntscall_method_is_the_programs_function_with_the_receiver_first_on_both_backends() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
 interface WidgetOwnMethods {
     /** @ntsSymbol widget_get_width */
     get_width(this: Widget): c_int;
@@ -5287,7 +5428,8 @@ export function run(): number {
 #[test]
 fn a_promise_carries_a_c_handle_across_an_await_on_both_backends() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
 interface WidgetOwnMethods {
     /** @ntsSymbol widget_get_width */
     get_width(this: Widget): c_int;
@@ -5395,7 +5537,8 @@ export async function both(): Promise<void> {
 fn a_c_long_with_bit_31_set_crosses_the_win64_slot_on_both_backends() {
     let source = r#"
 import { local } from "c:memory";
-import type { Struct, c_int, c_long, c_ulong } from "c:types";
+import type { Struct } from "c:types";
+import type { c_int, c_long, c_ulong } from "@nts/scalars";
 type Slot = Struct<{ before: c_int; value: c_long; after: c_int }, "slot">;
 declare function echo_long(value: c_long): c_long;
 declare function echo_ulong(value: c_ulong): c_ulong;
@@ -5633,7 +5776,7 @@ export function probe(seed: number): number {
 #[test]
 fn a_c_long_constant_too_wide_for_win64_is_refused_on_both_backends() {
     let source = r#"
-import type { c_long, c_ulong } from "c:types";
+import type { c_long, c_ulong } from "@nts/scalars";
 declare function take_long(value: c_long): void;
 declare function take_ulong(value: c_ulong): void;
 export function fits(): void { take_long(-2147483648n as c_long); take_ulong(4294967295n as c_ulong); }
@@ -5668,7 +5811,7 @@ export function wide(): void { take_long(2147483648n as c_long); }
             && for_win64[0].contains("`long`"),
         "{for_win64:?}"
     );
-    let negative = "import type { c_ulong } from \"c:types\";\ndeclare function take_ulong(value: c_ulong): void;\nexport function negative(): void { take_ulong(-1n as c_ulong); }\n";
+    let negative = "import type { c_ulong } from \"@nts/scalars\";\ndeclare function take_ulong(value: c_ulong): void;\nexport function negative(): void { take_ulong(-1n as c_ulong); }\n";
     let refused_negative = rejected("win64-constants-negative", negative, &[]);
     assert!(
         refused_negative.len() == 1 && refused_negative[0].starts_with("NTS5001"),
@@ -5732,7 +5875,8 @@ export function wide(): void { take_long(2147483648n as c_long); }
 #[test]
 fn a_nullable_callback_and_a_void_pointer_cross_on_both_backends() {
     let source = r#"
-import type { Ptr, c_int } from "c:types";
+import type { Ptr } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function some_address(): Ptr<void>;
 declare function apply_or(f: ((n: c_int) => c_int) | null, x: c_int, fallback: c_int): c_int;
 declare function is_null(p: Ptr<void> | null): c_int;
@@ -5782,7 +5926,8 @@ export function realPointer(): number { return is_null(some_address()); }
 #[test]
 fn a_utf16_string_crosses_lent_when_wide_and_copied_when_narrow_on_both_backends() {
     let source = r#"
-import type { Utf16String, c_int } from "c:types";
+import type { Utf16String } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function sum(s: Utf16String): c_int;
 declare function same(a: Utf16String, b: Utf16String): c_int;
 declare function is_null(s: Utf16String | null): c_int;
@@ -5847,7 +5992,8 @@ export function nothing(): number { return is_null(null); }
 #[test]
 fn a_string_view_crosses_as_the_string_itself_on_both_backends() {
     let source = r#"
-import type { StringView, c_int } from "c:types";
+import type { StringView } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function units(s: StringView): c_int;
 declare function count(s: StringView): c_int;
 declare function flags(s: StringView): c_int;
@@ -5918,7 +6064,8 @@ export function nothing(): number { return is_null(null); }
 #[test]
 fn a_string_view_result_is_copied_exactly_on_both_backends() {
     let source = r#"
-import type { StringView, c_int } from "c:types";
+import type { StringView } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function echo(s: StringView): StringView;
 declare function fixed(): StringView;
 declare function maybe(flag: c_int): StringView | null;
@@ -5966,7 +6113,7 @@ export function nulls(): number { return (maybe(0 as c_int) === null ? 10 : 0) +
 #[test]
 fn a_string_intersected_with_a_real_property_is_not_a_utf16_string() {
     let source = r#"
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 declare function take(s: string & { real: number }): c_int;
 export function go(s: string & { real: number }): number { return take(s); }
 "#;
@@ -6011,7 +6158,7 @@ fn a_c_long32_is_a_number_on_win64_and_refused_where_long_is_64_bits() {
         "a Windows-only brand without a case here"
     );
     let source = r#"
-import type { c_long32, c_ulong32 } from "c:types";
+import type { c_long32, c_ulong32 } from "@nts/scalars";
 declare function echo_dword(value: c_ulong32): c_ulong32;
 declare function echo_long(value: c_long32): c_long32;
 export function dword(): number { return echo_dword(4294967295 as c_ulong32); }
@@ -6148,7 +6295,8 @@ fn a_cycle_through_a_gobject_is_collected_on_both_backends() {
     let cflags: Vec<&str> = cflags.iter().map(String::as_str).collect();
     let libs: Vec<&str> = libs.iter().map(String::as_str).collect();
     let source = r#"
-import type { Class, Erased, ErasedClosure, GObjectClass, Owned, Ptr, c_int, c_uint, c_ulong } from "c:types";
+import type { Class, Erased, ErasedClosure, GObjectClass, Owned, Ptr } from "c:types";
+import type { c_int, c_uint, c_ulong } from "@nts/scalars";
 type GClosure = Class<"_GClosure">;
 type GParamSpec = Class<"_GParamSpec">;
 interface GObjectMethods {
@@ -6335,7 +6483,8 @@ void collect(void) { nts_checkpoint(); }
 #[test]
 fn an_upcast_borrows_its_handles_reference_on_both_backends() {
     let source = r#"
-import type { Class, GObjectClass, Owned, c_int } from "c:types";
+import type { Class, GObjectClass, Owned } from "c:types";
+import type { c_int } from "@nts/scalars";
 type GTypeInstance = Class<"_GTypeInstance">;
 type GObject = GObjectClass<"_GObject", GTypeInstance>;
 type Thing = GObjectClass<"_Thing", GObject>;
@@ -6403,8 +6552,8 @@ export function live(): number { return live_objects() as number; }
     }
 }
 
-/// `CNumber<C>`: a C number a binding takes and gives as a plain `number`, as
-/// GJS does -- `gtk_box_new(VERTICAL, 4)`, no cast. An argument proven to be
+/// A kind of `@nts/scalars`: a C number a binding takes and gives as a plain
+/// `number`, as GJS does -- `gtk_box_new(VERTICAL, 4)`, no cast. An argument proven to be
 /// one of C's type's values crosses as it is, and a fraction is refused where
 /// it would cross into an integer (`add(2.9, …)`, which once truncated to 2); a
 /// result reads back as a `number` that arithmetic keeps fractional, and a
@@ -6412,12 +6561,12 @@ export function live(): number { return live_objects() as number; }
 #[test]
 fn a_plain_number_crosses_as_its_c_type_on_both_backends() {
     let source = r#"
-import type { CNumber } from "c:types";
-declare function add(a: CNumber<"int">, b: CNumber<"double">): CNumber<"int">;
-declare function halve(x: CNumber<"float">): CNumber<"double">;
-declare function twice(callback: (n: CNumber<"int">) => CNumber<"int">, n: CNumber<"int">): CNumber<"int">;
-declare function doubled(n: CNumber<"size_t">): CNumber<"size_t">;
-function plus_one(n: CNumber<"int">): CNumber<"int"> { return (n + 1) | 0; }
+import type { AsNumber, Float32, Float64, Int32, Uint16, c_int, c_size_t } from "@nts/scalars";
+declare function add(a: c_int, b: Float64): c_int;
+declare function halve(x: Float32): Float64;
+declare function twice(callback: (n: c_int) => c_int, n: c_int): c_int;
+declare function doubled(n: AsNumber<c_size_t>): AsNumber<c_size_t>;
+function plus_one(n: c_int): c_int { return (n + 1) | 0; }
 // A 64-bit one crosses as C's `size_t` and is a `number` to the program.
 export function wide(): number { return doubled(3) / 2 + 0.5; }
 export function run(): number {
@@ -6442,7 +6591,7 @@ size_t doubled(size_t n) { return 2 * n + 1; }
         };
         assert!(
             text.contains("int add(int, double)"),
-            "a `CNumber` is not C's type"
+            "a kind of `@nts/scalars` is not C's type"
         );
         // add: 2 + 3 = 5 (the double 3.5 truncates in C), + 0.25 kept;
         // halve(5) = 2.5; twice: 40 -> 41 -> 42, minus 40 = 2. wide:
@@ -6456,7 +6605,7 @@ size_t doubled(size_t n) { return 2 * n + 1; }
     // `_finish` returns a `gsize`. Held as a `bigint`, this was refused as
     // "settling with a `bigint`".
     let settled = format!(
-        "{source}\nexport function later(): Promise<CNumber<\"size_t\">> {{ return new Promise<CNumber<\"size_t\">>((resolve) => {{ resolve(doubled(3)); }}); }}\n"
+        "{source}\nexport function later(): Promise<AsNumber<c_size_t>> {{ return new Promise<AsNumber<c_size_t>>((resolve) => {{ resolve(doubled(3)); }}); }}\n"
     );
     let Some((_, prepared)) = prepare("cnumber-promise", &settled) else {
         return;
@@ -6493,7 +6642,8 @@ size_t doubled(size_t n) { return 2 * n + 1; }
 #[test]
 fn an_interface_takes_the_classes_implementing_it_on_both_backends() {
     let source = r#"
-import type { GObjectClass, GObjectInterface, ScopedClosure, c_int } from "c:types";
+import type { GObjectClass, GObjectInterface, ScopedClosure } from "c:types";
+import type { c_int } from "@nts/scalars";
 type GObject = GObjectClass<"_GObject">;
 type Widget = GObjectClass<"_Widget", GObject>;
 type Editable = GObjectInterface<"_Editable", Widget>;
@@ -6582,21 +6732,22 @@ void nts_gobject_made(void *o) { (void)o; }
 #[test]
 fn a_local_used_where_it_is_made_is_allowed_in_a_loop_and_an_async_function() {
     let source = r#"
-import type { CNumber, Ptr } from "c:types";
+import type { Ptr } from "c:types";
+import type { AsNumber, Float32, Float64, Int32, Uint16, c_int, c_size_t } from "@nts/scalars";
 import { local } from "c:memory";
 /** @ntsNoEscape out */
-declare function fill(out: Ptr<CNumber<"int">>, value: CNumber<"int">): void;
+declare function fill(out: Ptr<c_int>, value: c_int): void;
 export function looped(): number {
     let sum = 0;
     for (let i = 1; i <= 4; i++) {
-        const slot = local<CNumber<"int">>();
+        const slot = local<c_int>();
         fill(slot, i * 10);
         sum += slot[0];
     }
     return sum;
 }
 export async function suspended(): Promise<number> {
-    const slot = local<CNumber<"int">>();
+    const slot = local<c_int>();
     fill(slot, 7);
     const before = slot[0];
     await Promise.resolve();
@@ -6644,8 +6795,8 @@ export async function suspended(): Promise<number> {
         );
     }
     let carried = source.replace(
-        "    for (let i = 1; i <= 4; i++) {\n        const slot = local<CNumber<\"int\">>();",
-        "    let kept = local<CNumber<\"int\">>();\n    for (let i = 1; i <= 4; i++) {\n        const slot = local<CNumber<\"int\">>();\n        sum += kept[0];\n        kept = slot;",
+        "    for (let i = 1; i <= 4; i++) {\n        const slot = local<c_int>();",
+        "    let kept = local<c_int>();\n    for (let i = 1; i <= 4; i++) {\n        const slot = local<c_int>();\n        sum += kept[0];\n        kept = slot;",
     );
     let Some((_, prepared)) = prepare("confined-carried", &carried) else {
         return;
@@ -6668,14 +6819,15 @@ export async function suspended(): Promise<number> {
 #[test]
 fn a_local_read_past_a_branch_of_its_own_iteration_is_allowed_in_a_loop() {
     let source = r#"
-import type { CNumber, Ptr } from "c:types";
+import type { Ptr } from "c:types";
+import type { AsNumber, Float32, Float64, Int32, Uint16, c_int, c_size_t } from "@nts/scalars";
 import { local } from "c:memory";
 /** @ntsNoEscape out */
-declare function fill(out: Ptr<CNumber<"int">>, value: CNumber<"int">): void;
+declare function fill(out: Ptr<c_int>, value: c_int): void;
 export function looped(): number {
     let sum = 0;
     for (let i = 1; i <= 4; i++) {
-        const slot = local<CNumber<"int">>();
+        const slot = local<c_int>();
         fill(slot, i * 10);
         if (i % 2 === 0) {
             sum += slot[0];
@@ -6713,7 +6865,8 @@ export function looped(): number {
 #[test]
 fn an_erased_result_is_the_handle_the_program_holds_on_both_backends() {
     let source = r#"
-import type { Class, Erased, GObjectClass, c_int } from "c:types";
+import type { Class, Erased, GObjectClass } from "c:types";
+import type { c_int } from "@nts/scalars";
 type GTypeInstance = Class<"_GTypeInstance">;
 type GObject = GObjectClass<"_GObject", GTypeInstance>;
 type Thing = GObjectClass<"_Thing", GObject>;
@@ -6759,7 +6912,8 @@ export function live(): number { return live_objects() as number; }
 #[test]
 fn a_construct_only_property_is_its_constructors_argument_on_both_backends() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
 interface ThingOwnMethods {
     /** @ntsSymbol thing_set_label */
     set_label(this: Thing, label: string): void;
@@ -6878,7 +7032,8 @@ export function run(): void {
 #[test]
 fn a_c_string_read_from_a_slot_is_copied_on_both_backends() {
     let source = r#"
-import type { Ptr, c_char, c_int } from "c:types";
+import type { Ptr } from "c:types";
+import type { c_char, c_int } from "@nts/scalars";
 import { local, stringFrom } from "c:memory";
 /** @ntsNoEscape out */
 declare function name_into(out: Ptr<Ptr<c_char>>, which: c_int): void;
@@ -6923,10 +7078,11 @@ void name_into(char **out, int which) {
 #[test]
 fn c_bytes_read_from_a_pointer_are_copied_on_both_backends() {
     let source = r#"
-import type { ConstPtr, c_double, c_uint8 } from "c:types";
+import type { ConstPtr } from "c:types";
+import type { Float64, Uint8 } from "@nts/scalars";
 import { bytesFrom } from "c:memory";
-declare function bytes_at(): ConstPtr<c_uint8> | null;
-declare function byte_zero(): c_double;
+declare function bytes_at(): ConstPtr<Uint8> | null;
+declare function byte_zero(): Float64;
 export function run(): number {
     const bytes = bytesFrom(bytes_at(), 4);
     let sum = 0;
@@ -6965,7 +7121,8 @@ double byte_zero(void) { return data[0]; }
 #[test]
 fn a_static_member_of_a_declared_value_is_its_c_function_on_both_backends() {
     let source = r#"
-import type { Class, c_int } from "c:types";
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Thing = Class<"_Thing">;
 declare function thing_record(thing: Thing): c_int;
 declare const Thing: {
@@ -7191,9 +7348,10 @@ void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) {
 #[test]
 fn a_proven_number_reaches_c_integer_storage_exactly_on_both_backends() {
     let source = r#"
-import type { CNumber, Ptr, c_int } from "c:types";
-declare function seen_i32(v: CNumber<"int32">): CNumber<"double">;
-declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
+import type { Ptr } from "c:types";
+import type { AsNumber, Float32, Float64, Int32, Uint16, c_int, c_size_t } from "@nts/scalars";
+declare function seen_i32(v: Int32): Float64;
+declare function seen_u16(v: Uint16): Float64;
 declare function slots(): Ptr<c_int>;
 export function run(x: c_int): number {
     const p = slots();
@@ -7234,7 +7392,8 @@ double seen_u16(uint16_t v) { return v; }
 #[test]
 fn a_dropped_host_handle_result_keeps_no_root_on_both_backends() {
     let source = r#"
-import type { HostClass, c_int } from "c:types";
+import type { HostClass } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
 declare function node_at(i: c_int): Node;
 declare function roots_held(): c_int;
@@ -7279,7 +7438,8 @@ export function errors(): number { return errors_seen() as number; }
 #[test]
 fn an_owned_handle_parameter_is_released_after_a_loop_on_both_backends() {
     let source = r#"
-import type { HostClass, c_int } from "c:types";
+import type { HostClass } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
 declare function node_at(i: c_int): Node;
 declare function node_value(n: Node): c_int;

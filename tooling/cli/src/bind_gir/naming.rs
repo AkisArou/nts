@@ -154,7 +154,7 @@ fn includes<'a>(repository: &'a Repository, namespace: &'a Namespace) -> BTreeSe
 }
 
 /// Each identifier in `text`, with where it starts: the tokens type text is
-/// renamed by. A string literal's contents are not tokens -- `CNumber<"int">`
+/// renamed by. A string literal's contents are not tokens -- `c_int`
 /// names no type -- and neither is a name after a `.`, which is already a
 /// member of something.
 fn identifiers(text: &str) -> impl Iterator<Item = (usize, &str)> {
@@ -561,10 +561,9 @@ mod tests {
 
     #[test]
     fn a_token_is_an_identifier_outside_a_string_and_not_after_a_dot() {
-        let tokens: Vec<&str> =
-            identifiers(r#"CNumber<"int"> | Gio.ListModel | (self: GtkButton) => void"#)
-                .map(|(_, t)| t)
-                .collect();
-        assert_eq!(tokens, ["CNumber", "Gio", "self", "GtkButton", "void"]);
+        let tokens: Vec<&str> = identifiers("c_int | Gio.ListModel | (self: GtkButton) => void")
+            .map(|(_, t)| t)
+            .collect();
+        assert_eq!(tokens, ["c_int", "Gio", "self", "GtkButton", "void"]);
     }
 }

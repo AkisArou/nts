@@ -25,18 +25,10 @@ fn preamble(binding: &Binding, command: &str) -> String {
     }
     out.push_str(" */\n");
     let _ = writeln!(out, "declare module \"{}\" {{", binding.module);
-    if !binding.brands.is_empty() {
-        let _ = writeln!(
-            out,
-            "  import type {{ {} }} from \"c:types\";",
-            binding
-                .brands
-                .iter()
-                .copied()
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
+    out.push_str(&crate::bind::vocabulary_imports(
+        binding.brands.iter().copied(),
+        "  ",
+    ));
     for (module, names) in &binding.imports {
         let _ = writeln!(
             out,
@@ -951,9 +943,9 @@ fn settles(result: &super::map::Mapped) -> bool {
         {
             true
         }
-        // A number the program reads as a `number` (`CNumber`), whatever C's
+        // A number the program reads as a `number` (`AsNumber`), whatever C's
         // width; not a `bigint`, which a promise's payload cannot carry.
-        Type::Scalar(scalar) => !scalar.needs_exact_integer() || result.ts.starts_with("CNumber<"),
+        Type::Scalar(scalar) => !scalar.needs_exact_integer() || result.ts.starts_with("AsNumber<"),
         _ => false,
     }
 }
@@ -1383,7 +1375,10 @@ fn module_of_type(binding: &Binding, name: &str) -> Option<String> {
     {
         return Some(module.clone());
     }
-    binding.brands.contains(name).then(|| "c:types".to_owned())
+    binding
+        .brands
+        .contains(name)
+        .then(|| nts_core::hir::native::vocabulary_module(name).to_owned())
 }
 
 /// `start` as a Promise, settled by `finish`: what `finish` returns, or the

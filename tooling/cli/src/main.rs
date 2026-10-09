@@ -3767,7 +3767,10 @@ fn unresolved_foreign(
             _ => None,
         };
         let Some(module) = module else { continue };
-        if !module.starts_with("c:") && !module.starts_with("winrt:") {
+        if !module.starts_with("c:")
+            && !module.starts_with("winrt:")
+            && module != nts_core::hir::native::SCALARS_MODULE
+        {
             continue;
         }
         let Some(source) = snapshot.sources.get(diagnostic.primary.file.0 as usize) else {
@@ -3921,23 +3924,30 @@ fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8
 /// names.
 fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) -> Result<()> {
     {
-        // **`c:types` is the compiler's, and no header declares it.** It holds
-        // the scalar brands -- `c_int`, `c_uint32`, `c_double` -- that say how a
-        // TypeScript number crosses to C, and every generated binding imports
-        // from it. Binding it from a package's header is the wrong question, and
-        // asking it produced `no complete definition of \`c_uint32\` in these
+        // **`c:types` and `@nts/scalars` are the compiler's, and no header
+        // declares them.** They hold the memory vocabulary (`Ptr`, `Struct`)
+        // and the scalar kinds (`c_int`, `Uint32`, `Float64`) that say how a
+        // TypeScript value crosses to C, and every generated binding imports
+        // from them. Binding one from a package's header is the wrong question,
+        // and asking it produced `no complete definition of \`Uint32\` in these
         // headers`: a true sentence naming something the reader cannot act on,
         // about a module their package was never supposed to declare.
         //
-        // The fix is a path, so the message is the path. Nothing distributes
-        // this file yet -- every tsconfig in the tree that uses a `c:` module
-        // lists it by hand -- which is a gap in its own right, and naming it
-        // here is the least this can do until it closes.
-        if module == C_BRANDS {
+        // The fix is a path, so the message is the path: `libc.d.ts` declares
+        // `c:types` and references the scalar library. Nothing distributes it
+        // yet -- every tsconfig in the tree that uses a `c:` module lists it by
+        // hand -- which is a gap in its own right, and naming it here is the
+        // least this can do until it closes.
+        if [
+            nts_core::hir::native::TYPES_MODULE,
+            nts_core::hir::native::SCALARS_MODULE,
+        ]
+        .contains(&module)
+        {
             bail!(
-                "`{file}` imports `{C_BRANDS}`, which is the compiler's scalar brand \
-                 module rather than one a package declares -- so no header can define \
-                 it. Add `runtime/native/libc.d.ts` to this project's tsconfig, in \
+                "`{file}` imports `{module}`, which is the compiler's own module \
+                 rather than one a package declares -- so no header can define it. \
+                 Add `runtime/native/libc.d.ts` to this project's tsconfig, in \
                  `files` or `include`, the way every other `c:` consumer in the tree \
                  does"
             )
@@ -5155,9 +5165,6 @@ fn refuse_unpackaged(name: &str, kind: &str, target: &nts_build::config::Target)
         ),
     }
 }
-
-/// The compiler's scalar brand module, which no package declares.
-const C_BRANDS: &str = "c:types";
 
 /// The runtime `emit-jvm` places beside the classes it writes.
 ///

@@ -7,7 +7,8 @@
  * @ntsHeader sys/resource.h
  */
 declare module "c:sys/resource" {
-  import type { Ptr, Struct, c_int, c_long } from "c:types";
+  import type { c_int, c_long } from "@nts/scalars";
+  import type { Ptr, Struct } from "c:types";
   export type Rusage = Struct<{
     ru_utime: Timeval;
     ru_stime: Timeval;

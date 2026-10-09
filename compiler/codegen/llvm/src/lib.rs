@@ -1486,7 +1486,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 let passed = bridge_argument(
                     compiled,
                     (at, parameter, foreign, from),
-                    (bridging.boxed(at), length, counted, bridging.sequence(at)),
+                    (bridging.boxed(at), length, counted, bridging.converted(at)),
                     (&mut body, &mut releases),
                 )?;
                 arguments.push(passed);
@@ -1496,10 +1496,11 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             // `symbol` already carries the sigil; a second one is `@@f`, which
             // the assembler reports as "expected value token" pointing at the
             // call and not at the name.
-            // Raised around the call so a `throw` inside it stops at this
-            // boundary instead of jumping past the C frames that called us.
-            // Same two calls the C bridge makes, because the policy lives in
-            // the runtime and not in either backend's text.
+            // Raised around the conversions and the call, so a `throw` in
+            // either stops at this boundary instead of jumping past the C
+            // frames that called us. Same two calls the C bridge makes, in the
+            // same places, because the policy lives in the runtime and not in
+            // either backend's text.
             let enter = "  call void @nts_callback_enter()";
             // A once-bridge gives the closure back after its one call, before
             // leaving, as the C bridge does.
@@ -1522,16 +1523,17 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                     out,
                     "define internal void @{name}({parameters}) nounwind {{"
                 );
+                let _ = writeln!(out, "{enter}");
                 out.push_str(&body);
-                let _ = writeln!(out, "{enter}\n  {call}\n{leave}\n  ret void\n}}");
+                let _ = writeln!(out, "  {call}\n{leave}\n  ret void\n}}");
             } else {
                 let want_ty = ty_of(&want, compiled)?;
                 let _ = writeln!(
                     out,
                     "define internal {want_ty} @{name}({parameters}) nounwind {{"
                 );
-                out.push_str(&body);
                 let _ = writeln!(out, "{enter}");
+                out.push_str(&body);
                 let _ = writeln!(out, "  %r = {call}");
                 bridge_answer(
                     &mut out,
@@ -1604,18 +1606,18 @@ fn declare_types(
 }
 
 /// What a bridge argument is converted by: the boxed record, the array's
-/// length, whether the program counts, and the sequence made an array.
+/// length, whether the program counts, and the function lowering made for it.
 type Conversions<'a> = (
     Option<&'a nts_core::hir::BoxedParameter>,
     Option<(usize, HirType)>,
     bool,
-    Option<&'a nts_core::hir::SequenceParameter>,
+    Option<&'a nts_core::hir::ConvertedParameter>,
 );
 
 fn bridge_argument(
     compiled: &Func,
     (at, parameter, foreign, from): (usize, usize, &nts_core::hir::native::Type, HirType),
-    (boxing, length, counted, sequence): Conversions<'_>,
+    (boxing, length, counted, converted): Conversions<'_>,
     (body, releases): (&mut String, &mut String),
 ) -> Result<String, Diagnostic> {
     let to = compiled.params[parameter + 1].ty.clone();
@@ -1625,19 +1627,20 @@ fn bridge_argument(
     // the copy and releases it after the call; anything that keeps the box
     // counts it, so one kept past the call outlives this release. Without
     // counting nothing is given back (see the C bridge).
-    // A sequence C passes, as the array the compiled function takes: made by
-    // the function lowering made for it (`Bridging::sequences`), and given
-    // back after the call under counting, as a boxed copy is.
-    if let Some(sequence) = sequence {
+    // An argument the function lowering made for it converts
+    // (`Bridging::converted`) -- a sequence made an array, a 64-bit integer
+    // read exactly as a number -- and a managed result given back after the
+    // call under counting, as a boxed copy is.
+    if let Some(converted) = converted {
         let _ = writeln!(
             body,
-            "  %q{at} = call ptr {}(ptr %a{at})",
-            symbol(&sequence.function)
+            "  %q{at} = call {to_ty} {}({from_ty} %a{at})",
+            symbol(&converted.function)
         );
-        if counted {
+        if counted && matches!(to, HirType::Managed(_)) {
             let _ = writeln!(releases, "  call void @nts_release(ptr %q{at})");
         }
-        return Ok(format!("ptr %q{at}"));
+        return Ok(format!("{to_ty} %q{at}"));
     }
     if let Some(boxing) = boxing {
         let _ = writeln!(body, "  %g{at} = call i64 @{}()", boxing.get_type);

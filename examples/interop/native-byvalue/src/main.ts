@@ -4,26 +4,26 @@
 import { mixed, point_add, rect_area, rect_inset, rect_make, tagged_next, wide_add, type Point, type Tagged, type Wide } from "c:geometry";
 import { local } from "c:memory";
 import { report } from "c:report";
-import type { c_char, c_double, c_int, c_long } from "c:types";
+import type { c_char, Float64, c_int, c_long } from "@nts/scalars";
 
 function main(): void {
-  const r = rect_make(1 as c_double, 2 as c_double, 10 as c_double, 20 as c_double);
+  const r = rect_make(1 as Float64, 2 as Float64, 10 as Float64, 20 as Float64);
   report(`rect ${r.origin.x} ${r.origin.y} ${r.size.x} ${r.size.y} area ${rect_area(r)}`);
 
-  const inset = rect_inset(r, 1 as c_double);
+  const inset = rect_inset(r, 1 as Float64);
   report(`inset ${inset.origin.x} ${inset.origin.y} ${inset.size.x} ${inset.size.y}`);
   // C changed its copy; ours is as it was.
   report(`unchanged ${r.origin.x} ${r.size.x}`);
   // And the result is its own storage: changing the source later leaves it.
-  r.size.x = 100 as c_double;
+  r.size.x = 100 as Float64;
   report(`result kept ${inset.size.x} area now ${rect_area(r)}`);
 
   const a = local<Point>();
   const b = local<Point>();
-  a.x = 1.5 as c_double;
-  a.y = -2 as c_double;
-  b.x = 0.25 as c_double;
-  b.y = 8 as c_double;
+  a.x = 1.5 as Float64;
+  a.y = -2 as Float64;
+  b.x = 0.25 as Float64;
+  b.y = 8 as Float64;
   const sum = point_add(a, b);
   report(`point ${sum.x} ${sum.y}`);
 
@@ -40,7 +40,7 @@ function main(): void {
   const wider = wide_add(w, 1000n as c_long);
   report(`wide ${wider.a} ${wider.b} ${wider.c}`);
 
-  report(`mixed ${mixed(r, sum, 2 as c_double, next, wider)}`);
+  report(`mixed ${mixed(r, sum, 2 as Float64, next, wider)}`);
 }
 
 main();

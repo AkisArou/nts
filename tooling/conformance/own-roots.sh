@@ -29,7 +29,7 @@
 # On 2026-09-14 a new NTS1001 kind appeared:
 #
 #     foreign function `nts_cluster_self_send` parameter `message` without a native ABI
-#     type; use a c_int/c_double brand
+#     type; use a kind of @nts/scalars (c_int, Float64)
 #
 # It fires at every **call site** of a `declare function` that has not been annotated, so one
 # untagged declaration used four times reads as four roots. `cluster` went from 4 own roots to

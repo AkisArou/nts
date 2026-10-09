@@ -1,3 +1,4 @@
+/// <reference path="./scalars.d.ts" />
 // Hand-written, curated C ABI declarations. Not generated from system headers.
 // Module members enter scope only through imports.
 
@@ -9,6 +10,7 @@
  * happens wherever a *binding* uses one of these to describe a real function.
  */
 declare module "c:types" {
+  import type { AsNumber, c_int, c_uint, c_ulong, Float64 } from "@nts/scalars";
   // A pointer to a C struct tag, with no managed header or implicit lifetime.
   // Construct and destroy it through the library's functions. `| null` admits
   // a null pointer. The phantom field is never readable or constructible.
@@ -148,18 +150,6 @@ declare module "c:types" {
   // program passes and reads `true` and `false`; C sees `1` and `0`, and any
   // non-zero it answers is `true`.
   export type CBool<B extends number> = boolean & { readonly __c_bool?: B };
-  // A C number a binding takes and gives as a plain `number`: `C` names the
-  // C type (`"int"` is `int`, `"size_t"` is `size_t`), and a program writes
-  // `box.spacing = 4` or `read_upto("\n", -1)` with no cast. A 64-bit
-  // quantity past 2^53 rounds, as it does in GJS and in every bridge to
-  // JavaScript; what must keep every bit -- an identifier, GLib's `GType` --
-  // keeps its `bigint` brand. The same optional brand `objc:types` spells
-  // Swift's numbers with.
-  export type CNumber<
-    C extends
-      | "char" | "int8" | "uint8" | "int16" | "uint16" | "int" | "uint" | "int32" | "uint32"
-      | "int64" | "uint64" | "long" | "ulong" | "size_t" | "float" | "double",
-  > = number & { readonly [K in `__c_${C}`]?: true };
   // A handle C declares as one of its ancestors: `gtk_box_new` returns the
   // `GtkBox` GIR says it does, which the header declares `GtkWidget *`. The
   // program has a `T`; C's prototype says `D`, which must be an ancestor of
@@ -279,7 +269,7 @@ declare module "c:types" {
   // `double` it was registered as, a `boolean` GLib's `gboolean`. Both are
   // their TypeScript types still, so a handler reads them as it would.
   export type SignalArgs<T extends readonly unknown[]> = {
-    [I in keyof T]: T[I] extends number ? CNumber<"double"> : T[I] extends boolean ? CBool<c_int> : T[I];
+    [I in keyof T]: T[I] extends number ? Float64 : T[I] extends boolean ? CBool<c_int> : T[I];
   };
   export interface WithSignals<Sig extends SignalMap> {
     // What the compiler reads the map from: the snapshot is structural, and
@@ -294,7 +284,7 @@ declare module "c:types" {
       detailed_signal: K,
       handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
       connect_flags?: c_uint,
-    ): CNumber<"ulong">;
+    ): AsNumber<c_ulong>;
     /**
      * @ntsSymbol nts_gobject_connect
      * @ntsDefault connect_flags=1
@@ -304,7 +294,7 @@ declare module "c:types" {
       detailed_signal: K,
       handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
       connect_flags?: c_uint,
-    ): CNumber<"ulong">;
+    ): AsNumber<c_ulong>;
     // Lowered as a call of a thunk the compiler defines per signal, which
     // emits by the signal's id: the symbol names no C function.
     /**
@@ -436,7 +426,7 @@ declare module "c:types" {
       detailed_signal: K,
       handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
       connect_flags?: c_uint,
-    ): CNumber<"ulong">;
+    ): AsNumber<c_ulong>;
     /**
      * @ntsSymbol nts_gobject_connect
      * @ntsDefault connect_flags=1
@@ -446,7 +436,7 @@ declare module "c:types" {
       detailed_signal: K,
       handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
       connect_flags?: c_uint,
-    ): CNumber<"ulong">;
+    ): AsNumber<c_ulong>;
     /**
      * @ntsSymbol nts_gobject_emit
      */
@@ -657,65 +647,6 @@ declare module "c:types" {
               : Slot<Fields[K]> }
       & { readonly [index: number]: ConstPtr<T> }
     : { readonly [index: number]: Slot<T> });
-  // Hand-written native ABI scalar declarations, maintained with hir/native.rs.
-  // Import the required types from "c:types".
-  // Brands select the C boundary type; arithmetic inside TypeScript is ordinary
-  // number arithmetic. An assertion requests a conversion at a foreign call;
-  // it does not validate the value's range. The __c_* properties are phantom
-  // markers and cannot be read by compiled code.
-  // C's `char` is a third type, distinct from both `signed char` and
-  // `unsigned char` however it is signed on a target. A `char[65]` member
-  // described with `c_uint8` has the same size, alignment and offsets and is
-  // still the wrong type -- which the generated witness refuses.
-  export type c_char = number & { readonly __c_char: unique symbol };
-  export type c_int = number & { readonly __c_int: unique symbol };
-  export type c_uint = number & { readonly __c_uint: unique symbol };
-  export type c_int8 = number & { readonly __c_int8: unique symbol };
-  export type c_uint8 = number & { readonly __c_uint8: unique symbol };
-  export type c_int16 = number & { readonly __c_int16: unique symbol };
-  export type c_uint16 = number & { readonly __c_uint16: unique symbol };
-  export type c_int32 = number & { readonly __c_int32: unique symbol };
-  export type c_uint32 = number & { readonly __c_uint32: unique symbol };
-  // LP64 native ABI, over `bigint` rather than `number`: a double holds every
-  // integer up to 2^53 exactly and nothing above it, so these six carry values
-  // a `number` cannot. Measured rather than assumed -- a round trip through a
-  // `number`-based `c_int64` returned INT64_MAX as INT64_MIN, with a correct
-  // `int64_t` prototype at both ends.
-  //
-  // Arithmetic on them is ordinary bigint arithmetic; the brand selects the C
-  // boundary type and does not wrap each intermediate. A value stored into
-  // signed 64-bit storage normalizes like `BigInt.asIntN(64, x)` and unsigned
-  // like `asUintN`, and one loaded back is the exact signed or unsigned value.
-  //
-  // `size_t` and `ptrdiff_t` are 64 bits on every supported target, and so is
-  // `long` except on Windows. Giving `int64_t` exact values while its own
-  // underlying spelling rounded would be the worse of both.
-  //
-  // **`c_long` and `c_ulong` on Windows.** Win64 is LLP64: C's `long` is 32
-  // bits there. The brand stays `bigint` on every target, so one source builds
-  // for all of them, and the value in TypeScript is the same exact integer.
-  // Only the slot C reads is narrower:
-  // - **A constant that does not fit** a 32-bit `long` (or `unsigned long`) is
-  //   refused when building for Windows, naming the value.
-  // - **A runtime value is truncated** modulo 2^32 at the boundary, as C
-  //   truncates: `2n ** 32n + 5n` arrives as `5`. A value C hands back is
-  //   sign-extended for `c_long` and zero-extended for `c_ulong`.
-  // Use `c_int64`/`c_uint64` for a value that needs 64 bits on every target.
-  export type c_int64 = bigint & { readonly __c_int64: unique symbol };
-  export type c_uint64 = bigint & { readonly __c_uint64: unique symbol };
-  export type c_long = bigint & { readonly __c_long: unique symbol };
-  export type c_ulong = bigint & { readonly __c_ulong: unique symbol };
-  // C's `long` and `unsigned long` where they are 32 bits: Windows (LLP64),
-  // whose APIs are built on `LONG` and `DWORD`. A `number`, where `c_long` is
-  // a `bigint` so that portable code is exact on every target. A Windows
-  // binding uses these; a build for a target whose `long` is 64 bits refuses
-  // every function that takes or returns one, by name.
-  export type c_long32 = number & { readonly __c_long32: unique symbol };
-  export type c_ulong32 = number & { readonly __c_ulong32: unique symbol };
-  export type c_size_t = bigint & { readonly __c_size_t: unique symbol };
-  export type c_ptrdiff_t = bigint & { readonly __c_ptrdiff_t: unique symbol };
-  export type c_float = number & { readonly __c_float: unique symbol };
-  export type c_double = number & { readonly __c_double: unique symbol };
 }
 
 /**
@@ -766,7 +697,7 @@ declare module "c:memory" {
   // cannot see that.
   /** @ntsAbi intrinsic */
   export function copy<T>(destination: Ptr<T>, source: ConstPtr<T>): void;
-  import type { c_char } from "c:types";
+  import type { c_char } from "@nts/scalars";
   // A C string as a `string`: the bytes up to its NUL, copied, and decoded as
   // UTF-8 -- an ill-formed sequence becomes one U+FFFD for its maximal
   // prefix, as node's `TextDecoder` has it. The pointer is neither kept nor
@@ -778,7 +709,7 @@ declare module "c:memory" {
   // struct's member.
   /** @ntsAbi intrinsic */
   export function stringFrom(c: ConstPtr<c_char> | null): string | null;
-  import type { c_uint8 } from "c:types";
+  import type { Uint8 } from "@nts/scalars";
   // `length` **bytes** at `bytes` -- bytes, not elements; the result is a
   // `Uint8Array`, where the two are the same number -- copied into a new
   // `Uint8Array` the program owns. The pointer is neither kept nor freed: a
@@ -787,7 +718,7 @@ declare module "c:memory" {
   // other length ends the process, since a length with nothing behind it is
   // a broken promise rather than an absence.
   /** @ntsAbi intrinsic */
-  export function bytesFrom(bytes: ConstPtr<c_uint8> | null, length: number): Uint8Array;
+  export function bytesFrom(bytes: ConstPtr<Uint8> | null, length: number): Uint8Array;
   // The same for bytes C spells as `char` -- `g_file_load_contents`'s
   // `char **contents` -- or as untyped memory, `gconstpointer`
   // (`g_bytes_get_data`): the bytes are the bytes, whatever C calls them.
@@ -812,7 +743,7 @@ declare module "c:memory" {
   ): T | null;
 }
 
-// Type aliases only: every export here renames a brand `c:types` already
+// Type aliases only: every export here renames a kind `@nts/scalars`
 // publishes. **No `@ntsHeader`** -- there is no function to re-declare and no
 // record to lay out, so a header would add an include and give the witness
 // nothing to compare. `c:stdlib` and `c:math` keep theirs, because they
@@ -833,28 +764,28 @@ declare module "c:pending" {
 declare module "c:stdint" {
   // Hand-written fixed-width C integer aliases. JavaScript number precision applies.
   export type {
-    c_int8 as int8_t,
-    c_uint8 as uint8_t,
-    c_int16 as int16_t,
-    c_uint16 as uint16_t,
-    c_int32 as int32_t,
-    c_uint32 as uint32_t,
-    c_int64 as int64_t,
-    c_uint64 as uint64_t,
-  } from "c:types";
+    Int8 as int8_t,
+    Uint8 as uint8_t,
+    Int16 as int16_t,
+    Uint16 as uint16_t,
+    Int32 as int32_t,
+    Uint32 as uint32_t,
+    BigInt64 as int64_t,
+    BigUint64 as uint64_t,
+  } from "@nts/scalars";
 }
 
-// Type aliases only: every export here renames a brand `c:types` already
+// Type aliases only: every export here renames a kind `@nts/scalars`
 // publishes. **No `@ntsHeader`** -- there is no function to re-declare and no
 // record to lay out, so a header would add an include and give the witness
 // nothing to compare. `c:stdlib` and `c:math` keep theirs, because they
 // declare real C functions whose prototypes the witness checks.
 declare module "c:stddef" {
   // Hand-written aliases for the supported LP64 C data model.
-  export type { c_size_t as size_t, c_ptrdiff_t as ptrdiff_t } from "c:types";
+  export type { c_size_t as size_t, c_ptrdiff_t as ptrdiff_t } from "@nts/scalars";
 }
 
-// Type aliases only: every export here renames a brand `c:types` already
+// Type aliases only: every export here renames a kind `@nts/scalars`
 // publishes. **No `@ntsHeader`** -- there is no function to re-declare and no
 // record to lay out, so a header would add an include and give the witness
 // nothing to compare. `c:stdlib` and `c:math` keep theirs, because they
@@ -871,7 +802,7 @@ declare module "c:stdbool" {
  */
 declare module "c:stdlib" {
   // Hand-written, curated scalar bindings. Not generated from system headers.
-  import type { c_int, c_long } from "c:types";
+  import type { c_int, c_long } from "@nts/scalars";
 
   // Bytes, not elements. Invalid/nonintegral counts, counts below sizeof<T>(),
   // counts above Number.MAX_SAFE_INTEGER, and allocator failure return null.
@@ -898,17 +829,17 @@ declare module "c:stdlib" {
 declare module "c:math" {
   // Hand-written, curated scalar bindings. Not generated from system headers.
   // Link libm where required.
-  import type { c_double, c_float, c_int } from "c:types";
+  import type { Float64, Float32, c_int } from "@nts/scalars";
 
-  export function fabs(value: c_double): c_double;
-  export function fabsf(value: c_float): c_float;
-  export function sqrt(value: c_double): c_double;
-  export function sqrtf(value: c_float): c_float;
-  export function pow(base: c_double, exponent: c_double): c_double;
-  export function fmod(value: c_double, divisor: c_double): c_double;
-  export function floor(value: c_double): c_double;
-  export function ceil(value: c_double): c_double;
-  export function trunc(value: c_double): c_double;
-  export function copysign(magnitude: c_double, sign: c_double): c_double;
-  export function ldexp(value: c_double, exponent: c_int): c_double;
+  export function fabs(value: Float64): Float64;
+  export function fabsf(value: Float32): Float32;
+  export function sqrt(value: Float64): Float64;
+  export function sqrtf(value: Float32): Float32;
+  export function pow(base: Float64, exponent: Float64): Float64;
+  export function fmod(value: Float64, divisor: Float64): Float64;
+  export function floor(value: Float64): Float64;
+  export function ceil(value: Float64): Float64;
+  export function trunc(value: Float64): Float64;
+  export function copysign(magnitude: Float64, sign: Float64): Float64;
+  export function ldexp(value: Float64, exponent: c_int): Float64;
 }

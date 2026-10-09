@@ -125,7 +125,8 @@ import {
 import { G_TYPE_STRING, g_signal_group_new } from "c:GObject-2.0";
 import { GdkRGBA } from "c:Gdk-4.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
-import type { CNumber, Ptr, c_char } from "c:types";
+import type { Ptr } from "c:types";
+import type { c_int, c_char } from "@nts/scalars";
 import { local, stringFrom } from "c:memory";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
@@ -173,8 +174,8 @@ function outParameters(): void {
     console.log("no-date");
     return;
   }
-  const year = local<CNumber<"int">>();
-  const month = local<CNumber<"int">>();
+  const year = local<c_int>();
+  const month = local<c_int>();
   g_date_time_get_ymd(when, year, month, null);
   console.log("ymd=" + String(year[0]) + "-" + String(month[0]));
   // The same as GJS has it: the out values returned, in order.

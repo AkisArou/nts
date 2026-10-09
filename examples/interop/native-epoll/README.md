@@ -13,7 +13,7 @@ Get any one of them wrong and you have a struct of the right kind and the wrong
 size. An array of them then puts every element after the first at an address
 the kernel does not agree with.
 
-    export type EpollData = Union<{ ptr: Ptr<unknown>; fd: c_int; u32: c_uint32; u64: c_uint64 }, "epoll_data">;
+    export type EpollData = Union<{ ptr: Ptr<unknown>; fd: c_int; u32: Uint32; u64: BigUint64 }, "epoll_data">;
     export type EpollEvent = Packed<Struct<{ events: Events; data: EpollData }, "epoll_event">>;
 
 `Packed<T>` composes rather than taking a third argument, so everything that

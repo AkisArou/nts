@@ -7,6 +7,6 @@
  * @ntsHeader /home/akisarou/Projects/nts/examples/workspace/packages/crypto-core/native/digest.h
  */
 declare module "c:digest" {
-  import type { c_uint32 } from "c:types";
-  export function digest_step(seed: c_uint32, value: c_uint32): c_uint32;
+  import type { Uint32 } from "@nts/scalars";
+  export function digest_step(seed: Uint32, value: Uint32): Uint32;
 }

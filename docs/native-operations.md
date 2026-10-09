@@ -10,9 +10,10 @@ ResourceFlow follows native operations and is not implemented by this slice.
 [The runnable example](../examples/interop/native-buffer/src/main.ts) exposes:
 
 ```ts
-import type { Ptr, c_uint8 } from "c:types";
+import type { Ptr } from "c:types";
+import type { Uint8 } from "@nts/scalars";
 
-export function uppercaseAscii(bytes: Ptr<c_uint8>, length: number): number {
+export function uppercaseAscii(bytes: Ptr<Uint8>, length: number): number {
   let changed = 0;
   for (let i = 0; i < length; i++) {
     const byte = bytes[i];
@@ -86,7 +87,7 @@ const observed = events[0];
 ```
 
 The binding describes `PollFd` as
-`Struct<{ fd: c_int; events: c_int16; revents: c_int16 }, "pollfd">`.
+`Struct<{ fd: c_int; events: Int16; revents: Int16 }, "pollfd">`.
 `Struct` is a schema for native payload storage, not a managed object or an
 allocation. The optional tag names the C struct. Generated headers also expose
 aliases named after the exported function and parameter, so C callers do not
@@ -736,7 +737,7 @@ a `ConstPtr<Sample>` was wanted.
 
 ## Records by value
 
-    export function inset(r: ByValue<Rect>, by: c_double): ByValue<Rect>;
+    export function inset(r: ByValue<Rect>, by: Float64): ByValue<Rect>;
 
 C's `struct rect inset(struct rect r, double by)`. A program holds a record only
 as storage, so `ByValue<T>` is `Ptr<T>` with an optional brand: the brand says
@@ -1436,7 +1437,7 @@ expression of macros. None is a declaration, so no `.d.ts` can name one, and
 three examples here typed the number by hand and asserted it from C.
 
     nts bind-c --module c:epoll --header sys/epoll.h \
-      --const EPOLLIN:c_uint32 --alias EPOLLIN=READABLE \
+      --const EPOLLIN:Uint32 --alias EPOLLIN=READABLE \
       --const EPOLL_CTL_ADD --constants-out src/constants.ts
 
 The values come from the compiler's own evaluator. Each requested name goes

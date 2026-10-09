@@ -12,7 +12,7 @@ import { g_dcgettext, g_dgettext, g_dngettext, g_dpgettext2 } from "c:GLib-2.0";
 import { bind_textdomain_codeset, bindtextdomain, textdomain } from "c:libintl";
 import { setlocale } from "c:locale";
 import { stringFrom } from "c:memory";
-import type { CNumber } from "c:types";
+import type { AsNumber, c_ulong } from "@nts/scalars";
 
 /**
  * The count a plural form is chosen for: C's `unsigned long`, which is what
@@ -20,7 +20,7 @@ import type { CNumber } from "c:types";
  * literal, a length -- and any other is refused where it is passed, rather
  * than reaching C as something it never meant.
  */
-export type Count = CNumber<"ulong">;
+export type Count = AsNumber<c_ulong>;
 
 /** `setlocale`'s categories, glibc's `LC_*` values. */
 export enum LocaleCategory {

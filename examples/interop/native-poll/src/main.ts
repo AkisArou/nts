@@ -1,4 +1,5 @@
-import type { Ptr, c_int, c_uint, c_ulong } from "c:types";
+import type { Ptr } from "c:types";
+import type { c_int, c_uint, c_ulong } from "@nts/scalars";
 import { poll, type PollFd } from "c:poll";
 import { addrOf, local, sizeof } from "c:memory";
 import { malloc, free } from "c:stdlib";

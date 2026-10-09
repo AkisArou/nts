@@ -11,13 +11,13 @@ import {
   GtkStringList,
   GtkStringObject,
 } from "c:Gtk-4.0";
-import type { CNumber } from "c:types";
+import type { c_uint } from "@nts/scalars";
 import { run, type Workbench } from "../../host/workbench.ts";
 
 // GJS's `Implements: [Gtk.SectionModel]`, as the class's second type
 // argument.
 class CustomModel extends GtkStringList<{}, GtkSectionModelImplementation> {
-  vfunc_get_section(position: CNumber<"uint">): [CNumber<"uint">, CNumber<"uint">] {
+  vfunc_get_section(position: c_uint): [c_uint, c_uint] {
     const start = position;
     const end = Math.min(start + 5, 4294967295);
     return [start, end];

@@ -1,5 +1,6 @@
 declare module "x:hosts" {
-  import type { Closure, HostClass, c_int } from "c:types";
+  import type { Closure, HostClass } from "c:types";
+  import type { c_int } from "@nts/scalars";
   export type Node = HostClass<"XNode", null, "x_retain", "x_release">;
   export type Records = HostClass<"XRecords", null, "x_records_retain", "x_records_release">;
   /** @ntsSymbol x_ready */

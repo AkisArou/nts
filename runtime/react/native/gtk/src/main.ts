@@ -136,7 +136,7 @@ import {
   type GtkWidget,
 } from "c:Gtk-4.0";
 import { g_main_context_iteration, g_main_loop_new } from "c:GLib-2.0";
-import type { CNumber } from "c:types";
+import type { c_int } from "@nts/scalars";
 import type { GObject } from "c:GObject-2.0";
 import {
   react_gtk_emit,
@@ -586,7 +586,7 @@ function main(): void {
   appendInitialChild(cellB, inB);
   appendInitialChild(grid, cellA);
   appendInitialChild(grid, cellB);
-  const cellAt = (column: CNumber<"int">): string => {
+  const cellAt = (column: c_int): string => {
     if (!(grid instanceof GridNode)) {
       return "not a grid";
     }

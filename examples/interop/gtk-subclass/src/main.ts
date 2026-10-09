@@ -121,7 +121,8 @@ import {
   g_resources_register,
 } from "c:Gio-2.0";
 import { g_filename_to_uri, g_getenv } from "c:GLib-2.0";
-import type { CEnum, CNumber, Erased, Owned, Properties, Property, Ptr, c_size_t, c_uint } from "c:types";
+import type { CEnum, Erased, Owned, Properties, Property, Ptr } from "c:types";
+import type { c_int, c_uint, c_size_t } from "@nts/scalars";
 import { local } from "c:memory";
 import { Badge } from "./badge.ts";
 
@@ -431,7 +432,7 @@ function panel(): string {
 // An override answering its out parameters as GJS's does, a tuple the
 // compiler writes through the pointers GTK passes (NULL skipped).
 class Square extends GtkWidget {
-  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<"int">): [CNumber<"int">, CNumber<"int">, CNumber<"int">, CNumber<"int">] {
+  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: c_int): [c_int, c_int, c_int, c_int] {
     const size = orientation === Orientation.HORIZONTAL ? 42 : 17;
     void for_size;
     return [size, size, -1, -1];
@@ -441,7 +442,7 @@ class Square extends GtkWidget {
 // Chaining up through a tuple: the parent's measurement, as GJS's
 // `super.vfunc_measure(...)` answers it, widened by 10.
 class Wider extends GtkLabel {
-  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: CNumber<"int">): [CNumber<"int">, CNumber<"int">, CNumber<"int">, CNumber<"int">] {
+  vfunc_measure(orientation: CEnum<GtkOrientation, c_uint>, for_size: c_int): [c_int, c_int, c_int, c_int] {
     const [minimum, natural, minimum_baseline, natural_baseline] = super.vfunc_measure(orientation, for_size);
     // GTK's sizes are C `int`s, and ten more than the largest one isn't.
     return [Math.min(minimum + 10, 2147483647), Math.min(natural + 10, 2147483647), minimum_baseline, natural_baseline];
@@ -541,13 +542,13 @@ function kind(widget: GtkWidget | null): string {
 // instance converts to a `GListModel`, which Gio's own functions call through.
 class Words extends GObject<{}, GListModelImplementation> {
   readonly words: string[] = ["alpha", "beta", "gamma"];
-  vfunc_get_n_items(): CNumber<"uint"> {
+  vfunc_get_n_items(): c_uint {
     return this.words.length;
   }
   vfunc_get_item_type(): c_size_t {
     return gtk_label_get_type();
   }
-  vfunc_get_item(position: CNumber<"uint">): Owned<Erased<GObject>> | null {
+  vfunc_get_item(position: c_uint): Owned<Erased<GObject>> | null {
     return position < this.words.length ? new GtkLabel({ label: this.words[position] }) : null;
   }
   // The interface's own method, on `this`: whoever watches the model hears
@@ -617,8 +618,8 @@ function main(): void {
   console.log(stamps());
 
   const square = new Square({});
-  const width = local<CNumber<"int">>();
-  const height = local<CNumber<"int">>();
+  const width = local<c_int>();
+  const height = local<c_int>();
   gtk_widget_measure(square, Orientation.HORIZONTAL, -1, width);
   gtk_widget_measure(square, Orientation.VERTICAL, -1, height);
   console.log("measure " + String(width[0]) + " " + String(height[0]));

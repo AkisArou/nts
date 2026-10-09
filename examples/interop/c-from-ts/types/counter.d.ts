@@ -1,6 +1,7 @@
 // Hand-written declarations for native/counter.h.
 declare module "c:counter" {
-  import type { c_int, Opaque } from "c:types";
+  import type { Opaque } from "c:types";
+  import type { c_int } from "@nts/scalars";
 
   // An opaque C pointee, not a managed TypeScript object.
   export type Counter = Opaque<"Counter">;

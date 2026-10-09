@@ -40,7 +40,7 @@ nobody passes, so it is refused with the promoted type named:
     foreign function `open` variadic tail is `uint16_t`, which C promotes to
     `int` before the callee sees it; declare `int`
 
-`mode_t` is `unsigned int` here, which is why the binding says `c_uint32`.
+`mode_t` is `unsigned int` here, which is why the binding says `Uint32`.
 
 ## What checks it
 
@@ -69,7 +69,7 @@ must:
 
 ## One more binding the witness refused
 
-This example's `write` was first declared `(Fd, ConstPtr<unknown>, c_uint32):
+This example's `write` was first declared `(Fd, ConstPtr<unknown>, Uint32):
 c_int`. It typechecks, it lowers clean, and it is two different types from what
 `<unistd.h>` declares. The witness said `conflicting types for 'write'`, which
 is the entire reason the prototype is re-declared beside the real one. It is

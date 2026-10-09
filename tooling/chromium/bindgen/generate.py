@@ -75,7 +75,7 @@ class Skip(Exception):
 
 
 # The IDL's numeric types. Every number crosses as the program's own double
-# (`CNumber<"double">`, written as a plain number), and the adapter converts
+# (`Float64`, written as a plain number), and the adapter converts
 # it as page script's binding converts it: Blink's own NativeValueTraits on the
 # same value, so ToInt32's wrap, [EnforceRange]'s TypeError, [Clamp]'s rounding
 # and a restricted double's refusal of NaN are Blink's, message and all. A
@@ -87,18 +87,18 @@ THROWING_CONVERSIONS = ("IDLDouble", "IDLFloat", "EnforceRange")
 # What crosses as itself: the IDL type, the C type, the TypeScript type.
 SCALARS = {
     "boolean": ("bool", "boolean"),
-    "byte": ("int8_t", 'CNumber<"int8">'),
-    "octet": ("uint8_t", 'CNumber<"uint8">'),
-    "short": ("int16_t", 'CNumber<"int16">'),
-    "unsigned short": ("uint16_t", 'CNumber<"uint16">'),
-    "long": ("int32_t", 'CNumber<"int32">'),
-    "unsigned long": ("uint32_t", 'CNumber<"uint32">'),
-    "long long": ("int64_t", 'CNumber<"int64">'),
-    "unsigned long long": ("uint64_t", 'CNumber<"uint64">'),
-    "float": ("float", 'CNumber<"float">'),
-    "unrestricted float": ("float", 'CNumber<"float">'),
-    "double": ("double", 'CNumber<"double">'),
-    "unrestricted double": ("double", 'CNumber<"double">'),
+    "byte": ("int8_t", 'Int8'),
+    "octet": ("uint8_t", 'Uint8'),
+    "short": ("int16_t", 'Int16'),
+    "unsigned short": ("uint16_t", 'Uint16'),
+    "long": ("int32_t", 'Int32'),
+    "unsigned long": ("uint32_t", 'Uint32'),
+    "long long": ("int64_t", 'AsNumber<BigInt64>'),
+    "unsigned long long": ("uint64_t", 'AsNumber<BigUint64>'),
+    "float": ("float", 'Float32'),
+    "unrestricted float": ("float", 'Float32'),
+    "double": ("double", 'Float64'),
+    "unrestricted double": ("double", 'Float64'),
 }
 # DOMString and CSSOMString are one type to Blink. A USVString's lone
 # surrogates become U+FFFD, as V8's conversion makes them. A ByteString is
@@ -497,7 +497,7 @@ class Generator:
             return Param(name, f"const NtsBorrowedString* {name}", f"{name}: StringView{or_null}",
                          f"{name}_converted", True, prelude=prelude, may_throw=True)
         if keyword in NUMERIC and not nullable:
-            ts = f'{name}: CNumber<"double">'
+            ts = f'{name}: Float64'
             if keyword == "unrestricted double":
                 return Param(name, f"double {name}", ts, name, False)
             tag = native_value_tag(idl_type)
@@ -648,7 +648,7 @@ class Generator:
             self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
             return Result("const NtsStringView*", "StringView" + or_null, "string", nullable)
         if keyword in NUMERIC and not nullable:
-            return Result("double", 'CNumber<"double">', "scalar")
+            return Result("double", 'Float64', "scalar")
         if keyword in SCALARS and not nullable:
             c, ts = SCALARS[keyword]
             return Result(c, ts, "scalar")
@@ -1493,10 +1493,10 @@ class Generator:
         for identifier in sorted(self.sequences):
             handle = f"NtsDom{identifier}Sequence"
             length = Function(None, f"nts_dom_{identifier}Sequence_get_length", [],
-                              Result("double", 'CNumber<"double">', "scalar"),
+                              Result("double", 'Float64', "scalar"),
                               "reinterpret_cast<nts_dom::NtsSequence*>(self)->length()", False, False)
             item = Function(None, f"nts_dom_{identifier}Sequence_item",
-                            [Param("index", "double index", 'index: CNumber<"double">', "index", False)],
+                            [Param("index", "double index", 'index: Float64', "index", False)],
                             Result(f"{self.handle_tag(identifier)}*", f"{identifier} | null", "node"),
                             "reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index)", False, False)
             for function in (length, item):
@@ -1514,11 +1514,11 @@ class Generator:
                 f'  export type {name} = HostClass<"NtsDom{name}", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & {name}Methods;',
                 f"  export interface {name}Methods {{",
                 f"    /** @ntsSymbol nts_dom_{name}_get_length */",
-                f'    _get_length(this: {name}): CNumber<"double">;',
+                f'    _get_length(this: {name}): Float64;',
                 f"    /** @ntsGet _get_length */",
-                f'    readonly length: CNumber<"double">;',
+                f'    readonly length: Float64;',
                 f"    /** @ntsSymbol nts_dom_{name}_item */",
-                f'    item(this: {name}, index: CNumber<"double">): {identifier} | null;',
+                f'    item(this: {name}, index: Float64): {identifier} | null;',
                 "  }",
             ]
         return lines
@@ -1535,9 +1535,9 @@ class Generator:
         for identifier, entry in sorted(self.dictionaries.items()):
             if isinstance(entry, str):
                 continue
-            ts = {"boolean": "CBool<c_uint8>", "string": "StringView", "bytes": "StringView", "enum": "StringView"}
+            ts = {"boolean": "CBool<Uint8>", "string": "StringView", "bytes": "StringView", "enum": "StringView"}
             members = "; ".join(f"{name}: " + (f"{keyword[len('handle:'):]} | null" if keyword.startswith("handle:")
-                                               else ts.get(keyword, "c_double")) for name, keyword, _, _ in entry[0])
+                                               else ts.get(keyword, "Float64")) for name, keyword, _, _ in entry[0])
             lines.append(f'  export type {identifier} = Struct<{{ {members} }}, "NtsDom{identifier}">;')
         return lines
 
@@ -1738,7 +1738,8 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
-  import type {{ ByValue, CBool, Closure, CNumber, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct, c_double, c_uint8 }} from "c:types";
+  import type {{ ByValue, CBool, Closure, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct }} from "c:types";
+  import type {{ AsNumber, BigInt64, BigUint64, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 }} from "@nts/scalars";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
 {chr(10).join(self.enum_types())}

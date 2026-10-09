@@ -10,7 +10,8 @@ use camino::Utf8Path;
 
 use super::map::{Binding, TypeDecl};
 
-/// Every name of `c:types` a binding may use.
+/// Every name of the C vocabulary a binding may use: `c:types`' and the
+/// scalars of `@nts/scalars`, each imported from its own module.
 const BRANDS: &[&str] = &[
     "ByValue",
     "CArray",
@@ -25,18 +26,18 @@ const BRANDS: &[&str] = &[
     "Union",
     "Utf16String",
     "c_char",
-    "c_double",
-    "c_float",
+    "Float64",
+    "Float32",
     "c_int",
-    "c_int16",
-    "c_int64",
-    "c_int8",
+    "Int16",
+    "BigInt64",
+    "Int8",
     "c_long",
     "c_long32",
     "c_uint",
-    "c_uint16",
-    "c_uint64",
-    "c_uint8",
+    "Uint16",
+    "BigUint64",
+    "Uint8",
     "c_ulong",
     "c_ulong32",
 ];
@@ -56,13 +57,10 @@ fn imports(body: &str, own: &str, owners: &BTreeMap<String, String>) -> String {
         .copied()
         .filter(|brand| used.contains(brand))
         .collect();
-    if !brands.is_empty() {
-        let _ = writeln!(
-            out,
-            "  import type {{ {} }} from \"c:types\";",
-            brands.join(", ")
-        );
-    }
+    out.push_str(&crate::bind::vocabulary_imports(
+        brands.iter().copied(),
+        "  ",
+    ));
     let mut foreign: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for name in &used {
         if let Some(namespace) = owners.get(*name)

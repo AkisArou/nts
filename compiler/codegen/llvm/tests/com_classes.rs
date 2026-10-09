@@ -17,7 +17,7 @@ use std::process::Command;
 /// `Microsoft.UI.Xaml.Application` as `bind-winmd` writes it, cut down: one
 /// overridable interface of one slot, one of two, and a method to call.
 const BINDING: &str = r#"declare module "winrt:Test.Xaml" {
-  import type { CNumber } from "c:types";
+  import type { Int32 } from "@nts/scalars";
   import type { ComClass, IInspectable } from "winrt:types";
   export interface IApplicationMethods {
     /**
@@ -48,11 +48,11 @@ const BINDING: &str = r#"declare module "winrt:Test.Xaml" {
     /**
      * @ntsOverride 0B5ED9C1-0B2C-4B4C-8F5C-3D2A0F1E2D3C 7 Second
      */
-    Second(value: CNumber<"int32">, flag: boolean): void;
+    Second(value: Int32, flag: boolean): void;
     /**
      * @ntsOverride 7C2B8F0E-5A61-4D3B-9E47-1F0A2B3C4D5E 6 Third
      */
-    Third(): { found: CNumber<"int32">; returnValue: boolean };
+    Third(): { found: Int32; returnValue: boolean };
     /**
      * @ntsOverride 7C2B8F0E-5A61-4D3B-9E47-1F0A2B3C4D5E 7 Fourth
      */
@@ -285,10 +285,11 @@ fn a_delegate_taking_a_boolean_is_ir() {
 
 /// Layout overrides as `bind-winmd` writes `FrameworkElement`'s, cut down.
 const LAYOUT: &str = r#"declare module "winrt:Test.Layout" {
-  import type { ByValue, CNumber, Struct, c_float } from "c:types";
+  import type { ByValue, Struct } from "c:types";
+  import type { Int32, Float32 } from "@nts/scalars";
   import type { ComClass, HString, IInspectable } from "winrt:types";
-  export type Size = Struct<{ Width: c_float; Height: c_float }, "Test_Size">;
-  export type Rect = Struct<{ X: c_float; Y: c_float; Width: c_float; Height: c_float }, "Test_Rect">;
+  export type Size = Struct<{ Width: Float32; Height: Float32 }, "Test_Size">;
+  export type Rect = Struct<{ X: Float32; Y: Float32; Width: Float32; Height: Float32 }, "Test_Rect">;
   /**
    * @ntsComposable Test.Layout.Element 9FD96657-5294-5A65-A1DB-4FEA143597DA 6
    */
@@ -313,7 +314,7 @@ const LAYOUT: &str = r#"declare module "winrt:Test.Layout" {
     /**
      * @ntsOverride 2B7E1A55-8C3F-4D21-A6E9-0F4B8D2C7E13 6 Allowed
      */
-    Allowed(level: CNumber<"int32">): boolean;
+    Allowed(level: Int32): boolean;
     /**
      * @ntsOverride 2B7E1A55-8C3F-4D21-A6E9-0F4B8D2C7E13 7 Peer
      */
@@ -808,7 +809,7 @@ fn a_composed_class_has_methods_of_its_own() {
 /// A class's idiomatic surface, as `bind-winmd` writes it: `WidgetMembers`
 /// on the class implementing the interfaces, `GadgetMembers` inheriting it.
 const SURFACE: &str = r#"declare module "winrt:Test.Surface" {
-  import type { CNumber } from "c:types";
+  import type { Int32 } from "@nts/scalars";
   import type { ComClass } from "winrt:types";
   export type IWidget = ComClass<"IWidget">;
   export type IGadget = ComClass<"IGadget">;
@@ -818,7 +819,7 @@ const SURFACE: &str = r#"declare module "winrt:Test.Surface" {
      * @ntsSet 7 put_Size
      * @ntsVia 11111111-2222-3333-4444-555555555555 IWidget
      */
-    size: CNumber<"int32">;
+    size: Int32;
     /**
      * @ntsVtable 6 Refresh
      * @ntsHresult
@@ -1360,30 +1361,30 @@ fn a_listener_naming_no_event_is_refused() {
 
 /// A generic interface as `bind-winmd` writes it, with its own surface.
 const GENERIC: &str = r#"declare module "winrt:Test.Generic" {
-  import type { CNumber } from "c:types";
+  import type { Uint32 } from "@nts/scalars";
   import type { ComClass, IInspectable } from "winrt:types";
   export interface IVectorMethods<T> {
     /**
      * @ntsVtable 6 GetAt
      * @ntsHresult
      */
-    GetAt(this: IVector<T>, index: CNumber<"uint32">): T;
+    GetAt(this: IVector<T>, index: Uint32): T;
     /**
      * @ntsVtable 7 get_Size
      * @ntsHresult
      */
-    get_Size(this: IVector<T>): CNumber<"uint32">;
+    get_Size(this: IVector<T>): Uint32;
   }
   export interface IVectorMembers<T> {
     /**
      * @ntsVtable 6 GetAt
      * @ntsHresult
      */
-    getAt(this: IVector<T>, index: CNumber<"uint32">): T;
+    getAt(this: IVector<T>, index: Uint32): T;
     /**
      * @ntsGet 7 get_Size
      */
-    readonly size: CNumber<"uint32">;
+    readonly size: Uint32;
     /**
      * @ntsIterate get_Size GetAt
      */
@@ -1466,14 +1467,14 @@ fn a_vector_is_walked_by_count_through_its_own_table() {
 /// A class's static property as `bind-winmd` writes it: a variable of its
 /// namespace, read and written through its statics factory's slots.
 const STATICS: &str = r#"declare module "winrt:Test.Statics" {
-  import type { CNumber } from "c:types";
+  import type { Int32 } from "@nts/scalars";
   export namespace Clock {
     /**
      * @ntsGet 6 get_Ticks
      * @ntsSet 7 put_Ticks
      * @ntsFactory Test.Statics.Clock 0B0B0B0B-1111-2222-3333-444444444444
      */
-    let ticks: CNumber<"int32">;
+    let ticks: Int32;
   }
 }
 "#;

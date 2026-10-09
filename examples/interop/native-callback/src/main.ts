@@ -1,5 +1,6 @@
 import { apply_twice, apply_never, apply_wide, dispatch, each_upto, subscribe, unsubscribe, deliver, type Counter, type Handlers } from "c:library";
-import type { Ptr, c_int, c_int64 } from "c:types";
+import type { Ptr } from "c:types";
+import type { c_int, BigInt64 } from "@nts/scalars";
 import { local, sizeof } from "c:memory";
 import { malloc, free } from "c:stdlib";
 
@@ -103,8 +104,8 @@ export function reentrant(x: c_int): number { return apply_twice(reenter, x); }
 // C, hands the compiled function a `__int128`, and converts the result back.
 // Nothing is a `double` on that path, which is the whole point: above 2^53 a
 // double loses the low bit, and every value below it would agree either way.
-function bump(n: c_int64): c_int64 { return BigInt.asIntN(64, n + 1n) as c_int64; }
-export function wideRoundTrip(x: c_int64): bigint { return apply_wide(bump, x); }
+function bump(n: BigInt64): BigInt64 { return BigInt.asIntN(64, n + 1n) as BigInt64; }
+export function wideRoundTrip(x: BigInt64): bigint { return apply_wide(bump, x); }
 
 // **A promise job queued inside a callback waits for the program's own
 // checkpoint.** This library runs no foreign loop, so a callback returning to

@@ -1698,6 +1698,7 @@ mod tests {
             result_as: None,
             vtable: None,
             hresult: false,
+            result_as_number: false,
         };
         let values = vec![
             op(OpKind::Param(0), number()),              // %0

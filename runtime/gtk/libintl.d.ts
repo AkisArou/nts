@@ -7,7 +7,8 @@
  * @ntsHeader libintl.h
  */
 declare module "c:libintl" {
-  import type { Ptr, c_char } from "c:types";
+  import type { Ptr } from "c:types";
+  import type { c_char } from "@nts/scalars";
 
   export function textdomain(domainname: string | null): Ptr<c_char> | null;
   export function bindtextdomain(domainname: string, dirname: string | null): Ptr<c_char> | null;
@@ -20,7 +21,8 @@ declare module "c:libintl" {
  * @ntsHeader locale.h
  */
 declare module "c:locale" {
-  import type { CNumber, Ptr, c_char } from "c:types";
+  import type { Ptr } from "c:types";
+  import type { c_int, c_char } from "@nts/scalars";
 
-  export function setlocale(category: CNumber<"int">, locale: string | null): Ptr<c_char> | null;
+  export function setlocale(category: c_int, locale: string | null): Ptr<c_char> | null;
 }

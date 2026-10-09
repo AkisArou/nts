@@ -5,11 +5,12 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { ByValue, Struct, c_double } from "c:types";
+  import type { ByValue, Struct } from "c:types";
+  import type { Float64 } from "@nts/scalars";
   import type { ObjcClass } from "objc:types";
 
-  export type CGPoint = Struct<{ x: c_double; y: c_double }, "CGPoint">;
-  export type CGSize = Struct<{ width: c_double; height: c_double }, "CGSize">;
+  export type CGPoint = Struct<{ x: Float64; y: Float64 }, "CGPoint">;
+  export type CGSize = Struct<{ width: Float64; height: Float64 }, "CGSize">;
   export type CGRect = Struct<{ origin: CGPoint; size: CGSize }, "CGRect">;
 
   export interface NSValueOwnMethods {

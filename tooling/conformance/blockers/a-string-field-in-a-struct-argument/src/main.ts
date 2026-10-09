@@ -20,7 +20,7 @@
 //
 // Control, one difference -- the boolean alone:
 //
-//     export type Init = Struct<{ trackVisibility: CBool<c_uint8> }, "ObserverInit">;
+//     export type Init = Struct<{ trackVisibility: CBool<Uint8> }, "ObserverInit">;
 //     observe({ trackVisibility: true });
 //
 // compiles.

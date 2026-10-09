@@ -35,7 +35,7 @@ These five sabotages of the binding were each tried, and each refused:
 | change | what refuses it |
 |---|---|
 | `@ntsDefine _GNU_SOURCE` removed | no member named `domainname` |
-| one member `c_uint8`, not `c_char` | the `_Generic` type assert |
+| one member `Uint8`, not `c_char` | the `_Generic` type assert |
 | one member `CArray<c_char, 64>` | the size and every later offset |
 | sixth member deleted | the size |
 | `@ntsHeader stdio.h` | `struct utsname` is not defined |
@@ -43,7 +43,7 @@ These five sabotages of the binding were each tried, and each refused:
 The second is the one a layout-only check misses. `uint8_t` is `unsigned char`,
 which has `char`'s size, `char`'s alignment and `char`'s offsets -- and is a
 different type, which is why the witness asserts each member's type and not
-only where it sits. The first version of this binding said `c_uint8`.
+only where it sits. The first version of this binding said `Uint8`.
 
 ## Where the definition comes from
 

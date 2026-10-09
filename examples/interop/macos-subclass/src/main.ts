@@ -21,7 +21,7 @@ import {
   objc_registerClassPair,
   sel_registerName,
 } from "objc:runtime";
-import type { c_double, c_int, c_size_t } from "c:types";
+import type { Float64, c_int, c_size_t } from "@nts/scalars";
 
 let clicks = 0;
 let targetWatch: c_int = 0 as c_int;
@@ -57,7 +57,7 @@ function start(): void {
   console.log("is an NSObject " + String(base !== null && target.isKindOfClass(base)));
   target.performSelector(sel_registerName("clicked:"), target);
   // Foundation keeps the target until the timer fires, and then lets it go.
-  scheduledTimerCalling(0.01 as c_double, target, sel_registerName("clicked:"), null, false);
+  scheduledTimerCalling(0.01 as Float64, target, sel_registerName("clicked:"), null, false);
 }
 
 function finish(): void {

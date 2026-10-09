@@ -5,7 +5,7 @@
  */
 declare module "c:cycles" {
   import type { GObject } from "c:GObject-2.0";
-  import type { c_int, c_size_t } from "c:types";
+  import type { c_int, c_size_t } from "@nts/scalars";
 
   export function cycles_track(object: GObject): void;
   export function cycles_finalized(): c_int;

@@ -42,7 +42,7 @@ import {
   type UITableViewDelegate,
 } from "objc:UIKit";
 import { exit } from "c:stdlib";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 import type { Int } from "objc:types";
 
 // Swift's `class Fruits: NSObject, UITableViewDataSource, UITableViewDelegate`.

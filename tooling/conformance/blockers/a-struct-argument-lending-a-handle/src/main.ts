@@ -19,7 +19,7 @@
 // reference counting would release an owned one at the store, before the call.
 //
 // Control, one difference -- `relatedTarget` left out of the struct type
-// (`Struct<{ bubbles: CBool<c_uint8> }, "EventInit">`): nothing refused.
+// (`Struct<{ bubbles: CBool<Uint8> }, "EventInit">`): nothing refused.
 import { makeTarget, newEvent } from "nts:events";
 export function go(): number {
   newEvent({ relatedTarget: makeTarget(), bubbles: true });

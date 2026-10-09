@@ -127,7 +127,7 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     // `PWSTR` that is not read-only is a buffer the caller owns, not a lent
     // string: `LoadStringW` writes into it.
     assert!(
-        messaging.contains("export function LoadStringW(hInstance: HINSTANCE | null, uID: c_uint, lpBuffer: Ptr<c_uint16>, cchBufferMax: c_int): c_int;"),
+        messaging.contains("export function LoadStringW(hInstance: HINSTANCE | null, uID: c_uint, lpBuffer: Ptr<Uint16>, cchBufferMax: c_int): c_int;"),
         "LoadStringW's buffer is not a writable UTF-16 pointer"
     );
     // The check is real: `SM_CMETRICS` counts the system metrics, and the
@@ -233,7 +233,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         "export interface IJsonValueMethods",
         9,
         "GetNumber",
-        "GetNumber(this: IJsonValue): CNumber<\"double\">;",
+        "GetNumber(this: IJsonValue): Float64;",
     );
     declared_in(
         "export namespace JsonValue",
@@ -294,9 +294,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
         "IVector<T> does not carry its surface"
     );
     assert!(
-        collections.contains(
-            "     * @ntsGet 7 get_Size\n     */\n    readonly size: CNumber<\"uint32\">;"
-        ),
+        collections.contains("     * @ntsGet 7 get_Size\n     */\n    readonly size: Uint32;"),
         "IVector<T> has no `size`"
     );
     assert!(
@@ -372,7 +370,7 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
     // A delegate is a type of its own name, as a parameter taking it spells
     // it; a generic one has no one IID, so no one type.
     assert!(
-        module.contains("export type AsyncActionCompletedHandler = Delegate<(asyncInfo: IAsyncAction, asyncStatus: CEnum<AsyncStatus, c_int32>) => void, \"A4ED5C81-76C9-40BD-8BE6-B1D90FB20AE7\">;"),
+        module.contains("export type AsyncActionCompletedHandler = Delegate<(asyncInfo: IAsyncAction, asyncStatus: CEnum<AsyncStatus, Int32>) => void, \"A4ED5C81-76C9-40BD-8BE6-B1D90FB20AE7\">;"),
         "{module}"
     );
     assert!(
@@ -402,7 +400,7 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         "{module}"
     );
     assert!(
-        module.contains("CreateStringArray(this: IPropertyValueStatics, value: Counted<HStrings, CNumber<\"uint32\">, \"before\">): Inspectable;"),
+        module.contains("CreateStringArray(this: IPropertyValueStatics, value: Counted<HStrings, Uint32, \"before\">): Inspectable;"),
         "{module}"
     );
     // Structs both ways, as plain objects copied in and out.
@@ -411,13 +409,13 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
         "{module}"
     );
     assert!(
-        module.contains("CreatePointArray(this: IPropertyValueStatics, value: Counted<CopiedArray<Point>, CNumber<\"uint32\">, \"before\">): Inspectable;"),
+        module.contains("CreatePointArray(this: IPropertyValueStatics, value: Counted<CopiedArray<Point>, Uint32, \"before\">): Inspectable;"),
         "{module}"
     );
     // And one the call is passed, as the handles of the interface it takes,
     // their count before them.
     assert!(
-        module.contains("CreateInspectableArray(this: IPropertyValueStatics, value: Counted<CHandles<IInspectable>, CNumber<\"uint32\">, \"before\">): Inspectable;"),
+        module.contains("CreateInspectableArray(this: IPropertyValueStatics, value: Counted<CHandles<IInspectable>, Uint32, \"before\">): Inspectable;"),
         "{module}"
     );
     // An interface declares the IID it is asked for by, which an
@@ -468,7 +466,7 @@ fn winrt_structs_cross_by_value() {
     let refused =
         std::fs::read_to_string(out.join("Windows.Graphics.Imaging.refused.txt")).unwrap();
     assert!(
-        imaging.contains("export type BitmapBounds = Struct<{ x: c_uint32; y: c_uint32; width: c_uint32; height: c_uint32 }, \"Windows_Graphics_Imaging_BitmapBounds\">;"),
+        imaging.contains("export type BitmapBounds = Struct<{ x: Uint32; y: Uint32; width: Uint32; height: Uint32 }, \"Windows_Graphics_Imaging_BitmapBounds\">;"),
         "{imaging}"
     );
     assert!(imaging.contains("put_Bounds(this: IBitmapTransform, value: ByValue<BitmapBounds> | Fields<BitmapBounds>): void;"), "{imaging}");
@@ -476,7 +474,7 @@ fn winrt_structs_cross_by_value() {
         imaging.contains("get_Bounds(this: IBitmapTransform): ByValue<BitmapBounds>;"),
         "{imaging}"
     );
-    assert!(foundation.contains("export type DateTime = Struct<{ universalTime: c_int64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
+    assert!(foundation.contains("export type DateTime = Struct<{ universalTime: BigInt64 }, \"Windows_Foundation_DateTime\">;"), "{foundation}");
     // `System.Guid`, which no `.winmd` defines, is `winrt:types`' struct; a
     // `ref const` struct is a `ConstPtr` to the caller's storage, lent.
     assert!(
@@ -554,7 +552,7 @@ fn a_struct_holding_a_string_is_copied() {
     let refused =
         std::fs::read_to_string(out.join("Windows.UI.Xaml.Controls.refused.txt")).unwrap();
     assert!(
-        interop.contains("export type TypeName = Struct<{ name: HString; kind: CEnum<TypeKind, c_int32> }, \"Windows_UI_Xaml_Interop_TypeName\">;"),
+        interop.contains("export type TypeName = Struct<{ name: HString; kind: CEnum<TypeKind, Int32> }, \"Windows_UI_Xaml_Interop_TypeName\">;"),
         "{interop}"
     );
     assert!(controls.contains("Navigate(this: IFrame, sourcePageType: Copied<TypeName>, parameter: Inspectable | null): boolean;"), "{controls}");
@@ -567,7 +565,7 @@ fn a_struct_holding_a_string_is_copied() {
 }
 
 /// A struct's `boolean` field is one byte read as a boolean
-/// (`CBool<c_uint8>`): `CorePhysicalKeyStatus`, which a key event answers,
+/// (`CBool<Uint8>`): `CorePhysicalKeyStatus`, which a key event answers,
 /// is declared rather than refused.
 #[test]
 fn a_boolean_struct_field_is_a_one_byte_boolean() {
@@ -592,7 +590,7 @@ fn a_boolean_struct_field_is_a_one_byte_boolean() {
     );
     let module = std::fs::read_to_string(out.join("Windows.UI.Core.d.ts")).unwrap();
     assert!(
-        module.contains("export type CorePhysicalKeyStatus = Struct<{ repeatCount: c_uint32; scanCode: c_uint32; isExtendedKey: CBool<c_uint8>; isMenuKeyDown: CBool<c_uint8>; wasKeyDown: CBool<c_uint8>; isKeyReleased: CBool<c_uint8> }, \"Windows_UI_Core_CorePhysicalKeyStatus\">;"),
+        module.contains("export type CorePhysicalKeyStatus = Struct<{ repeatCount: Uint32; scanCode: Uint32; isExtendedKey: CBool<Uint8>; isMenuKeyDown: CBool<Uint8>; wasKeyDown: CBool<Uint8>; isKeyReleased: CBool<Uint8> }, \"Windows_UI_Core_CorePhysicalKeyStatus\">;"),
         "{module}"
     );
     let _ = std::fs::remove_dir_all(&out);
@@ -626,7 +624,7 @@ fn a_struct_holding_objects_is_declared_so_http_binds() {
     let module = std::fs::read_to_string(out.join("Windows.Web.Http.d.ts")).unwrap();
     let refused = std::fs::read_to_string(out.join("Windows.Web.Http.refused.txt")).unwrap();
     assert!(
-        module.contains("totalBytesToSend: IReference<c_uint64> | null;"),
+        module.contains("totalBytesToSend: IReference<BigUint64> | null;"),
         "{module}"
     );
     assert!(module.contains("getStringAsync(uri: IUriRuntimeClass | null): IAsyncOperationWithProgressOfStringHttpProgress;"), "{module}");
@@ -673,14 +671,14 @@ fn winrt_byte_arrays_are_lent_in_place() {
     let refused =
         std::fs::read_to_string(out.join("Windows.Security.Cryptography.refused.txt")).unwrap();
     assert!(
-        streams.contains("@ntsNoEscape value\n     * @ntsHresult\n     */\n    WriteBytes(this: IDataWriter, value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): void;"),
+        streams.contains("@ntsNoEscape value\n     * @ntsHresult\n     */\n    WriteBytes(this: IDataWriter, value: Counted<CBytes<\"const uint8_t\">, Uint32, \"before\">): void;"),
         "{streams}"
     );
     assert!(
-        streams.contains("@ntsNoEscape value\n     * @ntsHresult\n     */\n    ReadBytes(this: IDataReader, value: Counted<CBytes<\"uint8_t\">, CNumber<\"uint32\">, \"before\">): void;"),
+        streams.contains("@ntsNoEscape value\n     * @ntsHresult\n     */\n    ReadBytes(this: IDataReader, value: Counted<CBytes<\"uint8_t\">, Uint32, \"before\">): void;"),
         "{streams}"
     );
-    assert!(crypto.contains("function CreateFromByteArray(value: Counted<CBytes<\"const uint8_t\">, CNumber<\"uint32\">, \"before\">): IBuffer;"), "{crypto}");
+    assert!(crypto.contains("function CreateFromByteArray(value: Counted<CBytes<\"const uint8_t\">, Uint32, \"before\">): IBuffer;"), "{crypto}");
     // `CopyToByteArray`'s array is the callee's, which this refused until it
     // was bound as a `Uint8Array`: `a_received_array_is_a_typed_array`.
     assert!(
@@ -726,7 +724,7 @@ fn an_instantiation_declares_the_members_its_arguments_decide() {
     );
     assert!(
         storage.contains(
-            "put_Completed(this: IAsyncOperationOfStorageFolder, handler: Delegate<(asyncInfo: IAsyncOperationOfStorageFolder, asyncStatus: CEnum<AsyncStatus, c_int32>) => void, \"C211026E-9E63-5452-BA54-3A07D6A96874\">): void;"
+            "put_Completed(this: IAsyncOperationOfStorageFolder, handler: Delegate<(asyncInfo: IAsyncOperationOfStorageFolder, asyncStatus: CEnum<AsyncStatus, Int32>) => void, \"C211026E-9E63-5452-BA54-3A07D6A96874\">): void;"
         ),
         "{storage}"
     );
@@ -900,7 +898,7 @@ fn an_enum_array_is_its_integer_typed_array() {
     );
     let view = std::fs::read_to_string(out.join("Windows.UI.ViewManagement.d.ts")).unwrap();
     assert!(
-        view.contains("getPreferredInteractionMode(supportedModes: Counted<CElements<Int32Array, \"const int32_t\">, CNumber<\"uint32\">, \"before\">): CEnum<UserInteractionMode, c_int32>;"),
+        view.contains("getPreferredInteractionMode(supportedModes: Counted<CElements<Int32Array, \"const int32_t\">, Uint32, \"before\">): CEnum<UserInteractionMode, Int32>;"),
         "{view}"
     );
     let devices = std::fs::read_to_string(out.join("Windows.Media.Devices.d.ts")).unwrap();
@@ -945,17 +943,17 @@ fn an_array_the_callee_fills_is_the_programs() {
     );
     let json = std::fs::read_to_string(out.join("Windows.Data.Json.d.ts")).unwrap();
     assert!(
-        json.contains("GetMany(this: IVectorOfIJsonValue, startIndex: CNumber<\"uint32\">, items: Counted<FilledHandles<IJsonValue>, CNumber<\"uint32\">, \"before\">): CNumber<\"uint32\">;"),
+        json.contains("GetMany(this: IVectorOfIJsonValue, startIndex: Uint32, items: Counted<FilledHandles<IJsonValue>, Uint32, \"before\">): Uint32;"),
         "{json}"
     );
     let core = std::fs::read_to_string(out.join("Windows.Media.Devices.Core.d.ts")).unwrap();
     assert!(
-        core.contains("distortPoints(inputs: Counted<CopiedArray<Point>, CNumber<\"uint32\">, \"before\">, results: Counted<FilledArray<Point>, CNumber<\"uint32\">, \"before\">): void;"),
+        core.contains("distortPoints(inputs: Counted<CopiedArray<Point>, Uint32, \"before\">, results: Counted<FilledArray<Point>, Uint32, \"before\">): void;"),
         "{core}"
     );
     let system = std::fs::read_to_string(out.join("Windows.System.d.ts")).unwrap();
     assert!(
-        system.contains("GetMany(this: IVectorViewOfString, startIndex: CNumber<\"uint32\">, items: Counted<FilledStrings, CNumber<\"uint32\">, \"before\">): CNumber<\"uint32\">;"),
+        system.contains("GetMany(this: IVectorViewOfString, startIndex: Uint32, items: Counted<FilledStrings, Uint32, \"before\">): Uint32;"),
         "{system}"
     );
     let _ = std::fs::remove_dir_all(&out);
@@ -979,12 +977,17 @@ fn an_array_the_callee_fills_is_the_programs() {
     );
     let gaming = std::fs::read_to_string(out.join("Windows.Gaming.Input.d.ts")).unwrap();
     assert!(
-        gaming.contains("buttonArray: Counted<FilledBooleans, CNumber<\"uint32\">, \"before\">"),
+        gaming.contains("buttonArray: Counted<FilledBooleans, Uint32, \"before\">"),
         "{gaming}"
     );
     let diagnostics =
         std::fs::read_to_string(out.join("Windows.Foundation.Diagnostics.d.ts")).unwrap();
-    assert!(diagnostics.contains("addBooleanArray(name: HString, value: Counted<Booleans, CNumber<\"uint32\">, \"before\">): void;"), "{diagnostics}");
+    assert!(
+        diagnostics.contains(
+            "addBooleanArray(name: HString, value: Counted<Booleans, Uint32, \"before\">): void;"
+        ),
+        "{diagnostics}"
+    );
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -1032,7 +1035,7 @@ fn a_received_array_is_a_typed_array() {
     // elements are borrowed in place, spelled as C spells its element.
     assert!(
         foundation.contains(
-            "CreateInt32Array(this: IPropertyValueStatics, value: Counted<CElements<Int32Array, \"const int32_t\">, CNumber<\"uint32\">, \"before\">): Inspectable;"
+            "CreateInt32Array(this: IPropertyValueStatics, value: Counted<CElements<Int32Array, \"const int32_t\">, Uint32, \"before\">): Inspectable;"
         ),
         "{foundation}"
     );

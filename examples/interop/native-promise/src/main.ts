@@ -5,10 +5,10 @@
 // calls and the awaits only after the first line is printed -- so the program
 // waits on the host rather than on a promise already settled.
 import { doubled, ready, refused, settle } from "c:later";
-import type { c_double } from "c:types";
+import type { Float64 } from "@nts/scalars";
 
 async function main(): Promise<void> {
-  const answer = doubled(21 as c_double);
+  const answer = doubled(21 as Float64);
   const done = ready();
   const denied = refused();
   console.log("made");

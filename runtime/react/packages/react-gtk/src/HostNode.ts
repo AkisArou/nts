@@ -16,7 +16,7 @@
 
 import { type GtkApplication, GtkPopover, type GtkWidget, GtkWindow } from "c:Gtk-4.0";
 import { g_idle_add_full } from "c:GLib-2.0";
-import type { CNumber } from "c:types";
+import type { c_uint } from "@nts/scalars";
 
 import { connectController, Controllers } from "./controllers.ts";
 
@@ -160,7 +160,7 @@ export class SignalSlot {
    * back to C as the enum's `unsigned int`, converted here rather than
    * checked: a throw inside a C callback would end the program.
    */
-  answer(call: () => number): CNumber<"uint"> {
+  answer(call: () => number): c_uint {
     if (this.handler === null || reactWriting > 0) {
       return 0;
     }

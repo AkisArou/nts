@@ -5,7 +5,7 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { c_double } from "c:types";
+  import type { Float64 } from "@nts/scalars";
   import type { ObjcClass } from "objc:types";
   import type { ClassObject, Selector } from "objc:runtime";
 
@@ -37,7 +37,7 @@ declare module "objc:Foundation" {
    * @ntsClass NSTimer
    */
   export function scheduledTimerCalling(
-    interval: c_double,
+    interval: Float64,
     target: NSObject,
     name: Selector,
     userInfo: NSObject | null,

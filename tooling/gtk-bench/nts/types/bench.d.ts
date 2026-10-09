@@ -2,8 +2,8 @@
  * @ntsHeader "bench.h"
  */
 declare module "c:bench" {
-  import type { c_double } from "c:types";
-  export function bench_now(): c_double;
+  import type { Float64 } from "@nts/scalars";
+  export function bench_now(): Float64;
   export function bench_case(): string;
   export function bench_log(line: string): void;
 }

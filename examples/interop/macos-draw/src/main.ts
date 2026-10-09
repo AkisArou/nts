@@ -29,13 +29,14 @@
 import { CGColor, CGColorSpaceCreateDeviceRGB, CGContext, CGEventSource, CGEventSourceStateID, CGImageAlphaInfo, CGPath } from "objc:CoreGraphics";
 import { weak_alive, weak_watch } from "c:support";
 import { free, malloc } from "c:stdlib";
-import type { Ptr, c_int, c_uint8 } from "c:types";
+import type { Ptr } from "c:types";
+import type { c_int, Uint8 } from "@nts/scalars";
 import type { CGFloat } from "objc:types";
 
 const WIDTH = 8;
 const HEIGHT = 4;
 
-function row(pixels: Ptr<c_uint8>, y: number, width: number): string {
+function row(pixels: Ptr<Uint8>, y: number, width: number): string {
   let text = "";
   for (let x = 0; x < width; x++) {
     const at = (y * width + x) * 4;
@@ -93,12 +94,12 @@ function components(): string {
 function triangle(): void {
   const width = 4;
   const height = 2;
-  const pixels = malloc<c_uint8>(width * height * 4);
+  const pixels = malloc<Uint8>(width * height * 4);
   if (pixels === null) {
     return;
   }
   for (let at = 0; at < width * height * 4; at++) {
-    pixels[at] = 0 as c_uint8;
+    pixels[at] = 0 as Uint8;
   }
   const context = CGContext({
     data: pixels,
@@ -128,12 +129,12 @@ function paths(): string {
 }
 
 function main(): void {
-  const pixels = malloc<c_uint8>(WIDTH * HEIGHT * 4);
+  const pixels = malloc<Uint8>(WIDTH * HEIGHT * 4);
   if (pixels === null) {
     return;
   }
   for (let at = 0; at < WIDTH * HEIGHT * 4; at++) {
-    pixels[at] = 0 as c_uint8;
+    pixels[at] = 0 as Uint8;
   }
   const context = CGContext({
     data: pixels,

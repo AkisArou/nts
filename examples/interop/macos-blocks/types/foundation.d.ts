@@ -4,7 +4,8 @@
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { Ptr, c_int8, c_ulong, c_double } from "c:types";
+  import type { Ptr } from "c:types";
+  import type { Int8, c_ulong, Float64 } from "@nts/scalars";
   import type { Block, ObjcClass } from "objc:types";
 
   export interface NSObjectOwnMethods {
@@ -25,7 +26,7 @@ declare module "objc:Foundation" {
      */
     enumerateObjectsUsingBlock(
       this: NSMutableArray,
-      block: Block<(object: NSObject, index: c_ulong, stop: Ptr<c_int8>) => void>,
+      block: Block<(object: NSObject, index: c_ulong, stop: Ptr<Int8>) => void>,
     ): void;
   }
   export type NSMutableArray = ObjcClass<"NSMutableArray", NSObject> & NSMutableArrayOwnMethods & NSObjectOwnMethods;
@@ -58,7 +59,7 @@ declare module "objc:Foundation" {
    * @ntsClass NSTimer
    */
   export function scheduledTimer(
-    interval: c_double,
+    interval: Float64,
     repeats: boolean,
     block: Block<(timer: NSTimer) => void>,
   ): NSTimer;

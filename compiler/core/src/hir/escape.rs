@@ -1909,6 +1909,7 @@ mod foreign_contracts {
             result_as: None,
             vtable: None,
             hresult: false,
+            result_as_number: false,
         }))
     }
 

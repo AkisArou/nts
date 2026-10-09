@@ -84,11 +84,13 @@ fn snapshot_with_types(
     ));
     std::fs::create_dir_all(&dir).unwrap();
     // Keep isolated-brand controls free of unrelated ambient declarations.
-    let declarations = if include_types || source.contains("\"c:") {
-        format!(",\"{root}/runtime/native/libc.d.ts\"")
-    } else {
-        String::new()
-    };
+    // `libc.d.ts` brings `@nts/scalars` with it.
+    let declarations =
+        if include_types || source.contains("\"c:") || source.contains("\"@nts/scalars\"") {
+            format!(",\"{root}/runtime/native/libc.d.ts\"")
+        } else {
+            String::new()
+        };
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(
@@ -97,7 +99,7 @@ fn snapshot_with_types(
     )
     .unwrap();
     let imports = if include_types {
-        "import type { c_char, c_int, c_uint, c_int8, c_uint8, c_int16, c_uint16, c_int32, c_uint32, c_int64, c_uint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, c_float, c_double } from \"c:types\";\n"
+        "import type { c_char, c_int, c_uint, Int8, Uint8, Int16, Uint16, Int32, Uint32, BigInt64, BigUint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, Float32, Float64 } from \"@nts/scalars\";\n"
     } else {
         ""
     };
@@ -116,15 +118,11 @@ use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
 #[test]
 #[allow(clippy::too_many_lines)] // Two generated families and their C consumer.
 fn scalar_abi_matches_an_independently_compiled_c_library() {
-    let published = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../../runtime/native/libc.d.ts"
-    ));
-    let published: std::collections::BTreeSet<_> = published
-        .lines()
-        .map(str::trim)
-        .filter(|line| line.starts_with("export type c_") && line.contains("unique symbol"))
-        .map(|line| line.split_whitespace().nth(2).unwrap())
+    // Every kind `@nts/scalars` exports: `AsNumber` is a way of carrying one.
+    let published: std::collections::BTreeSet<_> = nts_core::hir::native::SCALARS
+        .iter()
+        .copied()
+        .filter(|name| *name != "AsNumber")
         .collect();
     // Both families together: a brand belongs to exactly one, and a brand in
     // neither is a shipped scalar nothing checks against C.
@@ -152,7 +150,7 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
     for (i, (brand, c_type, input, expected)) in CASES.iter().enumerate() {
         write!(
             ts,
-            "declare function take_{i}(n: {brand}): c_double;\n\
+            "declare function take_{i}(n: {brand}): Float64;\n\
              declare function give_{i}(): {brand};\n\
              declare function give_wide_{i}(): {brand};\n\
              export function argument_{i}(n: {brand}): number {{ return take_{i}(n); }}\n\
@@ -326,13 +324,13 @@ fn unbranded_parameter_and_return_are_separate_refusals() {
             "parameter",
             "declare function bad(n: number): c_int;",
             "bad(n)",
-            "parameter `n` (which wants a c_int or c_double brand, a boolean, or a string), a type with no native ABI",
+            "parameter `n` (which wants a kind from `@nts/scalars` (`Int32`, `c_int`, `Float64` ...), a boolean, or a string), a type with no native ABI",
         ),
         (
             "return",
             "declare function bad(n: c_int): number;",
             "bad(n as c_int)",
-            "return (which wants a c_int or c_double brand, a boolean, or a string, or void), a type with no native ABI",
+            "return (which wants a kind from `@nts/scalars` (`Int32`, `c_int`, `Float64` ...), a boolean, or a string, or void), a type with no native ABI",
         ),
     ] {
         for unrelated in ["", "declare function witness(n: c_int): c_int;"] {
@@ -362,9 +360,9 @@ fn conflicting_authored_abis_and_runtime_symbol_collisions_are_errors() {
             "overloads",
             r"
             declare function foreign(n: c_int): c_int;
-            declare function foreign(n: c_double): c_double;
+            declare function foreign(n: Float64): Float64;
             export function a(n: c_int): number { return foreign(n); }
-            export function b(n: number): number { return foreign(n as c_double); }
+            export function b(n: number): number { return foreign(n as Float64); }
         ",
             "conflicting ABI declarations",
         ),
@@ -479,7 +477,7 @@ fn unrelated_declarations_cannot_supply_a_calls_abi() {
 #[test]
 fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
     let source = r#"
-        import type { c_int, c_long, c_float, c_double } from "c:types";
+        import type { c_int, c_long, Float32, Float64 } from "@nts/scalars";
         import { abs, exit, labs } from "c:stdlib";
         import { fabs, fabsf, sqrtf, pow, fmod, floor, ceil, trunc, copysign, ldexp } from "c:math";
         import * as math from "c:math";
@@ -491,14 +489,14 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
             // `BigInt(n)`, which is a runtime call this translation unit does
             // not link -- the value is the same one `(long)(-3.75)` gave.
             return abs(k) + Number(labs(-3n as c_long))
-                + fabs(-1.25 as c_double) + fabsf(-1.25 as c_float)
-                + math.sqrt(4 as c_double) + sqrtf(4 as c_float)
-                + pow(2 as c_double, 3 as c_double)
-                + fmod(5.5 as c_double, 2 as c_double)
-                + floor(1.75 as c_double) + ceil(1.25 as c_double)
-                + trunc(-1.75 as c_double)
-                + copysign(1.25 as c_double, -1 as c_double)
-                + ldexp(1.25 as c_double, 2 as c_int);
+                + fabs(-1.25 as Float64) + fabsf(-1.25 as Float32)
+                + math.sqrt(4 as Float64) + sqrtf(4 as Float32)
+                + pow(2 as Float64, 3 as Float64)
+                + fmod(5.5 as Float64, 2 as Float64)
+                + floor(1.75 as Float64) + ceil(1.25 as Float64)
+                + trunc(-1.75 as Float64)
+                + copysign(1.25 as Float64, -1 as Float64)
+                + ldexp(1.25 as Float64, 2 as c_int);
         }
     "#;
     let Some((dir, prepared)) = prepare_with_types("libc", source, false) else {
@@ -703,7 +701,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         format!(
             "import {{ collide as viaOne }} from \"c:a\";\n\
          import {{ collide as viaTwo }} from \"c:b\";\n\
-         import type {{ Ptr, c_int, c_size_t }} from \"c:types\";\n\
+         import type {{ Ptr }} from \"c:types\"; import type {{ c_int, c_size_t }} from \"@nts/scalars\";\n\
          export function one(fd: c_int, buf: Ptr<c_int>): number {{\n\
          return Number(viaOne(fd, buf, 4 as c_int));\n\
          }}\n\
@@ -719,11 +717,11 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
     let binding = |count: &str| {
         format!(
             "declare module \"c:a\" {{\n\
-             import type {{ Ptr, c_int }} from \"c:types\";\n\
+             import type {{ Ptr }} from \"c:types\"; import type {{ c_int }} from \"@nts/scalars\";\n\
              export function collide(fd: c_int, buf: Ptr<c_int>, count: c_int): c_int;\n\
              }}\n\
              declare module \"c:b\" {{\n\
-             import type {{ Ptr, c_int, c_size_t }} from \"c:types\";\n\
+             import type {{ Ptr }} from \"c:types\"; import type {{ c_int, c_size_t }} from \"@nts/scalars\";\n\
              export function collide(fd: c_int, buf: Ptr<c_int>, count: {count}): c_int;\n\
              }}\n"
         )
@@ -814,7 +812,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
 /// The witness a program publishes about a foreign type, checked against the
 /// header that really declares it -- and checked that it can *fail*.
 ///
-/// The arms differ in one thing: `events` is `c_int16` in one and `c_uint16` in
+/// The arms differ in one thing: `events` is `Int16` in one and `Uint16` in
 /// the other. On this target that changes no size, no alignment and no offset,
 /// so the assertions a layout-only witness would carry are byte-identical
 /// between them. That equality is asserted below rather than described, because
@@ -839,7 +837,8 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
         format!(
             "/** @ntsHeader poll.h */\n\
              declare module \"c:poll\" {{\n\
-             import type {{ Ptr, Struct, c_int, c_long, {field}, c_ulong }} from \"c:types\";\n\
+             import type {{ Ptr, Struct }} from \"c:types\";\n\
+             import type {{ c_int, c_long, {field}, c_ulong }} from \"@nts/scalars\";\n\
              export type PollFd = Struct<{{ fd: c_int; events: {field}; revents: {field} }}, \"pollfd\">;\n\
              export type Count = {count};\n\
              export type Timeout = c_int;\n\
@@ -872,15 +871,15 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
         Some((dir, emitted.witness))
     };
 
-    let Some((signed_dir, signed)) = witness_of("witness-signed", "c_int16", "c_ulong") else {
+    let Some((signed_dir, signed)) = witness_of("witness-signed", "Int16", "c_ulong") else {
         eprintln!("skipped: no tsgo");
         return;
     };
-    let (unsigned_dir, unsigned) = witness_of("witness-unsigned", "c_uint16", "c_ulong").unwrap();
+    let (unsigned_dir, unsigned) = witness_of("witness-unsigned", "Uint16", "c_ulong").unwrap();
     // The function's type wrong and nothing else -- `long` where the header
     // says `unsigned long`, the same width -- so only the comparison of
     // `poll`'s own type can refuse it.
-    let (narrow_dir, narrow) = witness_of("witness-signed-count", "c_int16", "c_long").unwrap();
+    let (narrow_dir, narrow) = witness_of("witness-signed-count", "Int16", "c_long").unwrap();
 
     // The header's declaration compared with the binding's type, not a second
     // declaration of `poll`: an exact type, which is the check a
@@ -963,13 +962,13 @@ fn a_witnessed_function_is_called_through_its_header_only_where_the_header_is_in
             "through-header",
             "/** @ntsHeader poll.h */\n\
              declare module \"c:poll\" {\n\
-             import type { Ptr, Struct, c_int, c_int16, c_ulong } from \"c:types\";\n\
-             export type PollFd = Struct<{ fd: c_int; events: c_int16; revents: c_int16 }, \"pollfd\">;\n\
+             import type { Ptr, Struct } from \"c:types\"; import type { c_int, Int16, c_ulong } from \"@nts/scalars\";\n\
+             export type PollFd = Struct<{ fd: c_int; events: Int16; revents: Int16 }, \"pollfd\">;\n\
              /** @ntsNoEscape fds */\n\
              export function poll(fds: Ptr<PollFd>, count: c_ulong, timeout: c_int): c_int;\n\
              }\n",
             "import { poll, type PollFd } from \"c:poll\";\nimport { local } from \"c:memory\";\n\
-             import type { c_int, c_ulong } from \"c:types\";\n\
+             import type { c_int, c_ulong } from \"@nts/scalars\";\n\
              export function go(): number { const fds = local<PollFd>(); return poll(fds, 0n as c_ulong, 0 as c_int); }\n",
             "int poll(",
         ),
@@ -977,7 +976,7 @@ fn a_witnessed_function_is_called_through_its_header_only_where_the_header_is_in
             "own-prototype",
             "/** @ntsHeader unistd.h */\n\
              declare module \"c:unistd\" {\n\
-             import type { c_int } from \"c:types\";\n\
+             import type { c_int } from \"@nts/scalars\";\n\
              export function getpid(): c_int;\n\
              }\n",
             "import { getpid } from \"c:unistd\";\nexport function go(): number { return getpid(); }\n",
@@ -1026,14 +1025,14 @@ fn a_callback_bridge_finds_its_closure_beside_an_override() {
     let binding = r#"
 /** @ntsHeader "bridge.h" */
 declare module "c:bridge" {
-  import type { c_int } from "c:types";
+  import type { c_int } from "@nts/scalars";
   export function apply(f: (n: c_int) => c_int, x: c_int): c_int;
 }
 "#;
     let program = |shapes: &str| {
         format!(
             r#"import {{ apply }} from "c:bridge";
-import type {{ c_int }} from "c:types";
+import type {{ c_int }} from "@nts/scalars";
 {shapes}
 function addOne(n: c_int): c_int {{
   return ((n + 1) | 0) as c_int;
@@ -1076,7 +1075,8 @@ export function run(x: c_int): number {{
 #[test]
 fn identity_between_related_host_handles_is_valid_c() {
     let source = r#"
-import type { HostClass, c_int } from "c:types";
+import type { HostClass } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
 type Element = HostClass<"HostElement", Node>;
 declare function node_at(i: c_int): Element;
@@ -1137,9 +1137,10 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_number_reaches_a_c_integer_only_where_it_is_proven_to_fit() {
     let declarations = r#"
-import type { CNumber, Ptr, c_int } from "c:types";
-declare function seen_i32(v: CNumber<"int32">): CNumber<"double">;
-declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
+import type { Ptr } from "c:types";
+import type { Float64, Int32, Uint16, c_int } from "@nts/scalars";
+declare function seen_i32(v: Int32): Float64;
+declare function seen_u16(v: Uint16): Float64;
 "#;
     let unproven = format!(
         "{declarations}export function i32(x: number): number {{ return seen_i32(x); }}\n\
@@ -1260,13 +1261,13 @@ declare function seen_u16(v: CNumber<"uint16">): CNumber<"double">;
 /// for a `uint16_t` throws a `RangeError` and C is never called; one that fits
 /// passes its exact length.
 #[test]
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_count_narrower_than_an_array_is_bounded_before_the_call() {
     let source = r#"
-import type { CBytes, CNumber, Counted } from "c:types";
+import type { CBytes, Counted } from "c:types";
+import type { Float64, Int32, Uint16 } from "@nts/scalars";
 /** @ntsNoEscape bytes */
-declare function count_of(bytes: Counted<CBytes, CNumber<"uint16">>): CNumber<"double">;
-export function counted(n: CNumber<"int32">): number {
+declare function count_of(bytes: Counted<CBytes, Uint16>): Float64;
+export function counted(n: Int32): number {
   try {
     return count_of(new Uint8Array(n));
   } catch (error) {
@@ -1319,47 +1320,7 @@ export function counted(n: CNumber<"int32">): number {
         }
         std::fs::write(dir.join("native.c"), native).unwrap();
         std::fs::write(dir.join("caller.c"), caller).unwrap();
-        let mut objects = Vec::new();
-        for source in ["program.c", "nts_runtime.c", "native.c", "caller.c"] {
-            let object = format!("{source}.o");
-            let mut args = vec![
-                "-std=gnu11",
-                "-D_GNU_SOURCE",
-                "-O2",
-                "-w",
-                "-I",
-                ".",
-                "-c",
-                source,
-                "-o",
-                &object,
-            ];
-            if provider == hir::Provider::ReferenceCounting {
-                args.push("-DNTS_PROVIDER_RC");
-            }
-            let result = Command::new("clang")
-                .current_dir(&dir)
-                .args(&args)
-                .output()
-                .unwrap();
-            assert!(
-                result.status.success(),
-                "{provider:?} {source}: {}",
-                String::from_utf8_lossy(&result.stderr)
-            );
-            objects.push(object);
-        }
-        let result = Command::new("clang")
-            .current_dir(&dir)
-            .args(&objects)
-            .args(["-lm", "-lpthread", "-o", "caller"])
-            .output()
-            .unwrap();
-        assert!(
-            result.status.success(),
-            "{provider:?}: {}",
-            String::from_utf8_lossy(&result.stderr)
-        );
+        build_caller(&dir, provider);
         let ran = Command::new(dir.join("caller")).output().unwrap();
         assert!(
             ran.status.success(),
@@ -1367,6 +1328,52 @@ export function counted(n: CNumber<"int32">): number {
             String::from_utf8_lossy(&ran.stdout)
         );
     }
+}
+
+/// `program.c`, the runtime, `native.c` and `caller.c` in `dir`, compiled
+/// and linked as `caller` under `provider`.
+fn build_caller(dir: &Utf8Path, provider: hir::Provider) {
+    let mut objects = Vec::new();
+    for source in ["program.c", "nts_runtime.c", "native.c", "caller.c"] {
+        let object = format!("{source}.o");
+        let mut args = vec![
+            "-std=gnu11",
+            "-D_GNU_SOURCE",
+            "-O2",
+            "-w",
+            "-I",
+            ".",
+            "-c",
+            source,
+            "-o",
+            &object,
+        ];
+        if provider == hir::Provider::ReferenceCounting {
+            args.push("-DNTS_PROVIDER_RC");
+        }
+        let result = Command::new("clang")
+            .current_dir(dir)
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{provider:?} {source}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        objects.push(object);
+    }
+    let result = Command::new("clang")
+        .current_dir(dir)
+        .args(&objects)
+        .args(["-lm", "-lpthread", "-o", "caller"])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{provider:?}: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
 }
 
 /// A closure answering a host handle: where a signature returning `void`
@@ -1383,7 +1390,8 @@ export function counted(n: CNumber<"int32">): number {
 #[test]
 fn a_closure_answering_a_host_handle_crosses_only_where_its_result_is_dropped() {
     let prelude = r#"
-import type { HostClass, c_int } from "c:types";
+import type { HostClass } from "c:types";
+import type { c_int } from "@nts/scalars";
 type Node = HostClass<"HostNode", null, "host_retain", "host_release">;
 type Leaf = HostClass<"HostLeaf", Node, "host_retain", "host_release">;
 declare function node_at(i: c_int): Node;
@@ -1495,23 +1503,24 @@ export function reads(): number { return read(() => leaf_at(1 as c_int)); }
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_closure_lent_to_c_comes_back_as_the_same_callable_closure() {
     let source = r#"
-import type { Closure, c_double } from "c:types";
-type Handler = Closure<(n: c_double) => c_double>;
+import type { Closure } from "c:types";
+import type { Float64 } from "@nts/scalars";
+type Handler = Closure<(n: Float64) => Float64>;
 declare function handler_set(handler: Handler): void;
 declare function handler_get(): Handler | null;
 declare function handler_clear(): void;
 let calls = 0;
 export function roundTrip(n: number): number {
   const step = n > 100 ? 3 : 2;
-  const handler: Handler = (x: c_double): c_double => {
+  const handler: Handler = (x: Float64): Float64 => {
     calls += 1;
-    return (x * step) as c_double;
+    return (x * step) as Float64;
   };
   handler_set(handler);
   const back = handler_get();
   if (back === null) return -1;
   const same = back === handler ? 1000 : 0;
-  return same + (back(n as c_double) as number) + calls * 100;
+  return same + (back(n as Float64) as number) + calls * 100;
 }
 export function cleared(): number {
   handler_clear();
@@ -1629,10 +1638,11 @@ void handler_clear(void) {
 fn a_held_record_lends_its_string_member_for_the_call() {
     let binding = r#"
 declare module "x:ev" {
-  import type { ByValue, CBool, Fields, StringView, Struct, c_double, c_uint8 } from "c:types";
-  export type Init = Struct<{ key: StringView | null; repeat: CBool<c_uint8> }, "EvInit">;
+  import type { ByValue, CBool, Fields, StringView, Struct } from "c:types";
+  import type { Float64, Uint8 } from "@nts/scalars";
+  export type Init = Struct<{ key: StringView | null; repeat: CBool<Uint8> }, "EvInit">;
   /** @ntsSymbol ev_key_length */
-  export function keyLength(init: ByValue<Init> | Fields<Init>): c_double;
+  export function keyLength(init: ByValue<Init> | Fields<Init>): Float64;
 }
 "#;
     let source = r#"

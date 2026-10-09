@@ -49,19 +49,21 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir:
 
 const GEOMETRY: &str = r#"
 declare module "c:geometry" {
-  import type { ByValue, Struct, c_double } from "c:types";
-  export type Point = Struct<{ x: c_double; y: c_double }, "point">;
+  import type { ByValue, Struct } from "c:types";
+  import type { Float64 } from "@nts/scalars";
+  export type Point = Struct<{ x: Float64; y: Float64 }, "point">;
   export type Rect = Struct<{ origin: Point; size: Point }, "rect">;
-  export function inset(r: ByValue<Rect>, by: c_double): ByValue<Rect>;
-  export function area(r: ByValue<Rect>): c_double;
+  export function inset(r: ByValue<Rect>, by: Float64): ByValue<Rect>;
+  export function area(r: ByValue<Rect>): Float64;
 }
 /**
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { ByValue, Struct, c_double, c_ulong } from "c:types";
+  import type { ByValue, Struct } from "c:types";
+  import type { Float64, c_ulong } from "@nts/scalars";
   import type { ObjcClass } from "objc:types";
-  export type CGPoint = Struct<{ x: c_double; y: c_double }, "CGPoint">;
+  export type CGPoint = Struct<{ x: Float64; y: Float64 }, "CGPoint">;
   export type CGRect = Struct<{ origin: CGPoint; size: CGPoint }, "CGRect">;
   export interface NSValueOwnMethods {
     /**
@@ -85,12 +87,12 @@ declare module "objc:Foundation" {
 const PROGRAM: &str = r#"import { area, inset, type Rect } from "c:geometry";
 import { valueWithRect, type CGRect } from "objc:Foundation";
 import { local } from "c:memory";
-import type { c_double } from "c:types";
+import type { Float64 } from "@nts/scalars";
 export function run(): number {
   const r = local<Rect>();
-  r.size.x = 4 as c_double;
-  r.size.y = 5 as c_double;
-  const smaller = inset(r, 1 as c_double);
+  r.size.x = 4 as Float64;
+  r.size.y = 5 as Float64;
+  const smaller = inset(r, 1 as Float64);
   const boxed = valueWithRect(local<CGRect>());
   const back = boxed.rectValue();
   return area(smaller) + back.size.x;
@@ -231,21 +233,22 @@ long int_out(struct big x, struct ci a, struct ci b, struct ci c, struct ci d, s
 
 const SHAPES_TS: &str = r#"
 declare module "c:shapes" {
-  import type { ByValue, Ptr, Struct, c_char, c_double, c_float, c_int, c_long } from "c:types";
-  export type Pd = Struct<{ a: c_double; b: c_double }, "pd">;
-  export type Pf = Struct<{ a: c_float; b: c_float }, "pf">;
-  export type Tf = Struct<{ a: c_float; b: c_float; c: c_float }, "tf">;
-  export type Fd = Struct<{ a: c_float; b: c_double }, "fd">;
-  export type Ci = Struct<{ a: c_int; b: c_double }, "ci">;
-  export type Dc = Struct<{ a: c_double; b: c_int }, "dc">;
+  import type { ByValue, Ptr, Struct } from "c:types";
+  import type { c_char, Float64, Float32, c_int, c_long } from "@nts/scalars";
+  export type Pd = Struct<{ a: Float64; b: Float64 }, "pd">;
+  export type Pf = Struct<{ a: Float32; b: Float32 }, "pf">;
+  export type Tf = Struct<{ a: Float32; b: Float32; c: Float32 }, "tf">;
+  export type Fd = Struct<{ a: Float32; b: Float64 }, "fd">;
+  export type Ci = Struct<{ a: c_int; b: Float64 }, "ci">;
+  export type Dc = Struct<{ a: Float64; b: c_int }, "dc">;
   export type Cc = Struct<{ a: c_char; b: c_char }, "cc">;
   export type Iii = Struct<{ a: c_int; b: c_int; c: c_int }, "iii">;
   export type Ic = Struct<{ a: c_int; b: c_char }, "ic">;
   export type Pi = Struct<{ p: Ptr<unknown>; n: c_int }, "pi">;
   export type Big = Struct<{ a: c_long; b: c_long; c: c_long }, "big">;
   export type C1 = Struct<{ a: c_char }, "c1">;
-  export type F1 = Struct<{ a: c_float }, "f1">;
-  export type D1 = Struct<{ a: c_double }, "d1">;
+  export type F1 = Struct<{ a: Float32 }, "f1">;
+  export type D1 = Struct<{ a: Float64 }, "d1">;
   export function f_pd(v: ByValue<Pd>): ByValue<Pd>;
   export function f_pf(v: ByValue<Pf>): ByValue<Pf>;
   export function f_tf(v: ByValue<Tf>): ByValue<Tf>;
@@ -260,7 +263,7 @@ declare module "c:shapes" {
   export function f_c1(v: ByValue<C1>): ByValue<C1>;
   export function f_f1(v: ByValue<F1>): ByValue<F1>;
   export function f_d1(v: ByValue<D1>): ByValue<D1>;
-  export function sse_out(a: ByValue<Pd>, b: ByValue<Pd>, c: ByValue<Pd>, d: ByValue<Pd>, e: ByValue<Pd>): c_double;
+  export function sse_out(a: ByValue<Pd>, b: ByValue<Pd>, c: ByValue<Pd>, d: ByValue<Pd>, e: ByValue<Pd>): Float64;
   export function int_out(
     x: ByValue<Big>, a: ByValue<Ci>, b: ByValue<Ci>, c: ByValue<Ci>, d: ByValue<Ci>, e: ByValue<Ci>, f: ByValue<Ci>,
   ): c_long;
@@ -269,7 +272,7 @@ declare module "c:shapes" {
 
 const SHAPES_PROGRAM: &str = r#"import * as shapes from "c:shapes";
 import { local } from "c:memory";
-import type { c_int } from "c:types";
+import type { c_int } from "@nts/scalars";
 export function run(): number {
   shapes.f_pd(local<shapes.Pd>());
   shapes.f_pf(local<shapes.Pf>());
@@ -508,8 +511,9 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
     );
 
     let binding = r#"declare module "c:u" {
-  import type { ByValue, Union, c_double, c_int } from "c:types";
-  export type Either = Union<{ d: c_double; i: c_int }, "either">;
+  import type { ByValue, Union } from "c:types";
+  import type { Float64, c_int } from "@nts/scalars";
+  export type Either = Union<{ d: Float64; i: c_int }, "either">;
   export function take(e: ByValue<Either>): void;
 }
 "#;
@@ -567,39 +571,40 @@ double spill(struct rect a, struct rect b, struct rect c);
 
 const ARM64_TS: &str = r#"
 declare module "c:shapes" {
-  import type { ByValue, Ptr, Struct, c_char, c_double, c_float, c_int, c_long } from "c:types";
-  export type Pd = Struct<{ a: c_double; b: c_double }, "pd">;
-  export type D1 = Struct<{ a: c_double }, "d1">;
-  export type Quad = Struct<{ a: c_double; b: c_double; c: c_double; d: c_double }, "quad">;
+  import type { ByValue, Ptr, Struct } from "c:types";
+  import type { c_char, Float64, Float32, c_int, c_long } from "@nts/scalars";
+  export type Pd = Struct<{ a: Float64; b: Float64 }, "pd">;
+  export type D1 = Struct<{ a: Float64 }, "d1">;
+  export type Quad = Struct<{ a: Float64; b: Float64; c: Float64; d: Float64 }, "quad">;
   export type Rect = Struct<{ origin: Pd; size: Pd }, "rect">;
-  export type Ci = Struct<{ a: c_int; b: c_double }, "ci">;
+  export type Ci = Struct<{ a: c_int; b: Float64 }, "ci">;
   export type Ic = Struct<{ a: c_int; b: c_char }, "ic">;
   export type Pi = Struct<{ p: Ptr<unknown>; n: c_int }, "pi">;
   export type C3 = Struct<{ a: c_char; b: c_char; c: c_char }, "c3">;
-  export type Tf = Struct<{ a: c_float; b: c_float; c: c_float }, "tf">;
+  export type Tf = Struct<{ a: Float32; b: Float32; c: Float32 }, "tf">;
   export type Big = Struct<{ a: c_long; b: c_long; c: c_long }, "big">;
   export function f_pd(v: ByValue<Pd>): ByValue<Pd>;
   export function f_d1(v: ByValue<D1>): ByValue<D1>;
   export function f_quad(v: ByValue<Quad>): ByValue<Quad>;
-  export function f_rect(v: ByValue<Rect>, by: c_double): ByValue<Rect>;
+  export function f_rect(v: ByValue<Rect>, by: Float64): ByValue<Rect>;
   export function f_ci(v: ByValue<Ci>): ByValue<Ci>;
   export function f_ic(v: ByValue<Ic>): ByValue<Ic>;
   export function f_pi(v: ByValue<Pi>): ByValue<Pi>;
   export function make_c3(n: c_int): ByValue<C3>;
   export function make_tf(n: c_int): ByValue<Tf>;
   export function make_big(n: c_int): ByValue<Big>;
-  export function spill(a: ByValue<Rect>, b: ByValue<Rect>, c: ByValue<Rect>): c_double;
+  export function spill(a: ByValue<Rect>, b: ByValue<Rect>, c: ByValue<Rect>): Float64;
 }
 "#;
 
 const ARM64_PROGRAM: &str = r#"import * as shapes from "c:shapes";
 import { local } from "c:memory";
-import type { c_double, c_int } from "c:types";
+import type { Float64, c_int } from "@nts/scalars";
 export function run(): number {
   shapes.f_pd(local<shapes.Pd>());
   shapes.f_d1(local<shapes.D1>());
   shapes.f_quad(local<shapes.Quad>());
-  shapes.f_rect(local<shapes.Rect>(), 1 as c_double);
+  shapes.f_rect(local<shapes.Rect>(), 1 as Float64);
   shapes.f_ci(local<shapes.Ci>());
   shapes.f_ic(local<shapes.Ic>());
   shapes.f_pi(local<shapes.Pi>());
@@ -704,14 +709,14 @@ fn the_llvm_declarations_are_clangs_on_arm64() {
 #[test]
 fn arm64_refuses_only_what_its_convention_places() {
     let binding = r#"declare module "c:scalars" {
-  import type { c_double, c_int } from "c:types";
-  export function scaled(n: c_int, by: c_double): c_double;
+  import type { Float64, c_int } from "@nts/scalars";
+  export function scaled(n: c_int, by: Float64): Float64;
 }
 /**
  * @ntsFramework Foundation
  */
 declare module "objc:Foundation" {
-  import type { c_ulong } from "c:types";
+  import type { c_ulong } from "@nts/scalars";
   import type { ObjcClass } from "objc:types";
   export interface NSObjectOwnMethods {
     /**
@@ -727,7 +732,7 @@ declare module "objc:Foundation" {
   export function make(): NSObject;
 }
 "#;
-    let source = "import { scaled } from \"c:scalars\";\nimport { make } from \"objc:Foundation\";\nimport type { c_double, c_int } from \"c:types\";\nexport function run(): number {\n  return scaled(2 as c_int, 1.5 as c_double) + Number(make().hash());\n}\n";
+    let source = "import { scaled } from \"c:scalars\";\nimport { make } from \"objc:Foundation\";\nimport type { Float64, c_int } from \"@nts/scalars\";\nexport function run(): number {\n  return scaled(2 as c_int, 1.5 as Float64) + Number(make().hash());\n}\n";
     let Some((_, prepared)) = prepare("arm64-scalars", binding, source) else {
         eprintln!("skipped: no tsgo");
         return;
@@ -804,8 +809,9 @@ fn byval_is_a_pointer_to_a_copy_on_win64() {
 #[test]
 fn a_local_stored_in_a_global_is_refused() {
     let binding = r#"declare module "c:held" {
-  import type { Struct, c_double } from "c:types";
-  export type Pair = Struct<{ a: c_double; b: c_double }, "pair">;
+  import type { Struct } from "c:types";
+  import type { Float64 } from "@nts/scalars";
+  export type Pair = Struct<{ a: Float64; b: Float64 }, "pair">;
 }
 "#;
     let source = "import type { Pair } from \"c:held\";\n\
@@ -853,7 +859,7 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
     let cases: [(&str, &str, &str, &str, &str, &str); 5] = [
         (
             "counted-member",
-            r#"export type Holder = Struct<{ name: NSString; n: c_double }, "holder">;
+            r#"export type Holder = Struct<{ name: NSString; n: Float64 }, "holder">;
   export function take(h: ByValue<Holder>): void;"#,
             "take, type Holder",
             "void",
@@ -862,7 +868,7 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
         ),
         (
             "packed",
-            r#"export type Tight = Packed<Struct<{ a: c_double; b: c_double }, "tight">>;
+            r#"export type Tight = Packed<Struct<{ a: Float64; b: Float64 }, "tight">>;
   export function take(h: ByValue<Tight>): void;"#,
             "take, type Tight",
             "void",
@@ -871,16 +877,16 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
         ),
         (
             "variadic-result",
-            r#"export type Pair = Struct<{ a: c_double; b: c_double }, "pair">;
-  export function take(first: c_double, ...rest: c_double[]): ByValue<Pair>;"#,
+            r#"export type Pair = Struct<{ a: Float64; b: Float64 }, "pair">;
+  export function take(first: Float64, ...rest: Float64[]): ByValue<Pair>;"#,
             "take",
             "void",
-            "take(1 as c_double);",
+            "take(1 as Float64);",
             "is variadic and returns a record by value",
         ),
         (
             "callback",
-            r#"export type Pair = Struct<{ a: c_double; b: c_double }, "pair">;
+            r#"export type Pair = Struct<{ a: Float64; b: Float64 }, "pair">;
   export function take(each: (p: ByValue<Pair>) => void): void;"#,
             "take",
             "void",
@@ -892,7 +898,7 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
         ),
         (
             "escaping-result",
-            r#"export type Pair = Struct<{ a: c_double; b: c_double }, "pair">;
+            r#"export type Pair = Struct<{ a: Float64; b: Float64 }, "pair">;
   export function make(): ByValue<Pair>;"#,
             "make, type Pair",
             "Ptr<Pair>",
@@ -903,7 +909,7 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
     for (name, declarations, imports, returns, body, expected) in cases {
         let binding = format!(
             r#"declare module "c:refused" {{
-  import type {{ ByValue, Packed, Struct, c_double }} from "c:types";
+  import type {{ ByValue, Packed, Struct }} from "c:types"; import type {{ Float64 }} from "@nts/scalars";
   import type {{ ObjcClass }} from "objc:types";
   export type NSString = ObjcClass<"NSString">;
   {declarations}
@@ -913,7 +919,7 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
         let source = format!(
             "import {{ {imports} }} from \"c:refused\";\n\
              import {{ local }} from \"c:memory\";\n\
-             import type {{ Ptr, c_double }} from \"c:types\";\n\
+             import type {{ Ptr }} from \"c:types\"; import type {{ Float64 }} from \"@nts/scalars\";\n\
              export function run(): {returns} {{\n  {body}\n}}\n"
         );
         let Some((_, prepared)) = prepare(&format!("refuse-{name}"), &binding, &source) else {
