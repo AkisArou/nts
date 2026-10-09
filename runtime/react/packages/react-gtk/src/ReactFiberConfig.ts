@@ -21,6 +21,7 @@ import type { GtkWidget } from "c:Gtk-4.0";
 
 import { getCurrentUpdatePriority, type HostNode, NoEventPriority, type Props, textOf, type WidgetNode } from "./HostNode.ts";
 import type { HostRoot } from "./HostRoot.ts";
+import { cUint } from "./numbers.ts";
 import { cancelTimer, startTimer } from "./SchedulerHost.ts";
 
 export { getCurrentUpdatePriority, HostNode, setCurrentUpdatePriority, SlotNode, type Props, WidgetNode } from "./HostNode.ts";
@@ -228,8 +229,10 @@ export function bindToConsole(_methodName: string, _args: unknown[], _badgeName:
 export function scheduleTimeout(fn: () => void, delay?: number): TimeoutHandle {
   return startTimer(fn, delay ?? 0);
 }
+// The reconciler keeps the handle as a plain number beside `noTimeout`'s -1,
+// so it comes back here unproven: it is the GLib source id `startTimer` made.
 export function cancelTimeout(id: TimeoutHandle): void {
-  cancelTimer(id);
+  cancelTimer(cUint(id, "timeout handle"));
 }
 
 export function createFragmentInstance(_fragmentFiber: unknown): FragmentInstanceType {

@@ -44,10 +44,12 @@ import {
   type AdwViewStackPage,
 } from "c:Adw-1";
 import { g_signal_handler_disconnect } from "c:GObject-2.0";
+import type { CNumber } from "c:types";
 import type { GtkWidget } from "c:Gtk-4.0";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { AppendedPageNode, GroupNode, GroupPlacement, type PackProps } from "../children.ts";
+import { cInt, cUint } from "../numbers.ts";
 import {
   HostNode,
   insertAt,
@@ -269,7 +271,7 @@ export class ViewStackPageNode extends AppendedPageNode {
     page.set_icon_name(text("iconName"));
     page.set_needs_attention(props["needsAttention"] === true);
     const badge = props["badgeNumber"];
-    page.set_badge_number(typeof badge === "number" ? badge : 0);
+    page.set_badge_number(cUint(typeof badge === "number" ? badge : 0, "badge"));
   }
 }
 
@@ -339,8 +341,9 @@ function selectByReact(view: AdwTabView, page: AdwTabPage): void {
  */
 export class TabViewPageNode extends PlacedNode {
   private readonly state: TabState = new TabState();
-  private closeHandler = 0;
-  private selectHandler = 0;
+  // Handler ids as GObject made them, a `gulong` each, for disconnecting.
+  private closeHandler: CNumber<"ulong"> = 0;
+  private selectHandler: CNumber<"ulong"> = 0;
 
   protected attach(owner: WidgetNode, widget: GtkWidget): void {
     const view = owner.widget;
@@ -401,7 +404,7 @@ export class TabViewPageNode extends PlacedNode {
     const from = view.get_page_position(page);
     // Counted with this tab taken out: a tab after it moves up one.
     const to = this.target(owner, view, page.get_pinned());
-    view.reorder_page(page, to > from ? to - 1 : to);
+    view.reorder_page(page, cInt(to > from ? to - 1 : to, "position"));
     return true;
   }
   protected update(owner: WidgetNode, widget: GtkWidget): void {
@@ -427,11 +430,11 @@ export class TabViewPageNode extends PlacedNode {
   // The index of the tab React's order puts after this one (past the end of
   // the region, with none), kept to the tab's region: libadwaita keeps pinned
   // tabs before the others.
-  private target(owner: WidgetNode, view: AdwTabView, pinned: boolean): number {
+  private target(owner: WidgetNode, view: AdwTabView, pinned: boolean): CNumber<"int"> {
     const pinnedCount = view.get_n_pinned_pages();
     const next = owner.elementAfter(this);
     const at = next === null ? (pinned ? pinnedCount : view.get_n_pages()) : view.get_page_position(view.get_page(next));
-    return pinned ? Math.min(at, pinnedCount) : Math.max(at, pinnedCount);
+    return cInt(pinned ? Math.min(at, pinnedCount) : Math.max(at, pinnedCount), "position");
   }
 
   private describe(view: AdwTabView, page: AdwTabPage): void {
@@ -866,7 +869,7 @@ export class AlertResponseNode extends ObjectElementNode {
     const label = this.props["label"];
     dialog.set_response_label(id, typeof label === "string" ? label : id);
     const appearance = this.props["appearance"];
-    dialog.set_response_appearance(id, typeof appearance === "number" ? appearance : 0);
+    dialog.set_response_appearance(id, cUint(typeof appearance === "number" ? appearance : 0, "appearance"));
     dialog.set_response_enabled(id, this.props["enabled"] !== false);
   }
 
@@ -1001,7 +1004,7 @@ function selectAsProps(owner: WidgetNode): void {
   const sidebar = owner.widget;
   const selected = owner.prop("selected");
   if (sidebar instanceof AdwSidebar && typeof selected === "number" && selected !== sidebar.get_selected()) {
-    sidebar.set_selected(selected);
+    sidebar.set_selected(cUint(selected, "selected"));
   }
 }
 
@@ -1061,7 +1064,7 @@ export class SidebarSectionNode extends ObjectElementNode {
     }
     const position = at < 0 ? this.items.length : at;
     insertAt(this.items, position, child);
-    writeAsReact(() => section.insert(item, position));
+    writeAsReact(() => section.insert(item, cInt(position, "position")));
     this.reselect();
   }
 
@@ -1084,7 +1087,7 @@ export class SidebarSectionNode extends ObjectElementNode {
       if (this.owner === parent) {
         sidebar.remove(section);
       }
-      sidebar.insert(section, position);
+      sidebar.insert(section, cInt(position, "position"));
       selectAsProps(parent);
     });
     this.owner = parent;
@@ -1240,11 +1243,11 @@ export class ToastNode extends ObjectElementNode {
     }
     if (changed("timeout")) {
       const timeout = next["timeout"];
-      toast.set_timeout(typeof timeout === "number" ? timeout : 5);
+      toast.set_timeout(cUint(typeof timeout === "number" ? timeout : 5, "timeout"));
     }
     if (changed("priority")) {
       const priority = next["priority"];
-      toast.set_priority(typeof priority === "number" ? priority : 0);
+      toast.set_priority(cUint(typeof priority === "number" ? priority : 0, "priority"));
     }
     if (changed("buttonLabel")) {
       const label = next["buttonLabel"];

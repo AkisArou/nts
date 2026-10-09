@@ -460,8 +460,11 @@ type ValueKind =
   // classes that implement it for an interface.
   | { kind: "object"; type: string; classes: string[]; nullable: boolean }
   | { kind: "boolean" }
-  | { kind: "number" }
-  | { kind: "enum"; type: string };
+  // `c` is the C type the setter takes (`CNumber<"int">` is "int"), which
+  // decides the conversion the value makes on its way in (src/numbers.ts).
+  | { kind: "number"; c: string }
+  // `base` is the integer C takes the enum as: `c_int` or `c_uint`.
+  | { kind: "enum"; type: string; base: string };
 
 interface Prop {
   jsx: string; // hasFrame
@@ -779,12 +782,13 @@ function valueKind(type: string, bindings: Bindings, reference = false): ValueKi
   if (/^CBool<\w+>$/.test(type)) {
     return { kind: "boolean" };
   }
-  if (/^CNumber<"\w+">$/.test(type)) {
-    return { kind: "number" };
+  const number = /^CNumber<"(\w+)">$/.exec(type);
+  if (number !== null) {
+    return { kind: "number", c: number[1]! };
   }
-  const enumType = /^CEnum<(\w+), \w+>$/.exec(type);
+  const enumType = /^CEnum<(\w+), (\w+)>$/.exec(type);
   if (enumType !== null) {
-    return { kind: "enum", type: enumType[1]! };
+    return { kind: "enum", type: enumType[1]!, base: enumType[2]! };
   }
   // An object the app makes and hands over: a model, an adjustment, a menu.
   // Not a widget, which React makes and an app would need a ref to; not a
@@ -1479,7 +1483,7 @@ function emit(m: Model, target: Target): string {
       line("      return;");
       line("    }");
       line("    if (this.placed[at] !== child.widget) {");
-      line(`      this.gtk.${rowAccessors.get(qualified(w.gir))}(at)!.set_child(null);`);
+      line(`      this.gtk.${rowAccessors.get(qualified(w.gir))}(cInt(at, "index"))!.set_child(null);`);
       line("    }");
       line("    this.gtk.remove(this.placed[at]!);");
       line("    this.items.splice(at, 1);");
@@ -1498,7 +1502,7 @@ function emit(m: Model, target: Target): string {
       line("      this.takeBack(child);");
       line("    }");
       line("    const index = this.items.indexOf(before);");
-      line("    this.gtk.insert(child.widget, index);");
+      line('    this.gtk.insert(child.widget, cInt(index, "index"));');
       line("    insertAt(this.items, index, child);");
       line("    insertAt(this.placed, index, this.held(child));");
       line("  }");
@@ -1521,7 +1525,7 @@ function emit(m: Model, target: Target): string {
       line("    if (from >= 0) {");
       line("      this.items.splice(from, 1);");
       line("      this.items.push(child);");
-      line("      this.gtk.reorder(child.widget, this.items.length - 1);");
+      line('      this.gtk.reorder(child.widget, cInt(this.items.length - 1, "position"));');
       line("      return;");
       line("    }");
       line("    this.gtk.append(child.widget);");
@@ -1536,9 +1540,9 @@ function emit(m: Model, target: Target): string {
       line("    const at = this.items.indexOf(before);");
       line("    insertAt(this.items, at, child);");
       line("    if (from >= 0) {");
-      line("      this.gtk.reorder(child.widget, at);");
+      line('      this.gtk.reorder(child.widget, cInt(at, "position"));');
       line("    } else {");
-      line("      this.gtk.insert(child.widget, at);");
+      line('      this.gtk.insert(child.widget, cInt(at, "position"));');
       line("    }");
       line("  }");
       line("  protected unplace(child: WidgetNode): void {");
@@ -1636,10 +1640,33 @@ function emit(m: Model, target: Target): string {
   }
   const imports = [...byModule.keys()].sort().map((module) => `import {\n${byModule.get(module)!.map((n) => `  ${n},`).join("\n")}\n} from "${module}";`);
   const fromHostNode = ["type HostNode", "insertAt", "type SignalSlot", "SlotNode", "stringsOf", "WidgetNode", "writeAsReact"].filter((n) => needs.has(n));
-  return out
-    .join("\n")
+  const text = out.join("\n");
+  // The conversions the emitted setters and children call, from src/numbers.ts.
+  const fromNumbers = ["cFloat", "cInt", "cUint"].filter((n) => text.includes(`${n}(`));
+  const numbersImport = fromNumbers.length === 0 ? "" : `\nimport { ${fromNumbers.join(", ")} } from "${hostNode.replace("HostNode.ts", "numbers.ts")}";`;
+  return text
     .replace("__IMPORTS__", imports.join("\n"))
-    .replace("__HOST_NODE__", `import { ${fromHostNode.join(", ")} } from "${hostNode}";`);
+    .replace("__HOST_NODE__", `import { ${fromHostNode.join(", ")} } from "${hostNode}";${numbersImport}`);
+}
+
+/**
+ * `expression`, a number the app wrote, converted for a setter that takes the
+ * C type `c` (src/numbers.ts): checked into an `int` or `unsigned int`,
+ * rounded to a `float`. A `double` holds any number as it is.
+ */
+function convert(c: string, expression: string, prop: string): string {
+  switch (c) {
+    case "int":
+    case "int32":
+      return `cInt(${expression}, "${prop}")`;
+    case "uint":
+    case "uint32":
+      return `cUint(${expression}, "${prop}")`;
+    case "float":
+      return `cFloat(${expression})`;
+    default:
+      return expression;
+  }
 }
 
 /** The type an ancestor of `t` declares its prop `jsx` with, or null when none does. */
@@ -1699,7 +1726,12 @@ function assign(p: Prop): string {
     return `gtk.${p.setter}(stringsOf(value) ?? ${p.reset});`;
   }
   const test = p.value.kind === "enum" ? "number" : p.value.kind;
-  const valueOf = p.value.kind === "enum" ? `value as ${p.value.type}` : "value";
+  const valueOf =
+    p.value.kind === "enum"
+      ? `${convert(p.value.base === "c_int" ? "int" : "uint", "value", p.jsx)} as ${p.value.type}`
+      : p.value.kind === "number"
+        ? convert(p.value.c, "value", p.jsx)
+        : "value";
   if (p.reset === null) {
     return `if (typeof value === "${test}") gtk.${p.setter}(${valueOf});`;
   }

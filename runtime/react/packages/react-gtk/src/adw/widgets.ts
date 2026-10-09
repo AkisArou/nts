@@ -153,6 +153,7 @@ import {
 import * as Gtk from "../widgets.ts";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 import { type HostNode, insertAt, type SignalSlot, SlotNode, stringsOf, WidgetNode, writeAsReact } from "../HostNode.ts";
+import { cFloat, cInt, cUint } from "../numbers.ts";
 import { type HeaderBarChildren, AdwGroupNode, type ToolbarViewChildren, type ActionRowChildren, type EntryRowChildren, type ExpanderRowChildren, type ViewStackChildren, ViewStackPageNode, type TabViewChildren, TabViewPageNode, type WindowBreakpoints, BreakpointNode, type ApplicationWindowBreakpoints, type BreakpointBinBreakpoints, type ToastOverlayChildren, ToastNode, type SidebarChildren, SidebarSectionNode, SidebarItemNode, type ToggleGroupChildren, ToggleNode, type AlertDialogChildren, AlertResponseNode, type DialogBreakpoints, NavigationStack } from "./children.ts";
 
 // ---- props: what JSX checks -------------------------------------------------
@@ -1193,10 +1194,10 @@ export function dialogProp(gtk: AdwDialog, key: string, value: unknown): boolean
       gtk.set_can_close(typeof value === "boolean" ? value : true);
       return true;
     case "contentHeight":
-      gtk.set_content_height(typeof value === "number" ? value : -1);
+      gtk.set_content_height(typeof value === "number" ? cInt(value, "contentHeight") : -1);
       return true;
     case "contentWidth":
-      gtk.set_content_width(typeof value === "number" ? value : -1);
+      gtk.set_content_width(typeof value === "number" ? cInt(value, "contentWidth") : -1);
       return true;
     case "defaultWidget":
       gtk.set_default_widget(value instanceof GtkWidget ? value : null);
@@ -1208,7 +1209,7 @@ export function dialogProp(gtk: AdwDialog, key: string, value: unknown): boolean
       gtk.set_follows_content_size(typeof value === "boolean" ? value : false);
       return true;
     case "presentationMode":
-      gtk.set_presentation_mode(typeof value === "number" ? value as AdwDialogPresentationMode : 0 as AdwDialogPresentationMode);
+      gtk.set_presentation_mode(typeof value === "number" ? cUint(value, "presentationMode") as AdwDialogPresentationMode : 0 as AdwDialogPresentationMode);
       return true;
     case "title":
       gtk.set_title(typeof value === "string" ? value : "");
@@ -1311,7 +1312,7 @@ export function aboutDialogProp(gtk: AdwAboutDialog, key: string, value: unknown
       gtk.set_license(typeof value === "string" ? value : "");
       return true;
     case "licenseType":
-      gtk.set_license_type(typeof value === "number" ? value as GtkLicense : 0 as GtkLicense);
+      gtk.set_license_type(typeof value === "number" ? cUint(value, "licenseType") as GtkLicense : 0 as GtkLicense);
       return true;
     case "releaseNotes":
       gtk.set_release_notes(typeof value === "string" ? value : "");
@@ -1494,13 +1495,13 @@ export function actionRowProp(gtk: AdwActionRow, key: string, value: unknown): b
       gtk.set_subtitle(typeof value === "string" ? value : "");
       return true;
     case "subtitleLines":
-      gtk.set_subtitle_lines(typeof value === "number" ? value : 0);
+      gtk.set_subtitle_lines(typeof value === "number" ? cInt(value, "subtitleLines") : 0);
       return true;
     case "subtitleSelectable":
       gtk.set_subtitle_selectable(typeof value === "boolean" ? value : false);
       return true;
     case "titleLines":
-      gtk.set_title_lines(typeof value === "number" ? value : 0);
+      gtk.set_title_lines(typeof value === "number" ? cInt(value, "titleLines") : 0);
       return true;
   }
   return preferencesRowProp(gtk, key, value);
@@ -1646,7 +1647,7 @@ export function avatarProp(gtk: AdwAvatar, key: string, value: unknown): boolean
       gtk.set_show_initials(typeof value === "boolean" ? value : false);
       return true;
     case "size":
-      gtk.set_size(typeof value === "number" ? value : -1);
+      gtk.set_size(typeof value === "number" ? cInt(value, "size") : -1);
       return true;
     case "text":
       gtk.set_text(typeof value === "string" ? value : null);
@@ -1692,7 +1693,7 @@ export function bannerProp(gtk: AdwBanner, key: string, value: unknown): boolean
       gtk.set_button_label(typeof value === "string" ? value : null);
       return true;
     case "buttonStyle":
-      gtk.set_button_style(typeof value === "number" ? value as AdwBannerButtonStyle : 0 as AdwBannerButtonStyle);
+      gtk.set_button_style(typeof value === "number" ? cUint(value, "buttonStyle") as AdwBannerButtonStyle : 0 as AdwBannerButtonStyle);
       return true;
     case "revealed":
       gtk.set_revealed(typeof value === "boolean" ? value : false);
@@ -1760,7 +1761,7 @@ export function binSignal(gtk: AdwBin, key: string, slot: SignalSlot): boolean {
 export function bottomSheetProp(gtk: AdwBottomSheet, key: string, value: unknown): boolean {
   switch (key) {
     case "align":
-      gtk.set_align(typeof value === "number" ? value : 0.5);
+      gtk.set_align(typeof value === "number" ? cFloat(value) : 0.5);
       return true;
     case "canClose":
       gtk.set_can_close(typeof value === "boolean" ? value : true);
@@ -1934,16 +1935,16 @@ export function carouselProp(gtk: AdwCarousel, key: string, value: unknown): boo
       gtk.set_interactive(typeof value === "boolean" ? value : true);
       return true;
     case "revealDuration":
-      gtk.set_reveal_duration(typeof value === "number" ? value : 0);
+      gtk.set_reveal_duration(typeof value === "number" ? cUint(value, "revealDuration") : 0);
       return true;
     case "scrollParams":
       if (value instanceof AdwSpringParams) gtk.set_scroll_params(value);
       return true;
     case "spacing":
-      gtk.set_spacing(typeof value === "number" ? value : 0);
+      gtk.set_spacing(typeof value === "number" ? cUint(value, "spacing") : 0);
       return true;
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? cUint(value, "orientation") as GtkOrientation : 0 as GtkOrientation);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -2001,7 +2002,7 @@ export function carouselIndicatorDotsProp(gtk: AdwCarouselIndicatorDots, key: st
       gtk.set_carousel(value instanceof AdwCarousel ? value : null);
       return true;
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? cUint(value, "orientation") as GtkOrientation : 0 as GtkOrientation);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -2029,7 +2030,7 @@ export function carouselIndicatorLinesProp(gtk: AdwCarouselIndicatorLines, key: 
       gtk.set_carousel(value instanceof AdwCarousel ? value : null);
       return true;
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? cUint(value, "orientation") as GtkOrientation : 0 as GtkOrientation);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -2054,16 +2055,16 @@ export function carouselIndicatorLinesSignal(gtk: AdwCarouselIndicatorLines, key
 export function clampProp(gtk: AdwClamp, key: string, value: unknown): boolean {
   switch (key) {
     case "maximumSize":
-      gtk.set_maximum_size(typeof value === "number" ? value : 600);
+      gtk.set_maximum_size(typeof value === "number" ? cInt(value, "maximumSize") : 600);
       return true;
     case "tighteningThreshold":
-      gtk.set_tightening_threshold(typeof value === "number" ? value : 400);
+      gtk.set_tightening_threshold(typeof value === "number" ? cInt(value, "tighteningThreshold") : 400);
       return true;
     case "unit":
-      gtk.set_unit(typeof value === "number" ? value as AdwLengthUnit : 2 as AdwLengthUnit);
+      gtk.set_unit(typeof value === "number" ? cUint(value, "unit") as AdwLengthUnit : 2 as AdwLengthUnit);
       return true;
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? cUint(value, "orientation") as GtkOrientation : 0 as GtkOrientation);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -2098,28 +2099,28 @@ export function clampSignal(gtk: AdwClamp, key: string, slot: SignalSlot): boole
 export function clampScrollableProp(gtk: AdwClampScrollable, key: string, value: unknown): boolean {
   switch (key) {
     case "maximumSize":
-      gtk.set_maximum_size(typeof value === "number" ? value : 600);
+      gtk.set_maximum_size(typeof value === "number" ? cInt(value, "maximumSize") : 600);
       return true;
     case "tighteningThreshold":
-      gtk.set_tightening_threshold(typeof value === "number" ? value : 400);
+      gtk.set_tightening_threshold(typeof value === "number" ? cInt(value, "tighteningThreshold") : 400);
       return true;
     case "unit":
-      gtk.set_unit(typeof value === "number" ? value as AdwLengthUnit : 2 as AdwLengthUnit);
+      gtk.set_unit(typeof value === "number" ? cUint(value, "unit") as AdwLengthUnit : 2 as AdwLengthUnit);
       return true;
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? cUint(value, "orientation") as GtkOrientation : 0 as GtkOrientation);
       return true;
     case "hadjustment":
       gtk.set_hadjustment(value instanceof GtkAdjustment ? value : null);
       return true;
     case "hscrollPolicy":
-      gtk.set_hscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
+      gtk.set_hscroll_policy(typeof value === "number" ? cUint(value, "hscrollPolicy") as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
       return true;
     case "vadjustment":
       gtk.set_vadjustment(value instanceof GtkAdjustment ? value : null);
       return true;
     case "vscrollPolicy":
-      gtk.set_vscroll_policy(typeof value === "number" ? value as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
+      gtk.set_vscroll_policy(typeof value === "number" ? cUint(value, "vscrollPolicy") as GtkScrollablePolicy : 0 as GtkScrollablePolicy);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -2211,10 +2212,10 @@ export function comboRowProp(gtk: AdwComboRow, key: string, value: unknown): boo
       else gtk.set_model(null);
       return true;
     case "searchMatchMode":
-      gtk.set_search_match_mode(typeof value === "number" ? value as GtkStringFilterMatchMode : 2 as GtkStringFilterMatchMode);
+      gtk.set_search_match_mode(typeof value === "number" ? cUint(value, "searchMatchMode") as GtkStringFilterMatchMode : 2 as GtkStringFilterMatchMode);
       return true;
     case "selected":
-      gtk.set_selected(typeof value === "number" ? value : 4294967295);
+      gtk.set_selected(typeof value === "number" ? cUint(value, "selected") : 4294967295);
       return true;
     case "useSubtitle":
       gtk.set_use_subtitle(typeof value === "boolean" ? value : false);
@@ -2281,13 +2282,13 @@ export function entryRowProp(gtk: AdwEntryRow, key: string, value: unknown): boo
       gtk.set_enable_emoji_completion(typeof value === "boolean" ? value : false);
       return true;
     case "inputHints":
-      gtk.set_input_hints(typeof value === "number" ? value as GtkInputHints : 0 as GtkInputHints);
+      gtk.set_input_hints(typeof value === "number" ? cUint(value, "inputHints") as GtkInputHints : 0 as GtkInputHints);
       return true;
     case "inputPurpose":
-      gtk.set_input_purpose(typeof value === "number" ? value as GtkInputPurpose : 0 as GtkInputPurpose);
+      gtk.set_input_purpose(typeof value === "number" ? cUint(value, "inputPurpose") as GtkInputPurpose : 0 as GtkInputPurpose);
       return true;
     case "maxLength":
-      gtk.set_max_length(typeof value === "number" ? value : 0);
+      gtk.set_max_length(typeof value === "number" ? cInt(value, "maxLength") : 0);
       return true;
     case "showApplyButton":
       gtk.set_show_apply_button(typeof value === "boolean" ? value : false);
@@ -2299,16 +2300,16 @@ export function entryRowProp(gtk: AdwEntryRow, key: string, value: unknown): boo
       gtk.set_enable_undo(typeof value === "boolean" ? value : true);
       return true;
     case "maxWidthChars":
-      gtk.set_max_width_chars(typeof value === "number" ? value : -1);
+      gtk.set_max_width_chars(typeof value === "number" ? cInt(value, "maxWidthChars") : -1);
       return true;
     case "text":
       gtk.set_text(typeof value === "string" ? value : "");
       return true;
     case "widthChars":
-      gtk.set_width_chars(typeof value === "number" ? value : -1);
+      gtk.set_width_chars(typeof value === "number" ? cInt(value, "widthChars") : -1);
       return true;
     case "xalign":
-      gtk.set_alignment(typeof value === "number" ? value : 0);
+      gtk.set_alignment(typeof value === "number" ? cFloat(value) : 0);
       return true;
   }
   return preferencesRowProp(gtk, key, value);
@@ -2409,10 +2410,10 @@ export function expanderRowProp(gtk: AdwExpanderRow, key: string, value: unknown
       gtk.set_subtitle(typeof value === "string" ? value : "");
       return true;
     case "subtitleLines":
-      gtk.set_subtitle_lines(typeof value === "number" ? value : 0);
+      gtk.set_subtitle_lines(typeof value === "number" ? cInt(value, "subtitleLines") : 0);
       return true;
     case "titleLines":
-      gtk.set_title_lines(typeof value === "number" ? value : 0);
+      gtk.set_title_lines(typeof value === "number" ? cInt(value, "titleLines") : 0);
       return true;
   }
   return preferencesRowProp(gtk, key, value);
@@ -2457,7 +2458,7 @@ export function expanderRowSignal(gtk: AdwExpanderRow, key: string, slot: Signal
 export function headerBarProp(gtk: AdwHeaderBar, key: string, value: unknown): boolean {
   switch (key) {
     case "centeringPolicy":
-      gtk.set_centering_policy(typeof value === "number" ? value as AdwCenteringPolicy : 0 as AdwCenteringPolicy);
+      gtk.set_centering_policy(typeof value === "number" ? cUint(value, "centeringPolicy") as AdwCenteringPolicy : 0 as AdwCenteringPolicy);
       return true;
     case "decorationLayout":
       gtk.set_decoration_layout(typeof value === "string" ? value : null);
@@ -2520,7 +2521,7 @@ export function inlineViewSwitcherProp(gtk: AdwInlineViewSwitcher, key: string, 
       gtk.set_can_shrink(typeof value === "boolean" ? value : false);
       return true;
     case "displayMode":
-      gtk.set_display_mode(typeof value === "number" ? value as AdwInlineViewSwitcherDisplayMode : 0 as AdwInlineViewSwitcherDisplayMode);
+      gtk.set_display_mode(typeof value === "number" ? cUint(value, "displayMode") as AdwInlineViewSwitcherDisplayMode : 0 as AdwInlineViewSwitcherDisplayMode);
       return true;
     case "homogeneous":
       gtk.set_homogeneous(typeof value === "boolean" ? value : false);
@@ -2529,7 +2530,7 @@ export function inlineViewSwitcherProp(gtk: AdwInlineViewSwitcher, key: string, 
       gtk.set_stack(value instanceof AdwViewStack ? value : null);
       return true;
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? cUint(value, "orientation") as GtkOrientation : 0 as GtkOrientation);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -2657,13 +2658,13 @@ export function navigationSplitViewProp(gtk: AdwNavigationSplitView, key: string
       gtk.set_show_content(typeof value === "boolean" ? value : false);
       return true;
     case "sidebarPosition":
-      gtk.set_sidebar_position(typeof value === "number" ? value as GtkPackType : 0 as GtkPackType);
+      gtk.set_sidebar_position(typeof value === "number" ? cUint(value, "sidebarPosition") as GtkPackType : 0 as GtkPackType);
       return true;
     case "sidebarWidthFraction":
       gtk.set_sidebar_width_fraction(typeof value === "number" ? value : 0.25);
       return true;
     case "sidebarWidthUnit":
-      gtk.set_sidebar_width_unit(typeof value === "number" ? value as AdwLengthUnit : 2 as AdwLengthUnit);
+      gtk.set_sidebar_width_unit(typeof value === "number" ? cUint(value, "sidebarWidthUnit") as AdwLengthUnit : 2 as AdwLengthUnit);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -2789,13 +2790,13 @@ export function overlaySplitViewProp(gtk: AdwOverlaySplitView, key: string, valu
       gtk.set_show_sidebar(typeof value === "boolean" ? value : true);
       return true;
     case "sidebarPosition":
-      gtk.set_sidebar_position(typeof value === "number" ? value as GtkPackType : 0 as GtkPackType);
+      gtk.set_sidebar_position(typeof value === "number" ? cUint(value, "sidebarPosition") as GtkPackType : 0 as GtkPackType);
       return true;
     case "sidebarWidthFraction":
       gtk.set_sidebar_width_fraction(typeof value === "number" ? value : 0.25);
       return true;
     case "sidebarWidthUnit":
-      gtk.set_sidebar_width_unit(typeof value === "number" ? value as AdwLengthUnit : 2 as AdwLengthUnit);
+      gtk.set_sidebar_width_unit(typeof value === "number" ? cUint(value, "sidebarWidthUnit") as AdwLengthUnit : 2 as AdwLengthUnit);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3042,10 +3043,10 @@ export function sidebarProp(gtk: AdwSidebar, key: string, value: unknown): boole
       gtk.set_menu_model(value instanceof GMenuModel ? value : null);
       return true;
     case "mode":
-      gtk.set_mode(typeof value === "number" ? value as AdwSidebarMode : 0 as AdwSidebarMode);
+      gtk.set_mode(typeof value === "number" ? cUint(value, "mode") as AdwSidebarMode : 0 as AdwSidebarMode);
       return true;
     case "selected":
-      gtk.set_selected(typeof value === "number" ? value : 4294967295);
+      gtk.set_selected(typeof value === "number" ? cUint(value, "selected") : 4294967295);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3118,7 +3119,7 @@ export function spinRowProp(gtk: AdwSpinRow, key: string, value: unknown): boole
       gtk.set_climb_rate(typeof value === "number" ? value : 0);
       return true;
     case "digits":
-      gtk.set_digits(typeof value === "number" ? value : 0);
+      gtk.set_digits(typeof value === "number" ? cUint(value, "digits") : 0);
       return true;
     case "numeric":
       gtk.set_numeric(typeof value === "boolean" ? value : false);
@@ -3127,7 +3128,7 @@ export function spinRowProp(gtk: AdwSpinRow, key: string, value: unknown): boole
       gtk.set_snap_to_ticks(typeof value === "boolean" ? value : false);
       return true;
     case "updatePolicy":
-      gtk.set_update_policy(typeof value === "number" ? value as GtkSpinButtonUpdatePolicy : 0 as GtkSpinButtonUpdatePolicy);
+      gtk.set_update_policy(typeof value === "number" ? cUint(value, "updatePolicy") as GtkSpinButtonUpdatePolicy : 0 as GtkSpinButtonUpdatePolicy);
       return true;
     case "value":
       gtk.set_value(typeof value === "number" ? value : 0);
@@ -3142,16 +3143,16 @@ export function spinRowProp(gtk: AdwSpinRow, key: string, value: unknown): boole
       gtk.set_enable_undo(typeof value === "boolean" ? value : true);
       return true;
     case "maxWidthChars":
-      gtk.set_max_width_chars(typeof value === "number" ? value : -1);
+      gtk.set_max_width_chars(typeof value === "number" ? cInt(value, "maxWidthChars") : -1);
       return true;
     case "text":
       gtk.set_text(typeof value === "string" ? value : "");
       return true;
     case "widthChars":
-      gtk.set_width_chars(typeof value === "number" ? value : -1);
+      gtk.set_width_chars(typeof value === "number" ? cInt(value, "widthChars") : -1);
       return true;
     case "xalign":
-      gtk.set_alignment(typeof value === "number" ? value : 0);
+      gtk.set_alignment(typeof value === "number" ? cFloat(value) : 0);
       return true;
   }
   return actionRowProp(gtk, key, value);
@@ -3253,7 +3254,7 @@ export function splitButtonProp(gtk: AdwSplitButton, key: string, value: unknown
       gtk.set_can_shrink(typeof value === "boolean" ? value : false);
       return true;
     case "direction":
-      gtk.set_direction(typeof value === "number" ? value as GtkArrowType : 1 as GtkArrowType);
+      gtk.set_direction(typeof value === "number" ? cUint(value, "direction") as GtkArrowType : 1 as GtkArrowType);
       return true;
     case "dropdownTooltip":
       gtk.set_dropdown_tooltip(typeof value === "string" ? value : "");
@@ -3607,7 +3608,7 @@ export function tabViewProp(gtk: AdwTabView, key: string, value: unknown): boole
       if (value instanceof AdwTabPage) gtk.set_selected_page(value);
       return true;
     case "shortcuts":
-      gtk.set_shortcuts(typeof value === "number" ? value as AdwTabViewShortcuts : 4095 as AdwTabViewShortcuts);
+      gtk.set_shortcuts(typeof value === "number" ? cUint(value, "shortcuts") as AdwTabViewShortcuts : 4095 as AdwTabViewShortcuts);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3678,7 +3679,7 @@ export function toastOverlaySignal(gtk: AdwToastOverlay, key: string, slot: Sign
 export function toggleGroupProp(gtk: AdwToggleGroup, key: string, value: unknown): boolean {
   switch (key) {
     case "active":
-      gtk.set_active(typeof value === "number" ? value : 4294967295);
+      gtk.set_active(typeof value === "number" ? cUint(value, "active") : 4294967295);
       return true;
     case "activeName":
       if (typeof value === "string" && gtk.get_toggle_by_name(value) !== null) gtk.set_active_name(value);
@@ -3690,7 +3691,7 @@ export function toggleGroupProp(gtk: AdwToggleGroup, key: string, value: unknown
       gtk.set_homogeneous(typeof value === "boolean" ? value : false);
       return true;
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? cUint(value, "orientation") as GtkOrientation : 0 as GtkOrientation);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3730,7 +3731,7 @@ export function toggleGroupSignal(gtk: AdwToggleGroup, key: string, slot: Signal
 export function toolbarViewProp(gtk: AdwToolbarView, key: string, value: unknown): boolean {
   switch (key) {
     case "bottomBarStyle":
-      gtk.set_bottom_bar_style(typeof value === "number" ? value as AdwToolbarStyle : 0 as AdwToolbarStyle);
+      gtk.set_bottom_bar_style(typeof value === "number" ? cUint(value, "bottomBarStyle") as AdwToolbarStyle : 0 as AdwToolbarStyle);
       return true;
     case "extendContentToBottomEdge":
       gtk.set_extend_content_to_bottom_edge(typeof value === "boolean" ? value : false);
@@ -3745,7 +3746,7 @@ export function toolbarViewProp(gtk: AdwToolbarView, key: string, value: unknown
       gtk.set_reveal_top_bars(typeof value === "boolean" ? value : true);
       return true;
     case "topBarStyle":
-      gtk.set_top_bar_style(typeof value === "number" ? value as AdwToolbarStyle : 0 as AdwToolbarStyle);
+      gtk.set_top_bar_style(typeof value === "number" ? cUint(value, "topBarStyle") as AdwToolbarStyle : 0 as AdwToolbarStyle);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -3796,7 +3797,7 @@ export function viewStackProp(gtk: AdwViewStack, key: string, value: unknown): b
       gtk.set_hhomogeneous(typeof value === "boolean" ? value : true);
       return true;
     case "transitionDuration":
-      gtk.set_transition_duration(typeof value === "number" ? value : 200);
+      gtk.set_transition_duration(typeof value === "number" ? cUint(value, "transitionDuration") : 200);
       return true;
     case "vhomogeneous":
       gtk.set_vhomogeneous(typeof value === "boolean" ? value : true);
@@ -3850,7 +3851,7 @@ export function viewStackSignal(gtk: AdwViewStack, key: string, slot: SignalSlot
 export function viewSwitcherProp(gtk: AdwViewSwitcher, key: string, value: unknown): boolean {
   switch (key) {
     case "policy":
-      gtk.set_policy(typeof value === "number" ? value as AdwViewSwitcherPolicy : 0 as AdwViewSwitcherPolicy);
+      gtk.set_policy(typeof value === "number" ? cUint(value, "policy") as AdwViewSwitcherPolicy : 0 as AdwViewSwitcherPolicy);
       return true;
     case "stack":
       gtk.set_stack(value instanceof AdwViewStack ? value : null);
@@ -3909,7 +3910,7 @@ export function viewSwitcherSidebarProp(gtk: AdwViewSwitcherSidebar, key: string
       gtk.set_filter(value instanceof GtkFilter ? value : null);
       return true;
     case "mode":
-      gtk.set_mode(typeof value === "number" ? value as AdwSidebarMode : 0 as AdwSidebarMode);
+      gtk.set_mode(typeof value === "number" ? cUint(value, "mode") as AdwSidebarMode : 0 as AdwSidebarMode);
       return true;
     case "stack":
       gtk.set_stack(value instanceof AdwViewStack ? value : null);
@@ -3973,16 +3974,16 @@ export function windowTitleSignal(gtk: AdwWindowTitle, key: string, slot: Signal
 export function wrapBoxProp(gtk: AdwWrapBox, key: string, value: unknown): boolean {
   switch (key) {
     case "align":
-      gtk.set_align(typeof value === "number" ? value : 0);
+      gtk.set_align(typeof value === "number" ? cFloat(value) : 0);
       return true;
     case "childSpacing":
-      gtk.set_child_spacing(typeof value === "number" ? value : 0);
+      gtk.set_child_spacing(typeof value === "number" ? cInt(value, "childSpacing") : 0);
       return true;
     case "childSpacingUnit":
-      gtk.set_child_spacing_unit(typeof value === "number" ? value as AdwLengthUnit : 0 as AdwLengthUnit);
+      gtk.set_child_spacing_unit(typeof value === "number" ? cUint(value, "childSpacingUnit") as AdwLengthUnit : 0 as AdwLengthUnit);
       return true;
     case "justify":
-      gtk.set_justify(typeof value === "number" ? value as AdwJustifyMode : 0 as AdwJustifyMode);
+      gtk.set_justify(typeof value === "number" ? cUint(value, "justify") as AdwJustifyMode : 0 as AdwJustifyMode);
       return true;
     case "justifyLastLine":
       gtk.set_justify_last_line(typeof value === "boolean" ? value : false);
@@ -3991,28 +3992,28 @@ export function wrapBoxProp(gtk: AdwWrapBox, key: string, value: unknown): boole
       gtk.set_line_homogeneous(typeof value === "boolean" ? value : false);
       return true;
     case "lineSpacing":
-      gtk.set_line_spacing(typeof value === "number" ? value : 0);
+      gtk.set_line_spacing(typeof value === "number" ? cInt(value, "lineSpacing") : 0);
       return true;
     case "lineSpacingUnit":
-      gtk.set_line_spacing_unit(typeof value === "number" ? value as AdwLengthUnit : 0 as AdwLengthUnit);
+      gtk.set_line_spacing_unit(typeof value === "number" ? cUint(value, "lineSpacingUnit") as AdwLengthUnit : 0 as AdwLengthUnit);
       return true;
     case "naturalLineLength":
-      gtk.set_natural_line_length(typeof value === "number" ? value : -1);
+      gtk.set_natural_line_length(typeof value === "number" ? cInt(value, "naturalLineLength") : -1);
       return true;
     case "naturalLineLengthUnit":
-      gtk.set_natural_line_length_unit(typeof value === "number" ? value as AdwLengthUnit : 0 as AdwLengthUnit);
+      gtk.set_natural_line_length_unit(typeof value === "number" ? cUint(value, "naturalLineLengthUnit") as AdwLengthUnit : 0 as AdwLengthUnit);
       return true;
     case "packDirection":
-      gtk.set_pack_direction(typeof value === "number" ? value as AdwPackDirection : 0 as AdwPackDirection);
+      gtk.set_pack_direction(typeof value === "number" ? cUint(value, "packDirection") as AdwPackDirection : 0 as AdwPackDirection);
       return true;
     case "wrapPolicy":
-      gtk.set_wrap_policy(typeof value === "number" ? value as AdwWrapPolicy : 1 as AdwWrapPolicy);
+      gtk.set_wrap_policy(typeof value === "number" ? cUint(value, "wrapPolicy") as AdwWrapPolicy : 1 as AdwWrapPolicy);
       return true;
     case "wrapReverse":
       gtk.set_wrap_reverse(typeof value === "boolean" ? value : false);
       return true;
     case "orientation":
-      gtk.set_orientation(typeof value === "number" ? value as GtkOrientation : 0 as GtkOrientation);
+      gtk.set_orientation(typeof value === "number" ? cUint(value, "orientation") as GtkOrientation : 0 as GtkOrientation);
       return true;
   }
   return Gtk.widgetProp(gtk, key, value);
@@ -4544,7 +4545,7 @@ export class AdwCarouselNode extends WidgetNode {
     if (from >= 0) {
       this.items.splice(from, 1);
       this.items.push(child);
-      this.gtk.reorder(child.widget, this.items.length - 1);
+      this.gtk.reorder(child.widget, cInt(this.items.length - 1, "position"));
       return;
     }
     this.gtk.append(child.widget);
@@ -4559,9 +4560,9 @@ export class AdwCarouselNode extends WidgetNode {
     const at = this.items.indexOf(before);
     insertAt(this.items, at, child);
     if (from >= 0) {
-      this.gtk.reorder(child.widget, at);
+      this.gtk.reorder(child.widget, cInt(at, "position"));
     } else {
-      this.gtk.insert(child.widget, at);
+      this.gtk.insert(child.widget, cInt(at, "position"));
     }
   }
   protected unplace(child: WidgetNode): void {

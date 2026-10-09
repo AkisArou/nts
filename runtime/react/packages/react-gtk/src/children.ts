@@ -18,13 +18,21 @@
 // it without this module naming a libadwaita class.
 
 import { GtkActionBar, GtkFixed, GtkGrid, GtkHeaderBar, GtkNotebook, GtkOverlay, GtkStack, type GtkStackPage, type GtkWidget } from "c:Gtk-4.0";
+import type { CNumber } from "c:types";
 import type { HostComponent } from "shared/ReactHostComponent.ts";
 
 import { HostNode, insertAt, PlacedNode, type Props, textOf, type WidgetNode, writeAsReact } from "./HostNode.ts";
+import { cInt } from "./numbers.ts";
 
 function numberProp(props: Props, key: string, fallback: number): number {
   const value = props[key];
   return typeof value === "number" ? value : fallback;
+}
+
+/** A number prop as the C `int` GTK takes it (src/numbers.ts), or `fallback` when the prop is not a number. */
+function intProp(props: Props, key: string, fallback: number): CNumber<"int"> {
+  const value = props[key];
+  return cInt(typeof value === "number" ? value : fallback, key);
 }
 
 function stringProp(props: Props, key: string): string | null {
@@ -62,7 +70,7 @@ export class GridChildNode extends PlacedNode {
       throw misplaced("Grid.Child", "Grid", owner);
     }
     const props = this.props;
-    grid.attach(widget, numberProp(props, "column", 0), numberProp(props, "row", 0), numberProp(props, "columnSpan", 1), numberProp(props, "rowSpan", 1));
+    grid.attach(widget, intProp(props, "column", 0), intProp(props, "row", 0), intProp(props, "columnSpan", 1), intProp(props, "rowSpan", 1));
   }
   protected detach(owner: WidgetNode, widget: GtkWidget): void {
     const grid = owner.widget;
@@ -202,13 +210,13 @@ export class NotebookPageNode extends PlacedNode {
     if (!(notebook instanceof GtkNotebook)) {
       throw misplaced("Notebook.Page", "Notebook", owner);
     }
-    notebook.insert_page(widget, null, this.index(owner, notebook, -1));
+    notebook.insert_page(widget, null, cInt(this.index(owner, notebook, -1), "position"));
     this.describe(notebook, widget);
     // As a Stack's visible child: the Notebook's `page` was applied before
     // its pages existed.
     const current = owner.prop("page");
     if (typeof current === "number" && notebook.page_num(widget) === current) {
-      notebook.set_current_page(current);
+      notebook.set_current_page(cInt(current, "page"));
     }
   }
   protected detach(owner: WidgetNode, widget: GtkWidget): void {
@@ -229,7 +237,7 @@ export class NotebookPageNode extends PlacedNode {
     // The page goes where the next one is (past the end, with none), counted
     // with this one taken out: a page after it moves up one.
     const to = this.index(owner, notebook, notebook.get_n_pages());
-    notebook.reorder_child(widget, to > from ? to - 1 : to);
+    notebook.reorder_child(widget, cInt(to > from ? to - 1 : to, "position"));
     return true;
   }
   protected update(owner: WidgetNode, widget: GtkWidget): void {

@@ -136,6 +136,7 @@ import {
   type GtkWidget,
 } from "c:Gtk-4.0";
 import { g_main_context_iteration, g_main_loop_new } from "c:GLib-2.0";
+import type { CNumber } from "c:types";
 import type { GObject } from "c:GObject-2.0";
 import {
   react_gtk_emit,
@@ -217,7 +218,8 @@ function rows(list: HostNode, nodes: HostNode[], names: string[]): string {
     return "not a list";
   }
   let out = "";
-  for (let i = 0; ; i++) {
+  // Bounded by `int`, the index GTK takes; the list ends long before.
+  for (let i = 0; i <= 2147483647; i++) {
     const row = list.gtk.get_row_at_index(i);
     if (row === null) {
       break;
@@ -584,7 +586,7 @@ function main(): void {
   appendInitialChild(cellB, inB);
   appendInitialChild(grid, cellA);
   appendInitialChild(grid, cellB);
-  const cellAt = (column: number): string => {
+  const cellAt = (column: CNumber<"int">): string => {
     if (!(grid instanceof GridNode)) {
       return "not a grid";
     }

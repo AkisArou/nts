@@ -16,6 +16,7 @@
 
 import { type GtkApplication, GtkPopover, type GtkWidget, GtkWindow } from "c:Gtk-4.0";
 import { g_idle_add_full } from "c:GLib-2.0";
+import type { CNumber } from "c:types";
 
 import { connectController, Controllers } from "./controllers.ts";
 
@@ -155,9 +156,11 @@ export class SignalSlot {
   /**
    * A signal whose handler answers with a choice of an enum (a drop's
    * GdkDragAction): runs `call`, which asks the handler; with no handler, 0,
-   * which such an enum reserves for declining (no action).
+   * which such an enum reserves for declining (no action). The choice goes
+   * back to C as the enum's `unsigned int`, converted here rather than
+   * checked: a throw inside a C callback would end the program.
    */
-  answer(call: () => number): number {
+  answer(call: () => number): CNumber<"uint"> {
     if (this.handler === null || reactWriting > 0) {
       return 0;
     }
@@ -165,7 +168,7 @@ export class SignalSlot {
     setCurrentUpdatePriority(DiscreteEventPriority);
     const chosen = call();
     setCurrentUpdatePriority(previous);
-    return chosen;
+    return chosen >>> 0;
   }
 
   /**

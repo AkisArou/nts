@@ -10,6 +10,9 @@
 //   ran is a GLib critical, and a GTK program under test makes those fatal.
 
 import { g_get_monotonic_time, g_idle_add_full, g_source_remove, g_timeout_add_full } from "c:GLib-2.0";
+import type { CNumber } from "c:types";
+
+import { cDelay } from "./numbers.ts";
 
 // GLib's priorities are macros, so they are not in the bindings.
 const PRIORITY_DEFAULT = 0;
@@ -41,7 +44,8 @@ export function postWork(): void {
   });
 }
 
-export type Timer = number;
+// A timer is the source id GLib made, a `guint`, which goes back to GLib as one.
+export type Timer = CNumber<"uint">;
 
 // Timeout sources that have not run yet, by id.
 const pending = new Set<number>();
@@ -49,12 +53,12 @@ const pending = new Set<number>();
 // A timer is its source id, filled in once GLib has made the source: the
 // callback reads it back when it runs to stop tracking a source that is gone.
 class TimerSource {
-  id = 0;
+  id: Timer = 0;
 }
 
 export function startTimer(callback: () => void, ms: number): Timer {
   const source = new TimerSource();
-  source.id = g_timeout_add_full(PRIORITY_DEFAULT, Math.max(0, Math.ceil(ms)), () => {
+  source.id = g_timeout_add_full(PRIORITY_DEFAULT, cDelay(ms), () => {
     pending.delete(source.id);
     callback();
     return false;
