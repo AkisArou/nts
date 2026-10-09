@@ -535,6 +535,43 @@ and Q4's check for `AsNumber`.**
 - **Left for later landings:** 2c, 2e, 2f and 2g as planned, with `CBool` and
   `CEnum` moving to the library in 2c.
 
+**2c, as designed (2026-10-09).** The research behind it found three facts
+the plan did not have:
+- the CLI never told the compiler the product's targets, so the strict check
+  used the build machine's data model;
+- `char` was signed on every target, though it is unsigned on Linux and
+  Android for arm64. HIR holds it as a signed byte, so a `char` of 200 read
+  from C there would be -56. That is inferred from the representation; there
+  is no arm64 machine here to observe it;
+- `CBool` and `CEnum` were still recognised by property name alone, which 2b
+  ended for the numbers.
+
+It lands in three pieces:
+
+1. **The targets reach the check** (done, 6ec7982c9). A build checks against
+   its product's targets, all of them, so every target's build checks the
+   same program. `nts facts` and `nts hir` check against every target their
+   config declares.
+2. **The data model is a table.** `DataModel` states, per (os, arch), what C
+   makes of its own types: `char`'s signedness, `long`'s width and the
+   pointer's width. Each kind is decided from it in one of three ways:
+   - **A store is checked against the intersection** of the product's
+     targets' ranges. A `c_char` written for both x86-64 and arm64 Linux takes
+     0..127.
+   - **HIR holds the union** of every supported target's values, so its
+     representation is the same on every target, as S6 asks. That is already
+     true of `long` (i64) and `size_t` (u64). `char` becomes i16, the narrowest
+     type holding both -128 and 255. A value C hands in carries the union's
+     facts.
+   - **A backend crosses at its target's exact type**, `Scalar::abi(model)`:
+     `char` is i8 signed or unsigned, and `long` is i32 or i64.
+
+   `NativeAbi` keeps what it is besides: the calling convention and the
+   bit-field rules. `NativeAbi::BOUND`, the upper bound lowering sizes storage
+   with, becomes the model's.
+3. **`CBool` and `CEnum` join `@nts/scalars`**, recognised by the library's
+   label as the numbers are.
+
 **3. The operations** (F):
 - as compiler operations, with the node package and the oracle;
 - **the convert group first.** nts's own runtime writes it by hand today:
