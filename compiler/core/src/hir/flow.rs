@@ -776,25 +776,29 @@ fn foreign_result(key: &str) -> Option<Facts> {
     super::facts::from_jvm_descriptor(returns)
 }
 
+/// A position a search answers, or -1.
+const INDEX: &[&str] = &["nts_str_index_of", "nts_str_last_index_of", "nts_array_index_of", "nts_array_last_index_of"];
+/// The length after one element was added: one at least. A number's array,
+/// a reference's, an erased value's.
+const LENGTH: &[&str] = &["nts_array_push", "nts_array_push_ref", "nts_array_push_value"];
+/// A view's, a buffer's or a `DataView`'s length counts what was allocated,
+/// which no machine holds 2^53 of.
+const STORAGE: &[&str] = &[
+    "nts_view_length",
+    "nts_view_byte_length",
+    "nts_buffer_byte_length",
+    "nts_buffer_max_byte_length",
+    "nts_dataview_byte_length",
+];
+
+/// What a runtime helper's result is known to be.
+///
+/// Each helper here needs its result declared in `runtime::SIGNATURES` as
+/// well: a fact narrows the call's value to an integer, and only a declared
+/// result tells `specialize` the call itself still answers a `double`, which
+/// it converts. Without one the call was retyped -- C converted at the
+/// assignment, and the JVM refused a `double` stored as a `long`.
 fn runtime_result(name: &str) -> Option<Facts> {
-    const INDEX: &[&str] = &[
-        "nts_str_index_of",
-        "nts_str_last_index_of",
-        "nts_array_index_of",
-        "nts_array_last_index_of",
-    ];
-    // The length after one element was added: one at least. A number's
-    // array, a reference's, an erased value's.
-    const LENGTH: &[&str] = &["nts_array_push", "nts_array_push_ref", "nts_array_push_value"];
-    // A view's, a buffer's or a `DataView`'s length counts what was
-    // allocated, which no machine holds 2^53 of.
-    const STORAGE: &[&str] = &[
-        "nts_view_length",
-        "nts_view_byte_length",
-        "nts_buffer_byte_length",
-        "nts_buffer_max_byte_length",
-        "nts_dataview_byte_length",
-    ];
     if INDEX.contains(&name) {
         return Some(Facts::new(-1.0, facts::U32_MAX, true, false, false));
     }
@@ -1473,6 +1477,21 @@ mod tests {
     use crate::hir::{Block, HirType, Op, Param};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
+
+    /// Every helper whose result has facts declares that result: the facts
+    /// narrow the call's value, and the declaration is how `specialize` keeps
+    /// the call answering what the runtime answers.
+    #[test]
+    fn a_helper_with_result_facts_declares_its_result() {
+        for name in INDEX.iter().chain(LENGTH).chain(STORAGE) {
+            assert!(runtime_result(name).is_some(), "{name} is listed and has no facts");
+            assert_eq!(
+                crate::hir::runtime::result(name),
+                Some(&HirType::Float { bits: 64 }),
+                "{name}: its facts would retype a call whose declared result is unknown"
+            );
+        }
+    }
 
     fn origin() -> Origin {
         Origin::source(Location {
