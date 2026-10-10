@@ -48,7 +48,8 @@ capture="$here/target/Api.javap"
   echo "// the day a generated field goes back to \`public\`, this diff says so out loud."
   echo "// Regenerate with NTS_REGENERATE=1 ./build.sh"
   echo
-  for c in $(find "$classes/nts/gen" -name '*.class' | sort); do
+  # Byte order makes this API record independent of the caller's locale.
+  for c in $(find "$classes/nts/gen" -name '*.class' | LC_ALL=C sort); do
     n=$(echo "$c" | sed "s|$classes/||; s|/|.|g; s|\.class\$||")
     javap -p -cp "$classes" "$n"
   done

@@ -192,11 +192,26 @@ export function readHir(text) {
     if (m[3]) methods.set(m[2], m[3]);
   }
   const calls = [...text.matchAll(/= call (.+?)\(/g)].map((m) => m[1]);
+  // A generated bridge can be shared by class and interface slots. Its
+  // suffix says nothing about which body it serves: prove that from its one
+  // direct call, on this same receiver. A wrapper calling the base body must
+  // not count as the overriding body merely because its name looks right.
+  const bridges = new Map();
+  for (const m of text.matchAll(/^(?:export )?func (.+?)\([^\n]*\n(.*?)^\}/gms)) {
+    const name = m[1];
+    if (!methods.has(name) || name.lastIndexOf("@") <= name.indexOf("#")) continue;
+    const direct = [...m[2].matchAll(/^  (?:%\d+ = )?call (.+?)\(([^\n]*)\)/gm)];
+    if (direct.length !== 1) continue;
+    const [, target, args] = direct[0];
+    if (args.split(",")[0].trim() === "%0" && compiled.has(target) && methods.get(target) === methods.get(name)) {
+      bridges.set(name, target);
+    }
+  }
   const init = /^(?:export )?func module#init\(.*?^\}/ms.exec(text)?.[0] ?? "";
   const initCalls = new Set([...init.matchAll(/= call (.+?)\(/g)].map((m) => m[1]));
   const stated = /^(\d+) function\(s\)/m.exec(text);
   const lines = [...defined.values()].reduce((a, n) => a + n, 0);
-  return { defined, compiled, methods, calls, initCalls, lines, stated: stated ? Number(stated[1]) : null };
+  return { defined, compiled, methods, bridges, calls, initCalls, lines, stated: stated ? Number(stated[1]) : null };
 }
 
 /**
@@ -336,9 +351,10 @@ export function readCascades(text) {
 }
 
 /**
- * A table entry's method, without the bridge a slot may hold it through:
+ * A member's spelling, without the legacy erasure suffix:
  * `Sub#read@erased` is `Sub#read`, erased to the slot's representation
- * (`lower/virtual_returns.rs`).
+ * (`lower/virtual_returns.rs`). This discovers an ancestor's dispatched name;
+ * accepting a table entry requires its resolved call target below.
  */
 const unbridged = (name) => name.replace(/@erased$/, "");
 const member = (name) => unbridged(name).slice(name.indexOf("#") + 1);
@@ -552,10 +568,18 @@ export function judge({ prepared, plain, layouts, refusals, whole = true }, sour
   }
 
   // `base` names a class, and the name is unique within one listing.
+  const resolved = (name) => {
+    const seen = new Set();
+    while (hir.bridges.has(name) && !seen.has(name)) {
+      seen.add(name);
+      name = hir.bridges.get(name);
+    }
+    return name;
+  };
   const dispatchedAbove = (cls) => {
     const members = new Set();
     for (let at = cls.base, seen = 0; at && seen < 64; at = classes.get(at)?.base, seen++) {
-      for (const m of classes.get(at)?.methods ?? []) members.add(member(m));
+      for (const m of classes.get(at)?.methods ?? []) members.add(member(resolved(m)));
     }
     return members;
   };
@@ -566,7 +590,7 @@ export function judge({ prepared, plain, layouts, refusals, whole = true }, sour
       say("owner-has-layout", `\`${name}\` takes \`this\` of type ${id}, which \`layouts\` does not list`);
       continue;
     }
-    if (dispatchedAbove(cls).has(member(name)) && !cls.methods.some((entry) => unbridged(entry) === unbridged(name))) {
+    if (dispatchedAbove(cls).has(member(resolved(name))) && !cls.methods.some((entry) => resolved(entry) === resolved(name))) {
       say("override-in-table", `\`${name}\` overrides a method its ancestors dispatch, and its class \`${cls.name}\`'s table does not hold it`);
     }
   }
@@ -699,15 +723,30 @@ function selfTest() {
   if (!lost.violations?.some((v) => v.rule === "override-in-table")) return "an override missing from its table was not caught";
   // A table holding an override through its bridge -- `Other#value@erased`,
   // the slot's erased form -- holds the override, and the bridge with it.
-  const bridged = judge({
+  const bridgeFixture = {
     ...clean,
     prepared: clean.prepared.replace(
       "export func Other#value(this: managed<obj#11>) -> f64 {\n}\n",
-      "export func Other#value(this: managed<obj#11>) -> f64 {\n}\nfunc Other#value@erased(this: managed<obj#11>) -> erased {\n}\n",
+      "export func Other#value(this: managed<obj#11>) -> f64 {\n}\nfunc Other#value@erased(this: managed<obj#11>) -> erased {\n  %1 = call Other#value(%0) : f64\n  %2 = erase %1 : erased\n  ret %2\n}\n",
     ).replace(summary(5), summary(6)),
     layouts: clean.layouts.replace("  methods Other#value\n", "  methods Other#value@erased\n"),
-  });
+  };
+  const bridged = judge(bridgeFixture);
   if (bridged.unmeasured || bridged.violations.length !== 0) return `an override held through its bridge read as missing: ${JSON.stringify(bridged)}`;
+  // The same bridge may first be made for an interface, then shared by the
+  // class slot. Neither its suffix nor its declared result proves the target.
+  const shared = { ...bridgeFixture, prepared: bridgeFixture.prepared.replaceAll("@erased", "@Reader"), layouts: bridgeFixture.layouts.replaceAll("@erased", "@Reader") };
+  if (judge(shared).violations?.length !== 0) return "a shared interface bridge read as a missing override";
+  const voidBridge = { ...shared, prepared: shared.prepared.replace("%1 = call Other#value(%0) : f64", "call Other#value(%0)") };
+  if (judge(voidBridge).violations?.length !== 0) return "a bridge's void call did not prove the override";
+  for (const fixture of [bridgeFixture, shared]) {
+    const stale = judge({ ...fixture, prepared: fixture.prepared.replace("export declare func Base#value", "export func Base#value").replace("call Other#value(%0)", "call Base#value(%0)") });
+    if (!stale.violations?.some((v) => v.rule === "override-in-table" && v.detail.includes("`Other#value`"))) return "a bridge calling the base body hid the missing override";
+    const wrongReceiver = judge({ ...fixture, prepared: fixture.prepared.replace("call Other#value(%0)", "call Other#value(%1)") });
+    if (!wrongReceiver.violations?.some((v) => v.rule === "override-in-table")) return "a bridge calling the override on another receiver hid the missing entry";
+    const missingBody = judge({ ...fixture, prepared: fixture.prepared.replace("  %1 = call Other#value(%0) : f64\n", "") });
+    if (!missingBody.violations?.some((v) => v.rule === "override-in-table")) return "a bridge suffix without a target hid the missing entry";
+  }
   // A refused `main` cut from the top level.
   const cut = clean.prepared.replace("  %2 = call total(%1) : f64\n", "");
   // A refused `total` is also absent from the prepared program -- a fixture

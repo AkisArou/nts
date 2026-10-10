@@ -18,11 +18,6 @@ public final class nts.gen.Closure0 extends nts.gen.Fn3__41 implements nts.rt.Nt
   public nts.gen.Closure0();
 }
 Compiled from "nts"
-public abstract class nts.gen.erased.Callable {
-  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
-  public nts.gen.erased.Callable();
-}
-Compiled from "nts"
 public final class nts.gen.Fn3__41$Lambda extends nts.gen.Fn3__41 implements nts.rt.NtsNamed {
   nts.rt.NtsNumberCallback it;
   public nts.gen.Fn3__41$Lambda(nts.rt.NtsNumberCallback);
@@ -63,4 +58,9 @@ public final class nts.gen.Session implements nts.rt.NtsPrintable {
   public double hits();
   public java.lang.String nts$print();
   public nts.gen.Session();
+}
+Compiled from "nts"
+public abstract class nts.gen.erased.Callable {
+  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
+  public nts.gen.erased.Callable();
 }
