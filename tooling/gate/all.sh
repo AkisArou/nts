@@ -1869,7 +1869,14 @@ test262() {
 # The gap worth knowing: a stale record hides passes indefinitely and nothing goes
 # red while it does, so this floor moves when somebody needs a full run for an
 # unrelated reason rather than when the work lands.
-TEST262_LANGUAGE_PASS_FLOOR=6119
+#
+# **2026-10-10, 6,119 -> 6,627**, which is that gap closing: a full run from a pin of
+# 998f2e534 found 515 passes and 21 failures that ran and were in no record. It
+# also lost seven passes, and they were not passes: `function ([,]) {}` called
+# with a generator unerased the generator as an array, which the body never read.
+# That unerase is checked now and stops by name, so the seven and six failures of
+# the same shape are no-verdicts.
+TEST262_LANGUAGE_PASS_FLOOR=6627
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1353
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
