@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused at run time: `level` read through `Channel` on an object whose class does not hold it where `Channel` does, which is the only place this compiler reads it",
+  "node": "exit 1; nts: uncaught Observed: a Red through the cast=5;a Green through the cast=9;",
+  "measured_with": "98410ece9fdc20d7",
+  "source": "measured"
+}

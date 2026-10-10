@@ -129,11 +129,20 @@ pass already knows.
 
 Before any of the above, the erased path must not be quieter than the typed one.
 An unerase to an interface is where the class is lost, and today it trusts the
-interface's layout. The guard: an unerase to an interface whose fitting classes
-disagree about the layout checks the object's class at run time and stops by name
-if it is not one laid out as the interface — the rule a typed cast already
-applies at compile time. A named stop instead of a wrong answer, and the outcomes
-fixture moves from a wrong answer to a refusal. Part 2 then lifts the stop.
+interface's layout. The guard: an access through an interface to a field that
+some class implementing it holds elsewhere checks the object's class at run time,
+and stops by name if it is one of those classes. A named stop instead of a wrong
+answer, and the outcomes fixture moves from a wrong answer to a refusal. Part 2
+then lifts the stop.
+
+*Built (`hir::interface_fields`) at the access, not at the unerase.* A first
+version tested the class at the unerase, and refused at compile time an erased
+join with an arm laid out otherwise. It cost seven functions in `web-platform`.
+Those are sites that make a `SocketConnector` out of an `AdoptingConnector` and
+only call its methods, which dispatch correctly whatever the layout. Tested at
+the access, a program stops only where it would have read the wrong field, and
+the test is placed exactly where Part 2's getter call goes. One pass after
+lowering sees every access path, and the layouts are complete by then.
 
 ## Part 3, later — smaller tables
 
@@ -147,7 +156,7 @@ taken when the measured size says so.
 
 | Step | What | Measured by |
 |---|---|---|
-| 0 | The guard at an unerase to an interface whose classes disagree | the outcomes fixture: wrong answer → named stop |
+| 0 | The guard at an access through an interface whose classes disagree about the field | the outcomes fixture: wrong answer → named stop |
 | 1 | Infer `implements` by shape, for methods | the 95 structural-call sites; React's `Wakeable#then`; `blockers/a-method-through-a-structural-interface` → example; definitions census; code size |
 | 2 | Interface fields as getter and setter slots where layouts disagree and the class is lost | the fixture → example; the 60 refused casts; `nts receivers` |
 | 3 | Selector coloring | table bytes per module |

@@ -39,6 +39,7 @@ pub mod generics;
 pub mod globals;
 pub mod guards;
 pub mod instantiate;
+pub mod interface_fields;
 pub mod interprocedural;
 pub mod layout;
 pub mod liveness;
@@ -6741,6 +6742,9 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
     let pruned = pruned + dropped;
     let unions_split = split_unions(&mut program);
+    // After the copies that give a call its class, so that only an access
+    // through an interface whose class is lost is tested.
+    interface_fields::guard(&mut program);
     written_roots::narrow(&mut program, options.roots);
     written_storage::narrow(&mut program);
 

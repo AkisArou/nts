@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: store, a Red=0,1;store, a Green=2,0;read, a Red=not 7;read, a Green=not 7;",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused at run time: `level` written through `Channel` on an object whose class does not hold it where `Channel` does, which is the only place this compiler writes it",
   "node": "exit 1; nts: uncaught Observed: store, a Red=200,1;store, a Green=2,200;read, a Red=7;read, a Green=7;",
-  "measured_with": "eaeca7aacaf44967",
+  "measured_with": "98410ece9fdc20d7",
   "source": "measured"
 }
