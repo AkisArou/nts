@@ -202,3 +202,28 @@ fn equal_machine_signatures_keep_distinct_absence_conversions() {
         );
     }
 }
+
+#[test]
+fn a_named_literal_without_a_row_blocks_the_new_class_edges() {
+    let Some(program) = prepared("tests/programs/structural-literal-gap") else {
+        return;
+    };
+    assert!(
+        program
+            .uncompiled
+            .iter()
+            .any(|(name, _)| name == "Sink#take")
+    );
+    let exact = program
+        .classes
+        .iter()
+        .find(|class| class.name == "Exact")
+        .unwrap();
+    assert!(
+        program
+            .layouts
+            .iter()
+            .filter(|layout| layout.types.iter().any(|ty| exact.types.contains(ty)))
+            .all(|layout| layout.interfaces.is_empty())
+    );
+}

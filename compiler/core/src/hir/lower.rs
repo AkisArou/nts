@@ -421,6 +421,11 @@ struct Hierarchy {
     /// `literal_member_owner` answers, which is the one `lower_object_method`
     /// lays out and asks.
     stored: rustc_hash::FxHashMap<TypeId, Vec<String>>,
+    /// Every contextual owner actually constructed by an object literal.
+    /// Collected with stored members, using the same owner decision as the
+    /// literal's lowering. Inference needs the complete receiver set, including
+    /// named owners whose structural table rows are not built yet.
+    literal_owners: rustc_hash::FxHashSet<TypeId>,
     /// A class's name, which is half of the function name a call emits.
     name: rustc_hash::FxHashMap<TypeId, String>,
     /// The dispatch slot of each overridden method, keyed by the class that
@@ -1205,6 +1210,7 @@ fn collect_stored_members(
         let Some(ty) = probe.literal_member_owner(literal) else {
             continue;
         };
+        hierarchy.literal_owners.insert(ty);
         // An instantiation of a generic interface has no dispatch table: the
         // hierarchy registers the declaration's type id and a `Box<number>`
         // is another, so a literal's method there was `a method with no
@@ -1610,6 +1616,7 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
         .copied()
         .collect();
     classes.sort_unstable_by_key(|class| class.0);
+    let literals = interfaces::uncovered_literals(hierarchy, &classes);
     let mut inferred: Vec<(TypeId, TypeId)> = Vec::new();
     for face in faces {
         let Some(wanted) = properties(face) else {
@@ -1621,7 +1628,7 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
         // callback): this` fill a `destroy(error): void` slot.
         let methods = hierarchy.declares.get(&face).cloned().unwrap_or_default();
         let mut fitting: Vec<TypeId> = Vec::new();
-        let mut a_misfit = false;
+        let mut a_misfit = interfaces::literal_blocks(snapshot, &literals, wanted);
         for class in &classes {
             if hierarchy.descends_from(*class, face) {
                 continue;

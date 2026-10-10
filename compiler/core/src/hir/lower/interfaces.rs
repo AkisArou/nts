@@ -275,6 +275,37 @@ pub(super) fn property<'a>(
     properties.iter().find(|property| property.name == member)
 }
 
+/// Literal owners come from the same contextual-type decision as their bodies.
+/// Anonymous owners already registered as concrete candidates have table rows.
+/// A literal lowered under a named interface needs Part 1c's separate plan;
+/// admitting a class beside it must not open a slot that its value cannot fill.
+pub(super) fn uncovered_literals(hierarchy: &Hierarchy, classes: &[TypeId]) -> Vec<TypeId> {
+    let mut owners: Vec<_> = hierarchy
+        .literal_owners
+        .iter()
+        .copied()
+        .filter(|owner| {
+            classes
+                .binary_search_by_key(&owner.0, |class| class.0)
+                .is_err()
+        })
+        .collect();
+    owners.sort_unstable_by_key(|owner| owner.0);
+    owners
+}
+
+pub(super) fn literal_blocks(
+    snapshot: &SemanticSnapshot,
+    owners: &[TypeId],
+    wanted: &[PropertyRecord],
+) -> bool {
+    owners.iter().any(|owner| {
+        wanted
+            .iter()
+            .all(|member| member.optional || property(snapshot, *owner, &member.name).is_some())
+    })
+}
+
 /// A declaration belongs to the interface, including every parameter value
 /// op. Materialize its referenced layouts before completing callable entries.
 pub(super) fn declaration(

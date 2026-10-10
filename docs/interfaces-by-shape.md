@@ -128,6 +128,9 @@ fills it, and the call compiles as today's virtual call.
   Adaptable candidates now receive entries, including beside a class with a
   written `implements`; the crash fixture is an example under
   `examples/a-structural-misfit-dispatched-through-an-interface`.
+  Literal owners outside the concrete candidate set also block inference when
+  their members match: a literal lowered under another named interface has no
+  row in these slots. Part 1c must provide that row before the edge is safe.
 
 It was built once before, on 2026-09-22, by name and shape, and set aside: it
 cleared no refusal in the runtime and turned two upcasts into casts between
