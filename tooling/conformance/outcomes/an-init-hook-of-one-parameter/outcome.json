@@ -2,8 +2,8 @@
   "run": "build",
   "category": "refused",
   "nts": "NTS1001 `init`, where a `Map` or a `Set` has only `size`",
-  "ran": "exit 1; nts: uncaught Observed: init at arity 4 (control): type=;init at arity 1: asyncId is a number=false;init at arity 0: called=false;",
+  "ran": "uncompilable-c: collect2: error: ld returned 1 exit status",
   "node": "exit 1; nts: uncaught Observed: init at arity 4 (control): type=Witness;init at arity 1: asyncId is a number=true;init at arity 0: called=true;",
-  "measured_with": "82c65520cbe233b6",
+  "measured_with": "1cf7e55fb61e171a",
   "source": "measured"
 }

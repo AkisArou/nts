@@ -269,6 +269,21 @@ typedef struct NtsDescriptor {
    * what follows. */
   uint32_t foreign;
   const NtsForeignSlot *foreign_slots;
+  /* How an object of this type prints: `String(o)`, `${o}`, and `o` joined
+   * into an array's text. JavaScript asks the prototype chain for `toString`,
+   * and the answer is a fact about the type, so it lives here: a class's own
+   * `toString`, the error rule for an `Error`, `"[object Object]"` for an
+   * object whose chain adds nothing, the joined elements for an array,
+   * `"[object Map]"` and its kin for the runtime's own objects.
+   *
+   * **Null means refuse, never guess** -- the rule `element` keeps. A type no
+   * one taught to print (a tuple, a `Date`, a hand-written descriptor in
+   * `runtime/node`, which zero-fills what follows `element`) stops by name
+   * rather than answering a plausible `"[object Object]"`. Read only for a
+   * value tagged `OBJECT` or `FUNCTION`; a string, a symbol and a bigint print
+   * from their tags. */
+  /* An `NtsString *`, which is an `NtsHeader *` declared below. */
+  struct NtsHeader *(*to_string)(const struct NtsHeader *object);
 } NtsDescriptor;
 
 /* What an array's slots hold.
@@ -1622,6 +1637,9 @@ int nts_string_cmp(const NtsString *a, const NtsString *b);
  * that is how this ABI passes a number the compiler knew all along. */
 NTS_ALLOCATES NtsMap *nts_map_new(double kind);
 NTS_ALLOCATES NtsMap *nts_set_new(double kind);
+/* A table, which is a map's storage under a type of its own: see
+ * `nts_desc_table`. */
+NTS_ALLOCATES NtsMap *nts_table_new(double kind);
 /* Not `NTS_READS_ONLY`, and the three below are not either.
  *
  * Each of them calls `nts_value_retain` on what it returns, so a reference
@@ -2564,6 +2582,12 @@ NtsString *nts_string_from_code_point_into(NtsHeader *into, double point);
  * a boolean, a number and a string; every other tag is a lowering that should
  * have refused, and it aborts rather than guessing. */
 NtsString *nts_value_to_string(NtsValue value);
+/* What a descriptor's `to_string` points at, for the kinds the compiler emits:
+ * an object whose prototype chain adds nothing, a closure or a class token,
+ * and an array. */
+NtsString *nts_object_to_string(const NtsHeader *object);
+NtsString *nts_function_to_string(const NtsHeader *object);
+NtsString *nts_array_to_string(const NtsHeader *object);
 /* An argument of `console.log`, as node's `util.inspect` spells one at the top
  * level: `String(v)`, except that negative zero is `-0` and not `0`. A typed
  * number is told apart in the lowering; this is the same rule for a value

@@ -18,9 +18,12 @@ package nts.rt;
  * rather than a bit, which is a compile error at every site that ignores it
  * instead of a silent wrong answer.
  */
-public final class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
+public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
 
     public static NtsMap newMap(double kind) { return new NtsMap(); }
+
+    /** A dictionary, which is a `Map`'s storage printing as an object. */
+    public static NtsMap newTable(double kind) { return new NtsDictionary(); }
 
     /**
      * Insert, and hand back the receiver.

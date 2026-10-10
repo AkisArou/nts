@@ -52,7 +52,7 @@ pub mod types;
 mod unbox;
 pub mod widen;
 
-use nts_core::hir::Program;
+use nts_core::hir::{Printed, Program};
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::class::access;
 use nts_jvm_emitter::code::Code;
@@ -1338,19 +1338,6 @@ fn object_class(
     if nts_core::hir::is_tuple_layout_name(&layout.name) {
         builder.interfaces.push(types::TUPLE.to_owned());
     }
-    // A class whose dispatch table names a no-argument `toString` returning a
-    // string. `String(v)` on an erased object needs to tell that from a class
-    // that merely inherits `java.lang.Object`'s, and no *class* can answer it --
-    // they all have one. See `types::STRINGABLE`.
-    //
-    // **The member name is part of the key, and the descriptor with it.** Asking
-    // only "is there a slot returning a string" would mark a class with an
-    // unrelated `label(): string`, whose `toString` is then Object's and whose
-    // `String()` answers `nts.gen.Thing@1b6d3586`. That is the mistake
-    // `callback_interfaces` made with `call` and fixed, one method name over.
-    if declares_own_to_string(package, program, layout) {
-        builder.interfaces.push(types::STRINGABLE.to_owned());
-    }
     if let Some(resume) = resumes(package, program, layout) {
         builder.interfaces.push(types::RESUMABLE.to_owned());
         let origin = program_origin(program);
@@ -1405,6 +1392,12 @@ fn object_class(
         &mut builder,
         &origin,
     )?;
+    // How an object of this layout prints. After every member is declared, so
+    // that a member the program itself names `nts$print` is seen and refused.
+    // Not on an interface: its implementers carry it.
+    if !interface {
+        printing_method(package, program, layout, &mut builder, &mut pool, &origin)?;
+    }
     // A field the JVM zeroes to `null` where the language's zero is
     // `undefined`.
     //
@@ -1509,20 +1502,96 @@ fn render(
 /// one that overrides `java.lang.Object.toString` and so the one `ref.toString()`
 /// reaches. A `toString(radix)` is a different method to the JVM and marking its
 /// class would promise a call that resolves elsewhere.
-fn declares_own_to_string(
+/// `nts$print`, how an object of this layout prints (`Program::printed`), which
+/// `NtsValue.objectText` calls for `String(o)`, `${o}` and an array's text on
+/// any object this program made, closures included: the decision is the
+/// table's, as on C and LLVM, so the three backends print one answer.
+///
+/// A method of its own rather than Java's `toString`, which Java calls
+/// implicitly -- concatenation, a refusal's own message, a debugger -- and a
+/// `toString` that refused would turn those into crashes. A class's own
+/// TypeScript `toString` still overrides Java's, by way of its member
+/// forwarder, so a Java caller keeps getting the program's text.
+fn printing_method(
     package: &str,
     program: &Program,
     layout: &nts_core::hir::Layout,
-) -> bool {
-    layout.methods.iter().flatten().any(|name| {
-        hierarchy::member_name(name) == "toString"
-            && program
-                .funcs
-                .iter()
-                .find(|func| &func.name == name)
-                .and_then(|func| instance_descriptor(package, program, func))
-                .is_some_and(|descriptor| descriptor == "()Ljava/lang/String;")
-    })
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    if builder
+        .methods
+        .iter()
+        .any(|method| method.name == types::PRINT)
+    {
+        return Err(Diagnostic::error(
+            "NTS4009",
+            format!(
+                "`{}` declares a member named `{}`, which this backend reserves for how an \
+                 object prints",
+                layout.name,
+                types::PRINT
+            ),
+            origin.location,
+        ));
+    }
+    let class = types::class_name(package, layout);
+    let mut code = Code::new(vec![VType::Object(class)], 1);
+    let by = match program.printed.get(&layout.name) {
+        Some(Printed::By(function)) => program
+            .funcs
+            .iter()
+            .find(|func| &func.name == function)
+            .and_then(|func| {
+                body::signature(package, program, func).map(|signature| (func, signature))
+            }),
+        _ => None,
+    };
+    match (program.printed.get(&layout.name), by) {
+        (Some(Printed::By(_)), Some((func, signature))) => {
+            code.load(origin, Kind::Ref, 0);
+            code.invoke_static(
+                origin,
+                pool,
+                &body::program_class(package),
+                &body::method_name(&func.name),
+                &signature,
+            );
+        }
+        (Some(Printed::Object), _) => code.const_string(origin, pool, "[object Object]"),
+        (Some(Printed::Function), _) => {
+            code.const_string(origin, pool, "function () { [native code] }");
+        }
+        // Refused, or a function this lane did not emit: the runtime names the
+        // type and refuses, as `runtime/c` does for a null `to_string`.
+        _ => {
+            code.const_string(origin, pool, &layout.name);
+            code.invoke_static(
+                origin,
+                pool,
+                "nts/rt/NtsValue",
+                "unprintable",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+            );
+        }
+    }
+    code.ret(origin, Some(Kind::Ref));
+    let rendered = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4009",
+            format!("how `{}` prints could not be written: {error}", layout.name),
+            origin.location,
+        )
+    })?;
+    builder.method(
+        access::PUBLIC,
+        types::PRINT,
+        "()Ljava/lang/String;",
+        Some(rendered),
+    );
+    builder.interfaces.push(types::PRINTABLE.to_owned());
+    Ok(())
 }
 
 fn callback_interfaces(

@@ -597,6 +597,20 @@ impl Hierarchy {
         })
     }
 
+    /// Whether `ty` is a provided error or a class whose chain reaches one: the
+    /// `Error` family, whose instances print by `Error.prototype.toString`.
+    fn is_an_error(&self, ty: TypeId) -> bool {
+        let mut at = Some(ty);
+        for _ in 0..64 {
+            let Some(here) = at else { return false };
+            if self.provided_errors.contains_key(&here) {
+                return true;
+            }
+            at = self.base.get(&here).copied();
+        }
+        false
+    }
+
     /// The nearest class at or above `ty` that declares `member`.
     fn declaring(&self, ty: TypeId, member: &str) -> Option<TypeId> {
         let mut at = Some(ty);
@@ -15024,6 +15038,7 @@ pub fn lower_with(
 
     collect_declared_facts(&mut lowered.program, snapshot);
     canonicalize_objects(&mut lowered.program);
+    printed::decide(snapshot, &hierarchy, &mut lowered.program);
     prune_class_tests(&mut lowered.program);
     report_unaccounted(
         snapshot,
@@ -37252,7 +37267,7 @@ impl<'a> FuncBuilder<'a> {
         );
         Ok(self.push(
             OpKind::Call {
-                callee: Callee::External("nts_map_new".to_owned()),
+                callee: Callee::External("nts_table_new".to_owned()),
                 args: vec![kind],
                 frame: None,
             },
@@ -46663,26 +46678,16 @@ impl<'a> FuncBuilder<'a> {
             }
             HirType::Managed(ManagedType::String) => Ok(value),
             // An erased value carries the tag that says which spelling it
-            // wants, and five of the seven tags spell themselves exactly. The
-            // other two want `toString` off a prototype chain, so the question
-            // is asked of the *type* rather than left to the tag: a union of
-            // scalars and absences converts, one that can hold an object does
-            // not, and `String(unknown)` stays refused.
+            // wants, and the runtime spells every one: a primitive as itself,
+            // an object or a function as its type says, off its descriptor
+            // (`Program::printed`), and a tuple or a `Date` by a refusal naming
+            // it. So `String(unknown)` converts, and what the value turns out
+            // to be decides the text, as in node.
             //
-            // `String(xs.pop())` is the case that made this necessary. The
-            // checker types it `number | undefined` and there is no doubling
-            // back from that: the absent answer has to survive the conversion.
-            HirType::Erased if self.spells_itself(from) => {
-                let origin = self.origin(from);
-                Ok(self.push(
-                    OpKind::Call {
-                        callee: Callee::External("nts_value_to_string".to_owned()),
-                        args: vec![value],
-                        frame: None,
-                    },
-                    text,
-                    origin,
-                ))
+            // `String(xs.pop())` -- `number | undefined` -- is the absent answer
+            // surviving the conversion, which a typed `double` could not carry.
+            HirType::Erased => {
+                Ok(self.runtime_call("nts_value_to_string", vec![value], text, self.origin(from)))
             }
             // A `bool` and a `bigint` each have an exact spelling of their
             // own: two words, and decimal with no exponent however large.
@@ -46719,14 +46724,13 @@ impl<'a> FuncBuilder<'a> {
             // **A class's own `toString`.** `${o}`, `"" + o` and `String(o)`
             // all convert through it -- `ToPrimitive` with hint string calls
             // it -- so the receiver's class decides what the conversion means,
-            // and the conversion is a call.
-            //
-            // Only where a class in the hierarchy declares one. An object with
-            // no `toString` converts to `"[object Object]"`, a constant this
-            // could emit and deliberately does not: it would make a missing
-            // method look like a working one, and every `${o}` that meant
-            // something would print the same eight characters instead of
-            // saying which method the program is missing.
+            // and where the static type declares one the conversion is a
+            // direct call. An object whose chain declares none prints
+            // `"[object Object]"`, through the arm below. That used to be
+            // refused, on the argument that eight constant characters would
+            // make a missing method look like a working one; but it is what
+            // node prints, and a compiler that differs from node to warn about
+            // a program's design is the wrong place for the warning.
             HirType::Managed(ManagedType::Object(ty))
                 if self.hierarchy.declaring(ty, "toString").is_some() =>
             {
@@ -46754,6 +46758,16 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 ))
             }
+            // **Any other object prints as its type says**, read off its
+            // descriptor at run time (`Program::printed`): `"[object Object]"`
+            // for one whose chain adds nothing, the error rule for an `Error`,
+            // the elements joined for an array, `"[object Map]"` and its kin.
+            // Through the conversion an erased value takes, so a typed object
+            // and the same object erased cannot print differently.
+            HirType::Managed(_) if self.prints_off_its_descriptor(value) => {
+                let erased = self.coerce(value, &HirType::Erased, from)?;
+                Ok(self.runtime_call("nts_value_to_string", vec![erased], text, self.origin(from)))
+            }
             _ => {
                 let named = self.describe_node(from);
                 Err(self.unsupported(from, &format!("a conversion to string from {named}")))
@@ -46761,12 +46775,31 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Whether every member of a node's type has an exact spelling as text.
-    ///
-    /// An object's is `toString` off the prototype chain -- `"[object Object]"`
-    /// for a plain one, the joined elements for an array -- which is §13's and
-    /// does not exist here. A number, a string, a boolean, a bigint, `null` and
-    /// `undefined` each spell themselves and nothing else is consulted.
+    /// Whether a typed object converts to a string through its descriptor, as
+    /// an erased one does: every object but those the type proves the runtime
+    /// would refuse, which are refused here instead -- a `Date`, whose text
+    /// depends on the time zone, and a tuple, which is laid out as a record and
+    /// not as the array node joins.
+    fn prints_off_its_descriptor(&self, value: ValueId) -> bool {
+        match &self.values[value.0 as usize].ty {
+            HirType::Managed(ManagedType::Date) => false,
+            HirType::Managed(ManagedType::Object(ty)) => !matches!(
+                self.snapshot
+                    .types
+                    .get(ty.0 as usize)
+                    .map(|record| &record.kind),
+                Some(TypeKind::Tuple(_))
+            ),
+            HirType::Managed(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Whether every member of a node's type prints the same under `String()`
+    /// and `util.inspect`, which `console.log` uses: a number, a string, a
+    /// boolean, a bigint, a symbol, `null` and `undefined`. An object's two
+    /// texts differ -- `"[object Object]"` against `{ a: 1 }` -- so it is not
+    /// one of them, and `nts_value_inspect` refuses it by name.
     fn spells_itself(&self, node: NodeId) -> bool {
         let Some(ty) = self.snapshot.node_types.get(&node) else {
             return false;
@@ -48988,7 +49021,7 @@ impl<'a> FuncBuilder<'a> {
             );
             self.push(
                 OpKind::Call {
-                    callee: Callee::External("nts_map_new".to_owned()),
+                    callee: Callee::External("nts_table_new".to_owned()),
                     args: vec![kind],
                     frame: None,
                 },
@@ -50972,17 +51005,6 @@ impl<'a> FuncBuilder<'a> {
         let ty = self.values[value.0 as usize].ty.clone();
         if ty == text && absences.is_empty() {
             return Ok(value);
-        }
-        // **An erased message is spelled by `nts_value_to_string`, which
-        // answers only the tags [`Self::spells_itself`] admits** -- the gate
-        // `as_string` puts on every other conversion to a string, and the
-        // same sentence. Without it, `new Error(x)` with `x: any` holding an
-        // object compiled and stopped at run time, the runtime saying the
-        // lowering should have refused it.
-        let source = self.through_assertions(argument);
-        if ty == HirType::Erased && !self.spells_itself(source) {
-            let named = self.describe_node(source);
-            return Err(self.unsupported(argument, &format!("a conversion to string from {named}")));
         }
         // Which absence a null pointer is, from the checker: a string and its
         // `undefined` share a representation with its `null`, and `coerce`
@@ -66239,7 +66261,14 @@ impl<'a> FuncBuilder<'a> {
             HirType::NUMBER,
             origin.clone(),
         );
-        let map = self.runtime_call("nts_map_new", vec![kind], ty.clone(), origin.clone());
+        // A table where the binding types the dictionary as an object, a `Map`
+        // where it says `Map`: the two print differently (`nts_desc_table`).
+        let allocate = if matches!(ty, HirType::Managed(ManagedType::Table(_, _))) {
+            "nts_table_new"
+        } else {
+            "nts_map_new"
+        };
+        let map = self.runtime_call(allocate, vec![kind], ty.clone(), origin.clone());
         // `for (let at = 0; at < length; at++) map.set(keys[at], values[at])`.
         let (head, body, done) = (self.new_block(), self.new_block(), self.new_block());
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
@@ -80316,6 +80345,7 @@ mod bigint;
 mod gobject;
 mod initialization;
 mod native_memory;
+mod printed;
 mod virtual_returns;
 
 /// An Objective-C property: its declaration, and the selectors that read and

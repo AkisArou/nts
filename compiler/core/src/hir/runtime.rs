@@ -1261,6 +1261,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_symbol_key_for", &[None], None),
     ("nts_symbol_new", &[None], None),
     ("nts_symbol_to_string", &[None], None),
+    ("nts_table_new", &[Some(HirType::Float { bits: 64 })], None),
     (
         "nts_tag_name",
         &[Some(HirType::Int {

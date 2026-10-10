@@ -27,7 +27,7 @@ const KINDS = [
   // No truthiness or `== null` here: the checker rejects both on a function
   // that is always defined, which is a fact about the *test* rather than about
   // this compiler, so the cell does not exist to be swept.
-  { id: "fn", ts: "(x: number) => number", expr: "((x: number): number => x + n)", asks: ["typeof"] },
+  { id: "fn", ts: "(x: number) => number", expr: "((x: number): number => x + n)", asks: ["typeof"], text: "spellings" },
   // The absences, alone and together. Every one of this session's bugs lived
   // in one of these three rows.
   { id: "s_null", ts: "string | null", expr: '(n > 0 ? "a" : null)', asks: ["typeof", "truthy", "null", "undef", "loose", "nullish"] },
@@ -42,7 +42,7 @@ const KINDS = [
   // Erased, which is where a tag has to answer what a representation cannot.
   { id: "u_num", ts: "unknown", expr: "(n as unknown)", asks: ["typeof", "truthy", "null", "undef", "loose"] },
   { id: "u_str", ts: "unknown", expr: '((n > 0 ? "a" : "") as unknown)', asks: ["typeof", "truthy", "null", "undef", "loose"] },
-  { id: "u_fn", ts: "unknown", expr: "(((x: number): number => x + n) as unknown)", asks: ["typeof", "truthy", "null", "undef", "loose"] },
+  { id: "u_fn", ts: "unknown", expr: "(((x: number): number => x + n) as unknown)", asks: ["typeof", "truthy", "null", "undef", "loose"], text: "spellings" },
   { id: "u_obj", ts: "unknown", expr: "({ a: n } as unknown)", asks: ["typeof", "truthy", "null", "undef", "loose"] },
   { id: "u_null", ts: "unknown", expr: "(null as unknown)", asks: ["typeof", "truthy", "null", "undef", "loose"] },
   { id: "u_undef", ts: "unknown", expr: "(undefined as unknown)", asks: ["typeof", "truthy", "null", "undef", "loose"] },
@@ -62,6 +62,15 @@ const ASKS = {
   // concatenation as a null pointer -- which aborts rather than disagreeing,
   // and an aborted case is *not* counted in "agreed on every case".
   text: (v) => `String(${v}) + "|" + \`\${${v}}\` + "|" + ("" + ${v})`,
+  // A function's text is the one place nts differs from node by decision:
+  // node prints the source, which a compiled program does not keep, and nts
+  // prints a built-in's, `function () { [native code] }` (2026-10-10,
+  // `docs/conformance/typescript.md`; `compiler/core/tests/printed.rs` pins
+  // the text). So a function's cell asks what both must still agree on --
+  // that the three conversions give one text -- rather than comparing a text
+  // that differs on purpose. Record 0298 rejected skipping the cell while the
+  // answer was undecided; this is the decided answer, asked.
+  spellings: (v) => `(String(${v}) === \`\${${v}}\` && String(${v}) === "" + ${v} ? "one text" : "three")`,
 };
 
 // The second product: equality *between* two erased values, over every pair of
@@ -256,7 +265,7 @@ let count = 0;
 // A parameter is also the only one of the two that a caller can pass an
 // absence to without the callee's declaration mentioning it.
 for (const kind of KINDS) {
-  for (const ask of [...kind.asks, "text"]) {
+  for (const ask of [...kind.asks, kind.text ?? "text"]) {
     count++;
     out.push(`export function ${kind.id}_${ask}(n: number): string {`);
     out.push(`  const v: ${kind.ts} = ${kind.expr};`);

@@ -3,15 +3,17 @@
 // Regenerate with NTS_REGENERATE=1 ./build.sh
 
 Compiled from "nts"
-public final class nts.gen.Cell0 {
+public final class nts.gen.Cell0 implements nts.rt.NtsPrintable {
   double value;
+  public java.lang.String nts$print();
   public nts.gen.Cell0();
 }
 Compiled from "nts"
-public final class nts.gen.Closure0 extends nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback {
+public final class nts.gen.Closure0 extends nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable {
   nts.gen.Cell0 total;
   public void call(double);
   public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
+  public java.lang.String nts$print();
   public nts.gen.Closure0();
 }
 Compiled from "nts"
@@ -26,9 +28,10 @@ public final class nts.gen.Fn3__41$Lambda extends nts.gen.Fn3__41 {
   public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
 }
 Compiled from "nts"
-public abstract class nts.gen.Fn3__41 extends nts.gen.erased.Callable implements nts.rt.NtsNumberCallback {
+public abstract class nts.gen.Fn3__41 extends nts.gen.erased.Callable implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable {
   public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
   public void call(double);
+  public java.lang.String nts$print();
   public nts.gen.Fn3__41();
 }
 Compiled from "nts"
@@ -52,9 +55,10 @@ public final class nts.gen.Program {
   public static void eachUpTo(double, nts.rt.NtsNumberCallback);
 }
 Compiled from "nts"
-public final class nts.gen.Session {
+public final class nts.gen.Session implements nts.rt.NtsPrintable {
   double $hits;
   public double bump();
   public double hits();
+  public java.lang.String nts$print();
   public nts.gen.Session();
 }

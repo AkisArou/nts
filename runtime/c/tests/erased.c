@@ -313,6 +313,7 @@ int main(void) {
                                           NULL,
                                           NTS_ARRAY_UNKNOWN,
                                           0,
+                                          NULL,
                                           NULL};
     NtsHeader *function = nts_object_new(&closure);
     NtsPromise *object = nts_promise_new();

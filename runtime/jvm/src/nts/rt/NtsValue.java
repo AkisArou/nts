@@ -255,14 +255,12 @@ public final class NtsValue {
                 // whose `.description` is `undefined`, not `""`.
                 return NtsSymbol.describe((NtsSymbol) value.ref);
             case FUNCTION:
-                // **Node answers with the function's source text and this lane
-                // has none.** Refused rather than guessed, which is the same
-                // choice `runtime/c` makes at the same tag: any string we
-                // invented would be a wrong answer that ran, and the one thing
-                // worse than refusing `String(f)` is printing something
-                // plausible for it.
-                throw new NtsRefusal("String() of a function, whose source text "
-                    + "this compiler does not keep");
+                // A closure or a class token is a generated object like any
+                // other, and its class says how it prints: a function's text,
+                // `function () { [native code] }`, since node's -- the source
+                // -- is not kept. Asked of the object, so the tag and a closure
+                // read back out of an array tagged `OBJECT` agree.
+                return objectText(value.ref);
             case BIGINT:
                 return NtsBigInt.toText((NtsBigInt) value.ref);
             default:
@@ -284,41 +282,58 @@ public final class NtsValue {
             return "null";
         }
         if (ref instanceof NtsSymbol) {
-            // **An erased symbol arrives tagged `OBJECT`.**
-            // `hir::tags::of_reference` answers `STRING` for a string and
-            // `FUNCTION` for a closure type and `OBJECT` for everything else,
-            // and has no arm for `ManagedType::Symbol` -- so the tag cannot
-            // tell one from an object here.
-            //
-            // `runtime/c` is unaffected because it can ask the descriptor what
-            // the object *is*; this lane has the tag and the class, and the
-            // class is the one that knows. That is the same answer `isArray`
-            // gives for the same reason, and it keeps `String(sym)` agreeing
-            // with node -- `Symbol(tag)` rather than `[object Object]` --
-            // without waiting on the shared table.
-            //
-            // The tag itself is still wrong, and `typeof` reads the tag: that
-            // is `hir::tags`' to fix and is reported rather than worked around
-            // twice.
+            // An erased symbol arrives tagged `OBJECT` (`hir::tags`), and the
+            // class is what knows it is one.
             return NtsSymbol.describe((NtsSymbol) ref);
         }
-        if (ref instanceof NtsStringable) {
-            return ref.toString();
+        // Everything the program made: its class's answer, from the
+        // compiler's table, as `runtime/c` reads a descriptor's `to_string`.
+        if (ref instanceof NtsPrintable) {
+            return ((NtsPrintable) ref).nts$print();
         }
         if (ref.getClass().isArray() || ref instanceof NtsArrayD || ref instanceof NtsArrayL
             || ref instanceof NtsArrayZ || ref instanceof NtsTemplate) {
             return arrayText(ref);
         }
-        if (ref instanceof NtsTuple) {
-            // A tuple is a generated struct with named fields rather than an
-            // indexable run, so joining it would need the field list the class
-            // does not carry. `Array.isArray` says true of one and `String()`
-            // refuses it -- stated rather than silently answered
-            // `"[object Object]"`, which would be a wrong answer that ran.
-            throw new NtsRefusal("String() of a tuple, which this lane lays out "
-                + "as a struct and cannot walk as a run of elements");
+        // The runtime's own objects, as `Object.prototype.toString` names
+        // them. A dictionary before the `Map` it extends.
+        if (ref instanceof NtsDictionary) {
+            return "[object Object]";
         }
-        return "[object Object]";
+        if (ref instanceof NtsMap) {
+            return "[object Map]";
+        }
+        if (ref instanceof NtsSet) {
+            return "[object Set]";
+        }
+        if (ref instanceof NtsPromise) {
+            return "[object Promise]";
+        }
+        if (ref instanceof NtsBuffer) {
+            return "[object ArrayBuffer]";
+        }
+        if (ref instanceof NtsDataView) {
+            return "[object DataView]";
+        }
+        if (ref instanceof NtsView) {
+            return NtsView.join((NtsView) ref, ",");
+        }
+        // A runtime class nobody taught to print -- a `Date`, whose text
+        // depends on the time zone, among them -- stops by name rather than
+        // answering `"[object Object]"` for it.
+        if (ref.getClass().getName().startsWith("nts.rt.")) {
+            throw new NtsRefusal("String() of a " + ref.getClass().getSimpleName()
+                + ", which this runtime does not print");
+        }
+        // A bound Java object: its text is what the Java API says it is.
+        return ref.toString();
+    }
+
+    /** What a generated class whose type says nothing about how it prints
+     *  answers from `nts$print`: a refusal naming it. */
+    public static String unprintable(String layout) {
+        throw new NtsRefusal("String() of `" + layout + "`, whose type says nothing about how "
+            + "it prints");
     }
 
     /**
@@ -376,15 +391,31 @@ public final class NtsValue {
         if (count < 0) {
             count = java.lang.reflect.Array.getLength(items);
         }
-        StringBuilder text = new StringBuilder();
-        for (int at = 0; at < count; at++) {
-            if (at > 0) {
-                text.append(',');
+        // An array being joined, met again inside itself, prints as empty --
+        // node's join keeps the same stack -- rather than recursing until the
+        // thread's stack runs out. By identity: two equal arrays are two.
+        for (Object outer : JOINING) {
+            if (outer == ref) {
+                return "";
             }
-            text.append(elementText(java.lang.reflect.Array.get(items, at)));
         }
-        return text.toString();
+        JOINING.add(ref);
+        try {
+            StringBuilder text = new StringBuilder();
+            for (int at = 0; at < count; at++) {
+                if (at > 0) {
+                    text.append(',');
+                }
+                text.append(elementText(java.lang.reflect.Array.get(items, at)));
+            }
+            return text.toString();
+        } finally {
+            JOINING.remove(JOINING.size() - 1);
+        }
     }
+
+    /** The arrays `arrayText` is inside of; one thread, as the event loop is. */
+    private static final java.util.ArrayList<Object> JOINING = new java.util.ArrayList<>();
 
     /** One element of a joined array, by the rules `Array.prototype.join` uses. */
     private static String elementText(Object element) {
@@ -671,7 +702,8 @@ public final class NtsValue {
      */
     public static boolean isMap(NtsValue value) {
         Object ref = value == null ? null : value.ref;
-        return ref instanceof NtsMap;
+        // A dictionary shares a `Map`'s storage and is not one.
+        return ref instanceof NtsMap && !(ref instanceof NtsDictionary);
     }
 
     /** `instanceof Set`; the sibling of {@link #isMap} under `NtsTable`. */

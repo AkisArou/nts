@@ -2784,6 +2784,23 @@ pub struct SignatureFacePart {
     pub rest: bool,
 }
 
+/// How an object of a layout prints: JavaScript's `ToString` of an object,
+/// which asks its prototype chain for `toString`. See [`Program::printed`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Printed {
+    /// A function of this program, taking the object: the class's own
+    /// `toString(): string`, or the compiler's for the `Error` family.
+    By(String),
+    /// `"[object Object]"`: an object whose prototype chain adds nothing.
+    Object,
+    /// A closure or a class token: a function's text.
+    Function,
+    /// Nothing says how, so the runtime stops by name: a tuple, a frame, an
+    /// object literal whose own `toString` this compiler cannot call through
+    /// its type.
+    Refused,
+}
+
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {
@@ -2811,6 +2828,11 @@ pub struct Program {
     /// So a pass that makes a uniform call direct ([`call_directly`]) names the
     /// body, with the call's `this`, and not the wrapper, which would drop it.
     pub receiving: std::collections::BTreeMap<String, String>,
+    /// How an object of each layout prints, by layout name: what `String(o)`,
+    /// `${o}` and an array's text read off its descriptor
+    /// (`NtsDescriptor.to_string`). Decided once, after lowering, for every
+    /// layout, so the backends write one answer rather than each deriving it.
+    pub printed: std::collections::BTreeMap<String, Printed>,
     /// See [`Program::erased_call_slot`]. The entry that **records an uncaught
     /// `throw` and returns** rather than ending the program, which a call inside a
     /// `try` takes when it knows the signature and not the class.

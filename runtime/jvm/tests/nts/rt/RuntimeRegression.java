@@ -625,17 +625,23 @@ public final class RuntimeRegression {
         NtsEnv.drain(NtsEnv.current()); equal(out.toString(), "AmBC", "timer reentrancy and checkpoints");
         check(!NtsEnv.step(NtsEnv.current()), "empty loop");
     }
-    /** A generated class that declares its own `toString`; see `NtsStringable`. */
-    private static final class Labelled implements NtsStringable {
+    /** A generated class whose `toString` is its own; see `NtsPrintable`. */
+    private static final class Labelled implements NtsPrintable {
         private final int n;
         Labelled(int n) { this.n = n; }
-        @Override public String toString() { return "L" + n; }
+        @Override public String nts$print() { return "L" + n; }
     }
 
-    /** A generated class that does not. `String()` of one is `[object Object]`. */
-    private static final class Plain {
+    /** A generated class that declares none: `String()` of one is `[object Object]`. */
+    private static final class Plain implements NtsPrintable {
         @SuppressWarnings("unused") private final int n;
         Plain(int n) { this.n = n; }
+        @Override public String nts$print() { return "[object Object]"; }
+    }
+
+    /** A generated closure, which prints as a function with no source. */
+    private static final class Closure implements NtsPrintable {
+        @Override public String nts$print() { return "function () { [native code] }"; }
     }
 
     /** A tuple: laid out as a struct, called an Array by the language. */
@@ -705,13 +711,22 @@ public final class RuntimeRegression {
         catch (NtsRefusal expected) { refusedTuple = true; }
         check(refusedTuple, "a tuple refuses rather than answering");
 
-        // Node answers with a function's source text and this compiler keeps
-        // none, so the tag refuses rather than inventing one.
-        boolean refusedFunction = false;
-        try {
-            NtsValue.valueToString(NtsValue.ofTagged(NtsValue.FUNCTION, new Plain(1)));
-        } catch (NtsRefusal expected) { refusedFunction = true; }
-        check(refusedFunction, "a function refuses rather than answering");
+        // A function prints as its class says, whichever tag it carries.
+        equal(NtsValue.valueToString(NtsValue.ofTagged(NtsValue.FUNCTION, new Closure())),
+            "function () { [native code] }", "a function's text");
+
+        // The runtime's own objects, and a dictionary that is not a `Map`.
+        equal(NtsValue.valueToString(NtsValue.ofObject(NtsMap.newMap(0))), "[object Map]", "Map");
+        equal(NtsValue.valueToString(NtsValue.ofObject(NtsMap.newTable(0))), "[object Object]",
+            "a dictionary");
+        check(!NtsValue.isMap(NtsValue.ofObject(NtsMap.newTable(0))), "a dictionary is not a Map");
+        equal(NtsValue.valueToString(NtsValue.ofObject(NtsSet.newSet(0))), "[object Set]", "Set");
+
+        // An array holding itself prints the inner occurrence as empty, as node's join does.
+        Object[] self = new Object[2];
+        self[0] = "a";
+        self[1] = self;
+        equal(NtsValue.valueToString(NtsValue.ofObject(self)), "a,", "an array holding itself");
     }
 
     /**

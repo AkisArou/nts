@@ -56,7 +56,7 @@ use std::fmt::Write as _;
 
 use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{
-    BinOp, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
+    BinOp, BlockId, Callee, Func, HirType, OpKind, Printed, Program, Terminator, UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
 
@@ -692,8 +692,10 @@ fn literal_table(program: &Program) -> Vec<String> {
 /// this backend emitted had its element kind read from whatever followed it.
 /// Zero there refuses, which is how it went unseen. The type now carries every
 /// field, `foreign` and `foreign_slots` after `element` as in the runtime.
+///
+/// And `to_string` last, how an object of the type prints (`Program::printed`).
 const DESCRIPTOR_TYPE: &str =
-    "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, ptr, i32, i32, ptr }";
+    "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, ptr, i32, i32, ptr, ptr }";
 
 /// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
 const KIND_OBJECT: u32 = 2;
@@ -834,9 +836,17 @@ fn descriptors(program: &Program) -> String {
             placed.size,
             references.len()
         );
-        // `element` is `NTS_ARRAY_UNKNOWN` for an object, as in C.
+        // `element` is `NTS_ARRAY_UNKNOWN` for an object, as in C. How it
+        // prints (`Program::printed`) last, null where nothing says how, which
+        // the runtime refuses by name.
+        let to_string = match program.printed.get(&layout.name) {
+            Some(Printed::By(function)) => format!("ptr {}", symbol(function)),
+            Some(Printed::Object) => "ptr @nts_object_to_string".to_owned(),
+            Some(Printed::Function) => "ptr @nts_function_to_string".to_owned(),
+            Some(Printed::Refused) | None => "ptr null".to_owned(),
+        };
         let tail = format!(
-            "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}",
+            "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {to_string}",
             erased.len()
         );
         let _ = writeln!(
@@ -878,7 +888,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
         let _ = writeln!(
             *out,
             "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
-             ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot }}",
+             ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot, ptr null }}",
             u32::from(family.holds_closures()),
             nts_codegen_common::counting::ARRAY_FOREIGN
         );
@@ -921,7 +931,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
                 *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
                  i32 0, i32 0, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
-                 ptr null, i32 {}, i32 0, ptr null }}",
+                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string }}",
                 shape.size,
                 nts_codegen_common::counting::array_element(element)
             );
@@ -2345,6 +2355,11 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
 /// `Callee::External`, the backend reaches for them. Declared from the same
 /// table as everything else so there is one place a signature comes from.
 pub const ALWAYS_DECLARED: &[&str] = &[
+    // How an object prints: named by descriptors (`Program::printed`), never
+    // called by the program, so `externals` cannot see them.
+    "nts_object_to_string",
+    "nts_function_to_string",
+    "nts_array_to_string",
     // The no-match arm of an open field chain. Declared always, because the
     // chain is emitted wherever a slot has several layouts and a call with no
     // declaration is an invalid module rather than a refusal.

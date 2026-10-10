@@ -181,7 +181,8 @@ int main(void) {
                                        0,
                                        NTS_ARRAY_VALUE,
                                        0u,
-                                       0};
+                                       0,
+                                       NULL};
   retained = 0;
   released = 0;
   NtsValue held = handle(NTS_TAG_HANDLE_GOBJECT, &object_a);

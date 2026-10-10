@@ -886,6 +886,9 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         // of the iteration protocol. If that refusal lifts, this needs a Set arm.
         "nts_map_new" => (types::MAP, "newMap", "(D)Lnts/rt/NtsMap;"),
         "nts_set_new" => (types::SET, "newSet", "(D)Lnts/rt/NtsSet;"),
+        // A dictionary: a `Map`'s storage under a type that prints as an
+        // object (`NtsDictionary`).
+        "nts_table_new" => (types::MAP, "newTable", "(D)Lnts/rt/NtsMap;"),
         "nts_map_get" => (types::TABLE, "get", MAP_KEY_TO_VALUE),
         "nts_map_has" => (types::TABLE, "has", "(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Z"),
         "nts_map_set" => (

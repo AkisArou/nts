@@ -467,6 +467,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_array_to_string",
+        returns: "ptr",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_array_unlend",
         returns: "void",
         params: &["ptr"],
@@ -1084,6 +1090,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_function_to_string",
+        returns: "ptr",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_gobject_boxed",
         returns: "ptr",
         params: &["ptr", "i64"],
@@ -1596,6 +1608,12 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_object_new",
         returns: "noalias nonnull ptr",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_object_to_string",
+        returns: "ptr",
         params: &["ptr"],
         attributes: &[],
     },
@@ -2281,6 +2299,12 @@ pub const SIGNATURES: &[Signature] = &[
         name: "nts_symbol_to_string",
         returns: "noalias nonnull ptr",
         params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_table_new",
+        returns: "noalias nonnull ptr",
+        params: &["double"],
         attributes: &[],
     },
     Signature {

@@ -17,7 +17,8 @@ pub use nts_codegen_common::symbols::{c_global, c_identifier, c_member};
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
 use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{
-    BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Terminator, UnOp, ValueId,
+    BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Printed, Program, Terminator, UnOp,
+    ValueId,
 };
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;
@@ -1649,13 +1650,16 @@ fn emit_bodies<'a>(
 /// Listing a position the emitter never reaches costs nothing: a cast to
 /// `NtsHeader *` on a value that is already one is a cast to its own type.
 const ERASES_CLASS: &[(&str, usize)] = &[
+    ("nts_array_to_string", 0),
     ("nts_callback_task", 0),
     ("nts_closure_lend", 0),
     ("nts_closure_lend_once", 0),
     ("nts_concat_into", 0),
     ("nts_enqueue_job", 0),
     ("nts_environment_install_platform", 0),
+    ("nts_function_to_string", 0),
     ("nts_number_to_string_into", 0),
+    ("nts_object_to_string", 0),
     ("nts_presence_clear", 0),
     ("nts_presence_clear_fn", 0),
     ("nts_presence_has", 0),
@@ -3409,8 +3413,22 @@ fn emit_object_descriptors(
             references.len()
         );
         let (foreign, foreign_slots) = foreign_slot_table(writer, origin, layout, &name);
+        // How an object of this layout prints (`Program::printed`), which the
+        // runtime reads off the descriptor. A function this program does not
+        // define is null, as a table entry is, and null is a refusal by name.
+        let to_string = match program.printed.get(&layout.name) {
+            Some(Printed::By(function)) => Some(c_identifier(function))
+                .filter(|symbol| defined.contains(symbol))
+                .map_or_else(
+                    || "NULL".to_owned(),
+                    |symbol| format!("(NtsString *(*)(const NtsHeader *))(void *){symbol}"),
+                ),
+            Some(Printed::Object) => "nts_object_to_string".to_owned(),
+            Some(Printed::Function) => "nts_function_to_string".to_owned(),
+            Some(Printed::Refused) | None => "NULL".to_owned(),
+        };
         let tail = format!(
-            "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}",
+            "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {to_string}",
             erased.len()
         );
         emit_layout_descriptors(writer, origin, program, layout, &name, (&shared, &tail));
@@ -3522,7 +3540,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0, {}, 0u, 0 }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0, {}, 0u, 0, nts_array_to_string }};",
                 descriptor_name(element),
                 // For an array, `erased` is a fact about every element rather
                 // than a table of offsets -- exactly as `references` is. An
@@ -6545,7 +6563,7 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
             writer.line(
                 origin,
                 format!(
-                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot }};"
+                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL }};"
                 ),
             );
         }

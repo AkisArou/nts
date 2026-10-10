@@ -473,14 +473,13 @@ pub fn field_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
     }
 }
 
-/// A generated class that declares its own `toString`, marked so that
-/// `String(v)` on an erased object can tell it from one that inherits
-/// `java.lang.Object`'s.
-///
-/// `runtime/c` reads a null `descriptor->methods[nts_to_string_slot]` as "none
-/// declared". There is no such null here: every class has a `toString`, so the
-/// absence has to be spelled nominally. See `NtsStringable`.
-pub const STRINGABLE: &str = "nts/rt/NtsStringable";
+/// The interface every generated class implements to say how its objects
+/// print (`Program::printed`), through [`PRINT`]: `runtime/c` reads the same
+/// answer off a descriptor's `to_string`. See `NtsPrintable`.
+pub const PRINTABLE: &str = "nts/rt/NtsPrintable";
+
+/// [`PRINTABLE`]'s one method, `()Ljava/lang/String;`.
+pub const PRINT: &str = "nts$print";
 
 /// The field an object carries its optional-property presence bits in.
 ///

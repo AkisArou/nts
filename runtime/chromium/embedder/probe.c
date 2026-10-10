@@ -249,7 +249,7 @@ static const NtsDescriptor completion_descriptor = {NTS_KIND_OBJECT,
                                                     NULL,
                                                     NTS_ARRAY_UNKNOWN,
                                                     0u,
-                                                    NULL};
+                                                    NULL, NULL};
 static void finish_counter(void* state) {
   Completion* completion = state;
   NtsChromiumProbe* probe = completion->probe;
@@ -308,7 +308,7 @@ static const NtsDescriptor cancellation_descriptor = {NTS_KIND_OBJECT,
                                                       NULL,
                                                       NTS_ARRAY_UNKNOWN,
                                                       0u,
-                                                      NULL};
+                                                      NULL, NULL};
 static void canceled_run(void* state) {
   CancellationTask* task = state;
   ntsChromiumIncrementCounter(task->counter);

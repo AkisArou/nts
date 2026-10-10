@@ -24,7 +24,7 @@ package nts.rt;
  *
  * <h2>This is the third of one shape, and at three it is the mechanism</h2>
  *
- * {@link NtsStringable} asks whether a class declares its own {@code toString};
+ * {@link NtsPrintable} says how a class's objects print;
  * {@link NtsTuple} asks whether a layout the language calls an Array is laid
  * out as a struct; this asks whether a root carries presence bits. All three
  * are <b>a fact about the class, asked of a value</b>, and all three are facts

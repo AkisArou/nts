@@ -134,10 +134,60 @@ fn callback_targets<'p>(
         .filter_map(|ty| hierarchy.layouts.of(ty))
         .flat_map(|at| hierarchy.implementations(at))
         .flat_map(|at| {
-            program.layouts[at]
+            let layout = &program.layouts[at];
+            // And how it prints, which the runtime calls off its descriptor
+            // when it converts the object to a string (`Program::printed`).
+            let printed = match program.printed.get(&layout.name) {
+                Some(super::Printed::By(function)) => Some(function.as_str()),
+                _ => None,
+            };
+            layout
                 .methods
                 .iter()
                 .filter_map(Option::as_deref)
+                .chain(printed)
+        })
+        .collect()
+}
+
+/// The `toString` of every layout ([`super::Printed::By`]), where an operation
+/// hands the runtime an erased value to print.
+///
+/// [`callback_targets`] follows an argument back through its erasure to the
+/// layouts it can be, which is how `String(o)` on a typed object keeps that
+/// class's `toString`. A value that was never anything else -- an `unknown`
+/// parameter -- names no layout, and what it holds at run time can be any
+/// object the program made. So the entry that prints an erased value reaches
+/// every function a descriptor prints by: kept, and an edge for
+/// `interprocedural`, whose callers for a function only the runtime calls are
+/// otherwise none.
+fn printed_through_an_erasure<'p>(
+    program: &'p Program,
+    func: &Func,
+    kind: &OpKind,
+) -> Vec<&'p str> {
+    let OpKind::Call {
+        callee: Callee::External(name),
+        args,
+        ..
+    } = kind
+    else {
+        return Vec::new();
+    };
+    let prints = name == "nts_value_to_string";
+    let erased = args.iter().any(|arg| {
+        super::carried_values(func, *arg)
+            .any(|value| func.values[value.0 as usize].ty == super::HirType::Erased)
+    });
+    if !prints || !erased {
+        return Vec::new();
+    }
+    program
+        .printed
+        .values()
+        .filter_map(|printed| match printed {
+            super::Printed::By(function) => Some(function.as_str()),
+            _ => None,
         })
         .collect()
 }
@@ -239,7 +289,10 @@ pub fn callback_names(program: &Program) -> Vec<&str> {
             if handed.is_empty() {
                 continue;
             }
-            for name in callback_targets(program, &hierarchy, func, handed) {
+            for name in callback_targets(program, &hierarchy, func, handed)
+                .into_iter()
+                .chain(printed_through_an_erasure(program, func, &op.kind))
+            {
                 if !found.contains(&name) {
                     found.push(name);
                 }
@@ -565,6 +618,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             } else {
                 callback_targets(program, &hierarchy, func, handed)
             };
+            targets.extend(printed_through_an_erasure(program, func, &op.kind));
             // A virtual call reaches *every* implementation of its slot, because
             // which one runs is decided by a receiver this cannot see. Keeping
             // only the one the static type names would prune an override that a
@@ -619,6 +673,13 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             if method.as_ref().is_some_and(|name| !keep.contains(name)) {
                 *method = None;
             }
+        }
+    }
+    // And a descriptor's `to_string` naming one: nothing converts that object
+    // to a string, by the same argument.
+    for printed in program.printed.values_mut() {
+        if matches!(printed, super::Printed::By(name) if !keep.contains(name)) {
+            *printed = super::Printed::Refused;
         }
     }
     before - program.funcs.len()

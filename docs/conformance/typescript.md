@@ -3448,14 +3448,50 @@ fell through to ``a conversion to string from `A```.
 concatenation, `String(…)`, an override reached through the base type, and two
 objects converted in one expression. **5 refusals** on the pre-change binary.
 
-**A class with no `toString` still refuses, deliberately.** node's answer is
-`"[object Object]"`, a constant this could emit in one line — and then every
-`${o}` that meant something would print those eight characters, look like it
-worked, and give nobody a reason to write the method. A wrong answer that looks
-like an answer is worse than a refusal, and this is the cheapest possible
-instance of that trade: the refusal costs one diagnostic and names the method to
-add. `blockers/a-tostring-nobody-declared` holds it, and says what would change
-if the decision is revisited — this comment and one arm, no machinery.
+**A class with no `toString` prints `"[object Object]"`** since 2026-10-10, as
+node does. It was refused, on the argument that eight constant characters would
+make a missing method look like a working one; that is a judgement about a
+program's design, and differing from node is the wrong way to deliver it. See
+the next section.
+
+#### An object's text, typed or not (fixed 2026-10-10)
+
+`String(o)`, `${o}`, `"" + o` and an array's text, for every object, and for an
+`unknown` holding one. Until this, every object but a class with its own
+`toString` refused, typed or not, and so did every `unknown` -- 176 refusals in
+`runtime/node`, 161 of them `internal/errors.ts` building messages from values
+it does not know.
+
+JavaScript asks the prototype chain for `toString`, so how an object prints is a
+fact about its type. `hir::Program::printed` decides it once per layout, and the
+runtime reads it off the descriptor (`NtsDescriptor.to_string`; on the JVM, the
+generated `nts$print`):
+
+| What | Prints |
+|---|---|
+| a class with its own `toString(): string` | that method's text (a direct call where the type is known) |
+| the `Error` family | `name: message`, either dropped when empty -- a compiler-written `Error#toString` |
+| a class or object literal whose chain adds nothing | `[object Object]` |
+| an array, a typed array | the elements joined by `,`; `null` and `undefined` empty; an array inside itself empty |
+| `Map`, `Set`, `Promise`, `ArrayBuffer`, `DataView` | `[object Map]` and its kin |
+| a dictionary (`Record`, `Object.create(null)`) | `[object Object]` -- its own descriptor, `nts_desc_table`, so it is also not `instanceof Map` |
+| a closure or a class used as a value | `function () { [native code] }` |
+| a `Date`, a tuple, an object literal with its own `toString` member | a refusal by name: refused at compile time where the type proves it, at run time where an `unknown` turns out to be one |
+
+**The one deliberate difference from node** is a function: node prints its
+source text, which a compiled program does not keep (`docs/records/0298`).
+nts prints what node and every browser print for a function they have no
+source for -- a built-in's: `function () { [native code] }`. Decided
+2026-10-10.
+
+`console.log` is a different conversion (`util.inspect`: `{ a: 1 }`, not
+`[object Object]`) and still refuses an object, by name, in
+`nts_value_inspect`.
+
+`examples/an-object-converted-to-a-string`, typed and through `unknown`, on C,
+LLVM, the JVM and rc; four blockers became examples with it
+(`a-caught-value-concatenated`, `a-tostring-nobody-declared`,
+`an-error-message-of-any-type`, `unknown-interpolated-into-a-template`).
 
 #### A computed key that is a constant (fixed)
 
