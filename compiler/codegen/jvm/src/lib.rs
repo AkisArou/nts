@@ -666,6 +666,12 @@ fn super_class(package: &str, program: &Program, layout: &nts_core::hir::Layout)
 /// does not declare it already: a signature some closure implements still
 /// carries its typed `call` through `closure_slot`, and a second `call` at one
 /// descriptor is a duplicate member the class is refused for.
+///
+/// **An abstract `call` is not a declaration the face gives way to.** It is
+/// the signature's own slot (`Fn…#call`), which prune keeps once a
+/// signature-typed value reaches a runtime helper (`String(f)`). Kept, it left
+/// the adapter (`Fn…$Lambda`) nothing to inherit, and the first Java call
+/// threw `AbstractMethodError`. The face replaces it.
 fn typed_face(
     package: &str,
     program: &Program,
@@ -678,10 +684,13 @@ fn typed_face(
         !builder
             .methods
             .iter()
-            .any(|m| m.name == "call" && m.descriptor == face.typed)
+            .any(|m| m.name == "call" && m.descriptor == face.typed && m.body.is_some())
     }) else {
         return Ok(());
     };
+    builder
+        .methods
+        .retain(|m| !(m.name == "call" && m.descriptor == face.typed));
     let body = face::typed_call(package, layout, &face, pool, origin).map_err(|error| {
         Diagnostic::error(
             "NTS4003",

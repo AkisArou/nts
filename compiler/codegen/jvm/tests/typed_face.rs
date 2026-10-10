@@ -49,6 +49,12 @@ export function callOne(): void {
 export function nameOf(f: Pair): string {
   return \"[\" + f.name + \"]\";
 }
+// A signature-typed value handed to a runtime helper keeps the signature's
+// slot declaration, which once displaced the face's concrete `call` with an
+// abstract one: the adapter then threw `AbstractMethodError`.
+export function textOf(f: Pair): string {
+  return \"[\" + String(f).length + \"]\";
+}
 ";
 
 const DRIVE: &str = "\
