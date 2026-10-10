@@ -1527,6 +1527,189 @@ fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
     }
 }
 
+/// A slot for every method something overrides, numbered against the class
+/// that first declares it. A method nothing overrides gets none, which is why
+/// a hierarchy with no overriding pays nothing: every call in it is static and
+/// no class carries a table.
+fn number_slots(hierarchy: &mut Hierarchy) {
+    let mut roots: Vec<(TypeId, String)> = Vec::new();
+    for (class, names) in &hierarchy.declares {
+        for name in names {
+            let Some(root) = hierarchy.root_declaring(*class, name) else {
+                continue;
+            };
+            if hierarchy.overridden(root, name) && !roots.contains(&(root, name.clone())) {
+                roots.push((root, name.clone()));
+            }
+        }
+    }
+    // Sorted, so one compiler on one input numbers the slots one way.
+    roots.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+    for (at, key) in roots.into_iter().enumerate() {
+        hierarchy
+            .slots
+            .insert(key, u32::try_from(at).unwrap_or(u32::MAX));
+    }
+}
+
+/// Every class that has an interface's methods, with signatures one dispatch
+/// slot can carry, implements it (`docs/interfaces-by-shape.md`, Part 1).
+///
+/// TypeScript is structurally typed: `class C { go(): number }` satisfies
+/// `interface S { go(): number }` without writing `implements S`, and a call
+/// through `S` on a `C` is ordinary. Dispatch here is by edge -- the slot is
+/// numbered against `S` and every implementer fills it (record 0201) -- and the
+/// edge came from the heritage clause alone, so `take(s: S) { return s.go() }`
+/// was refused whenever no class *wrote* `implements S`: `S#go` had no body to
+/// declare (`examples/a-method-through-a-structural-interface`).
+///
+/// Inferred for the whole program before any slot is numbered, so everything
+/// after -- `overridden`, the slot loop, the tables, `Layout::interfaces` and so
+/// the JVM's `implements` list and `interface_fields`' guard -- sees an inferred
+/// edge as it sees a written one. A class fits when every member the interface
+/// declares is one of the class's, an optional one excepted, and every method
+/// has the same arity and the same representation for each parameter and the
+/// result. The slot is declared with one signature, and a method whose ABI
+/// differs would need an adapter this does not make. TypeScript's own rule is
+/// looser -- fewer parameters, a narrower result -- and one class it accepts
+/// that this does not leaves the whole interface as it was, for the reason the
+/// loop below gives: refused at a call through it, until something writes
+/// `implements`.
+///
+/// An edge for a class no value brings to the interface fills a table entry
+/// nothing reads. Measured over the runtime on 2026-10-10: 115 more functions
+/// compile, 28 of them in `web-platform`, with one new root refusal in place of
+/// 259 refusal lines; and on C, LLVM, the JVM and C under rc the only example
+/// that changes is the one this was written for. `web-platform` takes 0.2 s
+/// more of 23 to lower. The largest cascades that a name-only match points at --
+/// `URLParser#parse`, `RandomSource#fill`, `CancelHandle#cancel` -- are
+/// implemented by literals in `runtime/web-platform/host`, outside the program,
+/// which no inference inside it can find; and a name-only match pairs them
+/// with `URL`, `Buffer` and anything with a `cancel`.
+fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
+    let properties = |ty: TypeId| match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Object { properties } => Some(properties),
+        _ => None,
+    };
+    let signature = |ty: TypeId| match snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Function(at) => snapshot.signatures.get(at.0 as usize),
+        _ => None,
+    };
+    let represented_alike = |one: TypeId, other: TypeId| {
+        let one = probe.represent(one);
+        one.is_some() && one == probe.represent(other)
+    };
+    let same_abi = |mine: TypeId, wanted: TypeId| {
+        let (Some(mine), Some(wanted)) = (signature(mine), signature(wanted)) else {
+            return false;
+        };
+        mine.type_parameters.is_empty()
+            && wanted.type_parameters.is_empty()
+            && mine.parameters.len() == wanted.parameters.len()
+            && mine
+                .parameters
+                .iter()
+                .zip(&wanted.parameters)
+                .all(|(one, other)| {
+                    one.rest == other.rest
+                        && one.optional == other.optional
+                        && represented_alike(one.ty, other.ty)
+                })
+            && represented_alike(mine.return_type, wanted.return_type)
+    };
+    // Sorted, so one compiler on one input infers in one order.
+    let mut faces: Vec<TypeId> = hierarchy
+        .faces
+        .iter()
+        .filter(|face| {
+            hierarchy
+                .declares
+                .get(face)
+                .is_some_and(|methods| !methods.is_empty())
+        })
+        .copied()
+        .collect();
+    faces.sort_unstable_by_key(|face| face.0);
+    let mut classes: Vec<TypeId> = hierarchy
+        .declares
+        .keys()
+        .filter(|class| !hierarchy.faces.contains(class))
+        .copied()
+        .collect();
+    classes.sort_unstable_by_key(|class| class.0);
+    let mut inferred: Vec<(TypeId, TypeId)> = Vec::new();
+    for face in faces {
+        let Some(wanted) = properties(face) else {
+            continue;
+        };
+        // Which members are methods is what the hierarchy says, not the
+        // member's kind: an optional method, `destroy?(): void`, is recorded as
+        // a property, and judging it by kind let `Readable#destroy(error,
+        // callback): this` fill a `destroy(error): void` slot.
+        let methods = hierarchy.declares.get(&face).cloned().unwrap_or_default();
+        let mut fitting: Vec<TypeId> = Vec::new();
+        let mut a_misfit = false;
+        for class in &classes {
+            if hierarchy.descends_from(*class, face) {
+                continue;
+            }
+            let Some(has) = properties(*class) else {
+                continue;
+            };
+            let found = |member: &PropertyRecord| {
+                has.iter().find(|candidate| candidate.name == member.name)
+            };
+            // **Only a class with every member the interface requires counts**:
+            // anything else never reaches a slot of it without a lie the
+            // checker was told. By name, which is wider than what TypeScript
+            // would accept -- a `size(): string` counts against `size():
+            // number` -- and so errs toward inferring nothing.
+            if !wanted
+                .iter()
+                .all(|member| member.optional || found(member).is_some())
+            {
+                continue;
+            }
+            let fits = wanted.iter().all(|member| match found(member) {
+                // An optional *method* the class lacks is not one it can be
+                // excused: the edge is inherited, and a subclass that declares
+                // the method then fills the interface's slot with whatever
+                // signature it chose. `EventEmitter` "fitted"
+                // `LegacyDestroyable` on `emit` alone, and `Readable` and
+                // `Writable` became two disagreeing implementations of its
+                // `destroy?()`.
+                None => !methods.contains(&member.name),
+                Some(found) if methods.contains(&member.name) => {
+                    hierarchy.declaring(*class, &member.name).is_some()
+                        && same_abi(found.ty, member.ty)
+                }
+                Some(_) => true,
+            });
+            if fits {
+                fitting.push(*class);
+            } else {
+                a_misfit = true;
+            }
+        }
+        // **All or none.** Inferring edges gives the interface dispatch slots,
+        // and a class TypeScript accepts as one that did not fit -- `take(x:
+        // number | string)` where the slot is `take(x: number)` -- has no
+        // entry in them, so a call through the interface on it, once its class
+        // is lost in an array or a field, jumped through a null pointer. Main
+        // does that today wherever a class *declares* the interface beside such
+        // a class (`outcomes/a-structural-misfit-dispatched-through-an-interface`);
+        // inferring edges must not make it reachable from interfaces that had
+        // no slots. So one misfit leaves the interface as it was: a call
+        // through it refused until something writes `implements`.
+        if !a_misfit {
+            inferred.extend(fitting.into_iter().map(|class| (class, face)));
+        }
+    }
+    for (class, face) in inferred {
+        hierarchy.implements.entry(class).or_default().push(face);
+    }
+}
+
 /// The iteration protocol's interfaces, whose members no node declares.
 ///
 /// Every interface above is found by walking `INTERFACE_DECLARATION` nodes,
@@ -2016,29 +2199,9 @@ fn collect_hierarchy(
     // must not also be numbered a slot. Before the slot loop for the same
     // reason.
     collect_stored_members(snapshot, &mut probe, closures, &mut hierarchy);
+    infer_implements(snapshot, &probe, &mut hierarchy);
 
-    // A slot for every method something overrides, numbered against the class
-    // that first declares it. A method nothing overrides gets none, which is why
-    // a hierarchy with no overriding pays nothing: every call in it is static
-    // and no class carries a table.
-    let mut roots: Vec<(TypeId, String)> = Vec::new();
-    for (class, names) in &hierarchy.declares {
-        for name in names {
-            let Some(root) = hierarchy.root_declaring(*class, name) else {
-                continue;
-            };
-            if hierarchy.overridden(root, name) && !roots.contains(&(root, name.clone())) {
-                roots.push((root, name.clone()));
-            }
-        }
-    }
-    // Sorted, so one compiler on one input numbers the slots one way.
-    roots.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
-    for (at, key) in roots.into_iter().enumerate() {
-        hierarchy
-            .slots
-            .insert(key, u32::try_from(at).unwrap_or(u32::MAX));
-    }
+    number_slots(&mut hierarchy);
     // One more slot on the end, if anything in the program can be a function
     // value: see [`needs_closure_slots`].
     if needs_closure_slots(snapshot, closures, &hierarchy) {

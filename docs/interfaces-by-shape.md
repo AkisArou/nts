@@ -95,6 +95,37 @@ fills it, and the call compiles as today's virtual call.
 - *Object literals* that fit an interface are classes here too (each literal
   shape is a layout), so they get rows like any class.
 
+*Built (`infer_implements` in `hir/lower.rs`), stricter than the above in
+three ways, each found by measuring:*
+
+- **The same ABI, not assignability.** Each method must have the same arity
+  and the same representation for every parameter and the result. TypeScript
+  accepts a wider parameter or a narrower result, and those need the adapter
+  this does not yet make.
+- **An optional method blocks the fit.** If the class lacks it, a subclass
+  that declares it fills the inherited slot with whatever signature it chose.
+  `EventEmitter` fitted `LegacyDestroyable` on `emit` alone, and `Readable`
+  and `Writable` became two disagreeing `destroy`s.
+- **All or none per interface.** An inferred edge gives the interface slots.
+  A class TypeScript accepts as the interface but that does not fit has no
+  entry in them, and a call through the interface on it, with its class lost
+  in an array, jumps through a null pointer. Main does exactly that wherever a
+  class *declares* the interface beside such a class
+  (`outcomes/a-structural-misfit-dispatched-through-an-interface`). So one
+  misfit leaves the interface as it was, refused until something writes
+  `implements`. The adapter is what closes both.
+
+It was built once before, on 2026-09-22, by name and shape, and set aside: it
+cleared no refusal in the runtime and turned two upcasts into casts between
+structs that disagree about their fields. This time the census gains a little
+(see the commit), and the largest cascades stay. Their interfaces
+(`URLParser`, `RandomSource`, `CancelHandle`) are implemented by literals in
+`runtime/web-platform/host`, outside the program, which no inference inside
+it can find. A written `implements` on a *generic* class reaches only the
+declaration's type and not its instantiations. Inference covers an
+instantiation that fits exactly; substituting the heritage clause per
+instantiation is the rest.
+
 ## Part 2 — fields: the same tables, as accessors
 
 A field read through an interface is correct when the object's class is known

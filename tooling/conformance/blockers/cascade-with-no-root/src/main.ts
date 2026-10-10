@@ -86,7 +86,14 @@ export interface Handle {
 
 type Callback<Args extends unknown[]> = (...args: Args) => void;
 
-export class Immediate<Args extends unknown[] = []> implements Handle {
+// No `implements Handle` and no `hasRef`, since 2026-10-10: a class with every
+// method an interface declares now implements it without writing so
+// (`infer_implements`), and this `Immediate` had both -- its written
+// `implements` reached only the generic declaration, never `Immediate<[number]>`,
+// which is the gap inference closed here. `ref` claims the interface by a cast
+// instead, so `Handle` stays one nothing in this program implements: the shape
+// this fixture guards.
+export class Immediate<Args extends unknown[] = []> {
   _onImmediate: Callback<Args> | null | undefined;
   _argv: Args;
   _refed = true;
@@ -98,11 +105,7 @@ export class Immediate<Args extends unknown[] = []> implements Handle {
 
   ref(): Handle {
     this._refed = true;
-    return this;
-  }
-
-  hasRef(): boolean {
-    return this._refed;
+    return this as unknown as Handle;
   }
 }
 
