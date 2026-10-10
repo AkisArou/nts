@@ -21,8 +21,11 @@ fn require_moved_closure(program: &hir::Program) {
 #[test]
 fn an_omitted_live_column_is_rejected_at_both_native_emitters() {
     let source = r"
-class Base { read(): number { return 1; } }
-class Derived extends Base { override read(): number { return 2; } }
+class Base { a(): number { return 3; } read(): number { return 1; } }
+class Derived extends Base {
+    override a(): number { return 4; }
+    override read(): number { return 2; }
+}
 export function read(other: boolean): number {
     const value: Base = other ? new Derived() : new Base();
     return value.read();
@@ -59,6 +62,9 @@ export function read(other: boolean): number {
             }
         })
         .expect("a real table reader");
+    // The exported callback constant must remain valid, so the rejection
+    // proves the actual virtual-call emitter checked its own reader.
+    assert_ne!(slot, hir::closure_call_slot(&prepared.program));
     prepared
         .program
         .native_dispatch

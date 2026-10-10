@@ -746,11 +746,11 @@ impl<'a> Emitter<'a> {
             // call declaring `I`. The emitter's own accounting said so:
             // `depth 0 -> 3 -> 2`.
             //
-            // Four sites tonight where the mark is honoured on one side and the
-            // type read on the other -- `conversion`'s result, `place`'s
-            // discard, `operation`'s literal, and this. The widened case above
-            // is the same shape and was already here; nobody had needed the
-            // other direction until a value was held *narrower* than declared.
+            // Rematerialization must honor held storage just as conversion(),
+            // place() and operation() do.
+            // DispatchSlot stays f64. If it ever becomes eligible for integer
+            // narrowing, this rematerialization must also emit its logical
+            // selector as an int rather than passing it to constant() as f64.
             if self.narrowed.contains(&value)
                 && let OpKind::ConstFloat(number) = op.kind
                 && number.fract() == 0.0
