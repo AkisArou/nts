@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "SIGSEGV",
+  "node": "exit 1; nts: uncaught Observed: a Wide kept as itself=6;through the array=602;",
+  "measured_with": "4a24bfbdb24f1906",
+  "source": "measured"
+}
