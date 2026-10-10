@@ -96,3 +96,55 @@ fn every_kind_of_object_prints_as_its_type_says() {
         );
     }
 }
+
+/// Where the type settles how an object prints, the conversion is its direct
+/// form (`printed::devirtualize`): a constant, a call of the one `toString`,
+/// a typed join -- and never the runtime's descriptor dispatch, which every
+/// answer would survive, so only this says the pass ran.
+#[test]
+fn a_conversion_the_type_settles_is_direct() {
+    let Some(lowered) = lowered() else {
+        eprintln!("SKIP printed: tsgo is not built");
+        return;
+    };
+    let typed = lowered
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name == "typed")
+        .expect("`typed` is lowered");
+    let calls: Vec<String> = typed
+        .values
+        .iter()
+        .filter_map(|op| match &op.kind {
+            hir::OpKind::Call {
+                callee: hir::Callee::Direct(name) | hir::Callee::External(name),
+                ..
+            } => Some(name.clone()),
+            _ => None,
+        })
+        .collect();
+    let constant = typed
+        .values
+        .iter()
+        .any(|op| matches!(&op.kind, hir::OpKind::ConstString(text) if text == "[object Object]"));
+    assert!(
+        constant,
+        "a class with no `toString` is a constant: {calls:?}"
+    );
+    for direct in [
+        "Labelled#toString",
+        "Failure@toString",
+        "nts_array_join_num",
+        "nts_array_join_str",
+    ] {
+        assert!(
+            calls.iter().any(|call| call == direct),
+            "`{direct}` is called directly: {calls:?}"
+        );
+    }
+    assert!(
+        !calls.iter().any(|call| call == "nts_value_to_string"),
+        "and nothing goes through the runtime: {calls:?}"
+    );
+}

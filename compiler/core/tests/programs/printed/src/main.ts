@@ -33,3 +33,14 @@ export function all(n: number): string {
     show(literal),
   ].join("|");
 }
+
+/** Typed: the type settles each, so none goes through the runtime. */
+export function typed(n: number): string {
+  return [
+    String(new Plain()),
+    String(new Labelled()),
+    String(new Failure("f")),
+    String([n, 2]),
+    String(["a", "b"]),
+  ].join("|");
+}

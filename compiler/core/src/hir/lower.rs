@@ -597,6 +597,20 @@ impl Hierarchy {
         })
     }
 
+    /// Whether `ty` is `ancestor` or extends it, by the base chain alone: a
+    /// class's subclasses, and nothing that merely implements an interface.
+    fn descends(&self, ty: TypeId, ancestor: TypeId) -> bool {
+        let mut at = Some(ty);
+        for _ in 0..64 {
+            let Some(here) = at else { return false };
+            if here == ancestor {
+                return true;
+            }
+            at = self.base.get(&here).copied();
+        }
+        false
+    }
+
     /// Whether `ty` is a provided error or a class whose chain reaches one: the
     /// `Error` family, whose instances print by `Error.prototype.toString`.
     fn is_an_error(&self, ty: TypeId) -> bool {
@@ -15039,6 +15053,7 @@ pub fn lower_with(
     collect_declared_facts(&mut lowered.program, snapshot);
     canonicalize_objects(&mut lowered.program);
     printed::decide(snapshot, &hierarchy, &mut lowered.program);
+    printed::devirtualize(snapshot, &hierarchy, &mut lowered.program);
     prune_class_tests(&mut lowered.program);
     report_unaccounted(
         snapshot,

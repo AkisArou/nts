@@ -304,3 +304,179 @@ impl Body {
 fn span(from: ValueId, to: ValueId) -> Vec<ValueId> {
     (from.0..=to.0).map(ValueId).collect()
 }
+
+/// `String(o)` where the type settles how `o` prints: the conversion the
+/// lowering routed through the runtime -- `nts_value_to_string` of an `Erase`
+/// -- made its direct form.
+///
+/// - a call of the one function every layout the type can be prints by: a
+///   class's `toString`, or an error layout's rule;
+/// - the constant text, where that is `"[object Object]"`;
+/// - the typed join, for an array of numbers or of strings.
+///
+/// Only where every layout a value of the static type can be prints alike: a
+/// class and everything that extends it. An interface or a literal's type can
+/// be any object of its shape, so its conversion stays the runtime's, which
+/// asks the object. The table ([`Program::printed`]) is the one authority for
+/// both, so the direct form and the runtime's cannot print differently -- and
+/// the runtime one is a load, an indirect call and the erasing, where this is
+/// a call or nothing.
+pub(super) fn devirtualize(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    program: &mut Program,
+) {
+    let printed = program.printed.clone();
+    let layouts = program.layouts.clone();
+    for func in &mut program.funcs {
+        let rewrites: Vec<(usize, Direct)> = func
+            .values
+            .iter()
+            .enumerate()
+            .filter_map(|(at, op)| {
+                direct_form(snapshot, hierarchy, &layouts, &printed, func, op)
+                    .map(|form| (at, form))
+            })
+            .collect();
+        for (at, form) in rewrites {
+            match form {
+                Direct::Call(function, object) => {
+                    func.values[at].kind = OpKind::Call {
+                        callee: super::Callee::Direct(function),
+                        args: vec![object],
+                        frame: None,
+                    };
+                }
+                Direct::Text(text) => func.values[at].kind = OpKind::ConstString(text.to_owned()),
+                Direct::Join(helper, array) => {
+                    let comma = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+                    let origin = func.values[at].origin.clone();
+                    func.values.push(Op {
+                        kind: OpKind::ConstString(",".to_owned()),
+                        ty: HirType::Managed(ManagedType::String),
+                        origin,
+                    });
+                    let call = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+                    if let Some(block) = func
+                        .blocks
+                        .iter_mut()
+                        .find(|block| block.ops.contains(&call))
+                    {
+                        let position = block.ops.iter().position(|op| *op == call).unwrap_or(0);
+                        block.ops.insert(position, comma);
+                    }
+                    func.values[at].kind = OpKind::Call {
+                        callee: super::Callee::External(helper.to_owned()),
+                        args: vec![array, comma],
+                        frame: None,
+                    };
+                }
+            }
+        }
+    }
+}
+
+/// What a conversion becomes where its type settles it.
+enum Direct {
+    Call(String, ValueId),
+    Text(&'static str),
+    Join(&'static str, ValueId),
+}
+
+/// The direct form of one operation, if it is a conversion the type settles.
+fn direct_form(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    layouts: &[Layout],
+    printed: &BTreeMap<String, Printed>,
+    func: &Func,
+    op: &Op,
+) -> Option<Direct> {
+    let OpKind::Call {
+        callee: super::Callee::External(name),
+        args,
+        frame: None,
+    } = &op.kind
+    else {
+        return None;
+    };
+    let [erased] = args.as_slice() else {
+        return None;
+    };
+    if name != "nts_value_to_string" {
+        return None;
+    }
+    let OpKind::Erase { value, .. } = func.values[erased.0 as usize].kind else {
+        return None;
+    };
+    match &func.values[value.0 as usize].ty {
+        HirType::Managed(ManagedType::Object(ty)) if is_a_class(snapshot, hierarchy, *ty) => {
+            let candidates: Vec<&Layout> = layouts
+                .iter()
+                .filter(|layout| {
+                    layout
+                        .types
+                        .iter()
+                        .any(|candidate| hierarchy.descends(*candidate, *ty))
+                })
+                .collect();
+            let answers: Vec<Option<&Printed>> = candidates
+                .iter()
+                .map(|layout| printed.get(&layout.name))
+                .collect();
+            let first = (*answers.first()?)?;
+            if answers.iter().all(|answer| *answer == Some(first)) {
+                return match first {
+                    Printed::By(function) => Some(Direct::Call(function.clone(), value)),
+                    Printed::Object => Some(Direct::Text("[object Object]")),
+                    Printed::Function | Printed::Refused => None,
+                };
+            }
+            // **An error family, each layout with its own rule.** The rules are
+            // one rule over the same two fields, and every candidate extends
+            // the static type, so its fields sit where the static type's do:
+            // the static type's own rule answers for all of them. Not where
+            // any of them declares its own `toString`.
+            let own = layouts
+                .iter()
+                .find(|layout| layout.types.contains(ty))
+                .map(error_rule_name)?;
+            let every_one_a_rule = candidates
+                .iter()
+                .zip(&answers)
+                .all(|(layout, answer)| *answer == Some(&Printed::By(error_rule_name(layout))));
+            (every_one_a_rule
+                && printed
+                    .values()
+                    .any(|answer| *answer == Printed::By(own.clone())))
+            .then_some(Direct::Call(own, value))
+        }
+        HirType::Managed(ManagedType::Array(element)) => match element.as_ref() {
+            HirType::Float { bits: 64 } => Some(Direct::Join("nts_array_join_num", value)),
+            HirType::Managed(ManagedType::String) => {
+                Some(Direct::Join("nts_array_join_str", value))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Whether a type is a class: what a value of it can be is the class and what
+/// extends it, which a base chain answers. A provided error is one; an
+/// interface or an object literal's type is not, being any object of its shape.
+fn is_a_class(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, ty: TypeId) -> bool {
+    if hierarchy.provided_errors.contains_key(&ty) {
+        return true;
+    }
+    snapshot
+        .types
+        .get(ty.0 as usize)
+        .and_then(|record| record.symbol)
+        .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+        .is_some_and(|record| {
+            record
+                .flags
+                .contains(nts_semantic_schema::SymbolFlags::CLASS)
+        })
+}
