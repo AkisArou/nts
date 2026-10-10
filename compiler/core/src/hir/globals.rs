@@ -113,7 +113,9 @@ pub fn representations(program: &Program, facts: &GlobalFacts) -> GlobalWidths {
             program
                 .globals
                 .get(**global as usize)
-                .is_some_and(|slot| matches!(slot.ty, HirType::Float { .. }))
+                // Only a `number`: a written global held at its kind's width
+                // (`super::written_storage`) has it already, a `Float32` included.
+                .is_some_and(|slot| slot.ty == HirType::NUMBER)
         })
         .filter_map(|(global, held)| Some((*global, width_for(*held)?)))
         .collect()

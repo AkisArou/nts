@@ -639,6 +639,48 @@ Arrays' invariance moves into 2f: an array element has no kind until 2f gives a
 written array its element kind, and that is when `number[]` as `Uint8[]` must
 become an error rather than an unproven read.
 
+**2f, first piece, as built (2026-10-10): written fields and globals at
+their width.** A field or global written as a kind is held at that kind's
+width: `r: Uint8` is a byte in its object, `count: Int32` four, `big: Uint32`
+an unsigned four, `low: Int16` two, `ratio: Float32` a float.
+`hir::written_storage` decides it from the written kind (`Scalar::width_on`,
+the narrowest width holding the kind on every target), unconditionally, the
+way `written_roots` gives a root's parameters theirs.
+- **Stores** were already proven to fit (`Into::Field`, `Into::Global`), so
+  `specialize` converts each one exactly to the slot's type.
+- **Reads** widen at once to the `number` the program computes with, so `p.r
+  + 1` is 256 and not a byte's wrap.
+- **The fact-driven narrowing** (`fields`, `globals`) now takes only a slot
+  still held as a `number`, so it never turns a written `Float32` into an
+  integer.
+- **A field is one width wherever its storage is shared.** A class and the
+  interface it is read through put the field at one place, and so do the arms
+  of one read or store. A kind is an optional label, so one class can write
+  `level: Uint8` behind an interface another implements as `level: number`;
+  such a group keeps its `number`, and the facts narrow it together, as
+  before. Dropping the width from only some layouts in a group wrote a byte
+  into a four-byte field.
+- **The width holds for a slot the outside can reach**, which the fact-driven
+  narrowing skips: there it is a contract the outside is held to, as a written
+  parameter's is.
+- **Not yet:** an optional field (`x?: Uint8`, erased until the presence-bit
+  work), a captured local's cell, and arrays of written kinds (`Uint8[]` is
+  still an array of doubles). Arrays need a growable byte, short and int array
+  on the JVM, whose runtime has only `NtsArrayD` for numbers.
+
+`examples/a-written-field-held-at-its-width` checks every kind at its edges on
+C, LLVM, the JVM and rc. Node holds them all as doubles, so agreement cannot
+see a width; `compiler/core/tests/written_storage.rs` pins the widths, the
+global, the `Float32` that stays a float, and the shared field that keeps one
+width.
+
+Building the example also found a wrong answer that predates this:
+`tooling/conformance/outcomes/a-field-through-an-interface-its-classes-order-differently`.
+A value whose class was lost (an erased join unerased to an interface) is read
+and written at the interface's index, whatever its class lays out, and even a
+class that agrees with the interface misses the store. That is the field half
+of interfaces satisfied by shape, and the design takes it first.
+
 **2g, as built (2026-10-09): the JVM's unsigned integers.** The JVM has no
 unsigned type, so a `u32` is held raw in an `int` and a `u64` in a `long`. Their
 top bit is a value bit, and every signed instruction read it as a sign:

@@ -219,8 +219,9 @@ pub(super) fn representations(
     let mut narrowed = FxHashMap::default();
     for (at, layout) in program.layouts.iter().enumerate() {
         for field in 0..u32::try_from(layout.fields.len()).unwrap_or(0) {
-            if exposed.contains(&(at, field))
-                || !matches!(layout.fields[field as usize].ty, HirType::Float { .. })
+            // Only a `number`: a written field held at its kind's width
+            // (`super::written_storage`) has it already, a `Float32` included.
+            if exposed.contains(&(at, field)) || layout.fields[field as usize].ty != HirType::NUMBER
             {
                 continue;
             }
@@ -272,7 +273,11 @@ pub(super) fn representations(
 /// out from under the op. Dropping the narrowing is the conservative repair and
 /// costs a wider field in exactly the programs where the arms could not have been
 /// narrowed as a unit anyway.
-fn keep_arms_together(program: &Program, layouts: &LayoutIndex, narrowed: &mut FieldWidths) {
+pub(super) fn keep_arms_together(
+    program: &Program,
+    layouts: &LayoutIndex,
+    narrowed: &mut FieldWidths,
+) {
     let mut drop: Vec<(usize, u32)> = Vec::new();
     for func in &program.funcs {
         for op in &func.values {

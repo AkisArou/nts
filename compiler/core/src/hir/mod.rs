@@ -50,6 +50,7 @@ pub mod tags;
 pub mod templates;
 pub mod unerase;
 pub mod written_roots;
+pub mod written_storage;
 
 mod bridges;
 pub mod cse;
@@ -6741,6 +6742,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let pruned = pruned + dropped;
     let unions_split = split_unions(&mut program);
     written_roots::narrow(&mut program, options.roots);
+    written_storage::narrow(&mut program);
 
     let (specialized, mut conversions, mut checks_removed) = if specialize_numbers {
         specialize_numbers_of(&mut program, options.roots)
