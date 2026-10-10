@@ -578,6 +578,12 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_bound_function_to_string",
+        returns: "ptr",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_bounds",
         returns: "void",
         params: &["double", "i32"],
@@ -1090,6 +1096,12 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
         name: "nts_environment_platform",
         returns: "ptr",
         params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_function_name",
+        returns: "ptr",
+        params: &["[2 x i64]"],
         attributes: &[],
     },
     Signature {

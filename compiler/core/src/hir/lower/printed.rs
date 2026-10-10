@@ -14,7 +14,8 @@
 //!   JVM's verifier lets pass;
 //! - `"[object Object]"` for an object whose chain adds nothing, which is not a
 //!   fallback but that object's text;
-//! - a function's text for a closure or a class token;
+//! - a function's text for a closure or a class token, with the name
+//!   [`Program::function_names`] gives it, and none for a bound function;
 //! - and a refusal, by name at run time, where nothing here says how: a tuple,
 //!   a frame, an object literal whose own `toString` is a member this compiler
 //!   cannot call through the descriptor, and a layout whose types would print
@@ -31,18 +32,23 @@ use nts_diagnostics::Location;
 use nts_semantic_schema::{GeneratedReason, Origin, SemanticSnapshot, TypeId, TypeKind};
 
 use super::{
-    BinOp, Block, BlockId, Facts, Func, Hierarchy, HirType, Layout, ManagedType, Op, OpKind, Param,
-    ParamShape, Program, Terminator, ValueId,
+    BinOp, Block, BlockId, ClosureInfo, ClosureSource, Facts, Func, Hierarchy, HirType, Layout,
+    ManagedType, Op, OpKind, Param, ParamShape, Program, Terminator, ValueId, closure_index,
 };
 use crate::hir::Printed;
 
 /// Decide [`Program::printed`] for every layout, and write the error rule for
 /// each error layout that prints by it.
-pub(super) fn decide(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program: &mut Program) {
+pub(super) fn decide(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    closures: &[ClosureInfo],
+    program: &mut Program,
+) {
     let mut printed = BTreeMap::new();
     let mut written = Vec::new();
     for layout in &program.layouts {
-        let mut answer = printing(snapshot, hierarchy, program, layout);
+        let mut answer = printing(snapshot, hierarchy, closures, program, layout);
         if answer == Printed::By(error_rule_name(layout)) {
             match error_to_string(layout) {
                 Some(func) => written.push(func),
@@ -64,15 +70,23 @@ fn error_rule_name(layout: &Layout) -> String {
 fn printing(
     snapshot: &SemanticSnapshot,
     hierarchy: &Hierarchy,
+    closures: &[ClosureInfo],
     program: &Program,
     layout: &Layout,
 ) -> Printed {
-    if layout
+    if let Some(closure) = layout
         .types
         .iter()
-        .any(|ty| super::super::is_closure_type(*ty))
+        .find(|ty| super::super::is_closure_type(**ty))
     {
-        return Printed::Function;
+        let bound = closures
+            .get(closure_index(*closure))
+            .is_some_and(|closure| closure.source == ClosureSource::Bound);
+        return if bound {
+            Printed::BoundFunction
+        } else {
+            Printed::Function
+        };
     }
     if layout.types.iter().any(|ty| is_a_class_token(*ty)) {
         return Printed::Function;
@@ -429,7 +443,7 @@ fn direct_form(
                 return match first {
                     Printed::By(function) => Some(Direct::Call(function.clone(), value)),
                     Printed::Object => Some(Direct::Text("[object Object]")),
-                    Printed::Function | Printed::Refused => None,
+                    Printed::Function | Printed::BoundFunction | Printed::Refused => None,
                 };
             }
             // **An error family, each layout with its own rule.** The rules are

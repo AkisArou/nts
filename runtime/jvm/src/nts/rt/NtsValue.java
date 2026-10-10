@@ -336,6 +336,42 @@ public final class NtsValue {
             + "it prints");
     }
 
+    /** `f.name` where the type does not settle it: the function's class says
+     *  ({@link NtsNamed}), or nothing does and it stops by name. */
+    public static String functionName(NtsValue function) {
+        return nameOf(function.ref);
+    }
+
+    /** What a function object is called, as {@link #functionName} answers. */
+    public static String nameOf(Object function) {
+        if (function instanceof NtsNamed) {
+            return ((NtsNamed) function).nts$name();
+        }
+        throw new NtsRefusal("the name of `" + (function == null ? "?"
+            : function.getClass().getSimpleName()) + "`, whose type does not say what it "
+            + "is called");
+    }
+
+    /** A bound function's name, whose target is known only at run time:
+     *  `"bound "` and the target's. `runtime/c` reads the same off a
+     *  descriptor marked `nts_bound_function_name`. */
+    public static String boundName(Object target) {
+        return "bound " + nameOf(target);
+    }
+
+    /** What a generated function class with no name answers where its text
+     *  is asked for: a refusal naming it, as {@link #functionName} makes. */
+    public static String unnamed(String layout) {
+        throw new NtsRefusal("the name of `" + layout + "`, whose type does not say what it "
+            + "is called");
+    }
+
+    /** A function's text, as node prints one it has no source for -- a
+     *  built-in's, with its name. `runtime/c`'s `nts_function_to_string`. */
+    public static String functionText(String name) {
+        return "function " + name + "() { [native code] }";
+    }
+
     /**
      * The elements, comma-joined, with `null` and `undefined` contributing the
      * empty string and a nested array recursing.

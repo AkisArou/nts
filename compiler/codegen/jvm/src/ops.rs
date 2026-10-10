@@ -429,6 +429,11 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
             "valueToString",
             "(Lnts/rt/NtsValue;)Ljava/lang/String;",
         ),
+        "nts_function_name" => (
+            types::VALUE,
+            "functionName",
+            "(Lnts/rt/NtsValue;)Ljava/lang/String;",
+        ),
         "nts_value_inspect" => (
             types::VALUE,
             "valueInspect",

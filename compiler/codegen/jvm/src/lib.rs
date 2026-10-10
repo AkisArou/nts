@@ -52,7 +52,7 @@ pub mod types;
 mod unbox;
 pub mod widen;
 
-use nts_core::hir::{Printed, Program};
+use nts_core::hir::{FunctionName, Printed, Program};
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::class::access;
 use nts_jvm_emitter::code::Code;
@@ -1397,6 +1397,7 @@ fn object_class(
     // Not on an interface: its implementers carry it.
     if !interface {
         printing_method(package, program, layout, &mut builder, &mut pool, &origin)?;
+        naming_method(package, program, layout, &mut builder, &mut pool, &origin)?;
     }
     // A field the JVM zeroes to `null` where the language's zero is
     // `undefined`.
@@ -1504,28 +1505,35 @@ fn printing_method(
     let class = types::class_name(package, layout);
     let mut code = Code::new(vec![VType::Object(class)], 1);
     let by = match program.printed.get(&layout.name) {
-        Some(Printed::By(function)) => program
-            .funcs
-            .iter()
-            .find(|func| &func.name == function)
-            .and_then(|func| {
-                body::signature(package, program, func).map(|signature| (func, signature))
-            }),
+        Some(Printed::By(function)) => program_function(package, program, function),
         _ => None,
     };
     match (program.printed.get(&layout.name), by) {
         (Some(Printed::By(_)), Some((func, signature))) => {
-            code.load(origin, Kind::Ref, 0);
-            code.invoke_static(
-                origin,
-                pool,
-                &body::program_class(package),
-                &body::method_name(&func.name),
-                &signature,
-            );
+            call_on_this(&mut code, pool, package, func, &signature, origin);
         }
         (Some(Printed::Object), _) => code.const_string(origin, pool, "[object Object]"),
+        // Its name in a built-in's text, or the refusal `runtime/c` makes for
+        // a null `function_name`.
         (Some(Printed::Function), _) => {
+            if let Some(FunctionName::Is(name)) = program.function_names.get(&layout.name) {
+                code.const_string(
+                    origin,
+                    pool,
+                    &format!("function {name}() {{ [native code] }}"),
+                );
+            } else {
+                code.const_string(origin, pool, &layout.name);
+                code.invoke_static(
+                    origin,
+                    pool,
+                    "nts/rt/NtsValue",
+                    "unnamed",
+                    "(Ljava/lang/String;)Ljava/lang/String;",
+                );
+            }
+        }
+        (Some(Printed::BoundFunction), _) => {
             code.const_string(origin, pool, "function () { [native code] }");
         }
         // Refused, or a function this lane did not emit: the runtime names the
@@ -1557,6 +1565,139 @@ fn printing_method(
     );
     builder.interfaces.push(types::PRINTABLE.to_owned());
     Ok(())
+}
+
+/// `nts$name`, what a function of this layout is called
+/// (`Program::function_names`), which `NtsValue.functionName` calls for a
+/// `.name` the type does not settle: the name, or for a bound function whose
+/// target is a value, `"bound "` and the target's. A layout with no entry does
+/// not implement `NtsNamed`, and the runtime refuses it by name, as
+/// `runtime/c` does for a null `function_name`.
+fn naming_method(
+    package: &str,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    let Some(name) = program.function_names.get(&layout.name) else {
+        return Ok(());
+    };
+    if builder
+        .methods
+        .iter()
+        .any(|method| method.name == types::NAME)
+    {
+        return Err(Diagnostic::error(
+            "NTS4009",
+            format!(
+                "`{}` declares a member named `{}`, which this backend reserves for what a \
+                 function is called",
+                layout.name,
+                types::NAME
+            ),
+            origin.location,
+        ));
+    }
+    let class = types::class_name(package, layout);
+    if let FunctionName::Is(text) = name {
+        return named(builder, pool, &class, text, origin);
+    }
+    // A bound function's: `"bound "` and its target's, which is field 0,
+    // where `lower_bind` stores it.
+    let Some(descriptor) = layout.fields.first().and_then(|field| {
+        types::field_descriptor(types::Shape::packaged(program, package), &field.ty)
+    }) else {
+        return Err(Diagnostic::error(
+            "NTS4009",
+            format!(
+                "`{}` is a bound function whose target has no representation",
+                layout.name
+            ),
+            origin.location,
+        ));
+    };
+    let field = hierarchy::field_name(program, layout, 0);
+    let mut code = Code::new(vec![VType::Object(class.clone())], 1);
+    code.load(origin, Kind::Ref, 0);
+    code.get_field(origin, pool, &class, &field, &descriptor);
+    code.invoke_static(
+        origin,
+        pool,
+        "nts/rt/NtsValue",
+        "boundName",
+        "(Ljava/lang/Object;)Ljava/lang/String;",
+    );
+    named_by(builder, pool, code, &class, origin)
+}
+
+/// `nts$name` answering `text`, and `NtsNamed` declared.
+fn named(
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    class: &str,
+    text: &str,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    let mut code = Code::new(vec![VType::Object(class.to_owned())], 1);
+    code.const_string(origin, pool, text);
+    named_by(builder, pool, code, class, origin)
+}
+
+/// `nts$name` as `code` computes it, onto the stack, and `NtsNamed` declared.
+fn named_by(
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    mut code: Code,
+    class: &str,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    code.ret(origin, Some(Kind::Ref));
+    let rendered = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4009",
+            format!("what `{class}` is called could not be written: {error}"),
+            origin.location,
+        )
+    })?;
+    builder.method(
+        access::PUBLIC,
+        types::NAME,
+        "()Ljava/lang/String;",
+        Some(rendered),
+    );
+    builder.interfaces.push(types::NAMED.to_owned());
+    Ok(())
+}
+
+/// A function of this program and its descriptor, by name.
+fn program_function<'p>(
+    package: &str,
+    program: &'p Program,
+    name: &str,
+) -> Option<(&'p nts_core::hir::Func, String)> {
+    let func = program.funcs.iter().find(|func| func.name == name)?;
+    body::signature(package, program, func).map(|signature| (func, signature))
+}
+
+/// `Program.<func>(this)`, leaving its answer on the stack.
+fn call_on_this(
+    code: &mut Code,
+    pool: &mut Pool,
+    package: &str,
+    func: &nts_core::hir::Func,
+    signature: &str,
+    origin: &nts_semantic_schema::Origin,
+) {
+    code.load(origin, Kind::Ref, 0);
+    code.invoke_static(
+        origin,
+        pool,
+        &body::program_class(package),
+        &body::method_name(&func.name),
+        signature,
+    );
 }
 
 /// The `nts.rt` interfaces this layout implements, from the shape of its
@@ -2364,6 +2505,11 @@ fn lambda_adapter(
         })?;
         builder.method(access::PUBLIC, member, face.erased.clone(), Some(body));
     }
+
+    // What it is called: `""`. To the program a Java lambda is an anonymous
+    // function, whose `name` is `""` -- the language's answer, not a guess --
+    // and it prints as one, `function () { [native code] }`.
+    named(&mut builder, &mut pool, &name, "", origin)?;
 
     builder.build(pool).map_err(|error| {
         Diagnostic::error(

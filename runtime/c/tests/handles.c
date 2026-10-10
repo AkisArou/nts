@@ -182,6 +182,7 @@ int main(void) {
                                        NTS_ARRAY_VALUE,
                                        0u,
                                        0,
+                                       NULL,
                                        NULL};
   retained = 0;
   released = 0;

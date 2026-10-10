@@ -481,6 +481,14 @@ pub const PRINTABLE: &str = "nts/rt/NtsPrintable";
 /// [`PRINTABLE`]'s one method, `()Ljava/lang/String;`.
 pub const PRINT: &str = "nts$print";
 
+/// The interface a generated class implements to say what a function of it is
+/// called (`Program::function_names`), through [`NAME`]: `runtime/c` reads the
+/// same answer off a descriptor's `function_name`. See `NtsNamed`.
+pub const NAMED: &str = "nts/rt/NtsNamed";
+
+/// [`NAMED`]'s one method, `()Ljava/lang/String;`.
+pub const NAME: &str = "nts$name";
+
 /// The field an object carries its optional-property presence bits in.
 ///
 /// `runtime/c` puts them in the header's spare flag bits -- 26 of them above

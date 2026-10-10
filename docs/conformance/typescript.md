@@ -2312,7 +2312,7 @@ representation, and implementing them means giving it up:
 | `getPrototypeOf`, `setPrototypeOf`, `__proto__` | there is no chain to read or rewrite |
 | exotic object kinds, the intrinsic graph, realms | an engine's object model; a compiled program has one static layout per type |
 | `Symbol.species`, `Symbol.hasInstance`, `Symbol.toPrimitive`, `Symbol.unscopables` | hooks that redirect built-in operations at run time |
-| `Function.prototype.toString`, observable `.name`/`.length` | a function here is a C function, not an object with properties |
+| `Function.prototype.toString`'s source text, observable `.length` | no source is kept (a function prints as a built-in, with its name -- above); `.length` is not implemented |
 | `Function("source")`, `eval` | a compiler is not in the program |
 
 **TypeScript is what earns the right to omit them.** In a typed program the
@@ -3475,13 +3475,14 @@ generated `nts$print`):
 | an array, a typed array | the elements joined by `,`; `null` and `undefined` empty; an array inside itself empty |
 | `Map`, `Set`, `Promise`, `ArrayBuffer`, `DataView` | `[object Map]` and its kin |
 | a dictionary (`Record`, `Object.create(null)`) | `[object Object]` -- its own descriptor, `nts_desc_table`, so it is also not `instanceof Map` |
-| a closure or a class used as a value | `function () { [native code] }` |
+| a closure or a class used as a value | `function f() { [native code] }`, with its name (below) |
+| a bound function | `function () { [native code] }`, as node prints one |
 | a `Date`, a tuple, an object literal with its own `toString` member | a refusal by name: refused at compile time where the type proves it, at run time where an `unknown` turns out to be one |
 
 **The one deliberate difference from node** is a function: node prints its
 source text, which a compiled program does not keep (`docs/records/0298`).
 nts prints what node and every browser print for a function they have no
-source for -- a built-in's: `function () { [native code] }`. Decided
+source for -- a built-in's: `function f() { [native code] }`. Decided
 2026-10-10.
 
 `console.log` is a different conversion (`util.inspect`: `{ a: 1 }`, not
@@ -3492,6 +3493,38 @@ source for -- a built-in's: `function () { [native code] }`. Decided
 LLVM, the JVM and rc; four blockers became examples with it
 (`a-caught-value-concatenated`, `a-tostring-nobody-declared`,
 `an-error-message-of-any-type`, `unknown-interpolated-into-a-template`).
+
+#### What a function is called (fixed 2026-10-10)
+
+`f.name`, and the name in a function's text. JavaScript names a function where
+it is written: a declaration, method or accessor (`get x`) by its own name; an
+anonymous function or arrow by what it initializes -- a `const`, an identifier
+assigned to (`=`, `??=` and the other logical assignments), an object
+literal's property, a class field, a parameter's or a destructuring default,
+`export default` -- through parentheses and TypeScript's assertions; anything
+else `""`; a bound function `"bound "` and its target's name.
+
+Every rule but the bound one reads the source around the function, and a
+closure class is one per declaration, so the name is a constant of the class:
+data, not code. `hir::Program::function_names` gives each closure class, and
+each class used as a value, its name (`lower/function_names.rs`), a string the
+descriptor points at (`NtsDescriptor.function_name`; on the JVM,
+`NtsNamed.nts$name` returns it), which the runtime reads where the type does
+not say which function a value is. Where it does, `f.name` is the constant. A
+bound function's is the one name the runtime makes: its descriptor carries a
+marker, and the name is `"bound "` and its target's, read through its first
+reference.
+
+**It replaced a wrong answer.** The name used to be read off the function
+*type*'s declaration, and a parameter of type `typeof g` can hold any
+function of `g`'s signature: it answered `"g"` for every function passed.
+
+A method whose key is computed at run time (`{ [k]() {} }` with `k: string`)
+has no name this compiler keeps: `.name` refuses, at compile time where the
+type proves it and by name at run time otherwise.
+
+`examples/a-function-named-where-it-is-written`, every rule, on C, LLVM, the
+JVM and rc.
 
 #### A computed key that is a constant (fixed)
 

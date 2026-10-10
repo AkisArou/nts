@@ -17,8 +17,8 @@ pub use nts_codegen_common::symbols::{c_global, c_identifier, c_member};
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
 use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{
-    BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Printed, Program, Terminator, UnOp,
-    ValueId,
+    BinOp, BlockId, Callee, Func, FunctionName, HirType, ManagedType, OpKind, Printed, Program,
+    Terminator, UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;
@@ -924,6 +924,7 @@ fn refused_by_lowering(program: &Program, emitted: &str) -> bool {
 /// `abi`, which is required rather than defaulted so that no caller gets the
 /// host's answer by omission.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     let mut writer = CodeWriter::new();
     let mut diagnostics = Vec::new();
@@ -1060,9 +1061,16 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     }
     writer.blank(&origin);
 
-    emit_object_descriptors(&mut writer, &origin, program, &defined, &mut diagnostics);
-    emit_descriptors(&mut writer, &origin, &descriptors);
     emit_literals(&mut writer, &origin, &literals);
+    emit_object_descriptors(
+        &mut writer,
+        &origin,
+        program,
+        &defined,
+        &literals,
+        &mut diagnostics,
+    );
+    emit_descriptors(&mut writer, &origin, &descriptors);
     emit_templates(&mut writer, program, &literals);
     if let Err(diagnostic) = emit_globals(&mut writer, program) {
         diagnostics.push(diagnostic);
@@ -1651,6 +1659,7 @@ fn emit_bodies<'a>(
 /// `NtsHeader *` on a value that is already one is a cast to its own type.
 const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_array_to_string", 0),
+    ("nts_bound_function_to_string", 0),
     ("nts_callback_task", 0),
     ("nts_closure_lend", 0),
     ("nts_closure_lend_once", 0),
@@ -2822,6 +2831,15 @@ fn literal_table(program: &Program) -> Vec<String> {
         }
     }
 
+    // And what each function is called (`Program::function_names`), which its
+    // descriptor points at.
+    for name in program.function_names.values() {
+        if let FunctionName::Is(text) = name
+            && !literals.contains(text)
+        {
+            literals.push(text.clone());
+        }
+    }
     literals
 }
 
@@ -3274,12 +3292,15 @@ fn a_closure_with_nothing_to_call(
     })
 }
 
+/// Every layout's descriptor. After the literals, because a descriptor points
+/// at its function's name (`Program::function_names`), which is one.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn emit_object_descriptors(
     writer: &mut CodeWriter,
     origin: &Origin,
     program: &Program,
     defined: &rustc_hash::FxHashSet<String>,
+    literals: &[String],
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let cyclic_layouts = program.cyclic_layouts();
@@ -3425,10 +3446,22 @@ fn emit_object_descriptors(
                 ),
             Some(Printed::Object) => "nts_object_to_string".to_owned(),
             Some(Printed::Function) => "nts_function_to_string".to_owned(),
+            Some(Printed::BoundFunction) => "nts_bound_function_to_string".to_owned(),
             Some(Printed::Refused) | None => "NULL".to_owned(),
         };
+        // And what a function of it is called (`Program::function_names`): a
+        // literal, or the runtime's marker for a bound function that reads
+        // its target's. Null refuses by name.
+        let function_name = match program.function_names.get(&layout.name) {
+            Some(FunctionName::Is(text)) => {
+                format!("(const NtsHeader *)&{}", literal_name(literals, text))
+            }
+            Some(FunctionName::Bound) => "&nts_bound_function_name".to_owned(),
+            None => "NULL".to_owned(),
+        };
         let tail = format!(
-            "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {to_string}",
+            "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {to_string}, \
+             {function_name}",
             erased.len()
         );
         emit_layout_descriptors(writer, origin, program, layout, &name, (&shared, &tail));
@@ -3540,7 +3573,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0, {}, 0u, 0, nts_array_to_string }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0, {}, 0u, 0, nts_array_to_string, NULL }};",
                 descriptor_name(element),
                 // For an array, `erased` is a fact about every element rather
                 // than a table of offsets -- exactly as `references` is. An
@@ -6563,7 +6596,7 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
             writer.line(
                 origin,
                 format!(
-                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL }};"
+                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL }};"
                 ),
             );
         }

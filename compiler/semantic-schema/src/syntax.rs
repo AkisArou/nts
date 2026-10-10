@@ -237,6 +237,7 @@ pub const TAGGED_TEMPLATE_EXPRESSION: u16 = 216;
 pub const TEMPLATE_SPAN: u16 = 240;
 pub const PROPERTY_ACCESS_EXPRESSION: u16 = 212;
 pub const ELEMENT_ACCESS_EXPRESSION: u16 = 213;
+pub const TYPE_ASSERTION_EXPRESSION: u16 = 217;
 pub const PARENTHESIZED_EXPRESSION: u16 = 218;
 pub const AS_EXPRESSION: u16 = 235;
 pub const NON_NULL_EXPRESSION: u16 = 236;
@@ -296,6 +297,7 @@ pub const IMPORT_DECLARATION: u16 = 273;
 /// it binds a local name to the declaring module's, and is not a read of it.
 /// Read off real output: the parent of `nextTick` in exactly that import.
 pub const IMPORT_SPECIFIER: u16 = 277;
+pub const EXPORT_ASSIGNMENT: u16 = 278;
 /// `export { x } from "..."` and `export * from "..."`, and also a plain
 /// `export { x }` with no specifier. Only the forms *with* a specifier name
 /// another module; the rest resolve to nothing, which is what distinguishes

@@ -18,6 +18,10 @@
 //! Two strings joined in order make both failures visible: a swap answers
 //! `right|left`, and a shift moves `undefined` into one of the places. A sum
 //! would hide the swap.
+//!
+//! And the lambda's name, asked from TypeScript: to the program a Java lambda
+//! is an anonymous function, so `""` -- the adapter's `nts$name` -- where a
+//! missing one would refuse.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
@@ -42,6 +46,9 @@ export function callFromTypeScript(f: Pair): void {
 export function callOne(): void {
   callFromTypeScript((a: string, b: string) => {});
 }
+export function nameOf(f: Pair): string {
+  return \"[\" + f.name + \"]\";
+}
 ";
 
 const DRIVE: &str = "\
@@ -52,6 +59,7 @@ public class Drive { public static void main(String[] a) {
       (nts.rt.NtsTextPairCallback) (x, y) -> seen.append(x).append(\"|\").append(y));
   back.call(\"left\", \"right\");
   System.out.println(seen);
+  System.out.println(nts.gen.Program.nameOf(back));
 }}
 ";
 
@@ -121,6 +129,9 @@ fn a_java_caller_passes_arguments_through_the_typed_face_in_order() {
         String::from_utf8_lossy(&ran.stdout),
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "left|right");
+    assert_eq!(
+        String::from_utf8_lossy(&ran.stdout).trim(),
+        "left|right\n[]"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }

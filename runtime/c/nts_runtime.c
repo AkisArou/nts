@@ -484,10 +484,9 @@ NtsString *nts_object_to_string(const NtsHeader *object) {
   return NTS_TEXT("[object Object]");
 }
 
-/* A closure or a class token. Node prints the function's source text, which a
- * compiled program does not keep, so this prints what node and every browser
- * print for a function they have no source for: a built-in's. */
-NtsString *nts_function_to_string(const NtsHeader *object) {
+/* A bound function: a built-in node has no name for, although its `name` is
+ * `"bound f"`. */
+NtsString *nts_bound_function_to_string(const NtsHeader *object) {
   (void)object;
   return NTS_TEXT("function () { [native code] }");
 }
@@ -504,7 +503,8 @@ const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY,
                                     NTS_ARRAY_REFERENCE,
                                     0u,
                                     NULL,
-                                    nts_array_to_string};
+                                    nts_array_to_string,
+                                    NULL};
 /* The same array of references, for one whose elements the compiler proved
    can never lead back to it (`Cycles::array`): never buffered as a cycle
    candidate. Trial deletion still walks through one when a cycle reaches it
@@ -521,13 +521,14 @@ const NtsDescriptor nts_desc_ref_acyclic = {NTS_KIND_ARRAY,
                                             NTS_ARRAY_REFERENCE,
                                             0u,
                                             NULL,
-                                            nts_array_to_string};
+                                            nts_array_to_string,
+                                            NULL};
 const NtsDescriptor nts_desc_string1 = {
-    NTS_KIND_STRING,   1,  0,    0,   0, 0, "string", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL};
+    NTS_KIND_STRING,   1,  0,    0,    0,   0, "string", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL};
 const NtsDescriptor nts_desc_string2 = {
-    NTS_KIND_STRING,   2,  0,    0,   0, 0, "string", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL};
+    NTS_KIND_STRING,   2,  0,    0,    0,   0, "string", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL};
 
 static const NtsDescriptor nts_desc_bigint = {NTS_KIND_BIGINT,
                                               (uint32_t)sizeof(NtsBigIntBox),
@@ -540,6 +541,7 @@ static const NtsDescriptor nts_desc_bigint = {NTS_KIND_BIGINT,
                                               0,
                                               NTS_ARRAY_UNKNOWN,
                                               0u,
+                                              NULL,
                                               NULL,
                                               NULL};
 
@@ -894,8 +896,8 @@ void nts_register_holders(uint32_t family, const NtsHolders *holders) {
  * this descriptor in its header, and the collector recognises it by address.
  * Cyclic, since holding is what puts it in a cycle. */
 const NtsDescriptor nts_holder_descriptor = {
-    NTS_KIND_OBJECT,   0,  0,    1,   0, 0, "holder", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL};
+    NTS_KIND_OBJECT,   0,  0,    1,    0,   0, "holder", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL};
 
 static bool nts_is_holder(const NtsHeader *object) {
   return object->descriptor == &nts_holder_descriptor;
@@ -2192,7 +2194,8 @@ static const NtsDescriptor nts_desc_number_array = {NTS_KIND_ARRAY,
                                                     NTS_ARRAY_FLOAT,
                                                     0u,
                                                     NULL,
-                                                    nts_array_to_string};
+                                                    nts_array_to_string,
+                                                    NULL};
 
 NtsArray *nts_array_of_numbers(double length) {
   return nts_array_new(&nts_desc_number_array, length);
@@ -4050,6 +4053,63 @@ NtsString *nts_array_to_string(const NtsHeader *object) {
   return out;
 }
 
+const NtsHeader nts_bound_function_name = {0};
+
+/* What a function is called, off its descriptor: `""` is a name, and a null
+ * entry is a refusal, never a guess. Owned, as every `NtsString *` a helper
+ * returns is: the compiler's names are immortal, and a bound function's is
+ * made here. */
+static NtsString *nts_function_name_of(const NtsHeader *function) {
+  const NtsDescriptor *descriptor = function ? function->descriptor : NULL;
+  const NtsHeader *name = descriptor ? descriptor->function_name : NULL;
+  if (name == &nts_bound_function_name && descriptor->references > 0) {
+    const NtsHeader *target =
+        *(NtsHeader *const *)((const char *)function + descriptor->offsets[0]);
+    NtsString *of = nts_function_name_of(target);
+    NtsString *prefix = NTS_TEXT("bound ");
+    NtsString *out = nts_concat(prefix, of);
+    nts_release((NtsHeader *)prefix);
+    nts_release((NtsHeader *)of);
+    return out;
+  }
+  if (name && name != &nts_bound_function_name) {
+    nts_retain((NtsHeader *)name);
+    return (NtsString *)name;
+  }
+  fprintf(stderr,
+          NTS_REFUSED "the name of `%s`, whose type does not say what it is "
+                      "called\n",
+          descriptor && descriptor->name ? descriptor->name : "?");
+  abort();
+}
+
+NtsString *nts_function_name(NtsValue function) {
+  return nts_function_name_of(nts_value_reference(function));
+}
+
+/* A closure or a class token. Node prints the function's source text, which a
+ * compiled program does not keep, so this prints what node and every browser
+ * print for a function they have no source for: a built-in's, with its name. */
+NtsString *nts_function_to_string(const NtsHeader *object) {
+  static const char head[] = "function ";
+  static const char tail[] = "() { [native code] }";
+  NtsString *name = nts_function_name_of(object);
+  int wide = (name->flags & NTS_TWO_BYTE) != 0;
+  uint32_t at = sizeof head - 1u;
+  uint32_t total = at + name->length + (uint32_t)(sizeof tail - 1u);
+  NtsString *out = nts_str_build(NULL, total, wide);
+  nts_join_put(out, 0, head, at, wide);
+  nts_copy_units(out, at, name, wide);
+  nts_join_put(out, at + name->length, tail, sizeof tail - 1u, wide);
+  if (wide) {
+    NTS_ELEMENTS(out, uint16_t)[total] = 0;
+  } else {
+    NTS_ELEMENTS(out, unsigned char)[total] = 0;
+  }
+  nts_release((NtsHeader *)name);
+  return out;
+}
+
 static inline NtsArray *nts_array_slice_counted(const NtsArray *a, double from,
                                                 double to,
                                                 void *(*retain)(void *)) {
@@ -5456,6 +5516,7 @@ static const NtsDescriptor nts_desc_boxed = {NTS_KIND_BOXED,
                                              0,
                                              NTS_ARRAY_UNKNOWN,
                                              0u,
+                                             NULL,
                                              NULL,
                                              NULL};
 
@@ -7036,7 +7097,8 @@ static const NtsDescriptor nts_desc_map = {NTS_KIND_MAP,
                                            NTS_ARRAY_UNKNOWN,
                                            0u,
                                            NULL,
-                                           nts_map_to_string};
+                                           nts_map_to_string,
+                                           NULL};
 
 /* A table: an object used as a dictionary (`Record<string, T>`, an index
  * signature, `Object.create(null)`). The same storage as a `Map` and a
@@ -7056,7 +7118,8 @@ static const NtsDescriptor nts_desc_table = {NTS_KIND_MAP,
                                              NTS_ARRAY_UNKNOWN,
                                              0u,
                                              NULL,
-                                             nts_object_to_string};
+                                             nts_object_to_string,
+                                             NULL};
 
 static NtsMap *nts_map_alloc(const NtsDescriptor *descriptor, uint32_t kind,
                              bool holds_values) {
@@ -7102,6 +7165,7 @@ static const NtsDescriptor nts_desc_date = {NTS_KIND_OBJECT,
                                             0,
                                             NTS_ARRAY_UNKNOWN,
                                             0u,
+                                            NULL,
                                             NULL,
                                             NULL};
 
@@ -7159,7 +7223,8 @@ static const NtsDescriptor nts_desc_buffer = {NTS_KIND_BUFFER,
                                               NTS_ARRAY_UNKNOWN,
                                               0u,
                                               NULL,
-                                              nts_buffer_to_string};
+                                              nts_buffer_to_string,
+                                              NULL};
 
 /* A byte count, from a double the lowering has already made legal.
  *
@@ -7324,7 +7389,8 @@ static const NtsDescriptor nts_desc_dataview = {NTS_KIND_OBJECT,
                                                 NTS_ARRAY_UNKNOWN,
                                                 0u,
                                                 NULL,
-                                                nts_dataview_to_string};
+                                                nts_dataview_to_string,
+                                                NULL};
 
 static NtsDataView *nts_dataview_make(NtsBuffer *buffer, double byte_offset,
                                       double byte_length, bool tracks) {
@@ -7622,7 +7688,7 @@ static const NtsDescriptor nts_desc_view = {
     /* One reference, at offset zero: the buffer. Cyclic because a view is an
        ordinary managed object and a program may put one in a cycle. */
     (const uint32_t[]){(uint32_t)offsetof(NtsView, buffer)}, 0, "TypedArray",
-    0u, 0, NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string};
+    0u, 0, NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string, NULL};
 
 /* Beside the descriptor it compares against, rather than with the other
  * `nts_is_*` helpers: a file-scope `static const` has no forward declaration
@@ -8168,6 +8234,7 @@ static const NtsDescriptor nts_desc_symbol = {NTS_KIND_SYMBOL,
                                               0,
                                               NTS_ARRAY_UNKNOWN,
                                               0u,
+                                              NULL,
                                               NULL,
                                               NULL};
 
@@ -9287,6 +9354,7 @@ static const NtsDescriptor nts_desc_reaction = {NTS_KIND_OBJECT,
                                                 NTS_ARRAY_UNKNOWN,
                                                 0u,
                                                 NULL,
+                                                NULL,
                                                 NULL};
 
 /* The settlement payload is *not* here: it is an erased slot, listed below, and
@@ -9313,7 +9381,8 @@ static const NtsDescriptor nts_desc_promise = {NTS_KIND_OBJECT,
                                                NTS_ARRAY_UNKNOWN,
                                                0u,
                                                NULL,
-                                               nts_promise_to_string};
+                                               nts_promise_to_string,
+                                               NULL};
 
 bool nts_is_promise(NtsValue value) {
   if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
@@ -9665,6 +9734,7 @@ static const NtsDescriptor nts_desc_combinator = {
     NTS_ARRAY_UNKNOWN,
     0u,
     NULL,
+    NULL,
     NULL};
 
 static const uint32_t nts_combinator_slot_offsets[] = {
@@ -9684,6 +9754,7 @@ static const NtsDescriptor nts_desc_combinator_slot = {
     0,
     NTS_ARRAY_UNKNOWN,
     0u,
+    NULL,
     NULL,
     NULL};
 
@@ -9855,6 +9926,7 @@ static const NtsDescriptor nts_desc_adoption = {NTS_KIND_OBJECT,
                                                 NTS_ARRAY_UNKNOWN,
                                                 0u,
                                                 NULL,
+                                                NULL,
                                                 NULL};
 
 static void nts_adoption_drop(void *state) { nts_release((NtsHeader *)state); }
@@ -9956,6 +10028,7 @@ static const NtsDescriptor nts_desc_callback = {NTS_KIND_OBJECT,
                                                 0,
                                                 NTS_ARRAY_UNKNOWN,
                                                 0u,
+                                                NULL,
                                                 NULL,
                                                 NULL};
 

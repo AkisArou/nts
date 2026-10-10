@@ -60,6 +60,7 @@ static const NtsDescriptor desc_closure = {NTS_KIND_OBJECT,
                                            NTS_ARRAY_UNKNOWN,
                                            0u,
                                            NULL,
+                                           NULL,
                                            NULL};
 
 static Closure *closure(const char *label) {
@@ -142,6 +143,7 @@ static const NtsDescriptor desc_tick = {NTS_KIND_OBJECT,
                                         0,
                                         NTS_ARRAY_UNKNOWN,
                                         0u,
+                                        NULL,
                                         NULL,
                                         NULL};
 

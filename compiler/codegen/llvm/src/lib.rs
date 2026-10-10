@@ -56,7 +56,8 @@ use std::fmt::Write as _;
 
 use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{
-    BinOp, BlockId, Callee, Func, HirType, OpKind, Printed, Program, Terminator, UnOp, ValueId,
+    BinOp, BlockId, Callee, Func, FunctionName, HirType, OpKind, Printed, Program, Terminator,
+    UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
 
@@ -603,6 +604,11 @@ fn literals(program: &Program) -> String {
     let _ = writeln!(out, "%struct.NtsTask = type {{ ptr, ptr, ptr }}");
     let _ = writeln!(out, "@nts_desc_string1 = external constant %NtsDescriptor");
     let _ = writeln!(out, "@nts_desc_string2 = external constant %NtsDescriptor");
+    // The `function_name` of a bound function whose target is a value.
+    let _ = writeln!(
+        out,
+        "@nts_bound_function_name = external constant %NtsHeader"
+    );
     let table = literal_table(program);
     for (index, text) in table.iter().enumerate() {
         let units: Vec<u16> = text.encode_utf16().collect();
@@ -676,6 +682,15 @@ fn literal_table(program: &Program) -> Vec<String> {
             }
         }
     }
+    // And what each function is called (`Program::function_names`), which its
+    // descriptor points at -- after the program's own, as the C backend does.
+    for name in program.function_names.values() {
+        if let FunctionName::Is(text) = name
+            && !table.contains(text)
+        {
+            table.push(text.clone());
+        }
+    }
     table
 }
 
@@ -693,9 +708,11 @@ fn literal_table(program: &Program) -> Vec<String> {
 /// Zero there refuses, which is how it went unseen. The type now carries every
 /// field, `foreign` and `foreign_slots` after `element` as in the runtime.
 ///
-/// And `to_string` last, how an object of the type prints (`Program::printed`).
-const DESCRIPTOR_TYPE: &str =
-    "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, ptr, i32, i32, ptr, ptr }";
+/// And `to_string`, how an object of the type prints (`Program::printed`), and
+/// `function_name` last, what a function of it is called
+/// (`Program::function_names`).
+const DESCRIPTOR_TYPE: &str = "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, \
+     ptr, i32, i32, ptr, ptr, ptr }";
 
 /// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
 const KIND_OBJECT: u32 = 2;
@@ -764,6 +781,7 @@ fn descriptor_kind(name: &str) -> u32 {
 /// `reference_fields` are `nts_core::hir`'s, and the offsets are the layout
 /// engine's. Only the rendering is the backend's, which is what a backend is.
 fn descriptors(program: &Program) -> String {
+    let literals = literal_table(program);
     let mut out = String::new();
     let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
     let cyclic = program.cyclic_layouts();
@@ -837,16 +855,27 @@ fn descriptors(program: &Program) -> String {
             references.len()
         );
         // `element` is `NTS_ARRAY_UNKNOWN` for an object, as in C. How it
-        // prints (`Program::printed`) last, null where nothing says how, which
-        // the runtime refuses by name.
+        // prints (`Program::printed`) and what a function of it is called
+        // (`Program::function_names`) last, null where nothing says, which the
+        // runtime refuses by name.
         let to_string = match program.printed.get(&layout.name) {
             Some(Printed::By(function)) => format!("ptr {}", symbol(function)),
             Some(Printed::Object) => "ptr @nts_object_to_string".to_owned(),
             Some(Printed::Function) => "ptr @nts_function_to_string".to_owned(),
+            Some(Printed::BoundFunction) => "ptr @nts_bound_function_to_string".to_owned(),
             Some(Printed::Refused) | None => "ptr null".to_owned(),
         };
+        let function_name = match program.function_names.get(&layout.name) {
+            Some(FunctionName::Is(text)) => {
+                let index = literals.iter().position(|known| known == text).unwrap_or(0);
+                format!("ptr @nts_str_{index}")
+            }
+            Some(FunctionName::Bound) => "ptr @nts_bound_function_name".to_owned(),
+            None => "ptr null".to_owned(),
+        };
         let tail = format!(
-            "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {to_string}",
+            "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {to_string}, \
+             {function_name}",
             erased.len()
         );
         let _ = writeln!(
@@ -888,7 +917,8 @@ fn array_descriptors(out: &mut String, program: &Program) {
         let _ = writeln!(
             *out,
             "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
-             ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot, ptr null }}",
+             ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot, ptr null, \
+             ptr null }}",
             u32::from(family.holds_closures()),
             nts_codegen_common::counting::ARRAY_FOREIGN
         );
@@ -931,7 +961,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
                 *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
                  i32 0, i32 0, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
-                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string }}",
+                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null }}",
                 shape.size,
                 nts_codegen_common::counting::array_element(element)
             );
@@ -2359,6 +2389,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     // called by the program, so `externals` cannot see them.
     "nts_object_to_string",
     "nts_function_to_string",
+    "nts_bound_function_to_string",
     "nts_array_to_string",
     // The no-match arm of an open field chain. Declared always, because the
     // chain is emitted wherever a slot has several layouts and a call with no

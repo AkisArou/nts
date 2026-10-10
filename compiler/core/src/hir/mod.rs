@@ -2793,12 +2793,28 @@ pub enum Printed {
     By(String),
     /// `"[object Object]"`: an object whose prototype chain adds nothing.
     Object,
-    /// A closure or a class token: a function's text.
+    /// A closure or a class token: a function's text, `function NAME() {
+    /// [native code] }`, with the name [`Program::function_names`] gives it.
     Function,
+    /// A bound function: `function () { [native code] }`, with no name. Node
+    /// prints a bound function as a built-in it has no name for, although its
+    /// `name` is `"bound f"`.
+    BoundFunction,
     /// Nothing says how, so the runtime stops by name: a tuple, a frame, an
     /// object literal whose own `toString` this compiler cannot call through
     /// its type.
     Refused,
+}
+
+/// What a function of a layout is called. See [`Program::function_names`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FunctionName {
+    /// A name the source fixes, `""` included.
+    Is(String),
+    /// A bound function whose target is known only at run time: `"bound "` and
+    /// the name of the function it holds in field 0, where `lower_bind` stores
+    /// it -- its first reference, which is how the runtime finds it.
+    Bound,
 }
 
 /// A lowered program.
@@ -2833,6 +2849,19 @@ pub struct Program {
     /// (`NtsDescriptor.to_string`). Decided once, after lowering, for every
     /// layout, so the backends write one answer rather than each deriving it.
     pub printed: std::collections::BTreeMap<String, Printed>,
+    /// What a function value of each layout is called, by layout name. The
+    /// runtime reads it off the descriptor (`NtsDescriptor.function_name`; on
+    /// the JVM, `NtsNamed.nts$name`) for a `.name` the type does not settle and
+    /// for a function's text.
+    ///
+    /// **A layout and not a value**, because a closure class is one per
+    /// declaration and JavaScript names a function by where it is written:
+    /// the declaration's own name, or the binding, property, field or
+    /// parameter an anonymous one is the initializer of. So it is data, a
+    /// string beside the descriptor, and not a function. A layout with no
+    /// entry -- a method whose key is computed at run time -- stops by name
+    /// when asked.
+    pub function_names: std::collections::BTreeMap<String, FunctionName>,
     /// See [`Program::erased_call_slot`]. The entry that **records an uncaught
     /// `throw` and returns** rather than ending the program, which a call inside a
     /// `try` takes when it knows the signature and not the class.

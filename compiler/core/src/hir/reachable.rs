@@ -192,6 +192,13 @@ fn printed_through_an_erasure<'p>(
         .collect()
 }
 
+/// Runtime helpers that read what they are handed and call none of it, so
+/// handing them a value keeps none of its methods. `nts_function_name` reads a
+/// name off the descriptor -- data, `Program::function_names` -- and keeping
+/// the methods of every function it might be handed kept a signature's
+/// declarations, which changed the classes the JVM emits for it.
+const READS_ONLY: &[&str] = &["nts_function_name"];
+
 /// The values an operation hands to the runtime, which calls their methods back
 /// later: an external call's arguments, a bridge's closure, a subscribed reaction.
 ///
@@ -213,6 +220,10 @@ fn printed_through_an_erasure<'p>(
 #[must_use]
 pub fn called_back(kind: &OpKind) -> &[super::ValueId] {
     match kind {
+        OpKind::Call {
+            callee: Callee::External(name),
+            ..
+        } if READS_ONLY.contains(&name.as_str()) => &[],
         OpKind::Call {
             callee: Callee::External(_) | Callee::Native(_),
             args,

@@ -501,6 +501,7 @@ static SIGNATURES: &[Declared] = &[
         &[None, Some(HirType::Float { bits: 64 })],
         None,
     ),
+    ("nts_function_name", &[None], None),
     (
         "nts_gobject_boxed",
         &[

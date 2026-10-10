@@ -284,6 +284,20 @@ typedef struct NtsDescriptor {
    * from their tags. */
   /* An `NtsString *`, which is an `NtsHeader *` declared below. */
   struct NtsHeader *(*to_string)(const struct NtsHeader *object);
+  /* What a function of this type is called: `f.name` where the type does not
+   * settle it, and the name in a function's text. A string the compiler
+   * writes beside the descriptor for every closure class and every class used
+   * as a value (`Program::function_names`), since JavaScript names a function
+   * where it is written and a closure class is one per declaration.
+   *
+   * `&nts_bound_function_name` marks a bound function whose target is known
+   * only at run time: its name is `"bound "` and its target's, and the target
+   * is its first reference (`lower_bind` stores it in field 0).
+   *
+   * **Null refuses by name, as `to_string` does**: every function the compiler
+   * makes has one -- `""` for an anonymous one -- so a null is a method whose
+   * key is computed at run time, or a type that is not a function at all. */
+  const struct NtsHeader *function_name;
 } NtsDescriptor;
 
 /* What an array's slots hold.
@@ -2583,11 +2597,18 @@ NtsString *nts_string_from_code_point_into(NtsHeader *into, double point);
  * have refused, and it aborts rather than guessing. */
 NtsString *nts_value_to_string(NtsValue value);
 /* What a descriptor's `to_string` points at, for the kinds the compiler emits:
- * an object whose prototype chain adds nothing, a closure or a class token,
- * and an array. */
+ * an object whose prototype chain adds nothing, a closure or a class token, a
+ * bound function, and an array. */
 NtsString *nts_object_to_string(const NtsHeader *object);
 NtsString *nts_function_to_string(const NtsHeader *object);
+NtsString *nts_bound_function_to_string(const NtsHeader *object);
 NtsString *nts_array_to_string(const NtsHeader *object);
+/* `f.name` where the type does not settle it: the function's descriptor's
+ * `function_name`. */
+NtsString *nts_function_name(NtsValue function);
+/* The `function_name` of a bound function whose target is known only at run
+ * time. A marker, compared by address and never read as a string. */
+extern const NtsHeader nts_bound_function_name;
 /* An argument of `console.log`, as node's `util.inspect` spells one at the top
  * level: `String(v)`, except that negative zero is `-0` and not `0`. A typed
  * number is told apart in the lowering; this is the same rule for a value
