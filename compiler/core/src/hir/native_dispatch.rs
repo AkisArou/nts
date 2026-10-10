@@ -131,10 +131,10 @@ pub(super) fn plan(program: &mut Program) {
     program.native_dispatch = Some(table);
 }
 
-/// A conservative emission view, not another whole-program DCE. Only table
-/// bodies can be omitted; every other function starts as a root. Projected
-/// rows, public/foreign entries and printing keep their bodies, and a walk
-/// keeps direct callees and the targets codegen names inside native bridges.
+/// A conservative emission view, not another whole-program DCE. Only unread
+/// table bodies and their callees can be omitted; unrelated functions stay.
+/// Projected rows, public/foreign entries and printing keep their bodies, and
+/// a walk keeps direct callees and targets codegen names inside native bridges.
 fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String> {
     let mut candidates = FxHashSet::default();
     let mut pending = Vec::new();
@@ -150,6 +150,21 @@ fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String
             }
         }
     }
+    let by_name: FxHashMap<&str, &Func> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func))
+        .collect();
+    let layouts = super::fields::LayoutIndex::build(program);
+    // A removed uniform entry can be the only caller of a non-table helper,
+    // such as the written closure's raising body. Include those descendants
+    // before rooting the unrelated code; any real use below keeps them back.
+    let candidates = follow_calls(
+        program,
+        &by_name,
+        &layouts,
+        candidates.into_iter().collect(),
+    );
     pending.extend(
         program
             .funcs
@@ -182,12 +197,19 @@ fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String
                 _ => None,
             }),
     );
-    let by_name: FxHashMap<&str, &Func> = program
-        .funcs
-        .iter()
-        .map(|func| (func.name.as_str(), func))
-        .collect();
-    let layouts = super::fields::LayoutIndex::build(program);
+    let kept = follow_calls(program, &by_name, &layouts, pending);
+    candidates
+        .difference(&kept)
+        .map(|name| (*name).to_owned())
+        .collect()
+}
+
+fn follow_calls<'p>(
+    program: &'p Program,
+    by_name: &FxHashMap<&str, &'p Func>,
+    layouts: &super::fields::LayoutIndex,
+    mut pending: Vec<&'p str>,
+) -> FxHashSet<&'p str> {
     let mut kept = FxHashSet::default();
     while let Some(name) = pending.pop() {
         if !kept.insert(name) {
@@ -223,10 +245,7 @@ fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String
             }
         }
     }
-    candidates
-        .difference(&kept)
-        .map(|name| (*name).to_owned())
-        .collect()
+    kept
 }
 
 #[cfg(test)]
@@ -391,7 +410,9 @@ mod tests {
         call(&mut second, "first");
         let mut program = Program {
             funcs: vec![first, second, internal("other")],
-            layouts: vec![row("entries", &[(3, "first"), (7, "second")])],
+            // The second body is not a table entry: it is reached only from
+            // the discarded entry, like a closure's written raising body.
+            layouts: vec![row("entries", &[(3, "first")])],
             ..Program::default()
         };
         assert_eq!(program.native_funcs().count(), 3, "raw HIR stays unchanged");
