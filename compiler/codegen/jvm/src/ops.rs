@@ -2977,8 +2977,8 @@ impl Emitter<'_> {
         Err(refuse(
             self.func,
             &format!(
-                "reading an erased value back as `{}`, which other classes declare they \
-                 implement without extending -- it carries state, so this backend emits it \
+                "reading an erased value back as `{}`, which other classes declare, or fit \
+                 by shape, without extending -- it carries state, so this backend emits it \
                  as a class rather than an interface, and the cast would throw",
                 target.name
             ),

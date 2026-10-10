@@ -1566,15 +1566,14 @@ fn number_slots(hierarchy: &mut Hierarchy) {
 /// Inferred for the whole program before any slot is numbered, so everything
 /// after -- `overridden`, the slot loop, the tables, `Layout::interfaces` and so
 /// the JVM's `implements` list and `interface_fields`' guard -- sees an inferred
-/// edge as it sees a written one. A class fits when every member the interface
-/// declares is one of the class's, an optional one excepted, and every method
-/// has the same arity and the same representation for each parameter and the
-/// result. The slot is declared with one signature, and a method whose ABI
-/// differs would need an adapter this does not make. TypeScript's own rule is
-/// looser -- fewer parameters, a narrower result -- and one class it accepts
-/// that this does not leaves the whole interface as it was, for the reason the
-/// loop below gives: refused at a call through it, until something writes
-/// `implements`.
+/// edge as it sees a written one. Every declared member must be present,
+/// including optional methods. Each method either carries the slot's ABI or
+/// admits a projection: fewer inputs, widening into erased storage, an
+/// `extends` upcast, a narrower result, or void becoming undefined. The slot
+/// keeps the interface's signature; `virtual_returns` fills it with an adapter.
+/// A candidate needing an unchecked narrowing or a structural storage cast
+/// blocks inference for the whole interface, for the reason the loop below
+/// gives: otherwise dispatch on that candidate could reach an empty entry.
 ///
 /// An edge for a class no value brings to the interface fills a table entry
 /// nothing reads. Measured over the runtime on 2026-10-10: 115 more functions
@@ -1590,32 +1589,6 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
     let properties = |ty: TypeId| match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Object { properties } => Some(properties),
         _ => None,
-    };
-    let signature = |ty: TypeId| match snapshot.types.get(ty.0 as usize)?.kind {
-        TypeKind::Function(at) => snapshot.signatures.get(at.0 as usize),
-        _ => None,
-    };
-    let represented_alike = |one: TypeId, other: TypeId| {
-        let one = probe.represent(one);
-        one.is_some() && one == probe.represent(other)
-    };
-    let same_abi = |mine: TypeId, wanted: TypeId| {
-        let (Some(mine), Some(wanted)) = (signature(mine), signature(wanted)) else {
-            return false;
-        };
-        mine.type_parameters.is_empty()
-            && wanted.type_parameters.is_empty()
-            && mine.parameters.len() == wanted.parameters.len()
-            && mine
-                .parameters
-                .iter()
-                .zip(&wanted.parameters)
-                .all(|(one, other)| {
-                    one.rest == other.rest
-                        && one.optional == other.optional
-                        && represented_alike(one.ty, other.ty)
-                })
-            && represented_alike(mine.return_type, wanted.return_type)
     };
     // Sorted, so one compiler on one input infers in one order.
     let mut faces: Vec<TypeId> = hierarchy
@@ -1681,7 +1654,7 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
                 None => !methods.contains(&member.name),
                 Some(found) if methods.contains(&member.name) => {
                     hierarchy.declaring(*class, &member.name).is_some()
-                        && same_abi(found.ty, member.ty)
+                        && interfaces::fits(probe, hierarchy, found, member)
                 }
                 Some(_) => true,
             });
@@ -15191,6 +15164,11 @@ pub fn lower_with(
         &mut wanted,
     );
 
+    declare_interface_methods(
+        &hierarchy,
+        &mut shared.builder(snapshot, foreign, Copy::default()),
+        &mut lowered.program,
+    );
     lay_out_held_signatures(snapshot, &mut lowered.program);
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
     declare_uniform_entries(snapshot, &hierarchy, &mut lowered.program, &shared);
@@ -15262,18 +15240,16 @@ pub fn lower_with(
     lowered
 }
 
-/// The last three steps of the dispatch tables, in the one order that works:
-/// the interfaces' declarations, then the raising slots filled from them, then
-/// every member slot's results made to agree.
+/// Complete the tables after declarations: fill raising slots, then adapt
+/// interface entries and make class-chain results agree.
 fn finish_dispatch_tables(
     snapshot: &SemanticSnapshot,
     hierarchy: &Hierarchy,
     program: &mut Program,
 ) {
-    declare_interface_methods(hierarchy, program);
     // **After the interface declarations, and the order is the whole of it.** A member's
     // raising slot is filled from each layout's own ordinary entry, and for an *interface*
-    // root that entry is a declaration this pass has only just made -- so filling first
+    // root that entry needs its interface declaration -- so filling first
     // found no `Sink#take` to suffix, fell back to the ordinary name, and left
     // `Sink#take@raises` reachable from nothing for `reachable::prune` to remove. The
     // backend then said `NTS2006 no declaration for `Sink#take@raises` to take a signature
@@ -16014,17 +15990,22 @@ fn signature_key(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Vec<TypeId>
 /// signature the program declares, that nothing calls directly, and that every
 /// reachable receiver overrides.
 ///
-/// # The signature comes from an implementer
-///
-/// Rather than from the checker, for the reason the closure case gives: every
-/// implementer must agree with the others about the descriptor or dispatch
-/// through the interface is meaningless, and taking the signature from one of
-/// them makes that agreement *checkable* -- a backend comparing an override
-/// against what it overrides sees a real disagreement, where a signature
-/// synthesized here would be a third opinion none of them held.
-fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
+/// The interface declares the signature. A body supplies the receiver and
+/// provenance used by the existing shell builder; adapters reconcile its ABI
+/// afterward. Referenced callable layouts must be materialized before callable
+/// entries are completed. Existing rest/generic declarations retain their
+/// previous shell path; those contracts never enable structural inference.
+fn declare_interface_methods(
+    hierarchy: &Hierarchy,
+    builder: &mut FuncBuilder,
+    program: &mut Program,
+) {
+    let existing_layouts = program.layouts.len();
+    builder.layouts = std::mem::take(&mut program.layouts);
     let mut declare: Vec<Func> = Vec::new();
-    for (root, member) in hierarchy.slots.keys() {
+    let mut slots: Vec<_> = hierarchy.slots.iter().collect();
+    slots.sort_unstable_by_key(|(_, slot)| **slot);
+    for ((root, member), _) in slots {
         let Some(owner) = hierarchy.name.get(root) else {
             continue;
         };
@@ -16042,8 +16023,7 @@ fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
         {
             continue;
         }
-        // An implementer's own, whichever the walk reaches first -- they agree
-        // or the program does not typecheck.
+        // A lowered body proves that a reachable implementer exists.
         let Some(body) = program.funcs.iter().find(|func| {
             func.name.ends_with(&format!("#{member}"))
                 && !func.abstract_declaration
@@ -16076,15 +16056,22 @@ fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
             ));
             continue;
         };
-        declare.push(declaration_shell(
-            body,
-            &declared,
-            HirType::Managed(ManagedType::Object(*root)),
-        ));
+        let shell = interfaces::declaration(builder, *root, member, body, &declared)
+            .unwrap_or_else(|| {
+                declaration_shell(
+                    body,
+                    &declared,
+                    HirType::Managed(ManagedType::Object(*root)),
+                )
+            });
+        declare.push(shell);
     }
     // Sorted, so one compiler on one input emits them in one order.
     declare.sort_by(|a, b| a.name.cmp(&b.name));
     program.funcs.extend(declare);
+    let added = builder.layouts.split_off(existing_layouts);
+    program.layouts = std::mem::take(&mut builder.layouts);
+    collect_layouts(program, added);
     record_unimplemented_interfaces(hierarchy, program);
 }
 
@@ -80229,7 +80216,12 @@ mod tests {
             written_return_elements: Vec::new(),
         });
 
-        super::declare_interface_methods(&hierarchy, &mut program);
+        let snapshot = nts_semantic_schema::SemanticSnapshot::default();
+        super::declare_interface_methods(
+            &hierarchy,
+            &mut super::FuncBuilder::probe(&snapshot),
+            &mut program,
+        );
         let shells = program
             .funcs
             .iter()
@@ -80452,6 +80444,7 @@ mod bigint;
 mod function_names;
 mod gobject;
 mod initialization;
+mod interfaces;
 mod native_memory;
 mod printed;
 mod virtual_returns;

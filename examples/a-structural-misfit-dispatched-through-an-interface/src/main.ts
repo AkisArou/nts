@@ -14,8 +14,8 @@
 // What closes it is an adapter: an entry for `Wide` in `Sink`'s slot that
 // takes the slot's `number` and calls `Wide#take` with it. Interfaces
 // satisfied by shape (`docs/interfaces-by-shape.md`, Part 1) infer the edge
-// only where every class with an interface's members fits it exactly, so that
-// it does not open this anywhere it was not already open.
+// where every candidate either fits or admits an adapter, so every class
+// that can arrive through the interface has an entry.
 //
 // Found on 2026-10-10 by the JVM lane's probe of Part 1.
 interface Sink {
@@ -38,13 +38,13 @@ function sink(s: Sink, n: number): number {
   return s.take(n);
 }
 
-function throughTheArray(n: number): string {
+export function throughTheArray(n: number): string {
   const all: Sink[] = [new Wide(), new Exact()];
   let total = 0;
   for (const s of all) total = total * 100 + s.take(n);
   return String(total);
 }
 
-observe("a Wide kept as itself", String(sink(new Wide(), 3)));
-observe("through the array", throughTheArray(3));
-done();
+export function keptAsItself(n: number): number {
+  return sink(new Wide(), n);
+}

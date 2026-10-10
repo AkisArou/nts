@@ -23,11 +23,12 @@
 //! # The two places a slot's signature was decided wrongly
 //!
 //! - **An interface's declaration was its first implementer's.**
-//!   `declare_interface_methods` copies a body's signature, return included, so
+//!   `declare_interface_methods` copied a body's signature, return included, so
 //!   `interface Producer { read(): unknown }` answered `managed<str>` whenever
 //!   `Optional` happened to be lowered before `Fallback`, and the C call site
 //!   assigned an `NtsString *` to an `NtsValue`: clang refused the program. The
-//!   declaration of a bridged slot returns `Erased` whichever body it came from.
+//!   declaration now uses the interface's contract, and a structural adapter
+//!   reconciles parameters and results before that body enters the table.
 //! - **A class chain is one slot entered through two signatures.** `Base#read():
 //!   unknown` and `Sub#read(): string | undefined` share the root's slot, and a
 //!   call through a `Sub` names `Sub#read`. Once every entry in the slot answers
@@ -49,7 +50,10 @@ use rustc_hash::FxHashMap;
 use nts_semantic_schema::{GeneratedReason, Origin, SemanticSnapshot, TypeId, TypeKind};
 
 use super::{Hierarchy, without_the_raising_suffix};
-use crate::hir::{Absent, Block, Callee, Func, HirType, Op, OpKind, Program, Terminator, ValueId};
+use crate::hir::{
+    Absent, Block, Callee, Func, HirType, ManagedType, Op, OpKind, Param, Program, Terminator,
+    ValueId,
+};
 
 /// The suffix a bridge takes after the entry it answers for.
 const ERASED_SUFFIX: &str = "@erased";
@@ -62,6 +66,7 @@ const ERASED_SUFFIX: &str = "@erased";
 /// bridges are added) and, per slot, each entry with the layouts holding it
 /// (`slot_tables`).
 pub(super) fn bridge(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program: &mut Program) {
+    adapt_interfaces(snapshot, hierarchy, program);
     let calls = virtual_calls(program);
     let owners = owners_by_name(hierarchy);
     let tables = slot_tables(program);
@@ -198,9 +203,33 @@ fn crosses(answer: &HirType) -> bool {
 /// answer erased -- `undefined` where it answers nothing, as JavaScript says a
 /// call to such a function does.
 fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
+    projected_bridge(
+        name,
+        target,
+        &Projection {
+            params: target.params.clone(),
+            returns: HirType::Erased,
+            arguments_absent: Vec::new(),
+            result_absent: absent,
+        },
+    )
+}
+
+/// One slot's calling convention, independent of the body it reaches.
+#[derive(Debug)]
+struct Projection {
+    params: Vec<Param>,
+    returns: HirType,
+    arguments_absent: Vec<Absent>,
+    result_absent: Absent,
+}
+
+/// Both return-only bridges and structural adapters use this body builder.
+/// It introduces only widening conversions licensed before table construction.
+fn projected_bridge(name: String, target: &Func, projection: &Projection) -> Func {
     let origin = Origin::generated(target.origin.location, GeneratedReason::AbiProjection);
     // A `Param` op *is* the signature in this IR, and value `i` is parameter `i`.
-    let mut values: Vec<Op> = target
+    let mut values: Vec<Op> = projection
         .params
         .iter()
         .enumerate()
@@ -210,9 +239,6 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
             origin: origin.clone(),
         })
         .collect();
-    let args: Vec<ValueId> = (0..values.len())
-        .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
-        .collect();
     let push = |values: &mut Vec<Op>, kind: OpKind, ty: HirType| {
         values.push(Op {
             kind,
@@ -221,6 +247,7 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
         });
         ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX))
     };
+    let args = projected_arguments(&mut values, &origin, target, projection);
     let answered = push(
         &mut values,
         OpKind::Call {
@@ -230,30 +257,34 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
         },
         target.return_type.clone(),
     );
-    let answer = if matches!(target.return_type, HirType::Void | HirType::Never) {
-        push(&mut values, OpKind::ConstUndefined, HirType::Erased)
-    } else {
-        push(
+    let answer = if projection.returns == HirType::Void {
+        None
+    } else if matches!(target.return_type, HirType::Void | HirType::Never) {
+        Some(push(&mut values, OpKind::ConstUndefined, HirType::Erased))
+    } else if projection.returns == HirType::Erased && target.return_type != HirType::Erased {
+        Some(push(
             &mut values,
             OpKind::Erase {
                 value: answered,
-                absent,
+                absent: projection.result_absent,
             },
             HirType::Erased,
-        )
+        ))
+    } else {
+        Some(answered)
     };
-    let ops = (target.params.len()..values.len())
+    let ops = (projection.params.len()..values.len())
         .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
         .collect();
     Func {
         name,
-        params: target.params.clone(),
-        return_type: HirType::Erased,
+        params: projection.params.clone(),
+        return_type: projection.returns.clone(),
         values,
         blocks: vec![Block {
             params: Vec::new(),
             ops,
-            terminator: Terminator::Return(Some(answer)),
+            terminator: Terminator::Return(answer),
         }],
         origin,
         exported: false,
@@ -265,6 +296,223 @@ fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
         written_return: None,
         written_return_elements: Vec::new(),
     }
+}
+
+fn projected_arguments(
+    values: &mut Vec<Op>,
+    origin: &Origin,
+    target: &Func,
+    projection: &Projection,
+) -> Vec<ValueId> {
+    target
+        .params
+        .iter()
+        .enumerate()
+        .map(|(at, wanted)| {
+            let value = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+            if wanted.ty != HirType::Erased || projection.params[at].ty == HirType::Erased {
+                return value;
+            }
+            values.push(Op {
+                kind: OpKind::Erase {
+                    value,
+                    absent: projection
+                        .arguments_absent
+                        .get(at)
+                        .copied()
+                        .unwrap_or(Absent::Impossible),
+                },
+                ty: HirType::Erased,
+                origin: origin.clone(),
+            });
+            ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX))
+        })
+        .collect()
+}
+
+/// Written callable types all use the existing uniform callable representation.
+/// Their different type ids must not create duplicate JVM methods with the same
+/// member and descriptor. Shared inputs join the facts of their contributing
+/// faces, and the key includes the conversions' absence semantics.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum AbiType {
+    Callable,
+    Concrete(HirType),
+}
+
+fn abi_type(snapshot: &SemanticSnapshot, ty: &HirType) -> AbiType {
+    if let HirType::Managed(ManagedType::Object(id)) = ty
+        && super::interfaces::signature(snapshot, *id).is_some()
+    {
+        return AbiType::Callable;
+    }
+    AbiType::Concrete(ty.clone())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AdapterKey {
+    target: String,
+    params: Vec<AbiType>,
+    returns: AbiType,
+    arguments_absent: Vec<Absent>,
+    result_absent: Absent,
+}
+
+/// Replace interface entries with the interface's complete calling convention.
+/// Class slots and direct calls retain their own signatures; an inherited body
+/// is resolved by the table, so a subclass override receives its own adapter.
+fn adapt_interfaces(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program: &mut Program) {
+    let owners = owners_by_name(hierarchy);
+    let tables = slot_tables(program);
+    let mut index: FxHashMap<String, usize> = program
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(at, func)| (func.name.clone(), at))
+        .collect();
+    let mut made: FxHashMap<AdapterKey, String> = FxHashMap::default();
+    let mut slots: Vec<_> = hierarchy
+        .slots
+        .iter()
+        .filter(|((root, _), _)| hierarchy.faces.contains(root))
+        .collect();
+    slots.sort_by_key(|(_, slot)| **slot);
+    let probe = super::FuncBuilder::probe(snapshot);
+    for ((root, member), slot) in slots {
+        let Some(owner) = hierarchy.name.get(root) else {
+            continue;
+        };
+        let declared = format!("{owner}#{member}");
+        let Some(&declaration) = index.get(&declared) else {
+            continue;
+        };
+        let Some(table) = tables.get(slot) else {
+            continue;
+        };
+        let plain = without_the_raising_suffix(member).0;
+        let Some(property) = super::interfaces::property(snapshot, *root, plain) else {
+            continue;
+        };
+        let Some(contract) = super::interfaces::contract(&probe, property) else {
+            continue;
+        };
+        for (name, holders) in table {
+            let Some(&at) = index.get(name) else { continue };
+            let target = &program.funcs[at];
+            let through = &program.funcs[declaration];
+            if target.abstract_declaration || same_signature(through, target) {
+                continue;
+            }
+            let Some(projection) =
+                interface_projection(snapshot, hierarchy, &owners, through, target, &contract)
+            else {
+                continue;
+            };
+            let key = AdapterKey {
+                target: name.clone(),
+                params: through
+                    .params
+                    .iter()
+                    .skip(1)
+                    .map(|param| abi_type(snapshot, &param.ty))
+                    .collect(),
+                returns: abi_type(snapshot, &through.return_type),
+                arguments_absent: projection.arguments_absent.clone(),
+                result_absent: projection.result_absent,
+            };
+            let bridge = if let Some(bridge) = made.get(&key) {
+                let at = index[bridge];
+                for (param, face) in program.funcs[at].params.iter_mut().zip(&projection.params) {
+                    param.known = param.known.join(face.known);
+                }
+                bridge.clone()
+            } else {
+                let name = format!("{name}@{owner}");
+                let name = if index.contains_key(&name) {
+                    format!("{name}${slot}")
+                } else {
+                    name
+                };
+                let bridge = projected_bridge(name.clone(), target, &projection);
+                index.insert(name.clone(), program.funcs.len());
+                program.funcs.push(bridge);
+                made.insert(key, name.clone());
+                name
+            };
+            for &layout in holders {
+                program.layouts[layout].methods[*slot as usize] = Some(bridge.clone());
+            }
+        }
+    }
+}
+
+fn same_signature(through: &Func, target: &Func) -> bool {
+    through.return_type == target.return_type
+        && through.params.len() == target.params.len()
+        && through
+            .params
+            .iter()
+            .zip(&target.params)
+            .skip(1)
+            .all(|(one, other)| one.ty == other.ty)
+}
+
+fn interface_projection(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    owners: &FxHashMap<&str, Vec<TypeId>>,
+    through: &Func,
+    target: &Func,
+    contract: &super::interfaces::Contract,
+) -> Option<Projection> {
+    if target.params.is_empty()
+        || target.params.len() > through.params.len()
+        || !target
+            .params
+            .iter()
+            .zip(&through.params)
+            .skip(1)
+            .all(|(target, through)| {
+                super::interfaces::converts(snapshot, hierarchy, &through.ty, &target.ty)
+            })
+        || !super::interfaces::converts(
+            snapshot,
+            hierarchy,
+            &target.return_type,
+            &through.return_type,
+        )
+    {
+        return None;
+    }
+    let mut params = through.params.clone();
+    params[0] = target.params[0].clone();
+    for param in params.iter_mut().skip(1) {
+        // Facts remain valid across shared faces only after joining them at
+        // reuse above. Retaining the first face alone would narrow unsafely;
+        // discarding every face would prevent body parameter specialization.
+        param.written = None;
+        param.shape = crate::hir::ParamShape::Ordinary;
+    }
+    let arguments_absent = std::iter::once(Absent::Impossible)
+        .chain(contract.sources.iter().enumerate().map(|(at, ty)| {
+            if target
+                .params
+                .get(at + 1)
+                .is_some_and(|param| param.ty == HirType::Erased)
+                && through.params[at + 1].ty != HirType::Erased
+            {
+                super::absent_of_result(snapshot, *ty)
+            } else {
+                Absent::Impossible
+            }
+        }))
+        .collect();
+    Some(Projection {
+        params,
+        returns: through.return_type.clone(),
+        arguments_absent,
+        result_absent: result_absent(snapshot, owners, &target.name, &target.return_type),
+    })
 }
 
 /// Point a call through a bridged slot at a declaration that answers erased,

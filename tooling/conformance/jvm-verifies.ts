@@ -296,6 +296,11 @@ function selfTest(printing) {
     if (!refused) bad++;
     if (printing) console.log(`  ${refused ? "ok  " : "FAIL"}  ${name}: ${refused ? "cannot read the pin" : "read, and should not have been"}`);
   }
+  const conflict = "NTS4001 `EchoInput` needs distinct dispatch bodies `EchoInput#feed@NullInput` and `EchoInput#feed@UndefinedInput` for JVM member `feed(Ljava/lang/String;)Lnts/rt/NtsValue;`; one member name and descriptor cannot distinguish these interface slots";
+  const classified = declineShape(conflict) === "dispatch conflict EchoInput.feed(Ljava/lang/String;)Lnts/rt/NtsValue;"
+    && declineShape("NTS4001 another refusal") === null;
+  if (!classified) bad++;
+  if (printing) console.log(`  ${classified ? "ok  " : "FAIL"}  distinct dispatch bodies classified separately from other NTS4001 refusals`);
   if (printing) console.log(bad === 0 ? "  self-test: every arm fired" : `  self-test: ${bad} arm(s) did not fire`);
   return bad;
 }
@@ -307,9 +312,11 @@ function selfTest(printing) {
  * shape across programs and runs is one key.
  */
 function declineShape(line) {
+  const conflict = /NTS4001 `([^`]+)` needs distinct dispatch bodies `[^`]+` and `[^`]+` for JVM member `([^`]+)`/.exec(line);
+  const plain = (t) => t.replace(/Closure\d+/g, "ClosureN").replace(/\$\d+\$/g, "$N$").replace(/Fn[\d_]*__\d+/g, "FnN").replace(/Type\d+/g, "TypeN");
+  if (conflict) return `dispatch conflict ${plain(conflict[1])}.${plain(conflict[2])}`;
   const m = /NTS4009 `([^`]+)` is `([^`]+)` where the method it overrides is `([^`]+)`/.exec(line);
   if (!m) return null;
-  const plain = (t) => t.replace(/Closure\d+/g, "ClosureN").replace(/\$\d+\$/g, "$N$").replace(/Fn[\d_]*__\d+/g, "FnN").replace(/Type\d+/g, "TypeN");
   return `${plain(m[1])} ${plain(m[2])} over ${plain(m[3])}`;
 }
 /** jvm-declines.known: shape -> { verdict, why }; verdict is jvm-only, live-on-c or unmeasured. */
@@ -426,11 +433,11 @@ if (declines.size > 0) {
     const v = declinesKnown.get(k)?.verdict ?? "UNCLASSIFIED";
     by.set(v, (by.get(v) ?? 0) + 1);
   }
-  console.log(`  NTS4009 declines: ${declines.size} shape(s) -- ${[...by].map(([v, n]) => `${n} ${v}`).join(", ")}`);
+  console.log(`  JVM dispatch declines: ${declines.size} shape(s) -- ${[...by].map(([v, n]) => `${n} ${v}`).join(", ")}`);
   for (const k of [...declines.keys()].filter((k) => declinesKnown.get(k)?.verdict === "live-on-c")) console.log(`    live on C  ${k.slice(0, 110)} -- ${declinesKnown.get(k).why}`);
   for (const k of unclassified) console.log(`    UNCLASSIFIED  ${k.slice(0, 150)}  (${[...declines.get(k)].slice(0, 3).join(", ")})`);
 }
 const ok = fresh.length === 0 && pinned.length === 0 && unresolved.length === 0 && shadowed.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
 const pinsHeld = held.filter((f) => known.get(f.project).pin).length;
-console.log(ok ? `  every module verifies, or is known not to (${held.length}, ${pinsHeld} pinned and holding); every NTS4009 decline classified` : `  ${fresh.length} new failure(s), ${pinned.length} broken pin(s), ${unresolved.length} with unresolved refs, ${shadowed.length} with shadowed raising copies, ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
+console.log(ok ? `  every module verifies, or is known not to (${held.length}, ${pinsHeld} pinned and holding); every JVM dispatch decline classified` : `  ${fresh.length} new failure(s), ${pinned.length} broken pin(s), ${unresolved.length} with unresolved refs, ${shadowed.length} with shadowed raising copies, ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
 process.exit(ok ? 0 : 1);

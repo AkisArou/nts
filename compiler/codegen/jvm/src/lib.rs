@@ -2814,8 +2814,20 @@ fn dispatch_forwarders(
         // Only the *return* may differ. Covariant parameters are not
         // overriding in any language on this platform -- they are overloading,
         // and a bridge would silently make one call the other.
-        if forwarded.get(&(member.clone(), descriptor.clone())) == Some(func_name) {
-            continue;
+        if let Some(previous) = forwarded.get(&(member.clone(), descriptor.clone())) {
+            if previous == func_name {
+                continue;
+            }
+            return Err(Diagnostic::error(
+                "NTS4001",
+                format!(
+                    "`{}` needs distinct dispatch bodies `{previous}` and `{func_name}` \
+                     for JVM member `{member}{descriptor}`; one member name and descriptor \
+                     cannot distinguish these interface slots",
+                    layout.name
+                ),
+                origin.location,
+            ));
         }
         forwarded.insert((member.clone(), descriptor.clone()), func_name.clone());
         // What this forwarder overrides: the superclass where it declares the
