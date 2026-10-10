@@ -2,7 +2,8 @@
 
 Part 1 + 1b recovered structural method dispatch while adding dense-table
 padding (record 0346). Part 3 removes that padding without merging selectors.
-The implementation pin is `c0b4497ad2dd`; its control is `deffc0dae399`, with
+The projection pin is `c0b4497ad2dd`; the completed native emission view is
+`d2b2eb7341e3`. Their control is `deffc0dae399`, with
 the same tsgo frontend `4ec6b1a5235e473fe20e6cef4972dfc867b6ea1b9fad1351a31d8557d66e7776`.
 
 ## The plan is a projection
@@ -65,9 +66,33 @@ Tests execute promise and timer callbacks through a moved closure column for
 fifty rounds on C and LLVM, with reference counts balanced under RC. A context
 bridge loads through an unknown signature closure, also on both backends and
 providers. Two fresh preparations emit byte-identical C.
-Five core tests and three native boundary tests pass; the sabotage reader's
+Eight core tests and three native boundary tests pass; the sabotage reader's
 selector differs from the exported callback selector, so its emission errors
 come from the actual call. Workspace Clippy passes with warnings denied.
+
+## Table projection also removes references to code
+
+The first full gate failed six native boundary tests under clang's
+`-Werror`: unread closure entries remained as unused static functions after
+their table columns disappeared. Timers and the native bridges still kept
+their real callback bodies. Removing only the table entries' bodies exposed
+one more orphan, a written raising body called only by a removed uniform entry.
+
+The shared native emission view now excludes unread table bodies and their
+direct-call or bridge descendants unless a surviving use keeps them. Every
+projected row, public or foreign entry, descriptor printer and unrelated
+function is a root; the walk preserves direct calls, suspension resumes and
+the body and argument conversions a native bridge names. C and LLVM consult
+the same precomputed view for bodies and their resources. Logical functions
+remain available for signatures, the census and the JVM. A wrongly omitted
+body would leave an undefined reference at compile or link time, rather than
+silently selecting another body.
+
+Tests cover an unread cycle containing a non-table helper, and bodies kept by
+direct calls, published entries, printing, projected rows and native bridges.
+With the gate's frontend source and workspace dependencies present, the full
+`cargo test --workspace --no-fail-fast` run passes: 1,534 tests, zero failures,
+five ignored. All six formerly failing boundary tests pass.
 
 ## Coverage and backend checks
 
@@ -102,12 +127,21 @@ generated C executables are byte-identical between rounds. Only three
 executables differ between control and candidate. The window is 41 minutes,
 with no other compiler or gate running beside it.
 
+The emission-view fix carries these timings forward on exact generated-source
+identity. `native-view-bench-proof.py` asserts that the control CLI reproduces
+each actual benchmark artifact, then compares all 62 specialized C sources
+from `d2b2eb7341e3` with those measured artifacts: every source is byte-identical.
+The runtime and support sources are unchanged. This checks the timed programs;
+it does not claim that the compiler executables themselves are identical.
+
 ## Size
 
 All 29 runtime modules emit valid C and compile at `-O2`; `c-compiles` separately
 passes 29/29 with `clang -std=c11 -fsyntax-only`, reusing the 28 Node emissions.
-Node output matches the independently projected offline C after removing
-blank lines. The projection has no other generated-C change in those modules.
+The initial projection output matched the independently projected offline C
+after removing blank lines. The final emission view also removes unreferenced
+bodies and their resources. All optimized object sizes remain identical to
+that initial projection; two modules omit one additional descriptor table each.
 
 Table bytes count every emitted nonempty `nts_vtable_*` row, including nulls,
 at eight bytes per column on x86-64. Optimized `program.o` uses
@@ -115,7 +149,7 @@ at eight bytes per column on x86-64. Optimized `program.o` uses
 text + data + bss from `size`, excluding shared runtime, addon, debug and
 relocation-file overhead. These are the same measures as record 0346.
 
-Across the 28 Node modules, tables fall from 2,569,032 to 58,952 bytes (97.7%)
+Across the 28 Node modules, tables fall from 2,569,032 to 58,640 bytes (97.7%)
 and objects from 13,611,084 to 11,180,165 bytes (17.9%). All 28 objects are at
 or below their pre-1b ceilings, whose total was 13,023,217 bytes; tables are
 also below the pre-1b 2,064,848-byte target. DNS is 180,304 bytes against its
@@ -127,8 +161,8 @@ from 543,441 to 522,798 object bytes.
 | assert | 72 / 13 | 81,792 / 832 | 490,566 | 504,364 / 422,369 |
 | async_hooks | 13 / 5 | 13,104 / 120 | 104,926 | 104,926 / 91,874 |
 | buffer | 10 / 3 | 10,000 / 48 | 184,065 | 184,065 / 174,093 |
-| child_process | 106 / 19 | 148,400 / 4,408 | 735,443 | 771,885 / 630,082 |
-| cluster | 111 / 20 | 163,392 / 4,960 | 789,819 | 831,383 / 676,148 |
+| child_process | 106 / 19 | 148,400 / 4,256 | 735,443 | 771,885 / 630,082 |
+| cluster | 111 / 20 | 163,392 / 4,800 | 789,819 | 831,383 / 676,148 |
 | console | 71 / 13 | 85,200 / 1,560 | 499,928 | 512,614 / 431,725 |
 | crypto | 137 / 19 | 209,336 / 5,776 | 837,299 | 878,773 / 690,634 |
 | dgram | 109 / 20 | 152,600 / 4,320 | 755,448 | 795,900 / 650,813 |

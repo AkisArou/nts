@@ -213,6 +213,12 @@ column; a missing method cannot acquire another selector's body. C and LLVM
 use this one plan for rows and loads. Calls still cost the same indexed load.
 The JVM continues to use logical slots.
 
+The same native plan supplies an emission view that omits bodies made
+unreferenced by discarded columns, including their otherwise unreferenced
+direct callees. Public and foreign entries, printing and every projected row
+keep their bodies. Both native backends use the view for code and its resources;
+logical declarations remain available for signatures and JVM emission.
+
 Readers include virtual and closure calls, promise subscriptions, context
 bridges, symbolic `DispatchSlot` callback arguments, and the exported
 `nts_closure_call_slot` that handwritten hosts read. `DispatchSlot` carries no
