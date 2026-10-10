@@ -177,12 +177,12 @@ pub(super) fn stack_storage(func: &Func, platform: Platform) -> Vec<String> {
 }
 
 pub(super) fn helpers(program: &super::Program) -> String {
-    let allocate = program.funcs.iter().any(|f| {
+    let allocate = program.native_funcs().any(|f| {
         f.values
             .iter()
             .any(|op| matches!(op.kind, OpKind::NativeMalloc { .. }))
     });
-    let free = program.funcs.iter().any(|f| {
+    let free = program.native_funcs().any(|f| {
         f.values
             .iter()
             .any(|op| matches!(op.kind, OpKind::NativeFree { .. }))
@@ -191,7 +191,7 @@ pub(super) fn helpers(program: &super::Program) -> String {
     // unused `declare` is harmless and an undeclared use is not, so the
     // condition is the same shape either way -- this one exists so the IR of a
     // program that copies nothing is unchanged.
-    let copies = program.funcs.iter().any(|f| {
+    let copies = program.native_funcs().any(|f| {
         f.values
             .iter()
             .any(|op| matches!(op.kind, OpKind::NativeCopy { .. }))

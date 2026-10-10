@@ -875,7 +875,7 @@ fn published_symbols(program: &Program) -> (Vec<String>, Vec<String>) {
     let mut symbols = Vec::new();
     let mut without = Vec::new();
     for (emitted, published) in &program.public_api {
-        if program.funcs.iter().any(|func| func.name == *emitted) {
+        if program.native_funcs().any(|func| func.name == *emitted) {
             symbols.push(c_identifier(emitted));
         } else if program
             .globals
@@ -943,7 +943,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // `double_` both become `double_`. Emitting both would produce a redefinition
     // error far from its cause, so it is caught here where the cause is known.
     let mut claimed: rustc_hash::FxHashMap<String, &str> = rustc_hash::FxHashMap::default();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         let c_name = c_identifier(&func.name);
         if let Some(previous) = claimed.insert(c_name.clone(), &func.name)
             && previous != func.name
@@ -1404,7 +1404,7 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
     // program naming no header-defined struct includes none, and then every
     // function it calls is declared here or nowhere.
     let headers_included = native_memory::needs_headers(program);
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in func
             .blocks
             .iter()
@@ -1434,7 +1434,9 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
             };
             let name = target.name.as_str();
             if (runtime_declares(name) && target.convention == nts_core::hir::native::Convention::C)
-                || program.funcs.iter().any(|f| c_identifier(&f.name) == name)
+                || program
+                    .native_funcs()
+                    .any(|f| c_identifier(&f.name) == name)
             {
                 refusals.push(Diagnostic::error(
                     "NTS2007",
@@ -1505,7 +1507,7 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
 /// `#include` and that line is written first. `Emitted::needs_unicode` keeps
 /// the text scan beside it for what this cannot see.
 fn uses_unicode(program: &Program) -> bool {
-    program.funcs.iter().any(|func| {
+    program.native_funcs().any(|func| {
         func.values.iter().any(|op| {
             matches!(&op.kind, OpKind::Call { callee: Callee::External(name), .. }
                 if declares_the_name(UNICODE_HEADER, name))
@@ -1609,7 +1611,7 @@ fn emit_bodies<'a>(
     let mut bodies = Vec::new();
     let templates = nts_core::hir::templates::present(program);
     let cycles = program.cycles();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         // An `abstract` method is a signature and no body. It is in `funcs` so
         // that a call through the slot can take its function-pointer type from
         // it; nothing calls it and no vtable names it, because an abstract
@@ -1989,7 +1991,7 @@ fn layouts_needing_descriptors(program: &Program) -> rustc_hash::FxHashSet<usize
             found.insert(at);
         }
     };
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in &func.values {
             // An `instanceof` names one descriptor per class in its closed
             // set, and that set is every class extending the one written -- so
@@ -2760,7 +2762,7 @@ fn global_is_observed(program: &Program, at: u32) -> bool {
         .globals
         .get(at as usize)
         .is_some_and(|global| global.exported)
-        || program.funcs.iter().any(|func| {
+        || program.native_funcs().any(|func| {
             func.values
                 .iter()
                 .any(|op| matches!(op.kind, OpKind::GlobalGet(global) if global == at))
@@ -2842,7 +2844,7 @@ fn float_literal(value: f64) -> String {
 
 fn literal_table(program: &Program) -> Vec<String> {
     let mut literals: Vec<String> = Vec::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for block in &func.blocks {
             for value in &block.ops {
                 let texts: &[String] = match &func.values[value.0 as usize].kind {
@@ -3589,7 +3591,7 @@ fn foreign_slot_table(
 /// Asked of the IR rather than tracked alongside it: `ClosureStatic` is the
 /// only thing that reads one, so the ops that read it are the whole answer.
 fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) -> bool {
-    program.funcs.iter().any(|func| {
+    program.native_funcs().any(|func| {
         func.values.iter().any(|op| {
             matches!(op.kind, OpKind::ClosureStatic)
                 && matches!(&op.ty, HirType::Managed(ManagedType::Object(ty))

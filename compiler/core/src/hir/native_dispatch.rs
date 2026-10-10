@@ -7,7 +7,9 @@
 
 use std::collections::BTreeSet;
 
-use super::{Callee, HirType, Layout, ManagedType, OpKind, Program};
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use super::{Callee, Func, HirType, Layout, ManagedType, OpKind, Printed, Program};
 
 /// One whole-program mapping, consumed by both native backends.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +18,8 @@ pub struct NativeDispatch {
     pub columns: Vec<Option<u32>>,
     /// The width every nonempty native row has.
     pub width: u32,
+    /// Bodies whose only references were in omitted table columns.
+    omitted_bodies: FxHashSet<String>,
 }
 
 impl NativeDispatch {
@@ -31,6 +35,18 @@ impl NativeDispatch {
 }
 
 impl Program {
+    /// Native code, without bodies made unreferenced by table projection.
+    /// Logical declarations remain available for signatures and JVM emission.
+    /// If a body is wrongly omitted, a surviving reference fails compilation
+    /// or linking as an undefined symbol; it cannot silently call another body.
+    pub fn native_funcs(&self) -> impl Iterator<Item = &Func> {
+        self.funcs.iter().filter(|func| {
+            self.native_dispatch
+                .as_ref()
+                .is_none_or(|table| !table.omitted_bodies.contains(&func.name))
+        })
+    }
+
     /// Native position of a logical selector. Raw HIR has identity tables.
     #[must_use]
     pub fn native_column(&self, selector: u32) -> Option<u32> {
@@ -106,10 +122,111 @@ pub(super) fn plan(program: &mut Program) {
     for (column, selector) in readers.iter().enumerate() {
         columns[*selector as usize] = u32::try_from(column).ok();
     }
-    program.native_dispatch = Some(NativeDispatch {
+    let mut table = NativeDispatch {
         columns,
         width: u32::try_from(readers.len()).unwrap_or(u32::MAX),
-    });
+        omitted_bodies: FxHashSet::default(),
+    };
+    table.omitted_bodies = omitted_bodies(program, &table);
+    program.native_dispatch = Some(table);
+}
+
+/// A conservative emission view, not another whole-program DCE. Only table
+/// bodies can be omitted; every other function starts as a root. Projected
+/// rows, public/foreign entries and printing keep their bodies, and a walk
+/// keeps direct callees and the targets codegen names inside native bridges.
+fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String> {
+    let mut candidates = FxHashSet::default();
+    let mut pending = Vec::new();
+    for layout in &program.layouts {
+        for (selector, body) in layout.methods.iter().enumerate() {
+            let Some(body) = body.as_deref() else {
+                continue;
+            };
+            if table.columns.get(selector).is_some_and(Option::is_some) {
+                pending.push(body);
+            } else {
+                candidates.insert(body);
+            }
+        }
+    }
+    pending.extend(
+        program
+            .funcs
+            .iter()
+            .filter(|func| !candidates.contains(func.name.as_str()))
+            .map(|func| func.name.as_str()),
+    );
+    pending.extend(super::reachable::root_names(
+        program,
+        super::reachable::Roots::EveryExport,
+    ));
+    // Class members are published under their owner's name, not their own.
+    let published: FxHashSet<&str> = program
+        .public_api
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect();
+    pending.extend(program.funcs.iter().filter_map(|func| {
+        func.name
+            .split_once('#')
+            .is_some_and(|(owner, _)| published.contains(owner))
+            .then_some(func.name.as_str())
+    }));
+    pending.extend(
+        program
+            .printed
+            .values()
+            .filter_map(|printed| match printed {
+                Printed::By(name) => Some(name.as_str()),
+                _ => None,
+            }),
+    );
+    let by_name: FxHashMap<&str, &Func> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func))
+        .collect();
+    let layouts = super::fields::LayoutIndex::build(program);
+    let mut kept = FxHashSet::default();
+    while let Some(name) = pending.pop() {
+        if !kept.insert(name) {
+            continue;
+        }
+        let Some(func) = by_name.get(name) else {
+            continue;
+        };
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|b| &b.ops)
+            .map(|v| func.value(*v))
+        {
+            match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Direct(target),
+                    ..
+                }
+                | OpKind::Suspend { resume: target, .. } => pending.push(target),
+                OpKind::NativeBridge {
+                    closure, bridging, ..
+                } => {
+                    pending.extend(bridging.converted.iter().map(|c| c.function.as_str()));
+                    if let HirType::Managed(ManagedType::Object(ty)) = func.value(*closure).ty
+                        && let Some(at) = layouts.of_class(ty)
+                        && let Some(target) = program.layouts[at].closure_call()
+                    {
+                        pending.push(target);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    candidates
+        .difference(&kept)
+        .map(|name| (*name).to_owned())
+        .collect()
 }
 
 #[cfg(test)]
@@ -250,5 +367,113 @@ mod tests {
             error,
             crate::hir::verify::Invalid::MissingNativeColumn { slot: 7, .. }
         )));
+    }
+
+    fn internal(name: &str) -> Func {
+        let mut func = function(name, &[0]);
+        func.exported = false;
+        func
+    }
+
+    fn call(func: &mut Func, target: &str) {
+        func.values[0].kind = OpKind::Call {
+            callee: Callee::Direct(target.to_owned()),
+            args: Vec::new(),
+            frame: None,
+        };
+    }
+
+    #[test]
+    fn emission_drops_only_unread_table_bodies_including_a_cycle() {
+        let mut first = internal("first");
+        let mut second = internal("second");
+        call(&mut first, "second");
+        call(&mut second, "first");
+        let mut program = Program {
+            funcs: vec![first, second, internal("other")],
+            layouts: vec![row("entries", &[(3, "first"), (7, "second")])],
+            ..Program::default()
+        };
+        assert_eq!(program.native_funcs().count(), 3, "raw HIR stays unchanged");
+        plan(&mut program);
+        assert_eq!(
+            program
+                .native_funcs()
+                .map(|f| f.name.as_str())
+                .collect::<Vec<_>>(),
+            ["other"]
+        );
+        assert_eq!(program.funcs.len(), 3, "logical bodies stay unchanged");
+    }
+
+    #[test]
+    fn emission_keeps_direct_public_printed_and_projected_bodies() {
+        let mut caller = internal("caller");
+        call(&mut caller, "direct");
+        let mut exported = internal("exported");
+        exported.exported = true;
+        let names = ["direct", "published", "Class#member", "printed", "live"];
+        let mut funcs = vec![caller, exported];
+        funcs.extend(names.map(internal));
+        funcs.push(function("reader", &[7]));
+        let mut program = Program {
+            funcs,
+            layouts: vec![row(
+                "entries",
+                &[
+                    (3, "direct"),
+                    (4, "exported"),
+                    (5, "published"),
+                    (6, "Class#member"),
+                    (7, "live"),
+                    (8, "printed"),
+                ],
+            )],
+            public_api: vec![
+                ("published".to_owned(), "alias".to_owned()),
+                ("Class".to_owned(), "Class".to_owned()),
+            ],
+            printed: [("entries".to_owned(), Printed::By("printed".to_owned()))].into(),
+            ..Program::default()
+        };
+        plan(&mut program);
+        assert_eq!(program.native_funcs().count(), program.funcs.len());
+        assert_eq!(program.native_column(3), None);
+    }
+
+    #[test]
+    fn emission_keeps_the_body_and_conversion_named_by_a_bridge() {
+        let mut bridge = internal("bridge");
+        bridge.values[0].ty = HirType::Managed(ManagedType::Object(TypeId(1)));
+        bridge.values.push(Op {
+            kind: OpKind::NativeBridge {
+                closure: ValueId(0),
+                signature: std::sync::Arc::new(super::super::native::FnPointer {
+                    name: "callback".to_owned(),
+                    parameters: Vec::new(),
+                    result: Box::new(super::super::native::Type::Void),
+                }),
+                context: true,
+                once: false,
+                bridging: super::super::Bridging {
+                    converted: vec![super::super::ConvertedParameter {
+                        at: 0,
+                        function: "convert".to_owned(),
+                    }],
+                    ..super::super::Bridging::default()
+                },
+            },
+            ty: HirType::NUMBER,
+            origin: bridge.origin.clone(),
+        });
+        bridge.blocks[0].ops.push(ValueId(1));
+        let mut program = Program {
+            funcs: vec![bridge, internal("callback"), internal("convert")],
+            layouts: vec![row("entries", &[(3, "callback"), (7, "convert")])],
+            ..Program::default()
+        };
+        plan(&mut program);
+        assert_eq!(program.native_column(3), None);
+        assert_eq!(program.native_funcs().count(), 3);
     }
 }

@@ -58,7 +58,7 @@ pub(super) fn types(
     // usual: reducing a type's alignment is the only way C offers to say that
     // the address may be any address.
     let mut unaligned: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for value in program.funcs.iter().flat_map(|func| &func.values) {
+    for value in program.native_funcs().flat_map(|func| &func.values) {
         if let HirType::NativePointer(pointee @ Pointee::Unaligned(_)) = &value.ty
             && let Pointee::Unaligned(inner) = pointee
         {
@@ -436,7 +436,7 @@ pub(super) fn operation(
 }
 
 pub(super) fn helpers(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
-    if program.funcs.iter().any(|f| {
+    if program.native_funcs().any(|f| {
         f.values
             .iter()
             .any(|v| matches!(v.kind, OpKind::NativeMalloc { .. }))
@@ -450,7 +450,7 @@ pub(super) fn helpers(writer: &mut CodeWriter, origin: &Origin, program: &Progra
         writer.line(origin, "    return malloc((size_t)bytes);");
         writer.line(origin, "}");
     }
-    if program.funcs.iter().any(|f| {
+    if program.native_funcs().any(|f| {
         f.values
             .iter()
             .any(|v| matches!(v.kind, OpKind::NativeFree { .. }))
@@ -609,7 +609,7 @@ pub(super) fn witness(
     let mut declared: std::collections::BTreeMap<&str, (bool, String, String)> =
         std::collections::BTreeMap::new();
     let mut opaque: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in func
             .blocks
             .iter()
@@ -918,7 +918,7 @@ pub(super) fn bridges(
             &nts_core::hir::Bridging,
         ),
     > = std::collections::BTreeMap::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in func
             .blocks
             .iter()
@@ -1235,7 +1235,7 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
         seen.entry(signature.name.clone())
             .or_insert_with(|| signature.clone());
     };
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for value in &func.values {
             if let nts_core::hir::HirType::NativePointer(Pointee::FnPointer(signature)) = &value.ty
             {

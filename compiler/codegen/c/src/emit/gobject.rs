@@ -166,8 +166,7 @@ pub(super) fn classes(
         // ancestor made only through its descendants has none.
         let make = format!("nts_gobject_new_{name}");
         if let Some(result) = program
-            .funcs
-            .iter()
+            .native_funcs()
             .flat_map(|func| &func.values)
             .find_map(|op| match &op.kind {
                 OpKind::Call {
@@ -306,8 +305,7 @@ fn set_by_name(
     for (prefix, callee, declaration) in BY_NAME {
         let mut done = std::collections::BTreeSet::new();
         for target in program
-            .funcs
-            .iter()
+            .native_funcs()
             .flat_map(|func| &func.values)
             .filter_map(|op| match &op.kind {
                 OpKind::Call {
@@ -364,8 +362,7 @@ fn get_by_name(
 ) -> bool {
     let mut done = std::collections::BTreeSet::new();
     for target in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .filter_map(|op| match &op.kind {
             OpKind::Call {
@@ -421,8 +418,7 @@ fn get_by_name(
 fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
     let mut done = std::collections::BTreeSet::new();
     for target in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .filter_map(|op| match &op.kind {
             OpKind::Call {
@@ -487,8 +483,7 @@ fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
 fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
     let mut done = std::collections::BTreeSet::new();
     for target in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .filter_map(|op| match &op.kind {
             OpKind::Call {
@@ -842,8 +837,7 @@ fn c_string(text: &str) -> String {
 fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) {
     let mut done = std::collections::BTreeSet::new();
     for target in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .filter_map(|op| match &op.kind {
             OpKind::Call {
@@ -927,8 +921,7 @@ fn chains(
     let refuse = |why: &str| Diagnostic::error("NTS2006", why.to_owned(), origin.location);
     let mut done = std::collections::BTreeSet::new();
     for target in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .filter_map(|op| match &op.kind {
             OpKind::Call {

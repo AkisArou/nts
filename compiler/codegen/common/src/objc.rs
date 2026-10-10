@@ -27,7 +27,7 @@ pub struct Lookups<'p> {
 #[must_use]
 pub fn lookups(program: &Program) -> Lookups<'_> {
     let mut found = Lookups::default();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in &func.values {
             if let OpKind::Call {
                 callee: Callee::Native(target),
@@ -73,7 +73,7 @@ pub fn class_symbol(class: &str) -> String {
 #[must_use]
 pub fn block_signatures(program: &Program) -> Vec<&FnPointer> {
     let mut found: Vec<&FnPointer> = Vec::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in &func.values {
             if let OpKind::NativeBlock { signature, .. } = &op.kind
                 && !found.iter().any(|seen| seen.name == signature.name)

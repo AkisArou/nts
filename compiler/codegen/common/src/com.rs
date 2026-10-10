@@ -8,7 +8,7 @@ use nts_core::hir::{OpKind, Program};
 #[must_use]
 pub fn delegate_signatures(program: &Program) -> Vec<&FnPointer> {
     let mut found: Vec<&FnPointer> = Vec::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in &func.values {
             if let OpKind::DelegateInvoke { signature } = &op.kind
                 && !found.iter().any(|seen| seen.name == signature.name)

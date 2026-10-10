@@ -97,7 +97,7 @@ pub(super) fn declarations(
 ) -> Result<Vec<String>, Vec<Diagnostic>> {
     let mut seen: BTreeMap<&str, (&Function, String)> = BTreeMap::new();
     let mut errors = Vec::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in func
             .blocks
             .iter()

@@ -248,7 +248,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     // chose, and the C backend asks the same `Cycles`.
     let cycles = program.cycles();
     let mut bodies = String::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         match function(program, &cycles, func, platform, templates) {
             Ok(rendered) => {
                 let _ = writeln!(bodies, "\n{rendered}");
@@ -671,7 +671,7 @@ fn literals(program: &Program) -> String {
 /// The literals a program holds, numbered the way the C backend numbers them.
 fn literal_table(program: &Program) -> Vec<String> {
     let mut table: Vec<String> = Vec::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for block in &func.blocks {
             for value in &block.ops {
                 let texts: &[String] = match &func.values[value.0 as usize].kind {
@@ -963,7 +963,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
         );
     }
     let mut seen: Vec<String> = Vec::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in &func.values {
             if !matches!(op.kind, OpKind::ArrayNew { .. }) {
                 continue;
@@ -1356,7 +1356,7 @@ fn suspension(
 /// collected up front the way string literals are.
 fn cell_names(program: &Program) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in &func.values {
             if let OpKind::CellReady { name, .. } = &op.kind
                 && !names.contains(name)
@@ -1429,7 +1429,7 @@ fn vtable(
 /// Asked of the IR rather than tracked alongside it: `ClosureStatic` is the
 /// only thing that reads one, so the ops that read it are the whole answer.
 fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) -> bool {
-    program.funcs.iter().any(|func| {
+    program.native_funcs().any(|func| {
         func.values.iter().any(|op| {
             matches!(op.kind, OpKind::ClosureStatic)
                 && matches!(&op.ty, HirType::Managed(nts_core::hir::ManagedType::Object(ty))
@@ -1473,7 +1473,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut types: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut declared = false;
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in func
             .blocks
             .iter()
@@ -1683,7 +1683,7 @@ fn declare_types(
     out: &mut String,
 ) {
     for parameter in &bridging.boxed {
-        let called = program.funcs.iter().flat_map(|f| &f.values).any(|op| {
+        let called = program.native_funcs().flat_map(|f| &f.values).any(|op| {
             matches!(&op.kind, OpKind::Call { callee: Callee::Native(t), .. } if t.name == parameter.get_type)
         });
         if !called && types.insert(parameter.get_type.clone()) {
@@ -2761,7 +2761,7 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
         seen.extend([counting.retain.to_owned(), counting.release.to_owned()]);
     }
     let mut lines = Vec::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in &func.values {
             let (target, frame) = match &op.kind {
                 OpKind::Call {
@@ -2797,8 +2797,7 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
     // no operation above names -- the bridges are emitted from the operations
     // that create them, not from calls.
     let once = program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .any(|op| matches!(op.kind, OpKind::NativeBridge { once: true, .. }));
     let unlend = "nts_closure_unlend_once".to_owned();
@@ -5836,7 +5835,7 @@ fn open_chain_call(
 fn open_chains(program: &Program) -> String {
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut text = String::new();
-    for func in &program.funcs {
+    for func in program.native_funcs() {
         for op in &func.values {
             let (arms, stored) = match &op.kind {
                 OpKind::OpenFieldGet { arms, .. } => (arms, None),

@@ -261,8 +261,7 @@ pub(super) fn send(
 /// native declarations have already declared.
 fn bound(program: &Program, symbol: &str) -> bool {
     program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .any(|op| {
             matches!(&op.kind, OpKind::Call { callee: Callee::Native(target), .. }

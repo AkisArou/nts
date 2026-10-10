@@ -28,7 +28,7 @@ fn made(program: &Program, class: &ForeignClass) -> bool {
 
 /// Whether the program calls `name` as a foreign function, and so declares it.
 fn called(program: &Program, name: &str) -> bool {
-    program.funcs.iter().flat_map(|func| &func.values).any(|op| {
+    program.native_funcs().flat_map(|func| &func.values).any(|op| {
         matches!(&op.kind, OpKind::Call { callee: Callee::Native(target), .. } if target.name == name)
     })
 }
@@ -445,8 +445,7 @@ fn children(program: &Program) -> String {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for target in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .filter_map(|op| match &op.kind {
             OpKind::Call {
@@ -572,8 +571,7 @@ fn notifies(program: &Program) -> String {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for target in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| &func.values)
         .filter_map(|op| match &op.kind {
             OpKind::Call {
@@ -642,8 +640,7 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for (func, target) in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| func.values.iter().map(move |op| (func, op)))
         .filter_map(|(func, op)| match &op.kind {
             OpKind::Call {
@@ -758,8 +755,7 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
     ] {
         let mut done = std::collections::BTreeSet::new();
         for (func, target) in program
-            .funcs
-            .iter()
+            .native_funcs()
             .flat_map(|func| func.values.iter().map(move |op| (func, op)))
             .filter_map(|(func, op)| match &op.kind {
                 OpKind::Call {
@@ -816,8 +812,7 @@ fn get_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for (func, target) in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| func.values.iter().map(move |op| (func, op)))
         .filter_map(|(func, op)| match &op.kind {
             OpKind::Call {
@@ -873,8 +868,7 @@ fn chains(
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for (func, target) in program
-        .funcs
-        .iter()
+        .native_funcs()
         .flat_map(|func| func.values.iter().map(move |op| (func, op)))
         .filter_map(|(func, op)| match &op.kind {
             OpKind::Call {
