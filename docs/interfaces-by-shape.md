@@ -114,6 +114,13 @@ fills it, and the call compiles as today's virtual call.
   tags. Those adapters remain distinct. When one class needs both at the same
   JVM member name and descriptor, the JVM backend declines that class by name;
   native dispatch tables can distinguish the slots.
+- **One conversion plan per body and convention.** Class return bridges and
+  interface adapters share identical plans. An identity projection remains a
+  recorded fact after allocation merging consumes its wrapper, so the JVM can
+  prove a slot forwarder also serves a covariant bridge. Conflicting bodies,
+  including inherited forwarders, decline by name instead of shadowing a slot.
+  Interface declarations take their body witness from the filled table, which
+  also covers a subclass served by a nonimplementing base.
 - **An optional method blocks the fit.** If the class lacks it, a subclass
   that declares it fills the inherited slot with whatever signature it chose.
   `EventEmitter` fitted `LegacyDestroyable` on `emit` alone, and `Readable`

@@ -6,7 +6,10 @@ use nts_core::hir::{self, HirType, OpKind};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn prepared(relative: &str) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        eprintln!("SKIP structural_adapters: NTS_TSGO is not set");
+        return None;
+    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
         .join("tsconfig.json")
@@ -20,6 +23,152 @@ fn prepared(relative: &str) -> Option<hir::Program> {
         "the checker accepts these method relations"
     );
     Some(hir::prepare(&snapshot).expect("valid prepared HIR").program)
+}
+
+#[test]
+fn class_and_interface_return_bridges_share_the_conversion_plan() {
+    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    else {
+        return;
+    };
+    let child = program
+        .layouts
+        .iter()
+        .find(|layout| layout.name == "ChildReader")
+        .unwrap();
+    let entries: Vec<_> = child
+        .methods
+        .iter()
+        .flatten()
+        .filter(|name| name.starts_with("ChildReader#read@"))
+        .collect();
+    assert_eq!(
+        entries.len(),
+        2,
+        "both roots dispatch to the shared adapter"
+    );
+    assert_eq!(entries[0], entries[1]);
+    assert_eq!(
+        program
+            .funcs
+            .iter()
+            .filter(|func| func.name.starts_with("ChildReader#read@"))
+            .count(),
+        1
+    );
+    assert!(
+        program
+            .identity_projections
+            .iter()
+            .any(|(adapter, target)| adapter.starts_with("ChildMaker#make@")
+                && target == "ChildMaker#make")
+    );
+    let inlined = program
+        .funcs
+        .iter()
+        .find(|func| func.name.starts_with("ChildMaker#make@"))
+        .unwrap();
+    assert!(
+        inlined
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::ObjectNew { .. })),
+        "allocation merging consumed the wrapper, while its proof survived"
+    );
+    for (adapter, target) in &program.identity_projections {
+        let adapter = program
+            .funcs
+            .iter()
+            .find(|func| &func.name == adapter)
+            .expect("live adapter");
+        let target = program
+            .funcs
+            .iter()
+            .find(|func| &func.name == target)
+            .expect("live target");
+        assert!(adapter.params.len() >= target.params.len());
+    }
+    assert!(!program.identity_projections.contains_key(entries[0]));
+}
+
+#[test]
+fn a_shared_projection_keeps_only_guarantees_from_both_faces() {
+    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    else {
+        return;
+    };
+    let reader = program
+        .layouts
+        .iter()
+        .find(|layout| layout.name == "ValueReader")
+        .unwrap();
+    let entries: Vec<_> = reader
+        .methods
+        .iter()
+        .flatten()
+        .filter(|name| name.starts_with("ValueReader#readValue@"))
+        .collect();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0], entries[1]);
+    let adapter = program
+        .funcs
+        .iter()
+        .find(|func| &func.name == entries[0])
+        .unwrap();
+    assert_eq!(adapter.params[1].ty, HirType::NUMBER);
+    assert!(adapter.params[1].known.contains(0.5));
+    assert!(adapter.params[1].known.contains(1_000_000.0));
+    assert!(adapter.params[1].known.contains(f64::NAN));
+}
+
+#[test]
+fn a_covariant_return_does_not_hide_the_class_parameters_erasure_mismatch() {
+    let Some(program) = prepared("tests/programs/structural-bridge-absence") else {
+        return;
+    };
+    assert!(
+        program
+            .uncompiled
+            .iter()
+            .any(|(name, why)| name == "throughParent"
+                && why.contains("passes parameter 1 as a string")
+                && why.contains("declares an erased value"))
+    );
+}
+
+#[test]
+fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() {
+    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    else {
+        return;
+    };
+    assert!(
+        program
+            .funcs
+            .iter()
+            .any(|func| func.name == "TaggedSink#take" && func.abstract_declaration),
+        "refusals {:?}; tagged layouts {:?}",
+        program.uncompiled,
+        program
+            .layouts
+            .iter()
+            .filter(|layout| layout.name.contains("Tagged")
+                || layout.name == "Base"
+                || layout.name == "OtherBase")
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        program
+            .funcs
+            .iter()
+            .any(|func| func.name == "inheritedFace")
+    );
+    assert!(
+        !program
+            .uncompiled
+            .iter()
+            .any(|(name, _)| name == "TaggedSink#take")
+    );
 }
 
 #[test]

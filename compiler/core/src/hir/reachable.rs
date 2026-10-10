@@ -674,6 +674,11 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     let keep: FxHashSet<String> = reached.into_iter().map(str::to_owned).collect();
     let before = program.funcs.len();
     program.funcs.retain(|func| keep.contains(&func.name));
+    // A proof can license bridge sharing only while both names remain live.
+    // Inlining may leave the adapter alive after consuming its target.
+    program
+        .identity_projections
+        .retain(|adapter, target| keep.contains(adapter) && keep.contains(target));
 
     // A table entry naming a function that is gone. It is unreachable by the
     // same argument that removed the function -- no call site dispatches

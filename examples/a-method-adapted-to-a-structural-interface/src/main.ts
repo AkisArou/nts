@@ -23,6 +23,17 @@ export function mixed(n: number): number {
 }
 export function concrete(n: number): number { return new Wide().take(String(n)); }
 
+interface TaggedSink { take(x: number): number; tag(): number }
+class TaggedInherited extends Base { tag(): number { return 1; } }
+class OtherBase { take(x: number | string): number { return typeof x === "number" ? x * 2 : 0; } }
+class OtherTaggedInherited extends OtherBase { tag(): number { return 2; } }
+export function inheritedFace(n: number): number {
+  const sinks: TaggedSink[] = [new TaggedInherited(), new OtherTaggedInherited()];
+  let answer = 0;
+  for (const sink of sinks) answer += sink.take(n) + sink.tag();
+  return answer;
+}
+
 class Animal { legs(): number { return 4; } }
 class Dog extends Animal { legs(): number { return 3; } }
 interface Maker { make(): Animal }
@@ -131,4 +142,41 @@ export function caught(n: number): number {
     } catch { total += 11; }
   }
   return total;
+}
+
+class ParentReader implements Producer { read(): unknown { return 1; } }
+class ChildReader extends ParentReader { read(): string { return "child"; } }
+export function throughBothErasedRoots(n: number): string {
+  const parents: ParentReader[] = [new ParentReader(), new ChildReader()];
+  const producers: Producer[] = [new ParentReader(), new ChildReader()];
+  let answer = "";
+  for (const parent of parents) answer += String(parent.read());
+  for (const producer of producers) answer += String(producer.read());
+  return answer + n;
+}
+
+class ParentMaker implements Maker { make(): Animal { return new Animal(); } }
+class ChildMaker extends ParentMaker { make(): Dog { return new Dog(); } }
+class Hound extends Dog { legs(): number { return 2; } }
+class GrandchildMaker extends ChildMaker { make(): Dog { return new Hound(); } }
+export function throughBothObjectRoots(n: number): number {
+  const parents: ParentMaker[] = [new ParentMaker(), new ChildMaker(), new GrandchildMaker()];
+  const makers: Maker[] = [new ParentMaker(), new ChildMaker(), new GrandchildMaker()];
+  let answer = 0;
+  for (const parent of parents) answer = answer * 10 + parent.make().legs();
+  for (const maker of makers) answer = answer * 10 + maker.make().legs();
+  return answer + n;
+}
+
+interface SmallValue { readValue(x: Count): unknown }
+interface BroadValue { readValue(x: number): unknown }
+class ValueReader { readValue(x: number | string): number { return typeof x === "number" ? x : x.length; } }
+class FixedValue { readValue(): number { return 1; } }
+export function sharedInputFacts(n: number): number {
+  const small: SmallValue[] = [new ValueReader(), new FixedValue()];
+  const broad: BroadValue[] = [new ValueReader(), new FixedValue()];
+  let answer = 0;
+  for (const reader of small) { const x = reader.readValue(3); answer += typeof x === "number" ? x : 0; }
+  for (const reader of broad) { const x = reader.readValue(n / 2); answer += typeof x === "number" ? x : 0; }
+  return answer;
 }

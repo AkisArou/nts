@@ -816,7 +816,13 @@ impl Hierarchy {
         };
         self.declares.iter().any(|(class, names)| {
             *class != target
-                && names.iter().any(|name| name == member)
+                && (names.iter().any(|name| name == member)
+                    // An interface needs a slot when a subclass supplies its
+                    // inherited body, even if the base itself lacks the edge.
+                    || (self.faces.contains(&ty)
+                        && !self.faces.contains(class)
+                        && self.base.contains_key(class)
+                        && self.declaring(*class, member).is_some()))
                 && self.descends_from(*class, ty)
         })
     }
@@ -16007,12 +16013,30 @@ fn declare_interface_methods(
     builder: &mut FuncBuilder,
     program: &mut Program,
 ) {
+    // The filled table proves who serves a slot. An inherited body can serve
+    // a subclass's interface even when its own receiver does not implement it.
+    let by_name: rustc_hash::FxHashMap<&str, usize> = program
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(at, func)| (func.name.as_str(), at))
+        .collect();
+    let mut bodies = rustc_hash::FxHashMap::default();
+    for layout in &program.layouts {
+        for (slot, entry) in layout.methods.iter().enumerate() {
+            if let Some(at) = entry.as_deref().and_then(|name| by_name.get(name))
+                && !program.funcs[*at].abstract_declaration
+            {
+                bodies.entry(slot).or_insert(*at);
+            }
+        }
+    }
     let existing_layouts = program.layouts.len();
     builder.layouts = std::mem::take(&mut program.layouts);
     let mut declare: Vec<Func> = Vec::new();
     let mut slots: Vec<_> = hierarchy.slots.iter().collect();
     slots.sort_unstable_by_key(|(_, slot)| **slot);
-    for ((root, member), _) in slots {
+    for ((root, member), slot) in slots {
         let Some(owner) = hierarchy.name.get(root) else {
             continue;
         };
@@ -16030,20 +16054,7 @@ fn declare_interface_methods(
         {
             continue;
         }
-        // A lowered body proves that a reachable implementer exists.
-        let Some(body) = program.funcs.iter().find(|func| {
-            func.name.ends_with(&format!("#{member}"))
-                && !func.abstract_declaration
-                && func
-                    .params
-                    .first()
-                    .is_some_and(|receiver| match receiver.ty {
-                        HirType::Managed(ManagedType::Object(ty)) => {
-                            hierarchy.descends_from(ty, *root)
-                        }
-                        _ => false,
-                    })
-        }) else {
+        let Some(body) = bodies.get(&(*slot as usize)).map(|at| &program.funcs[*at]) else {
             // **Recorded, because the cascade cannot say it.** A call through
             // this interface lowers to a dispatch naming `Owner#member`, and
             // if nothing declares it the reader gets ``f` cannot be compiled
@@ -80223,6 +80234,14 @@ mod tests {
             written_return_elements: Vec::new(),
         });
 
+        program.layouts.push(crate::hir::Layout {
+            types: vec![TypeId(9)],
+            name: "Impl".to_owned(),
+            fields: Vec::new(),
+            methods: vec![Some("Impl#write".to_owned()); 2],
+            interfaces: vec![TypeId(1), TypeId(2)],
+            base: None,
+        });
         let snapshot = nts_semantic_schema::SemanticSnapshot::default();
         super::declare_interface_methods(
             &hierarchy,

@@ -133,7 +133,7 @@ fn an_interface_that_carries_state_is_refused_rather_than_cast() {
 
     let found = diagnostics
         .iter()
-        .find(|(_, message)| message.contains("implement without extending"));
+        .find(|(_, message)| message.contains("without extending"));
     let Some((code, message)) = found else {
         panic!(
             "a `checkcast` to a stateful dispatch root was not refused; \

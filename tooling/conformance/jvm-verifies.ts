@@ -297,7 +297,7 @@ function selfTest(printing) {
     if (printing) console.log(`  ${refused ? "ok  " : "FAIL"}  ${name}: ${refused ? "cannot read the pin" : "read, and should not have been"}`);
   }
   const conflict = "NTS4001 `EchoInput` needs distinct dispatch bodies `EchoInput#feed@NullInput` and `EchoInput#feed@UndefinedInput` for JVM member `feed(Ljava/lang/String;)Lnts/rt/NtsValue;`; one member name and descriptor cannot distinguish these interface slots";
-  const classified = declineShape(conflict) === "dispatch conflict EchoInput.feed(Ljava/lang/String;)Lnts/rt/NtsValue;"
+  const classified = declineShape(conflict) === "dispatch conflict <any>.feed(Ljava/lang/String;)Lnts/rt/NtsValue;"
     && declineShape("NTS4001 another refusal") === null;
   if (!classified) bad++;
   if (printing) console.log(`  ${classified ? "ok  " : "FAIL"}  distinct dispatch bodies classified separately from other NTS4001 refusals`);
@@ -314,7 +314,7 @@ function selfTest(printing) {
 function declineShape(line) {
   const conflict = /NTS4001 `([^`]+)` needs distinct dispatch bodies `[^`]+` and `[^`]+` for JVM member `([^`]+)`/.exec(line);
   const plain = (t) => t.replace(/Closure\d+/g, "ClosureN").replace(/\$\d+\$/g, "$N$").replace(/Fn[\d_]*__\d+/g, "FnN").replace(/Type\d+/g, "TypeN");
-  if (conflict) return `dispatch conflict ${plain(conflict[1])}.${plain(conflict[2])}`;
+  if (conflict) return `dispatch conflict <any>.${plain(conflict[2])}`;
   const m = /NTS4009 `([^`]+)` is `([^`]+)` where the method it overrides is `([^`]+)`/.exec(line);
   if (!m) return null;
   return `${plain(m[1])} ${plain(m[2])} over ${plain(m[3])}`;

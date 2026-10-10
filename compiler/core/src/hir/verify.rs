@@ -317,6 +317,10 @@ pub enum Invalid {
     /// never fire — it is here because the failure without it was a C
     /// redefinition error with no source location.
     DuplicateFunction { name: String },
+    /// An identity-projection proof names a removed function, or a target that
+    /// needs more arguments than the adapter has. A stale proof must never
+    /// license omission of a JVM bridge.
+    InvalidIdentityProjection { adapter: String, target: String },
 }
 
 /// Check a whole program.
@@ -563,6 +567,16 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
         {
             problems.push(Invalid::DuplicateFunction {
                 name: func.name.clone(),
+            });
+        }
+    }
+    for (adapter, target) in &program.identity_projections {
+        if !matches!((arity.get(adapter.as_str()), arity.get(target.as_str())),
+            (Some(adapter), Some(target)) if adapter.len() >= target.len())
+        {
+            problems.push(Invalid::InvalidIdentityProjection {
+                adapter: adapter.clone(),
+                target: target.clone(),
             });
         }
     }

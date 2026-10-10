@@ -2712,6 +2712,14 @@ fn foreign_bridges(
     Ok(())
 }
 
+struct DispatchForwarder<'a> {
+    target: &'a nts_core::hir::Func,
+    full: String,
+    member: String,
+    descriptor: String,
+    bridge: Option<Bridge>,
+}
+
 /// One instance method per dispatch slot, forwarding to the static body.
 ///
 /// The bodies stay static on `nts/gen/Program`, and each class gets a four-byte
@@ -2752,17 +2760,13 @@ fn dispatch_forwarders(
     // but a duplicate member the class is refused for: stream's
     // `ClassicReadableSource` declared `__$asyncIterator$3288()` twice, so it
     // was never written and four runtime modules could not load (jvm-verifies
-    // cause H). Two *different* functions under one name and descriptor are a
-    // real conflict and still reach `DuplicateMember`.
-    let mut forwarded: FxHashMap<(String, String), String> = FxHashMap::default();
+    // cause H). Two different bodies under one key must decline by name.
+    // Include inherited entries: a newly declared method must not silently
+    // replace an inherited interface's different absence conversion.
+    let mut forwarded: FxHashMap<(String, String), &nts_core::hir::Func> = FxHashMap::default();
+    let mut planned = Vec::new();
     for (slot, entry) in layout.methods.iter().enumerate() {
         let Some(func_name) = entry else { continue };
-        // A class declares a forwarder only where its implementation differs
-        // from the one it would inherit; otherwise the base's already dispatches
-        // correctly and a second copy is bytes with no meaning.
-        if base.and_then(|b| b.methods.get(slot)) == Some(entry) {
-            continue;
-        }
         let Some(target) = program.funcs.iter().find(|f| &f.name == func_name) else {
             // A slot naming a function the program does not carry is a fact
             // about the IR, not about this backend, so it is reported rather
@@ -2815,21 +2819,24 @@ fn dispatch_forwarders(
         // overriding in any language on this platform -- they are overloading,
         // and a bridge would silently make one call the other.
         if let Some(previous) = forwarded.get(&(member.clone(), descriptor.clone())) {
-            if previous == func_name {
+            if previous.name == *func_name {
                 continue;
             }
-            return Err(Diagnostic::error(
-                "NTS4001",
-                format!(
-                    "`{}` needs distinct dispatch bodies `{previous}` and `{func_name}` \
-                     for JVM member `{member}{descriptor}`; one member name and descriptor \
-                     cannot distinguish these interface slots",
-                    layout.name
-                ),
-                origin.location,
+            return Err(dispatch_conflict(
+                layout,
+                &previous.name,
+                func_name,
+                &member,
+                &descriptor,
+                &origin,
             ));
         }
-        forwarded.insert((member.clone(), descriptor.clone()), func_name.clone());
+        forwarded.insert((member.clone(), descriptor.clone()), target);
+        // Emit only where the implementation differs from the inherited one,
+        // after checking coherence across the complete table.
+        if base.and_then(|b| b.methods.get(slot)) == Some(entry) {
+            continue;
+        }
         // What this forwarder overrides: the superclass where it declares the
         // slot, else an interface that does -- `Narrow implements Sink` takes
         // `take()` where `Sink` declares `take(D)D`, and with only the
@@ -2848,6 +2855,63 @@ fn dispatch_forwarders(
             &descriptor,
             &origin,
         )?;
+        planned.push(DispatchForwarder {
+            target,
+            full,
+            member,
+            descriptor,
+            bridge,
+        });
+    }
+
+    // Decide bridge ownership against every concrete slot, before emission.
+    // A covariant bridge can share a slot forwarder only when lowering proved
+    // that it calls exactly this target without changing any argument or result.
+    // Keep ClassBuilder.methods as the canonical member table: all subsequent
+    // readers see the complete dispatch surface when this function returns.
+    let mut bridged: FxHashMap<(String, String), &nts_core::hir::Func> = FxHashMap::default();
+    for DispatchForwarder {
+        target,
+        full,
+        member,
+        descriptor,
+        bridge,
+    } in planned
+    {
+        let func_name = &target.name;
+        let bridge = if let Some(bridge) = bridge {
+            let key = (member.clone(), bridge.descriptor.clone());
+            if let Some(replacement) = forwarded.get(&key) {
+                if program.identity_projections.get(&replacement.name) != Some(func_name) {
+                    return Err(dispatch_conflict(
+                        layout,
+                        &replacement.name,
+                        func_name,
+                        &member,
+                        &bridge.descriptor,
+                        &origin,
+                    ));
+                }
+                None
+            } else if let Some(previous) = bridged.get(&key) {
+                if previous.name != *func_name {
+                    return Err(dispatch_conflict(
+                        layout,
+                        &previous.name,
+                        func_name,
+                        &member,
+                        &bridge.descriptor,
+                        &origin,
+                    ));
+                }
+                None
+            } else {
+                bridged.insert(key, target);
+                Some(bridge)
+            }
+        } else {
+            None
+        };
 
         // An abstract declaration gets the method with no `Code`, and the
         // verifier is what makes the absence safe: `invokevirtual` on an
@@ -2933,6 +2997,26 @@ fn dispatch_forwarders(
         builder.method(access::PUBLIC, member, descriptor, Some(rendered));
     }
     Ok(())
+}
+
+fn dispatch_conflict(
+    layout: &nts_core::hir::Layout,
+    previous: &str,
+    target: &str,
+    member: &str,
+    descriptor: &str,
+    origin: &nts_semantic_schema::Origin,
+) -> Diagnostic {
+    Diagnostic::error(
+        "NTS4001",
+        format!(
+            "`{}` needs distinct dispatch bodies `{previous}` and `{target}` \
+             for JVM member `{member}{descriptor}`; one member name and descriptor \
+             cannot distinguish these interface slots",
+            layout.name
+        ),
+        origin.location,
+    )
 }
 
 /// The layout this function is a method of, if it is one.

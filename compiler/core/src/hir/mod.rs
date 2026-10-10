@@ -2846,6 +2846,16 @@ pub struct Program {
     /// So a pass that makes a uniform call direct ([`call_directly`]) names the
     /// body, with the call's `this`, and not the wrapper, which would drop it.
     pub receiving: std::collections::BTreeMap<String, String>,
+    /// ABI projections that call the named target with their input prefix and
+    /// return its answer unchanged. Widening an object pointer and dropping
+    /// trailing arguments are identities; erasing, unerasing, discarding a
+    /// result, and manufacturing `undefined` are not.
+    ///
+    /// Recorded by the shared adapter builder, because allocation merging can
+    /// inline the target into the adapter before a backend sees it. The JVM
+    /// uses this fact to prove that a slot forwarder can also serve as a
+    /// covariant bridge. Table entries are pinned through specialization.
+    pub identity_projections: std::collections::BTreeMap<String, String>,
     /// How an object of each layout prints, by layout name: what `String(o)`,
     /// `${o}` and an array's text read off its descriptor
     /// (`NtsDescriptor.to_string`). Decided once, after lowering, for every

@@ -66,16 +66,17 @@ const ERASED_SUFFIX: &str = "@erased";
 /// bridges are added) and, per slot, each entry with the layouts holding it
 /// (`slot_tables`).
 pub(super) fn bridge(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program: &mut Program) {
-    adapt_interfaces(snapshot, hierarchy, program);
-    let calls = virtual_calls(program);
-    let owners = owners_by_name(hierarchy);
-    let tables = slot_tables(program);
     let mut index: FxHashMap<String, usize> = program
         .funcs
         .iter()
         .enumerate()
         .map(|(at, func)| (func.name.clone(), at))
         .collect();
+    let mut made = FxHashMap::default();
+    adapt_interfaces(snapshot, hierarchy, program, &mut index, &mut made);
+    let calls = virtual_calls(program);
+    let owners = owners_by_name(hierarchy);
+    let tables = slot_tables(program);
     // Sorted, so one compiler on one input makes its bridges in one order.
     let mut slots: Vec<(&(TypeId, String), &u32)> = hierarchy.slots.iter().collect();
     slots.sort_by_key(|(_, slot)| **slot);
@@ -105,13 +106,21 @@ pub(super) fn bridge(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program
             if func.abstract_declaration || func.return_type == HirType::Erased {
                 continue;
             }
-            let bridge = format!("{name}{ERASED_SUFFIX}");
-            if !index.contains_key(&bridge) {
-                let absent = result_absent(snapshot, &owners, name, &func.return_type);
-                let made = erasing_bridge(bridge.clone(), func, absent);
-                index.insert(bridge.clone(), program.funcs.len());
-                program.funcs.push(made);
-            }
+            let projection = Projection {
+                params: func.params.clone(),
+                returns: HirType::Erased,
+                arguments_absent: Vec::new(),
+                result_absent: result_absent(snapshot, &owners, name, &func.return_type),
+            };
+            let bridge = intern_projection(
+                snapshot,
+                program,
+                &mut index,
+                &mut made,
+                at,
+                &projection,
+                format!("{name}{ERASED_SUFFIX}"),
+            );
             for &layout in holders {
                 program.layouts[layout].methods[slot as usize] = Some(bridge.clone());
             }
@@ -199,22 +208,6 @@ fn crosses(answer: &HirType) -> bool {
     matches!(answer, HirType::Erased | HirType::Void | HirType::Never) || super::erasable(answer)
 }
 
-/// `{entry}@erased`: the entry's own parameters, a direct call to it, and its
-/// answer erased -- `undefined` where it answers nothing, as JavaScript says a
-/// call to such a function does.
-fn erasing_bridge(name: String, target: &Func, absent: Absent) -> Func {
-    projected_bridge(
-        name,
-        target,
-        &Projection {
-            params: target.params.clone(),
-            returns: HirType::Erased,
-            arguments_absent: Vec::new(),
-            result_absent: absent,
-        },
-    )
-}
-
 /// One slot's calling convention, independent of the body it reaches.
 #[derive(Debug)]
 struct Projection {
@@ -222,6 +215,22 @@ struct Projection {
     returns: HirType,
     arguments_absent: Vec<Absent>,
     result_absent: Absent,
+}
+
+impl Projection {
+    fn is_identity(&self, target: &Func) -> bool {
+        target
+            .params
+            .iter()
+            .zip(&self.params)
+            .all(|(target, through)| target.ty != HirType::Erased || through.ty == HirType::Erased)
+            && if self.returns == HirType::Void {
+                matches!(target.return_type, HirType::Void | HirType::Never)
+            } else {
+                !matches!(target.return_type, HirType::Void | HirType::Never)
+                    && (self.returns != HirType::Erased || target.return_type == HirType::Erased)
+            }
+    }
 }
 
 /// Both return-only bridges and structural adapters use this body builder.
@@ -358,19 +367,96 @@ struct AdapterKey {
     result_absent: Absent,
 }
 
+impl AdapterKey {
+    fn of(snapshot: &SemanticSnapshot, target: &Func, projection: &Projection) -> Self {
+        Self {
+            target: target.name.clone(),
+            params: projection
+                .params
+                .iter()
+                .skip(1)
+                .map(|param| abi_type(snapshot, &param.ty))
+                .collect(),
+            returns: abi_type(snapshot, &projection.returns),
+            // Only conversions the body performs distinguish projections.
+            // A class return bridge and an interface adapter with unchanged
+            // inputs must share one body, whatever their source slot.
+            arguments_absent: target
+                .params
+                .iter()
+                .enumerate()
+                .skip(1)
+                .map(|(at, param)| {
+                    if param.ty == HirType::Erased && projection.params[at].ty != HirType::Erased {
+                        projection
+                            .arguments_absent
+                            .get(at)
+                            .copied()
+                            .unwrap_or(Absent::Impossible)
+                    } else {
+                        Absent::Impossible
+                    }
+                })
+                .collect(),
+            result_absent: if projection.returns == HirType::Erased
+                && target.return_type != HirType::Erased
+            {
+                projection.result_absent
+            } else {
+                Absent::Impossible
+            },
+        }
+    }
+}
+
+/// Class and interface slots share adapters by their complete conversion plan.
+/// Joining input facts keeps specialization valid for every contributing slot.
+fn intern_projection(
+    snapshot: &SemanticSnapshot,
+    program: &mut Program,
+    index: &mut FxHashMap<String, usize>,
+    made: &mut FxHashMap<AdapterKey, String>,
+    target: usize,
+    projection: &Projection,
+    name: String,
+) -> String {
+    let key = AdapterKey::of(snapshot, &program.funcs[target], projection);
+    if let Some(bridge) = made.get(&key) {
+        let at = index[bridge];
+        for (param, face) in program.funcs[at].params.iter_mut().zip(&projection.params) {
+            param.known = param.known.join(face.known);
+        }
+        return bridge.clone();
+    }
+    let name = if index.contains_key(&name) {
+        format!("{name}${}", program.funcs.len())
+    } else {
+        name
+    };
+    let bridge = projected_bridge(name.clone(), &program.funcs[target], projection);
+    if projection.is_identity(&program.funcs[target]) {
+        program
+            .identity_projections
+            .insert(name.clone(), program.funcs[target].name.clone());
+    }
+    index.insert(name.clone(), program.funcs.len());
+    program.funcs.push(bridge);
+    made.insert(key, name.clone());
+    name
+}
+
 /// Replace interface entries with the interface's complete calling convention.
 /// Class slots and direct calls retain their own signatures; an inherited body
 /// is resolved by the table, so a subclass override receives its own adapter.
-fn adapt_interfaces(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program: &mut Program) {
+fn adapt_interfaces(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    program: &mut Program,
+    index: &mut FxHashMap<String, usize>,
+    made: &mut FxHashMap<AdapterKey, String>,
+) {
     let owners = owners_by_name(hierarchy);
     let tables = slot_tables(program);
-    let mut index: FxHashMap<String, usize> = program
-        .funcs
-        .iter()
-        .enumerate()
-        .map(|(at, func)| (func.name.clone(), at))
-        .collect();
-    let mut made: FxHashMap<AdapterKey, String> = FxHashMap::default();
     let mut slots: Vec<_> = hierarchy
         .slots
         .iter()
@@ -408,37 +494,15 @@ fn adapt_interfaces(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program:
             else {
                 continue;
             };
-            let key = AdapterKey {
-                target: name.clone(),
-                params: through
-                    .params
-                    .iter()
-                    .skip(1)
-                    .map(|param| abi_type(snapshot, &param.ty))
-                    .collect(),
-                returns: abi_type(snapshot, &through.return_type),
-                arguments_absent: projection.arguments_absent.clone(),
-                result_absent: projection.result_absent,
-            };
-            let bridge = if let Some(bridge) = made.get(&key) {
-                let at = index[bridge];
-                for (param, face) in program.funcs[at].params.iter_mut().zip(&projection.params) {
-                    param.known = param.known.join(face.known);
-                }
-                bridge.clone()
-            } else {
-                let name = format!("{name}@{owner}");
-                let name = if index.contains_key(&name) {
-                    format!("{name}${slot}")
-                } else {
-                    name
-                };
-                let bridge = projected_bridge(name.clone(), target, &projection);
-                index.insert(name.clone(), program.funcs.len());
-                program.funcs.push(bridge);
-                made.insert(key, name.clone());
-                name
-            };
+            let bridge = intern_projection(
+                snapshot,
+                program,
+                index,
+                made,
+                at,
+                &projection,
+                format!("{name}@{owner}"),
+            );
             for &layout in holders {
                 program.layouts[layout].methods[*slot as usize] = Some(bridge.clone());
             }
