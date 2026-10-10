@@ -3107,7 +3107,9 @@ fn emit_object_types(
             // itself. That is strictly more than the C qualifier was buying.
             writer.line(origin, format!("    {ty} {};", c_member_at(layout, at)));
         }
-        writer.line(origin, "};");
+        // Read through other structs' pointers, which C does not allow between
+        // struct types unless told: see `NTS_OBJECT_STRUCT`.
+        writer.line(origin, "} NTS_OBJECT_STRUCT;");
         // What this compiler believes about the struct clang just laid out.
         //
         // Descriptors take `offsetof` on the principle that whoever laid the

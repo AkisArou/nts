@@ -36,7 +36,7 @@
  * as bytes per element and takes its count from the header; a fixed one reads
  * it as the whole object. Without the tag the same field would mean two things
  * and nothing would say which. */
-/* The two attribute macros, **defined before anything can use them.**
+/* The attribute macros, **defined before anything can use them.**
  *
  * They lived beside the prose that argues for them, four hundred lines down,
  * and a declaration written above that point does not fail at the definition --
@@ -56,10 +56,23 @@
  * survive being compiled. */
 #define NTS_ALLOCATES_OR_NULL __attribute__((malloc))
 #define NTS_READS_ONLY __attribute__((pure))
+/* On every object struct the compiler emits, and unlike the three above it is
+ * not an optimisation: it is what makes the program's own accesses defined.
+ * An object is read through other structs' pointers -- a class through its
+ * base's, through an interface's it implements, through a type whose fields
+ * are its first -- and C's aliasing rule (C11 6.5p7) does not relate two struct
+ * types that merely start alike. Under it clang and gcc assume a write through
+ * `NtsObj_Base *` cannot change a field read through `NtsObj_Derived *`, and
+ * forwarded the constructor's store past it
+ * (`outcomes/a-subclass-on-the-stack-written-through-its-base`). `may_alias`
+ * takes an object's fields out of type-based alias analysis; a compiler without
+ * the attribute does no such analysis to take them out of. */
+#define NTS_OBJECT_STRUCT __attribute__((may_alias))
 #else
 #define NTS_ALLOCATES
 #define NTS_ALLOCATES_OR_NULL
 #define NTS_READS_ONLY
+#define NTS_OBJECT_STRUCT
 #endif
 
 /* # A new helper below owes a row to four tables, in four crates
