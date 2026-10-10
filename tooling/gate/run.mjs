@@ -126,6 +126,7 @@ const STEPS = [
   { name: "integrity-runtime", elastic: true, slots: 12, min: 4, mem: 4, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
   { name: "snapshot-cache", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "a cached snapshot gives the same program" },
   { name: "assembles", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
+  { name: "c-compiles", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, after: ["profile"], doc: "every runtime program's emitted C compiles" },
   { name: "types", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "snapshot type tables consistent" },
   { name: "jvm-verifies", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies" },
   { name: "tooling", slots: 1, mem: 0.5, doc: "the gate's own tools pass their tests" },
@@ -386,6 +387,7 @@ function stepEnv(step, slots) {
   if (step.name === "definitions" && plan.includes("integrity-runtime")) e.NTS_DEFINITIONS_FROM = shared;
   if (step.name === "compile-time" && plan.includes("integrity-runtime")) e.NTS_COMPILE_TIMES_FROM = shared;
   if (step.name === "addons" && plan.includes("profile")) e.NTS_ADDON_EMITTED = join(ROOT, "target", "gate-profile");
+  if (step.name === "c-compiles" && plan.includes("profile")) e.NTS_ADDON_EMITTED = join(ROOT, "target", "gate-profile");
   e.NTS_GATE_COSTS_DIR = join(target, "gate-costs");
   // The release build's own test262 protocol binary, so the test262 steps do
   // not `cargo run` a debug copy and queue on cargo's lock behind `tests`.

@@ -114,6 +114,7 @@ export const ASKS = {
   "integrity-runtime": ["valid", "the same over the runtime"],
   definitions: ["whether", "did the runtime's reach go down, per module"],
   assembles: ["valid", "is the runtime's LLVM valid IR"],
+  "c-compiles": ["valid", "does every runtime project's emitted C compile, including web-platform"],
   "snapshot-cache": ["valid", "is a cached snapshot the same program as a fresh one"],
   types: ["valid", "is the snapshot's type table consistent"],
   "bench-agree": ["answers", "does every backend build and agree on the benchmarks"],
@@ -231,7 +232,7 @@ export const RULES = [
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    steps: ["examples", "rc", "outcomes", "snapshot-cache", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches"],
+    steps: ["examples", "rc", "outcomes", "snapshot-cache", "c-compiles", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches"],
     arms: [COMPARE[0], COMPARE[2]],
   },
   {
@@ -554,7 +555,7 @@ const CORPORA = [
   { name: "the interop projects", member: /^examples\/interop\/[^/]+\//, dirs: () => kids("examples/interop"), steps: ["interop"] },
   { name: "the blockers", member: /^tooling\/conformance\/blockers\/[^/]+\//, dirs: () => kids("tooling/conformance/blockers"), steps: ["blockers", "integrity"] },
   { name: "the outcomes", member: /^tooling\/conformance\/outcomes\/[^/]+\//, dirs: () => kids("tooling/conformance/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
-  { name: "the runtime modules", member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
+  { name: "the runtime modules", member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
   { name: "the bench cases", member: /^benches\/cases\/[^/]+\//, dirs: () => kids("benches/cases"), steps: ["benches", "bench-agree", "dex"] },
   { name: "the memory cases", member: /^tooling\/memory\/cases\/[^/]+\//, dirs: () => kids("tooling/memory/cases"), steps: ["memory"] },
 ];

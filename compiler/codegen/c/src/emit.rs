@@ -1971,8 +1971,9 @@ fn published_class_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
         .collect()
 }
 
-/// A descriptor is read through an object's own header, so only a layout a
-/// program allocates can ever have its read.
+/// Layouts allocated, published for construction, or named by a descriptor test.
+/// A closed field chain tests every arm even when this program allocates none
+/// of that arm's type, just as `instanceof` names unallocated classes.
 fn layouts_needing_descriptors(program: &Program) -> rustc_hash::FxHashSet<usize> {
     let mut found: rustc_hash::FxHashSet<usize> = published_class_layouts(program);
     let want = |found: &mut rustc_hash::FxHashSet<usize>, ty: &nts_core::hir::ClassId| {
@@ -2007,6 +2008,13 @@ fn layouts_needing_descriptors(program: &Program) -> rustc_hash::FxHashSet<usize
             if let OpKind::InstanceOf { classes, .. } = &op.kind {
                 for class in classes {
                     want(&mut found, class);
+                }
+                continue;
+            }
+            if let OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } = &op.kind
+            {
+                for arm in arms {
+                    want(&mut found, &arm.ty);
                 }
                 continue;
             }

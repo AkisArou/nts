@@ -2438,6 +2438,14 @@ step "tooling" tooling_tests
 step "integrity-runtime" integrity_runtime
 step "snapshot-cache" snapshot_cache
 step "assembles" assembles
+# HIR and identical cached C do not prove the generated C compiles. The addon
+# floor compiles runtime/node only; web-platform's open field tests once named
+# undeclared descriptors through every green gate. No link or Node headers:
+# clang -std=c11 -fsyntax-only over every runtime program, reusing profile's C.
+c_compiles() {
+  node tooling/conformance/c-compiles.mjs
+}
+step "c-compiles" c_compiles
 step "types" types_check
 step "jvm-verifies" jvm_verifies
 # Cheap -- filesystem only -- and it answers a question nothing else asks: does

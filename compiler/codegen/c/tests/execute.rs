@@ -37,6 +37,30 @@ fn build_and_run(example: &str, harness: &str) -> Option<std::process::Output> {
     build_and_run_with(example, harness, hir::Provider::NoGc)
 }
 
+#[test]
+fn a_field_chain_can_test_an_unallocated_union_arm() {
+    let harness = r#"
+#include <stdio.h>
+extern double readStatus(double);
+extern double sharedStatus(double);
+int main(void) {
+    printf("%.0f %.0f\n", readStatus(7), sharedStatus(11));
+    return 0;
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some(output) = build_and_run_with(
+            "a-field-read-tests-an-unallocated-record",
+            harness,
+            provider,
+        ) else {
+            return;
+        };
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "7 11\n");
+    }
+}
+
 /// As above, under a chosen memory provider.
 fn build_and_run_with(
     example: &str,

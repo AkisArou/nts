@@ -55,6 +55,7 @@ test("a crate no rule names owes what the crates that use it owe", () => {
 
 test("what a step runs owes that step", () => {
   owes("tooling/conformance/integrity.ts", ["integrity", "integrity-runtime"], { not: ["examples"] });
+  owes("tooling/conformance/c-compiles.mjs", ["c-compiles"], { not: ["examples"] });
   owes("tooling/gate/costs.mjs", ["integrity-runtime", "snapshot-cache", "assembles", "jvm-verifies", "types"]);
   // Run by llvm, llvm-rc and jvm through all.sh's backend_examples.
   owes("tooling/differential/agree.mjs", ["llvm", "llvm-rc", "jvm"]);
@@ -153,7 +154,13 @@ test("a step that reads another's output through the runner owes what that step 
   // (run.mjs's NTS_DEFINITIONS_FROM, NTS_COMPILE_TIMES_FROM); profile's
   // emission goes to addons (NTS_ADDON_EMITTED).
   owes("tooling/conformance/integrity.ts", ["integrity-runtime", "definitions", "compile-time"]);
-  owes("tooling/census/node-refusals.ts", ["profile", "addons"]);
+  owes("tooling/census/node-refusals.ts", ["profile", "addons", "c-compiles"]);
+});
+
+test("the C backend and every runtime module owe C validation", () => {
+  for (const path of ["compiler/codegen/c/src/emit.rs", "runtime/web-platform/src/provider.ts", "runtime/node/http/src/main.ts"]) {
+    owes(path, ["c-compiles"]);
+  }
 });
 
 test("an example's nts.config.ts owes config, new or changed, interop's too", () => {
