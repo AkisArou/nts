@@ -1467,41 +1467,6 @@ fn render(
     Ok((body::method_name(&func.name), signature, rendered))
 }
 
-/// One instance method per dispatch slot, forwarding to the static body.
-///
-/// The bodies stay static on `nts/gen/Program`, and each class gets a four-byte
-/// `aload_0; invokestatic; return` per slot it implements. That is deliberate
-/// and it is the cheaper half of a fork:
-///
-/// - A direct call stays `invokestatic`, which is what most calls are. Moving
-///   the bodies onto the classes would make every call to a method virtual,
-///   and C2 would have to devirtualise back to where it started.
-/// - Nothing about how a body is emitted changes -- the signature, the slots
-///   and the prologue are the same whether or not a method is dispatched.
-/// - A forwarder is far below `FreqInlineSize`, so C2 inlines it away and the
-///   frame does not exist at run time.
-///
-/// The overriding is done by the forwarders' *names and descriptors*, which is
-/// why `slot` is unused on this backend: the JVM has its own vtable, and naming
-/// the method lets the JIT devirtualise through class-hierarchy analysis. It
-/// also means an override and the thing it overrides must agree on the
-/// descriptor exactly -- if they do not, the JVM sees two unrelated methods,
-/// both present, and dispatch quietly picks the wrong one with no verifier
-/// error. `signatures::specialize` pinning anything a dispatch table names and
-/// `unerase::narrow_returns` excluding `dispatched` are what make them agree
-/// today, so the agreement is **checked here** rather than assumed.
-/// The `nts.rt` interfaces this layout implements, from the shape of its
-/// dispatched `call`.
-///
-/// Deduplicated, because two slots can name one function -- a class inheriting
-/// a callback and redeclaring it would otherwise list the interface twice, and
-/// a duplicate entry in `interfaces` is a class file the verifier rejects.
-/// Whether this layout's dispatch table names a `toString(): string` of its own.
-///
-/// The descriptor has to be exactly `()Ljava/lang/String;`, because that is the
-/// one that overrides `java.lang.Object.toString` and so the one `ref.toString()`
-/// reaches. A `toString(radix)` is a different method to the JVM and marking its
-/// class would promise a call that resolves elsewhere.
 /// `nts$print`, how an object of this layout prints (`Program::printed`), which
 /// `NtsValue.objectText` calls for `String(o)`, `${o}` and an array's text on
 /// any object this program made, closures included: the decision is the
@@ -1594,6 +1559,12 @@ fn printing_method(
     Ok(())
 }
 
+/// The `nts.rt` interfaces this layout implements, from the shape of its
+/// dispatched `call`.
+///
+/// Deduplicated, because two slots can name one function -- a class inheriting
+/// a callback and redeclaring it would otherwise list the interface twice, and
+/// a duplicate entry in `interfaces` is a class file the verifier rejects.
 fn callback_interfaces(
     package: &str,
     program: &Program,
@@ -2586,6 +2557,29 @@ fn foreign_bridges(
     Ok(())
 }
 
+/// One instance method per dispatch slot, forwarding to the static body.
+///
+/// The bodies stay static on `nts/gen/Program`, and each class gets a four-byte
+/// `aload_0; invokestatic; return` per slot it implements. That is deliberate
+/// and it is the cheaper half of a fork:
+///
+/// - A direct call stays `invokestatic`, which is what most calls are. Moving
+///   the bodies onto the classes would make every call to a method virtual,
+///   and C2 would have to devirtualise back to where it started.
+/// - Nothing about how a body is emitted changes -- the signature, the slots
+///   and the prologue are the same whether or not a method is dispatched.
+/// - A forwarder is far below `FreqInlineSize`, so C2 inlines it away and the
+///   frame does not exist at run time.
+///
+/// The overriding is done by the forwarders' *names and descriptors*, which is
+/// why `slot` is unused on this backend: the JVM has its own vtable, and naming
+/// the method lets the JIT devirtualise through class-hierarchy analysis. It
+/// also means an override and the thing it overrides must agree on the
+/// descriptor exactly -- if they do not, the JVM sees two unrelated methods,
+/// both present, and dispatch quietly picks the wrong one with no verifier
+/// error. `signatures::specialize` pinning anything a dispatch table names and
+/// `unerase::narrow_returns` excluding `dispatched` are what make them agree
+/// today, so the agreement is **checked here** rather than assumed.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn dispatch_forwarders(
     package: &str,
