@@ -3320,6 +3320,7 @@ impl Emitter<'_> {
                 // end proved still has to be spelled for the verifier.
                 self.load(code, pool, *value)?;
                 self.writable_array(code, pool, ty, origin);
+                values_array(code, pool, ty, origin);
                 self.refuse_impossible_cast(ty)?;
                 if let Some(want) = types::descriptor(self.shape, ty) {
                     code.check_cast(origin, pool, &want);
@@ -3353,6 +3354,7 @@ impl Emitter<'_> {
                     HirType::Managed(_) => {
                         code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
                         self.writable_array(code, pool, ty, origin);
+                        values_array(code, pool, ty, origin);
                         let descriptor = types::descriptor(self.shape, ty).ok_or_else(|| {
                             refuse(self.func, "unerasing to an unrepresentable reference")
                         })?;
@@ -3372,6 +3374,51 @@ impl Emitter<'_> {
             }
             _ => Err(refuse(self.func, "an erasure this backend does not spell")),
         }
+    }
+
+    /// The Java method a runtime helper call names: the class, the member and
+    /// its descriptor, or `None` when no table has the name.
+    fn runtime_method(
+        &self,
+        name: &str,
+        args: &[ValueId],
+        value: ValueId,
+    ) -> Option<(&'static str, &'static str, String)> {
+        // The array whose element type picks the overload. For most
+        // helpers that is the first argument; `Promise.all` takes the
+        // promises first and the values second, and it is the values
+        // that carry the payload representation.
+        let which = usize::from(name == "nts_promise_all");
+        let subject = args.get(which).map(|&first| self.ty(first).clone());
+        let element = subject
+            .as_ref()
+            .and_then(|ty| self.array_element_descriptor(ty));
+        let found = if self.shape.grows {
+            // A growable program has no bare arrays, so every array
+            // helper is a method on a wrapper and the element-width
+            // overloads below do not apply.
+            growable_external(name, element.as_deref().unwrap_or("L"))
+                .map(|(class, member, signature)| (leak(class), member, signature))
+                .or_else(|| external(name))
+        } else {
+            external(name).or_else(|| element.as_deref().and_then(|e| array_external(name, e)))
+        };
+        // The typed-array family, whose subject may be the *result*
+        // rather than an argument -- `nts_view_new` takes a buffer and
+        // answers a view. Tried after the tables above and before the
+        // refusal, so a name in both would keep the older answer; there
+        // is none, and this order makes adding one a visible decision
+        // rather than a silent override.
+        let found = found.or_else(|| view_helper(name, subject.as_ref(), self.ty(value)));
+        // `new Array(n)` names its element by its result alone.
+        found.map(|(class, member, signature)| {
+            let member = if member == "of" {
+                of_holding(self.ty(value))
+            } else {
+                member
+            };
+            (class, member, signature)
+        })
     }
 
     fn writable_array(
@@ -3732,7 +3779,13 @@ impl Emitter<'_> {
             Kind::Long => "J",
             _ => "D",
         };
-        code.invoke_static(origin, pool, &class, "of", &format!("({n})L{class};"));
+        code.invoke_static(
+            origin,
+            pool,
+            &class,
+            of_holding(ty),
+            &format!("({n})L{class};"),
+        );
         Ok(Placed::OnStack)
     }
 
@@ -6556,33 +6609,7 @@ impl Emitter<'_> {
                 } else {
                     name.clone()
                 };
-                // The array whose element type picks the overload. For most
-                // helpers that is the first argument; `Promise.all` takes the
-                // promises first and the values second, and it is the values
-                // that carry the payload representation.
-                let which = usize::from(name == "nts_promise_all");
-                let subject = args.get(which).map(|&first| self.ty(first).clone());
-                let element = subject
-                    .as_ref()
-                    .and_then(|ty| self.array_element_descriptor(ty));
-                let found = if self.shape.grows {
-                    // A growable program has no bare arrays, so every array
-                    // helper is a method on a wrapper and the element-width
-                    // overloads below do not apply.
-                    growable_external(name, element.as_deref().unwrap_or("L"))
-                        .map(|(class, member, signature)| (leak(class), member, signature))
-                        .or_else(|| external(name))
-                } else {
-                    external(name)
-                        .or_else(|| element.as_deref().and_then(|e| array_external(name, e)))
-                };
-                // The typed-array family, whose subject may be the *result*
-                // rather than an argument -- `nts_view_new` takes a buffer and
-                // answers a view. Tried after the tables above and before the
-                // refusal, so a name in both would keep the older answer; there
-                // is none, and this order makes adding one a visible decision
-                // rather than a silent override.
-                let found = found.or_else(|| view_helper(name, subject.as_ref(), self.ty(value)));
+                let found = self.runtime_method(name, args, value);
                 if self.integer_to_string(code, pool, name, args, origin)? {
                     return Ok(Placed::OnStack);
                 }
@@ -7860,5 +7887,40 @@ mod set_length {
         // The control. A stem that is not in the table must still be `None`,
         // or the assertions above pass on a function that accepts anything.
         assert!(super::growable_external("nts_array_set_width", "D").is_none());
+    }
+}
+
+/// Whether `ty` is an array of erased values: an `unknown[]`.
+fn holds_values(ty: &HirType) -> bool {
+    matches!(ty, HirType::Managed(ManagedType::Array(element)) if **element == HirType::Erased)
+}
+
+/// The `NtsArrayL` factory for an array of `ty`: `ofValues` for an
+/// `unknown[]`, which marks the array as holding erased values, and `of` for
+/// everything else. The mark is what `NtsValue.arrayOfValues` reads; see
+/// `NtsArrayL.values`.
+fn of_holding(ty: &HirType) -> &'static str {
+    if holds_values(ty) { "ofValues" } else { "of" }
+}
+
+/// An array read back out of an erased value as an `unknown[]` is checked to
+/// be one, as C's unerase calls `nts_array_of_values`. The `checkcast` after it
+/// names the class and not the element, and a growable `string[]` is the same
+/// class as an `unknown[]`
+/// (`outcomes/a-string-array-cast-to-an-unknown-array-takes-a-number-on-the-jvm`).
+fn values_array(
+    code: &mut Code,
+    pool: &mut Pool,
+    ty: &HirType,
+    origin: &nts_semantic_schema::Origin,
+) {
+    if holds_values(ty) {
+        code.invoke_static(
+            origin,
+            pool,
+            types::VALUE,
+            "arrayOfValues",
+            "(Ljava/lang/Object;)Ljava/lang/Object;",
+        );
     }
 }

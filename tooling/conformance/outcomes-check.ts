@@ -307,13 +307,18 @@ function runCheck(dir, backend) {
     maxBuffer: 64 * 1024 * 1024,
     env: backend === null ? rest : { ...rest, NTS_BACKEND: backend },
   });
-  const lines = `${ran.stdout ?? ""}${ran.stderr ?? ""}`
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => /^(checked|agreed|disagree|declined|refused:|nothing to check|invalid HIR)/i.test(l) || /\bdisagree/i.test(l));
+  const said = `${ran.stdout ?? ""}${ran.stderr ?? ""}`.split("\n").map((l) => l.trim());
+  const lines = said.filter(
+    (l) => /^(checked|agreed|disagree|declined|refused:|nothing to check|invalid HIR)/i.test(l) || /\bdisagree/i.test(l),
+  );
   const text = lines.join(" | ");
   if (/invalid HIR/.test(text)) return { category: "invalid-hir", nts: text };
   if (/disagree/i.test(text)) return { category: "wrong-answer", nts: text };
+  // A stop by name, as a `build` fixture's `aborted`: the first reason, without
+  // the counts, which move with the case pool. Below a disagreement, which is
+  // the worse answer when a program gives both.
+  const aborted = said.find((l) => l.startsWith("the compiled program aborted: "));
+  if (aborted) return { category: "aborted", nts: aborted.replace(/^the compiled program aborted: /, "") };
   if (/nothing to check/.test(text) && /refused:/.test(text)) {
     const first = lines.find((l) => l.startsWith("refused:"));
     // A location, if the line carries one, is where the fixture's text puts the

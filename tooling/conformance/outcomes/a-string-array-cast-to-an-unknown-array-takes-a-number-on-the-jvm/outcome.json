@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | Error: 58 case(s) disagree between the compiled program and node",
+  "category": "aborted",
+  "nts": "nts: refused at run time: an array read as `unknown[]` whose elements are not erased values, which this compiler holds as another kind of element",
   "node": null,
-  "measured_with": "a6d66beeb18e3a39",
+  "measured_with": "ed312db798f12109",
   "source": "measured"
 }

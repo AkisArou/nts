@@ -18,6 +18,24 @@ public final class NtsArrayL {
      */
     public Object[] items;
     int length;
+    /**
+     * Whether the elements are erased values: an {@code unknown[]}, where every
+     * other reference array -- a {@code string[]}, a {@code Box[]} -- is this
+     * class too. C reads the same fact from its descriptor ({@code erased}),
+     * and {@code h as unknown[]} checks it before trusting the array
+     * ({@link NtsValue#arrayOfValues}).
+     *
+     * <p><strong>False unless a factory for an array of values says
+     * otherwise</strong>, so a path that builds one and forgets is a named
+     * refusal of a real {@code unknown[]} rather than the silent wrong answer
+     * this replaces: a number stored among a {@code string[]}'s strings.
+     * The factories are {@code ofValues} (an array literal, {@code new
+     * Array(n)}) and the copies below, which keep their receiver's. A
+     * {@code _value} helper that makes a new {@code unknown[]} -- {@code
+     * slice}, {@code concat}, {@code filter}, {@code map} and spread are
+     * refused at lowering until one exists -- owes this flag the day it lands.
+     */
+    boolean values;
 
     private NtsArrayL(Object[] items, int length) { this.items = items; this.length = length; }
 
@@ -45,6 +63,22 @@ public final class NtsArrayL {
         return new NtsArrayL(count == 0 ? EMPTY : new Object[count], count);
     }
     public static NtsArrayL empty() { return new NtsArrayL(EMPTY, 0); }
+
+    /** {@link #of(long)} for an {@code unknown[]}; see {@link #values}. */
+    public static NtsArrayL ofValues(long n) { return holdingValues(of(n)); }
+    public static NtsArrayL ofValues(int n) { return holdingValues(of(n)); }
+    public static NtsArrayL ofValues(double n) { return holdingValues(of(n)); }
+
+    private static NtsArrayL holdingValues(NtsArrayL a) {
+        a.values = true;
+        return a;
+    }
+
+    /** A copy holds what its source held. */
+    private static NtsArrayL like(NtsArrayL source, NtsArrayL copy) {
+        copy.values = source.values;
+        return copy;
+    }
     public static double length(NtsArrayL a) { return a.length; }
     /**
      * The same length where the middle end asked for an integer.
@@ -267,14 +301,14 @@ public final class NtsArrayL {
     public static NtsArrayL slice(NtsArrayL a, double from, double to) {
         int start = NtsArrays.clamp(from, a.length);
         int end = Math.max(start, NtsArrays.clamp(to, a.length));
-        return new NtsArrayL(start == end ? EMPTY : Arrays.copyOfRange(a.items, start, end), end - start);
+        return like(a, new NtsArrayL(start == end ? EMPTY : Arrays.copyOfRange(a.items, start, end), end - start));
     }
     public static NtsArrayL concat(NtsArrayL a, NtsArrayL b) {
         int n = NtsArrays.checkedLength((long) a.length + b.length);
         Object[] joined = n == 0 ? EMPTY : new Object[n];
         System.arraycopy(a.items, 0, joined, 0, a.length);
         System.arraycopy(b.items, 0, joined, a.length, b.length);
-        return new NtsArrayL(joined, n);
+        return like(a, new NtsArrayL(joined, n));
     }
     public static NtsArrayL extend(NtsArrayL a, NtsArrayL b) {
         int old = a.length;
@@ -294,8 +328,8 @@ public final class NtsArrayL {
     public static NtsArrayL splice(NtsArrayL a, double at, double count) {
         int start = NtsArrays.clamp(at, a.length);
         int removed = Math.max(0, Math.min((int) count, a.length - start));
-        NtsArrayL taken = new NtsArrayL(removed == 0 ? EMPTY :
-            Arrays.copyOfRange(a.items, start, start + removed), removed);
+        NtsArrayL taken = like(a, new NtsArrayL(removed == 0 ? EMPTY :
+            Arrays.copyOfRange(a.items, start, start + removed), removed));
         if (removed != 0) {
             int old = a.length;
             System.arraycopy(a.items, start + removed, a.items, start, old - start - removed);
@@ -381,8 +415,16 @@ public final class NtsArrayL {
      * two are separate. And a store of the wrong element type throws {@code
      * ArrayStoreException} at the store rather than corrupting the array,
      * which is the covariance hole doing the right thing.
+     *
+     * <p>Holds values ({@link #values}) only when the Java array is an
+     * {@code NtsValue[]}. A Java method answering a plain {@code Object[]} for
+     * a TypeScript {@code unknown[]} would be adopted unmarked, and refused by
+     * name at a later {@code as unknown[]}: loud, and the place to mark it if
+     * such a binding ever appears.
      */
     public static NtsArrayL adopt(Object[] items) {
-        return new NtsArrayL(items == null ? EMPTY : items, items == null ? 0 : items.length);
+        NtsArrayL adopted = new NtsArrayL(items == null ? EMPTY : items, items == null ? 0 : items.length);
+        adopted.values = items instanceof NtsValue[];
+        return adopted;
     }
 }

@@ -395,6 +395,25 @@ public final class NtsValue {
         }
     }
 
+    /**
+     * An array read back out of an erased value as an array of erased values --
+     * {@code h as unknown[]} -- which it must be, as C's
+     * {@code nts_array_of_values} checks. The unerase's {@code checkcast} names
+     * the class and not the element, and a growable {@code string[]} is an
+     * {@link NtsArrayL} as an {@code unknown[]} is, so the cast passed and a
+     * write stored a number among the strings. A bare {@code NtsValue[]} is a
+     * non-growing program's {@code unknown[]}; null is the absent value a
+     * nullable array is. Anything else stops by name, in C's words.
+     */
+    public static Object arrayOfValues(Object ref) {
+        if (ref == null || ref instanceof NtsValue[] || (ref instanceof NtsArrayL && ((NtsArrayL) ref).values)) {
+            return ref;
+        }
+        throw NtsRefusal.missing(
+            "an array read as `unknown[]` whose elements are not erased values, which this compiler holds as "
+                + "another kind of element");
+    }
+
     public static Object arrayReference(Object ref) {
         if (ref instanceof NtsTemplate) {
             throw new NtsRefusal("converting an immutable template object to writable array storage");
