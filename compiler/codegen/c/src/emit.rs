@@ -5184,7 +5184,7 @@ fn start_frame_object(
             .map_or("0", |_| "nts_value_of_undefined()");
         writer.line(
             origin,
-            format!("{name}_frame.{} = {zero};", c_identifier(field)),
+            format!("{name}_frame.{} = {zero};", c_member_escaped(field)),
         );
     }
 }
