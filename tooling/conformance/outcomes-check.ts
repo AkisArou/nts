@@ -27,8 +27,17 @@
 //
 //   tooling/conformance/outcomes/<name>/
 //     tsconfig.json   extends ../../../../tsconfig.fixtures.json
-//     src/main.ts     the program; `// run: build` (default) or `// run: check`
+//     src/main.ts     the program; `// run: build` (default) or `// run: check`,
+//                     and with `check`, optionally `// backend: jvm` (or `llvm`)
 //     outcome.json    what it did, written by --record, compared by default
+//
+// **`// backend:` is for a defect only one backend has.** `build` is `emit-c`
+// by construction, and `check` ran whatever `NTS_BACKEND` the caller's shell
+// happened to export -- so a JVM-only wrong answer (a `string[]` cast to
+// `unknown[]` passes the JVM's `checkcast`, where C stops by name) had no
+// fixture that could hold it. The line sets `NTS_BACKEND` for that fixture,
+// and its absence now *unsets* it, so every other `check` record is measured
+// on the default backend whatever the shell exports.
 //
 // # How a case is run -- recorded, because the two disagree about "declined"
 //
@@ -285,13 +294,18 @@ function runNode(dir) {
   return `exit ${ran.status}${early ? `; before running: ${early.trim()}` : ""}`;
 }
 
+/** The backend a `check` fixture names with `// backend: <name>`, or null. */
+const backendOf = (name) =>
+  /^\/\/\s*backend:\s*(jvm|llvm)\s*$/m.exec(readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8"))?.[1] ?? null;
+
 /** `nts check`: the lines that decide, verbatim, declined ones included. */
-function runCheck(dir) {
+function runCheck(dir, backend) {
+  const { NTS_BACKEND: _ambient, ...rest } = env();
   const ran = spawnSync("sh", capped(TOOLS, NTS, ["check", dir]), {
     encoding: "utf8",
     timeout: 300_000,
     maxBuffer: 64 * 1024 * 1024,
-    env: env(),
+    env: backend === null ? rest : { ...rest, NTS_BACKEND: backend },
   });
   const lines = `${ran.stdout ?? ""}${ran.stderr ?? ""}`
     .split("\n")
@@ -313,7 +327,7 @@ function runCheck(dir) {
 function measure(name) {
   const mode = runMode(name);
   const dir = materialise(name, join(FIXTURES, name, "src"), mode);
-  if (mode === "check") return { run: "check", ...runCheck(dir), node: null };
+  if (mode === "check") return { run: "check", ...runCheck(dir, backendOf(name)), node: null };
   const nts = runBuild(dir);
   if (nts.category === "refused" && nts.ran === null) return { run: "build", category: "not-measured", nts: "a refused program's artefact could not be run to the end", node: null };
   if (nts.category !== "completed") return { run: "build", ...nts, node: nts.category === "not-measured" ? null : runNode(dir) };
