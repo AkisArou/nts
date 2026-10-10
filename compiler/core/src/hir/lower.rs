@@ -3998,6 +3998,17 @@ fn receiving_function_name(emitted: &str) -> String {
 /// See [`receiving_function_name`].
 const RECEIVING_SUFFIX: &str = "@this";
 
+/// Whether a callee is a raising copy, named directly or through its raising
+/// slot. A wrapper's call is built rather than lowered from a call node, so this
+/// is how its body knows to test for a raise after it.
+fn names_a_raising_copy(callee: &Callee) -> bool {
+    match callee {
+        Callee::Direct(name) => name.ends_with(RAISING_SUFFIX),
+        Callee::Virtual { declared, .. } => declared.ends_with(RAISING_SUFFIX),
+        _ => false,
+    }
+}
+
 /// The name of a closure's erased entry. See [`Hierarchy::erased_call_slot`].
 fn erased_call_name(index: usize) -> String {
     format!("Closure{index}#erased_call")
@@ -4642,8 +4653,10 @@ fn collect_function_values(
             .into_iter()
             .map(|declaration| function_value(snapshot, probe, declaration)),
     );
+    // A method whose body reads `this` takes the call's, as a `function` does: a
+    // read does not bind it ([`FuncBuilder::method_receiver`]).
     closures.extend(bound.into_iter().map(|declaration| ClosureInfo {
-        refusal: refusal_for_a_method_value(probe, declaration),
+        reads_this: uses_its_receiver(probe, declaration),
         source: ClosureSource::Method,
         ..ClosureInfo::as_written(declaration)
     }));
@@ -4674,42 +4687,6 @@ const A_GENERIC_DECLARATION_READING_THIS: &str =
     "a generic `function` declaration that reads its own `this`, used as a value";
 
 /// Why this method cannot be used as a value, if it cannot.
-fn refusal_for_a_method_value(probe: &FuncBuilder, method: NodeId) -> Option<&'static str> {
-    if uses_its_receiver(probe, method) {
-        return Some(RECEIVER_IS_NOT_BOUND);
-    }
-    // **A generator method was refused here and is not any more**, as of
-    // 2026-09-20, and how it was cleared is the part worth keeping.
-    //
-    // Calling a generator produces its *frame*, whose type is synthetic and
-    // per-declaration -- `managed<generator#0>` -- while the type the checker
-    // gives the call is the abstract `Generator<…>` object a wrapping closure
-    // is declared with. The two disagreed: `Closure8#call(…) -> managed<obj#31>`
-    // returning a `managed<generator#0>`, which is **invalid HIR** and so no
-    // output at all.
-    //
-    // Nothing was done to this function. `suspend::yielded_slot` made the
-    // abstract `Generator<…>` representable for an uninhabited element, and a
-    // frame's layout already has that class as its *base* -- so the two are one
-    // pointer and `compatible` has always permitted the upcast, at a return as
-    // much as at an argument. The refusal was written against a state of the
-    // world that a change three commits later removed, and nothing would have
-    // said so: a refusal does not fail when it stops being necessary.
-    //
-    // Found by re-running the census row rather than by reading this comment,
-    // which is the general shape -- **clearing one refusal publishes what stood
-    // behind it, and sometimes what stood behind it was another refusal.** 40
-    // files of the slice-1 `test/language` population, every one
-    // `private-gen-meth-*`.
-    None
-}
-
-/// Why a method whose body reads `this` cannot be used as a value here.
-const RECEIVER_IS_NOT_BOUND: &str = "a method used as a value whose body reads `this`, which a read does not bind -- \
-     `const g = c.m; g()` calls `m` with `this` undefined, and this compiler would hand it \
-     the receiver instead";
-
-/// What each function declaration is emitted as, and which cannot be.
 #[derive(Default, Clone)]
 struct Naming {
     initialization: std::rc::Rc<initialization::Analysis>,
@@ -30768,8 +30745,7 @@ impl<'a> FuncBuilder<'a> {
         // because those bodies *are* nodes. Four spellings of one construct and
         // only the fourth could see it, which is why that fixture has four.
         let callee = self.wrapper_callee_that_raises(id, info, callee)?;
-        let names_a_raising_copy =
-            matches!(&callee, Callee::Direct(name) if name.ends_with(RAISING_SUFFIX));
+        let names_a_raising_copy = names_a_raising_copy(&callee);
         let call = self.push(
             OpKind::Call {
                 callee,
@@ -30804,8 +30780,8 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// The refusal is what `lower_wanted_closures` turns into the entry that aborts
     /// by name, so a `try` reaching such a wrapper declines loudly rather than losing
-    /// the `throw`. A wrapper for a **method** is always that case: a raising copy is
-    /// made of plain functions.
+    /// the `throw`. A method's raising copy is named by [`Self::wrapped_call`], which
+    /// knows the receiver's type and so direct from virtual.
     ///
     /// Outside a raising variant this is the identity, which is what keeps the
     /// ordinary path exactly as it was.
@@ -30844,6 +30820,13 @@ impl<'a> FuncBuilder<'a> {
             && let Callee::Direct(name) = callee
         {
             return Ok(Callee::Direct(format!("{name}{RAISING_SUFFIX}")));
+        }
+        // A method's is named, direct or by its raising slot, by
+        // [`Self::wrapped_call`], which knows the receiver's type. Checked here
+        // rather than trusted: a plain callee passed on would let the `throw` end
+        // the program from inside a `try` that compiled.
+        if info.source == ClosureSource::Method && names_a_raising_copy(&callee) {
+            return Ok(callee);
         }
         Err(self.unsupported(
             id,
@@ -30890,10 +30873,90 @@ impl<'a> FuncBuilder<'a> {
         // name" while every public method beside it worked.
         let member = member_name_of(self.snapshot, id)
             .ok_or_else(|| self.unsupported(id, "a method declaration with no name"))?;
-        let callee = self.callee_for(id, owner, &member)?;
+        // Inside a raising variant, the method's raising copy where it has one;
+        // `wrapper_callee_that_raises` refuses where it has none.
+        let suffix = if self.raises && self.raising.contains(&self.implementation_of(id)) {
+            RAISING_SUFFIX
+        } else {
+            ""
+        };
+        let callee = self.method_callee(id, owner, &member, suffix)?;
+        let receiver = match this_argument {
+            Some(this) => self.method_receiver(id, &callee, receiver, this)?,
+            None => receiver,
+        };
         let mut args = vec![receiver];
         args.extend(forwarded);
         Ok((callee, args))
+    }
+
+    /// The receiver a method taken as a value calls its method with, where the
+    /// body reads `this`: the call's `this`, not the object it was read from.
+    /// JavaScript does not bind a method read off an object
+    /// (`docs/function-receivers.md`).
+    ///
+    /// The implementation that runs is the read object's, though, and a call
+    /// dispatches only on the receiver it passes. So where a subclass overrides
+    /// the method, the call's `this` must be the read object itself, and
+    /// anything else stops by name. Every use in the runtime has that shape:
+    /// `this._writev = this._writeVector` is called back on the same stream,
+    /// `this.equal = this.strictEqual` on the same `assert`. Where nothing
+    /// overrides it the callee is one function, and the call's `this` only has
+    /// to be proven an instance of the declaring class, as a `function`'s is
+    /// ([`Self::receive_this`]).
+    fn method_receiver(
+        &mut self,
+        id: NodeId,
+        callee: &Callee,
+        read: ValueId,
+        this: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        if matches!(callee, Callee::Direct(_)) {
+            // The method's own frame holds its receiver, so a generator method
+            // takes the proven one like any other.
+            return self.receive_this(id, this, false);
+        }
+        let origin = self.origin(id);
+        let erased = self.push(
+            OpKind::Erase {
+                value: read,
+                absent: Absent::Impossible,
+            },
+            HirType::Erased,
+            origin.clone(),
+        );
+        let same = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: this,
+                rhs: erased,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let refused = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: same,
+            then_target: carry_on,
+            then_args: Vec::new(),
+            else_target: refused,
+            else_args: Vec::new(),
+        });
+        self.switch_to(refused);
+        let what = self.push(
+            OpKind::ConstString(
+                "a method taken as a value from one object and called with another as its \
+                 `this`, where a subclass overrides it"
+                    .to_owned(),
+            ),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        self.runtime_call("nts_refused", vec![what], HirType::Void, origin);
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(carry_on);
+        Ok(read)
     }
 
     /// The receiver a bound method's closure carries, as its field 0.
@@ -71162,30 +71225,17 @@ impl<'a> FuncBuilder<'a> {
     /// as `this`. It refused as ``a method `call` with no declaration in the
     /// hierarchy``, and under it sat `http.createServer` and every stream.
     ///
-    /// # The receiver is passed, and nothing reads it yet
+    /// # Who reads the receiver
     ///
     /// A call through a function value hands it to the uniform entry, as every
-    /// such call hands its `this` ([`super::UNIFORM_THIS`]). **No body can
-    /// observe it yet**, so passing it changes nothing a program can see:
+    /// such call hands its `this` ([`super::UNIFORM_THIS`]), and a body that
+    /// reads its own `this` takes it (`docs/function-receivers.md`): a
+    /// `function` expression or declaration, and a method taken as a value
+    /// ([`Self::method_receiver`]). An arrow has no `this` of its own, and the
+    /// enclosing one is captured at the arrow rather than passed at the call.
     ///
-    /// - a `function` expression or declaration whose body reads `this` is
-    ///   refused -- ``a `function` expression that uses its own `this` `` and
-    ///   ``\`this\` outside a method``;
-    /// - an arrow has no `this` of its own by the language's rule, and the
-    ///   enclosing one is captured at the arrow rather than passed at the call;
-    /// - a *method* taken as a value is bound to the object it was read from
-    ///   (`bound_method`), and refused where its body reads `this`
-    ///   ([`RECEIVER_IS_NOT_BOUND`]), since JavaScript would not bind it.
-    ///
-    /// Letting a body read it is step 2 of `docs/function-receivers.md`, and
-    /// `blockers/a-call-with-a-receiver-that-is-read` is the fixture that says
-    /// when it is done.
-    ///
-    /// # What it is not
-    ///
-    /// `apply` is not this, and is not done: it takes its arguments as an array
-    /// and needs the spread that a rest parameter already has, which is a
-    /// different lowering rather than a second name for this one.
+    /// `apply` passes its receiver the same way and its arguments as an array:
+    /// [`Self::lower_apply_with_receiver`].
     fn lower_call_with_receiver(
         &mut self,
         id: NodeId,
@@ -76127,6 +76177,20 @@ impl<'a> FuncBuilder<'a> {
         type_id: TypeId,
         member_name: &str,
     ) -> Result<Callee, Diagnostic> {
+        let suffix = self.raising_suffix_of(id);
+        self.method_callee(id, type_id, member_name, suffix)
+    }
+
+    /// [`Self::callee_for`], told whether to name the raising copy rather than
+    /// asking the call node: a method value's wrapper calls the method with no
+    /// node of its own to ask ([`Self::wrapped_call`]).
+    fn method_callee(
+        &mut self,
+        id: NodeId,
+        type_id: TypeId,
+        member_name: &str,
+        suffix: &'static str,
+    ) -> Result<Callee, Diagnostic> {
         // `c[kStep](2)` spells the *variable* holding the symbol, and the
         // hierarchy knows the member as `__@kStep@2`. The declaration side
         // resolves the same way, so both halves of a symbol-keyed method agree
@@ -76177,7 +76241,6 @@ impl<'a> FuncBuilder<'a> {
         // that chooses: `call_within` admits any callee with a raising copy and leaves
         // the distinction here, rather than deriving it a second time from the
         // receiver's type.
-        let suffix = self.raising_suffix_of(id);
         if self.hierarchy.overridden(type_id, member_name)
             && let Some(slot) = self.hierarchy.slot_for(type_id, member_name)
         {

@@ -86,10 +86,10 @@
 // one. `export const add = held.add` needs a global to store the method value
 // in -- `storable` declines it because the closure layout is not fixed by the
 // initializer -- and the value it stores has to be *unbound*, because
-// `held.add` in JavaScript is not `held.add.bind(held)`. This compiler binds
-// the receiver, which is why a method whose body reads `this` is refused
-// outright at a read (`RECEIVER_IS_NOT_BOUND`). Both halves are independent:
-// `ignores` below reads no `this` and still gets no global.
+// `held.add` in JavaScript is not `held.add.bind(held)`. A method whose body
+// reads `this` is unbound since 2026-10-10, taking the call's `this`
+// (`examples/a-method-taken-as-a-value-that-reads-its-own-this`), so the half
+// left is the global: `ignores` below reads no `this` and still gets none.
 //
 // # What closing it is worth, measured 2026-09-24
 //
@@ -140,8 +140,9 @@ export const scale = 3;
 /**
  * The second half, isolated: a method that reads no `this` at all.
  *
- * The read of it would be permitted -- `RECEIVER_IS_NOT_BOUND` only fires on a
- * body that reads `this` -- and it still gets no global, which is what says the
- * storage question and the receiver question are independent.
+ * Its read was always permitted -- only a body that reads `this` was refused
+ * there, before method values took the call's -- and it still gets no global,
+ * which is what says the storage question and the receiver question are
+ * independent.
  */
 export const ignores = held.ignores;

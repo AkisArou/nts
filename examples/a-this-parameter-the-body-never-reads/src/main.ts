@@ -11,10 +11,9 @@
 //     };
 //
 // 78 occurrences across ten modules, from one construct, under a message that
-// said `uses its own `this`` about a body that does not. The refusing half --
-// a body that really does read `this` -- stays refused and is carried by
-// `tooling/conformance/blockers/a-call-with-a-receiver-that-is-read`, whose
-// two arms both read `this.v`.
+// said `uses its own `this`` about a body that does not. The other half -- a
+// body that really does read `this` -- takes the call's since 2026-10:
+// `examples/a-function-that-reads-its-own-this`.
 
 type Fn = (...args: number[]) => number;
 

@@ -1,7 +1,7 @@
 # Function values that carry `this`: the plan
 
-**Status: A, refined (below). Steps 1 and 2 built 2026-10-09; `.bind` and
-`function` declarations reading `this` 2026-10-10; method values next.**
+**Status: A, refined (below). Steps 1 and 2 built 2026-10-09; `.bind`,
+`function` declarations and method values reading `this` 2026-10-10.**
 
 ## The problem
 
@@ -198,8 +198,13 @@ Not yet, and refused rather than wrong:
   program did not compile at all.
 - A generator `function` that reads `this`: its body runs at the first
   `next()`, and a frame has no place for the `this` yet.
-- A method taken as a value whose body reads `this`:
-  `blockers/a-call-with-a-receiver-that-is-read`.
+- A method taken as a value and called with a `this` that is neither the object
+  it was read from nor, where a subclass overrides it, that object: it stops by
+  name (`method_receiver`), since a call dispatches only on the receiver it
+  passes. Node runs the read object's implementation on the other `this`.
+- A `this` that is not the declared type, `undefined` from a plain call
+  included, stops by name at the test. Node throws a catchable `TypeError`
+  only where the body then reads through it.
 - A `this` proven only by structure. The proof is `instanceof` over the
   classes the hierarchy places under the declared type, so a `this` that is
   merely shaped like it -- `const o = { v: 1 }; f.call(o)` where `f` takes
@@ -216,6 +221,23 @@ JVM and C under reference counting, 290 cases. Each control fails:
 - on main the example compiles nothing.
 
 Over all 471 examples, step 1 against step 2: 470 unchanged, 1 fixed.
+
+**Method values, as built (2026-10-10).** A method taken as a value whose body
+reads `this` is a closure taking the call's `this`, as a `function` is, and no
+longer bound to the object it was read from (`RECEIVER_IS_NOT_BOUND` is gone).
+The closure still holds that object, because the implementation that runs is
+its own. Where nothing overrides the method, the callee is one function and the
+call's `this` is proven an instance of the declaring class (`receive_this`).
+Where a subclass overrides it, the call's `this` must be the read object itself
+(`method_receiver`). Every runtime use has that shape:
+`this._writev = this._writeVector` in `net` and `fs`, and
+`this.equal = this.strictEqual` in `assert`. Inside a raising variant the
+wrapper names the method's raising copy, direct or by its raising slot
+(`method_callee`, split from `callee_for` for want of a call node). A method
+value thrown through inside a `try` had aborted by name before this, bound or
+not. `examples/a-method-taken-as-a-value-that-reads-its-own-this`, 203 cases on
+C, LLVM, the JVM and rc. `blockers/a-call-with-a-receiver-that-is-read` held
+the last case and is gone.
 
 **`function` declarations, as built (2026-10-10).** One that reads its own
 `this` is lowered under `name@this`, taking the call's `this` first and proving
