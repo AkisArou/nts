@@ -181,15 +181,20 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
         text,
         "@nts_desc_ref_acyclic = external constant %NtsDescriptor"
     );
-    let _ = writeln!(
-        text,
-        "@nts_closure_call_slot = constant i32 {}",
-        nts_core::hir::closure_call_slot(program)
-    );
+    match native_column(
+        program,
+        nts_core::hir::closure_call_slot(program),
+        dispatch_location(program),
+    ) {
+        Ok(slot) => {
+            let _ = writeln!(text, "@nts_closure_call_slot = constant i32 {slot}");
+        }
+        Err(diagnostic) => diagnostics.push(diagnostic),
+    }
     for line in externals(program, platform) {
         let _ = writeln!(text, "{line}");
     }
-    let _ = writeln!(text, "\n{}", descriptors(program));
+    let _ = writeln!(text, "\n{}", descriptors(program, &mut diagnostics));
     let _ = writeln!(text, "{}", literals(program));
     let _ = write!(text, "{}", cell_name_globals(program));
     // Module-scope storage. `internal` unless the program exports it, for the
@@ -780,7 +785,31 @@ fn descriptor_kind(name: &str) -> u32 {
 /// What goes *in* one is already shared: `cyclic_layouts` and
 /// `reference_fields` are `nts_core::hir`'s, and the offsets are the layout
 /// engine's. Only the rendering is the backend's, which is what a backend is.
-fn descriptors(program: &Program) -> String {
+fn dispatch_location(program: &Program) -> nts_diagnostics::Location {
+    program.funcs.first().map_or(
+        nts_diagnostics::Location {
+            file: nts_diagnostics::SourceId(0),
+            span: nts_diagnostics::Span::new(0, 0),
+        },
+        |func| func.origin.location,
+    )
+}
+
+fn native_column(
+    program: &Program,
+    selector: u32,
+    location: nts_diagnostics::Location,
+) -> Result<u32, Diagnostic> {
+    program.native_column(selector).ok_or_else(|| {
+        Diagnostic::error(
+            "NTS5001",
+            format!("logical selector {selector} has no native dispatch column"),
+            location,
+        )
+    })
+}
+
+fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
     let literals = literal_table(program);
     let mut out = String::new();
     let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
@@ -827,7 +856,17 @@ fn descriptors(program: &Program) -> String {
         // class does not implement is null, which is unreachable: a call only
         // uses a slot the receiver's static type declares, and every class at
         // or below that type fills it.
-        let methods = vtable(&mut out, layout, &tag);
+        let methods = match vtable(&mut out, program, layout, &tag) {
+            Ok(table) => table,
+            Err(why) => {
+                diagnostics.push(Diagnostic::error(
+                    "NTS5001",
+                    why,
+                    dispatch_location(program),
+                ));
+                continue;
+            }
+        };
         // A named function used as a value is one object, so it is emitted
         // rather than allocated: nothing in it but the header, and immortal.
         // `NTS_IMMORTAL` in the count word is what keeps reference counting
@@ -1269,6 +1308,7 @@ fn suspension(
             reaction,
             slot,
         } => {
+            let slot = native_column(program, *slot, op.origin.location)?;
             let made =
                 signatures::signature_on("nts_callback_task", platform).ok_or_else(|| {
                     refuse(
@@ -1356,15 +1396,20 @@ fn cell_name_globals(program: &Program) -> String {
 /// A slot the class does not implement is null, which is unreachable: a call
 /// only uses a slot the receiver's static type declares, and every class at or
 /// below that type fills it.
-fn vtable(out: &mut String, layout: &nts_core::hir::Layout, tag: &str) -> String {
-    if layout.methods.iter().all(Option::is_none) {
-        return "ptr null".to_owned();
+fn vtable(
+    out: &mut String,
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    tag: &str,
+) -> Result<String, String> {
+    let methods = program.native_methods(layout)?;
+    if methods.iter().all(Option::is_none) {
+        return Ok("ptr null".to_owned());
     }
-    let entries: Vec<String> = layout
-        .methods
+    let entries: Vec<String> = methods
         .iter()
         .map(|method| {
-            method.as_ref().map_or_else(
+            method.map_or_else(
                 || "ptr null".to_owned(),
                 |name| format!("ptr {}", symbol(name)),
             )
@@ -1376,7 +1421,7 @@ fn vtable(out: &mut String, layout: &nts_core::hir::Layout, tag: &str) -> String
         entries.len(),
         entries.join(", ")
     );
-    format!("ptr @nts_vtable_{tag}")
+    Ok(format!("ptr @nts_vtable_{tag}"))
 }
 
 /// Whether anything in the program refers to this layout's single instance.
@@ -1489,7 +1534,9 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                     "a callback bridge whose foreign signature and compiled function disagree about arity",
                 ));
             }
-            let dispatched = nts_core::hir::bridged_through_table(program, layout);
+            let dispatched = nts_core::hir::bridged_through_table(program, layout)
+                .map(|slot| native_column(program, slot, compiled.origin.location))
+                .transpose()?;
             if dispatched.is_some() && !*context {
                 return Err(refuse(
                     func,
@@ -3342,6 +3389,18 @@ fn field_at(
     Ok((offset, ty_of(ty, func)?))
 }
 
+fn dispatch_constant(
+    program: &Program,
+    slot: u32,
+    location: nts_diagnostics::Location,
+    out: &str,
+) -> Result<String, Diagnostic> {
+    Ok(format!(
+        "{out} = fsub double {}, 0.0",
+        float_literal(f64::from(native_column(program, slot, location)?))
+    ))
+}
+
 fn operation(
     program: &Program,
     cycles: &nts_core::hir::Cycles,
@@ -3378,6 +3437,7 @@ fn operation(
             // than speed.
             format!("{out} = fsub double {}, 0.0", float_literal(*number))
         }
+        OpKind::DispatchSlot(slot) => dispatch_constant(program, *slot, op.origin.location, &out)?,
         // The cached, required lookup a class send makes (`objc::module`).
         OpKind::ObjcClass { name, .. } => format!(
             "{out} = call ptr @{}()",
@@ -3468,7 +3528,7 @@ fn operation(
         // the same hazard by the same argument, and specialization only emits
         // one where the interval analysis proved the value fits.
         OpKind::Convert(operand) => return representation_change(func, value, *operand, &out),
-        OpKind::Call { .. } => return call(func, value, &out, platform),
+        OpKind::Call { .. } => return call(program, func, value, &out, platform),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.
         OpKind::ConstNull | OpKind::ConstUndefined
@@ -4547,7 +4607,13 @@ fn declared_result(returns: &str) -> (String, &str) {
 /// converted -- C does that at the call and says nothing, which is how
 /// `nts_tag_name(uint32_t)` came to be handed a double.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<String, Diagnostic> {
+fn call(
+    program: &Program,
+    func: &Func,
+    value: ValueId,
+    out: &str,
+    platform: Platform,
+) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     if let OpKind::Call {
         callee: Callee::Native(target),
@@ -4587,7 +4653,9 @@ fn call(func: &Func, value: ValueId, out: &str, platform: Platform) -> Result<St
             // whole hierarchy -- and the table stores untyped pointers, so the
             // call spells the signature it is making.
             let dispatched = match callee {
-                Callee::Virtual { slot, .. } | Callee::Closure { slot } => Some(*slot),
+                Callee::Virtual { slot, .. } | Callee::Closure { slot } => {
+                    Some(native_column(program, *slot, op.origin.location)?)
+                }
                 _ => None,
             };
             let empty = String::new();

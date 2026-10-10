@@ -321,6 +321,10 @@ pub enum Invalid {
     /// needs more arguments than the adapter has. A stale proof must never
     /// license omission of a JVM bridge.
     InvalidIdentityProjection { adapter: String, target: String },
+    /// A native reader was omitted from the column plan.
+    MissingNativeColumn { func: String, slot: u32 },
+    /// A native map is not an injective, compact projection of logical IDs.
+    InvalidNativeDispatch { reason: String },
 }
 
 /// Check a whole program.
@@ -344,10 +348,87 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     }
     check_layouts(program, &mut problems);
     check_subscriptions(program, &mut problems);
+    check_native_dispatch(program, &mut problems);
     if problems.is_empty() {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// Independently enumerate what code generation reads. The planner's reader
+/// walk is not used here; native emitters also require every column at a load.
+fn check_native_dispatch(program: &Program, problems: &mut Vec<Invalid>) {
+    let Some(table) = &program.native_dispatch else {
+        return;
+    };
+    let mut columns: Vec<u32> = table.columns.iter().copied().flatten().collect();
+    columns.sort_unstable();
+    if columns.len() != table.width as usize
+        || columns
+            .iter()
+            .enumerate()
+            .any(|(at, column)| usize::try_from(*column).ok() != Some(at))
+    {
+        problems.push(Invalid::InvalidNativeDispatch {
+            reason: "native columns must be distinct and cover the row width".to_owned(),
+        });
+    }
+    let mut require = |func: &str, slot: u32| {
+        if program.native_column(slot).is_none() {
+            problems.push(Invalid::MissingNativeColumn {
+                func: func.to_owned(),
+                slot,
+            });
+        }
+    };
+    require("nts_closure_call_slot", super::closure_call_slot(program));
+    for func in &program.funcs {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|b| &b.ops)
+            .filter_map(|v| func.values.get(v.0 as usize))
+        {
+            match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Virtual { slot, .. } | Callee::Closure { slot },
+                    ..
+                }
+                | OpKind::PromiseSubscribe { slot, .. }
+                | OpKind::DispatchSlot(slot) => require(&func.name, *slot),
+                OpKind::NativeBridge { closure, .. } => {
+                    if let Some(super::Op {
+                        ty: HirType::Managed(super::ManagedType::Object(ty)),
+                        ..
+                    }) = func.values.get(closure.0 as usize)
+                        && let Some(layout) = program.layouts.iter().find(|l| l.types.contains(ty))
+                        && let Some(slot) = super::bridged_through_table(program, layout)
+                    {
+                        require(&func.name, slot);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// The symbolic selector uses the native helper's numeric ABI on every lane.
+fn check_dispatch_slot_types(func: &Func, problems: &mut Vec<Invalid>) {
+    for op in func
+        .blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .filter_map(|v| func.values.get(v.0 as usize))
+    {
+        if matches!(op.kind, OpKind::DispatchSlot(_)) && op.ty != HirType::NUMBER {
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: "a dispatch selector must use the runtime's f64 ABI",
+                found: op.ty.clone(),
+            });
+        }
     }
 }
 
@@ -586,6 +667,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
         check_erasures(func, problems);
         check_lengths(func, problems);
         check_numeric_coercions(func, problems);
+        check_dispatch_slot_types(func, problems);
         // The ops a block still holds, not every value the lowering ever made.
         //
         // This asks whether a call "reaches the linker as an undefined symbol",
@@ -1864,6 +1946,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
         | OpKind::ConstFloat(_)
+        | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
         | OpKind::ConstTemplate { .. }

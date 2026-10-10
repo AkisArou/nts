@@ -1075,7 +1075,9 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     if let Err(diagnostic) = emit_globals(&mut writer, program) {
         diagnostics.push(diagnostic);
     }
-    emit_closure_call_slot(&mut writer, &origin, program);
+    if let Err(diagnostic) = emit_closure_call_slot(&mut writer, &origin, program) {
+        diagnostics.push(diagnostic);
+    }
 
     emit_bridges(&mut writer, &origin, program, &mut diagnostics);
 
@@ -1799,6 +1801,7 @@ fn call_text(
 
     let call = if let Callee::Closure { slot } = callee {
         let signature = closure_signature(func, value, args, context.program, origin)?;
+        let slot = native_column(context.program, *slot, origin)?;
         let receiver = args
             .first()
             .map_or_else(|| "0".to_owned(), |value| value_name(*value));
@@ -1812,6 +1815,7 @@ fn call_text(
         // table lives -- one load and one indirect call, which is what dispatch
         // costs when the compiler knows the whole hierarchy.
         let signature = virtual_signature(context.program, target, origin)?;
+        let slot = native_column(context.program, *slot, origin)?;
         let receiver = args
             .first()
             .map_or_else(|| "0".to_owned(), |value| value_name(*value));
@@ -2705,16 +2709,32 @@ fn global_name(program: &Program, global: u32) -> String {
 /// module anyone tries first is the one where 0 happens to be right and the
 /// three that matter dereference a null.
 ///
+/// Each actual native reader checks the column independently of the planner.
+fn native_column(program: &Program, selector: u32, origin: &Origin) -> Result<u32, Diagnostic> {
+    program.native_column(selector).ok_or_else(|| {
+        Diagnostic::error(
+            "NTS2006",
+            format!("logical selector {selector} has no native dispatch column"),
+            origin.location,
+        )
+    })
+}
+
 /// Emitted unconditionally. A program with no closures has nothing to call, so
 /// the value is unused rather than wrong, and a declaration in `nts_runtime.h`
 /// that some translation unit references must resolve in every link.
-fn emit_closure_call_slot(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
-    let slot = nts_core::hir::closure_call_slot(program);
+fn emit_closure_call_slot(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+) -> Result<(), Diagnostic> {
+    let slot = native_column(program, nts_core::hir::closure_call_slot(program), origin)?;
     writer.line(
         origin,
         format!("const uint32_t nts_closure_call_slot = {slot}u;"),
     );
     writer.blank(origin);
+    Ok(())
 }
 
 /// Whether any function names this global.
@@ -3357,17 +3377,23 @@ fn emit_object_descriptors(
         // receiver's static type declares, and a class whose method was refused
         // is one no surviving call can reach. A *closure* is the exception, and
         // is refused above rather than nulled here.
-        let entry = |method: &Option<String>| {
+        let projected = match program.native_methods(layout) {
+            Ok(row) => row,
+            Err(why) => {
+                diagnostics.push(Diagnostic::error("NTS2006", why, origin.location));
+                continue;
+            }
+        };
+        let entry = |method: Option<&str>| {
             method
-                .as_ref()
-                .map(|name| c_identifier(name))
+                .map(c_identifier)
                 .filter(|symbol| defined.contains(symbol))
                 .map_or_else(|| "0".to_owned(), |symbol| format!("(void *){symbol}"))
         };
-        let methods = if layout.methods.iter().all(|method| entry(method) == "0") {
+        let methods = if projected.iter().all(|method| entry(*method) == "0") {
             "0".to_owned()
         } else {
-            let entries: Vec<String> = layout.methods.iter().map(entry).collect();
+            let entries: Vec<String> = projected.iter().copied().map(entry).collect();
             writer.line(
                 origin,
                 format!(
@@ -5504,7 +5530,7 @@ fn emit_op(
             "nts_promise_subscribe({}, nts_callback_task((NtsHeader *){}, {}, false));",
             value_name(*promise),
             value_name(*reaction),
-            slot
+            native_column(context.program, *slot, &op.origin)?
         ),
         OpKind::InstanceOf { value: at, classes } => instance_of(&name, *at, classes, context),
         // The absent reference. Typed, because C distinguishes a null
@@ -5530,6 +5556,14 @@ fn emit_op(
         // Enough digits to round-trip an f64 exactly. Fewer would change the
         // program's arithmetic.
         OpKind::ConstFloat(v) => format!("{name} = {};", float_literal(*v)),
+        OpKind::DispatchSlot(slot) => format!(
+            "{name} = {};",
+            float_literal(f64::from(native_column(
+                context.program,
+                *slot,
+                &op.origin
+            )?))
+        ),
         // The cached, required lookup a class send makes (`emit/objc.rs`).
         OpKind::ObjcClass { name: class, .. } => {
             format!(

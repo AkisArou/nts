@@ -199,13 +199,31 @@ the access, a program stops only where it would have read the wrong field, and
 the test is placed exactly where Part 2's getter call goes. One pass after
 lowering sees every access path, and the layouts are complete by then.
 
-## Part 3, later — smaller tables
+## Part 3, as built — native tables contain their readers
 
-The tables are almost empty: in `http`, 187 rows of 126 slots, 423 of 23,562
-entries filled (1.8%). Inferred edges fill more. Selector coloring (two slots no
-class fills together share a column) would shrink them several times over. It
-does not change correctness or the cost of a call; it is a size optimization,
-taken when the measured size says so.
+The native tables were mostly padding. Inferred edges made them larger
+(record 0346), but most numbered slots have no surviving native table read.
+Projecting rows onto the selectors native code actually reads removes this
+padding without needing selector coloring or a proof about possible receivers.
+
+Logical selectors and `Layout::methods` stay unchanged. At the end of prepare,
+`hir::native_dispatch` sorts the surviving readers and assigns each a distinct
+native column. Every layout keeps exactly its body or null in each retained
+column; a missing method cannot acquire another selector's body. C and LLVM
+use this one plan for rows and loads. Calls still cost the same indexed load.
+The JVM continues to use logical slots.
+
+Readers include virtual and closure calls, promise subscriptions, context
+bridges, symbolic `DispatchSlot` callback arguments, and the exported
+`nts_closure_call_slot` that handwritten hosts read. `DispatchSlot` carries no
+numeric fact before emission: native code spells its column, and the JVM spells
+its logical value. The verifier checks the plan; both native emitters separately
+require a column at every actual read.
+
+Co-filled column sharing is deferred until there is a measured need. Sharing
+requires a further proof that a reachable null cannot become another method,
+especially through structural or erased receivers. Projection preserves nulls
+on every layout by construction.
 
 ## Plan
 
@@ -214,7 +232,7 @@ taken when the measured size says so.
 | 0 | The guard at an access through an interface whose classes disagree about the field | the outcomes fixture: wrong answer → named stop |
 | 1 | Infer `implements` by shape, for methods | the 95 structural-call sites; React's `Wakeable#then`; `blockers/a-method-through-a-structural-interface` → example; definitions census; code size |
 | 2 | Interface fields as getter and setter slots where layouts disagree and the class is lost | the fixture → example; the 60 refused casts; `nts receivers` |
-| 3 | Selector coloring | table bytes per module |
+| 3 | Native reader projection; selector coloring deferred | table and optimized object bytes per module |
 
 ## Decided (2026-10-10): all three as recommended
 

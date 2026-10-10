@@ -269,6 +269,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
         | OpKind::ConstFloat(_)
+        | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
         | OpKind::ConstTemplate { .. }
@@ -555,6 +556,7 @@ const fn leaves_fields_alone(kind: &OpKind) -> bool {
             | OpKind::BlockParam(_)
             | OpKind::ConstInt(_)
             | OpKind::ConstFloat(_)
+            | OpKind::DispatchSlot(_)
             | OpKind::ConstBool(_)
             | OpKind::ConstString(_)
             | OpKind::ConstTemplate { .. }

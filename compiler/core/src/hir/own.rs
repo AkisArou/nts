@@ -2235,6 +2235,7 @@ fn quiet(kind: &OpKind) -> bool {
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
         | OpKind::ConstFloat(_)
+        | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
         | OpKind::ConstTemplate { .. }

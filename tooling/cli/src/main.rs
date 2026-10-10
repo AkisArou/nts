@@ -2839,6 +2839,7 @@ fn render_constant(index: usize, ty: &str, kind: &OpKind) -> String {
     let value = match kind {
         OpKind::ConstInt(v) => v.to_string(),
         OpKind::ConstFloat(v) => v.to_string(),
+        OpKind::DispatchSlot(slot) => format!("dispatch.slot[{slot}]"),
         OpKind::ConstBool(v) => v.to_string(),
         OpKind::ConstString(v) => format!("{v:?}"),
         OpKind::ConstTemplate { site, cooked } => format!("template#{site} {cooked:?}"),
@@ -3110,6 +3111,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::BlockParam(n) => format!("%{index} = blockparam {n} : {ty}"),
         OpKind::ConstInt(_)
         | OpKind::ConstFloat(_)
+        | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
         | OpKind::ConstTemplate { .. }

@@ -517,6 +517,7 @@ fn width_of(
         // - Integer division is a different function from real division: `7 / 2`
         //   is `3.5` and C would say `3`. The analysis only proves a quotient
         //   whole when it is exact, but the margin is not worth what it buys.
+        // DispatchSlot also stays f64: its native column is not known yet.
         _ => false,
     };
 

@@ -28539,11 +28539,7 @@ impl<'a> FuncBuilder<'a> {
         self.layouts
             .push(self.closure_layout(index, module_job_fields(promise_ty)));
         self.used_closures.push(index);
-        let slot = self.push(
-            OpKind::ConstFloat(f64::from(slot)),
-            HirType::NUMBER,
-            origin.clone(),
-        );
+        let slot = self.push(OpKind::DispatchSlot(slot), HirType::NUMBER, origin.clone());
         self.runtime_call("nts_enqueue_job", vec![job, slot], HirType::Void, origin);
         Ok(promise)
     }
@@ -38774,11 +38770,7 @@ impl<'a> FuncBuilder<'a> {
         let Some(slot) = self.hierarchy.closure_slot else {
             return Err(self.unsupported(id, "a thenable job in a program with no closure slot"));
         };
-        let slot = self.push(
-            OpKind::ConstFloat(f64::from(slot)),
-            HirType::NUMBER,
-            origin.clone(),
-        );
+        let slot = self.push(OpKind::DispatchSlot(slot), HirType::NUMBER, origin.clone());
         self.runtime_call(
             "nts_enqueue_job",
             vec![object, slot],
@@ -72551,11 +72543,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a timer in a program with no closures"));
         };
         let origin = self.origin(id);
-        let slot = self.push(
-            OpKind::ConstFloat(f64::from(slot)),
-            HirType::NUMBER,
-            origin.clone(),
-        );
+        let slot = self.push(OpKind::DispatchSlot(slot), HirType::NUMBER, origin.clone());
         let delay = match delay {
             Some(node) => self.lower_expression(node)?,
             // `setTimeout(fn)` is `setTimeout(fn, 0)`.

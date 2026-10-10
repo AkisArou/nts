@@ -1290,6 +1290,7 @@ fn transfer_op(
         }
         // A bool is not a number, and a call's result needs the callee
         // analyzed — neither is a claim this pass can make.
+        // DispatchSlot belongs here: its native value is decided after analysis.
         _ => Facts::TOP,
     }
 }

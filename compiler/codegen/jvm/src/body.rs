@@ -307,7 +307,7 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
 pub(crate) fn rematerialised(func: &Func, value: ValueId) -> bool {
     let op = &func.values[value.0 as usize];
     match op.kind {
-        OpKind::ConstBool(_) | OpKind::ConstFloat(_) => true,
+        OpKind::ConstBool(_) | OpKind::ConstFloat(_) | OpKind::DispatchSlot(_) => true,
         OpKind::ConstInt(_) => !matches!(op.ty, HirType::BigInt),
         _ => false,
     }

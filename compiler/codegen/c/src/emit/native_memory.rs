@@ -966,7 +966,9 @@ pub(super) fn bridges(
                     "a callback bridge whose foreign signature and compiled function disagree about arity",
                 ));
             }
-            let dispatched = nts_core::hir::bridged_through_table(program, layout);
+            let dispatched = nts_core::hir::bridged_through_table(program, layout)
+                .map(|slot| super::native_column(program, slot, &op.origin))
+                .transpose()?;
             if dispatched.is_some() && !*context {
                 return Err(refuse(
                     "a callback bridge with no context whose closure is not known here",

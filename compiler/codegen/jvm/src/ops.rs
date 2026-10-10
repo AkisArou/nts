@@ -1603,9 +1603,10 @@ impl Emitter<'_> {
             // parameter because every edge into this block wrote it.
             OpKind::Param(_) | OpKind::BlockParam(_) => return Ok(()),
 
-            OpKind::ConstBool(_) | OpKind::ConstInt(_) | OpKind::ConstFloat(_) => {
-                self.constant(code, pool, &op.kind, &op.ty, &origin)?
-            }
+            OpKind::ConstBool(_)
+            | OpKind::ConstInt(_)
+            | OpKind::ConstFloat(_)
+            | OpKind::DispatchSlot(_) => self.constant(code, pool, &op.kind, &op.ty, &origin)?,
             OpKind::ConstTemplate { .. } | OpKind::ClosureStatic => {
                 self.static_instance(code, pool, &op.kind, &op.ty, &origin)?
             }
@@ -4679,6 +4680,9 @@ impl Emitter<'_> {
                     code.const_double(origin, pool, *number);
                 }
             }
+            // Native column compaction has no JVM reading. Keep the logical
+            // numeric value for the existing runtime-call argument shape.
+            OpKind::DispatchSlot(slot) => code.const_double(origin, pool, f64::from(*slot)),
             _ => return Err(refuse(self.func, "a literal this backend does not spell")),
         }
         Ok(Placed::OnStack)

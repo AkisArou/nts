@@ -186,6 +186,7 @@ fn has_effects(op: &Op, values: &[Op]) -> bool {
         | OpKind::Return(_)
         | OpKind::ConstInt(_)
         | OpKind::ConstFloat(_)
+        | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
         | OpKind::ConstTemplate { .. }

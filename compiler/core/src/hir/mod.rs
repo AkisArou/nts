@@ -64,6 +64,7 @@ pub mod monomorphize;
 pub mod narrow;
 pub mod native;
 mod native_callback;
+pub mod native_dispatch;
 mod native_storage;
 /// Who owns what, and for how long: one answer per value, which the counting
 /// pass reads and does no reasoning of its own about.
@@ -1148,6 +1149,10 @@ pub enum OpKind {
     /// used this before had to change.
     ConstInt(i128),
     ConstFloat(f64),
+    /// A logical dispatch selector passed through the native runtime's numeric
+    /// ABI. Its value is the native column only at code generation; numeric
+    /// analysis must not fold or specialize it using the logical index.
+    DispatchSlot(u32),
     ConstBool(bool),
     ConstString(String),
     /// One immortal object per original source site, shared by every copy of
@@ -2823,6 +2828,10 @@ pub enum FunctionName {
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub funcs: Vec<Func>,
+    /// Native table columns for the logical selectors that native code reads.
+    /// Planned after preparation; logical tables and the JVM keep their IDs.
+    /// Absent on raw lowering and hand-built HIR, which use identity columns.
+    pub native_dispatch: Option<native_dispatch::NativeDispatch>,
     /// Where a closure's written `call` sits in every dispatch table, and where
     /// its uniform entry sits.
     ///
@@ -6897,6 +6906,8 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
             )
         })
         .count();
+
+    native_dispatch::plan(&mut program);
 
     Prepared {
         cloned,
