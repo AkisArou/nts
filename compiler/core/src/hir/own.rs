@@ -3014,6 +3014,7 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
 const RUNTIME_HANDS_BACK: &[&str] = &[
     // A guard returns the original array without retaining it.
     "nts_array_writable",
+    "nts_array_of_values",
     "nts_array_fill",
     "nts_array_fill_bool",
     "nts_array_fill_ref",

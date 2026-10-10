@@ -4230,7 +4230,12 @@ fn erased_conversion(
                 }
                 "reference" => {
                     let ty = c_type_of(context.program, &op.ty, &op.origin)?;
-                    let reference = format!("nts_value_reference({})", value_name(*value));
+                    let mut reference = format!("nts_value_reference({})", value_name(*value));
+                    // An `unknown` holding an array can hold one of any element
+                    // kind, so an array of erased values is checked to be one.
+                    if op.ty == HirType::Managed(ManagedType::Array(Box::new(HirType::Erased))) {
+                        reference = format!("nts_array_of_values((NtsArray *){reference})");
+                    }
                     if context.templates && matches!(op.ty, HirType::Managed(ManagedType::Array(_)))
                     {
                         format!("({ty})nts_array_writable((NtsArray *){reference})")

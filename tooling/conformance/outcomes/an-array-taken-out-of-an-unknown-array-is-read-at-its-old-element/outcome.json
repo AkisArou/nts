@@ -2,7 +2,7 @@
   "run": "build",
   "category": "aborted",
   "nts": "SIGABRT; nts: refused at run time: an array read as `unknown[]` whose elements are not erased values, which this compiler holds as another kind of element",
-  "node": "exit 1; nts: uncaught Observed: as unknown[]=n + 1;as number[]=n + 1;",
+  "node": "exit 1; nts: uncaught Observed: as number[]=3;as unknown[]=3;",
   "measured_with": "31b64918fa132a16",
   "source": "measured"
 }

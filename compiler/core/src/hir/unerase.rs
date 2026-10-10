@@ -83,6 +83,13 @@ pub fn narrow_arrays(
     narrowed
 }
 
+/// Whether an unerase claiming `claimed` of an element stored as `stored` is
+/// one the narrowed read can stand in for.
+fn unwraps_to(stored: &HirType, claimed: &HirType) -> bool {
+    let number = |ty: &HirType| matches!(ty, HirType::Int { .. } | HirType::Float { .. });
+    stored == claimed || (number(stored) && number(claimed))
+}
+
 /// The one representation every store puts into an array, if there is one.
 ///
 /// `None` the moment two disagree, or a store is of something other than a
@@ -194,7 +201,20 @@ fn single_representation(
         let id = ValueId(u32::try_from(index).unwrap_or(0));
         let uses_a_read = |value: &ValueId| reads.contains(value);
         match &func.value(id).kind {
-            OpKind::Unerase { value } | OpKind::TagOf { value } if uses_a_read(value) => {}
+            // An unerase claiming what was stored is the unwrapping narrowing
+            // does, and so is one claiming a number where a number of another
+            // width was stored, which `reconcile` converts. One claiming
+            // something else is not, and replacing it with the read changed its
+            // type under its users: `held[0] as unknown[]` over a stored
+            // `number[]` became an `f64` element read where an erased one was
+            // declared -- invalid HIR on every backend
+            // (`outcomes/an-array-taken-out-of-an-unknown-array-is-read-at-its-old-element`).
+            OpKind::Unerase { value }
+                if uses_a_read(value)
+                    && found
+                        .as_ref()
+                        .is_some_and(|stored| unwraps_to(stored, &func.value(id).ty)) => {}
+            OpKind::TagOf { value } if uses_a_read(value) => {}
             other => {
                 if super::verify::operands(other).iter().any(uses_a_read) {
                     return None;

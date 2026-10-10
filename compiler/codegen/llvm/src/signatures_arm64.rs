@@ -344,6 +344,12 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_array_of_values",
+        returns: "ptr",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_array_pop",
         returns: "double",
         params: &["ptr"],

@@ -1048,6 +1048,9 @@ void nts_handle_family_register(uint32_t tag, void (*retain)(void *),
 #define NTS_ARRAY_IMMUTABLE 64u
 
 NtsArray *nts_array_writable(NtsArray *array);
+/* And one read back as an array of erased values, which it must be, or the
+ * program stops by name; NULL stays NULL. */
+NtsArray *nts_array_of_values(NtsArray *array);
 void nts_template_reflection(NtsValue value);
 
 /* The smallest capacity a grown string takes, in code units. See

@@ -1,25 +1,26 @@
-// **Writes an erased value into a `number[]`'s double slot.** An `unknown`
-// cast to `unknown[]` is unerased as `managed<[erased]>` whatever array it
-// holds, so a `number[]` behind it is believed to hold sixteen-byte `NtsValue`s.
-// An element *read* re-erases first and dispatches on the array's real element
-// kind, which is why reads agree; an element *write* stores an `NtsValue` into
-// an eight-byte `double` slot. node answers `n + 1`; C and LLVM read back the
-// value's bits, `1e-323` and the like.
+// **Stops by name, where it answered wrong.** An `unknown` cast to
+// `unknown[]` was unerased as `managed<[erased]>` whatever array it held, so a
+// `number[]` behind it was believed to hold sixteen-byte `NtsValue`s, and a
+// write stored one into an eight-byte `double` slot. node answers `n + 1`; C
+// and LLVM read back the value's bits, `1e-323` and the like, until 2026-10-10.
 //
-// The JVM does not get this far: the `unerase` is a `checkcast
-// [Lnts/rt/NtsValue;` on a `[D`, a `ClassCastException` at the cast. The
-// static claim is the same on every backend and false on all of them; only the
-// JVM checks it.
+// Now the claim is checked where it is made, as an unerase to a class is: an
+// array read out of an erased value as an array of erased values must be one,
+// or the program stops naming it -- `refused at run time: an array read as
+// `unknown[]` whose elements are not erased values`. The JVM already stopped
+// here, less legibly: its unerase is a `checkcast` that throws
+// `ClassCastException` on a `[D`. Reads through the cast stop too, on every
+// backend now, for the same reason.
 //
-// The controls are each case's other half: `as number[]` names the element the
-// array has, and the same write through it agrees. `Array.isArray(h)` narrowing
-// instead of a cast also agrees, and reads through the cast agree today, so
-// this is about the write.
+// What lifts it is an array whose element kind is read at run time, which
+// every read and write through the cast would go through; until a program
+// needs one, `Array.isArray(h)` narrowing reads any array, keeping the value
+// erased.
+//
+// The control is the other half: `as number[]` names the element the array has,
+// and the same write through it agrees.
 //
 // Found on 2026-10-10 writing the written-kind array guard for scalar 2f.
-//
-// The `push` and `for ... of` shapes of the same cast abort, which a build
-// cannot observe past; they are not in this program for that reason.
 
 function throughUnknownArray(n: number): string {
   const xs: number[] = [n, 2];

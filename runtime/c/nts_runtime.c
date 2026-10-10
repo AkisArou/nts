@@ -2002,6 +2002,30 @@ bool nts_is_buffer(NtsValue value) {
          object->descriptor->kind == NTS_KIND_BUFFER;
 }
 
+/* An erased value read back as an array of erased values -- `h as unknown[]`,
+ * or an `unknown[]` slot's value out of an `unknown` -- which is a claim about
+ * the array's elements the object may not keep: an `unknown` can hold any
+ * array, and a `number[]` is eight-byte doubles where this reads sixteen-byte
+ * values. A write through the claim stored a value's bits into a double's slot.
+ * So the claim is checked, as an unerase to a class is, and anything other than
+ * an array of values stops by name. NULL is the absent value a nullable array
+ * is. Hands back the same array without retaining it. */
+NtsArray *nts_array_of_values(NtsArray *array) {
+  if (!array) {
+    return NULL;
+  }
+  const NtsDescriptor *descriptor = array->header.descriptor;
+  if (descriptor->kind == NTS_KIND_ARRAY && descriptor->erased) {
+    return array;
+  }
+  fflush(stdout);
+  fputs("nts: refused at run time: an array read as `unknown[]` whose "
+        "elements are not erased values, which this compiler holds as "
+        "another kind of element\n",
+        stderr);
+  abort();
+}
+
 bool nts_is_array(NtsValue value) {
   if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;

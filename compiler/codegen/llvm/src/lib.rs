@@ -2418,6 +2418,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_array_from_handles",
     "nts_handle_check",
     "nts_array_writable",
+    "nts_array_of_values",
     // The growing pair, here for the reason the view trio is: `index_lines`
     // writes the call as raw IR, so `externals` -- which reads `OpKind::Call` --
     // never sees it, and the module referred to an undefined symbol.
@@ -4292,15 +4293,37 @@ fn tagging(
                     name(*value)
                 ));
             }
-            if templates
+            // An `unknown` holding an array can hold one of any element kind,
+            // so an array of erased values is checked to be one, as C checks it.
+            let of_values = op.ty
+                == HirType::Managed(nts_core::hir::ManagedType::Array(Box::new(HirType::Erased)));
+            let writable = templates
                 && matches!(
                     op.ty,
                     HirType::Managed(nts_core::hir::ManagedType::Array(_))
-                )
-            {
-                return Ok(format!(
-                    "{read}\n  {out}.reference = inttoptr i64 {bits} to ptr\n  {out} = call ptr @nts_array_writable(ptr {out}.reference)"
-                ));
+                );
+            if of_values || writable {
+                let mut text = format!("{read}\n  {out}.reference = inttoptr i64 {bits} to ptr");
+                let mut reference = format!("{out}.reference");
+                if of_values {
+                    let checked = if writable {
+                        format!("{out}.values")
+                    } else {
+                        out.clone()
+                    };
+                    let _ = write!(
+                        text,
+                        "\n  {checked} = call ptr @nts_array_of_values(ptr {reference})"
+                    );
+                    reference = checked;
+                }
+                if writable {
+                    let _ = write!(
+                        text,
+                        "\n  {out} = call ptr @nts_array_writable(ptr {reference})"
+                    );
+                }
+                return Ok(text);
             }
             let narrow = payload_into(func, &out, &bits, &op.ty)?;
             format!("{read}\n  {narrow}")
