@@ -76,7 +76,16 @@ claims=$(awk '
 # a lowering refusal.
 out="${TMPDIR:-/tmp}/nts-check-refusals.$$"
 mkdir -p "$out"
-trap 'rm -rf "$out"' EXIT
+# **The file is put back from this copy, not by git.** Each probe edits the
+# file in place, in whichever tree runs it -- usually the shared one -- and the
+# restore was `git checkout --`, which takes the index lock. On 2026-10-10 a
+# lock some other git process held made the checkout fail, and the probe's
+# uncommented line stayed in the shared tree's `refused.ts` for every session
+# reading it. A copy needs no lock, and the EXIT trap restores it however the
+# script ends: a refusal not produced, a signal, `set -e`.
+pristine="$out/refused.pristine.ts"
+cp -f "$file" "$pristine"
+trap 'cp -f "$pristine" "$file"; rm -rf "$out"' EXIT
 
 checked=0
 printf '%s\n' "$claims" | while IFS="$(printf '\t')" read -r code text line; do
@@ -105,7 +114,7 @@ printf '%s\n' "$claims" | while IFS="$(printf '\t')" read -r code text line; do
   # `emit-jvm` reports the checker's errors too -- a `TS2365` arm produces
   # identically under both -- so this is strictly wider and nothing is lost.
   answer=$("$nts" emit-jvm "$project/tsconfig.json" --out "$out" 2>&1 || true)
-  ( cd "$here" && git checkout -- "$file" )
+  cp -f "$pristine" "$file"
   case $answer in
     *"$code"*) ;;
     *)

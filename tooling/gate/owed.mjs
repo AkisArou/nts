@@ -393,6 +393,15 @@ export const RULES = [
     arms: [],
   },
   {
+    // Run by `examples/interop/{java-from-ts,android-shape}/build.sh` and
+    // nothing else, which the `interop` step runs. Before this rule it owed the
+    // full gate.
+    name: "the refused.ts claim checker",
+    when: (p) => p === "tooling/jvm/check-refusals.sh",
+    steps: ["interop"],
+    arms: [],
+  },
+  {
     name: "the dependency installer, the surfaces and the React compiler",
     when: (p) => /^(tooling\/deps|tooling\/surfaces|runtime\/react\/compiler)\//.test(p),
     steps: ["interop", "config", "react-sources", "examples"],

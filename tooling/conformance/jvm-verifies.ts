@@ -337,10 +337,20 @@ async function check(project, slot) {
     const shape = declineShape(line);
     if (shape) declines.set(shape, (declines.get(shape) ?? new Set()).add(project));
   }
-  // Invalid HIR emits nothing on any backend, and is its own outcome, which
-  // outcomes-check records: counted, not "not measured".
+  // Invalid HIR emits nothing on any backend. For an outcomes fixture it is
+  // that fixture's own outcome, which outcomes-check records: counted, not "not
+  // measured". **For a runtime module nobody records it**, and counting it
+  // passed a change that left 18 of 29 modules emitting nothing: "2225 of 2225
+  // class(es) verify across 29 of 29 project(s)" against main's 25003, exit 0,
+  // and the one line that said so read as a note (fb3325b3f, 2026-10-10). So
+  // there it is NOT MEASURED, and the run fails.
   if (/refusing to emit code from invalid HIR/.test(emit.out)) {
-    invalidHir.push(project);
+    if (project.startsWith("tooling/conformance/outcomes/")) {
+      invalidHir.push(project);
+    } else {
+      const why = emit.out.split("\n").find((l) => l.startsWith("invalid HIR")) ?? "invalid HIR";
+      unmeasured.push(`${project}: emit-jvm wrote no class -- ${why.slice(0, 160)}`);
+    }
     return;
   }
   if (emit.error || emit.signal || !existsSync(jar)) {
