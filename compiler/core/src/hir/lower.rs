@@ -28744,7 +28744,7 @@ impl<'a> FuncBuilder<'a> {
         // **The body's `this` is the call's**, proven at the declared type, as a
         // closure's is ([`Self::receive_this`]).
         if let Some(this_argument) = this_argument {
-            self.this = Some(self.receive_this(id, this_argument, generated.is_some())?);
+            self.this = Some(self.receive_this(id, this_argument)?);
         }
         self.lower_block(body)?;
 
@@ -29255,7 +29255,7 @@ impl<'a> FuncBuilder<'a> {
 
         // **The body's `this` is the call's**, proven at the declared type.
         if let Some(this_argument) = this_argument {
-            self.this = Some(self.receive_this(id, this_argument, generated.is_some())?);
+            self.this = Some(self.receive_this(id, this_argument)?);
         }
 
         // `x => x * 2` and `x => { return x * 2; }` are the same function, and
@@ -29370,18 +29370,10 @@ impl<'a> FuncBuilder<'a> {
     /// - anything else (a union, a primitive) has no such test, and is refused
     ///   by name.
     ///
-    /// A generator's body runs at its first `next()`, not at the call, and a
-    /// frame has no place for the `this` yet, so that one is refused rather
-    /// than proven early.
-    fn receive_this(
-        &mut self,
-        id: NodeId,
-        this: ValueId,
-        generator: bool,
-    ) -> Result<ValueId, Diagnostic> {
-        if generator {
-            return Err(self.unsupported(id, "a generator `function` that reads its own `this`"));
-        }
+    /// A generator's `this` is one of its parameters, so its frame keeps it
+    /// with them, and the test is in the body, which runs at the first `next()`
+    /// -- where node would first read it.
+    fn receive_this(&mut self, id: NodeId, this: ValueId) -> Result<ValueId, Diagnostic> {
         let read = self
             .node(id)
             .children
@@ -30912,9 +30904,7 @@ impl<'a> FuncBuilder<'a> {
         this: ValueId,
     ) -> Result<ValueId, Diagnostic> {
         if matches!(callee, Callee::Direct(_)) {
-            // The method's own frame holds its receiver, so a generator method
-            // takes the proven one like any other.
-            return self.receive_this(id, this, false);
+            return self.receive_this(id, this);
         }
         let origin = self.origin(id);
         let erased = self.push(

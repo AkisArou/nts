@@ -196,12 +196,10 @@ Not yet, and refused rather than wrong:
   member), and an ObjC field call. In a program where some `function` reads its
   own `this`, they are refused (`check_this_is_passed`). Before step 2 such a
   program did not compile at all.
-- A generator `function` that reads `this`: its body runs at the first
-  `next()`, and a frame has no place for the `this` yet.
-- A method taken as a value and called with a `this` that is neither the object
-  it was read from nor, where a subclass overrides it, that object: it stops by
-  name (`method_receiver`), since a call dispatches only on the receiver it
-  passes. Node runs the read object's implementation on the other `this`.
+- A method that a subclass overrides, taken as a value and called with a
+  `this` other than the object it was read from: it stops by name
+  (`method_receiver`), since a call dispatches only on the receiver it passes.
+  Node runs the read object's implementation on the other `this`.
 - A `this` that is not the declared type, `undefined` from a plain call
   included, stops by name at the test. Node throws a catchable `TypeError`
   only where the body then reads through it.
@@ -221,6 +219,14 @@ JVM and C under reference counting, 290 cases. Each control fails:
 - on main the example compiles nothing.
 
 Over all 471 examples, step 1 against step 2: 470 unchanged, 1 fixed.
+
+**Generators, as built (2026-10-10).** A generator that reads `this` was
+refused, on the premise that its frame had no place for it. It had one: the
+call's `this` is a parameter of the body, and the frame keeps it with the
+others. The test is in the resume function, so it runs at the first `next()`,
+where node would first read `this`. `examples/a-generator-that-reads-its-own-this`:
+an expression, a declaration that reads `this` after a `yield`, and a generator
+method taken as a value. 87 cases on C, LLVM, the JVM and rc.
 
 **Method values, as built (2026-10-10).** A method taken as a value whose body
 reads `this` is a closure taking the call's `this`, as a `function` is, and no
