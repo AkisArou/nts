@@ -9,11 +9,12 @@ public final class nts.gen.Cell0 implements nts.rt.NtsPrintable {
   public nts.gen.Cell0();
 }
 Compiled from "nts"
-public final class nts.gen.Closure0 extends nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable {
+public final class nts.gen.Closure0 extends nts.gen.Fn3__41 implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable,nts.rt.NtsNamed {
   nts.gen.Cell0 total;
   public void call(double);
   public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
   public java.lang.String nts$print();
+  public java.lang.String nts$name();
   public nts.gen.Closure0();
 }
 Compiled from "nts"
@@ -22,10 +23,11 @@ public abstract class nts.gen.erased.Callable {
   public nts.gen.erased.Callable();
 }
 Compiled from "nts"
-public final class nts.gen.Fn3__41$Lambda extends nts.gen.Fn3__41 {
+public final class nts.gen.Fn3__41$Lambda extends nts.gen.Fn3__41 implements nts.rt.NtsNamed {
   nts.rt.NtsNumberCallback it;
   public nts.gen.Fn3__41$Lambda(nts.rt.NtsNumberCallback);
   public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
+  public java.lang.String nts$name();
 }
 Compiled from "nts"
 public abstract class nts.gen.Fn3__41 extends nts.gen.erased.Callable implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable {
