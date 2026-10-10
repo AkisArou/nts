@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "uncompilable-c",
+  "nts": "error: 'nts_desc_NtsObj_Refused' undeclared (first use in this function); did you mean 'nts_desc_NtsObj_First'?",
+  "node": "exit 1; nts: uncaught Observed: read=7;control=11;",
+  "measured_with": "de9d0b1ce10c119f",
+  "source": "measured"
+}
