@@ -48,7 +48,9 @@ stop deterministically with the binding's name. C MemorySanitizer uses O0:
 at O1, optimization can erase the control's undefined read and hide the
 sanitizer finding. The LLVM witness uses Valgrind, not MemorySanitizer.
 
-All 311 C and LLVM backend tests pass, along with strict workspace Clippy.
+All 311 existing C and LLVM backend tests pass, along with strict workspace
+Clippy. Two additional backend unit tests directly assert integer and boolean
+defaults for a frame cell; both pass without a frontend or sanitizer.
 Every one of the 29 runtime modules emits valid HIR and compiles at O2.
 Native tables remain 62,592 bytes. Aggregate O2 object size changes from
 11,703,074 to 11,703,001 bytes. Of the 62 benchmark binaries, 58 are

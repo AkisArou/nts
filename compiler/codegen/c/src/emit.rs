@@ -6055,6 +6055,50 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn frame_objects_initialize_scalar_and_boolean_fields() {
+        use nts_core::hir::{Field, Layout};
+        use nts_diagnostics::{Location, SourceId, Span};
+
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let layout = Layout {
+            name: "Cell0".to_owned(),
+            types: Vec::new(),
+            fields: [
+                (
+                    "value",
+                    HirType::Int {
+                        bits: 32,
+                        signed: true,
+                    },
+                ),
+                ("ready", HirType::Bool),
+            ]
+            .into_iter()
+            .map(|(name, ty)| Field {
+                name: name.to_owned(),
+                ty,
+                written: None,
+                declared_by: None,
+                readonly: false,
+            })
+            .collect(),
+            methods: Vec::new(),
+            interfaces: Vec::new(),
+            base: None,
+        };
+        let mut writer = CodeWriter::new();
+        start_frame_object(&mut writer, &origin, "cell", "nts_desc_Cell0", &layout);
+        let text = writer.text();
+        // Neither member is counted: limiting initialization to references
+        // left both the value and the readiness guard as stack garbage.
+        assert!(text.contains("cell_frame.value = 0;"), "{text}");
+        assert!(text.contains("cell_frame.ready = 0;"), "{text}");
+    }
+
     /// Every scalar an array can hold has a kind, so that "unknown" keeps
     /// meaning "untaught runtime" and never "untaught emitter".
     ///

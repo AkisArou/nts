@@ -3838,6 +3838,78 @@ fn frame_object(
     Ok(lines.join("\n  "))
 }
 
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+    use nts_core::hir::{Field, Layout};
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::Origin;
+
+    #[test]
+    fn frame_objects_initialize_scalar_and_boolean_fields() {
+        let layout = Layout {
+            name: "Cell0".to_owned(),
+            types: Vec::new(),
+            fields: [
+                (
+                    "value",
+                    HirType::Int {
+                        bits: 32,
+                        signed: true,
+                    },
+                ),
+                ("ready", HirType::Bool),
+            ]
+            .into_iter()
+            .map(|(name, ty)| Field {
+                name: name.to_owned(),
+                ty,
+                written: None,
+                declared_by: None,
+                readonly: false,
+            })
+            .collect(),
+            methods: Vec::new(),
+            interfaces: Vec::new(),
+            base: None,
+        };
+        let func = Func {
+            name: "read".to_owned(),
+            params: Vec::new(),
+            return_type: HirType::Void,
+            written_return: None,
+            written_return_elements: Vec::new(),
+            values: Vec::new(),
+            blocks: Vec::new(),
+            origin: Origin::source(Location {
+                file: SourceId(0),
+                span: Span::new(0, 1),
+            }),
+            exported: false,
+            initializes_receiver: false,
+            abstract_declaration: false,
+            async_result: None,
+            frame: None,
+            obligations: Vec::new(),
+        };
+        let Some(placed) = nts_core::hir::layout::place(&layout.fields) else {
+            panic!("the cell's scalar fields should have a layout");
+        };
+        let Ok(text) = frame_object(&func, &layout, &placed, "Cell0", "%cell") else {
+            panic!("a frame cell should emit without a diagnostic");
+        };
+        // Both members need defaults even though neither is a counted field.
+        assert!(
+            text.contains("store i32 zeroinitializer, ptr %cell.f0"),
+            "{text}"
+        );
+        assert!(
+            text.contains("store i1 zeroinitializer, ptr %cell.f1"),
+            "{text}"
+        );
+    }
+}
+
 /// Reading and writing an array's elements.
 ///
 /// The block is a separate allocation -- which is what lets an array grow
