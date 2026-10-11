@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "checked 29 cases across 1 function(s) | refused: /home/akisarou/.cache/nts/outcomes/2018173/a-literal-method-compared-and-called-through-a-wider-face/src/main.ts:7:52: NTS1001 `take`, declared by `Sink` with a type that has no representation (a function type) is not supported by this lowering yet | Error: 27 case(s) disagree between the compiled program and node",
+  "node": null,
+  "measured_with": "7d1ed4b502cbc4ab",
+  "source": "measured"
+}

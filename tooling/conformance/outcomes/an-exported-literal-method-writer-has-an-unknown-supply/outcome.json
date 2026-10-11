@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "checked 29 cases across 1 function(s) | refused: /home/akisarou/.cache/nts/outcomes/2017056/an-exported-literal-method-writer-has-an-unknown-supply/src/main.ts:4:51: NTS1003 `use` cannot be compiled because it calls `Sink#take`, and no class in this program implements it, so its method has no body to declare | Error: 28 case(s) disagree between the compiled program and node",
+  "node": null,
+  "measured_with": "7d1ed4b502cbc4ab",
+  "source": "measured"
+}
