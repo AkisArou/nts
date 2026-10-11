@@ -238,3 +238,54 @@ fn captured_initialization_throws_and_proven_late_readers_need_no_flag() {
         "a proven-late class reader must carry no readiness cell"
     );
 }
+
+#[test]
+fn captured_var_typeof_observes_assignment_without_loading_an_unwritten_value() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/captured-var-observations/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&config)
+        .expect("snapshot succeeds");
+    let prepared = hir::prepare(&snapshot).expect("HIR verifies");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let values: Vec<_> = prepared
+        .program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .collect();
+    assert!(
+        values
+            .iter()
+            .all(|op| !matches!(op.kind, OpKind::CellReady { .. })),
+        "typeof never reads the uninitialized payload through a stop"
+    );
+    assert!(
+        values
+            .iter()
+            .any(|op| matches!(&op.kind, OpKind::ConstString(text) if text == "undefined")),
+        "the entry value must remain an observable typeof answer"
+    );
+    let assigned = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name == "assignedBeforeDeclaration")
+        .expect("assignment control retained");
+    assert_eq!(
+        assigned
+            .values
+            .iter()
+            .filter(|op| matches!(op.kind, OpKind::FieldSet { field: 1, .. }))
+            .count(),
+        1,
+        "an assignment sets readiness, and var without an initializer does not reset it"
+    );
+}

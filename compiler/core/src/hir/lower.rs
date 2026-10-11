@@ -27973,6 +27973,9 @@ impl<'a> FuncBuilder<'a> {
             .children(id)
             .first()
             .ok_or_else(|| self.unsupported(id, "`typeof` with no operand"))?;
+        if let Some(result) = self.guarded_var_typeof(id, operand) {
+            return result;
+        }
         if let Some(kind) = self.literal_method_typeof(id, operand)? {
             return Ok(kind);
         }
@@ -32054,10 +32057,11 @@ impl<'a> FuncBuilder<'a> {
                     origin.clone(),
                 );
                 self.check_binding_ready(at, symbol, ready)?;
+            } else if self.module.initialization.var_cell(symbol) {
+                self.check_var_ready(at, symbol, cell);
             } else {
-                // Forward var cells cannot yet represent undefined. Keep the
-                // named stop until their representation and unguarding change
-                // together; var has no lexical dead zone.
+                // Merged or otherwise unclassified bindings retain the
+                // existing stop; the pure-var rule needs a declaration proof.
                 self.push(
                     OpKind::CellReady { cell, name },
                     HirType::Void,
@@ -47723,6 +47727,17 @@ impl<'a> FuncBuilder<'a> {
                 {
                     Some(cell) => {
                         self.field_set(cell, 0, value, &origin);
+                        // A var's flag means assigned, not that its declaration
+                        // statement ran. `x = 2; var x;` leaves that value intact.
+                        if self.module.initialization.var_cell(symbol)
+                            && self
+                                .cell_of(symbol)
+                                .is_some_and(|index| self.is_guarded(index))
+                        {
+                            let ready =
+                                self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+                            self.field_set(cell, 1, ready, &origin);
+                        }
                     }
                     None => {
                         self.bindings.insert(symbol, value);

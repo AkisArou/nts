@@ -10,14 +10,17 @@
 
 use std::rc::Rc;
 
+use crate::hir::{OpKind, Terminator, ValueId};
+use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::{SymbolId, VariableKind, syntax};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
-    ClosureInfo, FuncBuilder, HirType, ManagedType, NodeId, PrimitiveBuiltin, SemanticSnapshot,
-    binds_its_own_this, children_in_the_body_of, children_that_run, declaration_initializer,
-    declared_base_class, declares_a_class, evaluation_order, implemented_member, is_static_member,
-    names_a_body, raising_callees_of, reads_a_name, the_constructor_declared_by, the_function_of,
+    Branch, ClosureInfo, FuncBuilder, HirType, ManagedType, NodeId, PrimitiveBuiltin,
+    SemanticSnapshot, binds_its_own_this, children_in_the_body_of, children_that_run,
+    declaration_initializer, declared_base_class, declares_a_class, evaluation_order,
+    implemented_member, is_static_member, names_a_body, raising_callees_of, reads_a_name,
+    the_constructor_declared_by, the_function_of,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -26,6 +29,93 @@ struct Binding {
     declaration: NodeId,
     name: NodeId,
     lexical: bool,
+}
+
+impl FuncBuilder<'_> {
+    /// Only a bare captured var read is answered locally. A call returning
+    /// that value still needs undefined-capable result transport and stays a
+    /// named stop until its representation is widened together with its ABI.
+    pub(super) fn guarded_var_typeof(
+        &mut self,
+        at: NodeId,
+        operand: NodeId,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        let operand = self.through_parentheses(operand);
+        let spelling = self.typeof_from_the_checkers_type(operand)?;
+        let symbol = self.node(operand).symbol?.0;
+        if !self.in_closure
+            || self.kind_of(operand) != Some(syntax::IDENTIFIER)
+            || !self.module.initialization.var_cell(symbol)
+            || !self
+                .cell_of(symbol)
+                .is_some_and(|index| self.is_guarded(index))
+        {
+            return None;
+        }
+        let cell = *self.bindings.get(&symbol)?;
+        let origin = self.origin(at);
+        let ready = self.push(
+            OpKind::FieldGet {
+                object: cell,
+                field: 1,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let text = HirType::Managed(ManagedType::String);
+        let initialized = self.push(
+            OpKind::ConstString(spelling.to_owned()),
+            text.clone(),
+            origin.clone(),
+        );
+        let undefined = self.push(OpKind::ConstString("undefined".to_owned()), text, origin);
+        Some(self.lower_branching_value(
+            at,
+            ready,
+            Branch::Value(initialized),
+            Branch::Value(undefined),
+        ))
+    }
+
+    /// Numeric and other narrow cells have no representation for var's entry
+    /// value. This is an unsupported transport, never a lexical `ReferenceError`.
+    pub(super) fn check_var_ready(&mut self, at: NodeId, symbol: u32, cell: ValueId) {
+        let origin = self.origin(at);
+        let ready = self.push(
+            OpKind::FieldGet {
+                object: cell,
+                field: 1,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let (carry_on, refused) = (self.new_block(), self.new_block());
+        self.terminate(Terminator::Branch {
+            cond: ready,
+            then_target: carry_on,
+            then_args: Vec::new(),
+            else_target: refused,
+            else_args: Vec::new(),
+        });
+        self.switch_to(refused);
+        let name = &self.snapshot.symbols[symbol as usize].name;
+        let declared = self
+            .type_of(at)
+            .and_then(|ty| self.spelling_for(&ty))
+            .map_or_else(|| self.describe_node(at), str::to_owned);
+        let reason = format!(
+            "`{name}` (var) was read before its assignment; JS gives undefined here, \
+             which this compiler cannot carry where `{name}`'s type is {declared}"
+        );
+        let what = self.push(
+            OpKind::ConstString(reason),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        self.runtime_call("nts_refused", vec![what], HirType::Void, origin);
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(carry_on);
+    }
 }
 
 /// The result contains only source facts, never global indices or emitted names.
@@ -41,6 +131,7 @@ pub(super) struct Analysis {
     flagged_declarations: FxHashSet<NodeId>,
     cyclic: FxHashSet<usize>,
     lexical_cells: FxHashSet<u32>,
+    var_cells: FxHashSet<u32>,
     ready_cells: FxHashSet<u32>,
     captured_guards: FxHashSet<(NodeId, u32)>,
     class_readiness: FxHashSet<u32>,
@@ -57,6 +148,10 @@ impl Analysis {
 
     pub(super) fn lexical_cell(&self, symbol: u32) -> bool {
         self.lexical_cells.contains(&symbol)
+    }
+
+    pub(super) fn var_cell(&self, symbol: u32) -> bool {
+        self.var_cells.contains(&symbol)
     }
 
     pub(super) fn cell_needs_guard(&self, symbol: u32) -> bool {
@@ -94,6 +189,21 @@ impl Analysis {
         closures: &[ClosureInfo],
         readers: &PrivateReaders,
     ) {
+        self.var_cells = super::guarded_symbols(closures)
+            .into_iter()
+            .filter(|symbol| {
+                probe
+                    .snapshot
+                    .symbols
+                    .get(*symbol as usize)
+                    .is_some_and(|record| {
+                        !record.declarations.is_empty()
+                            && record.declarations.iter().all(|declaration| {
+                                probe.variable_kind(*declaration) == Some(VariableKind::Var)
+                            })
+                    })
+            })
+            .collect();
         self.class_readiness = closures
             .iter()
             .filter(|closure| closure.refusal.is_none())
