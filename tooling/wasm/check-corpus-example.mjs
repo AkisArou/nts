@@ -36,21 +36,42 @@ try {
   const wasm = await instantiate(readFileSync(path.join(artifact, 'program.wasm')), manifest);
   report.validatedAndLinked = true; report.phase = 'node-oracle'; save();
   const js = await import(pathToFileURL(path.resolve(source)));
+  // Every public definition may come from a different included source file.
+  // Use the compiler's Origins to locate those oracle modules, requiring an
+  // unambiguous exported name rather than guessing a similarly named function.
+  const namespaces = [js];
+  const missing = [...manifest.exports, ...manifest.globals].some(entry => !Object.hasOwn(js, entry.name));
+  if (missing) {
+    const origins = JSON.parse(readFileSync(path.join(artifact, 'program.origins.json'), 'utf8'));
+    for (const entry of origins.sources) {
+      if (!entry.uri.startsWith('nts-workspace:///')) continue;
+      const file = path.resolve(path.dirname(source), '..', decodeURIComponent(new URL(entry.uri).pathname).slice(1));
+      if (file === path.resolve(source) || !existsSync(file) || !/\.(ts|tsx|js|mjs)$/.test(file)) continue;
+      namespaces.push(await import(pathToFileURL(file)));
+    }
+  }
+  function oracle(name) {
+    const owners = namespaces.filter(namespace => Object.hasOwn(namespace, name));
+    if (owners.length !== 1) return { found: false };
+    return { found: true, value: owners[0][name] };
+  }
   const pool = [NaN, -0, 0, 1, -1, 0.5, -0.5, 2, 3, 7, 20];
   function checkGlobals() {
     for (const global of manifest.globals) {
-      if (!Object.hasOwn(js, global.name)) {
+      const expected = oracle(global.name);
+      if (!expected.found) {
         report.missing.push(global.name); continue;
       }
-      if (!Object.is(wasm[global.name], js[global.name])) {
-        report.wrong.push({ name: global.name, wasm: display(wasm[global.name]), js: display(js[global.name]) });
+      if (!Object.is(wasm[global.name], expected.value)) {
+        report.wrong.push({ name: global.name, wasm: display(wasm[global.name]), js: display(expected.value) });
       }
       report.globals++;
     }
   }
   checkGlobals();
   for (const entry of manifest.exports) {
-    if (typeof js[entry.name] !== 'function') { report.missing.push(entry.name); continue; }
+    const reference = oracle(entry.name);
+    if (!reference.found || typeof reference.value !== 'function') { report.missing.push(entry.name); continue; }
     const pools = entry.params.map(param => param.ty.kind === 'bool' ? [false, true] : pool);
     // Bounded values deliberately avoid huge loop/recursion inputs. Known
     // facts still apply at the loader; record every named input refusal.
@@ -59,7 +80,7 @@ try {
     for (const args of tuples) {
       const actual = invoke(wasm[entry.name], args);
       if (actual.error?.code === 'NTS5001') { report.inputDeclines++; continue; }
-      const expected = invoke(js[entry.name], args);
+      const expected = invoke(reference.value, args);
       if ([actual.error, expected.error].some(error => error?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT')) {
         report.timeouts.push({ name: entry.name, args: args.map(display), wasm: Boolean(actual.error), js: Boolean(expected.error) });
         save(); process.exit(2);

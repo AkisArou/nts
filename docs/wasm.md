@@ -3,10 +3,10 @@
 Status: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
 on 2026-10-11 UTC). Additional exception evidence is recorded below.
 Scanned revision: `e52ddc97e160` on `wasm/m0`. M1a scalar bring-up is implemented
-in the lane worktree, with the execution evidence below. The shared provider
-change requires coordination with MainCodex: the latest review permits starting
-before stage B only if its files do not overlap; `hir/mod.rs` overlaps and has
-been reported to MainClaude. M1a cannot land until HostGc is selected,
+in the lane worktree, with the execution evidence below. The shared HostGc provider
+change is in progress on a separate branch after MainClaude approved the named
+`hir/mod.rs` overlap with MainCodex. Its core hunks are limited to the provider
+enum and native placement/provision selection. M1a cannot land until HostGc is selected,
 its JVM comparison is reviewed, and the full candidate passes the gate.
 
 ## Current M1a implementation and evidence
@@ -96,14 +96,19 @@ Execution evidence on Node 24.20.0, against the scanned core revision:
 | Public boundary fixture | 164 checks including void/undefined, scalar widths, aliases, declared facts, explicit infinite bounds, wrong arity, unsafe 64-bit results and five malformed manifests |
 | Existing `examples/loops` and `examples/bitwise` | 102 and 136 bounded scalar comparisons respectively; zero input declines, no dispatch, no imports; loops includes three nested labels and a break through `finally` |
 | Integrity/refusal tests | Six tests distinguish named helper/optional/public-shape declines from unresolved direct callees, invalid mixed bool/number equality HIR, invalid stack typing and unapproved GC features |
+| All discovered examples | 518 projects accounted for: 40 emitted, validated/linked and bounded-agree; 478 named project declines (including one intentional frontend TS2322 fixture); 2,061 compared cases and 18 named input declines; 0 observed wrong answers, integrity failures, unmeasured projects or timeouts |
 | Actual `emit-wasm` CLI | Executes the same scalar source population; writes source Origins; required `--out`, named `--rc` and `nts_math_cos` refusals precede output mutation; existing check runner refuses wasm |
 | Existing C / LLVM / JVM / RC check runners | Each agrees with Node on all 232 `examples/bitwise` cases; this is a selection smoke check, not the full regression gate |
 
 The saved generator fixture preserves the complete original CFG but substitutes
 scalar operations for frame access. It establishes structuring and branch-copy
 correctness; it does not establish generator runtime support. The ordinary
-example smoke uses a bounded selected population and is not the repository's
-full hostile-pool `agree` instrument.
+example smoke and all-project census use bounded populations and are not the
+repository's full hostile-pool `agree` instrument. The census sweeps numeric/bool
+arguments and checks live scalar globals; its 478 named declines and 18 input
+declines are reported separately from agreement. Follow-up runs resolved the
+`.js` entry, multi-source publication and local config-package resolution gaps;
+all 518 discovered projects are accounted for in `m1a-corpus/report.json`.
 
 Deterministic artifact inventory (`inspect.mjs`, gzip level 9; independently
 compressed files summed, no startup/throughput claim):
@@ -133,7 +138,7 @@ coverage test. Test/build workers are capped at two. Evidence logs and emitted
 modules are retained under the lane's `mainctl/wasm-evidence` directory.
 Still required before landing: coordinated HostGc integration, JVM byte comparison,
 the candidate's full owed gate, and reviewer approval. Complete workspace test
-execution, every-example wasm differential and startup/performance measurements
+execution, the full hostile-pool M1 wasm differential and startup/performance measurements
 have not run; those counts and claims are not implied by these bring-up results.
 
 ## Recommendation and build composition
@@ -216,9 +221,9 @@ turns off” is not presently an available provider configuration.
 
 Approved provider work: add one **`HostGc` provider** for JVM and wasm, and
 select it explicitly in their drivers. MainClaude authorized this lane to make
-that small core commit as a scoped exception to core file ownership. The latest
-review permits starting before stage B if no files overlap with MainCodex; the
-audit found `hir/mod.rs` overlap and has been reported for coordination. It must suppress
+that small core commit as a scoped exception to core file ownership. MainClaude explicitly approved the named `hir/mod.rs` overlap; keep its hunks
+limited to the provider enum and placement/provision selection so the core
+lane's rebase remains mechanical. It must suppress
 native ownership lowering and native frame placement, while preserving semantic
 analysis and logical layouts. Do not reinterpret `NoGc` as host-managed memory.
 Reject `--rc` with either managed backend by name at build planning.

@@ -25,12 +25,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nts", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--only", help="comma-separated project names for an explicit follow-up")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     binary = args.nts.resolve()
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=True)
     projects = sorted((root / "examples").glob("*/tsconfig.json"))
+    if args.only:
+        selected = set(args.only.split(","))
+        projects = [p for p in projects if p.parent.name in selected]
+        if {p.parent.name for p in projects} != selected:
+            raise SystemExit("unknown project in --only")
     report = {
         "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "binary": str(binary), "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
@@ -72,6 +78,9 @@ def main():
             if ("invalid HIR" in text or "invalid prepared HIR" in text
                     or "invalid generated wasm" in text or "panicked" in text):
                 row["outcome"] = "invalid"
+            elif "the program does not typecheck" in text and "TS" in text:
+                row["outcome"] = "declined"
+                row["decline_stage"] = "frontend"
             elif "NTS5001" in text or "NTS2001" in text or "preparation declined" in text:
                 row["outcome"] = "declined"
             else:
@@ -79,7 +88,8 @@ def main():
             row["reason"] = text[-4000:]
         else:
             row["emitted"] = True
-            source = config.parent / "src/main.ts"
+            entries = [config.parent / f"src/main.{suffix}" for suffix in ["ts", "tsx", "js", "mjs"]]
+            source = next((p for p in entries if p.is_file()), entries[0])
             if not source.is_file():
                 row["outcome"] = "unmeasured"
                 row["reason"] = "no conventional src/main.ts oracle entry"
