@@ -1637,6 +1637,24 @@ impl Emitter<'_> {
             OpKind::Convert(operand) => {
                 self.conversion(code, pool, value, *operand, &op.ty, &origin)?
             }
+            OpKind::FieldView { source, face, .. } => {
+                let name = |ty| {
+                    self.program
+                        .layout(ty)
+                        .map_or_else(|| format!("object {}", ty.0), |layout| layout.name.clone())
+                };
+                return Err(Diagnostic::error(
+                    "NTS4001",
+                    format!(
+                        "interface field accessor dispatch requires JVM stateful interfaces: \
+                         `{}` -> `{}` (in `{}`)",
+                        name(*source),
+                        name(*face),
+                        self.func.name
+                    ),
+                    origin.location,
+                ));
+            }
 
             OpKind::GlobalGet(_) | OpKind::GlobalSet { .. } => {
                 self.global(code, pool, &op.kind, &origin)?

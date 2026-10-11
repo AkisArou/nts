@@ -432,7 +432,7 @@ fn only_erased(func: &Func, value: ValueId) -> bool {
             }
             match &op.kind {
                 OpKind::Erase { value: erasing, .. } if *erasing == at => erased = true,
-                OpKind::Convert(_) if op.ty.counting().is_some() => {
+                OpKind::Convert(_) | OpKind::FieldView { .. } if op.ty.counting().is_some() => {
                     views.push(ValueId(u32::try_from(index).unwrap_or(u32::MAX)));
                 }
                 // A runtime helper that keeps none of its arguments reads the

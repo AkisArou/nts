@@ -6,7 +6,7 @@
 //! its semantic interface identity does not make that storage virtual.
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{Callee, Func, HirType, ManagedType, OpKind, Program, TypeId};
 
@@ -46,12 +46,27 @@ pub struct Plan {
     /// Missing-field getters, with their ordinary/raising convention. This is
     /// permission to consider native sharing, never proof that a body is pure.
     pub default_bodies: BTreeMap<String, bool>,
+    /// Non-prefix transfers source lowering admitted through field families.
+    /// A live transfer retains its explicit `FieldView` operation through all
+    /// copies; the JVM consumes that operation rather than deriving a cast.
+    pub native_views: BTreeSet<(TypeId, TypeId)>,
     by_field: FxHashMap<(TypeId, u32), usize>,
     by_selector: FxHashMap<u32, usize>,
     selectors: FxHashSet<u32>,
 }
 
 impl Plan {
+    pub(super) fn prune_views(&mut self, funcs: &[Func]) {
+        let views: FxHashSet<_> = funcs
+            .iter()
+            .flat_map(|func| &func.values)
+            .filter_map(|op| match op.kind {
+                OpKind::FieldView { source, face, .. } => Some((source, face)),
+                _ => None,
+            })
+            .collect();
+        self.native_views.retain(|pair| views.contains(pair));
+    }
     pub(super) fn note_selector(&mut self, slot: u32) {
         self.selectors.insert(slot);
     }

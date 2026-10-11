@@ -1224,6 +1224,14 @@ pub enum OpKind {
     /// machine types — and each one is a cost, so a pass that inserts many is
     /// telling you it chose badly.
     Convert(ValueId),
+    /// Preserve object identity through a non-prefix interface field view.
+    /// Source lowering licenses this through complete accessor families; it
+    /// is never a structural record copy or an unchecked representation cast.
+    FieldView {
+        value: ValueId,
+        source: TypeId,
+        face: TypeId,
+    },
     /// A call whose callee the checker resolved.
     Call {
         callee: Callee,
@@ -3642,7 +3650,7 @@ impl Program {
         for func in &self.funcs {
             for op in &func.values {
                 match &op.kind {
-                    OpKind::Convert(from) => {
+                    OpKind::Convert(from) | OpKind::FieldView { value: from, .. } => {
                         self.cast_pairs(&func.values[from.0 as usize].ty, &op.ty, &mut pairs);
                     }
                     OpKind::Erase { value, .. } => {
@@ -4497,6 +4505,7 @@ pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item 
             OpKind::Erase { .. }
                 | OpKind::Unerase { .. }
                 | OpKind::Convert(_)
+                | OpKind::FieldView { .. }
                 | OpKind::BlockParam(_)
         )
     ) {
@@ -4517,7 +4526,10 @@ pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item 
             values.push(at);
         }
         match op.kind {
-            OpKind::Erase { value, .. } | OpKind::Unerase { value } | OpKind::Convert(value) => {
+            OpKind::Erase { value, .. }
+            | OpKind::Unerase { value }
+            | OpKind::Convert(value)
+            | OpKind::FieldView { value, .. } => {
                 pending.push(value);
             }
             OpKind::BlockParam(_) => {

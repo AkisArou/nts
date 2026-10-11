@@ -27152,21 +27152,7 @@ impl<'a> FuncBuilder<'a> {
                 let why = self.not_the_same_element(id, from, to);
                 return Err(self.unsupported(id, &why));
             }
-            if let (
-                HirType::Managed(ManagedType::Object(from)),
-                HirType::Managed(ManagedType::Object(to)),
-            ) = (&have, want)
-                && !self.hierarchy.access_families.carries(*from, *to)
-                && let Some(why) = self.not_a_prefix(id, *from, *to)
-            {
-                // `type_in_a_message` and not a fifth spelling of it. This read
-                // `name_of_type(..).unwrap_or("an anonymous type")`, which
-                // `spell` then wrapped in backticks and prefixed with `a `,
-                // giving `a `an anonymous type``. Four helpers answered "name
-                // this type for a reader" four ways; they answer once now.
-                let (from, to) = (self.type_in_a_message(*from), self.type_in_a_message(*to));
-                return Err(self.unsupported(id, &why.spell(&from, &to)));
-            }
+            let view = self.native_field_view(id, value, &have, want)?;
             if let Some(why) = self.crossing_storage(&have, want) {
                 return Err(self.unsupported(id, &why));
             }
@@ -27174,7 +27160,7 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, &why));
             }
             self.record_arrival(&have, want, id);
-            return Ok(value);
+            return Ok(view.map_or(value, |kind| self.push(kind, want.clone(), self.origin(id))));
         }
         // **A `void` value erases to `undefined`, because that is what it is.** A
         // function with no `return` completes with `undefined`, so
@@ -27325,6 +27311,39 @@ impl<'a> FuncBuilder<'a> {
     /// The same question, answered with *which* of the two facts said no.
     ///
     /// See [`NotAPrefix`] for why one sentence for both was worth splitting.
+    /// Ask the existing prefix rule once. Only a transfer that rule would
+    /// refuse may become an accessor-backed view; ordinary casts stay ordinary.
+    fn native_field_view(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        have: &HirType,
+        want: &HirType,
+    ) -> Result<Option<OpKind>, Diagnostic> {
+        let (
+            HirType::Managed(ManagedType::Object(source)),
+            HirType::Managed(ManagedType::Object(face)),
+        ) = (have, want)
+        else {
+            return Ok(None);
+        };
+        let Some(why) = self.not_a_prefix(id, *source, *face) else {
+            return Ok(None);
+        };
+        if !self.hierarchy.access_families.carries(*source, *face) {
+            let (source, face) = (
+                self.type_in_a_message(*source),
+                self.type_in_a_message(*face),
+            );
+            return Err(self.unsupported(id, &why.spell(&source, &face)));
+        }
+        Ok(Some(OpKind::FieldView {
+            value,
+            source: *source,
+            face: *face,
+        }))
+    }
+
     fn not_a_prefix(&mut self, id: NodeId, from: TypeId, to: TypeId) -> Option<NotAPrefix> {
         // **A closure or a signature is not a field-layout question, and asking
         // is not free.** `apply(double, n)` passes a function value to a

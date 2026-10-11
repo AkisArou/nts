@@ -159,6 +159,7 @@ fn identity(func: &Func, mut value: ValueId) -> ValueId {
     for _ in 0..func.values.len() {
         match func.value(value).kind {
             OpKind::Convert(source)
+            | OpKind::FieldView { value: source, .. }
             | OpKind::Erase { value: source, .. }
             | OpKind::Unerase { value: source } => value = source,
             _ => return value,

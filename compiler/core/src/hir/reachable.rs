@@ -695,6 +695,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
         .interface_access
         .default_bodies
         .retain(|name, _| keep.contains(name));
+    program.interface_access.prune_views(&program.funcs);
 
     // A table entry naming a function that is gone. It is unreachable by the
     // same argument that removed the function -- no call site dispatches

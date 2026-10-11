@@ -343,6 +343,10 @@ function selfTest(printing) {
   if (printing) console.log(`  ${opaqueClassified ? "ok  " : "FAIL"}  opaque payload stores and numeric instantiations classified`);
   const fieldAccessor = "NTS4001 interface field accessor dispatch requires JVM stateful interfaces (in `readField`)";
   const fieldClassified = declineShape(fieldAccessor) === "interface field accessor dispatch";
+  const fieldView = "NTS4001 interface field accessor dispatch requires JVM stateful interfaces: `RequestContext` -> `ResponseContext` (in `createCacheStorage`)";
+  const viewClassified = declineShape(fieldView) === "interface field accessor dispatch";
+  if (!viewClassified) bad++;
+  if (printing) console.log(`  ${viewClassified ? "ok  " : "FAIL"}  native field-view transfer classified as accessor dispatch`);
   if (!fieldClassified) bad++;
   if (printing) console.log(`  ${fieldClassified ? "ok  " : "FAIL"}  interface field accessor dispatch classified`);
   // A row seen in one corpus only is live; only a row seen in neither is stale.

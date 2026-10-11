@@ -1288,6 +1288,7 @@ fn transfer_op(
                 None => incoming,
             }
         }
+        OpKind::FieldView { value, .. } => lookup(refinements, values, *value),
         // A bool is not a number, and a call's result needs the callee
         // analyzed — neither is a claim this pass can make.
         // DispatchSlot belongs here: its native value is decided after analysis.

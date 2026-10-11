@@ -156,7 +156,9 @@ pub fn analyze(func: &Func) -> Liveness {
         .iter()
         .enumerate()
         .filter_map(|(at, op)| match op.kind {
-            OpKind::Convert(operand) if func.values[operand.0 as usize].ty.counting().is_some() => {
+            OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. }
+                if func.values[operand.0 as usize].ty.counting().is_some() =>
+            {
                 Some((ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand))
             }
             _ => None,

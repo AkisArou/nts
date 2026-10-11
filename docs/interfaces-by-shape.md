@@ -257,7 +257,10 @@ survive later storage specialization.
 Pure stored and missing-field rows reserve table positions by their storage and
 absence contract, then acquire canonical bodies after layouts merge. A semantic
 record with no allocation reserves a missing-field default only when both its
-properties and physical fields lack the member. Owner-qualified reservation
+properties and physical fields lack the member. Reservations use the same
+required-member and optional/method candidate predicate as concrete suppliers;
+an unrelated face with an optional field cannot add rows to a record that lacks
+its required fields. Owner-qualified reservation
 names must not prevent otherwise identical literal and interface layouts from
 sharing storage. User-code accessors retain their concrete owner identity.
 Unallocated generic closure templates do not become reachable merely because
@@ -277,6 +280,13 @@ Native-only field selectors therefore do not generate JVM slot forwarders;
 direct calls to concrete helper bodies remain available. Projecting default
 rows into inherited JVM members would confuse distinct field contracts after
 equal missing-field helpers share a source body.
+An object transfer that the existing prefix rule refuses can instead become an
+explicit HIR `FieldView` when the complete source family plan licenses it.
+Copies and inlining retain the operation; native code preserves the pointer.
+The verifier checks both the operation and its source permission, and rejects
+an ordinary `Convert` substituted for the view. The JVM stops at the view's
+source location, naming the source, face and function under the same accessor
+feature diagnostic. Prefix transfers keep their existing behavior.
 Legacy method-value classification stays until stage D; source copies remain
 specialization, and field correctness no longer depends on them.
 

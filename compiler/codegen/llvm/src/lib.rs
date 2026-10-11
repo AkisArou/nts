@@ -3534,7 +3534,9 @@ fn operation(
         // Out-of-range float to integer is undefined in C and poison here --
         // the same hazard by the same argument, and specialization only emits
         // one where the interval analysis proved the value fits.
-        OpKind::Convert(operand) => return representation_change(func, value, *operand, &out),
+        OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. } => {
+            return representation_change(func, value, *operand, &out);
+        }
         OpKind::Call { .. } => return call(program, func, value, &out, platform),
         // A null pointer, which is what an absent reference is: the one spare
         // value a pointer has, and the whole reason `T | null` costs nothing.

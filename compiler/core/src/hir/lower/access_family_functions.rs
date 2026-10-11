@@ -42,6 +42,7 @@ pub(super) fn declare(
     naming: &Naming,
     program: &mut Program,
 ) {
+    note_native_views(hierarchy, program);
     for ((face, key), slot) in &hierarchy.slots {
         if hierarchy.access_families.for_key(*face, key).is_some() {
             program.interface_access.note_selector(*slot);
@@ -137,6 +138,18 @@ pub(super) fn declare(
         });
     }
     program.funcs.extend(functions);
+}
+
+fn note_native_views(hierarchy: &Hierarchy, program: &mut Program) {
+    for func in &program.funcs {
+        for op in &func.values {
+            if let OpKind::FieldView { source, face, .. } = op.kind
+                && hierarchy.access_families.carries(source, face)
+            {
+                program.interface_access.native_views.insert((source, face));
+            }
+        }
+    }
 }
 
 fn raising_entries(hierarchy: &Hierarchy, family: &Family) -> Vec<interface_access::Entry> {

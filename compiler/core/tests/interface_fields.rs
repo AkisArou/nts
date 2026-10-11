@@ -26,6 +26,71 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn non_prefix_field_views_keep_their_license_and_cannot_become_plain_casts() {
+    let Some(program) = prepared_fixture("interface-field-view") else {
+        return;
+    };
+    let reordered = program
+        .funcs
+        .iter()
+        .find(|f| f.name == "reordered")
+        .unwrap();
+    let (at, view) = reordered
+        .values
+        .iter()
+        .enumerate()
+        .find(|(_, op)| matches!(op.kind, OpKind::FieldView { .. }))
+        .expect("a non-prefix source transfer");
+    let OpKind::FieldView {
+        value,
+        source,
+        face,
+    } = view.kind
+    else {
+        unreachable!()
+    };
+    assert!(
+        program
+            .interface_access
+            .native_views
+            .contains(&(source, face))
+    );
+    assert!(
+        !program
+            .funcs
+            .iter()
+            .find(|f| f.name == "ordered")
+            .unwrap()
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::FieldView { .. }))
+    );
+    let mut unlicensed = program.clone();
+    unlicensed.interface_access.native_views.clear();
+    assert!(
+        hir::verify::verify(&unlicensed).is_err(),
+        "a view needs its source license"
+    );
+    let mut cast = program.clone();
+    cast.funcs
+        .iter_mut()
+        .find(|f| f.name == "reordered")
+        .unwrap()
+        .values[at]
+        .kind = OpKind::Convert(value);
+    assert!(
+        hir::verify::verify(&cast).is_err(),
+        "a Convert cannot replace a view"
+    );
+    let mut unused = program;
+    unused.interface_access.native_views.insert((face, face));
+    assert!(
+        hir::verify::verify(&unused).is_err(),
+        "each license must name a source transfer"
+    );
+}
+
+#[test]
 fn unrelated_optional_defaults_preserve_a_records_literal_storage_identity() {
     let Some(program) = prepared_fixture("accessor-default-record") else {
         eprintln!("SKIP interface_fields: tsgo is not built");

@@ -3138,6 +3138,14 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             )
         }
         OpKind::Convert(operand) => format!("%{index} = convert %{} : {ty}", operand.0),
+        OpKind::FieldView {
+            value,
+            source,
+            face,
+        } => format!(
+            "%{index} = field.view %{} obj#{} -> obj#{} : {ty}",
+            value.0, source.0, face.0
+        ),
         OpKind::ArrayNew { length, zeroed } => {
             // Printed, because "not zeroed" is a claim about what the rest of
             // the function does and is worth being able to read back.

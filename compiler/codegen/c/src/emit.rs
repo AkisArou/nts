@@ -5758,7 +5758,7 @@ fn emit_op(
                 }
             }
         }
-        OpKind::Convert(operand) => {
+        OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. } => {
             // A C cast. Between an integer and a double this is one instruction,
             // and every one is a place specialization decided two adjacent
             // values should live in different machine types.

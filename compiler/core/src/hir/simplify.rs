@@ -292,7 +292,9 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
             *lhs = of(*lhs);
             *rhs = of(*rhs);
         }
-        OpKind::Unary { operand, .. } | OpKind::Convert(operand) => *operand = of(*operand),
+        OpKind::Unary { operand, .. }
+        | OpKind::Convert(operand)
+        | OpKind::FieldView { value: operand, .. } => *operand = of(*operand),
         OpKind::Call { args, .. } => {
             for arg in args {
                 *arg = of(*arg);

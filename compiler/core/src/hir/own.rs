@@ -954,7 +954,9 @@ fn held_to_the_end(func: &Func) -> Vec<(ValueId, rustc_hash::FxHashSet<usize>)> 
             OpKind::Erase { value, .. } => {
                 let mut chain = vec![*value];
                 let mut at = *value;
-                while let OpKind::Convert(inner) = func.values[at.0 as usize].kind {
+                while let OpKind::Convert(inner) | OpKind::FieldView { value: inner, .. } =
+                    func.values[at.0 as usize].kind
+                {
                     chain.push(inner);
                     at = inner;
                 }
@@ -2246,6 +2248,7 @@ fn quiet(kind: &OpKind) -> bool {
         | OpKind::Unerase { .. }
         | OpKind::Unary { .. }
         | OpKind::Convert(_)
+        | OpKind::FieldView { .. }
         | OpKind::Length(_)
         | OpKind::FieldGet { .. }
         | OpKind::ArrayGet { .. }
@@ -3153,7 +3156,9 @@ fn views_borrow(func: &Func, value: ValueId, crossing: &rustc_hash::FxHashSet<Va
     let mut at = value;
     // Bounded: a chain of views is as long as a class hierarchy.
     for _ in 0..64 {
-        let OpKind::Convert(operand) = func.values[at.0 as usize].kind else {
+        let (OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. }) =
+            func.values[at.0 as usize].kind
+        else {
             break;
         };
         if !counted(operand) {

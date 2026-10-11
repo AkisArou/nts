@@ -196,6 +196,7 @@ fn has_effects(op: &Op, values: &[Op]) -> bool {
         | OpKind::Binary { .. }
         | OpKind::Unary { .. }
         | OpKind::Convert(_)
+        | OpKind::FieldView { .. }
         | OpKind::GlobalGet(_)
         | OpKind::ObjectNew { .. }
         | OpKind::FieldGet { .. }

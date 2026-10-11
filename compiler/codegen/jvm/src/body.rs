@@ -159,6 +159,8 @@ fn puts_label(func: &Func, value: ValueId) -> bool {
         OpKind::SharedFieldGet { .. }
         | OpKind::OpenFieldGet { .. }
         | OpKind::OpenFieldSet { .. } => true,
+        // FieldView is a reference identity with no labels or scratch slot;
+        // its emitter stops at the transfer before any downstream assignment.
         _ => false,
     }
 }

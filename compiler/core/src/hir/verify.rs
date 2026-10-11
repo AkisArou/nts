@@ -361,6 +361,7 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
 }
 
 fn check_interface_access(program: &Program, problems: &mut Vec<Invalid>) {
+    check_native_views(program, problems);
     let functions: rustc_hash::FxHashMap<_, _> = program
         .funcs
         .iter()
@@ -424,6 +425,86 @@ fn check_interface_access(program: &Program, problems: &mut Vec<Invalid>) {
                     });
                 }
             }
+        }
+    }
+}
+
+/// `FieldView` is the source decision, not a layout inference after narrowing.
+/// Check its license, operand and result independently, and reject a Convert
+/// that tries to consume that license without retaining the explicit view.
+fn check_native_views(program: &Program, problems: &mut Vec<Invalid>) {
+    let layouts = super::fields::LayoutIndex::build(program);
+    let physical: rustc_hash::FxHashSet<_> = program
+        .interface_access
+        .native_views
+        .iter()
+        .filter_map(|(source, face)| Some((layouts.of_class(*source)?, layouts.of_class(*face)?)))
+        .collect();
+    let mut used = rustc_hash::FxHashSet::default();
+    for func in &program.funcs {
+        for op in &func.values {
+            let reason = match op.kind {
+                OpKind::FieldView {
+                    value,
+                    source,
+                    face,
+                } => {
+                    used.insert((source, face));
+                    let licensed = program
+                        .interface_access
+                        .native_views
+                        .contains(&(source, face));
+                    let families: Vec<_> = program
+                        .interface_access
+                        .families
+                        .iter()
+                        .filter(|family| family.face == face)
+                        .collect();
+                    let supplied = !families.is_empty()
+                        && families
+                            .iter()
+                            .all(|family| family.owners.contains(&source));
+                    let object_layout = |ty: &HirType| match ty {
+                        HirType::Managed(super::ManagedType::Object(ty)) => layouts.of_class(*ty),
+                        _ => None,
+                    };
+                    let types = func.values.get(value.0 as usize).is_some_and(|operand| {
+                        object_layout(&operand.ty).is_some()
+                            && object_layout(&operand.ty) == layouts.of_class(source)
+                            && object_layout(&op.ty).is_some()
+                            && object_layout(&op.ty) == layouts.of_class(face)
+                    });
+                    (!licensed || !supplied || !types)
+                        .then_some("an unlicensed or mistyped native field view")
+                }
+                OpKind::Convert(value) => {
+                    let pair = func.values.get(value.0 as usize).and_then(|operand| {
+                        let (
+                            HirType::Managed(super::ManagedType::Object(source)),
+                            HirType::Managed(super::ManagedType::Object(face)),
+                        ) = (&operand.ty, &op.ty)
+                        else {
+                            return None;
+                        };
+                        Some((layouts.of_class(*source)?, layouts.of_class(*face)?))
+                    });
+                    pair.filter(|pair| physical.contains(pair))
+                        .map(|_| "a native field-view license used by an ordinary Convert")
+                }
+                _ => None,
+            };
+            if let Some(reason) = reason {
+                problems.push(Invalid::InvalidInterfaceAccess {
+                    reason: format!("{}: {reason}", func.name),
+                });
+            }
+        }
+    }
+    for pair in &program.interface_access.native_views {
+        if !used.contains(pair) {
+            problems.push(Invalid::InvalidInterfaceAccess {
+                reason: "a native field-view license has no FieldView operation".to_owned(),
+            });
         }
     }
 }
@@ -2033,7 +2114,9 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => vec![*value],
         OpKind::StringUnitAt { string, index, .. } => vec![*string, *index],
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
-        OpKind::Unary { operand, .. } | OpKind::Convert(operand) => vec![*operand],
+        OpKind::Unary { operand, .. }
+        | OpKind::Convert(operand)
+        | OpKind::FieldView { value: operand, .. } => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),
         OpKind::ArrayNew { length, .. } => vec![*length],
         OpKind::Length(array) | OpKind::Retain(array) | OpKind::Release(array) => {
