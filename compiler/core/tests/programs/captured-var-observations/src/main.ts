@@ -68,6 +68,13 @@ export function earlyBoolean(flag: boolean): string {
   return before + ":" + readBoolean();
 }
 
+export function earlyString(text: string): string {
+  function readString() { return typeof value; }
+  const before = readString();
+  var value = text;
+  return before + ":" + readString();
+}
+
 export function repeated(flag: boolean): string {
   function runOne() {
     function readRepeated() { return typeof value; }
