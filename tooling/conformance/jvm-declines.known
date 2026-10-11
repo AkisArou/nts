@@ -35,3 +35,6 @@ stateful store Ordered -> Shape	jvm-only	pre-existing JVM refusal at the same ca
 unrelated store ReadableStreamAsyncIterator<N> -> Iterable<N>	unmeasured	pre-existing JVM refusal in a-teed-stream-read-back; the C integration is refused before it reaches this iterator
 stateful store ReadableStream<N> -> ReadableStream<N>	unmeasured	pre-existing JVM refusal in a-teed-stream-read-back; the C integration is refused before it reaches these differently instantiated streams
 stateful store TypeN -> TypeN	jvm-only	pre-existing JVM generic-controller assignment refusal in a-controller-stored-by-a-generic-branch; that producer agrees on C
+unrelated store ReadableStreamAsyncIterator<N> -> EventTargetLike	unmeasured	pre-existing JVM refusal in fs/http; Iterable's empty layout shares EventTargetLike there, with no native iterator execution established by this guard
+unrelated store URLSearchParamsIteratorImpl -> EventTargetLike	unmeasured	pre-existing JVM refusal in fs/http/process; empty iterator layout shares EventTargetLike, native behavior not measured by this guard
+unrelated store URLSearchParamsIteratorImpl -> BlobExternalReader	unmeasured	pre-existing JVM refusal in url; empty iterator layout shares BlobExternalReader, native behavior not measured by this guard
