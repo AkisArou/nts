@@ -41,17 +41,18 @@ impl FuncBuilder<'_> {
         operand: NodeId,
     ) -> Option<Result<ValueId, Diagnostic>> {
         let operand = self.through_parentheses(operand);
-        let spelling = self.typeof_from_the_checkers_type(operand)?;
+        if !self.in_closure || self.kind_of(operand) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
         let symbol = self.node(operand).symbol?.0;
-        if !self.in_closure
-            || self.kind_of(operand) != Some(syntax::IDENTIFIER)
-            || !self.module.initialization.var_cell(symbol)
+        if !self.module.initialization.var_cell(symbol)
             || !self
                 .cell_of(symbol)
                 .is_some_and(|index| self.is_guarded(index))
         {
             return None;
         }
+        let spelling = self.typeof_from_the_checkers_type(operand)?;
         let cell = *self.bindings.get(&symbol)?;
         let origin = self.origin(at);
         let ready = self.push(
