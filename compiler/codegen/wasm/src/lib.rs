@@ -112,6 +112,12 @@ pub enum EmitError {
     },
     InvalidHir(Vec<Invalid>),
     InvalidWasm(String),
+    /// A verified CFG could not be translated. This is a compiler bug, not an
+    /// unsupported source shape, and must never select a fallback route.
+    Structuring {
+        function: String,
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for EmitError {
@@ -128,6 +134,12 @@ impl std::fmt::Display for EmitError {
             }
             Self::InvalidHir(errors) => write!(f, "invalid prepared HIR: {errors:?}"),
             Self::InvalidWasm(error) => write!(f, "invalid generated wasm: {error}"),
+            Self::Structuring { function, reason } => {
+                write!(
+                    f,
+                    "internal wasm structurer error in `{function}`: {reason}"
+                )
+            }
             Self::UnsupportedSurface { name, reason } => {
                 write!(f, "NTS5001: wasm declines public export `{name}`: {reason}")
             }

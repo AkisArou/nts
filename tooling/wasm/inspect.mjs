@@ -20,5 +20,6 @@ console.log(JSON.stringify({ files: sizes,
   total: { raw: sizes.reduce((n, f) => n + f.raw, 0), gzip: sizes.reduce((n, f) => n + f.gzip, 0) },
   functions: manifest.functions.length, structured: manifest.functions.filter(f => f.route === 'structured').length,
   dispatcher: manifest.functions.filter(f => f.route === 'dispatcher').length,
+  functionRoutes: manifest.functions,
   imports: WebAssembly.Module.imports(module), exports: WebAssembly.Module.exports(module).length,
 }, null, 2));

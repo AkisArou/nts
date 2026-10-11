@@ -267,7 +267,8 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
                 routes.push(route);
                 origins.extend(marks);
             }
-            Err(diagnostic) => declines.push(diagnostic),
+            Err(EmitError::Declined(diagnostics)) => declines.extend(diagnostics),
+            Err(error) => return Err(error),
         }
     }
     if !declines.is_empty() {

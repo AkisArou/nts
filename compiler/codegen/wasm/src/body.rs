@@ -1,7 +1,7 @@
 //! Typed local assignment, edge copies and lexical branch binding.
 
 use crate::{
-    FunctionRoute, InstructionOrigin, cfg,
+    EmitError, FunctionRoute, InstructionOrigin, cfg,
     helpers::Helper,
     module::Symbols,
     numeric, refuse,
@@ -13,9 +13,62 @@ use nts_diagnostics::Diagnostic;
 use std::collections::BTreeMap;
 use wasm_encoder::{BlockType, Function, Instruction as I};
 
+#[cfg(test)]
+#[path = "../tests/common/mod.rs"]
+mod test_common;
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+    use test_common::{block, function, value};
+
+    #[test]
+    fn a_corrupt_scope_plan_is_a_named_internal_error() {
+        let mut f = function("brokenScope", &[], nts_core::hir::HirType::Void);
+        let cond = value(
+            &mut f,
+            OpKind::ConstBool(true),
+            nts_core::hir::HirType::Bool,
+        );
+        f.blocks = vec![
+            block(
+                &[],
+                &[cond],
+                Terminator::Branch {
+                    cond,
+                    then_target: BlockId(0),
+                    then_args: vec![],
+                    else_target: BlockId(1),
+                    else_args: vec![],
+                },
+            ),
+            block(&[], &[], Terminator::Return(None)),
+        ];
+        let plan = cfg::plan(&f).unwrap();
+        let symbols = Symbols {
+            functions: rustc_hash::FxHashMap::default(),
+            helpers: BTreeMap::new(),
+        };
+        let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
+        let mut structure = plan.structure.unwrap();
+        // Actual fault injection: removing the enclosing loop's label must
+        // fail, never become a language decline or an irreducible fallback.
+        structure.loop_headers[0] = false;
+        let error = body.tree(BlockId(0), &structure).unwrap_err();
+        assert!(
+            matches!(&error, EmitError::Structuring { function, .. } if function == "brokenScope")
+        );
+        assert!(error.to_string().contains("out-of-scope"));
+        assert!(!error.to_string().contains("NTS5001"));
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Label {
     Target(BlockId),
+    LoopHead(BlockId),
     Dispatch,
     Other,
 }
@@ -33,23 +86,22 @@ pub(crate) struct Body<'a> {
     origins: Vec<InstructionOrigin>,
     index: u32,
     edges: usize,
+    visited: Vec<bool>,
 }
 
 pub(crate) fn emit(
     func: &Func,
     index: u32,
     symbols: &Symbols<'_>,
-) -> Result<(Function, FunctionRoute, Vec<InstructionOrigin>), Diagnostic> {
-    let plan = cfg::plan(func).map_err(|why| {
-        refuse(
-            func,
-            &func.origin,
-            format!("structurer implementation gap: {why}"),
-        )
+) -> Result<(Function, FunctionRoute, Vec<InstructionOrigin>), EmitError> {
+    let plan = cfg::plan(func).map_err(|reason| EmitError::Structuring {
+        function: func.name.clone(),
+        reason,
     })?;
-    let mut body = Body::new(func, index, symbols, &plan)?;
-    if let Some(region) = &plan.region {
-        body.region(region)?;
+    let mut body =
+        Body::new(func, index, symbols, &plan).map_err(|d| EmitError::Declined(vec![d]))?;
+    if let Some(structure) = &plan.structure {
+        body.tree(BlockId(0), structure)?;
     } else {
         body.dispatcher(&plan.order)?;
     }
@@ -58,12 +110,10 @@ pub(crate) fn emit(
         .iter()
         .map(|id| func.blocks[id.0 as usize].terminator.successors().len())
         .sum::<usize>();
-    if body.edges != expected {
-        return Err(refuse(
-            func,
-            &func.origin,
-            "structurer edge-coverage mismatch",
-        ));
+    if body.edges != expected
+        || body.visited.iter().filter(|seen| **seen).count() != plan.order.len()
+    {
+        return Err(body.structuring("structurer block/edge-coverage mismatch"));
     }
     body.ins(&I::Unreachable);
     body.ins(&I::End);
@@ -121,7 +171,7 @@ impl<'a> Body<'a> {
                 }
             }
         }
-        let pc = if plan.region.is_none() {
+        let pc = if plan.structure.is_none() {
             let id = next;
             locals.push(Slot::I32.wasm());
             Some(id)
@@ -146,6 +196,7 @@ impl<'a> Body<'a> {
             origins: Vec::new(),
             index,
             edges: 0,
+            visited: vec![false; func.blocks.len()],
         })
     }
 
@@ -177,7 +228,7 @@ impl<'a> Body<'a> {
             .iter()
             .rposition(|it| *it == label)
             .map(|at| crate::module::index(self.labels.len() - at - 1))
-            .ok_or_else(|| format!("structurer implementation gap: edge to out-of-scope {label:?}"))
+            .ok_or_else(|| format!("edge to out-of-scope {label:?}"))
     }
     fn open(&mut self, loop_: bool, label: Label) {
         self.ins(&if loop_ {
@@ -191,28 +242,102 @@ impl<'a> Body<'a> {
         self.ins(&I::End);
         self.labels.pop();
     }
-    fn region(&mut self, region: &cfg::Region) -> Result<(), Diagnostic> {
-        if let Some(header) = region.header {
-            self.open(true, Label::Target(header));
+    fn structuring(&self, reason: impl Into<String>) -> EmitError {
+        EmitError::Structuring {
+            function: self.func.name.clone(),
+            reason: reason.into(),
         }
-        for node in region.nodes.iter().skip(1).rev() {
-            self.open(false, Label::Target(node.entry()));
+    }
+    // Ramsey's doTree/nodeWithin: merge children are wrapped in reverse RPO
+    // order, then translated in forward order. Nonmerge children are inlined
+    // by branch(), which is called from the original terminator's position.
+    fn tree(&mut self, id: BlockId, structure: &cfg::Structure) -> Result<(), EmitError> {
+        if structure.loop_headers[id.0 as usize] {
+            self.open(true, Label::LoopHead(id));
         }
-        for (i, node) in region.nodes.iter().enumerate() {
-            if i != 0 {
-                self.close();
-            }
-            match node {
-                cfg::Node::Block(id) => self.block(*id)?,
-                cfg::Node::Loop(region) => self.region(region)?,
-            }
+        let merges: Vec<_> = structure.children[id.0 as usize]
+            .iter()
+            .copied()
+            .filter(|child| structure.merges[child.0 as usize])
+            .collect();
+        for child in merges.iter().rev() {
+            self.open(false, Label::Target(*child));
         }
-        if region.header.is_some() {
+        self.actions(id)?;
+        self.structured_terminator(id, structure)?;
+        for child in merges {
+            self.close();
+            self.tree(child, structure)?;
+        }
+        if structure.loop_headers[id.0 as usize] {
             self.close();
         }
         Ok(())
     }
-    fn dispatcher(&mut self, order: &[BlockId]) -> Result<(), Diagnostic> {
+    fn branch(
+        &mut self,
+        from: BlockId,
+        to: BlockId,
+        args: &[ValueId],
+        structure: &cfg::Structure,
+    ) -> Result<(), EmitError> {
+        self.copies(to, args).map_err(|why| self.structuring(why))?;
+        self.edges += 1;
+        let label = if structure.rank[to.0 as usize] <= structure.rank[from.0 as usize] {
+            Label::LoopHead(to)
+        } else if structure.merges[to.0 as usize] {
+            Label::Target(to)
+        } else {
+            if structure.parent[to.0 as usize] != Some(from) {
+                return Err(self.structuring(format!(
+                    "inline b{} is not a dominator child of b{}",
+                    to.0, from.0
+                )));
+            }
+            return self.tree(to, structure);
+        };
+        let depth = self.depth(label).map_err(|why| self.structuring(why))?;
+        self.ins(&I::Br(depth));
+        Ok(())
+    }
+    fn structured_terminator(
+        &mut self,
+        id: BlockId,
+        structure: &cfg::Structure,
+    ) -> Result<(), EmitError> {
+        match self.func.blocks[id.0 as usize].terminator.clone() {
+            Terminator::Jump { target, args } => self.branch(id, target, &args, structure),
+            Terminator::Branch {
+                cond,
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+            } => {
+                self.load(cond).map_err(|why| self.structuring(why))?;
+                self.ins(&I::If(BlockType::Empty));
+                self.labels.push(Label::Other);
+                self.branch(id, then_target, &then_args, structure)?;
+                self.ins(&I::Else);
+                self.branch(id, else_target, &else_args, structure)?;
+                self.close();
+                Ok(())
+            }
+            Terminator::Return(value) => {
+                if let Some(v) = value {
+                    self.load(v).map_err(|why| self.structuring(why))?;
+                }
+                self.ins(&I::Return);
+                Ok(())
+            }
+            Terminator::Unreachable => {
+                self.ins(&I::Unreachable);
+                Ok(())
+            }
+            Terminator::FellThrough => Err(self.structuring("a reachable FellThrough terminator")),
+        }
+    }
+    fn dispatcher(&mut self, order: &[BlockId]) -> Result<(), EmitError> {
         self.open(false, Label::Other);
         self.open(true, Label::Dispatch);
         for id in order.iter().rev() {
@@ -233,7 +358,10 @@ impl<'a> Body<'a> {
         self.ins(&I::Unreachable);
         Ok(())
     }
-    fn block(&mut self, block: BlockId) -> Result<(), Diagnostic> {
+    fn actions(&mut self, block: BlockId) -> Result<(), EmitError> {
+        if std::mem::replace(&mut self.visited[block.0 as usize], true) {
+            return Err(self.structuring(format!("b{} was emitted twice", block.0)));
+        }
         for id in &self.func.blocks[block.0 as usize].ops {
             let op = self.func.value(*id);
             self.origins.push(InstructionOrigin {
@@ -242,12 +370,16 @@ impl<'a> Body<'a> {
                 origin: op.origin.clone(),
             });
             self.op(*id)
-                .map_err(|why| refuse(self.func, &op.origin, why))?;
+                .map_err(|why| EmitError::Declined(vec![refuse(self.func, &op.origin, why)]))?;
         }
-        self.terminator(&self.func.blocks[block.0 as usize].terminator)
-            .map_err(|why| refuse(self.func, &self.func.origin, why))
+        Ok(())
     }
-    fn edge(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), String> {
+    fn block(&mut self, block: BlockId) -> Result<(), EmitError> {
+        self.actions(block)?;
+        self.terminator(&self.func.blocks[block.0 as usize].terminator)
+            .map_err(|why| self.structuring(why))
+    }
+    fn copies(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), String> {
         for copy in edge_copies(&self.func.blocks[target.0 as usize].params, args) {
             match copy {
                 Copy::Move { to, from } => {
@@ -268,6 +400,10 @@ impl<'a> Body<'a> {
                 }
             }
         }
+        Ok(())
+    }
+    fn edge(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), String> {
+        self.copies(target, args)?;
         if let Some(pc) = self.pc {
             self.ins(&I::I32Const(
                 i32::try_from(self.cases[&target])

@@ -36,15 +36,14 @@ types, strings, arrays, classes, closures, exception/runtime helpers and native
 ABIs remain outside this slice. The inventory below describes **planned M1**,
 not current M1a support.
 
-Reducible functions use a dominator-certified natural-loop forest. Removing
-dominating backedges gives an acyclic graph; immediate child loops are condensed,
-forward destinations get block labels, and loop headers get loop labels. Each
-original edge uses the common parallel-copy sequencer and a checked lexical
-branch depth. A residual cycle after removing dominating backedges proves an
-irreducible function; only that route emits a PC local, loop and `br_table`.
-Emission checks the number of mapped edges. Missing reducible scopes decline as
-structurer implementation gaps. No universal dispatcher or node-splitting limit
-is used.
+Reducible functions use Ramsey's dominator-tree translation. Merge children are
+placed in RPO order after nested block labels; nonmerge successors are inlined
+at their original branch position, and loop headers bind enclosing loop labels.
+Each edge performs the common parallel copies before transfer. A backward edge
+whose target does not dominate its source certifies irreducibility; only that
+route emits a PC local, loop and `br_table`. The emitter checks block and edge
+coverage, duplicate emission and lexical scope. A structuring failure is a named
+internal compiler error, never a source decline or a route change.
 
 `Program.public_api` determines publication, including aliases and live global
 getters. `Func.exported` determines reachability and `Global.exported` marks
@@ -500,19 +499,18 @@ Reuse `common::edge_copies` for simultaneous block-parameter assignment, includi
 swaps; temporary locals have the actual physical type. Emit every operation in
 its original side-effect order before considering stackification.
 
-Recommended structurer: compute reachable RPO, dominators, postdominators and
-loop/SCC structure; build a region tree of sequences, if/else joins and natural
-single-entry loops; emit block/loop labels and edge copies with a recorded mapping
-from every original edge to its emitted branch. Scope validation is mandatory.
-Reducible graphs take this structured route. Within a loop region, remove its
-dominating backedges, order the remaining acyclic graph, and wrap forward branch
-destinations in nested blocks; recognized if/else joins are a compact form of
-those scopes, not the only supported forward-edge shape. Natural-loop labels
-handle backedges, and labels in the parent region handle loop exits. Recursively
-apply that construction to the loop forest and certify every original edge.
-If an initially incomplete implementation cannot prove a reducible edge's scope,
-decline that function by name as a structurer implementation gap; do not silently
-route it through the dispatcher. M1a must exercise multiple exits, joins and
+Use [Ramsey's ICFP 2022 algorithm, sections 5–6](https://www.cs.tufts.edu/~nr/pubs/relooper.pdf).
+Compute reachable RPO and the immediate-dominator tree. Count forward inedges
+to identify merges; identify loop headers from backward edges. Traverse the
+dominator tree recursively, wrap merge children in reverse RPO order, and place
+their code after the corresponding block in forward order. Inline each nonmerge
+successor at its source branch, with parallel copies before the transfer. Loop
+headers bind enclosing loop labels. This handles reducible graphs generally,
+without recognizing source loop syntax or duplicating basic-block actions.
+Coverage and lexical-scope failures are named internal compiler errors. The
+translation must cover every reachable block exactly once and every original
+edge; it cannot change routes on a structuring failure. M1a must exercise
+multiple exits, joins and
 block-parameter cycles as well as simple source loops.
 Stackify single-use pure values within a block only after this path is sound.
 
@@ -526,7 +524,8 @@ fixture; scalar-only versions of its edge topology can exercise M1a before the
 generator runtime is supported. Later use per-SCC dispatch or node splitting only if
 measurement pays for its extra code and proof surface. Reject a “loop syntax only”
 structurer, guessing from block order, and universal dispatch as the final fast
-path. M1 reports how many functions use each route and times structured ordinary
+path. M1 reports each function's route, reachable block count and mapped edge
+count, plus route totals, and times structured ordinary
 loops plus the irreducible dispatcher fixture.
 
 In the following inventory, **M1** means planned support at M1 completion,

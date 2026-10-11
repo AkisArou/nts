@@ -76,7 +76,8 @@ def main():
             row["outcome"] = "timed_out"
         elif code:
             if ("invalid HIR" in text or "invalid prepared HIR" in text
-                    or "invalid generated wasm" in text or "panicked" in text):
+                    or "invalid generated wasm" in text or "internal wasm structurer error" in text
+                    or "panicked" in text):
                 row["outcome"] = "invalid"
             elif "the program does not typecheck" in text and "TS" in text:
                 row["outcome"] = "declined"
