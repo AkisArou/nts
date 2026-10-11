@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "checked 29 cases across 1 function(s) | refused: NTS1003 `invoke` cannot be compiled because it calls `Wakeable#then`, and no class in this program implements it, so its method has no body to declare | refused: NTS1003 `invoke@raises` cannot be compiled because it calls `Wakeable#then`, and no class in this program implements it, so its method has no body to declare | refused: NTS1003 `run` cannot be compiled because it calls `invoke@raises`, and it calls `Wakeable#then`, and no class in this program implements it, so its method has no body to declare | Error: 6 case(s) disagree between the compiled program and node",
+  "node": null,
+  "measured_with": "7d1ed4b502cbc4ab",
+  "source": "measured"
+}
