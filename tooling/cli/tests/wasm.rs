@@ -45,14 +45,15 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
     );
     let checked: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert!(checked["cases"].as_u64().unwrap() >= 150_000);
-    for (label, flags, source, name) in [
+    for (label, flags, source, code, name) in [
         (
             "unsupported",
             vec![],
             root.join("tooling/wasm/fixtures/declines"),
+            "NTS5001",
             "unsupportedMath",
         ),
-        ("rc", vec!["--rc"], supported.clone(), "--rc"),
+        ("rc", vec!["--rc"], supported.clone(), "NTS2001", "--rc"),
     ] {
         let out = scratch.join(label);
         let result = Command::new(env!("CARGO_BIN_EXE_nts"))
@@ -64,10 +65,7 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
             .unwrap();
         assert!(!result.status.success());
         let stderr = String::from_utf8_lossy(&result.stderr);
-        assert!(
-            stderr.contains("NTS5001") && stderr.contains(name),
-            "{stderr}"
-        );
+        assert!(stderr.contains(code) && stderr.contains(name), "{stderr}");
         assert!(!out.exists(), "a decline must precede any output mutation");
     }
     let result = Command::new(env!("CARGO_BIN_EXE_nts"))

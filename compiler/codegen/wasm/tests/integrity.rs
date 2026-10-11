@@ -7,6 +7,25 @@ use nts_codegen_wasm::EmitError;
 use nts_core::hir::{BinOp, Callee, HirType, OpKind, ParamShape, Program, Terminator};
 
 #[test]
+fn a_counting_marker_after_host_gc_preparation_declines_at_its_origin() {
+    let ty = HirType::Managed(nts_core::hir::ManagedType::String);
+    let mut f = function("countingMismatch", std::slice::from_ref(&ty), HirType::Void);
+    let arg = value(&mut f, OpKind::Param(0), ty);
+    let retained = value(&mut f, OpKind::Retain(arg), HirType::Void);
+    f.blocks
+        .push(block(&[], &[arg, retained], Terminator::Return(None)));
+    let EmitError::Declined(diagnostics) = nts_codegen_wasm::emit(&program(vec![f])).unwrap_err()
+    else {
+        panic!("expected provider decline")
+    };
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, "NTS2001");
+    assert!(diagnostics[0].message.contains("countingMismatch"));
+    assert!(diagnostics[0].message.contains("Retain"));
+    assert_eq!(diagnostics[0].primary, common::origin().location);
+}
+
+#[test]
 fn external_runtime_calls_decline_by_name_with_source_origin() {
     let mut f = function("unsupportedMath", &[F64], F64);
     let arg = value(&mut f, OpKind::Param(0), F64);

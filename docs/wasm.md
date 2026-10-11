@@ -4,10 +4,11 @@ Status: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
 on 2026-10-11 UTC). Additional exception evidence is recorded below.
 Scanned revision: `e52ddc97e160` on `wasm/m0`. M1a scalar bring-up is implemented
 in the lane worktree, with the execution evidence below. The shared HostGc provider
-change is in progress on a separate branch after MainClaude approved the named
+is implemented in a separate core draft after MainClaude approved the named
 `hir/mod.rs` overlap with MainCodex. Its core hunks are limited to the provider
-enum and native placement/provision selection. M1a cannot land until HostGc is selected,
-its JVM comparison is reviewed, and the full candidate passes the gate.
+enum and native placement/provision selection. The Wasm driver selects HostGc.
+The core draft must be reviewed, gated and landed before M1a lands through its
+own review and gate.
 
 ## Current M1a implementation and evidence
 
@@ -82,9 +83,10 @@ Use `NTS_TSGO` to select the repository's pinned frontend for compilation/tests.
 `[C, Llvm, Jvm]`, with a regression assertion; existing gate loops are unchanged.
 `NTS_BACKEND=wasm nts check` refuses by name until the M1 runner is implemented.
 It cannot enter the existing native runner and report C's answers as wasm.
-`emit-wasm --rc` refuses by name. Preparation temporarily selects `NoGc` for
-these scalar-only fixtures, with no reachable allocation; the approved HostGc
-commit must replace that selection before M1a lands.
+`emit-wasm --rc` refuses by name through the shared managed-provider planner
+(`NTS2001`). Preparation selects `HostGc`; surviving counting operations are
+source diagnostics at the emitter boundary. Unsupported language shapes use
+`NTS5001`.
 
 Execution evidence on Node 24.20.0, against the scanned core revision:
 
@@ -95,7 +97,7 @@ Execution evidence on Node 24.20.0, against the scanned core revision:
 | Typed numeric HIR fixture | 188 exact cases for unsigned widening/comparison/min/max, i32-min absolute value, negation retaining `-0`, safe i64 carriers, proven signed/unsigned integer div/rem and float-to-integer storage; no imports |
 | Public boundary fixture | 164 checks including void/undefined, scalar widths, aliases, declared facts, explicit infinite bounds, wrong arity, unsafe 64-bit results and five malformed manifests |
 | Existing `examples/loops` and `examples/bitwise` | 102 and 136 bounded scalar comparisons respectively; zero input declines, no dispatch, no imports; loops includes three nested labels and a break through `finally` |
-| Integrity/refusal tests | Six tests distinguish named helper/optional/public-shape declines from unresolved direct callees, invalid mixed bool/number equality HIR, invalid stack typing and unapproved GC features |
+| Integrity/refusal tests | Seven tests distinguish named helper/optional/public-shape/provider declines from unresolved direct callees, invalid mixed bool/number equality HIR, invalid stack typing and unapproved GC features |
 | All discovered examples | 518 projects accounted for: 40 emitted, validated/linked and bounded-agree; 478 named project declines (including one intentional frontend TS2322 fixture); 2,061 compared cases and 18 named input declines; 0 observed wrong answers, integrity failures, unmeasured projects or timeouts |
 | Actual `emit-wasm` CLI | Executes the same scalar source population; writes source Origins; required `--out`, named `--rc` and `nts_math_cos` refusals precede output mutation; existing check runner refuses wasm |
 | Existing C / LLVM / JVM / RC check runners | Each agrees with Node on all 232 `examples/bitwise` cases; this is a selection smoke check, not the full regression gate |
@@ -132,12 +134,14 @@ allows only floats, mutable globals, sign extension and saturating float-to-int
 instructions. GC/reference/EH proposals join explicitly with their implementation,
 not through library defaults. No npm or external wasm tool was added.
 
-Checks run: `cargo fmt --all`, strict workspace clippy with all targets, 30 common
-tests, 12 wasm integration tests, the actual CLI test, and the existing CLI usage
-coverage test. Test/build workers are capped at two. Evidence logs and emitted
+Checks run: `cargo fmt --all`, strict workspace clippy with all targets, 173 core
+and 33 common unit tests, 13 wasm integration tests, the actual CLI test, and the
+existing CLI usage coverage test. The HostGc draft additionally passes two
+preparation tests covering logical layouts and async/`for await` lifetimes, plus
+the JVM's early `--rc` refusal test. Test/build workers are capped at two. Evidence logs and emitted
 modules are retained under the lane's `mainctl/wasm-evidence` directory.
-Still required before landing: coordinated HostGc integration, JVM byte comparison,
-the candidate's full owed gate, and reviewer approval. Complete workspace test
+Still required before landing: review and landing of the separate HostGc draft,
+its complete JVM comparison, the candidate's full owed gate, and reviewer approval. Complete workspace test
 execution, the full hostile-pool M1 wasm differential and startup/performance measurements
 have not run; those counts and claims are not implied by these bring-up results.
 
@@ -230,6 +234,11 @@ Reject `--rc` with either managed backend by name at build planning.
 Before landing, the JVM lane reviews byte-identical artifacts or every named,
 explained difference; C, LLVM and RC must remain unchanged. Land the provider
 commit before M1a, with a diagnostic for surviving `Retain`/`Release` operations.
+Provider lowering is the single place that omits native managed-reference
+lifetimes, including markers from async/generator and `for await` lowering.
+Insertion sites remain provider-neutral; foreign/nonmanaged ownership markers
+remain and the boundary check diagnoses them. MainClaude explicitly approved
+one test-only `HostGc` arm in the C execution helper; no C emission code changes.
 
 | HIR work | Under `HostGc` |
 | --- | --- |

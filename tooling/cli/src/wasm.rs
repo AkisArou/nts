@@ -10,9 +10,9 @@ use nts_core::hir;
 use nts_diagnostics::Severity;
 
 pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
-    if args.iter().any(|arg| arg == "--rc") {
-        bail!("NTS5001: wasm declines --rc: its managed memory belongs to the host GC");
-    }
+    let provider =
+        nts_codegen_common::provider::host_gc("wasm", args.iter().any(|arg| arg == "--rc"))
+            .map_err(anyhow::Error::msg)?;
     let Some(out) = args
         .windows(2)
         .find(|pair| pair[0] == "--out")
@@ -38,9 +38,7 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         false,
         emission.scalar_targets(),
     );
-    // Scalar-only bring-up: no allocation placement can occur. Switch to the
-    // approved shared HostGc provider after coordinated core review, before M1a lands.
-    options.provider = hir::Provider::NoGc;
+    options.provider = provider;
     let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),

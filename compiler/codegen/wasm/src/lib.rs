@@ -139,6 +139,10 @@ impl std::error::Error for EmitError {}
 /// Emit a verified prepared program. Unsupported reachable shapes refuse by name.
 pub fn emit(program: &Program) -> Result<Emitted, EmitError> {
     nts_core::hir::verify::verify(program).map_err(EmitError::InvalidHir)?;
+    let mismatches = nts_codegen_common::provider::host_gc_diagnostics(program, "wasm");
+    if !mismatches.is_empty() {
+        return Err(EmitError::Declined(mismatches));
+    }
     module::emit(program)
 }
 

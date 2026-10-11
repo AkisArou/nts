@@ -73,6 +73,7 @@ pub(crate) fn block(params: &[ValueId], ops: &[ValueId], terminator: Terminator)
 
 pub(crate) fn program(funcs: Vec<Func>) -> Program {
     Program {
+        provider: nts_core::hir::Provider::HostGc,
         public_api: funcs
             .iter()
             .map(|f| (f.name.clone(), f.name.clone()))

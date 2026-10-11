@@ -15,8 +15,14 @@ fn emit_project(fixture: &Path) -> nts_codegen_wasm::Emitted {
         .snapshot(&tsconfig)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
-    let prepared =
-        hir::prepare_with(&snapshot, &hir::Options::default()).expect("prepared HIR verifies");
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Provider::HostGc,
+            ..hir::Options::default()
+        },
+    )
+    .expect("prepared HIR verifies");
     nts_codegen_wasm::emit(&prepared.program).expect("scalar fixture supported")
 }
 
