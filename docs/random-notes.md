@@ -11,3 +11,4 @@
 - LSP go to definition for a C shows the header definition, Java shows the java implementation
 - Playground with code (monorepo with all variants/apps) + compiler output
 - Support matrix in website with filters (unsupported etc?)
+- "plugins" into compiler somehow, to let external libs do some optimizations?? for example zod could have a plugin that could generate special optimized hir???
