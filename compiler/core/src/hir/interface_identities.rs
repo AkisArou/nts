@@ -27,15 +27,23 @@ pub(super) fn collect(
         if !declared.contains(&symbol) {
             continue;
         }
-        identities
+        let identity = identities
             .entry(symbol)
             .or_insert_with(|| InterfaceIdentity {
                 symbol,
                 name: snapshot.symbols[symbol as usize].name.clone(),
                 types: Vec::new(),
-            })
-            .types
-            .push(*ty);
+                names: BTreeMap::new(),
+            });
+        identity.types.push(*ty);
+        identity.names.insert(
+            *ty,
+            format!(
+                "{}{}",
+                identity.name,
+                super::lower::instantiation_suffix(snapshot, *ty)
+            ),
+        );
     }
     for identity in identities.values_mut() {
         identity.types.sort_unstable();

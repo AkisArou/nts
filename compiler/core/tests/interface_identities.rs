@@ -51,6 +51,8 @@ fn empty_interfaces_share_storage_and_keep_distinct_declarations() {
     assert!(identity("Left").types.contains(&left));
     assert!(identity("Right").types.contains(&right));
     assert_ne!(identity("Left").symbol, identity("Right").symbol);
+    assert_eq!(program.interface_type_name(left), Some("Left"));
+    assert_eq!(program.interface_type_name(right), Some("Right"));
     let token = returns(&program, "token");
     assert!(
         program
@@ -91,6 +93,14 @@ fn generic_instantiations_keep_their_storage_under_one_declaration() {
     assert_eq!(holders.len(), 1);
     assert!(holders[0].types.contains(&numeric));
     assert!(holders[0].types.contains(&textual));
+    assert_eq!(
+        program.interface_type_name(numeric),
+        Some(format!("Holder<{}>", numeric.0).as_str())
+    );
+    assert_eq!(
+        program.interface_type_name(textual),
+        Some(format!("Holder<{}>", textual.0).as_str())
+    );
 }
 
 #[test]

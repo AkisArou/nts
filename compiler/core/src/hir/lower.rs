@@ -428,6 +428,10 @@ struct Hierarchy {
     literal_methods: std::sync::Arc<literal_methods::Supplies>,
     /// A complete, shared contract for reads and writes through a field face.
     access_families: std::sync::Arc<access_families::Families>,
+    /// Declared-face storage after reservations, computed once before bodies.
+    /// Anonymous schemas may reserve entries only to alias one of these rows.
+    /// This set is independent of the order a body demands its layouts.
+    field_aliases: std::sync::Arc<Vec<Layout>>,
     /// A class's name, which is half of the function name a call emits.
     name: rustc_hash::FxHashMap<TypeId, String>,
     /// The dispatch slot of each overridden method, keyed by the class that
@@ -15114,7 +15118,38 @@ fn hierarchy_and_naming(
     hierarchy.closures_carry = naming.closures_carry;
     hierarchy.gate_holder = naming.gate_holder.as_deref().map(std::sync::Arc::from);
     raising_member_slots(snapshot, &mut hierarchy, &mut naming);
+    hierarchy.field_aliases = std::sync::Arc::new(field_aliases(
+        snapshot, foreign, closures, &hierarchy, &naming,
+    ));
     (hierarchy, naming)
+}
+
+fn field_aliases(
+    snapshot: &SemanticSnapshot,
+    foreign: &super::runtime::ForeignTable,
+    closures: &[ClosureInfo],
+    hierarchy: &Hierarchy,
+    naming: &Naming,
+) -> Vec<Layout> {
+    if hierarchy.access_families.licensed.is_empty() {
+        return Vec::new();
+    }
+    let mut probe = FuncBuilder::new(snapshot, foreign);
+    probe.hierarchy = hierarchy.clone();
+    probe.closures = closures.to_vec();
+    wire_naming(&mut probe, naming);
+    let mut faces: Vec<_> = hierarchy.faces.iter().copied().collect();
+    faces.sort_unstable();
+    for face in faces {
+        // Unrepresentable faces remain refused at their actual use site.
+        // This probe publishes geometry, never extra program layouts or bodies.
+        let _ = probe.layout_of(NodeId(0), face);
+    }
+    probe
+        .layouts
+        .into_iter()
+        .filter(|layout| layout.types.iter().any(|ty| hierarchy.faces.contains(ty)))
+        .collect()
 }
 
 /// As [`lower`], told which source files the project named as its roots.
@@ -18343,7 +18378,7 @@ fn is_a_generic_declaration(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     })
 }
 
-fn instantiation_suffix(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
+pub(super) fn instantiation_suffix(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     let instantiated = snapshot
         .type_arguments
         .get(&ty)
@@ -52513,16 +52548,23 @@ impl<'a> FuncBuilder<'a> {
     /// Split out of [`Self::layout_of`] for the reason [`Self::foreign_owner`] was: that
     /// function's line limit, and "what does this class put in the table" is its own
     /// question.
-    fn overridden_entries(&self, ty: TypeId, fields: &[Field]) -> Vec<Option<String>> {
+    fn overridden_entries(
+        &self,
+        ty: TypeId,
+        fields: &[Field],
+        base: Option<TypeId>,
+        name: &str,
+    ) -> Vec<Option<String>> {
         let mut methods = vec![None; self.hierarchy.table_size()];
+        let mut reserved = Vec::new();
         for ((root, member), slot) in &self.hierarchy.slots {
             if let Some((family, writes)) = self.hierarchy.access_families.for_key(*root, member) {
-                let supply = family
-                    .supplies
-                    .iter()
-                    .find(|supply| supply.owner == ty)
-                    .or_else(|| self.field_reservation(ty, fields, family));
+                let direct = family.supplies.iter().find(|supply| supply.owner == ty);
+                let supply = direct.or_else(|| self.field_reservation(ty, fields, family));
                 if let Some(supply) = supply {
+                    if direct.is_none() {
+                        reserved.push(*slot as usize);
+                    }
                     let raising = member.ends_with(RAISING_SUFFIX);
                     methods[*slot as usize] = Some(access_family_functions::placeholder(
                         &self.hierarchy,
@@ -52541,11 +52583,26 @@ impl<'a> FuncBuilder<'a> {
                 methods[*slot as usize] = Some(target.name(self));
             }
         }
+        // Anonymous schemas acquire reservations only as an alias of declared
+        // face storage, including its complete method table. The fixed set was
+        // computed before bodies: visiting an anonymous schema first must not
+        // decide whether it shares a row. No new concrete supplier is licensed.
+        if !self.hierarchy.faces.contains(&ty)
+            && !reserved.is_empty()
+            && !self.hierarchy.field_aliases.iter().any(|layout| {
+                may_merge(&layout.name, name) && layout.same_shape(fields, &methods, base)
+            })
+        {
+            for slot in reserved {
+                methods[slot] = None;
+            }
+        }
         methods
     }
 
-    /// An interface may have no allocation of its own. Pure stored or missing
-    /// reads still reserve the same entries as an equivalent literal layout;
+    /// A structural schema may have no allocation of its own, including an
+    /// instantiated callback return record. Pure stored or missing reads
+    /// still reserve the same entries as an equivalent literal layout;
     /// only actual suppliers fill that layout with an executable body later.
     fn field_reservation<'b>(
         &self,
@@ -52553,7 +52610,8 @@ impl<'a> FuncBuilder<'a> {
         fields: &[Field],
         family: &'b access_families::Family,
     ) -> Option<&'b access_families::Supply> {
-        if !self.hierarchy.faces.contains(&ty) || !access_families::reserves(self, ty, family.face)
+        if class_symbol(self.snapshot, ty).is_some()
+            || !access_families::reserves(self, ty, family.face)
         {
             return None;
         }
@@ -52758,7 +52816,7 @@ impl<'a> FuncBuilder<'a> {
         // what the jar calls it, and `Box<T>` and `Box<U>` are one class there.
         let name =
             bound.unwrap_or_else(|| format!("{name}{}", instantiation_suffix(self.snapshot, ty)));
-        let methods = self.overridden_entries(ty, &fields);
+        let methods = self.overridden_entries(ty, &fields, base, &name);
 
         // Structural, so a type whose shape is already laid out joins that
         // layout rather than getting one of its own. The first name wins, which
@@ -80555,6 +80613,84 @@ fn is_override_name(name: &str) -> bool {
 mod tests {
     use super::super::{Field, Layout, Program};
     use super::TypeId;
+
+    #[test]
+    #[allow(clippy::unwrap_used, clippy::expect_used)]
+    fn anonymous_reservations_survive_layout_demand_order() {
+        use nts_frontend_ts::{SemanticSource, TsgoApi};
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
+        let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/programs/accessor-schema-order/tsconfig.json")
+            .canonicalize_utf8()
+            .unwrap();
+        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+        let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
+        let readers =
+            super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
+        let closures = super::collect_closures(&snapshot, &readers);
+        let (hierarchy, naming) =
+            super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
+        let groups = [["item", "remove"], ["hostname", "port"]];
+        let mut faces = Vec::new();
+        let mut anonymous = Vec::new();
+        for (at, record) in snapshot.types.iter().enumerate() {
+            let super::TypeKind::Object { properties } = &record.kind else {
+                continue;
+            };
+            if !groups
+                .iter()
+                .any(|group| properties.iter().map(|p| p.name.as_str()).eq(*group))
+            {
+                continue;
+            }
+            let ty = TypeId(u32::try_from(at).unwrap());
+            if hierarchy.faces.contains(&ty) {
+                faces.push(ty);
+            } else if !hierarchy
+                .access_families
+                .licensed
+                .iter()
+                .any(|family| family.supplies.iter().any(|supply| supply.owner == ty))
+            {
+                anonymous.push(ty);
+            }
+        }
+        assert!(
+            anonymous.len() >= 2,
+            "both inferred callback schemas must be exercised"
+        );
+        assert!(faces.len() >= 2);
+        for anonymous_first in [true, false] {
+            let mut probe = super::FuncBuilder::new(&snapshot, foreign);
+            probe.hierarchy = hierarchy.clone();
+            probe.closures = closures.clone();
+            super::wire_naming(&mut probe, &naming);
+            let (first, second) = if anonymous_first {
+                (&anonymous, &faces)
+            } else {
+                (&faces, &anonymous)
+            };
+            for ty in first.iter().chain(second) {
+                probe.layout_of(super::NodeId(0), *ty).unwrap();
+            }
+            for fields in groups {
+                let count = probe
+                    .layouts
+                    .iter()
+                    .filter(|layout| {
+                        layout
+                            .fields
+                            .iter()
+                            .map(|field| field.name.as_str())
+                            .eq(fields)
+                    })
+                    .count();
+                assert_eq!(count, 1, "anonymous first={anonymous_first}: {fields:?}");
+            }
+        }
+    }
 
     fn layout(name: &str, ty: u32, fields: &[&str]) -> Layout {
         Layout {

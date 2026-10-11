@@ -119,6 +119,61 @@ fn unrelated_optional_defaults_preserve_a_records_literal_storage_identity() {
         ),
         "an unrelated missing optional getter must not separate equal records"
     );
+    let records: Vec<_> = program
+        .layouts
+        .iter()
+        .filter(|layout| {
+            layout.fields.len() == 2
+                && layout.fields[0].name == "item"
+                && layout.fields[1].name == "remove"
+        })
+        .collect();
+    assert_eq!(
+        records.len(),
+        1,
+        "instantiated callback return records share their literal storage"
+    );
+}
+
+#[test]
+fn anonymous_schema_reservations_do_not_depend_on_declaration_order() {
+    let mut shapes = Vec::new();
+    for fixture in ["accessor-schema-order", "accessor-schema-order-reversed"] {
+        let Some(program) = prepared_fixture(fixture) else {
+            return;
+        };
+        let mut rows = Vec::new();
+        for fields in [["item", "remove"], ["hostname", "port"]] {
+            let records: Vec<_> = program
+                .layouts
+                .iter()
+                .filter(|layout| {
+                    layout
+                        .fields
+                        .iter()
+                        .map(|field| field.name.as_str())
+                        .eq(fields)
+                })
+                .collect();
+            assert_eq!(
+                records.len(),
+                1,
+                "{fixture}: anonymous schema must alias its face"
+            );
+            rows.push(
+                records[0]
+                    .methods
+                    .iter()
+                    .filter(|entry| entry.is_some())
+                    .count(),
+            );
+        }
+        shapes.push(rows);
+    }
+    assert_eq!(
+        shapes[0], shapes[1],
+        "both declaration orders reserve the same rows"
+    );
 }
 
 #[test]

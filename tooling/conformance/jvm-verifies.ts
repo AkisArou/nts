@@ -341,6 +341,10 @@ function selfTest(printing) {
   const opaqueClassified = declineShape(opaqueStore) === "unrelated store Immediate<N> -> Handle";
   if (!opaqueClassified) bad++;
   if (printing) console.log(`  ${opaqueClassified ? "ok  " : "FAIL"}  opaque payload stores and numeric instantiations classified`);
+  const emptyStore = "NTS4001 storing a `URLSearchParamsIteratorImpl` where a `Iterable<456>` is declared, and the first does not extend the second here -- the IR relates them and `Layout.base` does not, so the JVM would refuse the class (target held as `EventTargetLike`)";
+  const emptyClassified = declineShape(emptyStore) === "unrelated store URLSearchParamsIteratorImpl -> Iterable<N>";
+  if (!emptyClassified) bad++;
+  if (printing) console.log(`  ${emptyClassified ? "ok  " : "FAIL"}  semantic empty-target store ignores its physical representative`);
   const fieldAccessor = "NTS4001 interface field accessor dispatch requires JVM stateful interfaces (in `readField`)";
   const fieldClassified = declineShape(fieldAccessor) === "interface field accessor dispatch";
   const fieldView = "NTS4001 interface field accessor dispatch requires JVM stateful interfaces: `RequestContext` -> `ResponseContext` (in `createCacheStorage`)";

@@ -10,6 +10,8 @@
 //! feeds the block's own terminator, where the branch is what was wanted
 //! anyway, or writes 0 or 1 through a scratch slot.
 
+use std::fmt::Write as _;
+
 use nts_codegen_common::Copy;
 use nts_core::hir::{
     BinOp, BlockId, Callee, HirType, ManagedType, OpKind, Terminator, UnOp, ValueId,
@@ -3090,24 +3092,37 @@ impl Emitter<'_> {
         if crate::hierarchy::implements(self.program, source_layout, *target_id) {
             return Ok(());
         }
+        let source_name = self
+            .program
+            .interface_type_name(*source_id)
+            .unwrap_or(&source_layout.name);
+        let target_name = self
+            .program
+            .interface_type_name(*target_id)
+            .unwrap_or(&target_layout.name);
+        let mut held = String::new();
+        if source_name != source_layout.name {
+            let _ = write!(held, " (source held as `{}`)", source_layout.name);
+        }
+        if target_name != target_layout.name {
+            let _ = write!(held, " (target held as `{}`)", target_layout.name);
+        }
         if !crate::hierarchy::declared(self.program, target_layout).is_empty() {
             return Err(refuse(
                 self.func,
                 &format!(
-                    "storing a `{}` where a `{}` is declared -- `{}` carries state, so \
-                     this backend emits it as a class rather than an interface, and `{}` \
-                     does not extend that class",
-                    source_layout.name, target_layout.name, target_layout.name, source_layout.name
+                    "storing a `{source_name}` where a `{target_name}` is declared -- `{target_name}` carries state, so \
+                     this backend emits it as a class rather than an interface, and `{source_name}` \
+                     does not extend that class{held}"
                 ),
             ));
         }
         Err(refuse(
             self.func,
             &format!(
-                "storing a `{}` where a `{}` is declared, and the first does not \
+                "storing a `{source_name}` where a `{target_name}` is declared, and the first does not \
                  extend the second here -- the IR relates them and `Layout.base` \
-                 does not, so the JVM would refuse the class",
-                source_layout.name, target_layout.name
+                 does not, so the JVM would refuse the class{held}"
             ),
         ))
     }

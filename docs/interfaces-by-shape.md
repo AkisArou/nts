@@ -263,6 +263,10 @@ an unrelated face with an optional field cannot add rows to a record that lacks
 its required fields. Owner-qualified reservation
 names must not prevent otherwise identical literal and interface layouts from
 sharing storage. User-code accessors retain their concrete owner identity.
+An anonymous callback-return schema reserves rows only when its complete storage
+and table match a declared face. The comparison uses the fixed set of face
+layouts computed before bodies, so visiting the anonymous schema first cannot
+change its representation. These reservations license no extra suppliers.
 Unallocated generic closure templates do not become reachable merely because
 another closure uses the same slot: reached allocations, static closure values
 and explicitly published or runtime-called entries determine the live frames.
@@ -287,6 +291,9 @@ The verifier checks both the operation and its source permission, and rejects
 an ordinary `Convert` substituted for the view. The JVM stops at the view's
 source location, naming the source, face and function under the same accessor
 feature diagnostic. Prefix transfers keep their existing behavior.
+JVM store diagnostics use semantic interface instantiation names, with a shared
+physical layout's differing name appended as context. Storage representatives
+cannot rename an existing decline; assignability still uses physical ancestry.
 Legacy method-value classification stays until stage D; source copies remain
 specialization, and field correctness no longer depends on them.
 

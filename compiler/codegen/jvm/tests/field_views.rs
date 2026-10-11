@@ -49,3 +49,47 @@ fn native_field_views_stop_at_the_transfer_and_keep_prefix_diagnostics() {
             .any(|d| d.message.contains("(in `exact`)"))
     );
 }
+
+#[test]
+fn semantic_store_names_survive_a_different_storage_representative() {
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../core/tests/programs/interface-field-view/tsconfig.json")
+        .canonicalize_utf8()
+        .unwrap();
+    let snapshot = TsgoApi::for_compilation(nts_frontend_ts::tsgo::locate().unwrap())
+        .snapshot(&config)
+        .unwrap();
+    let mut program = hir::prepare(&snapshot).unwrap().program;
+    let named = program
+        .interface_identities
+        .iter()
+        .find(|i| i.name == "Named")
+        .unwrap()
+        .types[0];
+    program
+        .layouts
+        .iter_mut()
+        .find(|l| l.types.contains(&named))
+        .unwrap()
+        .name = "OtherRepresentative".into();
+    let emitted = nts_codegen_jvm::emit(&program);
+    let stopped = emitted
+        .diagnostics
+        .iter()
+        .find(|d| d.message.contains("(in `ordered`)"))
+        .unwrap();
+    assert!(
+        stopped
+            .message
+            .contains("storing a `Ordered` where a `Named` is declared"),
+        "{}",
+        stopped.message
+    );
+    assert!(
+        stopped
+            .message
+            .contains("(target held as `OtherRepresentative`)"),
+        "{}",
+        stopped.message
+    );
+}

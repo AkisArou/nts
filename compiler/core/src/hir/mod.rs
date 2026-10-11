@@ -2014,6 +2014,9 @@ pub struct InterfaceIdentity {
     /// Each keeps its own semantic identity: equal pointer storage does not
     /// equate nullable and optional field contracts.
     pub types: Vec<TypeId>,
+    /// Semantic instantiation names, independent of a shared layout's name.
+    /// Diagnostic metadata only; it cannot decide storage or assignability.
+    pub names: std::collections::BTreeMap<TypeId, String>,
 }
 
 /// How one object type is laid out.
@@ -3759,6 +3762,14 @@ impl Program {
             }
             _ => {}
         }
+    }
+
+    /// A used interface's semantic name, including its instantiation suffix.
+    #[must_use]
+    pub fn interface_type_name(&self, ty: TypeId) -> Option<&str> {
+        self.interface_identities
+            .iter()
+            .find_map(|identity| identity.names.get(&ty).map(String::as_str))
     }
 
     /// The layout of an object type.
