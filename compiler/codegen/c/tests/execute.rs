@@ -325,6 +325,7 @@ fn build_and_run_transformed(
             "-fno-omit-frame-pointer",
         ],
         hir::Provider::NoGc => &[],
+        hir::Provider::HostGc => panic!("C execution tests require a native memory provider"),
     };
 
     let compile = std::process::Command::new("clang")

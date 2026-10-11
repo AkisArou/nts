@@ -8488,6 +8488,11 @@ fn emit_jvm(
     text: bool,
     emission: Emission,
 ) -> Result<bool> {
+    let provider = nts_codegen_common::provider::host_gc(
+        "jvm",
+        selected_provider() == hir::Provider::ReferenceCounting,
+    )
+    .map_err(anyhow::Error::msg)?;
     let tsgo_binary = frontend_binary();
     let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
@@ -8501,20 +8506,34 @@ fn emit_jvm(
         None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
     };
     let targets = emission.scalar_targets();
-    let prepared = match hir::prepare_with(
-        &snapshot,
-        &emit_options(
-            entry.as_deref(),
-            &entry_files,
-            &foreign_tables(&snapshot),
-            configured,
-            false,
-            targets,
-        ),
-    ) {
+    let foreign = foreign_tables(&snapshot);
+    let mut options = emit_options(
+        entry.as_deref(),
+        &entry_files,
+        &foreign,
+        configured,
+        false,
+        targets,
+    );
+    options.provider = provider;
+    let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
+    let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&prepared.program, "jvm");
+    for diagnostic in &mismatches {
+        eprintln!(
+            "{}",
+            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+        );
+    }
+    if !mismatches.is_empty() {
+        bail!(
+            "jvm HostGc preparation declined {} counting marker(s)",
+            mismatches.len()
+        );
+    }
+
     for diagnostic in &prepared.diagnostics {
         eprintln!(
             "{}",

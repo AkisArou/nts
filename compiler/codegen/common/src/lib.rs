@@ -32,3 +32,4 @@ pub mod counting;
 pub mod gobject;
 pub mod native;
 pub mod objc;
+pub mod provider;

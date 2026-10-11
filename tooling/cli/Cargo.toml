@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 nts-build.workspace = true
+nts-codegen-common.workspace = true
 nts-codegen-c.workspace = true
 nts-codegen-jvm.workspace = true
 nts-jvm-emitter.workspace = true

@@ -1014,10 +1014,12 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
     let defines: &[&str] = match provider {
         hir::Provider::ReferenceCounting => &["-DNTS_PROVIDER_RC"],
         hir::Provider::NoGc => &[],
+        hir::Provider::HostGc => bail!("NTS2001: native C/LLVM benchmarks decline HostGc"),
     };
     let shown = match provider {
         hir::Provider::ReferenceCounting => format!("{name} (rc)"),
         hir::Provider::NoGc => name.to_owned(),
+        hir::Provider::HostGc => bail!("NTS2001: native C/LLVM benchmarks decline HostGc"),
     };
 
     let specialized = out.join(format!("{name}.specialized.c"));
@@ -1821,12 +1823,12 @@ fn jvm_case(
     // is defined not to have, and then recording the refusal as the
     // compiler's. `NtsMap` had no timing on this backend for that reason.
     //
-    // `NoGc` here is not the native lane's `NoGc`. There, it means nothing is
-    // ever freed. Here, the platform frees, so it means *this compiler emits
-    // no reclamation of its own* -- which is the shipping configuration for
-    // this backend rather than a concession for a benchmark.
+    // The workload's native allocation budget is independent of this target's
+    // host-managed provider. Every native workload choice uses `HostGc` here.
     let provider = match provider {
-        hir::Provider::ReferenceCounting | hir::Provider::NoGc => hir::Provider::NoGc,
+        hir::Provider::ReferenceCounting | hir::Provider::NoGc | hir::Provider::HostGc => {
+            hir::Provider::HostGc
+        }
     };
 
     let supplied = case.join("driver.java");
@@ -1836,6 +1838,14 @@ fn jvm_case(
         Some(workload(case)?)
     };
     let program = prepared_program(tsconfig, entry, true, provider)?;
+    let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&program, "jvm");
+    if !mismatches.is_empty() {
+        let messages = mismatches
+            .iter()
+            .map(|d| format!("{} {}", d.code, d.message))
+            .collect::<Vec<_>>();
+        bail!("{DECLINED}{}", messages.join("; "));
+    }
     let emitted = nts_codegen_jvm::emit(&program);
     if !emitted.is_complete() {
         bail!("{DECLINED}{} function(s)", emitted.diagnostics.len());

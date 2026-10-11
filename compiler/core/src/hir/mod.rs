@@ -4878,6 +4878,10 @@ pub enum Provider {
     /// silent default for an application.
     #[default]
     NoGc,
+    /// A managed host owns the heap (JVM or `WasmGC`). Logical layouts and
+    /// semantic analyses remain; native frame placement, counting and
+    /// `GObject` floating-reference sinks do not run.
+    HostGc,
     /// RFC §9.2. Reference counting, with the cycle collector behind it: an
     /// object that could be in a cycle goes to a candidate buffer at a count of
     /// zero rather than being freed there, and collection runs once ten
@@ -6676,11 +6680,31 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
 /// without counting, the sink that keeps a floating `GObject` the program's
 /// rather than the first container's (`floating`).
 fn provide(program: &mut Program, provider: Provider) -> rc::Report {
-    if provider == Provider::ReferenceCounting {
-        rc::insert(program)
-    } else {
-        floating::sink(program);
-        rc::Report::default()
+    match provider {
+        Provider::ReferenceCounting => rc::insert(program),
+        Provider::NoGc => {
+            floating::sink(program);
+            rc::Report::default()
+        }
+        Provider::HostGc => {
+            // Lowering also records native frame lifetimes (`for await`).
+            // Host references need no such ownership operations. Keep foreign
+            // counted handles: a host GC cannot discharge their contract, and
+            // the managed driver must diagnose any surviving marker.
+            for func in &mut program.funcs {
+                let values = &func.values;
+                for block in &mut func.blocks {
+                    block.ops.retain(|id| {
+                        if let OpKind::Retain(of) | OpKind::Release(of) = values[id.0 as usize].kind
+                        {
+                            return !values[of.0 as usize].ty.may_hold_a_reference();
+                        }
+                        true
+                    });
+                }
+            }
+            rc::Report::default()
+        }
     }
 }
 
@@ -6875,7 +6899,10 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // in the frame should not be counted at all -- and after dead-code
     // elimination, because an allocation nothing reads is not evidence of
     // anything.
-    let framed = place_allocations(&mut program);
+    let framed = match options.provider {
+        Provider::NoGc | Provider::ReferenceCounting => place_allocations(&mut program),
+        Provider::HostGc => 0,
+    };
 
     // Reference counting, after everything that could move or remove an
     // operation: a retain inserted before dead-code elimination would keep

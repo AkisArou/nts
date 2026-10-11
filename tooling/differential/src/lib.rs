@@ -349,6 +349,19 @@ pub fn check(
     tsconfig: &Utf8Path,
     configure: impl FnOnce(TsgoApi) -> Result<TsgoApi>,
 ) -> Result<Report> {
+    let backend = Backend::from_environment()?;
+    let provider = match backend {
+        Backend::Jvm => {
+            nts_codegen_common::provider::host_gc("jvm", counting()).map_err(anyhow::Error::msg)?
+        }
+        Backend::C | Backend::Llvm => {
+            if counting() {
+                hir::Provider::ReferenceCounting
+            } else {
+                hir::Provider::NoGc
+            }
+        }
+    };
     // `NTS_TSGO`, then the frontend this repository builds, and only then the
     // bare name through `PATH`.
     //
@@ -401,17 +414,27 @@ pub fn check(
     // allocator that expects it to. Hence [`counting`], asked here and at the
     // runtime's defines, and nowhere else.
     let options = hir::Options {
-        provider: if counting() {
-            hir::Provider::ReferenceCounting
-        } else {
-            hir::Provider::NoGc
-        },
+        provider,
         ..hir::Options::default()
     };
     let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,
         Err(unprepared) => bail!("{}", unprepared.render(&snapshot.sources)),
     };
+    let mismatches =
+        nts_codegen_common::provider::host_gc_diagnostics(&prepared.program, backend.name());
+    if !mismatches.is_empty() {
+        for diagnostic in &mismatches {
+            eprintln!(
+                "{}",
+                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+            );
+        }
+        bail!(
+            "{} HostGc preparation declined counting markers",
+            backend.name()
+        );
+    }
     for diagnostic in &prepared.diagnostics {
         eprintln!(
             "  refused: {}",
