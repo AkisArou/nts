@@ -3864,7 +3864,7 @@ fn allocate_object(
         _ => descriptor_for(context.program, layout, None),
     };
     if frame {
-        start_frame_object(writer, &op.origin, name, &descriptor);
+        start_frame_object(writer, &op.origin, name, &descriptor, layout);
         return Ok(format!("{name} = &{name}_frame;"));
     }
     Ok(format!(
@@ -5222,7 +5222,7 @@ fn unary_text(
 /// which somehow reaches a frame object is a no-op rather than `free` on a stack
 /// address.
 ///
-/// Every byte starts zero, as it does in `nts_object_new`. This includes scalar
+/// Every field starts zero, as it does in `nts_object_new`. This includes scalar
 /// fields such as a captured binding's `ready` flag, not just references. A frame
 /// slot is reused by every execution of the site that declares it, so on the second
 /// pass through a loop it holds the pointers the first pass released -- and the
@@ -5233,11 +5233,13 @@ fn unary_text(
 /// Clearing happens at the allocation site on every execution, rather than only
 /// when the function's frame storage is declared. Clang can remove zeroes that
 /// are overwritten before a read.
-fn start_frame_object(writer: &mut CodeWriter, origin: &Origin, name: &str, descriptor: &str) {
-    writer.line(
-        origin,
-        format!("memset(&{name}_frame, 0, sizeof {name}_frame);"),
-    );
+fn start_frame_object(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    name: &str,
+    descriptor: &str,
+    layout: &nts_core::hir::Layout,
+) {
     writer.line(
         origin,
         format!("{name}_frame.header.descriptor = &{descriptor};"),
@@ -5246,6 +5248,24 @@ fn start_frame_object(writer: &mut CodeWriter, origin: &Origin, name: &str, desc
         origin,
         format!("{name}_frame.header.reserved = NTS_IMMORTAL;"),
     );
+    writer.line(origin, format!("{name}_frame.header.flags = 0;"));
+    writer.line(origin, format!("{name}_frame.header.length = 0;"));
+    // Typed stores let clang discard defaults overwritten by constructors.
+    // A whole-struct memset can retain a wide store spanning those fields and
+    // padding, even when the fields are written immediately afterwards.
+    for (at, field) in layout.fields.iter().enumerate() {
+        let zero = if field.ty == HirType::Erased {
+            // Match the heap's zero memory: undefined's tag and payload are
+            // both zero. Aggregate initialization spells that storage value.
+            "(NtsValue){0}"
+        } else {
+            "0"
+        };
+        writer.line(
+            origin,
+            format!("{name}_frame.{} = {zero};", c_member_at(layout, at)),
+        );
+    }
 }
 
 /// The two operations `hir::suspend` deals in.

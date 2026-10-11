@@ -176,10 +176,6 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     let _ = writeln!(text, "declare double @llvm.floor.f64(double) nounwind");
     let _ = writeln!(text, "declare double @llvm.ceil.f64(double) nounwind");
     let _ = writeln!(text, "declare double @llvm.trunc.f64(double) nounwind");
-    let _ = writeln!(
-        text,
-        "declare void @llvm.memset.p0.i64(ptr, i8, i64, i1) nounwind"
-    );
     let _ = writeln!(text, "@nts_desc_ref = external constant %NtsDescriptor");
     let _ = writeln!(
         text,
@@ -3775,7 +3771,7 @@ fn allocation(
             // The class being constructed, not the shape it shares.
             let tag = descriptor_for(program, layout, Some(*id));
             if *frame {
-                frame_object(&placed, &tag, &out)
+                frame_object(func, layout, &placed, &tag, &out)?
             } else {
                 format!("{out} = call ptr @nts_object_new(ptr @nts_desc_{tag})")
             }
@@ -3790,13 +3786,21 @@ fn allocation(
 }
 
 /// An object that lives in the frame, made out of storage the entry block owns.
-fn frame_object(placed: &nts_core::hir::layout::Placement, tag: &str, out: &str) -> String {
+fn frame_object(
+    func: &Func,
+    layout: &nts_core::hir::Layout,
+    placed: &nts_core::hir::layout::Placement,
+    tag: &str,
+    out: &str,
+) -> Result<String, Diagnostic> {
     // The storage is in the entry block -- see `frame_storage` --
     // and this is where it becomes an object: a name for it, the
     // descriptor, `NTS_IMMORTAL` in the count word so the counting
     // pass's release is a no-op on storage that was never
-    // allocated. Every byte is zeroed first, exactly as `nts_object_new`
-    // initializes a heap object, including scalar fields and the header.
+    // allocated. Every field is initialized as `nts_object_new` initializes
+    // a heap object, including scalar fields and the header. Typed stores let
+    // LLVM remove defaults overwritten by constructors without a memset
+    // spanning neighboring fields and padding.
     //
     // That last one is not decoration. `nts_object_new` hands back
     // memory that is already zero and the whole compiler is built
@@ -3805,12 +3809,8 @@ fn frame_object(placed: &nts_core::hir::layout::Placement, tag: &str, out: &str)
     // lets a list be built without counting. An `alloca` is
     // whatever the last frame left there. The first store to a
     // reference field would have released it.
-    [
+    let mut lines = vec![
         format!("{out} = getelementptr i8, ptr {out}.frame, i64 0"),
-        format!(
-            "call void @llvm.memset.p0.i64(ptr align {} {out}, i8 0, i64 {}, i1 false)",
-            placed.align, placed.size
-        ),
         format!("store ptr @nts_desc_{tag}, ptr {out}{}", tbaa("ptr")),
         format!("{out}.rc = getelementptr i8, ptr {out}, i64 8"),
         format!(
@@ -3818,8 +3818,29 @@ fn frame_object(placed: &nts_core::hir::layout::Placement, tag: &str, out: &str)
             nts_core::hir::layout::IMMORTAL,
             tbaa("i64")
         ),
-    ]
-    .join("\n  ")
+        format!("{out}.flags = getelementptr i8, ptr {out}, i64 16"),
+        format!("store i32 0, ptr {out}.flags{}", tbaa("i32")),
+        format!(
+            "{out}.length = getelementptr i8, ptr {out}, i64 {}",
+            nts_core::hir::layout::LENGTH_OFFSET
+        ),
+        format!("store i32 0, ptr {out}.length{}", tbaa("i32")),
+    ];
+    for (at, (field, offset)) in layout.fields.iter().zip(&placed.offsets).enumerate() {
+        let slot = format!("{out}.f{at}");
+        let ty = ty_of(&field.ty, func)?;
+        // Erased values use undefined's zero tag; pointers use null.
+        let zero = if ty == "ptr" {
+            "null"
+        } else {
+            "zeroinitializer"
+        };
+        lines.push(format!(
+            "{slot} = getelementptr i8, ptr {out}, i64 {offset}"
+        ));
+        lines.push(format!("store {ty} {zero}, ptr {slot}{}", tbaa(ty)));
+    }
+    Ok(lines.join("\n  "))
 }
 
 /// Reading and writing an array's elements.
