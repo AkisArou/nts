@@ -12,3 +12,4 @@
 - Playground with code (monorepo with all variants/apps) + compiler output
 - Support matrix in website with filters (unsupported etc?)
 - "plugins" into compiler somehow, to let external libs do some optimizations?? for example zod could have a plugin that could generate special optimized hir???
+- have a way for third-party targets. for example someone wants to build CLR (C#) target. (With a result like JVM)
