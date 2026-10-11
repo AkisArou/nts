@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "nts: `x` was read before its declaration ran",
+  "node": null,
+  "measured_with": "e0fd00828a8bb191",
+  "source": "measured"
+}
