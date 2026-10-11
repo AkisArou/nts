@@ -5249,7 +5249,6 @@ fn start_frame_object(
         format!("{name}_frame.header.reserved = NTS_IMMORTAL;"),
     );
     writer.line(origin, format!("{name}_frame.header.flags = 0;"));
-    writer.line(origin, format!("{name}_frame.header.length = 0;"));
     // Typed stores let clang discard defaults overwritten by constructors.
     // A whole-struct memset can retain a wide store spanning those fields and
     // padding, even when the fields are written immediately afterwards.

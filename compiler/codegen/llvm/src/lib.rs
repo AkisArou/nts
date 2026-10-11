@@ -3798,9 +3798,9 @@ fn frame_object(
     // descriptor, `NTS_IMMORTAL` in the count word so the counting
     // pass's release is a no-op on storage that was never
     // allocated. Every field is initialized as `nts_object_new` initializes
-    // a heap object, including scalar fields and the header. Typed stores let
-    // LLVM remove defaults overwritten by constructors without a memset
-    // spanning neighboring fields and padding.
+    // a heap object, including scalar fields and the meaningful header members.
+    // Typed stores let LLVM remove defaults overwritten by constructors without
+    // a memset spanning neighboring fields and padding.
     //
     // That last one is not decoration. `nts_object_new` hands back
     // memory that is already zero and the whole compiler is built
@@ -3820,11 +3820,6 @@ fn frame_object(
         ),
         format!("{out}.flags = getelementptr i8, ptr {out}, i64 16"),
         format!("store i32 0, ptr {out}.flags{}", tbaa("i32")),
-        format!(
-            "{out}.length = getelementptr i8, ptr {out}, i64 {}",
-            nts_core::hir::layout::LENGTH_OFFSET
-        ),
-        format!("store i32 0, ptr {out}.length{}", tbaa("i32")),
     ];
     for (at, (field, offset)) in layout.fields.iter().zip(&placed.offsets).enumerate() {
         let slot = format!("{out}.f{at}");

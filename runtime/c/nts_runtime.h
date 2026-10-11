@@ -357,6 +357,7 @@ typedef struct NtsHeader {
   const NtsDescriptor *descriptor;
   uintptr_t reserved;
   uint32_t flags;
+  /* ARRAY, STRING and holder metadata; ordinary frame objects leave it unset. */
   uint32_t length;
 } NtsHeader;
 
