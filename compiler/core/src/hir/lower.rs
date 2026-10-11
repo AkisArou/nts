@@ -2370,7 +2370,15 @@ fn raising_member_slots(
     // `runtime/node/timers`' `processImmediate` is why it matters: `9bd3eb1fc` made that
     // `try` refuse rather than lose a `throw`, and refusing it means the immediate queue
     // does not run compiled at all.
-    for call in &naming.guarded_calls {
+    // A raising copy propagates through every call in its body, even when
+    // only its caller is inside a try. Closure variants need the same slots.
+    // Naming publishes the bodies it actually offers, including the gate's
+    // strict arm, rather than numbering unused families from every declaration.
+    for call in naming
+        .guarded_calls
+        .iter()
+        .chain(&naming.raising_body_calls)
+    {
         let Some((root, key)) = interface_member_of(snapshot, &probe, hierarchy, *call) else {
             continue;
         };
@@ -4955,6 +4963,11 @@ struct Naming {
     /// that already visits every guarded node rather than by a second one, because "which
     /// calls does a `try` guard" is a question this file must answer once.
     guarded_calls: rustc_hash::FxHashSet<NodeId>,
+    /// Calls in the named and closure bodies whose raising entries are offered.
+    /// Collected from the same roots as `raising_copies`, after its gate decision.
+    /// Interface-family numbering needs these transitive calls as well as calls
+    /// directly guarded by a try.
+    raising_body_calls: rustc_hash::FxHashSet<NodeId>,
     /// Whether a call inside a `try` may dispatch at `Hierarchy::raising_call_slot`:
     /// every raising body this program would build can carry what it calls. See
     /// [`what_holds_the_gate_off`], which is also where the measurement that
@@ -6542,6 +6555,8 @@ struct RaisingCopies {
     gate_holder: Option<String>,
     /// [`Naming::guarded_calls`].
     guarded_calls: rustc_hash::FxHashSet<NodeId>,
+    /// [`Naming::raising_body_calls`].
+    body_calls: rustc_hash::FxHashSet<NodeId>,
 }
 
 fn raising_copies(
@@ -6616,8 +6631,8 @@ fn raising_copies(
     // The closure bodies are roots for the walk without being copies themselves: a
     // closure is not a `FUNCTION_DECLARATION` and `function_copies` is not what makes
     // it, so what it *calls* needs a copy and it does not.
-    for root in pending {
-        for call in calls_in_the_body_of(probe, root) {
+    for root in &pending {
+        for call in calls_in_the_body_of(probe, *root) {
             for callee in raising_callees_of(snapshot, probe, call) {
                 if eligible.contains(&callee) {
                     copies.insert(callee);
@@ -6630,12 +6645,14 @@ fn raising_copies(
     // calls**, which decides whether a call inside a `try` may dispatch at the
     // raising slot at all. See `what_holds_the_gate_off`.
     let Some((holder, call)) = what_holds_the_gate_off(snapshot, probe, throwing, &copies) else {
+        let body_calls = raising_body_calls(probe, &copies, &pending);
         return RaisingCopies {
             copies,
             eligible,
             closures_carry: true,
             gate_holder: None,
             guarded_calls,
+            body_calls,
         };
     };
     let gate_holder = Some(describe_gate_holder(
@@ -6671,13 +6688,28 @@ fn raising_copies(
         .filter(|declaration| eligible.contains(declaration))
         .collect();
     let copies = close_over_callees(snapshot, probe, &eligible, narrow);
+    let body_calls = raising_body_calls(probe, &copies, &[]);
     RaisingCopies {
         copies,
         eligible,
         closures_carry: false,
         gate_holder,
         guarded_calls,
+        body_calls,
     }
+}
+
+/// Calls in exactly the bodies offered by the selected raising-copy arm.
+fn raising_body_calls(
+    probe: &FuncBuilder,
+    copies: &rustc_hash::FxHashSet<NodeId>,
+    closures: &[NodeId],
+) -> rustc_hash::FxHashSet<NodeId> {
+    copies
+        .iter()
+        .chain(closures)
+        .flat_map(|body| calls_in_the_body_of(probe, *body))
+        .collect()
 }
 
 /// Close a set of copies over what those copies call: a copy names its callees'
@@ -7648,6 +7680,7 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
     naming.raising = raising.copies;
     naming.copyable = raising.eligible;
     naming.guarded_calls = raising.guarded_calls;
+    naming.raising_body_calls = raising.body_calls;
     naming.closures_carry = raising.closures_carry;
     naming.gate_holder = raising.gate_holder;
     naming.raising_then = throwing.bodily;

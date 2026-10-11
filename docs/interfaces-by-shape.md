@@ -201,14 +201,20 @@ field. Typed heterogeneous tuples retain the separately pinned core storage defe
 this change does not reinterpret their elements as compatible object pointers.
 
 React's actual Thenable supplies satisfy Wakeable's contract and gain inferred
-edges in the CLI product build. The GTK counter's next entry-chain stop remains
-`then@raises`: existing raising-family numbering only seeds interface calls
-directly guarded by a try, and misses calls inside a helper or callback's raising
-body. The declared-class control fails the same way on main; the literal control
-loses six exceptions on main and is now refused honestly. Both are pinned as
-blockers. Direct try/catch calls pass, including throwing and non-throwing
-Thenable supplies, as do the widget-driver controls on C and LLVM. Repairing this
-shared transitive raising-family seed is the immediate separate follow-up.
+edges in the CLI product build. Raising-family numbering now also seeds calls in
+exactly the named and closure raising bodies offered by the selected gate arm.
+The existing family-wide carry check and slot fill serve both classes and literals;
+nonthrowing members use their ordinary entries. The class and stored-literal
+transitive-call witnesses pass on C, LLVM, JVM and RC, including the nonthrowing
+controls. The strict gate still withholds unsupported closure copies.
+
+Both GTK counter products clear their two `then@raises` roots (138 to 136 roots).
+They still refuse 769 functions and drop the entry invocation: its next reported
+stop is `resolveLazy<erased>@raises`, whose `LazyComponent` parameter has no
+representation. It is pinned by the generic-interface-member blocker. The GTK
+and libadwaita widget-driver controls remain separate from a working demo.
+A concrete source copy of a nonthrowing interface method still names a missing
+raising body; its directly guarded-family witness is pinned independently.
 Then Part 2 comes next: the legacy-only fallback covers 127 interface
 occurrences across 14 runtime families (stream 12, HTTP 13), and none in either
 GTK counter or GTK state. Wakeable itself is not legacy-only.

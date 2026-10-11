@@ -2,7 +2,7 @@
 
 Part 1c extends structural method inference to literal implementers. Its control
 is main `f6811e8f3565`, whose compiler binary is identical to `ede19442c81c`;
-the final production source pin is `921affec716e` (SHA-256
+the initial core source pin is `921affec716e` (SHA-256
 `a4266105fd4debab5d6aa3326c07b4089d85a80b648f867fcb02e14a7481c3ca`).
 Size and benchmark measurements used the semantically identical ninth build
 `a3928e73cbbb672ebb4b5a8ea767c25a07e8a4c691a6c818b32264684d044a27`;
@@ -105,3 +105,22 @@ with the harness's original object order produces 62 byte-identical timed
 executables. Thus record 0348's two quiet interleaved timing pairs are carried
 forward; this change claims no fresh timing run. This proof does not measure
 compiler latency or new literal-adapter workloads.
+
+## Final landing
+
+Part 1c landed on main as `0c7055d82`. The final production pin is
+`1f0fa01cfdda`, SHA-256
+`a64b4036de701b15e2b1a020eb999a3711e10245b29867ed536cfbe3679ace80`.
+The later JVM container audit added shared assignability checks for array, map,
+set and promise payloads. Its three new runtime declines replace latent throws;
+all observed shapes are classified. The shared-layout cache-entry control agrees.
+Final differential counts are 498 unchanged, 12 fixed and zero regressions in
+all four lanes. There are 323 blockers and 139 outcomes (67 holds, 72 reproductions).
+
+The full gate passed 40 steps, skipped the accepted device lane and found two
+stale test assertions plus two positive examples with unused refused helpers.
+A fixture-only repair preserves the unsupported narrowed-parameter all-or-none
+witness and adds real own-Sink controls beside the wider-interface copies.
+All 16 affected steps then passed, including 1,545 unit tests (five ignored),
+and the compiler binary was byte-identical between runs. Native table bytes,
+census and benchmark carry-forward evidence above remain unchanged.
