@@ -39,6 +39,7 @@ pub mod generics;
 pub mod globals;
 pub mod guards;
 pub mod instantiate;
+pub mod interface_access;
 pub mod interface_fields;
 mod interface_identities;
 pub mod interprocedural;
@@ -2844,6 +2845,7 @@ pub enum FunctionName {
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub funcs: Vec<Func>,
+    pub interface_access: interface_access::Plan,
     /// Native table columns for the logical selectors that native code reads.
     /// Planned after preparation; logical tables and the JVM keep their IDs.
     /// Absent on raw lowering and hand-built HIR, which use identity columns.
@@ -6806,6 +6808,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
     let pruned = pruned + dropped;
     let unions_split = split_unions(&mut program);
+    interface_access::materialize(&mut program);
     // After the copies that give a call its class, so that only an access
     // through an interface whose class is lost is tested.
     interface_fields::guard(&mut program);

@@ -321,6 +321,9 @@ pub enum Invalid {
     /// needs more arguments than the adapter has. A stale proof must never
     /// license omission of a JVM bridge.
     InvalidIdentityProjection { adapter: String, target: String },
+    /// A field family lost a live row or changed its published slot ABI, or
+    /// an own-storage permission no longer names that owner's helper.
+    InvalidInterfaceAccess { reason: String },
     /// A native reader was omitted from the column plan.
     MissingNativeColumn { func: String, slot: u32 },
     /// A native map is not an injective, compact projection of logical IDs.
@@ -339,6 +342,7 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
         verify_func(func, &mut problems);
     }
     check_calls(program, &mut problems);
+    check_interface_access(program, &mut problems);
     check_native_calls(program, &mut problems);
     for (at, _, reason) in super::native_storage::check(program) {
         problems.push(Invalid::NativeStorage {
@@ -353,6 +357,60 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+fn check_interface_access(program: &Program, problems: &mut Vec<Invalid>) {
+    let functions: rustc_hash::FxHashMap<_, _> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func))
+        .collect();
+    for (name, owner) in &program.interface_access.storage_bodies {
+        if functions.get(name.as_str()).is_none_or(|func| {
+            func.params.first().is_none_or(|param| {
+                param.ty != HirType::Managed(super::ManagedType::Object(*owner))
+            })
+        }) {
+            problems.push(Invalid::InvalidInterfaceAccess {
+                reason: format!("own-storage permission `{name}` does not name its owner's helper"),
+            });
+        }
+    }
+    let layouts = super::fields::LayoutIndex::build(program);
+    for family in &program.interface_access.families {
+        for entry in std::iter::once(&family.getter).chain(family.setter.iter()) {
+            let Some(declared) = functions.get(entry.declared.as_str()) else {
+                continue; // Pruned slots grant no permission and have no callers.
+            };
+            for owner in &family.owners {
+                let Some(layout) = layouts.of_class(*owner).map(|at| &program.layouts[at]) else {
+                    continue; // A source candidate never materialized in HIR.
+                };
+                let target = layout
+                    .methods
+                    .get(entry.slot as usize)
+                    .and_then(Option::as_deref)
+                    .and_then(|name| functions.get(name));
+                if target.is_none_or(|target| {
+                    target.return_type != declared.return_type
+                        || target.params.len() != declared.params.len()
+                        || target
+                            .params
+                            .iter()
+                            .skip(1)
+                            .zip(declared.params.iter().skip(1))
+                            .any(|(mine, wanted)| mine.ty != wanted.ty)
+                }) {
+                    problems.push(Invalid::InvalidInterfaceAccess {
+                        reason: format!(
+                            "`{}` has no `{}` row at the declared accessor ABI",
+                            layout.name, family.member
+                        ),
+                    });
+                }
+            }
+        }
     }
 }
 

@@ -341,6 +341,10 @@ function selfTest(printing) {
   const opaqueClassified = declineShape(opaqueStore) === "unrelated store Immediate<N> -> Handle";
   if (!opaqueClassified) bad++;
   if (printing) console.log(`  ${opaqueClassified ? "ok  " : "FAIL"}  opaque payload stores and numeric instantiations classified`);
+  const fieldAccessor = "NTS4001 interface field accessor dispatch requires JVM stateful interfaces (in `readField`)";
+  const fieldClassified = declineShape(fieldAccessor) === "interface field accessor dispatch";
+  if (!fieldClassified) bad++;
+  if (printing) console.log(`  ${fieldClassified ? "ok  " : "FAIL"}  interface field accessor dispatch classified`);
   // A row seen in one corpus only is live; only a row seen in neither is stale.
   const stale = staleRows(["a", "only-runtime", "only-outcomes", "both"], [["only-runtime", "both"], ["only-outcomes", "both"]]);
   const staleOk = stale.length === 1 && stale[0] === "a";
@@ -357,6 +361,9 @@ function selfTest(printing) {
  * shape across programs and runs is one key.
  */
 function declineShape(line) {
+  if (line.includes("NTS4001 interface field accessor dispatch requires JVM stateful interfaces")) {
+    return "interface field accessor dispatch";
+  }
   const conflict = /NTS4001 `([^`]+)` needs distinct dispatch bodies `[^`]+` and `[^`]+` for JVM member `([^`]+)`/.exec(line);
   const plain = (t) => t.replace(/Closure\d+/g, "ClosureN").replace(/\$\d+\$/g, "$N$").replace(/<\d+(?:,\s*\d+)*>/g, "<N>").replace(/Fn[\d_]*__\d+/g, "FnN").replace(/Type\d+/g, "TypeN");
   if (conflict) return `dispatch conflict <any>.${plain(conflict[2])}`;

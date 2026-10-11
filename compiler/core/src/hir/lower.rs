@@ -426,6 +426,8 @@ struct Hierarchy {
     /// literal's lowering. Inference needs the complete receiver set, including
     /// named owners whose structural table rows are not built yet.
     literal_methods: std::sync::Arc<literal_methods::Supplies>,
+    /// A complete, shared contract for reads and writes through a field face.
+    access_families: std::sync::Arc<access_families::Families>,
     /// A class's name, which is half of the function name a call emits.
     name: rustc_hash::FxHashMap<TypeId, String>,
     /// The dispatch slot of each overridden method, keyed by the class that
@@ -2234,7 +2236,11 @@ fn collect_hierarchy(
         .collect_writes(&probe, &hierarchy.faces);
     infer_implements(snapshot, &probe, &mut hierarchy);
 
+    hierarchy.access_families =
+        std::sync::Arc::new(access_families::Families::collect(&mut probe, &hierarchy));
+
     number_slots(&mut hierarchy);
+    std::sync::Arc::clone(&hierarchy.access_families).number_slots(&mut hierarchy);
     // One more slot on the end, if anything in the program can be a function
     // value: see [`needs_closure_slots`].
     if needs_closure_slots(snapshot, closures, &hierarchy) {
@@ -2379,6 +2385,16 @@ fn raising_member_slots(
         .iter()
         .chain(&naming.raising_body_calls)
     {
+        let access_families: Vec<_> = hierarchy.access_families.at(*call).collect();
+        if !access_families.is_empty() {
+            for family in access_families {
+                families.push((family.face, family.key(false)));
+                if family.writes.is_some() {
+                    families.push((family.face, family.key(true)));
+                }
+            }
+            continue;
+        }
         let Some((root, key)) = interface_member_of(snapshot, &probe, hierarchy, *call) else {
             continue;
         };
@@ -2387,6 +2403,7 @@ fn raising_member_slots(
         }
     }
     families.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+    families.dedup();
     for (root, key) in families {
         let members = members_filling(snapshot, &probe, hierarchy, root, &key);
         // Every one of them, or the slot is not numbered. `copyable` says a copy can be
@@ -2530,6 +2547,9 @@ fn members_filling(
     root: TypeId,
     key: &str,
 ) -> Vec<NodeId> {
+    if let Some((family, writes)) = hierarchy.access_families.for_key(root, key) {
+        return family.accessors_for(writes);
+    }
     let mut found = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let NodeKind::Syntax(kind) = node.kind else {
@@ -5790,18 +5810,25 @@ fn walk_one_declaration(
         // the other of the two walks that answer "what can raise here". One
         // fact, two walks, and they disagreed until a program that compiles
         // was run by hand.
-        if matches!(
-            kind,
-            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
-        ) && probe.reads_an_accessor(at)
-        {
-            reached.push(
-                probe
-                    .children(at)
-                    .last()
-                    .and_then(|member| probe.node(*member).symbol)
-                    .map_or(Reached::Elsewhere, |member| Reached::Body(member.0)),
-            );
+        if probe.reads_an_accessor(at) {
+            if probe.hierarchy.access_families.at(at).next().is_some() {
+                reached.extend(
+                    probe
+                        .hierarchy
+                        .access_families
+                        .at(at)
+                        .flat_map(access_families::Family::symbols)
+                        .map(Reached::Body),
+                );
+            } else {
+                reached.push(
+                    probe
+                        .children(at)
+                        .last()
+                        .and_then(|member| probe.node(*member).symbol)
+                        .map_or(Reached::Elsewhere, |member| Reached::Body(member.0)),
+                );
+            }
         }
         if matches!(
             kind,
@@ -7204,6 +7231,14 @@ fn a_call_that_can_raise(
     // is the receiver. See [`FuncBuilder::an_accessor_that_can_raise`] -- the same
     // question, asked where the builder has the set rather than the caller.
     if probe.reads_an_accessor(call) {
+        if probe.hierarchy.access_families.at(call).next().is_some() {
+            return probe
+                .hierarchy
+                .access_families
+                .at(call)
+                .flat_map(access_families::Family::symbols)
+                .any(|symbol| throwing.any.contains(&symbol));
+        }
         return probe
             .children(call)
             .last()
@@ -7594,7 +7629,8 @@ fn calls_guarded_by_a_try(
                         | syntax::NEW_EXPRESSION
                         | syntax::TAGGED_TEMPLATE_EXPRESSION
                 )
-            ) {
+            ) || probe.reads_an_accessor(at)
+            {
                 guarded_a_call = true;
                 guarded_calls.insert(at);
             }
@@ -7687,8 +7723,10 @@ fn naming(
     snapshot: &SemanticSnapshot,
     closures: &[ClosureInfo],
     readers: &initialization::PrivateReaders,
+    hierarchy: &Hierarchy,
 ) -> Naming {
     let mut probe = FuncBuilder::probe(snapshot);
+    probe.hierarchy = hierarchy.clone();
     // Captured function declarations are closure values too. The same table
     // must classify their calls during raising analysis and during lowering.
     probe.closures = closures.to_vec();
@@ -10220,9 +10258,7 @@ fn calls_under(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
         // A read is the same shape, which is what their private-static-getter
         // file shows, and `reads_an_accessor` answers for both by the member
         // symbol's declarations rather than by the syntax around it.
-        Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
-            if probe.reads_an_accessor(id) =>
-        {
+        _ if probe.reads_an_accessor(id) => {
             into.push(id);
         }
         _ => {}
@@ -15074,7 +15110,7 @@ fn hierarchy_and_naming(
 ) -> (Hierarchy, Naming) {
     let mut hierarchy =
         collect_hierarchy(snapshot, foreign, closures, &qualified_names(snapshot).0);
-    let mut naming = naming(snapshot, closures, readers);
+    let mut naming = naming(snapshot, closures, readers, &hierarchy);
     hierarchy.closures_carry = naming.closures_carry;
     hierarchy.gate_holder = naming.gate_holder.as_deref().map(std::sync::Arc::from);
     raising_member_slots(snapshot, &mut hierarchy, &mut naming);
@@ -15310,6 +15346,7 @@ pub fn lower_with(
     );
 
     literal_methods::declare(snapshot, foreign, &shared, &mut lowered);
+    access_family_functions::declare(snapshot, &hierarchy, &shared.naming, &mut lowered.program);
     declare_interface_methods(
         &hierarchy,
         &mut shared.builder(snapshot, foreign, Copy::default()),
@@ -16171,6 +16208,9 @@ fn declare_interface_methods(
     let mut slots: Vec<_> = hierarchy.slots.iter().collect();
     slots.sort_unstable_by_key(|(_, slot)| **slot);
     for ((root, member), slot) in slots {
+        if hierarchy.access_families.for_key(*root, member).is_some() {
+            continue;
+        }
         let Some(owner) = hierarchy.name.get(root) else {
             continue;
         };
@@ -21700,6 +21740,11 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn type_of(&self, id: NodeId) -> Option<HirType> {
+        if let Some(read) = self.actual_field_read(id)
+            && read.representation(self) == Some(HirType::Erased)
+        {
+            return Some(HirType::Erased);
+        }
         let ty = self.snapshot.node_types.get(&id)?;
         self.represent(*ty)
     }
@@ -27111,6 +27156,7 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Managed(ManagedType::Object(from)),
                 HirType::Managed(ManagedType::Object(to)),
             ) = (&have, want)
+                && !self.hierarchy.access_families.carries(*from, *to)
                 && let Some(why) = self.not_a_prefix(id, *from, *to)
             {
                 // `type_in_a_message` and not a fifth spelling of it. This read
@@ -27798,9 +27844,7 @@ impl<'a> FuncBuilder<'a> {
     /// [`Self::lower_typeof`] reads as the two things it does -- find the answer,
     /// and run the operand -- rather than as one long match with a decision after.
     fn typeof_from_the_checkers_type(&self, operand: NodeId) -> Option<&'static str> {
-        self.snapshot
-            .node_types
-            .get(&operand)
+        self.read_type(operand)
             .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
             .and_then(|record| match &record.kind {
                 TypeKind::Number | TypeKind::Literal(LiteralValue::Number(_)) => Some("number"),
@@ -36769,6 +36813,16 @@ impl<'a> FuncBuilder<'a> {
                 "an `Object` static over something that is not an object here",
             ));
         };
+        if self.hierarchy.access_families.changes_transport(type_id)
+            && !self.hierarchy.access_families.permits_spread(type_id)
+        {
+            return Err(self.unsupported(
+                id,
+                "an `Object` static through an interface whose concrete own properties, \
+                 order or storage are not uniform -- field accessors do not supply \
+                 own-property reflection",
+            ));
+        }
         // An **optional** property is not a name the layout can answer for.
         //
         // `Object.keys` and `Object.hasOwn` report what an object *has*, and an
@@ -45790,6 +45844,9 @@ impl<'a> FuncBuilder<'a> {
             let name = self
                 .literal_name(property)
                 .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
+            if let Some(read) = self.interface_field_read(element, value, type_id, &name)? {
+                return Ok(read);
+            }
             let Some(field) = layout
                 .index_of(&name)
                 .or_else(|| Self::symbol_keyed(&layout, &name))
@@ -46237,6 +46294,9 @@ impl<'a> FuncBuilder<'a> {
         let name = self
             .literal_name(*member)
             .ok_or_else(|| self.unsupported(*member, "a computed property name"))?;
+        if let Some(place) = self.interface_field_place(target, object, type_id, &name)? {
+            return Ok(place);
+        }
         // `pair[0] = x`, which is the read's positional rule from the
         // other side. A tuple has no names, so the number is the field.
         let positional = name
@@ -46615,8 +46675,10 @@ impl<'a> FuncBuilder<'a> {
                 // the call returned an erased value -- which clang reported as
                 // `operand of type 'NtsValue' where a real type is required`,
                 // three passes after the mistake.
-                let ty = wants
-                    .clone()
+                let ty = self
+                    .field_access_family(at)
+                    .map(|family| family.returns.clone())
+                    .or_else(|| wants.clone())
                     .or_else(|| self.type_of(id))
                     .ok_or_else(|| self.unrepresentable(id, "an accessor's value"))?;
                 // **The read and the result are the same value here, and for an
@@ -49991,6 +50053,12 @@ impl<'a> FuncBuilder<'a> {
             ));
         };
         let from_type = from;
+        if self.hierarchy.faces.contains(&from_type)
+            && !self.hierarchy.access_families.permits_spread(from_type)
+        {
+            return Err(self.unsupported(property,
+                "an object spread through an interface whose concrete own properties, order or storage are not uniform -- field accessors do not supply own-property reflection"));
+        }
         let from = self.layout_of(source, from_type)?;
         let mut copied: Vec<u32> = Vec::new();
         for (at, field) in from.fields.iter().enumerate() {
@@ -50747,6 +50815,29 @@ impl<'a> FuncBuilder<'a> {
         member: &str,
         kind: &str,
     ) -> Result<Option<Callee>, Diagnostic> {
+        if let Some(family) = self.hierarchy.access_families.get(ty, member) {
+            let writes = kind == "set ";
+            if writes && family.writes.is_none() {
+                return Ok(None);
+            }
+            let raising = !self.raising_suffix_of(id).is_empty();
+            if raising
+                && !self
+                    .hierarchy
+                    .slots
+                    .contains_key(&(ty, format!("{}{}", family.key(writes), RAISING_SUFFIX)))
+            {
+                return Err(self.unsupported(
+                    id,
+                    "an interface field accessor without a complete raising family",
+                ));
+            }
+            let entry = access_family_functions::entry(&self.hierarchy, family, writes, raising);
+            return Ok(Some(Callee::Virtual {
+                slot: entry.slot,
+                declared: entry.declared,
+            }));
+        }
         let key = format!("{kind}{member}");
         let Some(declaring) = self.hierarchy.declaring(ty, &key) else {
             return Ok(None);
@@ -52394,6 +52485,20 @@ impl<'a> FuncBuilder<'a> {
     fn overridden_entries(&self, ty: TypeId, fields: &[Field]) -> Vec<Option<String>> {
         let mut methods = vec![None; self.hierarchy.table_size()];
         for ((root, member), slot) in &self.hierarchy.slots {
+            if let Some((family, writes)) = self.hierarchy.access_families.for_key(*root, member) {
+                if family.supplies.iter().any(|supply| supply.owner == ty) {
+                    let raising = member.ends_with(RAISING_SUFFIX);
+                    let ordinary =
+                        access_family_functions::entry(&self.hierarchy, family, writes, false);
+                    methods[*slot as usize] = Some(format!(
+                        "{}@{}{}",
+                        ordinary.declared,
+                        ty.0,
+                        if raising { RAISING_SUFFIX } else { "" }
+                    ));
+                }
+                continue;
+            }
             if !self.hierarchy.descends_from(ty, *root) {
                 continue;
             }
@@ -57372,6 +57477,9 @@ impl<'a> FuncBuilder<'a> {
         if let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[value.0 as usize].ty.clone()
         {
+            if let Some(read) = self.interface_field_read(id, value, type_id, member_name)? {
+                return Ok(read);
+            }
             let layout = self.layout_of(id, type_id)?;
             let Some(field) = self.field_named(type_id, &layout, member_name) else {
                 return self.member_that_is_not_a_field(id, value, type_id, member_name);
@@ -58207,6 +58315,9 @@ impl<'a> FuncBuilder<'a> {
     /// | undefined` are both one pointer. The type has not, and it is what says
     /// whether `v === undefined` can ever be true.
     fn absences_of(&self, node: NodeId) -> Option<Vec<u32>> {
+        if let Some(read) = self.actual_field_read(node) {
+            return read.absences(self);
+        }
         let ty = self.read_type(node)?;
         let record = self.snapshot.types.get(ty.0 as usize)?;
         let members: Vec<TypeId> = match &record.kind {
@@ -59272,6 +59383,19 @@ impl<'a> FuncBuilder<'a> {
         if self.raising_specializations.contains(&call) {
             return true;
         }
+        if self.hierarchy.access_families.at(call).next().is_some() {
+            return self.hierarchy.access_families.at(call).all(|family| {
+                [false, true]
+                    .into_iter()
+                    .filter(|writes| !writes || family.writes.is_some())
+                    .all(|writes| {
+                        self.hierarchy.slots.contains_key(&(
+                            family.face,
+                            format!("{}{}", family.key(writes), RAISING_SUFFIX),
+                        ))
+                    })
+            });
+        }
         // Through [`raising_callees_of`], which is the one place that turns a site into
         // the declarations a copy belongs to: the set was built from the
         // implementation, and a call to an overloaded function resolves to a
@@ -59352,6 +59476,14 @@ impl<'a> FuncBuilder<'a> {
     /// to name it -- which is [`a_raising_callee_of`]'s sentence, one construct over.
     /// [`Self::reads_an_accessor`] is this asked as a question.
     fn accessors_run_by(&self, node: NodeId) -> Vec<NodeId> {
+        if self.hierarchy.access_families.at(node).next().is_some() {
+            return self
+                .hierarchy
+                .access_families
+                .at(node)
+                .flat_map(access_families::Family::accessors)
+                .collect();
+        }
         if !matches!(
             self.kind_of(node),
             Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
@@ -59397,6 +59529,14 @@ impl<'a> FuncBuilder<'a> {
     /// cannot throw needs no copy and no flag test, and saying otherwise refused
     /// `return box.plain` beside the throwing one.
     fn an_accessor_that_can_raise(&self, access: NodeId) -> bool {
+        if self.hierarchy.access_families.at(access).next().is_some() {
+            return self
+                .hierarchy
+                .access_families
+                .at(access)
+                .flat_map(access_families::Family::symbols)
+                .any(|symbol| self.throwing.contains(&symbol));
+        }
         self.children(access)
             .last()
             .and_then(|member| self.node(*member).symbol)
@@ -60413,6 +60553,9 @@ impl<'a> FuncBuilder<'a> {
             let name = self
                 .literal_name(property)
                 .ok_or_else(|| self.unsupported(element, "a computed property name"))?;
+            if let Some(read) = self.interface_field_read(element, value, type_id, &name)? {
+                return Ok(read);
+            }
             let field = layout
                 .index_of(&name)
                 .or_else(|| Self::symbol_keyed(&layout, &name));
@@ -76333,16 +76476,8 @@ impl<'a> FuncBuilder<'a> {
             && let Some(declared) = layout.fields.get(field as usize)
             && matches!(declared.ty, HirType::Managed(ManagedType::Object(_)))
         {
-            let field_ty = declared.ty.clone();
-            let origin = self.origin(member);
-            let held = self.push(
-                OpKind::FieldGet {
-                    object: receiver,
-                    field,
-                },
-                field_ty,
-                origin,
-            );
+            let access = self.node(member).parent.unwrap_or(member);
+            let held = self.member_of(access, receiver, &member_name)?;
             return self.call_through_closure(id, member, held, Some(receiver), arguments);
         }
 
@@ -78809,6 +78944,9 @@ impl<'a> FuncBuilder<'a> {
     /// `@ntsGet` or a `get` accessor is the property's type as the receiver's
     /// type declares it.
     fn read_type(&self, node: NodeId) -> Option<TypeId> {
+        if let Some(read) = self.actual_field_read(node) {
+            return read.schema();
+        }
         let narrowed = self.snapshot.node_types.get(&node).copied();
         if self.kind_of(node) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             return narrowed;
@@ -80769,8 +80907,12 @@ mod tests {
     }
 }
 
+mod access_families;
+mod access_family_functions;
+mod access_family_sites;
 mod assertions;
 mod bigint;
+mod field_initialization;
 mod function_names;
 mod gobject;
 mod initialization;

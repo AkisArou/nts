@@ -1,26 +1,54 @@
-//! An access through an interface to a field some class implementing it holds
-//! elsewhere tests the object's class first (`hir::interface_fields`,
-//! `docs/interfaces-by-shape.md` Part 0). The outcomes fixtures run the stop;
-//! this checks which accesses are tested, and against which classes.
+//! Proven fields dispatch to their concrete storage; unproven fields retain
+//! the Part 0 guard. A known class still uses a direct field access.
 //!
 //! Skips only when `tsgo` is not built.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, OpKind};
+use nts_core::hir::{self, Callee, OpKind};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn prepared() -> Option<hir::Program> {
+    prepared_fixture("interface-fields")
+}
+
+fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/programs/interface-fields/tsconfig.json")
+        .join(format!("tests/programs/{fixture}/tsconfig.json"))
         .canonicalize_utf8()
         .expect("the program is checked in");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     Some(hir::prepare(&snapshot).expect("valid HIR").program)
+}
+
+#[test]
+fn field_dispatch_does_not_turn_prototype_getters_into_own_properties() {
+    let Some(program) = prepared_fixture("accessor-spread-boundary") else {
+        eprintln!("SKIP interface_fields: tsgo is not built");
+        return;
+    };
+    assert!(program.uncompiled.iter().any(|(_, reason)| {
+        reason.contains("own properties, order or storage are not uniform")
+    }));
+    assert!(!program.funcs.iter().any(|func| func.name == "spreadFace"));
+    assert!(
+        program
+            .uncompiled
+            .iter()
+            .any(|(_, reason)| { reason.contains("an `Object` static through an interface") })
+    );
+    assert!(
+        program
+            .funcs
+            .iter()
+            .any(|func| func.name == "provenOwnShape"),
+        "the uniform control was refused: {:?}",
+        program.uncompiled
+    );
 }
 
 /// The classes each class test in `func` names, by layout name and sorted.
@@ -55,17 +83,75 @@ fn tested(program: &hir::Program, func: &str) -> Vec<Vec<String>> {
 }
 
 #[test]
-fn an_access_is_tested_against_the_classes_holding_its_field_elsewhere() {
+fn proven_interface_fields_dispatch_to_each_class_storage() {
     let Some(program) = prepared() else {
         eprintln!("SKIP interface_fields: tsgo is not built");
         return;
     };
-    // `Lime` by its base, and not `Red` or `Teal`, which hold `level` where
-    // `Channel` does.
-    assert_eq!(tested(&program, "levelOf"), [["Green", "Lime"]]);
-    assert_eq!(tested(&program, "setLevel"), [["Green", "Lime"]]);
-    // `Teal` holds `name` after a field `Channel` does not have.
-    assert_eq!(tested(&program, "nameOf"), [["Green", "Lime", "Teal"]]);
+    for (function, member, writes) in [
+        ("levelOf", "level", false),
+        ("setLevel", "level", true),
+        ("nameOf", "name", false),
+    ] {
+        assert!(tested(&program, function).is_empty());
+        assert_storage_rows(&program, function, member, writes);
+    }
+}
+
+fn assert_storage_rows(program: &hir::Program, function: &str, member: &str, writes: bool) {
+    let caller = program
+        .funcs
+        .iter()
+        .find(|func| func.name == function)
+        .unwrap();
+    let slot = caller
+        .values
+        .iter()
+        .find_map(|op| match &op.kind {
+            OpKind::Call {
+                callee: Callee::Virtual { slot, .. },
+                ..
+            } => Some(*slot),
+            _ => None,
+        })
+        .expect("an interface access dispatches");
+    for name in ["Red", "Green", "Lime", "Teal"] {
+        let layout = program
+            .layouts
+            .iter()
+            .find(|layout| layout.name == name)
+            .unwrap();
+        let target = layout.methods[slot as usize]
+            .as_ref()
+            .expect("complete coverage");
+        let body = program
+            .funcs
+            .iter()
+            .find(|func| &func.name == target)
+            .unwrap();
+        let field = layout
+            .fields
+            .iter()
+            .position(|field| field.name == member)
+            .unwrap();
+        assert!(
+            body.values.iter().any(|op| match &op.kind {
+                OpKind::FieldGet { field: actual, .. } if !writes => *actual as usize == field,
+                OpKind::FieldSet { field: actual, .. } if writes => *actual as usize == field,
+                _ => false,
+            }),
+            "{name}'s row must access its own `{member}`"
+        );
+    }
+}
+
+#[test]
+fn an_unproven_field_keeps_the_class_guard() {
+    let Some(program) = prepared() else {
+        eprintln!("SKIP interface_fields: tsgo is not built");
+        return;
+    };
+    assert_eq!(tested(&program, "unreadyName"), [["Unready"]]);
 }
 
 #[test]
@@ -75,4 +161,100 @@ fn an_access_through_the_class_is_not_tested() {
         return;
     };
     assert!(tested(&program, "levelOfGreen").is_empty());
+    let func = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "levelOfGreen")
+        .unwrap();
+    assert!(
+        func.values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::FieldGet { .. }))
+    );
+    assert!(!func.values.iter().any(|op| matches!(
+        op.kind,
+        OpKind::Call {
+            callee: Callee::Virtual { .. },
+            ..
+        }
+    )));
+}
+
+#[test]
+fn accessor_coverage_and_storage_permissions_are_verified() {
+    let Some(program) = prepared() else {
+        eprintln!("SKIP interface_fields: tsgo is not built");
+        return;
+    };
+    let getter = program
+        .interface_access
+        .families
+        .iter()
+        .find(|family| family.member == "level")
+        .unwrap()
+        .getter
+        .clone();
+    let mut missing = program.clone();
+    missing
+        .layouts
+        .iter_mut()
+        .find(|layout| layout.name == "Green")
+        .unwrap()
+        .methods[getter.slot as usize] = None;
+    assert!(
+        hir::verify::verify(&missing)
+            .unwrap_err()
+            .iter()
+            .any(|error| {
+                matches!(error, hir::verify::Invalid::InvalidInterfaceAccess { reason }
+            if reason.contains("Green") && reason.contains("level"))
+            })
+    );
+
+    let mut wrong_abi = program.clone();
+    let row = wrong_abi
+        .layouts
+        .iter()
+        .find(|layout| layout.name == "Green")
+        .unwrap()
+        .methods[getter.slot as usize]
+        .as_ref()
+        .unwrap()
+        .clone();
+    wrong_abi
+        .funcs
+        .iter_mut()
+        .find(|func| func.name == row)
+        .unwrap()
+        .return_type = hir::HirType::Bool;
+    assert!(
+        hir::verify::verify(&wrong_abi)
+            .unwrap_err()
+            .iter()
+            .any(|error| {
+                matches!(error, hir::verify::Invalid::InvalidInterfaceAccess { reason }
+            if reason.contains("declared accessor ABI"))
+            })
+    );
+
+    let mut stale = program;
+    let owner = *stale
+        .interface_access
+        .storage_bodies
+        .values()
+        .next()
+        .unwrap();
+    stale
+        .interface_access
+        .storage_bodies
+        .insert("removed-helper".to_owned(), owner);
+    assert!(
+        hir::verify::verify(&stale)
+            .unwrap_err()
+            .iter()
+            .any(|error| {
+                matches!(error, hir::verify::Invalid::InvalidInterfaceAccess { reason }
+            if reason.contains("removed-helper"))
+            })
+    );
 }

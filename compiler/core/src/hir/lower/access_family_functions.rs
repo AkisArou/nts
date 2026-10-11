@@ -1,0 +1,550 @@
+//! Real functions and table rows for the source field-family plan.
+
+use super::{
+    Absent, Callee, Func, FuncBuilder, Hierarchy, HirType, ManagedType, Naming, OpKind, Origin,
+    Param, ParamShape, Program, SemanticSnapshot, Terminator, ValueId,
+    access_families::{Family, Reader, Supply},
+};
+use crate::hir::{
+    facts::Facts,
+    fields::{LayoutIndex, shares_storage},
+    interface_access,
+};
+
+struct Context<'a> {
+    snapshot: &'a SemanticSnapshot,
+    hierarchy: &'a Hierarchy,
+    naming: &'a Naming,
+    by_name: rustc_hash::FxHashMap<String, usize>,
+    bodies: rustc_hash::FxHashMap<BodyKey, String>,
+}
+
+/// Shared bodies have the same concrete storage and convention. Their input
+/// facts are TOP, the meet valid for every face that may enter the body.
+#[derive(PartialEq, Eq, Hash)]
+struct BodyKey {
+    owner: super::TypeId,
+    member: String,
+    writes: bool,
+    raising: bool,
+    input: Option<HirType>,
+    written_input: Option<crate::hir::native::Scalar>,
+    returns: HirType,
+    input_absent: Absent,
+    result_absent: Absent,
+}
+
+pub(super) fn declare(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    naming: &Naming,
+    program: &mut Program,
+) {
+    for ((face, key), slot) in &hierarchy.slots {
+        if hierarchy.access_families.for_key(*face, key).is_some() {
+            program.interface_access.note_selector(*slot);
+        }
+    }
+    let mut context = Context {
+        snapshot,
+        hierarchy,
+        naming,
+        bodies: rustc_hash::FxHashMap::default(),
+        by_name: program
+            .funcs
+            .iter()
+            .enumerate()
+            .map(|(at, function)| (function.name.clone(), at))
+            .collect(),
+    };
+    let layouts = LayoutIndex::build(program);
+    let mut functions = Vec::new();
+    for family in &hierarchy.access_families.licensed {
+        let Some(face) = layouts.of_class(family.face) else {
+            continue;
+        };
+        let field = program.layouts[face].index_of(&family.member);
+        let dispatch = family.eager
+            || family.supplies.iter().any(|supply| {
+                let Some(owner) = layouts.of_class(supply.owner) else {
+                    return false;
+                };
+                field.is_none_or(|field| {
+                    !shares_storage(&program.layouts[face], &program.layouts[owner], field)
+                })
+            });
+        let getter = entry(hierarchy, family, false, false);
+        let setter = family
+            .writes
+            .as_ref()
+            .map(|_| entry(hierarchy, family, true, false));
+        functions.push(shell(snapshot, family, getter.declared.clone(), false));
+        if let Some(setter) = &setter {
+            functions.push(shell(snapshot, family, setter.declared.clone(), true));
+        }
+        for writes in [false, true] {
+            if writes && setter.is_none() {
+                continue;
+            }
+            if hierarchy.slots.contains_key(&(
+                family.face,
+                format!("{}{}", family.key(writes), super::RAISING_SUFFIX),
+            )) {
+                functions.push(shell(
+                    snapshot,
+                    family,
+                    entry(hierarchy, family, writes, true).declared,
+                    writes,
+                ));
+            }
+        }
+        for supply in &family.supplies {
+            let Some(owner) = layouts.of_class(supply.owner) else {
+                continue;
+            };
+            for writes in [false, true] {
+                if writes && setter.is_none() {
+                    continue;
+                }
+                fill(
+                    &mut context,
+                    program,
+                    family,
+                    supply,
+                    (owner, writes, false),
+                    &mut functions,
+                );
+                if hierarchy.slots.contains_key(&(
+                    family.face,
+                    format!("{}{}", family.key(writes), super::RAISING_SUFFIX),
+                )) {
+                    fill(
+                        &mut context,
+                        program,
+                        family,
+                        supply,
+                        (owner, writes, true),
+                        &mut functions,
+                    );
+                }
+            }
+        }
+        program.interface_access.push(interface_access::Family {
+            face: family.face,
+            member: family.member.clone(),
+            field,
+            getter,
+            setter,
+            owners: family.supplies.iter().map(|supply| supply.owner).collect(),
+            pending: dispatch && !family.eager,
+        });
+    }
+    program.funcs.extend(functions);
+}
+
+pub(super) fn entry(
+    hierarchy: &Hierarchy,
+    family: &Family,
+    writes: bool,
+    raising: bool,
+) -> interface_access::Entry {
+    let suffix = if raising { super::RAISING_SUFFIX } else { "" };
+    let key = format!("{}{suffix}", family.key(writes));
+    interface_access::Entry {
+        slot: hierarchy.slots[&(family.face, key.clone())],
+        declared: format!(
+            "{}#{}{suffix}",
+            hierarchy.name[&family.face],
+            declaration_key(family, writes)
+        ),
+    }
+}
+
+fn declaration_key(family: &Family, writes: bool) -> String {
+    format!("{}@interface{}", family.key(writes), family.face.0)
+}
+
+fn body_key(
+    snapshot: &SemanticSnapshot,
+    family: &Family,
+    supply: &Supply,
+    writes: bool,
+    raising: bool,
+) -> BodyKey {
+    BodyKey {
+        owner: supply.owner,
+        member: family.member.clone(),
+        writes,
+        raising,
+        input: if writes { family.writes.clone() } else { None },
+        written_input: if writes { family.written_input } else { None },
+        returns: if writes {
+            HirType::Void
+        } else {
+            family.returns.clone()
+        },
+        input_absent: if writes {
+            super::interfaces::property(snapshot, family.face, &family.member)
+                .map_or(Absent::Impossible, |property| {
+                    super::absent_of_result(snapshot, property.ty)
+                })
+        } else {
+            Absent::Impossible
+        },
+        result_absent: if writes {
+            Absent::Impossible
+        } else {
+            supply.absent
+        },
+    }
+}
+
+fn origin(snapshot: &SemanticSnapshot, family: &Family) -> Origin {
+    let source = super::interfaces::property(snapshot, family.face, &family.member)
+        .and_then(|property| property.declaration)
+        .and_then(|at| snapshot.nodes.get(at.0 as usize))
+        .map_or_else(
+            || super::Location {
+                file: nts_diagnostics::SourceId(0),
+                span: nts_diagnostics::Span::new(0, 0),
+            },
+            |node| node.origin.location,
+        );
+    Origin::generated(source, nts_semantic_schema::GeneratedReason::AbiProjection)
+}
+
+fn parameters(
+    family: &Family,
+    receiver: super::TypeId,
+    writes: bool,
+    origin: &Origin,
+) -> Vec<Param> {
+    let mut params = vec![Param {
+        name: "this".to_owned(),
+        ty: HirType::Managed(ManagedType::Object(receiver)),
+        shape: ParamShape::Ordinary,
+        origin: origin.clone(),
+        known: Facts::TOP,
+        written: None,
+    }];
+    if writes {
+        params.push(Param {
+            name: "value".to_owned(),
+            ty: family.writes.clone().unwrap_or(HirType::Erased),
+            shape: ParamShape::Ordinary,
+            origin: origin.clone(),
+            known: Facts::TOP,
+            written: family.written_input,
+        });
+    }
+    params
+}
+
+fn shell(snapshot: &SemanticSnapshot, family: &Family, name: String, writes: bool) -> Func {
+    let origin = origin(snapshot, family);
+    let params = parameters(family, family.face, writes, &origin);
+    let mut builder = FuncBuilder::probe(snapshot);
+    for (at, param) in params.iter().enumerate() {
+        builder.push(
+            OpKind::Param(u32::try_from(at).unwrap_or(u32::MAX)),
+            param.ty.clone(),
+            origin.clone(),
+        );
+    }
+    let returns = if writes {
+        HirType::Void
+    } else {
+        family.returns.clone()
+    };
+    let mut function = builder.finish(name, params, returns, origin, false);
+    function.abstract_declaration = true;
+    function
+}
+
+fn fill(
+    context: &mut Context<'_>,
+    program: &mut Program,
+    family: &Family,
+    supply: &Supply,
+    (owner, writes, raising): (usize, bool, bool),
+    functions: &mut Vec<Func>,
+) {
+    let key = body_key(context.snapshot, family, supply, writes, raising);
+    let entry = entry(context.hierarchy, family, writes, raising);
+    if let Some(name) = context.bodies.get(&key) {
+        program.layouts[owner].methods[entry.slot as usize] = Some(name.clone());
+        return;
+    }
+    let ordinary = self::entry(context.hierarchy, family, writes, false);
+    let base = format!("{}@{}", ordinary.declared, supply.owner.0);
+    let ordinary_key = body_key(context.snapshot, family, supply, writes, false);
+    let base = context.bodies.get(&ordinary_key).cloned().unwrap_or(base);
+    let name = format!("{base}{}", if raising { super::RAISING_SUFFIX } else { "" });
+    let function = body(
+        context,
+        program,
+        family,
+        supply,
+        (&name, owner, writes, raising),
+    );
+    let function = function
+        .unwrap_or_else(|| refusal(context, program, family, supply, &name, writes, raising));
+    program.layouts[owner].methods[entry.slot as usize] = Some(name.clone());
+    if matches!(supply.reader, Reader::Stored) && supply.setter.is_none() {
+        program
+            .interface_access
+            .storage_bodies
+            .insert(name.clone(), supply.owner);
+    }
+    context.bodies.insert(key, name);
+    functions.push(function);
+}
+
+fn refusal(
+    context: &Context<'_>,
+    program: &Program,
+    family: &Family,
+    supply: &Supply,
+    name: &str,
+    writes: bool,
+    raising: bool,
+) -> Func {
+    let snapshot = context.snapshot;
+    let origin = origin(snapshot, family);
+    let params = parameters(family, supply.owner, writes, &origin);
+    let mut builder = FuncBuilder::probe(snapshot);
+    for (at, param) in params.iter().enumerate() {
+        builder.push(
+            OpKind::Param(u32::try_from(at).unwrap_or(u32::MAX)),
+            param.ty.clone(),
+            origin.clone(),
+        );
+    }
+    let message = builder.push(
+        OpKind::ConstString(refusal_reason(
+            context, program, family, supply, writes, raising,
+        )),
+        HirType::Managed(ManagedType::String),
+        origin.clone(),
+    );
+    builder.push(
+        OpKind::Call {
+            callee: Callee::External("nts_refused".to_owned()),
+            args: vec![message],
+            frame: None,
+        },
+        HirType::Void,
+        origin.clone(),
+    );
+    builder.terminate(Terminator::Unreachable);
+    builder.finish(
+        name.to_owned(),
+        params,
+        if writes {
+            HirType::Void
+        } else {
+            family.returns.clone()
+        },
+        origin,
+        false,
+    )
+}
+
+fn user_accessor(supply: &Supply, writes: bool) -> Option<super::access_families::Accessor> {
+    if writes {
+        supply.setter
+    } else if let Reader::Getter(accessor) = supply.reader {
+        Some(accessor)
+    } else {
+        None
+    }
+}
+
+fn accessor_name(
+    context: &Context<'_>,
+    family: &Family,
+    accessor: super::access_families::Accessor,
+    writes: bool,
+    raising: bool,
+) -> Option<String> {
+    let suffix = if raising && context.naming.raising.contains(&accessor.declaration) {
+        super::RAISING_SUFFIX
+    } else {
+        ""
+    };
+    Some(format!(
+        "{}#{} {}{suffix}",
+        context.hierarchy.name.get(&accessor.owner)?,
+        if writes { "set" } else { "get" },
+        family.member
+    ))
+}
+
+fn refusal_reason(
+    context: &Context<'_>,
+    program: &Program,
+    family: &Family,
+    supply: &Supply,
+    writes: bool,
+    raising: bool,
+) -> String {
+    let owner = context
+        .hierarchy
+        .name
+        .get(&supply.owner)
+        .map_or("a literal", String::as_str);
+    let cause = if let Some(accessor) = user_accessor(supply, writes) {
+        match accessor_name(context, family, accessor, writes, raising) {
+            Some(target) => program
+                .uncompiled
+                .iter()
+                .find(|(name, _)| *name == target)
+                .map_or_else(
+                    || format!("the accessor `{target}` has no lowered body"),
+                    |(_, reason)| format!("the accessor `{target}` was refused: {reason}"),
+                ),
+            None => "the accessor's declaring class has no lowered identity".to_owned(),
+        }
+    } else {
+        "the stored property has no physical field in its concrete layout".to_owned()
+    };
+    format!(
+        "interface field `{}` on `{owner}` cannot dispatch: {cause}",
+        family.member
+    )
+}
+
+fn body(
+    context: &Context<'_>,
+    program: &Program,
+    family: &Family,
+    supply: &Supply,
+    (name, owner, writes, raising): (&str, usize, bool, bool),
+) -> Option<Func> {
+    let snapshot = context.snapshot;
+    let origin = origin(snapshot, family);
+    let params = parameters(family, supply.owner, writes, &origin);
+    let mut builder = FuncBuilder::probe(snapshot);
+    for (at, param) in params.iter().enumerate() {
+        builder.push(
+            OpKind::Param(u32::try_from(at).ok()?),
+            param.ty.clone(),
+            origin.clone(),
+        );
+    }
+    let answer = if let Some(accessor) = user_accessor(supply, writes) {
+        let target = accessor_name(context, family, accessor, writes, raising)?;
+        let target = program.funcs.get(*context.by_name.get(&target)?)?;
+        let receiver = converted(
+            &mut builder,
+            ValueId(0),
+            &target.params.first()?.ty,
+            Absent::Impossible,
+            &origin,
+        );
+        let mut args = vec![receiver];
+        if writes {
+            let absent = super::interfaces::property(snapshot, family.face, &family.member)
+                .map_or(Absent::Impossible, |property| {
+                    super::absent_of_result(snapshot, property.ty)
+                });
+            args.push(converted(
+                &mut builder,
+                ValueId(1),
+                &supply.write_ty,
+                absent,
+                &origin,
+            ));
+        }
+        builder.push(
+            OpKind::Call {
+                callee: Callee::Direct(target.name.clone()),
+                args,
+                frame: None,
+            },
+            target.return_type.clone(),
+            origin.clone(),
+        )
+    } else if matches!(supply.reader, Reader::Undefined) {
+        builder.push(OpKind::ConstUndefined, HirType::Erased, origin.clone())
+    } else {
+        stored(&mut builder, program, family, owner, writes, &origin)?
+    };
+    let returns = if writes {
+        HirType::Void
+    } else {
+        family.returns.clone()
+    };
+    let answer = if writes {
+        None
+    } else {
+        Some(converted(
+            &mut builder,
+            answer,
+            &returns,
+            supply.absent,
+            &origin,
+        ))
+    };
+    builder.terminate(Terminator::Return(answer));
+    Some(builder.finish(name.to_owned(), params, returns, origin, false))
+}
+
+fn stored(
+    builder: &mut FuncBuilder<'_>,
+    program: &Program,
+    family: &Family,
+    owner: usize,
+    writes: bool,
+    origin: &Origin,
+) -> Option<ValueId> {
+    let field = program.layouts[owner].index_of(&family.member)?;
+    let ty = &program.layouts[owner].fields[field as usize].ty;
+    if writes {
+        let absent = super::interfaces::property(builder.snapshot, family.face, &family.member)
+            .map_or(Absent::Impossible, |property| {
+                super::absent_of_result(builder.snapshot, property.ty)
+            });
+        let value = converted(builder, ValueId(1), ty, absent, origin);
+        Some(builder.push(
+            OpKind::FieldSet {
+                object: ValueId(0),
+                field,
+                value,
+            },
+            HirType::Void,
+            origin.clone(),
+        ))
+    } else {
+        Some(builder.push(
+            OpKind::FieldGet {
+                object: ValueId(0),
+                field,
+            },
+            ty.clone(),
+            origin.clone(),
+        ))
+    }
+}
+
+fn converted(
+    builder: &mut FuncBuilder<'_>,
+    value: ValueId,
+    to: &HirType,
+    absent: Absent,
+    origin: &Origin,
+) -> ValueId {
+    let from = &builder.values[value.0 as usize].ty;
+    if from == to {
+        return value;
+    }
+    if matches!(from, HirType::Void | HirType::Never) {
+        return builder.push(OpKind::ConstUndefined, HirType::Erased, origin.clone());
+    }
+    let kind = if *to == HirType::Erased {
+        OpKind::Erase { value, absent }
+    } else {
+        OpKind::Convert(value)
+    };
+    builder.push(kind, to.clone(), origin.clone())
+}

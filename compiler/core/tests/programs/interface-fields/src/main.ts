@@ -55,3 +55,13 @@ export function make(n: number): unknown {
   if (n === 2) return new Lime();
   return new Teal();
 }
+
+interface UnreadyFace { name: string }
+class Unready implements UnreadyFace {
+  extra: number = 1;
+  name!: string;
+}
+export function unreadyName(held: unknown): string {
+  return (held as UnreadyFace).name;
+}
+export function makeUnready(): unknown { return new Unready(); }

@@ -232,6 +232,33 @@ instantiation is the rest.
 
 ## Part 2 — fields: the same tables, as accessors
 
+The native field implementation uses one whole-program family per used field.
+Every structural candidate must supply the read and, for a writable face, the
+write. Its table entry names a real function reading the concrete field or
+calling the concrete getter or setter. Shared bodies have the same storage,
+absence contract and ABI; their input facts are valid for every incoming face.
+
+User accessors and reads whose representation changes are lowered at the source,
+before exception handlers are analysed. Dot reads, calls through function fields,
+binding patterns and assignment patterns use that same contract. Actual read
+types and absence facts survive constant aliases, including destructuring;
+asserting a narrower interface cannot remove an implementer's null or undefined.
+Pure storage access waits until source specialization has recovered any known
+class. A remaining access whose layouts disagree becomes indexed dispatch;
+known-class and common-prefix loads stay direct.
+
+A narrow stored field needs an initialization proof: an initializer, a parameter
+property, or an unconditional constructor write before the receiver can escape.
+A definite-assignment assertion grants no such proof. Missing optional readonly
+fields can return undefined; incomplete supplies retain named stops. Spread and
+own-property reflection require separate evidence about every concrete own shape
+and literal allocation. A prototype getter is not an own property.
+
+The JVM currently declines these dispatch sites as NTS4001, classified as
+`interface field accessor dispatch`. Stateful JVM interfaces are stage C.
+Legacy method-value classification stays until stage D; source copies remain
+specialization, and field correctness no longer depends on them.
+
 Method values need the same accessor mechanism. A read through a method
 interface must return the implementer's own closure: a stored literal supplies
 its current field, and a class method supplies its existing bound-value

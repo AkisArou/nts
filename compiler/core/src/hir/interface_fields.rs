@@ -16,16 +16,17 @@
 //! implementing the interface that disagree with it about the field, and one
 //! of those stops naming the field. A stop and not a `TypeError`: the object
 //! is a `Channel` in JavaScript's terms, and it is this compiler that cannot
-//! read it there. Part 2 replaces the stop with a getter or setter the class
-//! fills. Only the access is tested, not the cast that made the value, so a
+//! read it there. Licensed Part 2 families replace the stop with a getter or
+//! setter the concrete supplier fills. This pass guards the remaining accesses.
+//! Only the access is tested, not the cast that made the value, so a
 //! program that calls a `Green`'s methods through `Channel` and never touches
 //! the field it disagrees about runs as it did.
 //!
 //! After lowering, because which classes exist and how they are laid out is a
 //! whole-program fact (record 0255), and after the copies that give a call its
 //! class, so an access a copy made through the class is not tested. Only the
-//! classes the program declares as implementing the interface are tested: one
-//! that satisfies it by shape alone is Part 1's to find.
+//! classes the hierarchy identifies as implementing the interface are tested,
+//! including the structural edges inferred by Part 1.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -47,10 +48,18 @@ pub fn guard(program: &mut Program) -> usize {
     if misfits.is_empty() {
         return 0;
     }
-    let Program { funcs, layouts, .. } = program;
+    let Program {
+        funcs,
+        layouts,
+        interface_access,
+        ..
+    } = program;
     funcs
         .iter_mut()
-        .map(|func| guard_func(func, layouts, &index, &misfits))
+        .map(|func| {
+            let own_storage = interface_access.storage_bodies.get(&func.name).copied();
+            guard_func(func, layouts, &index, &misfits, own_storage)
+        })
         .sum()
 }
 
@@ -148,6 +157,7 @@ fn guard_func(
     layouts: &[Layout],
     index: &LayoutIndex,
     misfits: &Misfits,
+    own_storage: Option<TypeId>,
 ) -> usize {
     let mut tested: FxHashSet<ValueId> = FxHashSet::default();
     let mut at = 0;
@@ -160,7 +170,16 @@ fn guard_func(
                 if tested.contains(op) {
                     return None;
                 }
-                access(func, *op, index, misfits).map(|access| (position, *op, access))
+                access(func, *op, index, misfits)
+                    .filter(|access| {
+                        // Only this helper's own concrete storage is licensed;
+                        // an unrelated read introduced by inlining still needs
+                        // the ordinary guard.
+                        !matches!(&func.value(access.object).ty,
+                            HirType::Managed(ManagedType::Object(owner))
+                                if Some(*owner) == own_storage)
+                    })
+                    .map(|access| (position, *op, access))
             });
         let Some((position, op, access)) = found else {
             at += 1;

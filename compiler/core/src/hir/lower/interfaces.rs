@@ -256,6 +256,20 @@ pub(super) fn converts(
     }
 }
 
+/// A field write must preserve both the implementation's semantic input facts
+/// and its storage ABI. Equal machine types alone do not license narrowing.
+pub(super) fn stores(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    from: TypeId,
+    to: TypeId,
+    from_storage: &HirType,
+    to_storage: &HirType,
+) -> bool {
+    widens(snapshot, hierarchy, from, to, 0)
+        && converts(snapshot, hierarchy, from_storage, to_storage)
+}
+
 /// Conservative semantic widening, rather than equality of machine types.
 /// `3` and `number` both represent as f64, but only one direction preserves the
 /// parameter facts which the optimizer is entitled to trust inside the body.

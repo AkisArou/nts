@@ -6894,7 +6894,17 @@ impl Emitter<'_> {
             // is what lets C2 devirtualise through class-hierarchy analysis --
             // which is why this lane is expected to win the `dispatch` row
             // rather than merely match it.
-            Callee::Virtual { declared, .. } => {
+            Callee::Virtual { slot, declared } => {
+                if self.program.interface_access.contains_selector(*slot) {
+                    return Err(Diagnostic::error(
+                        "NTS4001",
+                        format!(
+                            "interface field accessor dispatch requires JVM stateful interfaces (in `{}`)",
+                            self.func.name
+                        ),
+                        origin.location,
+                    ));
+                }
                 return self.virtual_call(code, pool, declared, args, result, origin);
             }
             // A closure call is a dispatch like any other, and the only thing

@@ -630,6 +630,20 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
                 callback_targets(program, &hierarchy, func, handed)
             };
             targets.extend(printed_through_an_erasure(program, func, &op.kind));
+            targets.extend(
+                program
+                    .interface_access
+                    .future_targets(program, func, &op.kind),
+            );
+            // A virtual call's declaration supplies its ABI even when no
+            // concrete row names that declaration (field-family shells).
+            if let OpKind::Call {
+                callee: Callee::Virtual { declared, .. },
+                ..
+            } = &op.kind
+            {
+                targets.push(declared);
+            }
             // A virtual call reaches *every* implementation of its slot, because
             // which one runs is decided by a receiver this cannot see. Keeping
             // only the one the static type names would prune an override that a
@@ -679,6 +693,10 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     program
         .identity_projections
         .retain(|adapter, target| keep.contains(adapter) && keep.contains(target));
+    program
+        .interface_access
+        .storage_bodies
+        .retain(|name, _| keep.contains(name));
 
     // A table entry naming a function that is gone. It is unreachable by the
     // same argument that removed the function -- no call site dispatches
