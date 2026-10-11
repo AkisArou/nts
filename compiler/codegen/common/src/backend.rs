@@ -24,6 +24,8 @@ pub enum Backend {
     Llvm,
     /// JVM class files, written directly.
     Jvm,
+    /// Direct WebAssembly. Experimental bring-up, outside existing gate loops.
+    Wasm,
 }
 
 impl Backend {
@@ -34,12 +36,16 @@ impl Backend {
             Self::C => "c",
             Self::Llvm => "llvm",
             Self::Jvm => "jvm",
+            Self::Wasm => "wasm",
         }
     }
 
-    /// Every backend, for a caller that iterates them rather than listing them
-    /// again.
+    /// The stable, gated backends. Wasm joins only after its M1 acceptance;
+    /// introducing its name must not add an unfinished lane to existing loops.
     pub const ALL: [Self; 3] = [Self::C, Self::Llvm, Self::Jvm];
+
+    /// Names users can select, including experimental backends.
+    pub const RECOGNIZED: [Self; 4] = [Self::C, Self::Llvm, Self::Jvm, Self::Wasm];
 
     /// The backend `NTS_BACKEND` names, or [`Backend::C`] when it is unset.
     ///
@@ -59,7 +65,10 @@ pub struct UnknownBackend(pub String);
 
 impl std::fmt::Display for UnknownBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let known: Vec<&str> = Backend::ALL.iter().map(|backend| backend.name()).collect();
+        let known: Vec<&str> = Backend::RECOGNIZED
+            .iter()
+            .map(|backend| backend.name())
+            .collect();
         write!(
             f,
             "unknown backend `{}`; NTS_BACKEND takes one of {}",
@@ -75,7 +84,7 @@ impl FromStr for Backend {
     type Err = UnknownBackend;
 
     fn from_str(name: &str) -> Result<Self, Self::Err> {
-        Self::ALL
+        Self::RECOGNIZED
             .into_iter()
             .find(|backend| backend.name() == name)
             .ok_or_else(|| UnknownBackend(name.to_owned()))
@@ -96,7 +105,7 @@ mod tests {
 
     #[test]
     fn every_backend_round_trips_through_its_name() {
-        for backend in Backend::ALL {
+        for backend in Backend::RECOGNIZED {
             assert_eq!(backend.name().parse::<Backend>().unwrap(), backend);
         }
     }
@@ -114,8 +123,14 @@ mod tests {
     fn the_message_names_what_it_would_have_accepted() {
         let error = "jmv".parse::<Backend>().unwrap_err().to_string();
         assert!(error.contains("jmv"), "{error}");
-        for backend in Backend::ALL {
+        for backend in Backend::RECOGNIZED {
             assert!(error.contains(backend.name()), "{error}");
         }
+    }
+
+    #[test]
+    fn wasm_is_recognized_without_changing_the_existing_gate_population() {
+        assert_eq!("wasm".parse::<Backend>().unwrap(), Backend::Wasm);
+        assert_eq!(Backend::ALL, [Backend::C, Backend::Llvm, Backend::Jvm]);
     }
 }

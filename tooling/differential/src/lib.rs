@@ -361,6 +361,9 @@ pub fn check(
                 hir::Provider::NoGc
             }
         }
+        Backend::Wasm => bail!(
+            "NTS5001: wasm declines the existing check runner during scalar bring-up; use emit-wasm and the Node loader"
+        ),
     };
     // `NTS_TSGO`, then the frontend this repository builds, and only then the
     // bare name through `PATH`.

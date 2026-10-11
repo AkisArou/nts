@@ -2,10 +2,139 @@
 
 Status: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
 on 2026-10-11 UTC). Additional exception evidence is recorded below.
-Scanned revision: `e52ddc97e160` on `wasm/m0`. This change contains documentation
-only. No backend, dependency, configuration surface or gate lane has been added.
-M1a is authorized. The shared provider change waits for MainCodex's Part 2
-stage B to land; the reviewer will notify this lane when it is safe to start.
+Scanned revision: `e52ddc97e160` on `wasm/m0`. M1a scalar bring-up is implemented
+in the lane worktree, with the execution evidence below. The shared provider
+change requires coordination with MainCodex: the latest review permits starting
+before stage B only if its files do not overlap; `hir/mod.rs` overlaps and has
+been reported to MainClaude. M1a cannot land until HostGc is selected,
+its JVM comparison is reviewed, and the full candidate passes the gate.
+
+## Current M1a implementation and evidence
+
+`compiler/codegen/wasm` emits a core module directly from prepared HIR. It
+predeclares callable signatures and imports, assigns typed locals, emits every
+reachable body, records instruction Origins, and validates the completed bytes
+before returning an `Emitted`. Unsupported scalar representations, operations,
+external helpers and public shapes return a named `NTS5001`; malformed HIR and
+generated-byte validation errors remain distinct integrity failures. No declined
+program returns partial bytes. The CLI also stops on preparation errors before
+creating its output directory.
+
+The current module has numeric storage, bools, direct calls and recursion,
+numeric globals and module initialization. It supports f32/f64 and signed or
+unsigned 8/16/32/64-bit integer slots. Integer storage conversions consume HIR's
+range and zero-sign proofs; they do not implement JavaScript's coercions.
+`ToInt32`/`ToUint32` have a separate total wasm algorithm using IEEE exponent and
+significand bits. `Math.round` uses floor plus a fractional comparison and keeps
+negative zero. Floating remainder imports the host's exact `%` implementation;
+it is the only host import in the comprehensive scalar fixture. Integral
+division/remainder use signed or unsigned wasm instructions under the same
+prepared numeric proof contract as C and LLVM; ordinary JS division and
+possibly NaN/observable-negative-zero remainders retain floating storage. Managed
+types, strings, arrays, classes, closures, exception/runtime helpers and native
+ABIs remain outside this slice. The inventory below describes **planned M1**,
+not current M1a support.
+
+Reducible functions use a dominator-certified natural-loop forest. Removing
+dominating backedges gives an acyclic graph; immediate child loops are condensed,
+forward destinations get block labels, and loop headers get loop labels. Each
+original edge uses the common parallel-copy sequencer and a checked lexical
+branch depth. A residual cycle after removing dominating backedges proves an
+irreducible function; only that route emits a PC local, loop and `br_table`.
+Emission checks the number of mapped edges. Missing reducible scopes decline as
+structurer implementation gaps. No universal dispatcher or node-splitting limit
+is used.
+
+`Program.public_api` determines publication, including aliases and live global
+getters. `Func.exported` determines reachability and `Global.exported` marks
+settled exports; neither substitutes for the publication contract. The Node
+loader checks import/export names and kinds before module initialization,
+checks arity and logical scalar types, and enforces the parameter facts used by
+specialization. It refuses non-fitting numeric inputs by name, including `-0`
+at integer boundaries and nonexact f32 inputs. The 64-bit numeric boundary uses
+BigInt as wasm's physical carrier but accepts/returns only safe JS numbers;
+unsupported BigInt language values do not enter through that path. Public
+optional/default/rest parameter shapes decline, while compiled private calls
+may use the defaults already evaluated by lowering.
+
+Publication tables carry names without Origins. An unsupported public surface
+therefore has an explicitly named `UnsupportedSurface` refusal, rather than a
+fabricated location. Operation/type refusals retain their HIR source Origins.
+The CLI writes `program.origins.json` beside the production artifacts, with
+function indices, offsets inside function payloads, Origins and normalized
+source URIs/digests/rewrite metadata. It includes no source text or diagnostic
+display paths. Debug names are included in the module sizes below.
+
+Run the experimental command and inspect its output:
+
+```sh
+cargo run -p nts-cli -- emit-wasm tooling/wasm/fixtures/scalars --no-acquire --out /tmp/nts-wasm
+node tooling/wasm/inspect.mjs /tmp/nts-wasm
+node tooling/wasm/check-scalars.mjs /tmp/nts-wasm tooling/wasm/fixtures/scalars/src/main.ts
+```
+
+The loader exports `instantiate(bytes, manifest)` and `load(moduleUrl,
+manifestUrl)`; `load` defaults to the sibling `program.json`. Loading evaluates
+the module initializer once and returns a frozen namespace with live getters.
+Use `NTS_TSGO` to select the repository's pinned frontend for compilation/tests.
+
+`Backend::Wasm` is recognized explicitly. `Backend::ALL` is still exactly
+`[C, Llvm, Jvm]`, with a regression assertion; existing gate loops are unchanged.
+`NTS_BACKEND=wasm nts check` refuses by name until the M1 runner is implemented.
+It cannot enter the existing native runner and report C's answers as wasm.
+`emit-wasm --rc` refuses by name. Preparation temporarily selects `NoGc` for
+these scalar-only fixtures, with no reachable allocation; the approved HostGc
+commit must replace that selection before M1a lands.
+
+Execution evidence on Node 24.20.0, against the scanned core revision:
+
+| Population | Result |
+| --- | --- |
+| Same-source scalar TS fixture | 165,016 exact `Object.is` comparisons, including full-exponent IEEE bit-pattern sampling, NaN, infinities, signed zero, rounding ties, shifts, arithmetic/comparison, labelled loops, recursion and live globals; 42 functions, all structured |
+| Saved full `triangle__resume` CFG and cyclic phi swap | 20,514 exact comparisons; all 16 original generator graph blocks and 18 edges; 4,835 cyclic paths, maximum 39 visits; generator graph dispatches, phi swap is structured |
+| Typed numeric HIR fixture | 188 exact cases for unsigned widening/comparison/min/max, i32-min absolute value, negation retaining `-0`, safe i64 carriers, proven signed/unsigned integer div/rem and float-to-integer storage; no imports |
+| Public boundary fixture | 164 checks including void/undefined, scalar widths, aliases, declared facts, explicit infinite bounds, wrong arity, unsafe 64-bit results and five malformed manifests |
+| Existing `examples/loops` and `examples/bitwise` | 102 and 136 bounded scalar comparisons respectively; zero input declines, no dispatch, no imports; loops includes three nested labels and a break through `finally` |
+| Integrity/refusal tests | Six tests distinguish named helper/optional/public-shape declines from unresolved direct callees, invalid mixed bool/number equality HIR, invalid stack typing and unapproved GC features |
+| Actual `emit-wasm` CLI | Executes the same scalar source population; writes source Origins; required `--out`, named `--rc` and `nts_math_cos` refusals precede output mutation; existing check runner refuses wasm |
+| Existing C / LLVM / JVM / RC check runners | Each agrees with Node on all 232 `examples/bitwise` cases; this is a selection smoke check, not the full regression gate |
+
+The saved generator fixture preserves the complete original CFG but substitutes
+scalar operations for frame access. It establishes structuring and branch-copy
+correctness; it does not establish generator runtime support. The ordinary
+example smoke uses a bounded selected population and is not the repository's
+full hostile-pool `agree` instrument.
+
+Deterministic artifact inventory (`inspect.mjs`, gzip level 9; independently
+compressed files summed, no startup/throughput claim):
+
+| Artifact | Wasm raw / gzip | Manifest raw / gzip | Loader raw / gzip | Production total raw / gzip |
+| --- | --- | --- | --- | --- |
+| Scalar fixture | 4,128 / 1,864 B | 17,195 / 803 B | 4,993 / 1,760 B | 26,316 / 4,427 B |
+| `examples/loops` | 4,318 / 1,366 B | 3,095 / 391 B | 4,993 / 1,760 B | 12,406 / 3,517 B |
+| `examples/bitwise` | 1,634 / 811 B | 3,195 / 364 B | 4,993 / 1,760 B | 9,822 / 2,935 B |
+
+The scalar total, including the loader and manifest, is below the provisional
+32 KiB raw smoke budget. The optional Origins sidecar is 88,122 raw / 2,659 gzip bytes;
+the loader does not read it. No unused helper family is emitted in these modules.
+
+Dependencies are exactly pinned to wasm-encoder/wasmparser 0.261.0. Their
+published Cargo manifests declare Rust 1.88.0 and
+`Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`, compatible with this
+workspace's Rust 1.97/Apache-2.0 policy. Both disable default features; encoder
+enables `std`, parser enables `std`, `validate`, `features`. The scalar validator
+allows only floats, mutable globals, sign extension and saturating float-to-int
+instructions. GC/reference/EH proposals join explicitly with their implementation,
+not through library defaults. No npm or external wasm tool was added.
+
+Checks run: `cargo fmt --all`, strict workspace clippy with all targets, 30 common
+tests, 12 wasm integration tests, the actual CLI test, and the existing CLI usage
+coverage test. Test/build workers are capped at two. Evidence logs and emitted
+modules are retained under the lane's `mainctl/wasm-evidence` directory.
+Still required before landing: coordinated HostGc integration, JVM byte comparison,
+the candidate's full owed gate, and reviewer approval. Complete workspace test
+execution, every-example wasm differential and startup/performance measurements
+have not run; those counts and claims are not implied by these bring-up results.
 
 ## Recommendation and build composition
 
@@ -87,8 +216,9 @@ turns off” is not presently an available provider configuration.
 
 Approved provider work: add one **`HostGc` provider** for JVM and wasm, and
 select it explicitly in their drivers. MainClaude authorized this lane to make
-that small core commit after Part 2 stage B lands, as a scoped exception to core
-file ownership. It must suppress
+that small core commit as a scoped exception to core file ownership. The latest
+review permits starting before stage B if no files overlap with MainCodex; the
+audit found `hir/mod.rs` overlap and has been reported for coordination. It must suppress
 native ownership lowering and native frame placement, while preserving semantic
 analysis and logical layouts. Do not reinterpret `NoGc` as host-managed memory.
 Reject `--rc` with either managed backend by name at build planning.
@@ -447,14 +577,112 @@ call's placeholder result is never consumed. No process-global singleton state.
 `nts_uncaught` crosses to the JS host as the actual thrown value; compiler defects
 and named input declines remain distinct from source-language exceptions.
 
-Native wasm `throw`/`try_table`/exnref are available, as the probes show. They are
-an M2 alternative for a region-aware exception lowering, not an instruction-for-
+Native wasm `throw`/`try_table`/exnref are available, as the probes show. Native
+EH is an **M2 priority**, requiring region-aware exception lowering, not an instruction-for-
 instruction replacement of `nts_raise`: immediate native unwinding would bypass
 HIR's explicit handler edges and cleanup/finally behavior. A transformation must
 establish call, handler and finalizer regions and preserve arbitrary thrown values.
 If core metadata is needed, request it rather than recognizing helper-name patterns
 as a proof. The [exception model](https://github.com/WebAssembly/exception-handling/blob/main/proposals/exception-handling/Exceptions.md)
 provides tags and catch targets, not TypeScript handler semantics.
+
+### Core proposal: preserve exception semantics through preparation
+
+**Request to MainCodex for cross-backend review with the JVM lane.** This is a
+proposed shared HIR contract, not an implemented extension or a change to M1.
+Native unwinding needs a semantic input that wasm, LLVM and JVM can consume.
+The exploratory deep no-throw kernels put explicit raising at about 3.4–3.9
+times Node's cost; this motivates prioritizing the contract in M2, with the
+actual emitted-code comparison still required before choosing its final lowering.
+
+Today `lower.rs` retains `Exit::Handler`, `Exit::Finally`, throw-time binding
+snapshots and the transitive raising-call decision while constructing a body.
+It then expresses handler transfer as ordinary jumps, duplicates finalizer
+bodies at exits, and expresses cross-call propagation through raising copies
+and flag/payload helpers. `Func` and `Terminator` do not carry the protected
+regions that explain those operations. Preserve the semantic information before
+this expansion, and carry it through optimization into prepared HIR. A backend
+must not reconstruct it from `@raises` names, helper sequences or source spans.
+
+The following are proposed data responsibilities; their Rust spelling belongs
+to the core design. Stable IDs must survive block splitting and cloning, with
+explicit remapping when IDs change.
+
+| Prepared HIR responsibility | Required information and meaning |
+| --- | --- |
+| Protected regions | A per-function region graph with parent, kind (`try` body, catch body or finalizer), source Origin, handler/finalizer references, and the ordered active-region stack at each potentially raising operation and exit. Split blocks at region changes or record operation-level membership: one block-wide label cannot describe a block crossing a `try` boundary. Byte offsets are backend output, never the source of this contract |
+| Handler entries and exceptional edges | An explicit exceptional successor for each raising site, or an explicit escape from the function. The edge carries the original erased thrown value and the SSA bindings visible at that site as typed handler parameters. Give synthetic exception results their own edge definitions: the normal call result exists only on the normal edge |
+| Raising operations and call effects | Semantic throw/propagate operations and a checked `CannotRaise` or `MayRaise` effect for calls and helpers. Direct summaries are transitive through recursion; virtual/interface/closure summaries include every permitted target, including adapters and overrides. Accessors, constructors, callback-bearing runtime helpers and imported calls participate. Unknown host effects are conservative or declined, never implicitly `CannotRaise` |
+| Finalizers and pending completion | The finalizer entry/body and the ordered finalizer chain crossed by each normal or abrupt exit. A pending completion carries its kind, payload and continuation: fall-through/jump, return, throw, break or continue. Evaluate return and throw operands before finalization. A normally completed finalizer resumes that completion; its own return, throw, break or continue replaces it |
+| Function escape and callable identity | Explicit uncaught propagation with its original payload and a semantic callable identity separate from any ordinary/raising ABI copies. Preserve override/closure slot obligations so a backend cannot select a nonpropagating entry for a potentially raising call |
+| Suspension and re-entry | The handler/finalizer continuation and live completion state at an `await`/`yield`, remapped onto resume entry paths by state-machine lowering. Host stack unwinding cannot cross a suspended activation. Callback/host re-entry has explicit propagation boundaries, and uncaught throws preserve the published host behavior |
+
+A raising call should have invoke-like semantics in the shared IR: successful
+execution enters its normal successor with the result; raising enters its
+exceptional successor with the thrown value and the preexisting live bindings.
+The backend may encode it as a call in a protected range rather than an actual
+`Invoke` instruction. Preserve which effects happened before the raising site.
+For `x = 1; mayThrow(); x = 2`, the catch sees `x === 1` when the call raises;
+an exceptional-edge parameter must not use the normal successor's assignment.
+Runtime operations with user-observable throwing behavior need this contract
+even if they were not written as source calls.
+
+Region nesting defines handler selection. A catch protects its associated try
+body, not its own catch body or finalizer. A throw from either searches the next
+active outer handler after running the finalizers it crosses. A finalizer runs
+exactly once on each path that leaves its scope, in innermost-first order,
+including return and labeled loop exits. Local caught throws may remain direct
+edges when that preserves all intervening finalizers and effects. Distinguish
+language exceptions from validator failures, compiler defects and host traps;
+do not make internal failures newly catchable as TS thrown values.
+
+This contract also defines exceptional liveness. Values needed by a handler or
+cleanup are live on the exceptional edge. Native ownership providers derive
+their releases and cleanup actions from those edges; host-GC providers preserve
+the values as collector-visible references without native retain/release work.
+Source finalizers remain semantic code under every provider. GC does not run a
+source `finally` in place of control-flow cleanup.
+
+Preparation must select a shared exception lowering after the semantic passes,
+using an explicit capability/convention request distinct from memory provider.
+The existing explicit lowering remains available for C and M1. A native-EH
+prepared form preserves the region/edge contract and does not contain a second
+flag-check convention for the same calls. Mixed foreign conventions require an
+explicit boundary adapter; no undocumented helper-pattern rewrite or automatic
+hybrid is proposed. Inlining, specialization, CSE, DCE, refusal cascade and
+reachability must preserve or deliberately discharge exceptional edges, roots
+and effects. Removing a handler requires a proof that no raising path reaches
+it; moving an operation across a region boundary requires the same semantic
+proof as moving it across an observable effect.
+
+The core verifier should check region nesting and membership, handler selection,
+edge arity/types and exceptional dominance, absence of a normal-only result on
+an exceptional edge, finalizer order and completion replacement, valid escaping
+payloads, and call-effect consistency. A changed callee set invalidates a
+`CannotRaise` proof. Unrepresentable host propagation or suspension shapes refuse
+by name. In particular, this proposal does not remove the current refusal for
+iterator-closing finalizers spanning `yield` without implementing that contract.
+
+| Consumer | Lowering enabled by the same semantic contract |
+| --- | --- |
+| Wasm | Native throw/`try_table` with a language payload carrier and explicit finalizer/resume paths; host exceptions translated only at specified boundaries |
+| LLVM | `invoke`/landing-pad or target-appropriate EH operations, with the personality, payload carrier and cleanup ABI implemented and tested for each supported target |
+| JVM | Protected bytecode ranges and exception tables, using a throwable carrier that preserves arbitrary TS payloads and their identity; finalizer exits remain explicit where required |
+| C / explicit lowering | The current ordinary CFG and raising flag/payload ABI, derived centrally from these regions and edges |
+
+Acceptance requires the same TS fixtures under both shared lowerings and each
+participating backend: nested catch/finally; calls inside and outside try;
+return-value evaluation before finally; finalizers that replace return/throw;
+labeled break/continue through nested finalizers; arbitrary thrown primitives,
+`undefined`, `null` and object identity; mutated locals observed by catch;
+recursive, virtual, interface, accessor and closure calls; callback/host re-entry;
+and fulfilled/rejected await resumptions. Retain current classified refusals for
+unsupported generator/foreign behavior. Verify artifacts and compare full result
+and effect traces to Node, then measure no-throw, rare-throw and throw-heavy paths
+on real emitted code against plain JS with equivalent Error/stack semantics.
+MainClaude arranges that M2 quiet window; no additional microprobe timing is owed
+now. Native EH remains the intended eventual single default for wasm, contingent
+on this contract and its correctness evidence.
 
 ### Local microbench evidence
 
@@ -513,6 +741,7 @@ will add durable probes/fixtures under the owned wasm paths.
 
 ### Follow-up: no-throw hot paths and the Node arm
 
+This corrected table is exploratory; explicit raising is settled for M1.
 The follow-up kernel explicitly compares calls **outside try** and **inside
 try**, both with no throws. It also measures rare throws, every-call throws and
 a declared hot-path mix. Node/V8 versions and flags are unchanged. Each of the
@@ -564,11 +793,13 @@ its native median is close to JS and its spread prevents a precise claim of a
 win over Node. Conversely, actually throwing on every call strongly favors
 explicit returns, with native unwinding much cheaper than allocating a JS Error.
 The explicit rare-throw depth-eight spread remains 1.41 and its cost changes
-between frequency populations. A quiet confirmation has been requested from
-MainClaude; these results remain exploratory.
+between frequency populations. Per MainClaude's follow-up, no quiet window or
+further timing is requested for this microprobe: it cannot change the M1 decision.
+Repeat the comparison in M2 on real emitted code, in a quiet window MainClaude
+will arrange, with the same plain-JS Error arm and all medians and spreads.
 
 Native tag-payload throw costs are within the JS Error arm's costs for both rare
-and every-call throwing. Recommend native EH as the **eventual single default**
+and every-call throwing. Prioritize native EH in M2 as the **eventual single default**
 once a region-aware core contract permits correct lowering; dominant no-throw
 paths weigh heavily in that choice. Keep explicit raising for M1 under the later
 M0 approval because prepared HIR lacks that contract and native unwinding would
@@ -835,7 +1066,7 @@ entries per benchmark to identify whether a gap is inside wasm or at the boundar
 | M1b | JS strings, ordinary arrays, classes without interface dispatch, closures, erased supported values and explicit exceptions. Public boundary limitations are named |
 | M1 complete | `nts emit-wasm`, Node check/glue and manual `agree` lane over **all** discovered examples: **0 wrong answers**, every emitted module validates/links, matches and named declines counted separately, every example accounted for, and **0 regressions** on C/LLVM/JVM/RC. Report exact counts and supported core-language fixtures; a lane declining everything does not meet M1 |
 | M1c | Map, Set and Date, prioritized immediately after M1 and before browser work; corresponding fixtures agree with Node and validate/link |
-| M2 | Real nts-bench paired rows versus Node, size/startup and boundary-call counts; fix measured gaps at their root, including structuring, boxing and dispatch; review native EH experiment if warranted |
+| M2 | Real nts-bench paired rows versus Node, size/startup and boundary-call counts; fix measured gaps at their root, including structuring, boxing and dispatch; prioritize the shared exception-region contract and native EH experiment |
 | M3 | Browser adapter and generated DOM/Web API bindings; native host URL/fetch/streams when compatible; identity, callback and microtask tests plus measured DOM boundary costs |
 | M4 | WASI 0.2 CLI component with gc-utf16 specialization, canonical adapter/resources and verified engine compatibility; CLI output/exception/resource/encoding fixtures agree |
 | M5 | Settled interface dispatch plus full async/generators, including the observed irreducible resume graph; mixed JS/wasm microtask, finally, rejection and generator-protocol traces match |
@@ -850,7 +1081,8 @@ contract; ask the core owner when implementing it rather than adding a wasm-only
 presence convention. Keep wasm out of every existing `Backend::ALL` gate loop
 and show that invariant in the M1a review.
 Dispatch/erasure optimizations remain measured choices, not claims derived from
-target features. No shared file is edited by this M0 deliverable.
+target features. M0 was documentation-only; the current scoped shared changes
+and their validation are recorded in the M1a section above.
 
 ## Appendix: complete helper-name classification at the scanned revision
 

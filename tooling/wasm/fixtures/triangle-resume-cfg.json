@@ -1,0 +1,8 @@
+{
+  "source": "examples/generators/src/main.ts",
+  "function": "triangle__resume",
+  "baseline": "e52ddc97e1601558d20829c706b247941a6cefb1",
+  "prepared_hir_sha256": "3f2e0506127f27a122c9ceee4c8173a0832f99f2f1f8bb60b3b1649e57340e5d",
+  "note": "All 16 reachable blocks and original successor order; scalar operations replace frame access to test CFG lowering before generator support.",
+  "successors": [[3, 1], [13, 2], [], [4, 5], [6], [6], [7], [8, 10], [11], [7], [], [12, 15], [], [14], [11], [9]]
+}

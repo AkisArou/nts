@@ -18,6 +18,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitflags"
+version = "2.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -119,6 +125,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "leb128fmt"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -172,6 +184,7 @@ dependencies = [
  "nts-codegen-jvm",
  "nts-codegen-llvm",
  "nts-codegen-napi",
+ "nts-codegen-wasm",
  "nts-core",
  "nts-debug-lowering",
  "nts-deps",
@@ -252,6 +265,23 @@ dependencies = [
  "nts-diagnostics",
  "nts-semantic-schema",
  "rustc-hash",
+]
+
+[[package]]
+name = "nts-codegen-wasm"
+version = "0.0.0"
+dependencies = [
+ "camino",
+ "nts-codegen-common",
+ "nts-core",
+ "nts-diagnostics",
+ "nts-frontend-ts",
+ "nts-semantic-schema",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "wasm-encoder",
+ "wasmparser",
 ]
 
 [[package]]
@@ -718,6 +748,26 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "wasm-encoder"
+version = "0.261.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2608e8bb6d67fd68f5a8d0eb1363d6e7bcbc1f8ded5a0bd3a1e382462b876b22"
+dependencies = [
+ "leb128fmt",
+ "wasmparser",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.261.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f20f20e44f7e8aeb6744823ea9d869ede51e51be4fdaedede2852282e54d2d8"
+dependencies = [
+ "bitflags",
+ "indexmap",
+]
 
 [[package]]
 name = "windows-metadata"

@@ -11,6 +11,7 @@ members = [
     "compiler/codegen/c",
     "compiler/codegen/llvm",
     "compiler/codegen/jvm",
+    "compiler/codegen/wasm",
     "compiler/codegen/napi",
     "compiler/jvm-emitter",
     "build",
@@ -41,6 +42,7 @@ nts-codegen-c = { path = "compiler/codegen/c" }
 nts-codegen-jvm = { path = "compiler/codegen/jvm" }
 nts-codegen-llvm = { path = "compiler/codegen/llvm" }
 nts-codegen-napi = { path = "compiler/codegen/napi" }
+nts-codegen-wasm = { path = "compiler/codegen/wasm" }
 nts-codegen-common = { path = "compiler/codegen/common" }
 nts-core = { path = "compiler/core" }
 nts-deps = { path = "tooling/deps" }
@@ -76,6 +78,10 @@ roxmltree = "0.21"
 # its own, and used by `tooling/cli` only, as `roxmltree` is.
 windows-metadata = "0.100"
 thiserror = "2"
+# Direct core-module emission and validation. The Node host is the execution
+# oracle; component encoding and unrelated parser features are not enabled.
+wasm-encoder = { version = "=0.261.0", default-features = false, features = ["std"] }
+wasmparser = { version = "=0.261.0", default-features = false, features = ["std", "validate", "features"] }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 [workspace.lints.rust]

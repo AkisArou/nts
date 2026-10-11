@@ -15,6 +15,7 @@ mod jar_resources;
 mod objc_bindings;
 mod objc_imports;
 mod swift;
+mod wasm;
 mod windows_surface;
 mod xcframework;
 
@@ -604,6 +605,7 @@ EMITTING ONE BACKEND
   emit-c       render the program as C, to --out or stdout
   emit-llvm    render the program as textual LLVM IR, to stdout (--os windows)
   emit-jvm     render the program as class files, to --out
+  emit-wasm    render a scalar WebAssembly module and Node loader, to --out
 
 BINDINGS
   bind-c       generate a TypeScript declaration from a C header
@@ -781,6 +783,7 @@ fn main() -> Result<()> {
             )
             .map(drop)
         }
+        Some("emit-wasm") => wasm::command(&args.collect::<Vec<_>>(), Emission::from_flags()),
         // Every type the frontend resolved, as the schema records it. A
         // lowering refusal names a *type*, and until now there was no way to see
         // what that type actually is — which is a scavenger hunt for anyone
