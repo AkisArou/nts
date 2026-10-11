@@ -140,8 +140,8 @@ existing CLI usage coverage test. The HostGc draft additionally passes two
 preparation tests covering logical layouts and async/`for await` lifetimes, plus
 the JVM's early `--rc` refusal test. Test/build workers are capped at two. Evidence logs and emitted
 modules are retained under the lane's `mainctl/wasm-evidence` directory.
-Still required before landing: review and landing of the separate HostGc draft,
-its complete JVM comparison, the candidate's full owed gate, and reviewer approval. Complete workspace test
+Still required before landing: independent JVM review and landing of the separate
+HostGc draft, the candidate's full owed gate, and reviewer approval. Complete workspace test
 execution, the full hostile-pool M1 wasm differential and startup/performance measurements
 have not run; those counts and claims are not implied by these bring-up results.
 
@@ -239,6 +239,31 @@ lifetimes, including markers from async/generator and `for await` lowering.
 Insertion sites remain provider-neutral; foreign/nonmanaged ownership markers
 remain and the boundary check diagnoses them. MainClaude explicitly approved
 one test-only `HostGc` arm in the C execution helper; no C emission code changes.
+
+Core draft `e9fab5a2730c` was compared against a clean `e52ddc97e160` pin.
+The final candidate binary's SHA-256 is
+`058df473eb81301e1ae1f05842a23aae0b8d28b448b77f16698a0dfbc2273301`;
+both arms record their source and applied-diff provenance. Across all 518
+examples, C and RC each have 511 byte-identical emitted outputs and seven
+unchanged refusals; LLVM has 517 and one. JVM has 489 byte-identical projects,
+28 with only `LineNumberTable` changes, and one unchanged frontend refusal.
+Across all 29 Node/Web runtime modules, JVM has 12 byte-identical outputs and
+17 with only `LineNumberTable` changes. Compiler status and diagnostics are
+unchanged throughout. These are artifact comparisons, including partially
+emitted projects with existing declines; they do not claim full language support.
+
+Removing zero-instruction lifetime markers changes the JVM emitter's source-line
+bookkeeping. Every changed class is identical after removing only its nested
+`LineNumberTable` attributes; constant pools, instructions, exception tables,
+stack maps, all other attributes and runtime jars remain byte-identical. The
+reports name every changed class and method and record both line tables and
+normalized hashes. The comparator fails on unexplained bytes, status/diagnostic
+changes or lost classes/jars, and rejects the historical preflight that caught
+two `for await` refusals. Final reports and exact hashes are indexed in
+`mainctl/wasm-evidence/HOSTGC-FINAL-EVIDENCE.md`; the failed preflight is archived
+separately. Independent JVM review and the full core gate are still required.
+All 40 emitted Wasm corpus modules, manifests and loaders remain byte-identical
+after HostGc integration, and the refreshed bounded census has the same totals.
 
 | HIR work | Under `HostGc` |
 | --- | --- |
