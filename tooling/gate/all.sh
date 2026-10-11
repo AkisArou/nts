@@ -1876,6 +1876,9 @@ test262() {
 # with a generator unerased the generator as an array, which the body never read.
 # That unerase is checked now and stops by name, so the seven and six failures of
 # the same shape are no-verdicts.
+# 2026-10-11: frame-member initialization keeps 6,627 passes and drops two fails
+# from the ran-set: S10.2.2_A1_T3 and function-local-closure-get-before-initialization
+# now stop by name instead of reading stack garbage. Record 0352 names both gaps.
 TEST262_LANGUAGE_PASS_FLOOR=6627
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1353
 # One recorded test262 directory, re-run and held to its record, its floor and
