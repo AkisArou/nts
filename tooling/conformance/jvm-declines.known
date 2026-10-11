@@ -6,19 +6,13 @@
 # measured. NTS4001 also names conflicting dispatch bodies at one JVM member
 # and descriptor, which native tables can distinguish. jvm-verifies.ts fails
 # on a dispatch shape not here.
+# Rows cover what the runtime and outcomes corpora decline. jvm-verifies --stale lists
+# any that neither declines any more, and that row is removed (a decline pinned
+# only by a blocker or a crate test belongs to that fixture, not here).
 # shape<TAB>verdict<TAB>why -- shapes are normalised (ClosureN, $N$, FnN, TypeN).
 ChildWritable._write (Lnts/rt/NtsViewU8;Ljava/lang/String;Lnts/gen/erased/Callable;)V over (Lnts/rt/NtsValue;Ljava/lang/String;Lnts/gen/erased/Callable;)V	refused-everywhere	a narrowed parameter read at an erased argument: was SIGSEGV on C, refused by lowering since b09c3e6f6 -- a-writable-override-narrowing-an-erased-chunk (child_process, cluster)
-PerformanceNodeEntry.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
-PerformanceMark.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
-PerformanceMeasure.toJSON ()Lnts/gen/PerformanceEntryDetailJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record that extends the base's: a-covariant-record-that-extends-the-base
 PerformanceNodeTiming.toJSON ()Lnts/gen/PerformanceNodeTimingJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record repeating the base's fields in its order: a-covariant-record-that-repeats-the-base (reordered would be live: a-covariant-record-with-the-base-fields-reordered)
 PerformanceResourceTiming.toJSON ()Lnts/gen/PerformanceResourceTimingJSON; over ()Lnts/gen/PerformanceEntryJSON;	jvm-only	a covariant record repeating the base's fields in its order: a-covariant-record-that-repeats-the-base
-ClosureN.call (Lnts/gen/ReadableStreamDefaultController$N$;)V over (Lnts/gen/ReadableStreamDefaultController$N$;)V	jvm-only	TeeBranch's start closure storing a controller of another instantiation: one layout (a pointer), and a-controller-stored-by-a-generic-branch reproduces this decline and agrees on C; every site is unreachable today, TeeBranch#constructor being refused on its QueuingStrategy (a-teed-stream-read-back)
-User.update (Lnts/gen/TypeN;)Ljava/lang/String; over (Lnts/rt/NtsValue;)Ljava/lang/String;	refused-everywhere	a narrowed parameter read at an erased argument: was SIGSEGV on C, refused by lowering since b09c3e6f6 -- an-override-reading-an-erased-argument (outcomes only; the React reconciler's shape)
-ClosureN.call (Lnts/gen/Controller$N$;)V over (Lnts/gen/Controller$N$;)V	jvm-only	the reduction of TeeBranch's start closure: a-controller-stored-by-a-generic-branch agrees on C
-dispatch conflict <any>.feed(Ljava/lang/String;)Lnts/rt/NtsValue;	jvm-only	two interface slots erase an absent string with different tags, regardless of class name; native tables distinguish them, but one JVM name and descriptor cannot (core/tests/programs/structural-absence)
-dispatch conflict <any>.read(Ljava/lang/String;)Ljava/lang/String;	jvm-only	a stored literal erases null and undefined inputs differently for two interfaces; native tables keep separate bodies (a-literal-method-call-through-two-faces-loses-absence)
-dispatch conflict <any>.read(Lnts/gen/erased/Callable;)D	jvm-only	a stored literal serves number and string callback interfaces through uniform calls; native tables preserve both projections (a-literal-interface-method-has-two-callback-contracts)
 
 # Shared assignment checks now count storage refusals too. Each row's native
 # behaviour was settled from the layouts (2026-10-11, the JVM lane): a store is
