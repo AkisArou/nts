@@ -425,7 +425,7 @@ struct Hierarchy {
     /// Collected with stored members, using the same owner decision as the
     /// literal's lowering. Inference needs the complete receiver set, including
     /// named owners whose structural table rows are not built yet.
-    literal_owners: rustc_hash::FxHashSet<TypeId>,
+    literal_methods: std::sync::Arc<literal_methods::Supplies>,
     /// A class's name, which is half of the function name a call emits.
     name: rustc_hash::FxHashMap<TypeId, String>,
     /// The dispatch slot of each overridden method, keyed by the class that
@@ -824,7 +824,10 @@ impl Hierarchy {
                         && self.base.contains_key(class)
                         && self.declaring(*class, member).is_some()))
                 && self.descends_from(*class, ty)
-        })
+        }) || self
+            .literal_methods
+            .owners()
+            .any(|owner| owner != target && self.descends_from(owner, ty))
     }
 }
 
@@ -1216,7 +1219,12 @@ fn collect_stored_members(
         let Some(ty) = probe.literal_member_owner(literal) else {
             continue;
         };
-        hierarchy.literal_owners.insert(ty);
+        let stands_alone = hierarchy.stands_alone(ty);
+        std::sync::Arc::make_mut(&mut hierarchy.literal_methods).register(
+            ty,
+            literal,
+            stands_alone,
+        );
         // An instantiation of a generic interface has no dispatch table: the
         // hierarchy registers the declaration's type id and a `Box<number>`
         // is another, so a literal's method there was `a method with no
@@ -1587,16 +1595,14 @@ fn number_slots(hierarchy: &mut Hierarchy) {
 /// blocks inference for the whole interface, for the reason the loop below
 /// gives: otherwise dispatch on that candidate could reach an empty entry.
 ///
-/// An edge for a class no value brings to the interface fills a table entry
-/// nothing reads. Measured over the runtime on 2026-10-10: 115 more functions
-/// compile, 28 of them in `web-platform`, with one new root refusal in place of
-/// 259 refusal lines; and on C, LLVM, the JVM and C under rc the only example
-/// that changes is the one this was written for. `web-platform` takes 0.2 s
-/// more of 23 to lower. The largest cascades that a name-only match points at --
-/// `URLParser#parse`, `RandomSource#fill`, `CancelHandle#cancel` -- are
-/// implemented by literals in `runtime/web-platform/host`, outside the program,
-/// which no inference inside it can find; and a name-only match pairs them
-/// with `URL`, `Buffer` and anything with a `cancel`.
+/// A literal's inferred row is licensed by every actual initial supply and
+/// possible write. Mixed method-value and invocation faces retain the previous
+/// class candidate set and source-copy behavior until an accessor can return
+/// the original closure. The classification is shared with call routing.
+///
+/// Literal implementations in external host programs (`URLParser`, `RandomSource`
+/// and `CancelHandle`) cannot fill a row in this compilation; inference only
+/// considers allocations and declarations present in the whole program.
 fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
     let properties = |ty: TypeId| match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Object { properties } => Some(properties),
@@ -1615,14 +1621,7 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
         .copied()
         .collect();
     faces.sort_unstable_by_key(|face| face.0);
-    let mut classes: Vec<TypeId> = hierarchy
-        .declares
-        .keys()
-        .filter(|class| !hierarchy.faces.contains(class))
-        .copied()
-        .collect();
-    classes.sort_unstable_by_key(|class| class.0);
-    let literals = interfaces::uncovered_literals(hierarchy, &classes);
+    let (legacy_classes, classes) = structural_candidates(hierarchy);
     let mut inferred: Vec<(TypeId, TypeId)> = Vec::new();
     for face in faces {
         let Some(wanted) = properties(face) else {
@@ -1633,10 +1632,22 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
         // a property, and judging it by kind let `Readable#destroy(error,
         // callback): this` fill a `destroy(error): void` slot.
         let methods = hierarchy.declares.get(&face).cloned().unwrap_or_default();
+        let legacy = hierarchy.literal_methods.is_legacy(face);
         let mut fitting: Vec<TypeId> = Vec::new();
-        let mut a_misfit = interfaces::literal_blocks(snapshot, &literals, wanted);
+        let mut a_misfit = legacy
+            && hierarchy
+                .literal_methods
+                .legacy_blocks(probe, &legacy_classes, wanted);
         for class in &classes {
-            if hierarchy.descends_from(*class, face) {
+            if legacy
+                && legacy_classes
+                    .binary_search_by_key(&class.0, |class| class.0)
+                    .is_err()
+            {
+                continue;
+            }
+            let literal = !legacy && hierarchy.literal_methods.contains(*class);
+            if hierarchy.descends_from(*class, face) && !literal {
                 continue;
             }
             let Some(has) = properties(*class) else {
@@ -1656,6 +1667,15 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
             {
                 continue;
             }
+            if !legacy
+                && wanted.iter().any(|member| {
+                    methods.contains(&member.name)
+                        && found(member)
+                            .is_some_and(|mine| !interfaces::candidate(probe, mine, member))
+                })
+            {
+                continue;
+            }
             let fits = wanted.iter().all(|member| match found(member) {
                 // An optional *method* the class lacks is not one it can be
                 // excused: the edge is inherited, and a subclass that declares
@@ -1666,13 +1686,21 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
                 // `destroy?()`.
                 None => !methods.contains(&member.name),
                 Some(found) if methods.contains(&member.name) => {
-                    hierarchy.declaring(*class, &member.name).is_some()
-                        && interfaces::fits(probe, hierarchy, found, member)
+                    if literal {
+                        hierarchy
+                            .literal_methods
+                            .fits(probe, hierarchy, *class, member)
+                    } else {
+                        hierarchy.declaring(*class, &member.name).is_some()
+                            && interfaces::fits(probe, hierarchy, found, member)
+                    }
                 }
                 Some(_) => true,
             });
             if fits {
-                fitting.push(*class);
+                if !hierarchy.descends_from(*class, face) {
+                    fitting.push(*class);
+                }
             } else {
                 a_misfit = true;
             }
@@ -1694,6 +1722,23 @@ fn infer_implements(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy:
     for (class, face) in inferred {
         hierarchy.implements.entry(class).or_default().push(face);
     }
+}
+
+/// Keep the original candidate list for faces whose method values still need
+/// source copies, alongside the complete literal candidate list.
+fn structural_candidates(hierarchy: &Hierarchy) -> (Vec<TypeId>, Vec<TypeId>) {
+    let mut classes: Vec<TypeId> = hierarchy
+        .declares
+        .keys()
+        .filter(|class| !hierarchy.faces.contains(class))
+        .copied()
+        .collect();
+    classes.sort_unstable_by_key(|class| class.0);
+    let declared = classes.clone();
+    classes.extend(hierarchy.literal_methods.owners());
+    classes.sort_unstable_by_key(|class| class.0);
+    classes.dedup();
+    (declared, classes)
 }
 
 /// The iteration protocol's interfaces, whose members no node declares.
@@ -2185,6 +2230,8 @@ fn collect_hierarchy(
     // must not also be numbered a slot. Before the slot loop for the same
     // reason.
     collect_stored_members(snapshot, &mut probe, closures, &mut hierarchy);
+    std::sync::Arc::make_mut(&mut hierarchy.literal_methods)
+        .collect_writes(&probe, &hierarchy.faces);
     infer_implements(snapshot, &probe, &mut hierarchy);
 
     number_slots(&mut hierarchy);
@@ -7234,6 +7281,9 @@ fn a_value_held_call(snapshot: &SemanticSnapshot, probe: &FuncBuilder, call: Nod
     if probe.through_call_or_apply(call).is_some() {
         return true;
     }
+    if literal_methods::stored_call(probe, call) {
+        return true;
+    }
     let Some(callee) = probe
         .children(call)
         .first()
@@ -9730,6 +9780,7 @@ struct PendingCopy {
     suffix: String,
 }
 
+mod closed_calls;
 mod erased_calls;
 mod generic_values;
 
@@ -9852,7 +9903,13 @@ fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy)
 /// field at the array's length by layout, and the JVM verifier rejects
 /// `NtsArrayL` where the record's class is wanted (jvm-verifies cause A, seven
 /// runtime modules). In the copy `args.length` is the array's own length.
-fn copy_retype(probe: &FuncBuilder, declared: TypeId, actual: TypeId) -> Option<(HirType, String)> {
+fn copy_retype(
+    probe: &FuncBuilder,
+    callee: NodeId,
+    position: u32,
+    declared: TypeId,
+    actual: TypeId,
+) -> Option<(HirType, String)> {
     if actual == declared {
         return None;
     }
@@ -9861,6 +9918,15 @@ fn copy_retype(probe: &FuncBuilder, declared: TypeId, actual: TypeId) -> Option<
     else {
         return None;
     };
+    if let HirType::Managed(ManagedType::Object(have)) = represented
+        && literal_methods::uses_dispatch(probe, have, want)
+        && !probe
+            .hierarchy
+            .literal_methods
+            .method_values_only(callee, position)
+    {
+        return None;
+    }
     match represented {
         // Spelled by representation, as an object's is: seven tuple types in
         // web-platform are one `[str]`, and a spelling by type id made seven
@@ -9933,8 +9999,8 @@ impl StructuralPlanner<'_, '_> {
             let Ok(position) = u32::try_from(at) else {
                 continue;
             };
-            if let Some((ty, spelling)) =
-                actual(*argument).and_then(|actual| copy_retype(probe, *declared, actual))
+            if let Some((ty, spelling)) = actual(*argument)
+                .and_then(|actual| copy_retype(probe, callee, position, *declared, actual))
             {
                 legacy.insert(position, ty.clone());
                 legacy_spelled.push(format!("{at}{spelling}"));
@@ -15177,6 +15243,7 @@ pub fn lower_with(
         &mut wanted,
     );
 
+    literal_methods::declare(snapshot, foreign, &shared, &mut lowered);
     declare_interface_methods(
         &hierarchy,
         &mut shared.builder(snapshot, foreign, Copy::default()),
@@ -26777,6 +26844,19 @@ impl<'a> FuncBuilder<'a> {
         if have == *want {
             return Ok(value);
         }
+        if let (
+            HirType::Managed(ManagedType::Object(owner)),
+            HirType::Managed(ManagedType::Object(face)),
+        ) = (&have, want)
+            && literal_methods::uses_dispatch(self, *owner, *face)
+            && !self.hierarchy.descends_from(*owner, *face)
+        {
+            return Err(self.unsupported(
+                id,
+                "a literal converted to a method interface without a complete dispatch table -- \
+                 its method supplies or possible writes could not satisfy every slot contract",
+            ));
+        }
         // Erasure preserves the object's identity. Reading it back as writable
         // array storage checks immutability; a direct cast cannot forge either
         // representation's capability.
@@ -27775,11 +27855,43 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    fn literal_method_typeof(
+        &mut self,
+        id: NodeId,
+        operand: NodeId,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some((receiver, member)) = self.member_access(self.through_parentheses(operand)) else {
+            return Ok(None);
+        };
+        let Some(face) = self.snapshot.node_types.get(&receiver).copied() else {
+            return Ok(None);
+        };
+        if !literal_methods::supplies_method_value(self, face, &member)
+            || !interfaces::property(self.snapshot, face, &member).is_some_and(|property| {
+                !property.optional
+                    && matches!(property.kind, nts_semantic_schema::MemberKind::Method)
+            })
+        {
+            return Ok(None);
+        }
+        // Evaluate the receiver, without constructing an identity-changing
+        // wrapper for a read whose only observable answer is its kind.
+        self.lower_expression(receiver)?;
+        Ok(Some(self.push(
+            OpKind::ConstString("function".to_owned()),
+            HirType::Managed(ManagedType::String),
+            self.origin(id),
+        )))
+    }
+
     fn lower_typeof(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let operand = *self
             .children(id)
             .first()
             .ok_or_else(|| self.unsupported(id, "`typeof` with no operand"))?;
+        if let Some(kind) = self.literal_method_typeof(id, operand)? {
+            return Ok(kind);
+        }
         let answer = self.typeof_from_the_checkers_type(operand).ok_or_else(|| {
             self.unsupported(
                 id,
@@ -49418,8 +49530,15 @@ impl<'a> FuncBuilder<'a> {
     /// does and hands them to the same decision, so the function a method is
     /// emitted as and the name a call looks for cannot drift apart.
     fn literal_member_owner(&mut self, id: NodeId) -> Option<TypeId> {
-        let ty = self
-            .contextual_type(id, 0)
+        let ty = self.literal_context_type(id)?;
+        self.literal_object_type(id, ty).ok().map(|(ty, _)| ty)
+    }
+
+    /// One allocation-type decision for the member collector and allocation.
+    /// Array and tuple contexts are recovered syntactically as well, before
+    /// lowering has an `expecting` slot to supply them.
+    fn literal_context_type(&self, id: NodeId) -> Option<HirType> {
+        self.contextual_type(id, 0)
             .filter(|ty| {
                 matches!(
                     ty,
@@ -49430,8 +49549,15 @@ impl<'a> FuncBuilder<'a> {
                 self.contextual_union_member(id)
                     .map(|member| HirType::Managed(ManagedType::Object(member)))
             })
-            .or_else(|| self.type_of(id))?;
-        self.literal_object_type(id, ty).ok().map(|(ty, _)| ty)
+            .or_else(|| {
+                self.expecting.clone().filter(|ty| {
+                    matches!(
+                        ty,
+                        HirType::Managed(ManagedType::Object(_) | ManagedType::Table(_, _))
+                    )
+                })
+            })
+            .or_else(|| self.type_of(id))
     }
 
     /// A literal a native call marked as never built (`mark_literals`):
@@ -49446,7 +49572,6 @@ impl<'a> FuncBuilder<'a> {
             .map(|ty| self.copied_literal(id, ty))
     }
 
-    #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         if let Some(unbuilt) = self.unbuilt_literal(id) {
             return unbuilt;
@@ -49472,50 +49597,7 @@ impl<'a> FuncBuilder<'a> {
         // Safe in the other direction too: a literal missing a *required*
         // property is a type error the checker reported before this ran.
         let ty = self
-            .contextual_type(id, 0)
-            .filter(|ty| {
-                matches!(
-                    ty,
-                    HirType::Managed(ManagedType::Object(_) | ManagedType::Table(_, _))
-                )
-            })
-            // Before the literal's own type, not after. A union of object
-            // types erases, so the filter above rejects it and the literal
-            // would take its *own* checker type -- which is the shape mismatch
-            // record 0244 is about. The member the literal matches is the type
-            // TypeScript says it has here, and it is the one the reader back
-            // out will assume.
-            .or_else(|| {
-                self.contextual_union_member(id)
-                    .map(|member| HirType::Managed(ManagedType::Object(member)))
-            })
-            // **The slot the enclosing expression is filling.** `expecting` is
-            // the channel `lower_array_literal` and `lower_absent` already take
-            // their type from, and this was the one literal that never looked
-            // at it -- so an object literal *inside* an array literal took its
-            // own checker type however the array had been typed:
-            //
-            //     function takes(xs: Opts[]): number { … }
-            //     takes([{ a: 1 }, { a: 2, b: 3 }]);
-            //
-            // built `obj#13` and `obj#14`, one field each, and stored both into
-            // an array of `obj#1`, which has two. Nothing refused it. `takes`
-            // read field 1 off a one-field object and answered 2 where node
-            // answers 105 -- a **silent wrong answer on the shipping compiler**,
-            // not a refusal, which is why no census could see it.
-            //
-            // After `contextual_type`, because that is the syntactic question
-            // and answers first where it can; before the literal's own type,
-            // because that is the thing being corrected.
-            .or_else(|| {
-                self.expecting.clone().filter(|ty| {
-                    matches!(
-                        ty,
-                        HirType::Managed(ManagedType::Object(_) | ManagedType::Table(_, _))
-                    )
-                })
-            })
-            .or_else(|| self.type_of(id))
+            .literal_context_type(id)
             .ok_or_else(|| self.unrepresentable(id, "an object literal"))?;
         // `const table: Record<string, number> = {}` is an allocation of a
         // *table*, and the contextual type is the only thing that says so: the
@@ -50765,6 +50847,16 @@ impl<'a> FuncBuilder<'a> {
                 .ok_or_else(|| self.unrepresentable(id, "a getter"))?;
             let origin = self.origin(id);
             return Ok(self.push_an_accessor_call(id, callee, vec![value], ty, origin));
+        }
+        if literal_methods::supplies_method_value(self, type_id, member_name) {
+            return Err(Diagnostic::error(
+                "NTS1001",
+                format!(
+                    "reading literal method `{member_name}` as a value through another interface \
+                    is not supported; call it directly, or read it from the literal's own type"
+                ),
+                self.location(id),
+            ));
         }
         if let Some(bound) = self.bound_method(id, value, member_name)? {
             return Ok(bound);
@@ -52102,18 +52194,14 @@ impl<'a> FuncBuilder<'a> {
     /// Split out of [`Self::layout_of`] for the reason [`Self::foreign_owner`] was: that
     /// function's line limit, and "what does this class put in the table" is its own
     /// question.
-    fn overridden_entries(&self, ty: TypeId) -> Vec<Option<String>> {
+    fn overridden_entries(&self, ty: TypeId, fields: &[Field]) -> Vec<Option<String>> {
         let mut methods = vec![None; self.hierarchy.table_size()];
         for ((root, member), slot) in &self.hierarchy.slots {
             if !self.hierarchy.descends_from(ty, *root) {
                 continue;
             }
-            let (plain, suffix) = without_the_raising_suffix(member);
-            let Some(owner) = self.hierarchy.declaring(ty, plain) else {
-                continue;
-            };
-            if let Some(name) = self.hierarchy.name.get(&owner) {
-                methods[*slot as usize] = Some(format!("{name}#{plain}{suffix}"));
+            if let Some(target) = literal_methods::target(self, ty, *root, member, fields) {
+                methods[*slot as usize] = Some(target.name(self));
             }
         }
         methods
@@ -52293,7 +52381,7 @@ impl<'a> FuncBuilder<'a> {
         // what the jar calls it, and `Box<T>` and `Box<U>` are one class there.
         let name =
             bound.unwrap_or_else(|| format!("{name}{}", instantiation_suffix(self.snapshot, ty)));
-        let methods = self.overridden_entries(ty);
+        let methods = self.overridden_entries(ty, &fields);
 
         // Structural, so a type whose shape is already laid out joins that
         // layout rather than getting one of its own. The first name wins, which
@@ -59303,6 +59391,9 @@ impl<'a> FuncBuilder<'a> {
         else {
             return false;
         };
+        if literal_methods::supplies_method_value(self, ty, &key) {
+            return true;
+        }
         members_filling(self.snapshot, self, &self.hierarchy, ty, &key)
             .into_iter()
             .any(|at| a_declaration_that_can_raise(self.snapshot, &self.throwing, at))
@@ -77434,6 +77525,9 @@ impl<'a> FuncBuilder<'a> {
         }
         let parent = self.syntactic_parent(id)?;
         match self.kind_of(parent) {
+            Some(syntax::ARRAY_LITERAL_EXPRESSION) => {
+                self.contextual_array_element(id, parent, depth)
+            }
             // **A `throw` erases whatever it is given**, which `lower_throw`
             // says in its own words: "`catch (e)` is `unknown`. That is the
             // language's own answer to what a handler receives, and taking it
@@ -77598,6 +77692,23 @@ impl<'a> FuncBuilder<'a> {
                 | syntax::AS_EXPRESSION
                 | syntax::SATISFIES_EXPRESSION,
             ) => self.contextual_type(parent, depth + 1),
+            _ => None,
+        }
+    }
+
+    /// The slot an array or tuple literal supplies, also available to the
+    /// literal-method collector before any allocation is lowered.
+    fn contextual_array_element(&self, id: NodeId, array: NodeId, depth: u32) -> Option<HirType> {
+        let ty = self
+            .contextual_type(array, depth + 1)
+            .or_else(|| self.type_of(array))?;
+        match ty {
+            HirType::Managed(ManagedType::Array(element)) => Some(*element),
+            HirType::Managed(ManagedType::Object(tuple)) => {
+                let at = self.children(array).iter().position(|child| *child == id)?;
+                let positions = self.fixed_arity_positions(tuple)?;
+                self.represent_passed(*positions.get(at)?)
+            }
             _ => None,
         }
     }
@@ -80459,6 +80570,7 @@ mod function_names;
 mod gobject;
 mod initialization;
 mod interfaces;
+mod literal_methods;
 mod native_memory;
 mod printed;
 mod virtual_returns;

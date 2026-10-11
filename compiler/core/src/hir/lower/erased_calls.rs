@@ -64,28 +64,15 @@ impl ClosedParameters {
         }
 
         let classifications = erasure::classify(snapshot);
-        let mut references: FxHashMap<SymbolId, Vec<NodeId>> = FxHashMap::default();
-        for (at, node) in snapshot.nodes.iter().enumerate() {
-            if node.kind == nts_semantic_schema::NodeKind::Syntax(syntax::IDENTIFIER)
-                && let Some(symbol) = node.symbol
-            {
-                references
-                    .entry(walk::denoted(snapshot, symbol))
-                    .or_default()
-                    .push(NodeId(u32::try_from(at).unwrap_or(u32::MAX)));
-            }
-        }
-        let exported: FxHashSet<_> = snapshot
-            .modules
-            .iter()
-            .flat_map(|module| {
-                module
-                    .exports
-                    .iter()
-                    .map(|(_, symbol)| walk::denoted(snapshot, *symbol))
-            })
-            .collect();
-        let mut functions = FxHashMap::default();
+        let collected;
+        let functions = if let Some(functions) = probe.hierarchy.literal_methods.closed_functions()
+        {
+            functions
+        } else {
+            collected = super::closed_calls::Functions::collect(probe);
+            &collected
+        };
+        let references = functions.references();
         let mut out = Self::default();
         for site in classifications.sites() {
             let Some(parameter) = site.parameter else {
@@ -106,10 +93,7 @@ impl ClosedParameters {
             {
                 continue;
             }
-            let closed = *functions.entry(parameter.declaration).or_insert_with(|| {
-                function_is_closed(probe, parameter.declaration, &references, &exported)
-            });
-            if closed {
+            if functions.is_closed(parameter.declaration) {
                 out.positions
                     .insert((parameter.declaration, parameter.position), site.binding);
                 out.closed.insert(site.binding);
@@ -127,7 +111,7 @@ impl ClosedParameters {
                 probe,
                 *declaration,
                 *binding,
-                &references,
+                references,
                 &out.positions,
                 &mut forwarded,
                 &mut reads,
@@ -179,53 +163,6 @@ impl ClosedParameters {
     }
 }
 
-fn function_is_closed(
-    probe: &FuncBuilder<'_>,
-    declaration: NodeId,
-    references: &FxHashMap<SymbolId, Vec<NodeId>>,
-    exported: &FxHashSet<SymbolId>,
-) -> bool {
-    let Some(name) = probe.name_node(declaration) else {
-        return false;
-    };
-    let Some(symbol) = probe.node(name).symbol else {
-        return false;
-    };
-    let symbol = walk::denoted(probe.snapshot, symbol);
-    if exported.contains(&symbol)
-        || super::super::generics::declared_signature(probe.snapshot, declaration)
-            .is_none_or(|signature| signature.this_type.is_some())
-        || probe
-            .node(declaration)
-            .modifiers
-            .contains(nts_semantic_schema::DeclarationModifiers::EXPORT)
-        || probe
-            .snapshot
-            .symbols
-            .get(symbol.0 as usize)
-            .is_none_or(|record| record.declarations.as_slice() != [declaration])
-    {
-        return false;
-    }
-    references
-        .get(&symbol)
-        .into_iter()
-        .flatten()
-        .all(|reference| {
-            *reference == name
-                || walk::parent(probe.snapshot, *reference).is_some_and(|call| {
-                    probe.kind_of(call) == Some(syntax::CALL_EXPRESSION)
-                        && probe.children(call).first() == Some(reference)
-                        && probe
-                            .snapshot
-                            .call_targets
-                            .get(&call)
-                            .and_then(|target| target.callee)
-                            == Some(declaration)
-                })
-        })
-}
-
 fn uses_are_closed(
     probe: &FuncBuilder<'_>,
     declaration: NodeId,
@@ -255,7 +192,7 @@ fn uses_are_closed(
             }
             // A nested function/closure is a boundary even if it does not
             // currently escape. Closure creation flow is a later proof.
-            if enclosing_function(probe, *reference) != Some(declaration) {
+            if super::closed_calls::enclosing_function(probe, *reference) != Some(declaration) {
                 return false;
             }
             // Preserve the existing checked narrowing path until copies can
@@ -341,28 +278,6 @@ fn uses_are_closed(
         }
     }
     true
-}
-
-fn enclosing_function(probe: &FuncBuilder<'_>, node: NodeId) -> Option<NodeId> {
-    let mut at = walk::parent(probe.snapshot, node);
-    while let Some(node) = at {
-        if matches!(
-            probe.kind_of(node),
-            Some(
-                syntax::FUNCTION_DECLARATION
-                    | syntax::FUNCTION_EXPRESSION
-                    | syntax::ARROW_FUNCTION
-                    | syntax::METHOD_DECLARATION
-                    | syntax::CONSTRUCTOR
-                    | syntax::GET_ACCESSOR
-                    | syntax::SET_ACCESSOR
-            )
-        ) {
-            return Some(node);
-        }
-        at = walk::parent(probe.snapshot, node);
-    }
-    None
 }
 
 fn access_is_written(probe: &FuncBuilder<'_>, access: NodeId) -> bool {
@@ -455,7 +370,7 @@ fn feeds_a_number(probe: &FuncBuilder<'_>, declaration: NodeId, read: NodeId) ->
         // Converted to the declared `number` on the way out, by the erased
         // original as by the copy.
         Some(syntax::RETURN_STATEMENT) => {
-            enclosing_function(probe, parent) == Some(declaration)
+            super::closed_calls::enclosing_function(probe, parent) == Some(declaration)
                 && super::super::generics::declared_signature(probe.snapshot, declaration)
                     .and_then(|signature| probe.represent(signature.return_type))
                     == Some(HirType::NUMBER)

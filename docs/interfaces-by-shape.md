@@ -108,7 +108,7 @@ fills it, and the call compiles as today's virtual call.
   interface parameter. Those need a checked conversion and block inference
   here. An interface edge is never a storage-prefix upcast. Overloaded/generic/rest methods,
   additional optional implementation parameters, and function-valued properties
-  against method slots remain unsupported.
+  on declared classes against method slots remain unsupported.
 - **Absence conversions are part of an adapter.** A nullable and an optional
   string input share pointer storage, but erase that pointer with different
   tags. Those adapters remain distinct. When one class needs both at the same
@@ -135,9 +135,72 @@ fills it, and the call compiles as today's virtual call.
   Adaptable candidates now receive entries, including beside a class with a
   written `implements`; the crash fixture is an example under
   `examples/a-structural-misfit-dispatched-through-an-interface`.
-  Literal owners outside the concrete candidate set also block inference when
-  their members match: a literal lowered under another named interface has no
-  row in these slots. Part 1c must provide that row before the edge is safe.
+  Contextual literal owners participate too. Every initial function and possible
+  method write must satisfy the contract before their rows can fill the slots.
+
+### Part 1c — literal supplies
+
+The allocation and the supply census use the same contextual owner, including
+literals in typed arrays and tuple positions. An owner represents every literal
+built at that type. It gains an edge only if every initial function and every
+possible later write fits each slot. A contextual method signature alone is
+not enough: TypeScript permits a narrower authored parameter through method
+bivariance. Classes and literals share the candidate filter; only provably
+disjoint primitive families can be excluded from all-or-none.
+
+A direct literal method fills the row with its actual owner-named body, even
+when an interface inherited the declaration. A stored method fills it with a
+forwarder that loads that object's current closure field on every call. Captures,
+replacements and each literal's own receiver remain distinct. The forwarder
+passes arguments through the uniform callable ABI, checks a raising result before
+reading it, and checks the erased result before recovering a concrete value.
+Discarding a result through a void face releases it under reference counting.
+An unsupported result contract blocks the edge; a value violating a supported
+contract stops by name.
+
+Adapter sharing includes owner, field, callable ABI, precise parameter absence
+and result absence. Shared bodies receive the meet of their input facts. A field
+forwarder is never an identity projection: loading and invoking the current
+closure remains necessary. Any new layouts it needs go through the ordinary
+whole-program layout merge before callable declaration shells are made.
+
+Writes through private helpers are proved from **every incoming supply**, using
+the same closed-call evidence as erased-parameter source copies. Exported or
+escaping helpers, unknown callers, reassigned parameters and unknown function
+values provide no permission. Dictionary, array and fresh unrelated object writes
+do not replace record fields; an erased alias that can reach the literal still
+participates.
+
+Calls through another method interface use the proved table rather than a source
+copy, which preserves the slot's raising, absence and input contracts. A source
+copy remains permitted for private callers whose whole transitive flow uses the
+object's methods only for identity, strict comparison or typeof. The proof follows
+immutable aliases and downstream closed helpers; a method call or unknown consumer
+removes that permission.
+
+A face mixing method-value reads with calls stays on the legacy path globally,
+until Part 2 can return the original closure through an accessor. The classification
+is computed once before inference and controls inference, copies and forwarders.
+This preserves programs main already handles. The existing wrong answer in
+`outcomes/a-literal-method-compared-and-called-through-a-wider-face` remains pinned
+and queued. A pure identity caller receiving an array element has lost its concrete
+owner: reading that method through the face is still refused by name rather than
+returning a fresh wrapper with different identity.
+
+Function-valued properties on declared classes remain deferred. A contextual owner
+also used by a declared class cannot assume that class has the literal's closure
+field. Typed heterogeneous tuples retain the separately pinned core storage defect;
+this change does not reinterpret their elements as compatible object pointers.
+
+React's actual Thenable supplies satisfy Wakeable's initial contract, but unknown
+computed writes conservatively block their inferred edges and raising slots. The
+GTK counter's next entry-chain stop remains `then@raises`; the widget-driver
+controls pass on C and LLVM. The immediate follow-up is **Wakeable write
+precision**: inventory the blocking writes and prove which cannot replace `then`
+before narrowing their receiver or key coverage. Keep unknown writes protected.
+After that, Part 2 comes next: the legacy-only fallback covers 127 interface
+occurrences across 14 runtime families (stream 12, HTTP 13), and none in either
+GTK counter or GTK state. Wakeable itself is not legacy-only.
 
 It was built once before, on 2026-09-22, by name and shape, and set aside: it
 cleared no refusal in the runtime and turned two upcasts into casts between
@@ -151,6 +214,14 @@ instantiation that fits exactly; substituting the heritage clause per
 instantiation is the rest.
 
 ## Part 2 — fields: the same tables, as accessors
+
+Method values need the same accessor mechanism. A read through a method
+interface must return the implementer's own closure: a stored literal supplies
+its current field, and a class method supplies its existing bound-value
+representation. A fresh wrapper for the literal changes `===`. Add this as an
+accessor slot alongside field getters and setters, then remove Part 1c's legacy
+classification for mixed method-value and invocation flows. Its pinned wrong
+answer is `outcomes/a-literal-method-compared-and-called-through-a-wider-face`.
 
 A field read through an interface is correct when the object's class is known
 (record 0294's copies) or when every class that can arrive puts the field where

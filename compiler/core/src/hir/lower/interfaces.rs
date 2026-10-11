@@ -9,6 +9,23 @@ use nts_semantic_schema::{ParameterRecord, SignatureRecord};
 use super::{FuncBuilder, Hierarchy, PropertyRecord, SemanticSnapshot, TypeId, TypeKind};
 use super::{HirType, ManagedType, Param, ParamShape, in_a_slot};
 
+/// Callable faces share the uniform ABI. This equivalence is shared by
+/// direct-body projections and stored-literal adapters.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(super) enum AbiType {
+    Callable,
+    Concrete(HirType),
+}
+
+pub(super) fn abi_type(snapshot: &SemanticSnapshot, ty: &HirType) -> AbiType {
+    if let HirType::Managed(ManagedType::Object(id)) = ty
+        && signature(snapshot, *id).is_some()
+    {
+        return AbiType::Callable;
+    }
+    AbiType::Concrete(ty.clone())
+}
+
 /// The actual parameter storage, together with the types licensing conversion.
 #[derive(Debug)]
 pub(super) struct Contract {
@@ -27,18 +44,25 @@ pub(super) fn signature(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&Sign
 
 /// An overload, generic method or rest expansion needs a different contract.
 pub(super) fn contract(probe: &FuncBuilder, member: &PropertyRecord) -> Option<Contract> {
+    contract_at(probe, member.ty, member.declaration)
+}
+
+/// A concrete literal supply keeps its own signature and parameter nodes.
+/// Its contextual owner's signature can hide bivariant parameter narrowing.
+pub(super) fn contract_at(
+    probe: &FuncBuilder,
+    ty: TypeId,
+    declaration: Option<super::NodeId>,
+) -> Option<Contract> {
     let snapshot = probe.snapshot;
-    let signature = signature(snapshot, member.ty)?;
+    let signature = signature(snapshot, ty)?;
     if !signature.type_parameters.is_empty() || signature.parameters.iter().any(|p| p.rest) {
         return None;
     }
-    if member
-        .declaration
-        .is_some_and(|at| probe.implementation_of(at) != at)
-    {
+    if declaration.is_some_and(|at| probe.implementation_of(at) != at) {
         return None;
     }
-    let nodes = member.declaration.map(|at| super::parameters_of(probe, at));
+    let nodes = declaration.map(|at| super::parameters_of(probe, at));
     if nodes
         .as_ref()
         .is_some_and(|nodes| nodes.len() != signature.parameters.len())
@@ -129,6 +153,15 @@ pub(super) fn fits(
     let (Some(mine), Some(wanted)) = (contract(probe, mine), contract(probe, wanted)) else {
         return false;
     };
+    fits_contracts(probe.snapshot, hierarchy, &mine, &wanted)
+}
+
+pub(super) fn fits_contracts(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    mine: &Contract,
+    wanted: &Contract,
+) -> bool {
     if mine.params.len() > wanted.params.len() {
         return false;
     }
@@ -138,18 +171,64 @@ pub(super) fn fits(
             .zip(&wanted.params)
             .enumerate()
             .all(|(at, (mine_param, slot))| {
-                widens(
-                    probe.snapshot,
-                    hierarchy,
-                    wanted.sources[at],
-                    mine.sources[at],
-                    0,
-                ) && converts(probe.snapshot, hierarchy, &slot.ty, &mine_param.ty)
+                widens(snapshot, hierarchy, wanted.sources[at], mine.sources[at], 0)
+                    && converts(snapshot, hierarchy, &slot.ty, &mine_param.ty)
             });
     inputs
         && (wanted.returns == HirType::Void
-            || (widens(probe.snapshot, hierarchy, mine.result, wanted.result, 0)
-                && converts(probe.snapshot, hierarchy, &mine.returns, &wanted.returns)))
+            || (widens(snapshot, hierarchy, mine.result, wanted.result, 0)
+                && converts(snapshot, hierarchy, &mine.returns, &wanted.returns)))
+}
+
+/// Could TypeScript pass this method as the wanted one, even under parameter
+/// bivariance? Only provably disjoint primitive families exclude a candidate.
+/// Objects, unknown contracts and narrowing inputs still participate in the
+/// all-or-none check. Classes and literals use this same candidacy predicate.
+pub(super) fn candidate(
+    probe: &FuncBuilder,
+    mine: &PropertyRecord,
+    wanted: &PropertyRecord,
+) -> bool {
+    let (Some(mine), Some(wanted)) = (contract(probe, mine), contract(probe, wanted)) else {
+        return true;
+    };
+    let disjoint = |one, other| match (
+        primitive_families(probe.snapshot, one, 0),
+        primitive_families(probe.snapshot, other, 0),
+    ) {
+        (Some(one), Some(other)) => one & other == 0,
+        _ => false,
+    };
+    (wanted.returns == HirType::Void || !disjoint(mine.result, wanted.result))
+        && mine
+            .sources
+            .iter()
+            .zip(&wanted.sources)
+            .all(|(mine, wanted)| !disjoint(*mine, *wanted))
+}
+
+fn primitive_families(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Option<u8> {
+    use super::LiteralValue;
+    if depth >= 16 {
+        return None;
+    }
+    Some(match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Number | TypeKind::Literal(LiteralValue::Number(_)) => 1,
+        TypeKind::String
+        | TypeKind::Literal(LiteralValue::String(_))
+        | TypeKind::TemplateLiteral { .. } => 2,
+        TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => 4,
+        TypeKind::BigInt | TypeKind::Literal(LiteralValue::BigInt(_)) => 8,
+        TypeKind::Symbol => 16,
+        TypeKind::Null => 32,
+        TypeKind::Undefined | TypeKind::Void => 64,
+        TypeKind::Union(arms) => arms.iter().try_fold(0, |found, arm| {
+            Some(found | primitive_families(snapshot, *arm, depth + 1)?)
+        })?,
+        // `never` fits every result; intersections can be branded primitives.
+        // Neither is evidence that this candidate cannot reach the face.
+        _ => return None,
+    })
 }
 
 /// A representation conversion with no test and no structural storage guess.
@@ -273,37 +352,6 @@ pub(super) fn property<'a>(
         return None;
     };
     properties.iter().find(|property| property.name == member)
-}
-
-/// Literal owners come from the same contextual-type decision as their bodies.
-/// Anonymous owners already registered as concrete candidates have table rows.
-/// A literal lowered under a named interface needs Part 1c's separate plan;
-/// admitting a class beside it must not open a slot that its value cannot fill.
-pub(super) fn uncovered_literals(hierarchy: &Hierarchy, classes: &[TypeId]) -> Vec<TypeId> {
-    let mut owners: Vec<_> = hierarchy
-        .literal_owners
-        .iter()
-        .copied()
-        .filter(|owner| {
-            classes
-                .binary_search_by_key(&owner.0, |class| class.0)
-                .is_err()
-        })
-        .collect();
-    owners.sort_unstable_by_key(|owner| owner.0);
-    owners
-}
-
-pub(super) fn literal_blocks(
-    snapshot: &SemanticSnapshot,
-    owners: &[TypeId],
-    wanted: &[PropertyRecord],
-) -> bool {
-    owners.iter().any(|owner| {
-        wanted
-            .iter()
-            .all(|member| member.optional || property(snapshot, *owner, &member.name).is_some())
-    })
 }
 
 /// A declaration belongs to the interface, including every parameter value

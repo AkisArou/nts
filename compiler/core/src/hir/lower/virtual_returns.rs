@@ -49,10 +49,10 @@ use rustc_hash::FxHashMap;
 
 use nts_semantic_schema::{GeneratedReason, Origin, SemanticSnapshot, TypeId, TypeKind};
 
+use super::interfaces::{AbiType, abi_type};
 use super::{Hierarchy, without_the_raising_suffix};
 use crate::hir::{
-    Absent, Block, Callee, Func, HirType, ManagedType, Op, OpKind, Param, Program, Terminator,
-    ValueId,
+    Absent, Block, Callee, Func, HirType, Op, OpKind, Param, Program, Terminator, ValueId,
 };
 
 /// The suffix a bridge takes after the entry it answers for.
@@ -337,25 +337,6 @@ fn projected_arguments(
             ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX))
         })
         .collect()
-}
-
-/// Written callable types all use the existing uniform callable representation.
-/// Their different type ids must not create duplicate JVM methods with the same
-/// member and descriptor. Shared inputs join the facts of their contributing
-/// faces, and the key includes the conversions' absence semantics.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum AbiType {
-    Callable,
-    Concrete(HirType),
-}
-
-fn abi_type(snapshot: &SemanticSnapshot, ty: &HirType) -> AbiType {
-    if let HirType::Managed(ManagedType::Object(id)) = ty
-        && super::interfaces::signature(snapshot, *id).is_some()
-    {
-        return AbiType::Callable;
-    }
-    AbiType::Concrete(ty.clone())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

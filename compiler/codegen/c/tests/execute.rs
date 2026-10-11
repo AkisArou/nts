@@ -61,6 +61,97 @@ int main(void) {
     }
 }
 
+/// A native closure can violate its declared result kind. The interface
+/// adapter must stop by name before interpreting the uniform return payload.
+#[test]
+fn a_literal_adapter_checks_the_uniform_result_before_decoding_it() {
+    let harness = r"
+extern double mixed(double);
+int main(void) { (void)mixed(2); return 0; }
+";
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some(output) = build_and_run_transformed(
+            "a-capturing-literal-dispatched-through-another-interface",
+            harness,
+            provider,
+            Host::None,
+            counterfeit_closure_return,
+        ) else {
+            return;
+        };
+        assert!(!output.status.success(), "an invalid result must stop");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(
+                "a literal method called through `Sink#take` returned a value of an unexpected kind"
+            ),
+            "the result guard must own the stop: {output:?}"
+        );
+    }
+}
+
+#[test]
+fn a_void_literal_interface_call_releases_its_discarded_result() {
+    let harness = r#"
+#include "nts_runtime.h"
+extern double result(double);
+int main(void) {
+    for (int i = 0; i < 10; i++) if (result(2) != 3) return 1;
+    nts_collect_cycles();
+    size_t before = nts_live_bytes();
+    for (int i = 0; i < 1000; i++) if (result(2) != 3) return 2;
+    nts_collect_cycles();
+    return nts_live_bytes() == before ? 0 : 3;
+}
+"#;
+    let Some(output) = build_and_run_with(
+        "a-literal-method-result-discarded-through-a-void-interface",
+        harness,
+        hir::Provider::ReferenceCounting,
+    ) else {
+        return;
+    };
+    assert!(
+        output.status.success(),
+        "discarded result leaked: {output:?}"
+    );
+}
+
+fn counterfeit_closure_return(program: &mut hir::Program) {
+    let slot = program.erased_call_slot.expect("uniform closure slot");
+    let target = program
+        .layouts
+        .iter()
+        .find(|layout| layout.name.starts_with("Closure"))
+        .and_then(|layout| layout.methods.get(slot as usize))
+        .and_then(Option::as_ref)
+        .expect("concrete uniform body")
+        .clone();
+    let func = program.funcs.iter_mut().find(|f| f.name == target).unwrap();
+    let origin = func.origin.clone();
+    // Keep the complete ABI and substitute only the native body's answer.
+    // BOOLEAN is well formed NtsValue storage but violates this number face.
+    func.values = vec![
+        hir::Op {
+            kind: hir::OpKind::ConstBool(true),
+            ty: hir::HirType::Bool,
+            origin: origin.clone(),
+        },
+        hir::Op {
+            kind: hir::OpKind::Erase {
+                value: hir::ValueId(0),
+                absent: hir::Absent::Impossible,
+            },
+            ty: hir::HirType::Erased,
+            origin,
+        },
+    ];
+    func.blocks = vec![hir::Block {
+        params: Vec::new(),
+        ops: vec![hir::ValueId(0), hir::ValueId(1)],
+        terminator: hir::Terminator::Return(Some(hir::ValueId(1))),
+    }];
+}
+
 /// As above, under a chosen memory provider.
 fn build_and_run_with(
     example: &str,
@@ -132,6 +223,16 @@ fn build_and_run_hosted(
     provider: hir::Provider,
     host_kind: Host,
 ) -> Option<std::process::Output> {
+    build_and_run_transformed(example, harness, provider, host_kind, |_| {})
+}
+
+fn build_and_run_transformed(
+    example: &str,
+    harness: &str,
+    provider: hir::Provider,
+    host_kind: Host,
+    transform: impl FnOnce(&mut hir::Program),
+) -> Option<std::process::Output> {
     let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
         // Announced, because a skip that prints nothing is indistinguishable
         // from a pass — and this is the test whose passing means the most.
@@ -162,7 +263,7 @@ fn build_and_run_hosted(
     // The same pipeline the CLI runs, specialization included — otherwise these
     // tests would prove that *unspecialized* code computes the right answers,
     // which is not what ships.
-    let prepared = hir::prepare_with(
+    let mut prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
             provider,
@@ -170,6 +271,8 @@ fn build_and_run_hosted(
         },
     )
     .expect("prepared HIR should verify");
+    transform(&mut prepared.program);
+    hir::verify::verify(&prepared.program).expect("transformed HIR should verify");
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
 
     let dir = work_dir(example, harness, provider);

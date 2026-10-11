@@ -1,8 +1,0 @@
-{
-  "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 29 cases across 1 function(s) | refused: /home/akisarou/.cache/nts/outcomes/1741860/a-literal-method-call-through-two-faces-loses-absence/src/main.ts:5:68: NTS1003 `pair` cannot be compiled because it calls `NullReader#read`, and no class in this program implements it, so its method has no body to declare | Error: 20 case(s) disagree between the compiled program and node",
-  "node": null,
-  "measured_with": "7d1ed4b502cbc4ab",
-  "source": "measured"
-}
