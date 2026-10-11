@@ -1879,7 +1879,10 @@ test262() {
 # 2026-10-11: frame-member initialization keeps 6,627 passes and drops two fails
 # from the ran-set: S10.2.2_A1_T3 and function-local-closure-get-before-initialization
 # now stop by name instead of reading stack garbage. Record 0352 names both gaps.
-TEST262_LANGUAGE_PASS_FLOOR=6627
+# 2026-10-11: captured lexical TDZ reads now throw catchable ReferenceError.
+# A full pinned run adds the captured-const test back as a pass (record 0353);
+# forward var still stops by name and remains outside the ran-set.
+TEST262_LANGUAGE_PASS_FLOOR=6628
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1353
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
