@@ -52534,7 +52534,8 @@ impl<'a> FuncBuilder<'a> {
         fields: &[Field],
         family: &'b access_families::Family,
     ) -> Option<&'b access_families::Supply> {
-        if !self.hierarchy.faces.contains(&ty) {
+        if !self.hierarchy.faces.contains(&ty) || !access_families::reserves(self, ty, family.face)
+        {
             return None;
         }
         let property = interfaces::property(self.snapshot, ty, &family.member);

@@ -458,6 +458,15 @@ impl Families {
     }
 }
 
+/// Declaration-only layouts reserve rows under the same candidate contract
+/// as concrete owners. A missing optional member does not authorize rows for
+/// a face whose required members the declaration cannot supply.
+pub(super) fn reserves(probe: &FuncBuilder<'_>, owner: TypeId, face: TypeId) -> bool {
+    properties(probe, face).is_some_and(|properties| {
+        candidate_satisfies(probe, &probe.hierarchy, face, owner, properties)
+    })
+}
+
 fn candidate_satisfies(
     probe: &FuncBuilder<'_>,
     hierarchy: &Hierarchy,
@@ -465,12 +474,13 @@ fn candidate_satisfies(
     owner: TypeId,
     properties: &[PropertyRecord],
 ) -> bool {
-    // An optional member cannot satisfy a required one. Such a type is
-    // disjoint from this face before ABI adaptation.
+    // Owners::candidates intersects these required names for concrete owners;
+    // declaration-only reservations must observe the same membership rule.
+    // An optional member cannot satisfy a required one either.
     if properties.iter().any(|wanted| {
         !wanted.optional
             && interfaces::property(probe.snapshot, owner, &wanted.name)
-                .is_some_and(|found| found.optional)
+                .is_none_or(|found| found.optional)
     }) {
         return false;
     }
