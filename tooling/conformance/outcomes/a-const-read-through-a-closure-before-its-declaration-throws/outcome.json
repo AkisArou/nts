@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: `x` was read before its declaration ran",
+  "node": "exit 1; nts: uncaught Observed: read after the declaration=after 2;read before the declaration=ReferenceError / after 2;",
+  "measured_with": "e0fd00828a8bb191",
+  "source": "measured"
+}
