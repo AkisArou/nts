@@ -310,7 +310,7 @@ function runCheck(dir, backend) {
   const said = `${ran.stdout ?? ""}${ran.stderr ?? ""}`.split("\n").map((l) => l.trim());
   const lines = said.filter(
     (l) => /^(checked|agreed|disagree|declined|refused:|nothing to check|invalid HIR)/i.test(l) || /\bdisagree/i.test(l),
-  );
+  ).map(stableCheckText);
   const text = lines.join(" | ");
   if (/invalid HIR/.test(text)) return { category: "invalid-hir", nts: text };
   if (/disagree/i.test(text)) return { category: "wrong-answer", nts: text };
@@ -327,6 +327,11 @@ function runCheck(dir, backend) {
   }
   if (/agreed on every case/.test(text)) return { category: "agrees", nts: text };
   return { category: "not-measured", nts: text || `nts check exited ${ran.status} and said nothing that decides` };
+}
+
+/** The construct, not its scratch directory or moved source location. */
+function stableCheckText(text) {
+  return text.replace(/\brefused:\s*\S+:\d+:\d+:\s+/g, "refused: ");
 }
 
 function measure(name) {
@@ -347,6 +352,18 @@ function measure(name) {
 // refused construct must come back `refused`, not "completed".
 
 function selfCheck() {
+  const summary = (site, count = 27) => ({
+    run: "check", category: "wrong-answer", node: null,
+    nts: `checked 29 cases | refused: ${site} NTS1001 missing method | Error: ${count} case(s) disagree`,
+  });
+  const before = summary("/scratch/100/source.ts:7:52:");
+  if (!judge(before, summary("/scratch/200/source.ts:8:53:")).ok) {
+    return "check refusal locations changed an identical observation";
+  }
+  if (judge(before, summary("/scratch/200/source.ts:8:53:", 28)).ok
+      || judge(before, { ...before, nts: before.nts.replace("missing method", "wrong contract") }).ok) {
+    return "check location normalization hid a changed count or refusal";
+  }
   const dir = join(SCRATCH, "self");
   const probe = (text) => {
     rmSync(dir, { recursive: true, force: true });
@@ -443,7 +460,10 @@ function judge(was, now) {
   // A refused build record says what its artefact did; one written before it
   // did has no `ran`, and reads as CHANGED until re-recorded, never as the same.
   const ranTo = (r) => (r.category === "refused" && r.run === "build" ? r.ran : undefined);
-  const same = was.category === now.category && was.nts === now.nts && ranTo(was) === ranTo(now);
+  // Old records retain their original spelling and provenance. Apply the same
+  // normalization to them that new check measurements use.
+  const textOf = (r) => r.run === "check" ? stableCheckText(r.nts) : r.nts;
+  const same = was.category === now.category && textOf(was) === textOf(now) && ranTo(was) === ranTo(now);
   const past = ranTo(now) !== undefined && ranTo(now) !== now.node && /^exit /.test(ranTo(now))
     ? ` -- and the program still ran, answering ${ranTo(now)} where node answers ${now.node}`
     : "";
@@ -460,7 +480,7 @@ function judge(was, now) {
       why: `was ${was.category}; hand it to tooling/conformance/blockers/ with\n                // expect: ${now.nts}`,
     };
   }
-  if (was.category === now.category && was.nts === now.nts) {
+  if (was.category === now.category && textOf(was) === textOf(now)) {
     return { word: "CHANGED", ok: false, why: `refused as before; its artefact ran to ${ranTo(was) ?? "(not recorded)"}, now ${ranTo(now)}` };
   }
   return { word: "CHANGED", ok: false, why: `${was.category} (${was.nts}) -> ${now.category} (${now.nts})` };

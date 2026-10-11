@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Type5 cannot be cast to class nts.rt.NtsMap (nts.gen.Type5 and nts.rt.NtsMap are in unnamed module of loader 'app')",
+  "node": null,
+  "measured_with": "7d1ed4b502cbc4ab",
+  "source": "measured"
+}
