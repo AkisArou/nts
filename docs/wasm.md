@@ -1,9 +1,11 @@
-# WebAssembly backend: M0 design for review
+# WebAssembly backend: design and bring-up plan
 
-Status: proposal, 2026-10-12 (Athens; probes recorded on 2026-10-11 UTC).
+Status: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
+on 2026-10-11 UTC). Additional exception evidence is recorded below.
 Scanned revision: `e52ddc97e160` on `wasm/m0`. This change contains documentation
 only. No backend, dependency, configuration surface or gate lane has been added.
-M1 starts after this design is reviewed.
+M1a is authorized. The shared provider change waits for MainCodex's Part 2
+stage B to land; the reviewer will notify this lane when it is safe to start.
 
 ## Recommendation and build composition
 
@@ -83,11 +85,16 @@ only for the RC provider. The JVM refuses counting operations and allocates its
 objects on the host heap despite native frame hints. Therefore “copy what JVM
 turns off” is not presently an available provider configuration.
 
-Request to MainCodex, routed through MainClaude: add one **`HostGc` provider**
-for JVM and wasm, and select it explicitly in their drivers. It must suppress
+Approved provider work: add one **`HostGc` provider** for JVM and wasm, and
+select it explicitly in their drivers. MainClaude authorized this lane to make
+that small core commit after Part 2 stage B lands, as a scoped exception to core
+file ownership. It must suppress
 native ownership lowering and native frame placement, while preserving semantic
 analysis and logical layouts. Do not reinterpret `NoGc` as host-managed memory.
 Reject `--rc` with either managed backend by name at build planning.
+Before landing, the JVM lane reviews byte-identical artifacts or every named,
+explained difference; C, LLVM and RC must remain unchanged. Land the provider
+commit before M1a, with a diagnostic for surviving `Retain`/`Release` operations.
 
 | HIR work | Under `HostGc` |
 | --- | --- |
@@ -491,6 +498,74 @@ These are local M0
 experiments, not compiler implementation or gate tests. The reviewed M1 work
 will add durable probes/fixtures under the owned wasm paths.
 
+### Follow-up: no-throw hot paths and the Node arm
+
+The follow-up kernel explicitly compares calls **outside try** and **inside
+try**, both with no throws. It also measures rare throws, every-call throws and
+a declared hot-path mix. Node/V8 versions and flags are unchanged. Each of the
+three arms warms for at least 600 ms; seven interleaved samples reverse arm order
+on successive rounds. Checksums are verified before warmup and after every
+sample. Forwarders are distinct static direct calls in both wasm and JS, allowing
+each compiler to choose inlining; the initial JS closure-forwarder variant is
+retained as rejected evidence, because its call shape was different.
+
+The JS arm uses `throw new Error('kernel')` with the negative-i result in a
+`value` property. It includes Error allocation; the native wasm arm throws an
+i32 tag payload, and the explicit arm stores flag/payload globals. They do not
+create a JS Error or reproduce its stack. This is an instruction/convention
+experiment, not the required same-TS-source benchmark of a compiled Error object.
+A realistic mix below is a **synthetic model**, not a measured application trace:
+15/16 of calls are outside try, 1/16 inside, with exactly one throw per 30,000
+iterations (one per 1,875 inside-try calls in this finite population). The rare
+all-inside case uses mask 1023, giving 29 throws per 30,000 iterations. Frequency
+labels describe this finite population; they are not production workload claims.
+
+Cells show **median ns per seed iteration [min, max] (max/min spread)**. Every
+ordinary sample contains 30 million iterations. For the always-throw case,
+explicit samples contain 30 million, native 3 million and JS 90,000 iterations;
+batch counts differ to keep native/JS Error runs practical and explicit timings
+above a few milliseconds. All arms use the identical 30,000-iteration kernel and
+verified integer checksum; raw JSON includes absolute ms, counts and all samples.
+Depth counts the seed plus forwarders, not an assumed number of residual machine
+calls after optimization.
+
+| Depth | Path/population | Explicit | Native wasm EH | Plain JS, Error |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | outside-never | 0.343 [0.341, 0.345] (1.01) | 0.327 [0.323, 0.331] (1.02) | 0.766 [0.755, 0.794] (1.05) |
+| 1 | inside-never | 0.339 [0.338, 0.346] (1.02) | 0.363 [0.362, 0.368] (1.02) | 0.757 [0.755, 0.760] (1.01) |
+| 1 | inside-rare | 0.352 [0.350, 0.356] (1.02) | 0.435 [0.433, 0.438] (1.01) | 2.439 [2.433, 2.487] (1.02) |
+| 1 | inside-always | 0.515 [0.515, 0.534] (1.04) | 70.472 [70.211, 70.999] (1.01) | 1725.665 [1721.991, 1733.993] (1.01) |
+| 1 | mixed-synthetic | 0.597 [0.591, 0.604] (1.02) | 0.434 [0.430, 0.444] (1.03) | 1.405 [1.403, 1.439] (1.03) |
+| 8 | outside-never | 2.610 [2.563, 2.756] (1.08) | 0.810 [0.808, 0.812] (1.01) | 0.757 [0.754, 0.759] (1.01) |
+| 8 | inside-never | 2.932 [2.738, 3.129] (1.14) | 0.795 [0.793, 0.797] (1.00) | 0.757 [0.755, 0.781] (1.03) |
+| 8 | inside-rare | 1.420 [1.366, 1.923] (1.41) | 0.908 [0.907, 0.911] (1.00) | 3.645 [3.641, 3.708] (1.02) |
+| 8 | inside-always | 1.538 [1.530, 1.545] (1.01) | 102.121 [100.815, 102.322] (1.01) | 2379.635 [2376.491, 2385.583] (1.00) |
+| 8 | mixed-synthetic | 3.193 [2.946, 3.270] (1.11) | 1.358 [1.327, 1.422] (1.07) | 1.426 [1.425, 1.431] (1.00) |
+
+The deepest no-throw cases favor native EH both inside and outside try; JS can
+inline these trivial direct calls too and is slightly faster than native wasm in
+that population. Per-call explicit checks are a material hot-path cost, so the
+throw-heavy row must not dominate the architecture choice when real programs
+rarely throw. The modeled mix also favors native over explicit at depth eight;
+its native median is close to JS and its spread prevents a precise claim of a
+win over Node. Conversely, actually throwing on every call strongly favors
+explicit returns, with native unwinding much cheaper than allocating a JS Error.
+The explicit rare-throw depth-eight spread remains 1.41 and its cost changes
+between frequency populations. A quiet confirmation has been requested from
+MainClaude; these results remain exploratory.
+
+Keep explicit raising for M1 because prepared HIR lacks the region contract
+required for native unwinding to preserve handlers/finalizers. Treat native EH
+as a serious M2 hot-path candidate once that contract is available, and decide
+with the same actual TS workload in Node and nts, measured throw distributions,
+correctness, size and startup. Do not turn this kernel into a general compiler
+speedup claim or a permanent rejection of native exceptions.
+
+Evidence: `exception-paths.mjs`, `exception-paths.json` and
+`exception-paths.log` in the same local evidence directory; script SHA-256:
+`9cada9b88e147fbfd296eceaa6d8e2dcc4b72ba43a20027c498f75a7744f3f15`. The rejected closure-forwarder run is
+kept as `exception-paths-closure-forwarders.{mjs,json,log}` for audit.
+
 ## Encoding, validation and dependency proposal
 
 Create `compiler/codegen/wasm` with separate type/host planning, support checking,
@@ -714,6 +789,10 @@ Prioritize `loop`, `checksum`, `accumulate`, `fib`, `arrays`, `array-mutations`,
 Map this list to the bench instrument's discovered names rather than creating
 similar substitute benchmarks. Later: generator, async ordering, JSON/Web API
 streams, DOM mutation batches and React mount/update/reorder/effects.
+The M2 EH experiment includes Node running the same kernel with
+`throw new Error()`, besides explicit and native wasm raising. Measure mixed
+`string | number` erasure, closure-thunk casts and dispatch-route counts rather
+than inferring those costs from a scalar-only kernel.
 
 Measure separately: compile, instantiate, module initialization, first call,
 steady work, total process startup and GC/allocation. Publish raw/gzip bytes of
@@ -722,6 +801,8 @@ function/type. Provisional M1 review budgets: a scalar-only smoke module plus
 loader ≤32 KiB raw; core-language support runtime plus host overhead ≤256 KiB raw,
 excluding application code and optional debug names; no unused helper family in
 a scalar artifact. These are falsifiable budgets to validate, not achieved sizes.
+When M6 is near, compare the reported raw/gzip runtime and host bytes with the
+React plus ReactDOM JS bundle for the same application.
 
 Startup target: report cold compile/instantiate/initialize separately from Node
 startup and compare a fresh-process first useful operation against importing the
@@ -736,15 +817,21 @@ entries per benchmark to identify whether a gap is inside wasm or at the boundar
 | M1a | Provider hook, encoder/validator, scalars, functions, globals, arbitrary CFG support, Node loader. Direct and irreducible fixtures agree or decline by name; every emitted artifact validates |
 | M1b | JS strings, ordinary arrays, classes without interface dispatch, closures, erased supported values and explicit exceptions. Public boundary limitations are named |
 | M1 complete | `nts emit-wasm`, Node check/glue and manual `agree` lane over **all** discovered examples: **0 wrong answers**, every emitted module validates/links, matches and named declines counted separately, every example accounted for, and **0 regressions** on C/LLVM/JVM/RC. Report exact counts and supported core-language fixtures; a lane declining everything does not meet M1 |
+| M1c | Map, Set and Date, prioritized immediately after M1 and before browser work; corresponding fixtures agree with Node and validate/link |
 | M2 | Real nts-bench paired rows versus Node, size/startup and boundary-call counts; fix measured gaps at their root, including structuring, boxing and dispatch; review native EH experiment if warranted |
 | M3 | Browser adapter and generated DOM/Web API bindings; native host URL/fetch/streams when compatible; identity, callback and microtask tests plus measured DOM boundary costs |
 | M4 | WASI 0.2 CLI component with gc-utf16 specialization, canonical adapter/resources and verified engine compatibility; CLI output/exception/resource/encoding fixtures agree |
 | M5 | Settled interface dispatch plus full async/generators, including the observed irreducible resume graph; mixed JS/wasm microtask, finally, rejection and generator-protocol traces match |
 | M6 | Compile this repo's React and application code once their native blockers clear; upstream behavioral oracle and same-app JS/wasm benchmarks decide every performance claim |
 
-Open review decisions: accept the shared HostGc request; approve the two proposed
-Rust dependencies; accept explicit raising for M1 and the host-specific binary
-contract; refine the provisional size budgets and the M1 public boundary scope.
+Reviewed decisions: shared HostGc, wasm-encoder plus wasmparser 0.261.0,
+explicit raising for M1, host-specific binaries, provisional size budgets and
+the M1 public boundary scope are approved. Pin the dependencies in Cargo.lock
+and check their license/MSRV against workspace policy before implementation.
+Optional-field presence must follow the upcoming core initialization/absence
+contract; ask the core owner when implementing it rather than adding a wasm-only
+presence convention. Keep wasm out of every existing `Backend::ALL` gate loop
+and show that invariant in the M1a review.
 Dispatch/erasure optimizations remain measured choices, not claims derived from
 target features. No shared file is edited by this M0 deliverable.
 
