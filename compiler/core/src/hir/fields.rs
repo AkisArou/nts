@@ -16,10 +16,12 @@
 //! across the native boundary can also be written by callers; their contents
 //! are unknown and their numeric storage must retain its declared width.
 //!
-//! Zero is joined in as well, because that is what an allocation leaves. A
-//! well-typed TypeScript program cannot read a field before its constructor
-//! writes it, but proving that here would mean a definite-assignment analysis
-//! for a fact worth one endpoint of an interval.
+//! Zero is joined in because that is what the allocator leaves in storage.
+//! This is a storage fact, not proof that a JavaScript read is initialized:
+//! a definite-assignment assertion or an escaping constructor can expose an
+//! unwritten field, whose JavaScript value is undefined. Read licensing and
+//! absence folding need an initialization proof or undefined-capable storage;
+//! these numeric facts grant neither.
 //!
 //! # Aliasing, and why base-first makes it easy
 //!
