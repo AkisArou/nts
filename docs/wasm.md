@@ -335,19 +335,30 @@ Recommended structurer: compute reachable RPO, dominators, postdominators and
 loop/SCC structure; build a region tree of sequences, if/else joins and natural
 single-entry loops; emit block/loop labels and edge copies with a recorded mapping
 from every original edge to its emitted branch. Scope validation is mandatory.
-This region algorithm need not pretend it recognizes every reducible graph.
-If it cannot prove an edge's scope or a region's join, use the general fallback.
+Reducible graphs take this structured route. Within a loop region, remove its
+dominating backedges, order the remaining acyclic graph, and wrap forward branch
+destinations in nested blocks; recognized if/else joins are a compact form of
+those scopes, not the only supported forward-edge shape. Natural-loop labels
+handle backedges, and labels in the parent region handle loop exits. Recursively
+apply that construction to the loop forest and certify every original edge.
+If an initially incomplete implementation cannot prove a reducible edge's scope,
+decline that function by name as a structurer implementation gap; do not silently
+route it through the dispatcher. M1a must exercise multiple exits, joins and
+block-parameter cycles as well as simple source loops.
 Stackify single-use pure values within a block only after this path is sound.
 
-The fallback is a **per-function dispatcher**, valid for arbitrary CFGs: an i32
+The fallback is a **per-function dispatcher for irreducible functions only**:
+first prove the reachable graph has an irreducible cycle; then use an i32
 program counter, an outer loop, nested case blocks and `br_table`; each original
 terminator performs edge copies, sets the next case, and branches to the loop.
 Return/unreachable exit normally. No local reassignment or side effect is cloned.
-This supports the observed generator graph and also reducible graphs outside the
-initial region recognizer. Later use per-SCC dispatch or node splitting only if
+The full observed `examples/generators` `triangle__resume` graph is its required
+fixture; scalar-only versions of its edge topology can exercise M1a before the
+generator runtime is supported. Later use per-SCC dispatch or node splitting only if
 measurement pays for its extra code and proof surface. Reject a “loop syntax only”
 structurer, guessing from block order, and universal dispatch as the final fast
-path. M1 reports how many functions use each route and times both on ordinary loops.
+path. M1 reports how many functions use each route and times structured ordinary
+loops plus the irreducible dispatcher fixture.
 
 In the following inventory, **M1** means planned support at M1 completion,
 not a claim of implementation today. Type/boundary limitations above apply.
@@ -487,7 +498,9 @@ not a general V8 performance guarantee. Both kernels verify checksums and time
 work inside wasm; they make no per-element JS boundary calls. The first shorter
 run was discarded as a decision instrument because warmup and sample size were
 inadequate. A quiet repeat is requested if this evidence is used beyond exploratory
-representation selection.
+representation selection in M2; no quiet window is requested for the current
+exploratory boxing probe. The design uses i31 for small integers, with boxed f64 otherwise;
+the real M2 erasure benchmarks decide the representation's performance.
 
 Raw scripts, dumps and JSON are retained for review under
 `/home/akisarou/.cache/nts-parallel-20261004/mainctl/wasm-evidence/`:
@@ -554,12 +567,16 @@ The explicit rare-throw depth-eight spread remains 1.41 and its cost changes
 between frequency populations. A quiet confirmation has been requested from
 MainClaude; these results remain exploratory.
 
-Keep explicit raising for M1 because prepared HIR lacks the region contract
-required for native unwinding to preserve handlers/finalizers. Treat native EH
-as a serious M2 hot-path candidate once that contract is available, and decide
-with the same actual TS workload in Node and nts, measured throw distributions,
-correctness, size and startup. Do not turn this kernel into a general compiler
-speedup claim or a permanent rejection of native exceptions.
+Native tag-payload throw costs are within the JS Error arm's costs for both rare
+and every-call throwing. Recommend native EH as the **eventual single default**
+once a region-aware core contract permits correct lowering; dominant no-throw
+paths weigh heavily in that choice. Keep explicit raising for M1 under the later
+M0 approval because prepared HIR lacks that contract and native unwinding would
+not preserve handlers/finalizers. Confirm the eventual choice in M2 with the
+same actual TS workload in Node and nts, equal thrown-value/stack semantics,
+measured throw distributions, correctness, size and startup. No hybrid is
+proposed; a real benchmark must demonstrate the need before adding another
+convention. This kernel is not a general compiler speedup claim.
 
 Evidence: `exception-paths.mjs`, `exception-paths.json` and
 `exception-paths.log` in the same local evidence directory; script SHA-256:
