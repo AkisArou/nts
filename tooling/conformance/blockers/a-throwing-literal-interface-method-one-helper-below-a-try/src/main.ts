@@ -1,4 +1,4 @@
-// run: check
+// expect: a call inside a body that carries a `throw` back to its caller
 interface Wakeable { then(resolve: () => unknown, reject: () => unknown): unknown }
 function invoke(value: Wakeable): number {
   value.then(() => undefined, () => undefined);

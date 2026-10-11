@@ -1,8 +1,12 @@
 # Literal methods fill their own dispatch rows
 
 Part 1c extends structural method inference to literal implementers. Its control
-is main `ede19442c81c`; the final measured compiler binary has SHA-256
-`a3928e73cbbb672ebb4b5a8ea767c25a07e8a4c691a6c818b32264684d044a27`.
+is main `f6811e8f3565`, whose compiler binary is identical to `ede19442c81c`;
+the final production source pin is `921affec716e` (SHA-256
+`a4266105fd4debab5d6aa3326c07b4089d85a80b648f867fcb02e14a7481c3ca`).
+Size and benchmark measurements used the semantically identical ninth build
+`a3928e73cbbb672ebb4b5a8ea767c25a07e8a4c691a6c818b32264684d044a27`;
+the intervening compiler edits only change Rust documentation.
 The frontend is the same tsgo used in record 0348.
 
 ## Evidence belongs to the allocation
@@ -49,8 +53,8 @@ check stable live RC bytes after 1,000 discarded managed results. All final
 boundary tests and workspace Clippy with warnings denied pass. The full gate
 is still required for landing.
 
-The blocker set has 317 expected refusals. Nine outcomes are promoted to examples
-or honest blockers; the remaining 137 outcomes report 67 holds and 70 reproductions.
+The blocker set has 319 expected refusals. Ten outcomes are promoted to examples
+or honest blockers; the remaining 138 outcomes report 67 holds and 71 reproductions.
 The independently pinned class/string tuple storage defect and empty-record cast
 to dictionary defect remain outcomes, as does mixed method identity and invocation.
 Two native-correct fixtures deliberately stop on the JVM when absence or callback
@@ -66,10 +70,19 @@ interface struct declarations account for the other modules' differences.
 
 Both GTK and libadwaita host-driver tests pass on C and LLVM. The full GTK counter
 still refuses 769 functions, drops its entry invocation and exits without output.
-Its next entry-chain stop is `then@raises`: initial React Thenable supplies fit
-Wakeable, but unknown computed writes conservatively block their interface edges
-and therefore the raising slots. The write-precision follow-up must prove which
-writes cannot replace `then`; it must not bypass the unknown-write guard.
+Its next entry-chain stop is `then@raises`. React Thenable supplies fit Wakeable
+and their ordinary field forwarders exist in the actual CLI product build. The
+shared raising-family collector only sees directly guarded interface calls;
+it misses calls inside a helper or callback's raising body. Main's declared-class
+control already refuses this shape. Main's literal control loses six exceptions
+in 29 cases, while 1c refuses it honestly. Both witnesses are blockers, and
+repairing the shared transitive seed is the immediate separate follow-up.
+
+An earlier raw-frontend diagnostic reported blocking computed writes. The actual
+CLI product frontend installs GIR bindings and the React transform and sees a
+different program: its four named Thenable owners have zero unknown-key or
+named `then` writes, all fit, and gain their edges. The inference and missing
+raising forwarders, rather than that raw diagnostic, establish the cause.
 
 Legacy-only classification covers 127 interface occurrences across 14 runtime
 families, at most 13 in a module (stream 12, HTTP 13). GTK counter and GTK state
@@ -77,7 +90,7 @@ have zero; Wakeable is never legacy-only. The families are AsyncIterator,
 AsyncWriter, ClassicReadableLike, ClassicWritableLike, CookieJarStore,
 DestroyableStream, ErrorOrDestroyStream, HTTPDuplex, LegacyReadableSource,
 SocketConnector, StreamAbortSignal, SyncWriter, TlsUpgrader and Utf8StreamFileSystem.
-Wakeable write precision is next, followed immediately by Part 2's accessor slots.
+The shared raising-family seed repair is next, followed by Part 2's accessor slots.
 
 ## Performance carry-forward is an executable proof
 

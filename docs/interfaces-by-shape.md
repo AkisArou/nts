@@ -192,13 +192,16 @@ also used by a declared class cannot assume that class has the literal's closure
 field. Typed heterogeneous tuples retain the separately pinned core storage defect;
 this change does not reinterpret their elements as compatible object pointers.
 
-React's actual Thenable supplies satisfy Wakeable's initial contract, but unknown
-computed writes conservatively block their inferred edges and raising slots. The
-GTK counter's next entry-chain stop remains `then@raises`; the widget-driver
-controls pass on C and LLVM. The immediate follow-up is **Wakeable write
-precision**: inventory the blocking writes and prove which cannot replace `then`
-before narrowing their receiver or key coverage. Keep unknown writes protected.
-After that, Part 2 comes next: the legacy-only fallback covers 127 interface
+React's actual Thenable supplies satisfy Wakeable's contract and gain inferred
+edges in the CLI product build. The GTK counter's next entry-chain stop remains
+`then@raises`: existing raising-family numbering only seeds interface calls
+directly guarded by a try, and misses calls inside a helper or callback's raising
+body. The declared-class control fails the same way on main; the literal control
+loses six exceptions on main and is now refused honestly. Both are pinned as
+blockers. Direct try/catch calls pass, including throwing and non-throwing
+Thenable supplies, as do the widget-driver controls on C and LLVM. Repairing this
+shared transitive raising-family seed is the immediate separate follow-up.
+Then Part 2 comes next: the legacy-only fallback covers 127 interface
 occurrences across 14 runtime families (stream 12, HTTP 13), and none in either
 GTK counter or GTK state. Wakeable itself is not legacy-only.
 
