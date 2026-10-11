@@ -7263,16 +7263,17 @@ fn a_call_that_can_raise(
 fn a_value_held_callee(snapshot: &SemanticSnapshot, probe: &FuncBuilder, symbol: u32) -> bool {
     snapshot.symbols.get(symbol as usize).is_some_and(|record| {
         record.declarations.iter().any(|at| {
-            matches!(
-                probe.kind_of(*at),
-                Some(
-                    syntax::VARIABLE_DECLARATION
-                        | syntax::PARAMETER
-                        | syntax::PROPERTY_DECLARATION
-                        | syntax::PROPERTY_SIGNATURE
-                        | syntax::BINDING_ELEMENT
+            taken_as_a_closure(&probe.closures, *at)
+                || matches!(
+                    probe.kind_of(*at),
+                    Some(
+                        syntax::VARIABLE_DECLARATION
+                            | syntax::PARAMETER
+                            | syntax::PROPERTY_DECLARATION
+                            | syntax::PROPERTY_SIGNATURE
+                            | syntax::BINDING_ELEMENT
+                    )
                 )
-            )
         })
     })
 }
@@ -7660,8 +7661,11 @@ fn written_field_orders(
     written_order
 }
 
-fn naming(snapshot: &SemanticSnapshot) -> Naming {
+fn naming(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> Naming {
     let mut probe = FuncBuilder::probe(snapshot);
+    // Captured function declarations are closure values too. The same table
+    // must classify their calls during raising analysis and during lowering.
+    probe.closures = closures.to_vec();
     probe.module.initialization = std::rc::Rc::new(initialization::analyze(snapshot, &probe));
     let class_tokens = class_token_indices(snapshot);
     let generators = generator_indices(snapshot);
@@ -15042,7 +15046,7 @@ fn hierarchy_and_naming(
 ) -> (Hierarchy, Naming) {
     let mut hierarchy =
         collect_hierarchy(snapshot, foreign, closures, &qualified_names(snapshot).0);
-    let mut naming = naming(snapshot);
+    let mut naming = naming(snapshot, closures);
     hierarchy.closures_carry = naming.closures_carry;
     hierarchy.gate_holder = naming.gate_holder.as_deref().map(std::sync::Arc::from);
     raising_member_slots(snapshot, &mut hierarchy, &mut naming);
