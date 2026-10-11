@@ -14,7 +14,7 @@ use nts_semantic_schema::{SymbolId, VariableKind, syntax};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
-    FuncBuilder, HirType, ManagedType, NodeId, PrimitiveBuiltin, SemanticSnapshot,
+    ClosureInfo, FuncBuilder, HirType, ManagedType, NodeId, PrimitiveBuiltin, SemanticSnapshot,
     binds_its_own_this, children_in_the_body_of, children_that_run, declaration_initializer,
     declared_base_class, declares_a_class, evaluation_order, implemented_member, is_static_member,
     names_a_body, raising_callees_of, reads_a_name, the_constructor_declared_by, the_function_of,
@@ -40,6 +40,8 @@ pub(super) struct Analysis {
     guarded_expressions: FxHashSet<NodeId>,
     flagged_declarations: FxHashSet<NodeId>,
     cyclic: FxHashSet<usize>,
+    lexical_cells: FxHashSet<u32>,
+    ready_cells: FxHashSet<u32>,
 }
 
 impl Analysis {
@@ -49,6 +51,14 @@ impl Analysis {
 
     pub(super) fn can_raise_at(&self, at: NodeId) -> bool {
         self.guarded_expressions.contains(&at)
+    }
+
+    pub(super) fn lexical_cell(&self, symbol: u32) -> bool {
+        self.lexical_cells.contains(&symbol)
+    }
+
+    pub(super) fn cell_needs_guard(&self, symbol: u32) -> bool {
+        !self.ready_cells.contains(&symbol)
     }
 
     pub(super) fn proven_ready(&self, symbol: u32) -> bool {
@@ -66,6 +76,54 @@ impl Analysis {
 
     pub(super) fn guards_declaration(&self, declaration: NodeId) -> bool {
         self.flagged_declarations.contains(&declaration)
+    }
+
+    fn captured_cells(&mut self, probe: &FuncBuilder, closures: &[ClosureInfo]) {
+        self.lexical_cells = super::guarded_symbols(closures)
+            .into_iter()
+            .filter(|symbol| {
+                probe
+                    .snapshot
+                    .symbols
+                    .get(*symbol as usize)
+                    .is_some_and(|record| {
+                        !record.declarations.is_empty()
+                            && record.declarations.iter().all(|declaration| {
+                                matches!(
+                                    probe.variable_kind(*declaration),
+                                    Some(VariableKind::Let | VariableKind::Const)
+                                )
+                            })
+                    })
+            })
+            .collect();
+        self.ready_cells = cells_proven_ready(probe, closures, &self.lexical_cells);
+        // A captured lexical read can throw even though its enclosing function
+        // contains no explicit throw. Publish the effect before raising copies
+        // are selected, and retain it through typeof and constant folding.
+        for closure in closures.iter().filter(|closure| closure.refusal.is_none()) {
+            if !closure.captures.iter().any(|capture| {
+                self.lexical_cell(capture.symbol) && self.cell_needs_guard(capture.symbol)
+            }) {
+                continue;
+            }
+            let mut subtree = Vec::new();
+            probe.subtree(closure.node, &mut subtree);
+            for at in subtree {
+                if reads_a_name(probe, at)
+                    && probe.node(at).symbol.is_some_and(|symbol| {
+                        self.lexical_cell(symbol.0)
+                            && self.cell_needs_guard(symbol.0)
+                            && closure
+                                .captures
+                                .iter()
+                                .any(|capture| capture.symbol == symbol.0)
+                    })
+                {
+                    self.preserve_effect(probe, at);
+                }
+            }
+        }
     }
 
     fn guard(&mut self, probe: &FuncBuilder, at: NodeId, symbol: u32) {
@@ -95,6 +153,119 @@ impl Analysis {
             }
         }
     }
+}
+
+fn syntax_parent(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
+    std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent)
+        .find(|at| probe.kind_of(*at).is_some())
+}
+
+fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
+    std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent)
+        .find(|at| names_a_body(probe.kind_of(*at)))
+}
+
+/// A declaration directly in a function body runs before every later source
+/// statement in that body. If its initializer throws, none of those statements
+/// executes. A nested block or loop does not establish that same fact.
+fn unconditional_owner(probe: &FuncBuilder, declaration: NodeId) -> Option<NodeId> {
+    let statement = if probe.kind_of(declaration) == Some(syntax::VARIABLE_DECLARATION) {
+        probe.ancestor(declaration, syntax::VARIABLE_STATEMENT)?
+    } else {
+        declaration
+    };
+    let block = syntax_parent(probe, statement)?;
+    if probe.kind_of(block) != Some(syntax::BLOCK) {
+        return None;
+    }
+    let owner = syntax_parent(probe, block)?;
+    names_a_body(probe.kind_of(owner)).then_some(owner)
+}
+
+/// Prove readiness only for a private reader whose every value use is a direct
+/// call in the declaring invocation, after the binding's declaration. Escaped
+/// readers, calls from another body, and re-entered scopes keep their guard.
+/// This is deliberately a permission to omit, never a guess about a callback.
+fn cells_proven_ready(
+    probe: &FuncBuilder,
+    closures: &[ClosureInfo],
+    candidates: &FxHashSet<u32>,
+) -> FxHashSet<u32> {
+    let mut mentions: FxHashMap<u32, Vec<NodeId>> = FxHashMap::default();
+    for (index, node) in probe.snapshot.nodes.iter().enumerate() {
+        let Ok(index) = u32::try_from(index) else {
+            continue;
+        };
+        let at = NodeId(index);
+        if reads_a_name(probe, at)
+            && let Some(symbol) = node.symbol
+        {
+            mentions.entry(symbol.0).or_default().push(at);
+        }
+    }
+    candidates
+        .iter()
+        .copied()
+        .filter(|symbol| {
+            let Some(record) = probe.snapshot.symbols.get(*symbol as usize) else {
+                return false;
+            };
+            let [declaration] = record.declarations.as_slice() else {
+                return false;
+            };
+            let Some(owner) = unconditional_owner(probe, *declaration) else {
+                return false;
+            };
+            let initialized = probe.node(*declaration).origin.location;
+            closures
+                .iter()
+                .filter(|closure| {
+                    closure.refusal.is_none()
+                        && closure
+                            .captures
+                            .iter()
+                            .any(|capture| capture.symbol == *symbol)
+                })
+                .all(|closure| {
+                    let binding = match probe.kind_of(closure.node) {
+                        Some(syntax::FUNCTION_DECLARATION) => closure.node,
+                        Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {
+                            let Some(binding) = syntax_parent(probe, closure.node) else {
+                                return false;
+                            };
+                            if probe.kind_of(binding) != Some(syntax::VARIABLE_DECLARATION)
+                                || the_function_of(probe, binding) != closure.node
+                            {
+                                return false;
+                            }
+                            binding
+                        }
+                        _ => return false,
+                    };
+                    if execution_owner(probe, binding) != Some(owner) {
+                        return false;
+                    }
+                    let Some(name) = probe.children(binding).first().copied() else {
+                        return false;
+                    };
+                    let Some(reader) = probe.node(name).symbol else {
+                        return false;
+                    };
+                    mentions.get(&reader.0).is_some_and(|uses| {
+                        uses.iter().all(|at| {
+                            if *at == name {
+                                return true;
+                            }
+                            let called = probe.node(*at).origin.location;
+                            probe.is_callee(*at)
+                                && execution_owner(probe, *at) == Some(owner)
+                                && called.file == initialized.file
+                                && called.span.start > initialized.span.end
+                        })
+                    })
+                })
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -675,7 +846,11 @@ fn module_bindings(probe: &FuncBuilder) -> FxHashMap<u32, Binding> {
 
 /// One traversal per module frontier, with cached bodies and bounded worklists.
 /// A frontier ends at each binding, including each element of a pattern.
-pub(super) fn analyze(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Analysis {
+pub(super) fn analyze(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    closures: &[ClosureInfo],
+) -> Analysis {
     let mut analysis = Analysis {
         bindings: module_bindings(probe),
         cyclic: evaluation_order(snapshot, &[])
@@ -685,6 +860,7 @@ pub(super) fn analyze(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Analy
             .collect(),
         ..Analysis::default()
     };
+    analysis.captured_cells(probe, closures);
     let bindings = analysis.bindings.clone();
     let mut summaries = Summaries {
         probe,

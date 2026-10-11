@@ -3,7 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, Callee, OpKind};
+use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 #[test]
@@ -144,4 +144,71 @@ fn a_folded_module_initializer_retains_its_exception() {
             .is_some_and(|base| error.types.contains(&base)),
         "a synthesized ReferenceError must carry its Error ancestry"
     );
+}
+
+#[test]
+fn captured_initialization_throws_and_proven_late_readers_need_no_flag() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/captured-initialization/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot succeeds");
+    let prepared = hir::prepare(&snapshot).expect("HIR verifies");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let program = &prepared.program;
+    for name in ["earlyNamed", "earlyTypeof", "passedBefore"] {
+        let function = program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .expect("reader retained");
+        assert!(function.values.iter().any(|op| matches!(
+            &op.kind, OpKind::Call { callee: Callee::External(name), .. } if name == "nts_raise_take"
+        )), "{name} must retain a handler edge for the synthesized throw");
+    }
+    assert!(
+        program
+            .funcs
+            .iter()
+            .flat_map(|func| &func.values)
+            .all(|op| !matches!(op.kind, OpKind::CellReady { .. })),
+        "lexical cells throw through ordinary HIR, without a backend stop"
+    );
+    for name in ["lateNamed", "lateArrow"] {
+        let function = program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .expect("reader retained");
+        let cells: Vec<_> = function
+            .values
+            .iter()
+            .filter_map(|op| {
+                if matches!(op.kind, OpKind::ObjectNew { .. })
+                    && let HirType::Managed(ManagedType::Object(ty)) = op.ty
+                    && let Some(layout) = program.layout(ty)
+                    && layout.name.starts_with("Cell")
+                {
+                    Some(layout)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(
+            !cells.is_empty(),
+            "{name} still captures the forward binding"
+        );
+        assert!(
+            cells.iter().all(|layout| layout.fields.len() == 1),
+            "{name}'s proven-ready cell must not carry readiness storage"
+        );
+    }
 }

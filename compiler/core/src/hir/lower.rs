@@ -3524,7 +3524,8 @@ struct Capture {
     /// The cell then exists before it holds anything, and a body that runs in
     /// that window would read a zero where JavaScript throws a
     /// `ReferenceError`. Such a cell carries a `ready` flag and its reads are
-    /// guarded, so the program stops instead of answering.
+    /// guarded. Lexical bindings throw `ReferenceError` through ordinary HIR;
+    /// a forward var retains a named stop until its cell can hold undefined.
     ///
     /// Only a *closure* can reach that window: TypeScript rejects a direct use
     /// before declaration in the same scope, so there is no other way in.
@@ -3653,11 +3654,9 @@ fn reached_by_name(
     false
 }
 
-/// The symbols a program captures *by reference*, in a stable order.
-///
-/// Each one becomes a cell, and its position here is the cell's identity. A
-/// sorted list rather than a set because that position is baked into a type id
-/// and a struct name, and two runs of one compiler have to agree.
+/// The symbols whose cell may need to say whether it has been filled yet.
+/// Initialization analysis can prove some lexical readers ready and omit
+/// their flag; a remaining forward var keeps the named stop for now.
 fn guarded_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
     let mut found: Vec<u32> = closures
         .iter()
@@ -3671,13 +3670,8 @@ fn guarded_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
     found
 }
 
-/// The symbols whose cell has to say whether it has been filled in yet.
-///
-/// A cell for a name declared *below* the closure that reads it exists before
-/// the declaration runs. Reading it then is a `ReferenceError` in JavaScript
-/// and would be a zero here, so those cells carry a flag and their reads inside
-/// a closure are guarded. Every other cell has no such window and carries
-/// nothing.
+/// The symbols a program captures by reference, in a stable order.
+/// Each position is a cell's type identity, so two compiler runs must agree.
 fn boxed_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
     let mut found: Vec<u32> = closures
         .iter()
@@ -7666,7 +7660,8 @@ fn naming(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> Naming {
     // Captured function declarations are closure values too. The same table
     // must classify their calls during raising analysis and during lowering.
     probe.closures = closures.to_vec();
-    probe.module.initialization = std::rc::Rc::new(initialization::analyze(snapshot, &probe));
+    probe.module.initialization =
+        std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures));
     let class_tokens = class_token_indices(snapshot);
     let generators = generator_indices(snapshot);
     let written_order = written_field_orders(snapshot, &probe);
@@ -31775,9 +31770,9 @@ impl<'a> FuncBuilder<'a> {
 
     /// Whether the cell at `index` carries a `ready` flag.
     fn is_guarded(&self, index: usize) -> bool {
-        self.boxed
-            .get(index)
-            .is_some_and(|symbol| self.guarded.contains(symbol))
+        self.boxed.get(index).is_some_and(|symbol| {
+            self.guarded.contains(symbol) && self.module.initialization.cell_needs_guard(*symbol)
+        })
     }
 
     /// Move a name into its cell, and bind the name to the cell.
@@ -31901,10 +31896,9 @@ impl<'a> FuncBuilder<'a> {
     /// it, and those can be in different branches. The entry block dominates
     /// everything, so this is the one placement that always holds.
     ///
-    /// The cell is zeroed until the declaration runs. JavaScript throws a
-    /// `ReferenceError` for a read in that window; this answers with the zero.
-    /// The two differ only for a program that would throw, which is the same
-    /// bargain the rest of this compiler makes with exceptions.
+    /// The cell stays unready until the declaration runs. Its lexical reads
+    /// throw `ReferenceError`; a forward var keeps the named representation
+    /// stop until its cell can represent JavaScript's initial undefined.
     fn open_cell_early(&mut self, symbol: u32, at: NodeId) -> Option<ValueId> {
         let index = self.cell_of(symbol)?;
         // **`closure_bound_to` first, exactly as `captured_as` asks it.** The
@@ -31929,11 +31923,21 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// Read a name that lives in a cell.
-    fn read_cell(&mut self, symbol: u32, cell: ValueId, at: NodeId) -> Option<ValueId> {
-        let index = self.cell_of(symbol)?;
-        let ty = self
+    fn read_cell(
+        &mut self,
+        symbol: u32,
+        cell: ValueId,
+        at: NodeId,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(index) = self.cell_of(symbol) else {
+            return Ok(None);
+        };
+        let Some(ty) = self
             .program_layout_field(index)
-            .or_else(|| self.type_of(at))?;
+            .or_else(|| self.type_of(at))
+        else {
+            return Ok(None);
+        };
         let origin = self.origin(at);
         // Inside a closure only. A read before the declaration is the one thing
         // the typechecker cannot catch here, because the body runs later; a
@@ -31944,20 +31948,50 @@ impl<'a> FuncBuilder<'a> {
                 .text
                 .clone()
                 .unwrap_or_else(|| "a name".to_owned());
-            self.push(
-                OpKind::CellReady { cell, name },
-                HirType::Void,
-                origin.clone(),
-            );
+            if self.module.initialization.lexical_cell(symbol) {
+                let ready = self.push(
+                    OpKind::FieldGet {
+                        object: cell,
+                        field: 1,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                let unset = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+                let missing = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Eq,
+                        lhs: ready,
+                        rhs: unset,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                self.refuse_when(
+                    at,
+                    missing,
+                    "ReferenceError",
+                    &format!("Cannot access '{name}' before initialization"),
+                )?;
+            } else {
+                // Forward var cells cannot yet represent undefined. Keep the
+                // named stop until their representation and unguarding change
+                // together; var has no lexical dead zone.
+                self.push(
+                    OpKind::CellReady { cell, name },
+                    HirType::Void,
+                    origin.clone(),
+                );
+            }
         }
-        Some(self.push(
+        Ok(Some(self.push(
             OpKind::FieldGet {
                 object: cell,
                 field: 0,
             },
             ty,
             origin,
-        ))
+        )))
     }
 
     /// The type a cell holds, from the layout this function already pushed.
@@ -46589,7 +46623,7 @@ impl<'a> FuncBuilder<'a> {
                     .bindings
                     .get(&symbol)
                     .ok_or_else(|| self.unsupported(id, "reading a name before it is bound"))?;
-                self.read_cell(symbol, bound, id).unwrap_or(bound)
+                self.read_cell(symbol, bound, id)?.unwrap_or(bound)
             }
         })
     }
@@ -76941,7 +76975,7 @@ impl<'a> FuncBuilder<'a> {
         {
             // A name something captured *and* writes to is bound to its cell,
             // so reading it is a load rather than the binding itself.
-            let value = self.read_cell(symbol.0, value, id).unwrap_or(value);
+            let value = self.read_cell(symbol.0, value, id)?.unwrap_or(value);
             return self.narrowed(id, value);
         }
         let origin = self.origin(id);
@@ -77076,7 +77110,7 @@ impl<'a> FuncBuilder<'a> {
         symbol: nts_semantic_schema::SymbolId,
     ) -> Result<ValueId, Diagnostic> {
         if let Some(value) = self.bindings.get(&symbol.0).copied() {
-            let value = self.read_cell(symbol.0, value, id).unwrap_or(value);
+            let value = self.read_cell(symbol.0, value, id)?.unwrap_or(value);
             return self.narrowed(id, value);
         }
         // An imported name, resolved to what it imports. Below the local
