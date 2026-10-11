@@ -94,6 +94,9 @@ negative ceiling stays 1,353. The forward-var witness still stops by name.
 ## Boundary
 
 Forward `var` reads still use their named stop. Removing it while a scalar
-cell cannot hold `undefined` would give a deterministic wrong scalar. The
-next change must add that representation and remove the guard together.
+cell cannot hold `undefined` would give a deterministic wrong scalar. That
+representation and the value-read guard must change together.
+[Record 0354](0354-captured-var-typeof-uses-assignment-readiness.md) handles
+bare typeof observations locally and defers broader undefined transport
+until a real-code witness justifies it.
 Fresh lexical storage for re-entered blocks remains a separate gap.
