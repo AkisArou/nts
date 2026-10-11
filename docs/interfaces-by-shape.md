@@ -254,8 +254,10 @@ also prove that all remaining suppliers share the receiver's exact layout;
 this evidence keeps the access direct without assuming that a prefix will
 survive later storage specialization.
 
-Pure stored rows reserve table positions by their storage and absence contract,
-then acquire canonical bodies after layouts merge. Owner-qualified reservation
+Pure stored and missing-field rows reserve table positions by their storage and
+absence contract, then acquire canonical bodies after layouts merge. A semantic
+record with no allocation reserves a missing-field default only when both its
+properties and physical fields lack the member. Owner-qualified reservation
 names must not prevent otherwise identical literal and interface layouts from
 sharing storage. User-code accessors retain their concrete owner identity.
 Unallocated generic closure templates do not become reachable merely because
@@ -271,6 +273,10 @@ and literal allocation. A prototype getter is not an own property.
 
 The JVM currently declines these dispatch sites as NTS4001, classified as
 `interface field accessor dispatch`. Stateful JVM interfaces are stage C.
+Native-only field selectors therefore do not generate JVM slot forwarders;
+direct calls to concrete helper bodies remain available. Projecting default
+rows into inherited JVM members would confuse distinct field contracts after
+equal missing-field helpers share a source body.
 Legacy method-value classification stays until stage D; source copies remain
 specialization, and field correctness no longer depends on them.
 

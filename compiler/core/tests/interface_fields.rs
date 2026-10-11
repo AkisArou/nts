@@ -26,6 +26,37 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn unrelated_optional_defaults_preserve_a_records_literal_storage_identity() {
+    let Some(program) = prepared_fixture("accessor-default-record") else {
+        eprintln!("SKIP interface_fields: tsgo is not built");
+        return;
+    };
+    let maker = program
+        .funcs
+        .iter()
+        .find(|f| f.name == "maybeAddress")
+        .unwrap();
+    let hir::HirType::Managed(hir::ManagedType::Object(face)) = maker.return_type else {
+        panic!("optional Address has pointer storage");
+    };
+    let allocation = maker
+        .values
+        .iter()
+        .find(|op| matches!(op.kind, OpKind::ObjectNew { .. }))
+        .unwrap();
+    let hir::HirType::Managed(hir::ManagedType::Object(owner)) = allocation.ty else {
+        panic!("Address literal has object storage");
+    };
+    assert!(
+        std::ptr::eq(
+            program.layout(face).unwrap(),
+            program.layout(owner).unwrap()
+        ),
+        "an unrelated missing optional getter must not separate equal records"
+    );
+}
+
+#[test]
 fn default_getter_roles_survive_prepare_and_only_default_targets_share() {
     let Some(program) = prepared_fixture("accessor-default-sharing") else {
         eprintln!("SKIP interface_fields: tsgo is not built");

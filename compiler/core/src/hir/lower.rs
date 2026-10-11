@@ -52502,7 +52502,7 @@ impl<'a> FuncBuilder<'a> {
                     .supplies
                     .iter()
                     .find(|supply| supply.owner == ty)
-                    .or_else(|| self.storage_reservation(ty, fields, family));
+                    .or_else(|| self.field_reservation(ty, fields, family));
                 if let Some(supply) = supply {
                     let raising = member.ends_with(RAISING_SUFFIX);
                     methods[*slot as usize] = Some(access_family_functions::placeholder(
@@ -52525,10 +52525,10 @@ impl<'a> FuncBuilder<'a> {
         methods
     }
 
-    /// An interface may have no allocation of its own. Its compatible storage
-    /// reservation still needs to join a literal's equivalent physical layout;
+    /// An interface may have no allocation of its own. Pure stored or missing
+    /// reads still reserve the same entries as an equivalent literal layout;
     /// only actual suppliers fill that layout with an executable body later.
-    fn storage_reservation<'b>(
+    fn field_reservation<'b>(
         &self,
         ty: TypeId,
         fields: &[Field],
@@ -52537,7 +52537,20 @@ impl<'a> FuncBuilder<'a> {
         if !self.hierarchy.faces.contains(&ty) {
             return None;
         }
-        let property = interfaces::property(self.snapshot, ty, &family.member)?;
+        let property = interfaces::property(self.snapshot, ty, &family.member);
+        if property.is_none()
+            && family.writes.is_none()
+            && !fields.iter().any(|field| field.name == family.member)
+        {
+            // A default getter reads no owner storage. Reserve it only where
+            // the semantic and physical record both lack the property; a
+            // prototype getter is present even though it occupies no field.
+            return family.supplies.iter().find(|supply| {
+                matches!(supply.reader, access_families::Reader::Undefined)
+                    && supply.setter.is_none()
+            });
+        }
+        let property = property?;
         if property.kind != MemberKind::Field {
             return None;
         }

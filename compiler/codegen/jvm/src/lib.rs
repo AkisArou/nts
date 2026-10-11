@@ -2766,6 +2766,17 @@ fn dispatch_forwarders(
     let mut forwarded: FxHashMap<(String, String), &nts_core::hir::Func> = FxHashMap::default();
     let mut planned = Vec::new();
     for (slot, entry) in layout.methods.iter().enumerate() {
+        // Stage B field families are a native dispatch surface. Their virtual
+        // call sites already decline in ops; projecting the rows here invents
+        // JVM overrides between unrelated default helpers. Direct concrete
+        // helper calls keep their Program bodies. Stateful JVM interfaces will
+        // supply the field surface in stage C.
+        if u32::try_from(slot)
+            .ok()
+            .is_some_and(|slot| program.interface_access.contains_selector(slot))
+        {
+            continue;
+        }
         let Some(func_name) = entry else { continue };
         let Some(target) = program.funcs.iter().find(|f| &f.name == func_name) else {
             // A slot naming a function the program does not carry is a fact

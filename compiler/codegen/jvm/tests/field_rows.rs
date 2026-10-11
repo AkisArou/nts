@@ -35,6 +35,14 @@ fn accessor_rows_preserve_record_inheritance_and_real_methods_still_block_it() {
         "{:?}",
         emitted.diagnostics
     );
+    assert!(
+        !emitted
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("distinct dispatch bodies")),
+        "Native field families must not manufacture JVM dispatch conflicts: {:?}",
+        emitted.diagnostics
+    );
     let at = program.layouts[child].methods.len();
     assert!(
         !program
