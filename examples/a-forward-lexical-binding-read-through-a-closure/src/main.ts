@@ -1,4 +1,3 @@
-// run: check
 // A lexical binding read before initialization must throw a catchable
 // ReferenceError, including through a closure, typeof, or a class constructor.
 function kind(error: unknown): string {

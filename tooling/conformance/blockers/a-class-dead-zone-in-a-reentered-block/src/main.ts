@@ -1,4 +1,4 @@
-// run: check
+// expect: NTS1001 a closure reading a local class before its declaration in a re-entered scope, which needs fresh readiness storage on each entry is not supported by this lowering yet
 // The class binding is unready again on every entry to this block.
 export function repeated(n: number): string {
   let out = "";

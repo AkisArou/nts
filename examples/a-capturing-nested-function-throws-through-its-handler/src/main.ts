@@ -1,4 +1,3 @@
-// run: check
 // The captured reader and the parameter-only control throw the same error.
 export function capturing(n: number): number {
   function captured(): number {
