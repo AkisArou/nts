@@ -3002,6 +3002,34 @@ impl Emitter<'_> {
 
     /// The same question between two types rather than two values.
     fn assignable_types(&self, source: &HirType, target: &HirType) -> Result<(), Diagnostic> {
+        // Wrappers erase their payload's Java class, then restore it on read.
+        // A shared wrapper descriptor does not license unrelated payloads.
+        match (source, target) {
+            (
+                HirType::Managed(ManagedType::Array(source)),
+                HirType::Managed(ManagedType::Array(target)),
+            )
+            | (
+                HirType::Managed(ManagedType::Set(source)),
+                HirType::Managed(ManagedType::Set(target)),
+            )
+            | (
+                HirType::Managed(ManagedType::Promise(source)),
+                HirType::Managed(ManagedType::Promise(target)),
+            ) => return self.assignable_types(source, target),
+            (
+                HirType::Managed(
+                    ManagedType::Map(source_key, source) | ManagedType::Table(source_key, source),
+                ),
+                HirType::Managed(
+                    ManagedType::Map(target_key, target) | ManagedType::Table(target_key, target),
+                ),
+            ) => {
+                self.assignable_types(source_key, target_key)?;
+                return self.assignable_types(source, target);
+            }
+            _ => {}
+        }
         let (
             HirType::Managed(ManagedType::Object(source_id)),
             HirType::Managed(ManagedType::Object(target_id)),
@@ -3044,6 +3072,17 @@ impl Emitter<'_> {
         if crate::hierarchy::implements(self.program, source_layout, *target_id) {
             return Ok(());
         }
+        if !crate::hierarchy::declared(self.program, target_layout).is_empty() {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "storing a `{}` where a `{}` is declared -- `{}` carries state, so \
+                     this backend emits it as a class rather than an interface, and `{}` \
+                     does not extend that class",
+                    source_layout.name, target_layout.name, target_layout.name, source_layout.name
+                ),
+            ));
+        }
         Err(refuse(
             self.func,
             &format!(
@@ -3053,6 +3092,116 @@ impl Emitter<'_> {
                 source_layout.name, target_layout.name
             ),
         ))
+    }
+
+    /// Container arguments may already be boxed, but boxing does not change
+    /// the class that a typed read will cast back to. Follow only explicit
+    /// erasure, never an unchecked claim about an unknown value's payload.
+    fn payload_type(&self, mut value: ValueId) -> Result<&HirType, Diagnostic> {
+        for _ in 0..self.func.values.len() {
+            let op = &self.func.values[value.0 as usize];
+            if let OpKind::Erase { value: inner, .. } = op.kind {
+                value = inner;
+            } else {
+                return Ok(self.ty(value));
+            }
+        }
+        Err(refuse(self.func, "a cyclic erased container argument"))
+    }
+
+    fn assignable_payload(&self, value: ValueId, target: &HirType) -> Result<(), Diagnostic> {
+        self.assignable_types(self.payload_type(value)?, target)
+    }
+
+    /// Runtime descriptors accept Object/NtsValue; the HIR retains the
+    /// container's element contract. All mutations use the same assignability
+    /// predicate as fields, calls, returns and block transfers.
+    fn assignable_container_arguments(
+        &self,
+        name: &str,
+        args: &[ValueId],
+        result: &HirType,
+    ) -> Result<(), Diagnostic> {
+        let Some((&receiver, rest)) = args.split_first() else {
+            return Ok(());
+        };
+        match self.ty(receiver) {
+            HirType::Managed(ManagedType::Array(element)) => {
+                let Some(stem) = name.strip_prefix("nts_array_") else {
+                    return Ok(());
+                };
+                let stem = ["_ref", "_value", "_foreign", "_bool"]
+                    .iter()
+                    .find_map(|suffix| stem.strip_suffix(suffix))
+                    .unwrap_or(stem);
+                match stem {
+                    "push" | "unshift" | "fill" => {
+                        for &value in rest {
+                            self.assignable_payload(value, element)?;
+                        }
+                    }
+                    "extend" => {
+                        for &array in rest {
+                            self.assignable_types(self.ty(array), self.ty(receiver))?;
+                        }
+                    }
+                    "concat" => {
+                        for &array in args {
+                            self.assignable_types(self.ty(array), result)?;
+                        }
+                    }
+                    // Splice insertions are lowered to ArraySet/push, while
+                    // the splice helper itself only removes elements.
+                    _ => {}
+                }
+            }
+            HirType::Managed(ManagedType::Map(key, element) | ManagedType::Table(key, element)) => {
+                if name == "nts_map_set"
+                    && let [stored_key, value] = rest
+                {
+                    self.assignable_payload(*stored_key, key)?;
+                    self.assignable_payload(*value, element)?;
+                } else if name == "nts_map_extend"
+                    && let [source] = rest
+                {
+                    self.assignable_types(self.ty(*source), self.ty(receiver))?;
+                }
+            }
+            HirType::Managed(ManagedType::Set(element)) if name == "nts_set_add" => {
+                if let [value] = rest {
+                    self.assignable_payload(*value, element)?;
+                }
+            }
+            HirType::Managed(ManagedType::Promise(element)) => match name {
+                "nts_promise_fulfill_reference"
+                | "nts_promise_fulfill_tagged"
+                | "nts_promise_fulfill_value" => {
+                    if let Some(&value) = rest.first() {
+                        self.assignable_payload(value, element)?;
+                    }
+                }
+                "nts_promise_resolve_value" => {
+                    if let Some(&value) = rest.first() {
+                        let source = self.payload_type(value)?;
+                        // Resolution adopts a promise rather than storing
+                        // the promise itself as the eventual payload.
+                        let source = match source {
+                            HirType::Managed(ManagedType::Promise(element)) => element,
+                            _ => source,
+                        };
+                        self.assignable_types(source, element)?;
+                    }
+                }
+                "nts_promise_adopt" => {
+                    if let [source] = rest {
+                        self.assignable_types(self.ty(*source), self.ty(receiver))?;
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        Ok(())
     }
 
     /// `x instanceof C` where the closed set of classes satisfying it has more
@@ -3835,6 +3984,11 @@ impl Emitter<'_> {
         ty: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
+        if let OpKind::ArraySet { array, value, .. } = kind
+            && let HirType::Managed(ManagedType::Array(element)) = self.ty(*array)
+        {
+            self.assignable_types(self.ty(*value), element)?;
+        }
         match kind {
             OpKind::ArrayGet { array, index, .. }
                 if self.ty(*array) == &HirType::Managed(ManagedType::Template) =>
@@ -6601,6 +6755,7 @@ impl Emitter<'_> {
             }
             Callee::Direct(name) => name,
             Callee::External(name) => {
+                self.assignable_container_arguments(name, args, result)?;
                 // The presence bits are a *field* on this lane, not a header
                 // word, so these four are emitted rather than called: a method
                 // in `runtime/jvm` could not reach a generated class's field

@@ -1,5 +1,4 @@
-// run: check
-// backend: jvm
+// expect: emit-jvm -> `Sink` carries state
 // Main f6811e8f and 7c0ad8c7 crash on container reads; C agrees on all cases.
 interface Sink { take(x: number): number; }
 const own: Sink = { take: (x: number): number => x - 3 };

@@ -149,3 +149,18 @@ fn an_interface_that_carries_state_is_refused_rather_than_cast() {
         "names the declaration to change: {message}"
     );
 }
+
+#[test]
+fn stateful_literal_container_contracts_are_refused_before_a_runtime_cast() {
+    let diagnostics = declined();
+    for function in [
+        "literal", "index", "push", "unshift", "fill", "concat", "map", "set", "promise",
+    ] {
+        assert!(
+            diagnostics.iter().any(|(code, message)| code == "NTS4001"
+                && message.contains("`Sink` carries state")
+                && message.contains(&format!("(in `{function}"))),
+            "{function} should name the incompatible stateful contract: {diagnostics:?}"
+        );
+    }
+}

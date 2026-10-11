@@ -140,6 +140,14 @@ fills it, and the call compiles as today's virtual call.
 
 ### Part 1c — literal supplies
 
+On the JVM, a literal allocated at an interface's own layout can give that
+layout instance fields. The backend then emits it as a class. A separately
+shaped literal cannot be stored or passed as that class, including through
+arrays, maps, sets and promises: the shared JVM assignability check refuses
+the transfer by name before an array store or later payload cast can throw.
+Emitting a separate concrete literal class behind a JVM interface remains
+queued with interface accessors.
+
 The allocation and the supply census use the same contextual owner, including
 literals in typed arrays and tuple positions. An owner represents every literal
 built at that type. It gains an edge only if every initial function and every

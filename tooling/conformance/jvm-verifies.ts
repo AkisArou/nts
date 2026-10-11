@@ -301,6 +301,10 @@ function selfTest(printing) {
     && declineShape("NTS4001 another refusal") === null;
   if (!classified) bad++;
   if (printing) console.log(`  ${classified ? "ok  " : "FAIL"}  distinct dispatch bodies classified separately from other NTS4001 refusals`);
+  const store = "NTS4001 storing a `Type7` where a `Sink` is declared -- `Sink` carries state, so this backend emits it as a class rather than an interface, and `Type7` does not extend that class";
+  const storageClassified = declineShape(store) === "stateful store TypeN -> Sink";
+  if (!storageClassified) bad++;
+  if (printing) console.log(`  ${storageClassified ? "ok  " : "FAIL"}  incompatible stateful container stores classified`);
   if (printing) console.log(bad === 0 ? "  self-test: every arm fired" : `  self-test: ${bad} arm(s) did not fire`);
   return bad;
 }
@@ -315,6 +319,8 @@ function declineShape(line) {
   const conflict = /NTS4001 `([^`]+)` needs distinct dispatch bodies `[^`]+` and `[^`]+` for JVM member `([^`]+)`/.exec(line);
   const plain = (t) => t.replace(/Closure\d+/g, "ClosureN").replace(/\$\d+\$/g, "$N$").replace(/Fn[\d_]*__\d+/g, "FnN").replace(/Type\d+/g, "TypeN");
   if (conflict) return `dispatch conflict <any>.${plain(conflict[2])}`;
+  const store = /NTS4001 storing a `([^`]+)` where a `([^`]+)` is declared -- `[^`]+` carries state, so this backend emits it as a class/.exec(line);
+  if (store) return `stateful store ${plain(store[1])} -> ${plain(store[2])}`;
   const m = /NTS4009 `([^`]+)` is `([^`]+)` where the method it overrides is `([^`]+)`/.exec(line);
   if (!m) return null;
   return `${plain(m[1])} ${plain(m[2])} over ${plain(m[3])}`;
