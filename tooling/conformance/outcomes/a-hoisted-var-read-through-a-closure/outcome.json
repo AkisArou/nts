@@ -1,8 +1,8 @@
 {
   "run": "build",
   "category": "aborted",
-  "nts": "SIGABRT; nts: `x` was read before its declaration ran",
+  "nts": "SIGABRT; nts: refused at run time: `x` (var) was read before its assignment; JS gives undefined here, which this compiler cannot carry where `x`'s type is number",
   "node": "exit 1; nts: uncaught Observed: typeof=undefined;",
-  "measured_with": "813e75eb427dea66",
+  "measured_with": "562f505ba5886d56",
   "source": "measured"
 }
