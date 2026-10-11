@@ -163,7 +163,15 @@ fn captured_initialization_throws_and_proven_late_readers_need_no_flag() {
         prepared.diagnostics
     );
     let program = &prepared.program;
-    for name in ["earlyNamed", "earlyTypeof", "passedBefore"] {
+    for name in [
+        "earlyNamed",
+        "earlyTypeof",
+        "passedBefore",
+        "earlyClass",
+        "hoistedClassReader",
+        "classTypeof",
+        "staticClassRead",
+    ] {
         let function = program
             .funcs
             .iter()
@@ -211,4 +219,22 @@ fn captured_initialization_throws_and_proven_late_readers_need_no_flag() {
             "{name}'s proven-ready cell must not carry readiness storage"
         );
     }
+    let late = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "lateClass")
+        .expect("class control retained");
+    assert!(
+        late.values
+            .iter()
+            .filter_map(|op| {
+                if let HirType::Managed(ManagedType::Object(ty)) = op.ty {
+                    program.layout(ty)
+                } else {
+                    None
+                }
+            })
+            .all(|layout| !layout.name.starts_with("Cell")),
+        "a proven-late class reader must carry no readiness cell"
+    );
 }

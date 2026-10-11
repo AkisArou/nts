@@ -42,6 +42,8 @@ pub(super) struct Analysis {
     cyclic: FxHashSet<usize>,
     lexical_cells: FxHashSet<u32>,
     ready_cells: FxHashSet<u32>,
+    captured_guards: FxHashSet<(NodeId, u32)>,
+    class_readiness: FxHashSet<u32>,
 }
 
 impl Analysis {
@@ -61,6 +63,14 @@ impl Analysis {
         !self.ready_cells.contains(&symbol)
     }
 
+    pub(super) fn guards_capture(&self, at: NodeId, symbol: u32) -> bool {
+        self.captured_guards.contains(&(at, symbol))
+    }
+
+    pub(super) fn class_cell(&self, symbol: u32) -> bool {
+        self.class_readiness.contains(&symbol)
+    }
+
     pub(super) fn proven_ready(&self, symbol: u32) -> bool {
         self.bindings.get(&symbol).is_some_and(|binding| {
             !self.early.contains(&symbol) && !self.cyclic.contains(&binding.module)
@@ -78,7 +88,19 @@ impl Analysis {
         self.flagged_declarations.contains(&declaration)
     }
 
-    fn captured_cells(&mut self, probe: &FuncBuilder, closures: &[ClosureInfo]) {
+    fn captured_cells(
+        &mut self,
+        probe: &FuncBuilder,
+        closures: &[ClosureInfo],
+        readers: &PrivateReaders,
+    ) {
+        self.class_readiness = closures
+            .iter()
+            .filter(|closure| closure.refusal.is_none())
+            .flat_map(|closure| &closure.captures)
+            .filter(|capture| capture.readiness_only)
+            .map(|capture| capture.symbol)
+            .collect();
         self.lexical_cells = super::guarded_symbols(closures)
             .into_iter()
             .filter(|symbol| {
@@ -89,15 +111,16 @@ impl Analysis {
                     .is_some_and(|record| {
                         !record.declarations.is_empty()
                             && record.declarations.iter().all(|declaration| {
-                                matches!(
-                                    probe.variable_kind(*declaration),
-                                    Some(VariableKind::Let | VariableKind::Const)
-                                )
+                                probe.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION)
+                                    || matches!(
+                                        probe.variable_kind(*declaration),
+                                        Some(VariableKind::Let | VariableKind::Const)
+                                    )
                             })
                     })
             })
             .collect();
-        self.ready_cells = cells_proven_ready(probe, closures, &self.lexical_cells);
+        self.ready_cells = cells_proven_ready(probe, closures, &self.lexical_cells, readers);
         // A captured lexical read can throw even though its enclosing function
         // contains no explicit throw. Publish the effect before raising copies
         // are selected, and retain it through typeof and constant folding.
@@ -120,6 +143,9 @@ impl Analysis {
                                 .any(|capture| capture.symbol == symbol.0)
                     })
                 {
+                    if let Some(symbol) = probe.node(at).symbol {
+                        self.captured_guards.insert((at, symbol.0));
+                    }
                     self.preserve_effect(probe, at);
                 }
             }
@@ -165,6 +191,51 @@ fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
         .find(|at| names_a_body(probe.kind_of(*at)))
 }
 
+pub(super) fn reentered_scope(probe: &FuncBuilder, declaration: NodeId) -> bool {
+    for at in std::iter::successors(probe.node(declaration).parent, |at| probe.node(*at).parent) {
+        let inline_executor = probe.kind_of(at) == Some(syntax::ARROW_FUNCTION)
+            && syntax_parent(probe, at).is_some_and(|parent| {
+                probe.kind_of(parent) == Some(syntax::NEW_EXPRESSION)
+                    && probe.arguments_of(parent).first() == Some(&at)
+                    && matches!(
+                        probe.type_of(parent),
+                        Some(HirType::Managed(ManagedType::Promise(_)))
+                    )
+            });
+        if !inline_executor
+            && (names_a_body(probe.kind_of(at))
+                || probe.kind_of(at).is_some_and(binds_its_own_this))
+        {
+            break;
+        }
+        if matches!(
+            probe.kind_of(at),
+            Some(
+                syntax::FOR_STATEMENT
+                    | syntax::FOR_IN_STATEMENT
+                    | syntax::FOR_OF_STATEMENT
+                    | syntax::WHILE_STATEMENT
+                    | syntax::DO_STATEMENT
+            )
+        ) {
+            return true;
+        }
+    }
+    false
+}
+
+pub(super) fn runtime_reference(probe: &FuncBuilder, at: NodeId) -> bool {
+    for parent in std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent) {
+        if probe.kind_of(parent).is_some_and(syntax::is_type_node) {
+            return false;
+        }
+        if names_a_body(probe.kind_of(parent)) {
+            break;
+        }
+    }
+    true
+}
+
 /// A declaration directly in a function body runs before every later source
 /// statement in that body. If its initializer throws, none of those statements
 /// executes. A nested block or loop does not establish that same fact.
@@ -182,27 +253,88 @@ fn unconditional_owner(probe: &FuncBuilder, declaration: NodeId) -> Option<NodeI
     names_a_body(probe.kind_of(owner)).then_some(owner)
 }
 
-/// Prove readiness only for a private reader whose every value use is a direct
-/// call in the declaring invocation, after the binding's declaration. Escaped
-/// readers, calls from another body, and re-entered scopes keep their guard.
-/// This is deliberately a permission to omit, never a guess about a callback.
+/// Source uses of callable bindings, indexed once before closure collection.
+/// The same proof serves capture selection and initialization effects.
+#[derive(Debug, Default)]
+pub(super) struct PrivateReaders {
+    mentions: FxHashMap<u32, Vec<NodeId>>,
+}
+
+impl PrivateReaders {
+    pub(super) fn new(probe: &FuncBuilder) -> Self {
+        let mut result = Self::default();
+        for (index, node) in probe.snapshot.nodes.iter().enumerate() {
+            let Ok(index) = u32::try_from(index) else {
+                continue;
+            };
+            let at = NodeId(index);
+            if reads_a_name(probe, at)
+                && let Some(symbol) = node.symbol
+            {
+                result.mentions.entry(symbol.0).or_default().push(at);
+            }
+        }
+        result
+    }
+
+    /// Permission to omit only: every use is a direct call in the declaring
+    /// invocation, after an unconditional declaration. Escaped readers, calls
+    /// from another body, and re-entered scopes retain their readiness check.
+    pub(super) fn ready_after(
+        &self,
+        probe: &FuncBuilder,
+        reader: NodeId,
+        declaration: NodeId,
+    ) -> bool {
+        let Some(owner) = unconditional_owner(probe, declaration) else {
+            return false;
+        };
+        let binding = match probe.kind_of(reader) {
+            Some(syntax::FUNCTION_DECLARATION) => reader,
+            Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {
+                let Some(binding) = syntax_parent(probe, reader) else {
+                    return false;
+                };
+                if probe.kind_of(binding) != Some(syntax::VARIABLE_DECLARATION)
+                    || the_function_of(probe, binding) != reader
+                {
+                    return false;
+                }
+                binding
+            }
+            _ => return false,
+        };
+        if execution_owner(probe, binding) != Some(owner) {
+            return false;
+        }
+        let Some(name) = probe.children(binding).first().copied() else {
+            return false;
+        };
+        let Some(symbol) = probe.node(name).symbol else {
+            return false;
+        };
+        let initialized = probe.node(declaration).origin.location;
+        self.mentions.get(&symbol.0).is_some_and(|uses| {
+            uses.iter().all(|at| {
+                if *at == name {
+                    return true;
+                }
+                let called = probe.node(*at).origin.location;
+                probe.is_callee(*at)
+                    && execution_owner(probe, *at) == Some(owner)
+                    && called.file == initialized.file
+                    && called.span.start > initialized.span.end
+            })
+        })
+    }
+}
+
 fn cells_proven_ready(
     probe: &FuncBuilder,
     closures: &[ClosureInfo],
     candidates: &FxHashSet<u32>,
+    readers: &PrivateReaders,
 ) -> FxHashSet<u32> {
-    let mut mentions: FxHashMap<u32, Vec<NodeId>> = FxHashMap::default();
-    for (index, node) in probe.snapshot.nodes.iter().enumerate() {
-        let Ok(index) = u32::try_from(index) else {
-            continue;
-        };
-        let at = NodeId(index);
-        if reads_a_name(probe, at)
-            && let Some(symbol) = node.symbol
-        {
-            mentions.entry(symbol.0).or_default().push(at);
-        }
-    }
     candidates
         .iter()
         .copied()
@@ -213,10 +345,6 @@ fn cells_proven_ready(
             let [declaration] = record.declarations.as_slice() else {
                 return false;
             };
-            let Some(owner) = unconditional_owner(probe, *declaration) else {
-                return false;
-            };
-            let initialized = probe.node(*declaration).origin.location;
             closures
                 .iter()
                 .filter(|closure| {
@@ -226,44 +354,7 @@ fn cells_proven_ready(
                             .iter()
                             .any(|capture| capture.symbol == *symbol)
                 })
-                .all(|closure| {
-                    let binding = match probe.kind_of(closure.node) {
-                        Some(syntax::FUNCTION_DECLARATION) => closure.node,
-                        Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION) => {
-                            let Some(binding) = syntax_parent(probe, closure.node) else {
-                                return false;
-                            };
-                            if probe.kind_of(binding) != Some(syntax::VARIABLE_DECLARATION)
-                                || the_function_of(probe, binding) != closure.node
-                            {
-                                return false;
-                            }
-                            binding
-                        }
-                        _ => return false,
-                    };
-                    if execution_owner(probe, binding) != Some(owner) {
-                        return false;
-                    }
-                    let Some(name) = probe.children(binding).first().copied() else {
-                        return false;
-                    };
-                    let Some(reader) = probe.node(name).symbol else {
-                        return false;
-                    };
-                    mentions.get(&reader.0).is_some_and(|uses| {
-                        uses.iter().all(|at| {
-                            if *at == name {
-                                return true;
-                            }
-                            let called = probe.node(*at).origin.location;
-                            probe.is_callee(*at)
-                                && execution_owner(probe, *at) == Some(owner)
-                                && called.file == initialized.file
-                                && called.span.start > initialized.span.end
-                        })
-                    })
-                })
+                .all(|closure| readers.ready_after(probe, closure.node, *declaration))
         })
         .collect()
 }
@@ -850,6 +941,7 @@ pub(super) fn analyze(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     closures: &[ClosureInfo],
+    readers: &PrivateReaders,
 ) -> Analysis {
     let mut analysis = Analysis {
         bindings: module_bindings(probe),
@@ -860,7 +952,7 @@ pub(super) fn analyze(
             .collect(),
         ..Analysis::default()
     };
-    analysis.captured_cells(probe, closures);
+    analysis.captured_cells(probe, closures, readers);
     let bindings = analysis.bindings.clone();
     let mut summaries = Summaries {
         probe,

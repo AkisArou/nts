@@ -3497,6 +3497,9 @@ const CONSTRUCTOR_KEY: &str = "constructor";
 #[derive(Clone, Debug)]
 struct Capture {
     symbol: u32,
+    /// A statically resolved local class carries only readiness, never a
+    /// constructor value. Its cell belongs to the declaring invocation.
+    readiness_only: bool,
     /// `Some(rejects)` when the name is a **promise settler** -- `resolve` or
     /// `reject` from a `new Promise` executor.
     ///
@@ -4481,6 +4484,7 @@ fn captures_of(
     settlers: &rustc_hash::FxHashMap<u32, bool>,
     assigned: &[u32],
     nested: &rustc_hash::FxHashSet<NodeId>,
+    readers: &initialization::PrivateReaders,
 ) -> ClosureInfo {
     let mut info = ClosureInfo::as_written(id);
 
@@ -4516,6 +4520,7 @@ fn captures_of(
     {
         info.captures.push(Capture {
             symbol: THIS_CAPTURE,
+            readiness_only: false,
             settles: None,
             name: "this".to_owned(),
             at,
@@ -4550,9 +4555,6 @@ fn captures_of(
         {
             continue;
         }
-        if reached_by_name(probe, snapshot, symbol, record, nested) {
-            continue;
-        }
         // A name declared *below* the arrow that reads it. The closure
         // captures the binding, and where the closure is built that binding
         // has no value -- so there is nothing to copy and it has to go
@@ -4567,7 +4569,28 @@ fn captures_of(
             let declared = probe.node(*declaration).origin.location;
             declared.file == arrow.file && declared.span.start > arrow.span.start
         });
-        let mut by_reference = assigned.contains(&symbol.0) || below;
+        let readiness_only = (below || probe.kind_of(id) == Some(syntax::FUNCTION_DECLARATION))
+            && initialization::runtime_reference(probe, *read)
+            && record.declarations.iter().all(|declaration| {
+                probe.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION)
+                    && !probe.is_module_scope(*declaration)
+                    && !readers.ready_after(probe, id, *declaration)
+            });
+        if !readiness_only && reached_by_name(probe, snapshot, symbol, record, nested) {
+            continue;
+        }
+        if readiness_only
+            && record
+                .declarations
+                .iter()
+                .any(|declaration| initialization::reentered_scope(probe, *declaration))
+        {
+            info.refusal = Some(
+                "a closure reading a local class before its declaration in a re-entered scope, which needs fresh readiness storage on each entry",
+            );
+            break;
+        }
+        let mut by_reference = assigned.contains(&symbol.0) || below || readiness_only;
         if by_reference {
             match probe.rebinding_refusal(record, symbol.0, below) {
                 Rebinding::Refused(message) => {
@@ -4580,11 +4603,12 @@ fn captures_of(
         }
         info.captures.push(Capture {
             symbol: symbol.0,
+            readiness_only,
             settles: settlers.get(&symbol.0).copied(),
             name: record.name.clone(),
             at: *read,
             by_reference,
-            forward: below,
+            forward: below || readiness_only,
         });
     }
     info
@@ -4620,6 +4644,7 @@ fn nested_closures(
     snapshot: &SemanticSnapshot,
     settlers: &rustc_hash::FxHashMap<u32, bool>,
     assigned: &[u32],
+    readers: &initialization::PrivateReaders,
 ) -> rustc_hash::FxHashSet<NodeId> {
     let candidates: Vec<NodeId> = snapshot
         .nodes
@@ -4636,7 +4661,7 @@ fn nested_closures(
             if found.contains(id) {
                 continue;
             }
-            if !captures_of(probe, snapshot, *id, settlers, assigned, &found)
+            if !captures_of(probe, snapshot, *id, settlers, assigned, &found, readers)
                 .captures
                 .is_empty()
             {
@@ -4656,7 +4681,10 @@ fn nested_closures(
 /// reconciler is ~24 functions wide and one deep.
 const NESTED_CLOSURE_ROUNDS: usize = 8;
 
-fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
+fn collect_closures(
+    snapshot: &SemanticSnapshot,
+    readers: &initialization::PrivateReaders,
+) -> Vec<ClosureInfo> {
     let probe = FuncBuilder::probe(snapshot);
     let settlers = settler_symbols(snapshot, &probe);
 
@@ -4664,7 +4692,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
     // Before the loop, because `reached_by_name` consults it for every name any
     // closure reads and the answer for one nested declaration depends on the
     // others.
-    let nested = nested_closures(&probe, snapshot, &settlers, &assigned);
+    let nested = nested_closures(&probe, snapshot, &settlers, &assigned, readers);
 
     let mut closures = Vec::new();
     for (index, node) in snapshot.nodes.iter().enumerate() {
@@ -4702,7 +4730,7 @@ fn collect_closures(snapshot: &SemanticSnapshot) -> Vec<ClosureInfo> {
         if !is_closure {
             continue;
         }
-        let mut info = captures_of(&probe, snapshot, id, &settlers, &assigned, &nested);
+        let mut info = captures_of(&probe, snapshot, id, &settlers, &assigned, &nested, readers);
         info.reads_this = matches!(
             node.kind,
             NodeKind::Syntax(syntax::FUNCTION_EXPRESSION | syntax::FUNCTION_DECLARATION)
@@ -7655,13 +7683,17 @@ fn written_field_orders(
     written_order
 }
 
-fn naming(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> Naming {
+fn naming(
+    snapshot: &SemanticSnapshot,
+    closures: &[ClosureInfo],
+    readers: &initialization::PrivateReaders,
+) -> Naming {
     let mut probe = FuncBuilder::probe(snapshot);
     // Captured function declarations are closure values too. The same table
     // must classify their calls during raising analysis and during lowering.
     probe.closures = closures.to_vec();
     probe.module.initialization =
-        std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures));
+        std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures, readers));
     let class_tokens = class_token_indices(snapshot);
     let generators = generator_indices(snapshot);
     let written_order = written_field_orders(snapshot, &probe);
@@ -15038,10 +15070,11 @@ fn hierarchy_and_naming(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
+    readers: &initialization::PrivateReaders,
 ) -> (Hierarchy, Naming) {
     let mut hierarchy =
         collect_hierarchy(snapshot, foreign, closures, &qualified_names(snapshot).0);
-    let mut naming = naming(snapshot, closures);
+    let mut naming = naming(snapshot, closures, readers);
     hierarchy.closures_carry = naming.closures_carry;
     hierarchy.gate_holder = naming.gate_holder.as_deref().map(std::sync::Arc::from);
     raising_member_slots(snapshot, &mut hierarchy, &mut naming);
@@ -15071,11 +15104,12 @@ pub fn lower_with(
     // the *closure* the arrow becomes rather than by its function type, and the
     // closure's layout is decided here. `collect_closures` reads only the
     // snapshot, so the order is free.
-    let closures = collect_closures(snapshot);
+    let readers = initialization::PrivateReaders::new(&FuncBuilder::probe(snapshot));
+    let closures = collect_closures(snapshot, &readers);
     // The hierarchy and the naming before the module scope, because the module scope's
     // probe lays out classes and a layout built without the hierarchy is a different
     // layout. See `hierarchy_and_naming` for why the two are built together.
-    let (hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures);
+    let (hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
     let mut module = collect_module_scope(
         snapshot,
         foreign,
@@ -20059,6 +20093,9 @@ struct FuncBuilder<'a> {
     /// This is what makes two identifiers with one symbol become one value
     /// rather than two loads.
     bindings: rustc_hash::FxHashMap<u32, ValueId>,
+    /// Readiness storage for statically resolved classes, separate from values
+    /// so a captured class still names its constructor rather than holding one.
+    class_cells: rustc_hash::FxHashMap<u32, ValueId>,
     /// What an `instanceof` tested, keyed by the expression's own node.
     ///
     /// `lower_instanceof` answers a `Bool` and, until this, threw away *which
@@ -20535,6 +20572,7 @@ impl<'a> FuncBuilder<'a> {
             return_elements: Vec::new(),
             returned_literal: None,
             bindings: rustc_hash::FxHashMap::default(),
+            class_cells: rustc_hash::FxHashMap::default(),
             tested_by_instanceof: rustc_hash::FxHashMap::default(),
             narrowed_past_an_if: Vec::new(),
             settlers: rustc_hash::FxHashMap::default(),
@@ -28065,6 +28103,20 @@ impl<'a> FuncBuilder<'a> {
 
     /// A potentially early access tests its binding, including a folded constant.
     fn check_initialized(&mut self, id: NodeId, symbol: u32) -> Result<(), Diagnostic> {
+        if self.module.initialization.guards_capture(id, symbol)
+            && let Some(cell) = self.class_cells.get(&symbol).copied()
+        {
+            let origin = self.origin(id);
+            let ready = self.push(
+                OpKind::FieldGet {
+                    object: cell,
+                    field: 0,
+                },
+                HirType::Bool,
+                origin,
+            );
+            return self.check_binding_ready(id, symbol, ready);
+        }
         if !self.module.initialization.guards(id, symbol) {
             return Ok(());
         }
@@ -28073,6 +28125,16 @@ impl<'a> FuncBuilder<'a> {
         };
         let origin = self.origin(id);
         let ready = self.push(OpKind::GlobalGet(flag), HirType::Bool, origin.clone());
+        self.check_binding_ready(id, symbol, ready)
+    }
+
+    fn check_binding_ready(
+        &mut self,
+        id: NodeId,
+        symbol: u32,
+        ready: ValueId,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
         let unset = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
         let missing = self.push(
             OpKind::Binary {
@@ -31365,6 +31427,9 @@ impl<'a> FuncBuilder<'a> {
     /// hand: the allocating side put `settler.result.promise` in the field,
     /// and its type is the promise the enclosing executor is constructing.
     fn captured_as(&self, info: &ClosureInfo, capture: &Capture) -> Result<HirType, Diagnostic> {
+        if capture.readiness_only {
+            return Ok(HirType::Bool);
+        }
         // A variant reads a re-typed capture at the copy's type: the same
         // answer the copy's own parameter has, which is what makes the field
         // agree with the value the copy stores in it.
@@ -31437,6 +31502,8 @@ impl<'a> FuncBuilder<'a> {
                         rejects,
                     },
                 );
+            } else if capture.readiness_only {
+                self.class_cells.insert(capture.symbol, value);
             } else {
                 self.bindings.insert(capture.symbol, value);
             }
@@ -31733,22 +31800,30 @@ impl<'a> FuncBuilder<'a> {
 
     /// The one-field object a captured-and-written variable lives in.
     fn cell_layout(&self, index: usize, ty: HirType) -> Layout {
-        let mut fields = vec![Field {
-            name: "value".to_owned(),
-            ty,
-            // Written by definition -- being written is why it exists.
-            readonly: false,
-            declared_by: None,
-            // The local's written kind: a closure reads it through here, and
-            // every assignment to the local was obliged to fit it.
-            written: self
-                .boxed
-                .get(index)
-                .and_then(|symbol| self.written_kind_of_symbol(*symbol)),
-        }];
+        let readiness_only = self
+            .boxed
+            .get(index)
+            .is_some_and(|symbol| self.module.initialization.class_cell(*symbol));
+        let mut fields = if readiness_only {
+            Vec::new()
+        } else {
+            vec![Field {
+                name: "value".to_owned(),
+                ty,
+                // Written by definition -- being written is why it exists.
+                readonly: false,
+                declared_by: None,
+                // The local's written kind: a closure reads it through here, and
+                // every assignment to the local was obliged to fit it.
+                written: self
+                    .boxed
+                    .get(index)
+                    .and_then(|symbol| self.written_kind_of_symbol(*symbol)),
+            }]
+        };
         // Zero until the declaration runs, which is what the guard reads. Only
         // on a cell that has the window; every other one carries nothing.
-        if self.is_guarded(index) {
+        if readiness_only || self.is_guarded(index) {
             fields.push(Field {
                 name: "ready".to_owned(),
                 ty: HirType::Bool,
@@ -31922,6 +31997,27 @@ impl<'a> FuncBuilder<'a> {
         Some(id)
     }
 
+    /// One readiness cell per declaring invocation. An entry allocation
+    /// dominates both a forward closure and the declaration that sets it.
+    fn open_class_cell(&mut self, symbol: u32, at: NodeId) -> Result<ValueId, Diagnostic> {
+        if let Some(cell) = self.class_cells.get(&symbol).copied() {
+            return Ok(cell);
+        }
+        let index = self.cell_of(symbol).ok_or_else(|| {
+            self.unsupported(at, "a class readiness capture with no cell identity")
+        })?;
+        self.layouts.push(self.cell_layout(index, HirType::Bool));
+        let cell = ValueId(u32::try_from(self.values.len()).unwrap_or(u32::MAX));
+        self.values.push(Op {
+            kind: OpKind::ObjectNew { frame: false },
+            ty: HirType::Managed(ManagedType::Object(cell_type(index))),
+            origin: self.origin(at),
+        });
+        self.blocks[0].ops.insert(0, cell);
+        self.class_cells.insert(symbol, cell);
+        Ok(cell)
+    }
+
     /// Read a name that lives in a cell.
     fn read_cell(
         &mut self,
@@ -31957,22 +32053,7 @@ impl<'a> FuncBuilder<'a> {
                     HirType::Bool,
                     origin.clone(),
                 );
-                let unset = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
-                let missing = self.push(
-                    OpKind::Binary {
-                        op: BinOp::Eq,
-                        lhs: ready,
-                        rhs: unset,
-                    },
-                    HirType::Bool,
-                    origin.clone(),
-                );
-                self.refuse_when(
-                    at,
-                    missing,
-                    "ReferenceError",
-                    &format!("Cannot access '{name}' before initialization"),
-                )?;
+                self.check_binding_ready(at, symbol, ready)?;
             } else {
                 // Forward var cells cannot yet represent undefined. Keep the
                 // named stop until their representation and unguarding change
@@ -48659,7 +48740,23 @@ impl<'a> FuncBuilder<'a> {
             // them against the same storage. Closer than never running them, and
             // still not the language -- a fresh class per call is a
             // monomorphisation question rather than a statement-lowering one.
-            Some(syntax::CLASS_DECLARATION) => self.lower_static_fields(id),
+            Some(syntax::CLASS_DECLARATION) => {
+                self.lower_static_fields(id)?;
+                if !self.is_terminated()
+                    && let Some(symbol) = self
+                        .children(id)
+                        .into_iter()
+                        .find(|at| self.kind_of(*at) == Some(syntax::IDENTIFIER))
+                        .and_then(|name| self.node(name).symbol)
+                    && self.module.initialization.class_cell(symbol.0)
+                {
+                    let cell = self.open_class_cell(symbol.0, id)?;
+                    let origin = self.origin(id);
+                    let ready = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+                    self.field_set(cell, 0, ready, &origin);
+                }
+                Ok(())
+            }
             Some(syntax::FUNCTION_DECLARATION) => self.bind_nested_function(id),
             Some(syntax::THROW_STATEMENT) => self.lower_throw(id),
             Some(syntax::TRY_STATEMENT) => self.lower_try(id),
@@ -52620,10 +52717,12 @@ impl<'a> FuncBuilder<'a> {
             .filter(|closure| closure.node == id)
             .all(|closure| {
                 closure.captures.iter().all(|capture| {
-                    self.snapshot
-                        .symbols
-                        .get(capture.symbol as usize)
-                        .is_none_or(|record| !record.declarations.iter().copied().any(inside))
+                    capture.readiness_only
+                        || self
+                            .snapshot
+                            .symbols
+                            .get(capture.symbol as usize)
+                            .is_none_or(|record| !record.declarations.iter().copied().any(inside))
                 })
             })
     }
@@ -52752,8 +52851,10 @@ impl<'a> FuncBuilder<'a> {
             .filter(|closure| closure.node == sibling)
             .all(|closure| {
                 closure.captures.iter().all(|capture| {
-                    self.later_sibling_function(capture.symbol, list, at)
-                        .is_some()
+                    capture.readiness_only
+                        || self
+                            .later_sibling_function(capture.symbol, list, at)
+                            .is_some()
                         || self
                             .snapshot
                             .symbols
@@ -52881,75 +52982,79 @@ impl<'a> FuncBuilder<'a> {
                 });
                 continue;
             }
-            if !self.bindings.contains_key(&capture.symbol) {
-                self.open_cell_early(capture.symbol, capture.at);
-            }
-            let value = *self.bindings.get(&capture.symbol).ok_or_else(|| {
-                // Every name that is reached *by* name -- a function, a class,
-                // an import, a type, anything at module scope -- is excluded
-                // from captures before this. So a miss here is a local that has
-                // no value at the point the closure is built, which in practice
-                // means the closure was written above the declaration:
-                //
-                //     const onListening = () => { ...cleanup... };
-                //     const cleanup = ...;
-                //
-                // Legal, because the body runs later. Capturing it here would
-                // capture nothing, so it is refused rather than answered.
-                //
-                // **A `new Promise` settler is a different miss and said the
-                // wrong thing about itself.** `resolve` and `reject` are
-                // parameters of the executor arrow, declared as ordinarily as
-                // any parameter -- nothing about them is above its own
-                // declaration. They are absent from `bindings` because
-                // `Settler`'s doc says they are "not values at all": the
-                // executor is lowered at the construction site and a call to
-                // one is the settle it stands for.
-                //
-                // So a closure written *inside* the executor that captures one
-                // was told its program had a use-before-declaration, which it
-                // does not, and 41 of the 48 sites in that census row are this.
-                // The commonest shape in the corpus:
-                //
-                //     new Promise((resolve, reject) => {
-                //       const done = (e: Error | null): void => {
-                //         if (e !== null) { reject(e); return; }
-                //         resolve(v);
-                //       };
-                //       lookupService(host, done);
-                //     });
-                //
-                // Measured rather than assumed: the identical shape written as
-                // a *user* function with two callback parameters lowers, and so
-                // does `new Promise((resolve) => resolve(7))` with no inner
-                // closure. Only the pair refuses.
-                //
-                // **Not `new Promise` by name**, because the same map serves
-                // `Promise.withResolvers`: its destructured `resolve` and
-                // `reject` are settlers too, and a closure capturing one lands
-                // here identically. Saying `new Promise` would be right about
-                // 41 sites and wrong about whichever spelling a reader had in
-                // front of them.
-                if let Some(settler) = self.settlers.get(&capture.symbol) {
-                    let which = if settler.rejects { "reject" } else { "resolve" };
-                    return self.unsupported(
+            let value = if capture.readiness_only {
+                self.open_class_cell(capture.symbol, capture.at)?
+            } else {
+                if !self.bindings.contains_key(&capture.symbol) {
+                    self.open_cell_early(capture.symbol, capture.at);
+                }
+                *self.bindings.get(&capture.symbol).ok_or_else(|| {
+                    // Every name that is reached *by* name -- a function, a class,
+                    // an import, a type, anything at module scope -- is excluded
+                    // from captures before this. So a miss here is a local that has
+                    // no value at the point the closure is built, which in practice
+                    // means the closure was written above the declaration:
+                    //
+                    //     const onListening = () => { ...cleanup... };
+                    //     const cleanup = ...;
+                    //
+                    // Legal, because the body runs later. Capturing it here would
+                    // capture nothing, so it is refused rather than answered.
+                    //
+                    // **A `new Promise` settler is a different miss and said the
+                    // wrong thing about itself.** `resolve` and `reject` are
+                    // parameters of the executor arrow, declared as ordinarily as
+                    // any parameter -- nothing about them is above its own
+                    // declaration. They are absent from `bindings` because
+                    // `Settler`'s doc says they are "not values at all": the
+                    // executor is lowered at the construction site and a call to
+                    // one is the settle it stands for.
+                    //
+                    // So a closure written *inside* the executor that captures one
+                    // was told its program had a use-before-declaration, which it
+                    // does not, and 41 of the 48 sites in that census row are this.
+                    // The commonest shape in the corpus:
+                    //
+                    //     new Promise((resolve, reject) => {
+                    //       const done = (e: Error | null): void => {
+                    //         if (e !== null) { reject(e); return; }
+                    //         resolve(v);
+                    //       };
+                    //       lookupService(host, done);
+                    //     });
+                    //
+                    // Measured rather than assumed: the identical shape written as
+                    // a *user* function with two callback parameters lowers, and so
+                    // does `new Promise((resolve) => resolve(7))` with no inner
+                    // closure. Only the pair refuses.
+                    //
+                    // **Not `new Promise` by name**, because the same map serves
+                    // `Promise.withResolvers`: its destructured `resolve` and
+                    // `reject` are settlers too, and a closure capturing one lands
+                    // here identically. Saying `new Promise` would be right about
+                    // 41 sites and wrong about whichever spelling a reader had in
+                    // front of them.
+                    if let Some(settler) = self.settlers.get(&capture.symbol) {
+                        let which = if settler.rejects { "reject" } else { "resolve" };
+                        return self.unsupported(
+                            capture.at,
+                            &format!(
+                                "`{}`, a promise {which} captured by a closure -- a settler is a \
+                             call this lowering rewrites rather than a value it can hold",
+                                capture.name
+                            ),
+                        );
+                    }
+                    self.unsupported(
                         capture.at,
                         &format!(
-                            "`{}`, a promise {which} captured by a closure -- a settler is a \
-                             call this lowering rewrites rather than a value it can hold",
+                            "`{}`, captured above its own declaration, where it has \
+                         no value yet",
                             capture.name
                         ),
-                    );
-                }
-                self.unsupported(
-                    capture.at,
-                    &format!(
-                        "`{}`, captured above its own declaration, where it has \
-                         no value yet",
-                        capture.name
-                    ),
-                )
-            })?;
+                    )
+                })?
+            };
             let (value, field_ty) = self.stored_capture(&info, capture, value)?;
             self.field_set(object, u32::try_from(at).unwrap_or(0), value, &origin);
             fields.push(Field {
