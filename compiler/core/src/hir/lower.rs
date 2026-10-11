@@ -15305,6 +15305,7 @@ pub fn lower_with(
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
 
     collect_declared_facts(&mut lowered.program, snapshot);
+    super::interface_identities::collect(snapshot, &hierarchy.faces, &mut lowered.program);
     canonicalize_objects(&mut lowered.program);
     printed::decide(snapshot, &hierarchy, &closures, &mut lowered.program);
     printed::devirtualize(snapshot, &hierarchy, &mut lowered.program);
@@ -17428,17 +17429,14 @@ fn objects_in(ty: &HirType, into: &mut Vec<TypeId>) {
     }
 }
 
-/// Give structurally identical object types one identity.
+/// Canonicalize storage aliases while preserving declared identities.
 ///
-/// TypeScript is structurally typed, so `Point` and the anonymous
-/// `{ x: number; y: number }` of a literal returned as one *are* the same type
-/// — but the checker gives them different ids, and `HirType` compares by id.
-/// Left alone, a `return { x, y }` from a function declared to return `Point`
-/// looks like a representation change and earns a conversion between two
-/// pointers to the same struct.
+/// The frontend can give anonymous aliases of one structural shape different
+/// IDs, even after `collect_layouts` has merged their storage. Canonicalizing
+/// those aliases avoids conversions between pointers to the same struct.
 ///
-/// Rewriting every object type to its layout's representative makes `HirType`
-/// equality mean what it should: *the same representation*.
+/// Anonymous types take their layout's representative. Class and interface
+/// contracts survive independently of that shared representation.
 fn canonicalize_objects(program: &mut Program) {
     // **A class is its own representative, and that is what keeps identity.**
     //
@@ -17451,31 +17449,19 @@ fn canonicalize_objects(program: &mut Program) {
     //
     // Per class rather than per layout costs nothing it was buying. Both ids
     // resolve to the same layout and therefore the same C struct and the same
-    // JVM field table, so a value of one where the other is declared is a
-    // conversion between a type and itself, which `hir::simplify` drops. What
-    // it stops being is *equal*, and only `instanceof` and allocation ask that.
+    // JVM field table. Storage stays shared while allocation and `instanceof`
+    // retain the class identity.
     //
-    // Everything with no class -- an interface, a literal's anonymous type --
-    // still takes the layout's representative, which is the case the pass was
-    // written for: `return { x, y }` where `Point` is declared must not earn a
-    // conversion between two pointers to one struct.
-    let mut representatives: Vec<(Vec<TypeId>, TypeId)> = program
-        .classes
-        .iter()
-        .filter_map(|class| Some((class.types.clone(), *class.types.first()?)))
-        .collect();
-    representatives.extend(
-        program
-            .layouts
-            .iter()
-            .filter_map(|layout| Some((layout.types.clone(), *layout.types.first()?))),
-    );
+    // An interface's schema ID keeps its contract, independently of storage:
+    // two empty declarations can share a layout, and two instantiations can
+    // share pointer fields while disagreeing about null versus undefined.
+    // Anonymous types still take their layout's representative. Index once,
+    // because every parameter, result and operation asks this same question.
+    let representatives = object_representatives(program);
 
     let canonical = |ty: &mut HirType| {
         if let HirType::Managed(ManagedType::Object(id)) = ty
-            && let Some((_, representative)) = representatives
-                .iter()
-                .find(|(members, _)| members.contains(id))
+            && let Some(representative) = representatives.get(id)
         {
             *id = *representative;
         }
@@ -17517,6 +17503,34 @@ fn canonicalize_objects(program: &mut Program) {
             }
         }
     }
+}
+
+/// Class aliases first, then each interface contract, then anonymous storage.
+/// First entry wins, preserving the canonicalizer's declared-identity priority.
+fn object_representatives(program: &Program) -> rustc_hash::FxHashMap<TypeId, TypeId> {
+    let mut representatives = rustc_hash::FxHashMap::default();
+    for class in &program.classes {
+        if let Some(&representative) = class.types.first() {
+            for &ty in &class.types {
+                representatives.entry(ty).or_insert(representative);
+            }
+        }
+    }
+    for ty in program
+        .interface_identities
+        .iter()
+        .flat_map(|identity| &identity.types)
+    {
+        representatives.entry(*ty).or_insert(*ty);
+    }
+    for layout in &program.layouts {
+        if let Some(&representative) = layout.types.first() {
+            for &ty in &layout.types {
+                representatives.entry(ty).or_insert(representative);
+            }
+        }
+    }
+    representatives
 }
 
 /// Choose a representation for a source type.

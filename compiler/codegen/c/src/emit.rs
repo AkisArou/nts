@@ -502,6 +502,8 @@ fn values_read(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
 /// static.
 struct Context<'a> {
     program: &'a Program,
+    /// Object aliases have one physical C struct, independent of contracts.
+    layouts: &'a nts_core::hir::fields::LayoutIndex,
     /// Which arrays of references can be in a cycle, decided once for the
     /// program: the descriptor an allocation names is the answer the collector
     /// acts on, so every allocation has to ask the same one.
@@ -518,6 +520,15 @@ struct Context<'a> {
     /// generated file is compiled with. `c.advance();` as a statement is
     /// exactly that.
     read: rustc_hash::FxHashSet<ValueId>,
+}
+
+impl Context<'_> {
+    /// Exact C object-type equality, without granting an assignability edge.
+    fn same_object_type(&self, left: &HirType, right: &HirType) -> bool {
+        self.layouts
+            .of(left)
+            .is_some_and(|layout| self.layouts.of(right) == Some(layout))
+    }
 }
 
 /// C for one program, and what could not be emitted.
@@ -1611,6 +1622,7 @@ fn emit_bodies<'a>(
     let mut bodies = Vec::new();
     let templates = nts_core::hir::templates::present(program);
     let cycles = program.cycles();
+    let layouts = nts_core::hir::fields::LayoutIndex::build(program);
     for func in program.native_funcs() {
         // An `abstract` method is a signature and no body. It is in `funcs` so
         // that a call through the slot can take its function-pointer type from
@@ -1625,6 +1637,7 @@ fn emit_bodies<'a>(
         let mut body = CodeWriter::new();
         let context = Context {
             program,
+            layouts: &layouts,
             cycles: &cycles,
             abi,
             literals,
@@ -1764,8 +1777,7 @@ fn call_text(
         .program
         .funcs
         .iter()
-        .find(|func| func.name == target)
-        .map(|func| &func.params);
+        .find(|func| func.name == target);
     let arguments: Vec<String> = args
         .iter()
         .enumerate()
@@ -1787,10 +1799,14 @@ fn call_text(
             if erases_class(target, at) {
                 return format!("(NtsHeader *){}", value_name(*argument));
             }
-            let wanted = declared.and_then(|params| params.get(at)).map(|p| &p.ty);
+            let wanted = declared.and_then(|func| func.params.get(at)).map(|p| &p.ty);
             let actual = &func.values[argument.0 as usize].ty;
             match wanted {
-                Some(wanted) if wanted != actual && wanted.is_managed() => {
+                Some(wanted)
+                    if wanted != actual
+                        && wanted.is_managed()
+                        && !context.same_object_type(wanted, actual) =>
+                {
                     match c_type_of(context.program, wanted, origin) {
                         Ok(ty) => format!("({ty}){}", value_name(*argument)),
                         Err(_) => value_name(*argument),
@@ -1859,26 +1875,8 @@ fn call_text(
         format!("{}({})", c_identifier(target), arguments.join(", "))
     };
 
-    // A result used at a different type than the callee declares.
-    //
-    // `bump(): this` on a base class returns the base pointer, and in a
-    // subclass the caller's `this` is the subclass. Under base-first layout
-    // those are the same pointer -- which is the rule `verify::compatible`
-    // already applies to a return, a store and a call argument -- but C wants
-    // telling, and `-Wincompatible-pointer-types` is an error here.
-    //
-    // Only where the two actually differ, so nothing that agreed before this
-    // grows a cast. Only for a managed type, because two scalars are a
-    // conversion rather than a cast and specialization owns those.
     let wanted = &func.values[value.0 as usize].ty;
-    let cast = context
-        .program
-        .funcs
-        .iter()
-        .find(|declared| declared.name == *target)
-        .filter(|declared| declared.return_type != *wanted && wanted.is_managed())
-        .map(|_| c_type_of(context.program, wanted, origin))
-        .transpose()?;
+    let cast = call_result_cast(declared, wanted, context, origin)?;
 
     Ok(if context.read.contains(&value) {
         match cast {
@@ -1889,6 +1887,27 @@ fn call_text(
         // The call still happens; only its result is unwanted.
         format!("{call};")
     })
+}
+
+/// A result used at a different C object type than the callee declares.
+///
+/// `bump(): this` on a base class returns the base pointer, and a subclass
+/// caller's `this` needs its own pointer spelling. Exact layout aliases need
+/// none. Scalar conversions belong to specialization.
+fn call_result_cast(
+    declared: Option<&Func>,
+    wanted: &HirType,
+    context: &Context<'_>,
+    origin: &Origin,
+) -> Result<Option<String>, Diagnostic> {
+    declared
+        .filter(|declared| {
+            declared.return_type != *wanted
+                && wanted.is_managed()
+                && !context.same_object_type(&declared.return_type, wanted)
+        })
+        .map(|_| c_type_of(context.program, wanted, origin))
+        .transpose()
 }
 
 fn native_call_expression(
@@ -2593,7 +2612,8 @@ fn field_store(
             op.origin.location,
         )
     })?;
-    let cast = if declared.ty == func.values[stored.0 as usize].ty {
+    let actual = &func.values[stored.0 as usize].ty;
+    let cast = if declared.ty == *actual || context.same_object_type(&declared.ty, actual) {
         String::new()
     } else {
         c_type_of(context.program, &declared.ty, &op.origin)
@@ -2615,7 +2635,7 @@ fn field_store(
 /// tells C that the two spellings mean one address.
 fn upcast(func: &Func, context: &Context<'_>, wanted: &HirType, value: ValueId) -> String {
     let actual = &func.values[value.0 as usize].ty;
-    if !wanted.is_managed() || wanted == actual {
+    if !wanted.is_managed() || wanted == actual || context.same_object_type(wanted, actual) {
         return String::new();
     }
     let origin = &func.values[value.0 as usize].origin;
@@ -5435,7 +5455,11 @@ fn memory_op(
             // same address, with the base's fields at the base's offsets.
             let stored_ty = &func.values[stored.0 as usize].ty;
             let cast = match element_declared(&func.values[array.0 as usize].ty) {
-                Some(declared) if declared != *stored_ty && declared.is_managed() => {
+                Some(declared)
+                    if declared != *stored_ty
+                        && declared.is_managed()
+                        && !context.same_object_type(&declared, stored_ty) =>
+                {
                     format!("({element})")
                 }
                 _ => String::new(),
@@ -5483,7 +5507,8 @@ fn upcast_to_global(
     else {
         return String::new();
     };
-    if declared == &func.values[value.0 as usize].ty || !declared.is_managed() {
+    let actual = &func.values[value.0 as usize].ty;
+    if declared == actual || !declared.is_managed() || context.same_object_type(declared, actual) {
         return String::new();
     }
     c_type_of(context.program, declared, origin)

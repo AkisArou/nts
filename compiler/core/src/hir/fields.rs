@@ -684,7 +684,8 @@ fn is_number(program: &Program, layout: usize, field: u32) -> bool {
 }
 
 /// Which layout each object type belongs to.
-pub(super) struct LayoutIndex(FxHashMap<super::TypeId, usize>);
+#[derive(Debug)]
+pub struct LayoutIndex(FxHashMap<super::TypeId, usize>);
 
 impl LayoutIndex {
     /// Read the layouts once, so that every question after is a lookup.
@@ -695,7 +696,8 @@ impl LayoutIndex {
     /// operation, and both of those walks run once per round of the
     /// interprocedural fixpoint -- so the search was multiplied by the number
     /// of layouts, the number of operations and the number of rounds at once.
-    pub(super) fn build(program: &Program) -> Self {
+    #[must_use]
+    pub fn build(program: &Program) -> Self {
         let mut of_type = FxHashMap::default();
         for (at, layout) in program.layouts.iter().enumerate() {
             for ty in &layout.types {
@@ -708,7 +710,8 @@ impl LayoutIndex {
     }
 
     /// Where this type's layout is, if it has one.
-    pub(super) fn of(&self, ty: &HirType) -> Option<usize> {
+    #[must_use]
+    pub fn of(&self, ty: &HirType) -> Option<usize> {
         let HirType::Managed(ManagedType::Object(id)) = ty else {
             return None;
         };

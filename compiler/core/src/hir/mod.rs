@@ -40,6 +40,7 @@ pub mod globals;
 pub mod guards;
 pub mod instantiate;
 pub mod interface_fields;
+mod interface_identities;
 pub mod interprocedural;
 pub mod layout;
 pub mod liveness;
@@ -1991,6 +1992,21 @@ pub struct ClassIdentity {
     pub types: Vec<TypeId>,
 }
 
+/// One interface declaration, independent of its physical layouts.
+///
+/// Instantiations belong to one declaration even when their fields have
+/// different storage. Conversely, unrelated empty interfaces can share a
+/// layout without becoming the same interface.
+#[derive(Debug, Clone)]
+pub struct InterfaceIdentity {
+    pub symbol: u32,
+    pub name: String,
+    /// Used schema types of this declaration, sorted and distinct.
+    /// Each keeps its own semantic identity: equal pointer storage does not
+    /// equate nullable and optional field contracts.
+    pub types: Vec<TypeId>,
+}
+
 /// How one object type is laid out.
 ///
 /// The compiler's answer to "where is this field", decided once and consumed by
@@ -3062,6 +3078,11 @@ pub struct Program {
     /// only it needs no separate descriptor: the cost is one constant per class
     /// that actually shares.
     pub classes: Vec<ClassIdentity>,
+    /// Semantic interface declarations over the layouts' shared storage.
+    /// Neither layout merging nor backend field naming decides this identity.
+    /// One declaration covers all of its used instantiations; their schema
+    /// IDs survive canonicalization so later access plans retain each contract.
+    pub interface_identities: Vec<InterfaceIdentity>,
     /// Variables declared at module scope, indexed by [`OpKind::GlobalGet`].
     pub globals: Vec<Global>,
     /// The memory discipline this program was lowered under.
