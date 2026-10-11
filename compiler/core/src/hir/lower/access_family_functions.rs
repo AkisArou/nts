@@ -24,7 +24,9 @@ struct Context<'a> {
 #[derive(PartialEq, Eq, Hash)]
 struct BodyKey {
     owner: super::TypeId,
-    member: String,
+    /// Constant missing-field reads do not depend on a member. Their owner is
+    /// still one exact canonical layout, so the JVM receiver type also agrees.
+    member: Option<String>,
     writes: bool,
     raising: bool,
     input: Option<HirType>,
@@ -187,6 +189,11 @@ pub(super) fn placeholder(
     let entry = entry(hierarchy, family, writes, false);
     let owner = if matches!(supply.reader, Reader::Stored) && supply.setter.is_none() {
         format!("storage{:?}", supply.absent)
+    } else if matches!(supply.reader, Reader::Undefined) {
+        // A missing-field reader has no owner storage to read. Equal complete
+        // layouts may merge before its receiver type is fixed, just as stored
+        // readers may; keep the two reader roles distinct in the reservation.
+        format!("undefined{:?}", supply.absent)
     } else {
         supply.owner.0.to_string()
     };
@@ -206,7 +213,7 @@ fn body_key(
 ) -> BodyKey {
     BodyKey {
         owner: supply.owner,
-        member: family.member.clone(),
+        member: (!matches!(supply.reader, Reader::Undefined)).then(|| family.member.clone()),
         writes,
         raising,
         input: if writes { family.writes.clone() } else { None },
@@ -305,7 +312,9 @@ fn fill(
     // The source owner may have joined an equivalent structural layout. One
     // body and receiver convention serve all of that layout's stored rows.
     let mut supply = supply.clone();
-    if matches!(supply.reader, Reader::Stored) && supply.setter.is_none() {
+    if (matches!(supply.reader, Reader::Stored) && supply.setter.is_none())
+        || matches!(supply.reader, Reader::Undefined)
+    {
         supply.owner = *program.layouts[owner]
             .types
             .first()
@@ -338,6 +347,12 @@ fn fill(
             .interface_access
             .storage_bodies
             .insert(name.clone(), supply.owner);
+    }
+    if matches!(supply.reader, Reader::Undefined) && !writes {
+        program
+            .interface_access
+            .default_bodies
+            .insert(name.clone(), raising);
     }
     context.bodies.insert(key, name);
     functions.push(function);

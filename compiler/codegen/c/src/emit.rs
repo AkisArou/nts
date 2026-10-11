@@ -3358,6 +3358,7 @@ fn emit_object_descriptors(
     let cyclic_layouts = program.cyclic_layouts();
     let needed = layouts_needing_descriptors(program);
     let published = published_class_layouts(program);
+    let mut emitted_rows = rustc_hash::FxHashSet::default();
     for (index, layout) in program.layouts.iter().enumerate() {
         // A layout nothing allocates *and* nothing tests against needs no
         // descriptor. It still needs its struct, because something is declared
@@ -3416,14 +3417,24 @@ fn emit_object_descriptors(
             "0".to_owned()
         } else {
             let entries: Vec<String> = projected.iter().copied().map(entry).collect();
-            writer.line(
-                origin,
-                format!(
-                    "static void *const nts_vtable_{name}[] = {{ {} }};",
-                    entries.join(", ")
-                ),
-            );
-            format!("nts_vtable_{name}")
+            let table = match program.native_table_index(layout) {
+                Ok(Some(index)) => format!("nts_vtable_shared_{index}"),
+                Ok(None) => format!("nts_vtable_{name}"),
+                Err(why) => {
+                    diagnostics.push(Diagnostic::error("NTS2006", why, origin.location));
+                    continue;
+                }
+            };
+            if emitted_rows.insert(table.clone()) {
+                writer.line(
+                    origin,
+                    format!(
+                        "static void *const {table}[] = {{ {} }};",
+                        entries.join(", ")
+                    ),
+                );
+            }
+            table
         };
 
         // The *pointer* slots, not every slot that may hold a reference: an

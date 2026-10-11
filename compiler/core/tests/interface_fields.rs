@@ -26,6 +26,44 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn default_getter_roles_survive_prepare_and_only_default_targets_share() {
+    let Some(program) = prepared_fixture("accessor-default-sharing") else {
+        eprintln!("SKIP interface_fields: tsgo is not built");
+        return;
+    };
+    let defaults = &program.interface_access.default_bodies;
+    assert!(
+        defaults.len() >= 2,
+        "both missing-field owners survive prepare"
+    );
+    let emitted: std::collections::BTreeSet<_> =
+        program.native_funcs().map(|f| f.name.as_str()).collect();
+    let mut shared = 0;
+    for layout in &program.layouts {
+        let row = program.native_methods(layout).expect("native row");
+        for (slot, logical) in layout.methods.iter().enumerate() {
+            let Some(column) = program.native_column(u32::try_from(slot).unwrap()) else {
+                continue;
+            };
+            let target = row.get(column as usize).copied().flatten();
+            if logical.as_deref() != target {
+                let logical = logical.as_ref().expect("null cannot acquire a body");
+                let target = target.expect("a live default cannot disappear");
+                assert_eq!(defaults.get(logical), defaults.get(target));
+                assert!(defaults.contains_key(logical));
+                assert!(emitted.contains(target));
+                assert!(!emitted.contains(logical.as_str()));
+                shared += 1;
+            }
+        }
+    }
+    assert!(
+        shared > 0,
+        "prepared defaults actually share a native target"
+    );
+}
+
+#[test]
 fn a_transitively_refused_getter_refuses_interface_readers() {
     let Some(program) = prepared_fixture("accessor-refusal-chain") else {
         eprintln!("SKIP interface_fields: tsgo is not built");

@@ -377,6 +377,20 @@ fn check_interface_access(program: &Program, problems: &mut Vec<Invalid>) {
             });
         }
     }
+    for name in program.interface_access.default_bodies.keys() {
+        if functions.get(name.as_str()).is_none_or(|func| {
+            func.params.len() != 1
+                || func.return_type != HirType::Erased
+                || !matches!(
+                    func.params[0].ty,
+                    HirType::Managed(super::ManagedType::Object(_))
+                )
+        }) {
+            problems.push(Invalid::InvalidInterfaceAccess {
+                reason: format!("default-getter role `{name}` does not name a live object getter"),
+            });
+        }
+    }
     let layouts = super::fields::LayoutIndex::build(program);
     for family in &program.interface_access.families {
         for entry in family.entries() {
@@ -431,6 +445,9 @@ fn check_native_dispatch(program: &Program, problems: &mut Vec<Invalid>) {
         problems.push(Invalid::InvalidNativeDispatch {
             reason: "native columns must be distinct and cover the row width".to_owned(),
         });
+    }
+    if let Err(reason) = table.validate_rows(program) {
+        problems.push(Invalid::InvalidNativeDispatch { reason });
     }
     let mut require = |func: &str, slot: u32| {
         if program.native_column(slot).is_none() {

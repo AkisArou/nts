@@ -814,6 +814,7 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
     let cyclic = program.cyclic_layouts();
+    let mut emitted_rows = std::collections::BTreeSet::new();
     for (index, layout) in program.layouts.iter().enumerate() {
         let Some(placed) = nts_core::hir::layout::place(&layout.fields) else {
             continue;
@@ -856,7 +857,7 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
         // class does not implement is null, which is unreachable: a call only
         // uses a slot the receiver's static type declares, and every class at
         // or below that type fills it.
-        let methods = match vtable(&mut out, program, layout, &tag) {
+        let methods = match vtable(&mut out, program, layout, &tag, &mut emitted_rows) {
             Ok(table) => table,
             Err(why) => {
                 diagnostics.push(Diagnostic::error(
@@ -1401,6 +1402,7 @@ fn vtable(
     program: &Program,
     layout: &nts_core::hir::Layout,
     tag: &str,
+    emitted_rows: &mut std::collections::BTreeSet<String>,
 ) -> Result<String, String> {
     let methods = program.native_methods(layout)?;
     if methods.iter().all(Option::is_none) {
@@ -1415,13 +1417,19 @@ fn vtable(
             )
         })
         .collect();
-    let _ = writeln!(
-        out,
-        "@nts_vtable_{tag} = internal constant [{} x ptr] [{}]",
-        entries.len(),
-        entries.join(", ")
+    let table = program.native_table_index(layout)?.map_or_else(
+        || format!("nts_vtable_{tag}"),
+        |index| format!("nts_vtable_shared_{index}"),
     );
-    Ok(format!("ptr @nts_vtable_{tag}"))
+    if emitted_rows.insert(table.clone()) {
+        let _ = writeln!(
+            out,
+            "@{table} = internal constant [{} x ptr] [{}]",
+            entries.len(),
+            entries.join(", ")
+        );
+    }
+    Ok(format!("ptr @{table}"))
 }
 
 /// Whether anything in the program refers to this layout's single instance.

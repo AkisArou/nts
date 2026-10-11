@@ -35,8 +35,10 @@ use nts_semantic_schema::TypeId;
 /// the layout holds that names a parent names the same parent layout; the
 /// parent's fields are a prefix of this layout's, name and type -- which is
 /// what `inherited`, `declared` and `declares_field` rest on; the parent carries
-/// state, so it is no JVM interface; and neither side dispatches, so no slot
-/// table has to agree. Otherwise `None`, and the refusal the JVM would have
+/// state, so it is no JVM interface; and neither side has ordinary method
+/// dispatch. Native field-family entries do not change this record relation:
+/// their shared slot contracts already agree, and stage B declines calls to
+/// those selectors on the JVM. Otherwise `None`, and the refusal the JVM would have
 /// given still stands. Deliberately free of `is_interface`, which asks this.
 #[must_use]
 pub fn jvm_base(program: &Program, layout: &Layout) -> Option<usize> {
@@ -66,7 +68,14 @@ pub fn jvm_base(program: &Program, layout: &Layout) -> Option<usize> {
             .iter()
             .zip(&layout.fields)
             .all(|(theirs, mine)| theirs.name == mine.name && theirs.ty == mine.ty);
-    let dispatches = |l: &Layout| l.methods.iter().any(Option::is_some);
+    let dispatches = |l: &Layout| {
+        l.methods.iter().enumerate().any(|(slot, method)| {
+            method.is_some()
+                && u32::try_from(slot)
+                    .ok()
+                    .is_none_or(|slot| !program.interface_access.contains_selector(slot))
+        })
+    };
     (prefix && !dispatches(base) && !dispatches(layout) && !std::ptr::eq(base, layout))
         .then_some(at)
 }

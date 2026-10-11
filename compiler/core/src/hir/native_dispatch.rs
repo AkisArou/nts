@@ -1,15 +1,19 @@
 //! Project native tables onto their readers without changing logical dispatch.
 //!
 //! Every surviving selector keeps a distinct column. For every layout, its
-//! body or null remains exactly the logical table's entry. In particular an
+//! body or null keeps the logical table's behavior. Only unused-receiver
+//! constant getters may share a native body; complete identical rows share
+//! storage. In particular an
 //! erased or structural receiver missing a method cannot acquire another body.
 //! Co-filled selector sharing needs a stronger receiver proof and is deferred.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{Callee, Func, HirType, Layout, ManagedType, OpKind, Printed, Program};
+
+mod default_getters;
 
 /// One whole-program mapping, consumed by both native backends.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +24,11 @@ pub struct NativeDispatch {
     pub width: u32,
     /// Bodies whose only references were in omitted table columns.
     omitted_bodies: FxHashSet<String>,
+    /// Only proven table-only constant getters may change their native target.
+    aliases: BTreeMap<String, String>,
+    /// Full rows are interned, including every absent entry.
+    rows: Vec<Vec<Option<String>>>,
+    layout_rows: BTreeMap<String, Option<usize>>,
 }
 
 impl NativeDispatch {
@@ -32,6 +41,18 @@ impl NativeDispatch {
             .flatten()
             .filter(|column| *column < self.width)
     }
+
+    pub(super) fn validate_rows(&self, program: &Program) -> Result<(), String> {
+        let aliases = default_getters::aliases(program, &self.columns);
+        if aliases != self.aliases {
+            return Err("native body aliases lack their prepared constant-getter proof".to_owned());
+        }
+        let (rows, layouts) = intern_rows(program, &self.columns, self.width, &aliases)?;
+        if rows != self.rows || layouts != self.layout_rows {
+            return Err("native rows differ from their complete logical projection".to_owned());
+        }
+        Ok(())
+    }
 }
 
 impl Program {
@@ -41,9 +62,10 @@ impl Program {
     /// or linking as an undefined symbol; it cannot silently call another body.
     pub fn native_funcs(&self) -> impl Iterator<Item = &Func> {
         self.funcs.iter().filter(|func| {
-            self.native_dispatch
-                .as_ref()
-                .is_none_or(|table| !table.omitted_bodies.contains(&func.name))
+            self.native_dispatch.as_ref().is_none_or(|table| {
+                !table.omitted_bodies.contains(&func.name)
+                    && !table.aliases.contains_key(&func.name)
+            })
         })
     }
 
@@ -57,16 +79,55 @@ impl Program {
 
     /// The same projection for both native emitters. A row with no remaining
     /// body is emitted as no table, as an empty logical row already is.
-    pub fn native_methods<'a>(&self, layout: &'a Layout) -> Result<Vec<Option<&'a str>>, String> {
+    pub fn native_methods<'a>(
+        &'a self,
+        layout: &'a Layout,
+    ) -> Result<Vec<Option<&'a str>>, String> {
         let Some(table) = &self.native_dispatch else {
             return Ok(layout.methods.iter().map(Option::as_deref).collect());
         };
-        if table.width as usize > table.columns.len() {
-            return Err("native dispatch width exceeds its selector map".to_owned());
-        }
-        let mut row = vec![None; table.width as usize];
+        let Some(index) = self.native_table_index(layout)? else {
+            return Ok(Vec::new());
+        };
+        table
+            .rows
+            .get(index)
+            .map(|row| row.iter().map(Option::as_deref).collect())
+            .ok_or_else(|| format!("native row {index} is absent"))
+    }
+
+    /// One stable row identity for both native emitters. Raw HIR keeps its
+    /// per-layout tables; a prepared empty row needs no table at all.
+    pub fn native_table_index(&self, layout: &Layout) -> Result<Option<usize>, String> {
+        let Some(table) = &self.native_dispatch else {
+            return Ok(None);
+        };
+        table
+            .layout_rows
+            .get(&layout.name)
+            .copied()
+            .ok_or_else(|| format!("layout `{}` has no native row", layout.name))
+    }
+}
+
+type Rows = Vec<Vec<Option<String>>>;
+type LayoutRows = BTreeMap<String, Option<usize>>;
+
+fn intern_rows(
+    program: &Program,
+    columns: &[Option<u32>],
+    width: u32,
+    aliases: &BTreeMap<String, String>,
+) -> Result<(Rows, LayoutRows), String> {
+    if width as usize > columns.len() {
+        return Err("native dispatch width exceeds its selector map".to_owned());
+    }
+    let mut projected = BTreeMap::new();
+    let mut distinct = BTreeSet::new();
+    for layout in &program.layouts {
+        let mut row = vec![None; width as usize];
         for (selector, body) in layout.methods.iter().enumerate() {
-            let Some(Some(column)) = table.columns.get(selector) else {
+            let Some(Some(column)) = columns.get(selector) else {
                 continue;
             };
             let Some(entry) = row.get_mut(*column as usize) else {
@@ -77,12 +138,29 @@ impl Program {
             if body.is_some() && entry.is_some() {
                 return Err(format!("two selectors occupy native column {column}"));
             }
-            if body.is_some() {
-                *entry = body.as_deref();
-            }
+            *entry = body
+                .as_ref()
+                .map(|name| aliases.get(name).unwrap_or(name).clone());
         }
-        Ok(row)
+        if row.iter().any(Option::is_some) {
+            distinct.insert(row.clone());
+        }
+        projected.insert(layout.name.clone(), row);
     }
+    let indexes: BTreeMap<_, _> = distinct
+        .into_iter()
+        .enumerate()
+        .map(|(index, row)| (row, index))
+        .collect();
+    let layouts = projected
+        .into_iter()
+        .map(|(name, row)| {
+            let index = indexes.get(&row).copied();
+            (name, index)
+        })
+        .collect();
+    let rows = indexes.into_keys().collect();
+    Ok((rows, layouts))
 }
 
 /// After every pass that shapes functions or layouts. Sorting the readers
@@ -122,11 +200,19 @@ pub(super) fn plan(program: &mut Program) {
     for (column, selector) in readers.iter().enumerate() {
         columns[*selector as usize] = u32::try_from(column).ok();
     }
+    let aliases = default_getters::aliases(program, &columns);
     let mut table = NativeDispatch {
         columns,
         width: u32::try_from(readers.len()).unwrap_or(u32::MAX),
         omitted_bodies: FxHashSet::default(),
+        aliases,
+        rows: Vec::new(),
+        layout_rows: BTreeMap::new(),
     };
+    if let Ok((rows, layouts)) = intern_rows(program, &table.columns, table.width, &table.aliases) {
+        table.rows = rows;
+        table.layout_rows = layouts;
+    }
     table.omitted_bodies = omitted_bodies(program, &table);
     program.native_dispatch = Some(table);
 }
@@ -392,6 +478,196 @@ mod tests {
         let mut func = function(name, &[0]);
         func.exported = false;
         func
+    }
+
+    fn default_getter(name: &str, owner: u32) -> Func {
+        let mut func = internal(name);
+        func.return_type = HirType::Erased;
+        func.values[0].kind = OpKind::ConstUndefined;
+        func.values[0].ty = HirType::Erased;
+        func.params.push(super::super::Param {
+            name: "this".to_owned(),
+            ty: HirType::Managed(ManagedType::Object(TypeId(owner))),
+            origin: func.origin.clone(),
+            shape: super::super::ParamShape::Ordinary,
+            known: super::super::facts::Facts::TOP,
+            written: None,
+        });
+        func
+    }
+
+    fn default_program() -> Program {
+        let mut second = row("two", &[(3, "defaultB"), (7, "other")]);
+        second.types = vec![TypeId(2)];
+        let mut program = Program {
+            funcs: vec![
+                function("reader", &[3, 7]),
+                default_getter("defaultA", 1),
+                default_getter("defaultB", 2),
+                internal("other"),
+            ],
+            layouts: vec![
+                row("one", &[(3, "defaultA"), (7, "other")]),
+                second,
+                row("missing", &[(7, "other")]),
+            ],
+            ..Program::default()
+        };
+        program.layouts[2].types = vec![TypeId(3)];
+        program.interface_access.default_bodies = [
+            ("defaultA".to_owned(), false),
+            ("defaultB".to_owned(), false),
+        ]
+        .into();
+        program
+    }
+
+    #[test]
+    fn proven_default_getters_and_only_complete_identical_rows_share() {
+        let mut program = default_program();
+        let logical = program
+            .layouts
+            .iter()
+            .map(|layout| layout.methods.clone())
+            .collect::<Vec<_>>();
+        plan(&mut program);
+        let table = program.native_dispatch.as_ref().expect("plan");
+        assert_eq!(
+            table.aliases,
+            [("defaultB".to_owned(), "defaultA".to_owned())].into()
+        );
+        assert_eq!(
+            program
+                .native_table_index(&program.layouts[0])
+                .expect("row"),
+            program
+                .native_table_index(&program.layouts[1])
+                .expect("row")
+        );
+        assert_ne!(
+            program
+                .native_table_index(&program.layouts[0])
+                .expect("row"),
+            program
+                .native_table_index(&program.layouts[2])
+                .expect("row")
+        );
+        let missing = program.native_methods(&program.layouts[2]).expect("row");
+        assert_eq!(
+            missing[program.native_column(3).expect("column") as usize],
+            None
+        );
+        assert!(program.native_funcs().any(|func| func.name == "defaultA"));
+        assert!(!program.native_funcs().any(|func| func.name == "defaultB"));
+        assert_eq!(program.funcs.len(), 4, "JVM keeps all functions");
+        for (layout, before) in program.layouts.iter().zip(logical) {
+            assert_eq!(layout.methods, before);
+        }
+        assert!(super::super::verify::verify(&program).is_ok());
+        let before = program.native_dispatch.clone();
+        program.layouts.reverse();
+        program.funcs.reverse();
+        plan(&mut program);
+        assert_eq!(program.native_dispatch, before, "row IDs are deterministic");
+    }
+
+    #[test]
+    fn default_sharing_needs_the_role_body_proof_and_no_direct_or_public_entry() {
+        for boundary in ["role", "read", "call", "public", "raising", "result"] {
+            let mut program = default_program();
+            match boundary {
+                "role" => {
+                    program.interface_access.default_bodies.remove("defaultB");
+                }
+                "read" => {
+                    program.funcs[2].values[0].kind = OpKind::FieldGet {
+                        object: ValueId(0),
+                        field: 0,
+                    };
+                }
+                "call" => {
+                    call(&mut program.funcs[0], "defaultB");
+                }
+                "public" => {
+                    program
+                        .public_api
+                        .push(("defaultB".to_owned(), "getter".to_owned()));
+                }
+                "raising" => {
+                    program
+                        .interface_access
+                        .default_bodies
+                        .insert("defaultB".to_owned(), true);
+                }
+                "result" => {
+                    program.funcs[2].return_type = HirType::NUMBER;
+                }
+                _ => unreachable!(),
+            }
+            plan(&mut program);
+            assert!(
+                program
+                    .native_dispatch
+                    .as_ref()
+                    .expect("plan")
+                    .aliases
+                    .is_empty(),
+                "{boundary}"
+            );
+            assert!(
+                program.native_funcs().any(|func| func.name == "defaultB"),
+                "{boundary}"
+            );
+        }
+    }
+
+    #[test]
+    fn verifier_rechecks_native_alias_permissions_and_every_null_entry() {
+        for sabotage in ["effect", "direct", "role", "null", "target"] {
+            let mut program = default_program();
+            plan(&mut program);
+            match sabotage {
+                "effect" => {
+                    program.funcs[2].values[0].kind = OpKind::Call {
+                        callee: Callee::External("nts_refused".to_owned()),
+                        args: Vec::new(),
+                        frame: None,
+                    };
+                }
+                "direct" => {
+                    call(&mut program.funcs[0], "defaultB");
+                }
+                "role" => {
+                    program.interface_access.default_bodies.clear();
+                }
+                "null" => {
+                    let column = program.native_column(3).expect("column") as usize;
+                    let row = program
+                        .native_table_index(&program.layouts[2])
+                        .expect("row")
+                        .expect("index");
+                    program.native_dispatch.as_mut().expect("plan").rows[row][column] =
+                        Some("defaultA".to_owned());
+                }
+                "target" => {
+                    program
+                        .native_dispatch
+                        .as_mut()
+                        .expect("plan")
+                        .aliases
+                        .insert("defaultB".to_owned(), "other".to_owned());
+                }
+                _ => unreachable!(),
+            }
+            let errors = super::super::verify::verify(&program).expect_err("bad native plan");
+            assert!(
+                errors.iter().any(|error| matches!(
+                    error,
+                    super::super::verify::Invalid::InvalidNativeDispatch { .. }
+                )),
+                "{sabotage}: {errors:?}"
+            );
+        }
     }
 
     fn call(func: &mut Func, target: &str) {

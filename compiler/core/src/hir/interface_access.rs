@@ -43,6 +43,9 @@ impl Family {
 pub struct Plan {
     pub families: Vec<Family>,
     pub storage_bodies: BTreeMap<String, TypeId>,
+    /// Missing-field getters, with their ordinary/raising convention. This is
+    /// permission to consider native sharing, never proof that a body is pure.
+    pub default_bodies: BTreeMap<String, bool>,
     by_field: FxHashMap<(TypeId, u32), usize>,
     by_selector: FxHashMap<u32, usize>,
     selectors: FxHashSet<u32>,

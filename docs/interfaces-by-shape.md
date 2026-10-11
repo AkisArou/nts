@@ -338,10 +338,22 @@ padding without needing selector coloring or a proof about possible receivers.
 
 Logical selectors and `Layout::methods` stay unchanged. At the end of prepare,
 `hir::native_dispatch` sorts the surviving readers and assigns each a distinct
-native column. Every layout keeps exactly its body or null in each retained
+native column. Every layout keeps its body behavior or null in each retained
 column; a missing method cannot acquire another selector's body. C and LLVM
 use this one plan for rows and loads. Calls still cost the same indexed load.
 The JVM continues to use logical slots.
+
+Missing optional fields can create many identical default getters. Their source
+role grants permission to consider sharing, then prepared IR must prove a single
+unused object parameter, no effects and a constant erased undefined return.
+Direct, public, printed and bridge references exclude a body. Native tables may
+then name one canonical getter per calling convention; no body reads another
+record's storage. Logical functions and JVM identities stay unchanged.
+
+The same plan interns complete native rows, including every null. Both native
+emitters use its stable row identity; descriptors with identical rows share
+table storage. The verifier recomputes the getter proofs and full projection,
+so stale permissions, changed bodies or a filled null invalidate the plan.
 
 The same native plan supplies an emission view that omits bodies made
 unreferenced by discarded columns, including their otherwise unreferenced
