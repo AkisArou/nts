@@ -3864,7 +3864,7 @@ fn allocate_object(
         _ => descriptor_for(context.program, layout, None),
     };
     if frame {
-        start_frame_object(writer, &op.origin, name, &descriptor, layout);
+        start_frame_object(writer, &op.origin, name, &descriptor);
         return Ok(format!("{name} = &{name}_frame;"));
     }
     Ok(format!(
@@ -5222,23 +5222,22 @@ fn unary_text(
 /// which somehow reaches a frame object is a no-op rather than `free` on a stack
 /// address.
 ///
-/// The reference slots start empty, and that one is load-bearing. A frame slot
-/// is reused by every execution of the site that declares it, so on the second
+/// Every byte starts zero, as it does in `nts_object_new`. This includes scalar
+/// fields such as a captured binding's `ready` flag, not just references. A frame
+/// slot is reused by every execution of the site that declares it, so on the second
 /// pass through a loop it holds the pointers the first pass released -- and the
 /// compiler emits a release of each reference field where the object ends.
 /// Zeroing is what makes that release read a null rather than a pointer to
 /// memory that is gone, on any path where a field was not written.
 ///
-/// None of these stores survive a program that writes every field before reading
-/// it, which is every constructor and every object literal; clang removes them
-/// along with the object.
-fn start_frame_object(
-    writer: &mut CodeWriter,
-    origin: &Origin,
-    name: &str,
-    descriptor: &str,
-    layout: &nts_core::hir::Layout,
-) {
+/// Clearing happens at the allocation site on every execution, rather than only
+/// when the function's frame storage is declared. Clang can remove zeroes that
+/// are overwritten before a read.
+fn start_frame_object(writer: &mut CodeWriter, origin: &Origin, name: &str, descriptor: &str) {
+    writer.line(
+        origin,
+        format!("memset(&{name}_frame, 0, sizeof {name}_frame);"),
+    );
     writer.line(
         origin,
         format!("{name}_frame.header.descriptor = &{descriptor};"),
@@ -5247,42 +5246,6 @@ fn start_frame_object(
         origin,
         format!("{name}_frame.header.reserved = NTS_IMMORTAL;"),
     );
-    // And the flags word, which `nts_object_new`'s `memset` gives a heap object
-    // for nothing and a stack frame had never been given at all.
-    //
-    // It was safe for as long as nothing read it: `nts_retain` and
-    // `nts_release` both test `reserved == NTS_IMMORTAL` **first** and
-    // short-circuit before touching `flags`, so the collector never saw the
-    // uninitialised word. That is an ordering dependency between two clauses of
-    // one condition, stated nowhere, and the optional-property presence bits
-    // are read by a helper that is behind no such gate.
-    //
-    // Nothing reads it on a frame today -- an object whose presence is asked
-    // about escapes into the helper and is heap-allocated -- which makes this
-    // one store per stack construction against a defect that is currently
-    // unreachable. It is written anyway: the alternative is an invariant that
-    // holds because of what escape analysis happens to decide, and the cost is
-    // a `uint32_t` store beside the two this function already emits.
-    writer.line(origin, format!("{name}_frame.header.flags = 0;"));
-    // A counted handle is zeroed too: the frame's release walk gives its
-    // fields up at the end of the frame, and one never assigned (a
-    // `field!: NSWindow`) must be a null release, not an uninitialised one.
-    for field in layout.counted_fields() {
-        // An erased field's zero is `undefined`, and it has to be spelled --
-        // the tag is a struct member, not a pointer, so `= 0` is not C. That
-        // this *is* the zero is what makes an omitted optional property
-        // already correct without a store.
-        let zero = layout
-            .fields
-            .iter()
-            .find(|candidate| candidate.name == field)
-            .filter(|candidate| candidate.ty == HirType::Erased)
-            .map_or("0", |_| "nts_value_of_undefined()");
-        writer.line(
-            origin,
-            format!("{name}_frame.{} = {zero};", c_member_escaped(field)),
-        );
-    }
 }
 
 /// The two operations `hir::suspend` deals in.
