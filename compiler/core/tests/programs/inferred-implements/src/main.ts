@@ -30,8 +30,7 @@ interface Sized {
   size(): number;
 }
 
-/** Would fit `Sized`, but `Label` has a `size` of another signature, and one
- *  such class leaves the interface with no inferred edges at all. */
+/** Fits `Sized`; Label's disjoint result does not make it a candidate. */
 class Box {
   width = 4;
   size(): number {

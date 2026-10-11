@@ -1,0 +1,4 @@
+{
+  "extends": "../../../../../tsconfig.fixtures.json",
+  "files": ["src/common.ts", "src/narrowed.ts"]
+}

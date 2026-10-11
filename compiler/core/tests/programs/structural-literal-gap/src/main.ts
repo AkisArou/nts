@@ -1,4 +1,4 @@
-// An uncovered named literal must not let class inference open a slot.
+// The named literal and class both supply the newly inferred Sink slot.
 interface Sink { take(x: number): number }
 interface Thenable { take(x: number | string): number }
 class Exact { take(x: number): number { return x - 1; } }

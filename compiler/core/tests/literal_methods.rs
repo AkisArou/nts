@@ -180,6 +180,7 @@ fn method_identity_copies_cover_aliases_and_downstream_helpers() {
         return;
     };
     let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.program.uncompiled.is_empty());
     assert!(
         prepared
             .program
@@ -211,6 +212,7 @@ fn mixed_comparison_and_invocation_preserves_the_legacy_face_globally() {
         return;
     };
     let prepared = hir::prepare(&snapshot).unwrap();
+    assert!(prepared.program.uncompiled.is_empty());
     assert!(
         prepared
             .program

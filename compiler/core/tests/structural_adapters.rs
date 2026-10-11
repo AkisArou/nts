@@ -353,12 +353,12 @@ fn equal_machine_signatures_keep_distinct_absence_conversions() {
 }
 
 #[test]
-fn a_named_literal_without_a_row_blocks_the_new_class_edges() {
+fn a_named_literal_fills_the_row_and_allows_class_edges() {
     let Some(program) = prepared("tests/programs/structural-literal-gap") else {
         return;
     };
     assert!(
-        program
+        !program
             .uncompiled
             .iter()
             .any(|(name, _)| name == "Sink#take")
@@ -373,6 +373,47 @@ fn a_named_literal_without_a_row_blocks_the_new_class_edges() {
             .layouts
             .iter()
             .filter(|layout| layout.types.iter().any(|ty| exact.types.contains(ty)))
-            .all(|layout| layout.interfaces.is_empty())
+            .any(|layout| !layout.interfaces.is_empty())
+    );
+    let slot = program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .find_map(|op| {
+            if let OpKind::Call {
+                callee: hir::Callee::Virtual { slot, declared },
+                ..
+            } = &op.kind
+                && declared == "Sink#take"
+            {
+                Some(*slot as usize)
+            } else {
+                None
+            }
+        })
+        .expect("the mixed array dispatches through Sink");
+    assert!(
+        program.layouts.iter().any(
+            |layout| layout.types.iter().any(|ty| exact.types.contains(ty))
+                && layout.methods.get(slot).is_some_and(Option::is_some)
+        ),
+        "Exact supplies the method actually called through Sink"
+    );
+    let literal = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "Thenable#take")
+        .expect("the literal's own method body");
+    let HirType::Managed(hir::ManagedType::Object(owner)) = literal.params[0].ty else {
+        panic!("the literal method has an object receiver");
+    };
+    assert!(
+        program
+            .layout(owner)
+            .unwrap()
+            .methods
+            .get(slot)
+            .is_some_and(Option::is_some),
+        "the literal supplies the same Sink slot as Exact"
     );
 }
