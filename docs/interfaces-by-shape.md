@@ -237,6 +237,10 @@ Every structural candidate must supply the read and, for a writable face, the
 write. Its table entry names a real function reading the concrete field or
 calling the concrete getter or setter. Shared bodies have the same storage,
 absence contract and ABI; their input facts are valid for every incoming face.
+That contract must survive refusal propagation: an interface reader depends on
+every concrete row, including its raising variant. If a getter's transitive
+callee is refused, the reader inherits that named refusal; a surviving abstract
+declaration cannot stand in for the missing body.
 
 User accessors and reads whose representation changes are lowered at the source,
 before exception handlers are analysed. Dot reads, calls through function fields,

@@ -23,9 +23,18 @@ pub struct Family {
     pub field: Option<u32>,
     pub getter: Entry,
     pub setter: Option<Entry>,
+    pub raising: Vec<Entry>,
     pub owners: Vec<TypeId>,
     /// Pure storage reads wait until concrete source copies have been made.
     pub pending: bool,
+}
+
+impl Family {
+    pub(super) fn entries(&self) -> impl Iterator<Item = &Entry> {
+        std::iter::once(&self.getter)
+            .chain(self.setter.iter())
+            .chain(self.raising.iter())
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -33,6 +42,7 @@ pub struct Plan {
     pub families: Vec<Family>,
     pub storage_bodies: BTreeMap<String, TypeId>,
     by_field: FxHashMap<(TypeId, u32), usize>,
+    by_selector: FxHashMap<u32, usize>,
     selectors: FxHashSet<u32>,
 }
 
@@ -51,7 +61,54 @@ impl Plan {
             self.by_field
                 .insert((family.face, field), self.families.len());
         }
+        for entry in family.entries() {
+            self.by_selector.insert(entry.slot, self.families.len());
+        }
         self.families.push(family);
+    }
+
+    /// A published declaration cannot vouch for a concrete getter whose body
+    /// settling refused. Preserve the same all-or-none supply contract while
+    /// named refusals propagate through calls, before pruning clears its row.
+    pub(super) fn unavailable(
+        &self,
+        program: &Program,
+        present: &FxHashSet<&str>,
+    ) -> FxHashMap<u32, String> {
+        let mut missing = FxHashMap::default();
+        if self.families.is_empty() {
+            return missing;
+        }
+        let layouts = super::fields::LayoutIndex::build(program);
+        for (&slot, &family) in &self.by_selector {
+            for owner in &self.families[family].owners {
+                let target = layouts
+                    .of_class(*owner)
+                    .and_then(|at| program.layouts[at].methods.get(slot as usize))
+                    .and_then(Option::as_deref);
+                if let Some(target) = target.filter(|name| !present.contains(name)) {
+                    missing.insert(slot, target.to_owned());
+                    break;
+                }
+            }
+        }
+        missing
+    }
+
+    pub(super) fn missing_dependency<'a>(
+        &self,
+        func: &Func,
+        kind: &OpKind,
+        unavailable: &'a FxHashMap<u32, String>,
+    ) -> Option<&'a str> {
+        let slot = match kind {
+            OpKind::Call {
+                callee: Callee::Virtual { slot, .. },
+                ..
+            } => *slot,
+            _ => self.entry(func, kind)?.slot,
+        };
+        unavailable.get(&slot).map(String::as_str)
     }
 
     fn entry<'a>(&'a self, func: &Func, kind: &OpKind) -> Option<&'a Entry> {

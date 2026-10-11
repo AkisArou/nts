@@ -86,10 +86,7 @@ pub(super) fn declare(
             if writes && setter.is_none() {
                 continue;
             }
-            if hierarchy.slots.contains_key(&(
-                family.face,
-                format!("{}{}", family.key(writes), super::RAISING_SUFFIX),
-            )) {
+            if has_raising_entry(hierarchy, family, writes) {
                 functions.push(shell(
                     snapshot,
                     family,
@@ -114,10 +111,7 @@ pub(super) fn declare(
                     (owner, writes, false),
                     &mut functions,
                 );
-                if hierarchy.slots.contains_key(&(
-                    family.face,
-                    format!("{}{}", family.key(writes), super::RAISING_SUFFIX),
-                )) {
+                if has_raising_entry(hierarchy, family, writes) {
                     fill(
                         &mut context,
                         program,
@@ -135,11 +129,28 @@ pub(super) fn declare(
             field,
             getter,
             setter,
+            raising: raising_entries(hierarchy, family),
             owners: family.supplies.iter().map(|supply| supply.owner).collect(),
             pending: dispatch && !family.eager,
         });
     }
     program.funcs.extend(functions);
+}
+
+fn raising_entries(hierarchy: &Hierarchy, family: &Family) -> Vec<interface_access::Entry> {
+    [false, true]
+        .into_iter()
+        .filter(|writes| !writes || family.writes.is_some())
+        .filter(|writes| has_raising_entry(hierarchy, family, *writes))
+        .map(|writes| entry(hierarchy, family, writes, true))
+        .collect()
+}
+
+fn has_raising_entry(hierarchy: &Hierarchy, family: &Family, writes: bool) -> bool {
+    hierarchy.slots.contains_key(&(
+        family.face,
+        format!("{}{}", family.key(writes), super::RAISING_SUFFIX),
+    ))
 }
 
 pub(super) fn entry(

@@ -379,7 +379,7 @@ fn check_interface_access(program: &Program, problems: &mut Vec<Invalid>) {
     }
     let layouts = super::fields::LayoutIndex::build(program);
     for family in &program.interface_access.families {
-        for entry in std::iter::once(&family.getter).chain(family.setter.iter()) {
+        for entry in family.entries() {
             let Some(declared) = functions.get(entry.declared.as_str()) else {
                 continue; // Pruned slots grant no permission and have no callers.
             };

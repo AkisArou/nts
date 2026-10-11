@@ -26,6 +26,35 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn a_transitively_refused_getter_refuses_interface_readers() {
+    let Some(program) = prepared_fixture("accessor-refusal-chain") else {
+        eprintln!("SKIP interface_fields: tsgo is not built");
+        return;
+    };
+    for caller in [
+        "readFace",
+        "caughtFace",
+        "unknownReceiver",
+        "caughtReceiver",
+    ] {
+        assert!(
+            program.uncompiled.iter().any(|(name, reason)| {
+                name == caller && reason.starts_with("it calls `") && reason.contains("`eval`")
+            }),
+            "{caller} must inherit the concrete getter refusal: {:?}",
+            program.uncompiled
+        );
+        assert!(!program.funcs.iter().any(|func| func.name == caller));
+    }
+    assert!(
+        program
+            .funcs
+            .iter()
+            .any(|func| func.name == "provenReceiver")
+    );
+}
+
+#[test]
 fn field_dispatch_does_not_turn_prototype_getters_into_own_properties() {
     let Some(program) = prepared_fixture("accessor-spread-boundary") else {
         eprintln!("SKIP interface_fields: tsgo is not built");
@@ -255,6 +284,38 @@ fn accessor_coverage_and_storage_permissions_are_verified() {
             .any(|error| {
                 matches!(error, hir::verify::Invalid::InvalidInterfaceAccess { reason }
             if reason.contains("removed-helper"))
+            })
+    );
+}
+
+#[test]
+fn raising_accessor_rows_require_complete_coverage() {
+    let Some(mut program) = prepared_fixture("accessor-families") else {
+        eprintln!("SKIP interface_fields: tsgo is not built");
+        return;
+    };
+    let family = program
+        .interface_access
+        .families
+        .iter()
+        .find(|family| family.member == "value" && !family.raising.is_empty())
+        .unwrap();
+    let slot = family.raising[0].slot as usize;
+    let owners = family.owners.clone();
+    let layout = program
+        .layouts
+        .iter_mut()
+        .find(|layout| layout.types.iter().any(|owner| owners.contains(owner)))
+        .unwrap();
+    assert!(layout.methods[slot].is_some());
+    layout.methods[slot] = None;
+    assert!(
+        hir::verify::verify(&program)
+            .unwrap_err()
+            .iter()
+            .any(|error| {
+                matches!(error, hir::verify::Invalid::InvalidInterfaceAccess { reason }
+                if reason.contains("value") && reason.contains("declared accessor ABI"))
             })
     );
 }

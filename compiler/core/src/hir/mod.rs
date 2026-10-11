@@ -6465,6 +6465,10 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
         let owned: rustc_hash::FxHashSet<String> =
             present.iter().map(|name| (*name).to_owned()).collect();
         let uncallable = uncallable_closures(lowered, &owned);
+        let unavailable_fields = lowered
+            .program
+            .interface_access
+            .unavailable(&lowered.program, &present);
         let mut refused = Vec::new();
         for func in &lowered.program.funcs {
             // Over the ops each block still *holds*, not over `func.values`.
@@ -6516,7 +6520,11 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
                                 .map(|lost| (lost.clone(), op.origin.clone())),
                             _ => None,
                         },
-                        _ => None,
+                        _ => lowered
+                            .program
+                            .interface_access
+                            .missing_dependency(func, &op.kind, &unavailable_fields)
+                            .map(|name| (name.to_owned(), op.origin.clone())),
                     }
                 });
             if let Some((name, origin)) = missing {
