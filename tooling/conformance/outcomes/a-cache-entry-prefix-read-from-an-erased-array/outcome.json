@@ -1,8 +1,0 @@
-{
-  "run": "check",
-  "category": "aborted",
-  "nts": "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.DurableEntry cannot be cast to class nts.gen.Entry (nts.gen.DurableEntry and nts.gen.Entry are in unnamed module of loader 'app')",
-  "node": null,
-  "measured_with": "7d1ed4b502cbc4ab",
-  "source": "measured"
-}

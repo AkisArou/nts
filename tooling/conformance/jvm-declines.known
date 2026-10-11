@@ -19,3 +19,19 @@ ClosureN.call (Lnts/gen/Controller$N$;)V over (Lnts/gen/Controller$N$;)V	jvm-onl
 dispatch conflict <any>.feed(Ljava/lang/String;)Lnts/rt/NtsValue;	jvm-only	two interface slots erase an absent string with different tags, regardless of class name; native tables distinguish them, but one JVM name and descriptor cannot (core/tests/programs/structural-absence)
 dispatch conflict <any>.read(Ljava/lang/String;)Ljava/lang/String;	jvm-only	a stored literal erases null and undefined inputs differently for two interfaces; native tables keep separate bodies (a-literal-method-call-through-two-faces-loses-absence)
 dispatch conflict <any>.read(Lnts/gen/erased/Callable;)D	jvm-only	a stored literal serves number and string callback interfaces through uniform calls; native tables preserve both projections (a-literal-interface-method-has-two-callback-contracts)
+
+# Shared assignment checks now count storage refusals too. Existing native
+# behavior is unmeasured here; these rows identify unchanged JVM refusals.
+stateful store TimersList -> ListNode	unmeasured	TimersList#constructor and append; pre-existing JVM assignment refusals in http/fs; baseline/after diagnostic sets unchanged, native behavior not measured by this guard
+stateful store BlobTransportBodySource -> TransportBodySource	unmeasured	BodyState#transportBodySource; pre-existing JVM return refusal in fs/http; baseline/after diagnostic sets unchanged, native behavior not measured by this guard
+stateful store MemoryHttpCacheBody -> HttpCacheBody	unmeasured	MemoryHttpCacheWriter#commit; pre-existing JVM return refusal in fs/http; baseline/after diagnostic sets unchanged, native behavior not measured by this guard
+stateful store SystemErrorException -> SystemError	unmeasured	systemError and socketBufferError; pre-existing JVM return refusals in fs/http; baseline/after diagnostic sets unchanged, native behavior not measured by this guard
+stateful store Immediate<N> -> ImmediateHandle	unmeasured	Immediate<N>#constructor; pre-existing JVM assignment refusal in http/dns/dgram; baseline/after diagnostic sets unchanged, native behavior not measured by this guard
+stateful store UVHostPortError -> Error	unmeasured	dgram; pre-existing JVM return refusal; baseline/after diagnostic sets unchanged, native behavior not measured by this guard
+stateful store DurableCacheEntry -> HttpCacheEntry	jvm-only	DurableHttpCacheStore#find newly declines an erased-array write; a-cache-entry-prefix-read-from-an-erased-array reproduces the baseline ClassCastException with extra entry fields, and agrees on C
+unrelated store MemoryCacheStorageHandle -> EventTargetLike	jvm-only	MemoryCacheStorageStore#open/#lookup newly decline a Promise payload; an-opaque-promise-payload-read-as-an-unrelated-class reproduces the baseline ClassCastException on typed await (even discarded), and agrees on C
+stateful store Reordered -> Shape	live-on-c	pre-existing JVM refusal at the callback; a-class-passed-to-a-callback-at-a-structural-type-in-another-field-order records C's reordered=300 against node's3
+stateful store Ordered -> Shape	jvm-only	pre-existing JVM refusal at the same callback; the ordered control in a-class-passed-to-a-callback-at-a-structural-type-in-another-field-order agrees on C
+unrelated store ReadableStreamAsyncIterator<N> -> Iterable<N>	unmeasured	pre-existing JVM refusal in a-teed-stream-read-back; the C integration is refused before it reaches this iterator
+stateful store ReadableStream<N> -> ReadableStream<N>	unmeasured	pre-existing JVM refusal in a-teed-stream-read-back; the C integration is refused before it reaches these differently instantiated streams
+stateful store TypeN -> TypeN	jvm-only	pre-existing JVM generic-controller assignment refusal in a-controller-stored-by-a-generic-branch; that producer agrees on C
