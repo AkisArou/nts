@@ -2127,6 +2127,9 @@ jvm_verifies() {
     # One line per known module is the ratchet's content, not news.
     printf '%s\n' "$out" | awk '!/^$/ && !/^  known /'
   done
+  # Then which jvm-declines.known rows neither corpus declined any more: a row
+  # can live in either, so only both runs together can say it is stale.
+  node tooling/conformance/jvm-verifies.ts --stale || status=1
   return $status
 }
 

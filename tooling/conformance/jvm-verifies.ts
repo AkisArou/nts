@@ -97,7 +97,8 @@
 // a module not measured. Exit 2: the tool could not start.
 
 import { spawn } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -134,6 +135,37 @@ if (!existsSync(SOURCE)) {
 }
 const base = join(homedir(), ".cache/nts-jvm-verifies");
 mkdirSync(base, { recursive: true });
+
+// **Which jvm-declines.known rows still occur.** A row is classified only
+// while its shape is declined somewhere, and nothing said when one stopped
+// being: a fix that turns a store into a real interface left its row behind,
+// still classifying a shape that would now be news if it came back. A row can
+// occur in the runtime corpus, the outcomes corpus or both, so no single run
+// can tell; each full-corpus run records the shapes it saw, keyed by the
+// compiler, and `--stale` reads both records. A stale row prints and passes,
+// as an expired jvm-verifies.known module does: a fix must not turn the gate
+// red. A record that is missing, is for another compiler, or came from a run
+// that could not measure every project fails, because then nothing was judged.
+const FINGERPRINT = createHash("sha256").update(readFileSync(SOURCE)).digest("hex").slice(0, 16);
+const seenRecord = (corpus) => join(base, `seen-${FINGERPRINT}-${corpus}.json`);
+if (process.argv.includes("--stale")) {
+  const records = ["runtime", "outcomes"].map((corpus) => {
+    const path = seenRecord(corpus);
+    return { corpus, path, record: existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null };
+  });
+  const missing = records.filter((r) => r.record === null);
+  const incomplete = records.filter((r) => r.record !== null && r.record.incomplete);
+  if (missing.length > 0 || incomplete.length > 0) {
+    for (const r of missing) console.log(`  NOT MEASURED: no ${r.corpus} record for this compiler (${FINGERPRINT}); run jvm-verifies${r.corpus === "outcomes" ? " --outcomes" : ""} first`);
+    for (const r of incomplete) console.log(`  NOT MEASURED: the ${r.corpus} run could not measure every project, so it cannot say what is absent`);
+    process.exit(1);
+  }
+  const rows = readDeclines();
+  const stale = staleRows([...rows.keys()], records.map((r) => r.record.shapes));
+  for (const shape of stale) console.log(`  ^ no longer declined in either corpus: ${shape} (${rows.get(shape).verdict}) -- remove it from tooling/conformance/jvm-declines.known, or re-verdict it`);
+  console.log(`  jvm-declines.known: ${rows.size - stale.length} of ${rows.size} row(s) still declined, ${stale.length} stale`);
+  process.exit(0);
+}
 const scratch = mkdtempSync(join(base, "run-"));
 process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
@@ -309,6 +341,11 @@ function selfTest(printing) {
   const opaqueClassified = declineShape(opaqueStore) === "unrelated store Immediate<N> -> Handle";
   if (!opaqueClassified) bad++;
   if (printing) console.log(`  ${opaqueClassified ? "ok  " : "FAIL"}  opaque payload stores and numeric instantiations classified`);
+  // A row seen in one corpus only is live; only a row seen in neither is stale.
+  const stale = staleRows(["a", "only-runtime", "only-outcomes", "both"], [["only-runtime", "both"], ["only-outcomes", "both"]]);
+  const staleOk = stale.length === 1 && stale[0] === "a";
+  if (!staleOk) bad++;
+  if (printing) console.log(`  ${staleOk ? "ok  " : "FAIL"}  a row seen in either corpus is live, one seen in neither is stale`);
   if (printing) console.log(bad === 0 ? "  self-test: every arm fired" : `  self-test: ${bad} arm(s) did not fire`);
   return bad;
 }
@@ -332,11 +369,19 @@ function declineShape(line) {
   return `${plain(m[1])} ${plain(m[2])} over ${plain(m[3])}`;
 }
 /** jvm-declines.known: shape -> { verdict, why }; verdict is jvm-only, live-on-c or unmeasured. */
-const declinesKnown = new Map(
-  (existsSync(DECLINES) ? readFileSync(DECLINES, "utf8") : "")
-    .split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"))
-    .map((l) => l.split("\t")).map(([shape, verdict, why]) => [shape, { verdict, why: why ?? "" }]),
-);
+function readDeclines() {
+  return new Map(
+    (existsSync(DECLINES) ? readFileSync(DECLINES, "utf8") : "")
+      .split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"))
+      .map((l) => l.split("\t")).map(([shape, verdict, why]) => [shape, { verdict, why: why ?? "" }]),
+  );
+}
+/** The known rows no corpus declined: a row seen in either corpus is live. */
+function staleRows(rows, seenPerCorpus) {
+  const seen = new Set(seenPerCorpus.flat());
+  return rows.filter((shape) => !seen.has(shape)).sort();
+}
+const declinesKnown = readDeclines();
 const declines = new Map();
 
 const failed = [];
@@ -448,6 +493,12 @@ if (declines.size > 0) {
   console.log(`  JVM dispatch declines: ${declines.size} shape(s) -- ${[...by].map(([v, n]) => `${n} ${v}`).join(", ")}`);
   for (const k of [...declines.keys()].filter((k) => declinesKnown.get(k)?.verdict === "live-on-c")) console.log(`    live on C  ${k.slice(0, 110)} -- ${declinesKnown.get(k).why}`);
   for (const k of unclassified) console.log(`    UNCLASSIFIED  ${k.slice(0, 150)}  (${[...declines.get(k)].slice(0, 3).join(", ")})`);
+}
+// The shapes this corpus declined, for `--stale`. Only a full corpus records:
+// a run over named projects saw a subset and cannot say what is absent.
+if (named.length === 0) {
+  const corpus = process.argv.includes("--outcomes") ? "outcomes" : "runtime";
+  writeFileSync(seenRecord(corpus), JSON.stringify({ shapes: [...declines.keys()].sort(), incomplete: unmeasured.length > 0 }));
 }
 const ok = fresh.length === 0 && pinned.length === 0 && unresolved.length === 0 && shadowed.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
 const pinsHeld = held.filter((f) => known.get(f.project).pin).length;
