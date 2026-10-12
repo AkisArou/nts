@@ -15176,11 +15176,29 @@ fn field_aliases(
 /// using only `include` does. See [`public_api`] for what it decides and why
 /// there is no way to decide it without being told.
 #[must_use]
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn lower_with(
     snapshot: &SemanticSnapshot,
     entry: &[String],
     foreign: &super::runtime::ForeignTable,
+) -> Lowered {
+    lower_with_access(
+        snapshot,
+        entry,
+        foreign,
+        super::InterfaceAccess::Materialize,
+    )
+}
+
+/// The selected backend capability also controls source reads whose stored
+/// suppliers differ in representation or absence. A preserving backend keeps
+/// the declared field operation; user getters still require dispatch.
+#[must_use]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+pub fn lower_with_access(
+    snapshot: &SemanticSnapshot,
+    entry: &[String],
+    foreign: &super::runtime::ForeignTable,
+    interface_access: super::InterfaceAccess,
 ) -> Lowered {
     // The instantiations generic bodies make of other generics, written into
     // the snapshot first, so every pass below meets them as the checker's
@@ -15197,7 +15215,16 @@ pub fn lower_with(
     // The hierarchy and the naming before the module scope, because the module scope's
     // probe lays out classes and a layout built without the hierarchy is a different
     // layout. See `hierarchy_and_naming` for why the two are built together.
-    let (hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
+    let (mut hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
+    if interface_access == super::InterfaceAccess::PreserveFieldAccess {
+        for family in &mut std::sync::Arc::make_mut(&mut hierarchy.access_families).licensed {
+            family.eager = family.eager
+                && family
+                    .supplies
+                    .iter()
+                    .any(|supply| matches!(supply.reader, access_families::Reader::Getter(_)));
+        }
+    }
     let mut module = collect_module_scope(
         snapshot,
         foreign,

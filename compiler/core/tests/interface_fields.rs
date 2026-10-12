@@ -26,6 +26,47 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn preserving_optional_storage_keeps_source_field_reads() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/accessor-schema-supplier/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    for access in [
+        hir::InterfaceAccess::Materialize,
+        hir::InterfaceAccess::PreserveFieldAccess,
+    ] {
+        let program = hir::prepare_with(
+            &snapshot,
+            &hir::Options {
+                provider: hir::Provider::HostGc,
+                ..hir::Options::new(access)
+            },
+        )
+        .unwrap()
+        .program;
+        let read = program
+            .funcs
+            .iter()
+            .find(|f| f.name == "readLabel")
+            .unwrap();
+        let dispatches = read.values.iter().any(|op| {
+            matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
+                if program.interface_access.contains_selector(slot))
+        });
+        assert_eq!(dispatches, access == hir::InterfaceAccess::Materialize);
+        if access == hir::InterfaceAccess::PreserveFieldAccess {
+            assert!(
+                read.values
+                    .iter()
+                    .any(|op| matches!(op.kind, OpKind::FieldGet { .. }))
+            );
+        }
+    }
+}
+
+#[test]
 fn stored_field_capability_is_independent_of_the_memory_provider() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;

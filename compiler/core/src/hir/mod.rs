@@ -6825,7 +6825,12 @@ fn specialize_numbers_of(
 
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
-    let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
+    let mut lowered = lower::lower_with_access(
+        snapshot,
+        options.entry_files,
+        options.foreign,
+        options.interface_access,
+    );
     // Before the check, and every analysis after it, reads them.
     lowered.program.targets = options.targets;
     // On the program the lowering produced, before any pass renumbers a value
