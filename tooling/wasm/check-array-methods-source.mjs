@@ -13,5 +13,11 @@ for (const x of [NaN, Infinity, -Infinity, -0, 0, 1, -1, .5, Number.MIN_VALUE, N
   for(let n=0;n<=32;n++) same(wasm.clearHoles(n,x),oracle.clearHoles(n,x));
   for(let n=1;n<=32;n++) same(wasm.fillRoundtrip(n,x),oracle.fillRoundtrip(n,x));
   for(let n=0;n<=4;n++) same(wasm.trimAfterFill(n,x),oracle.trimAfterFill(n,x));
+  for(let n=0;n<=6;n++) {
+    same(wasm.shiftOrDefault(n,x),oracle.shiftOrDefault(n,x));
+    if(n>0) same(wasm.shiftAsserted(n,x),oracle.shiftAsserted(n,x));
+    for(let at=0;at<n;at++) same(wasm.shiftThenRead(n,x,at),oracle.shiftThenRead(n,x,at));
+  }
 }
+for(let n=0;n<=6;n++) for(let at=0;at<=n;at++) same(wasm.shiftText(n,at),oracle.shiftText(n,at));
 console.log(JSON.stringify({cases}));

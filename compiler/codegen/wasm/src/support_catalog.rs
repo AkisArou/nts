@@ -100,18 +100,9 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ),
     ("nts_array_set_length_ref", Support::Intrinsic),
     ("nts_array_set_length_value", Support::Intrinsic),
-    (
-        "nts_array_shift",
-        Support::Decline("array helper not yet implemented"),
-    ),
-    (
-        "nts_array_shift_ref",
-        Support::Decline("array helper not yet implemented"),
-    ),
-    (
-        "nts_array_shift_value",
-        Support::Decline("array helper not yet implemented"),
-    ),
+    ("nts_array_shift", Support::Intrinsic),
+    ("nts_array_shift_ref", Support::Intrinsic),
+    ("nts_array_shift_value", Support::Intrinsic),
     ("nts_array_slice", Support::WasmHelper),
     (
         "nts_array_slice_foreign",

@@ -22,6 +22,8 @@ pub(crate) enum Family {
 pub(crate) enum Method {
     Push(Family),
     Pop(Family),
+    /// `pop` at the front: the rest move down one slot.
+    Shift(Family),
     Fill(Family),
     Truncate(Family),
     KeepFirst,
@@ -31,7 +33,7 @@ pub(crate) enum Method {
 
 pub(crate) fn external(name: &str) -> Option<Method> {
     use Family::{Boolean, Number, Reference, Value};
-    use Method::{Fill, Pop, Push, Truncate};
+    use Method::{Fill, Pop, Push, Shift, Truncate};
     match name {
         "nts_array_push" => Some(Push(Number)),
         "nts_array_push_ref" => Some(Push(Reference)),
@@ -41,6 +43,10 @@ pub(crate) fn external(name: &str) -> Option<Method> {
         // This suffix names the result, unlike push/set_length_value. The
         // shared header explicitly specifies a number array, not an erased one.
         "nts_array_pop_value" => Some(Pop(Value)),
+        "nts_array_shift" => Some(Shift(Number)),
+        "nts_array_shift_ref" => Some(Shift(Reference)),
+        // A number array's first element, erased, as `pop_value` is its last.
+        "nts_array_shift_value" => Some(Shift(Value)),
         "nts_array_fill" => Some(Fill(Number)),
         "nts_array_fill_bool" => Some(Fill(Boolean)),
         "nts_array_fill_ref" => Some(Fill(Reference)),
@@ -54,7 +60,7 @@ pub(crate) fn external(name: &str) -> Option<Method> {
 }
 impl Method {
     pub(crate) fn boxes_number(self) -> bool {
-        self == Self::Pop(Family::Value)
+        matches!(self, Self::Pop(Family::Value) | Self::Shift(Family::Value))
     }
     pub(crate) fn initializes(self) -> bool {
         matches!(self, Self::Fill(_))
@@ -66,7 +72,7 @@ impl Method {
         let family = match self {
             // Header contracts that are descriptor-width generic.
             Self::KeepFirst | Self::Element => return true,
-            Self::Push(f) | Self::Pop(f) | Self::Fill(f) | Self::Truncate(f) => f,
+            Self::Push(f) | Self::Pop(f) | Self::Shift(f) | Self::Fill(f) | Self::Truncate(f) => f,
         };
         match family {
             Family::Number if self.truncates() => element.is_scalar(),
@@ -104,7 +110,7 @@ fn call_inner(
     method: Method,
     args: &[ValueId],
 ) -> Result<(), Failure> {
-    let arity = if matches!(method, Method::Pop(_)) {
+    let arity = if matches!(method, Method::Pop(_) | Method::Shift(_)) {
         1
     } else {
         2
@@ -125,7 +131,8 @@ fn call_inner(
     match method {
         Method::Element => element_value(b, result, shape, array, args[1]),
         Method::Push(_) => push(b, result, shape, args[0], args[1]),
-        Method::Pop(family) => pop(b, result, shape, args[0], family),
+        Method::Pop(family) => take(b, result, shape, args[0], family, End::Back),
+        Method::Shift(family) => take(b, result, shape, args[0], family, End::Front),
         Method::Fill(_) => fill(b, result, shape, args[0], args[1]),
         Method::Truncate(_) | Method::KeepFirst => truncate(b, result, shape, args[0], args[1]),
     }
@@ -246,12 +253,22 @@ fn last(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<(), F
     b.instruction(&I::I32Sub);
     Ok(())
 }
-fn pop(
+/// Which end `take` removes an element from.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum End {
+    Front,
+    Back,
+}
+/// `pop` and `shift`. A number array that is empty is refused, where node
+/// answers `undefined`, which a number result cannot hold; a reference result
+/// is null, and an erased one `undefined`.
+fn take(
     b: &mut Body<'_, '_>,
     result: ValueId,
     shape: &gc::Array,
     array: ValueId,
     family: Family,
+    end: End,
 ) -> Result<(), Failure> {
     let actual = if family == Family::Value {
         HirType::Erased
@@ -270,10 +287,25 @@ fn pop(
         )));
     }
     backing(b, shape, array)?;
-    last(b, shape, array)?;
+    match end {
+        End::Front => b.instruction(&I::I32Const(0)),
+        End::Back => last(b, shape, array)?,
+    }
     b.instruction(&arrays::get_instruction(shape)?);
     if family == Family::Value {
         erased::call(b, erased::Helper::BoxNumber)?;
+    }
+    if end == End::Front {
+        // The rest move down one slot; `array.copy` allows the overlap.
+        backing(b, shape, array)?;
+        b.instruction(&I::I32Const(0));
+        backing(b, shape, array)?;
+        b.instruction(&I::I32Const(1));
+        last(b, shape, array)?;
+        b.instruction(&I::ArrayCopy {
+            array_type_index_dst: shape.backing,
+            array_type_index_src: shape.backing,
+        });
     }
     // Clear the backing tail so pop/truncation release GC roots even while
     // capacity is retained for a later push. The result stays on the stack.

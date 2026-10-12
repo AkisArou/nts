@@ -72,6 +72,20 @@ fn roundtrip(name: &str, ty: HirType, push: &str, pop: &str) -> Func {
     let result = b.call(pop, &[a], ty);
     b.finish(result)
 }
+/// Two pushed, two shifted: the second shift answers the second value, so the
+/// first shift moved it down.
+fn shift_twice(name: &str, ty: HirType, push: &str, shift: &str) -> Func {
+    let mut b = Build::new(name, &[ty.clone(), ty.clone()], ty.clone());
+    let first = b.param(0);
+    let second = b.param(1);
+    let zero = b.int(0);
+    let a = b.array(ty.clone(), zero);
+    b.call(push, &[a, first], F64);
+    b.call(push, &[a, second], F64);
+    b.call(shift, &[a], ty.clone());
+    let result = b.call(shift, &[a], ty);
+    b.finish(result)
+}
 fn push_length() -> Func {
     let mut b = Build::new("pushLength", &[F64], F64);
     let input = b.param(0);
@@ -378,6 +392,13 @@ fn typed_array_methods_match_node() {
             "nts_array_push_ref",
         ),
         roundtrip("number", F64, "nts_array_push", "nts_array_pop"),
+        shift_twice("shiftNumber", F64, "nts_array_push", "nts_array_shift"),
+        shift_twice(
+            "shiftReference",
+            string(),
+            "nts_array_push_ref",
+            "nts_array_shift_ref",
+        ),
         roundtrip(
             "reference",
             string(),

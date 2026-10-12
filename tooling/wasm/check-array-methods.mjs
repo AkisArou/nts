@@ -12,6 +12,7 @@ const numbers = [NaN, Infinity, -Infinity, -0, 0, 1, -1, .5, 2 ** 30, Number.MIN
 for (let n = -32; n <= 32; n++) numbers.push(n);
 for (const n of numbers) {
   const a = []; same(wasm.pushLength(n), a.push(n));
+  same(wasm.shiftNumber(17, n), n);
   const expected = a.pop(); same(wasm.number(n), expected); same(wasm.optionalNumber(n), expected); same(wasm.erasedPush(n), expected); same(wasm.emptyValue(n), 0);
   for (const len of [1,2,4,8]) for (let at = 0; at < len; at++) same(wasm.fillNumber(len,n,at), new Array(len).fill(n)[at]);
   for (let count = 0; count <= 4; count++) { const a = new Array(4).fill(n); a.length = count; a.push(17); same(wasm.truncateNumber(count,n), a.length); for(let at=0;at<a.length;at++) same(wasm.retainedNumber(count,n,17,at),a[at]); }
@@ -19,7 +20,7 @@ for (const n of numbers) {
 }
 for (const s of ['', 'abc', '😀', '\ud800', '\udfff', 'a\ud800b']) {
   for(let n=0;n<=16;n++) same(wasm.clearReferenceHoles(n,s),s);
-  const a=[]; a.push(s); same(wasm.reference(s),a.pop());
+  const a=[]; a.push(s); same(wasm.reference(s),a.pop()); same(wasm.shiftReference('first',s),s);
   for (const len of [1,2,4,8]) for (let at=0;at<len;at++) same(wasm.fillReference(len,s,at),new Array(len).fill(s)[at]);
   for(let n=0;n<=4;n++) {const a=new Array(4).fill(s); a.length=n;a.push('new');same(wasm.truncateReference(n,s),a.length);for(let at=0;at<a.length;at++) same(wasm.retainedReference(n,s,'new',at),a[at]);}
 }
