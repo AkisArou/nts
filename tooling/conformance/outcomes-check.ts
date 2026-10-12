@@ -29,6 +29,9 @@
 //     tsconfig.json   extends ../../../../tsconfig.fixtures.json
 //     src/main.ts     the program; `// run: build` (default) or `// run: check`,
 //                     and with `check`, optionally `// backend: jvm` (or `llvm`)
+//                     `// provider: rc` selects reference counting; in build
+//                     mode `// sanitizer: address` enables Clang ASan and
+//                     detect_stack_use_after_return (no virtual-address cap).
 //     outcome.json    what it did, written by --record, compared by default
 //
 // **`// backend:` is for a defect only one backend has.** `build` is `emit-c`
@@ -171,9 +174,9 @@ const CASCADE = new Set(["NTS1003", "NTS1005"]);
 const rootLine = (d) => `${d.code} ${d.raw}`;
 
 /** Everything the build run observed, reduced to one category and one detail. */
-function runBuild(dir) {
+function runBuild(dir, options = { rc: false, address: false }) {
   const out = join(dir, "out");
-  const emit = spawnSync("sh", capped(TOOLS, NTS, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main"]), {
+  const emit = spawnSync("sh", capped(TOOLS, NTS, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main", ...(options.rc ? ["--rc"] : [])]), {
     encoding: "utf8",
     timeout: 180_000,
     maxBuffer: 64 * 1024 * 1024,
@@ -192,29 +195,43 @@ function runBuild(dir) {
     // `main` "printed nothing", exit 0. So a refused record also says what the
     // artefact did, and a program that runs past its refusal is compared
     // rather than filed.
-    const ran = emit.status === 0 ? buildAndRun(emit, out) : { category: "no artefact", nts: `emit-c exited ${emit.status}` };
+    const ran = emit.status === 0 ? buildAndRun(emit, out, options) : { category: "no artefact", nts: `emit-c exited ${emit.status}` };
     return { category: "refused", nts: rootLine(rootOfTheProgram(said, roots, join(dir, "src/main.ts"))), roots: roots.map(rootLine), ran: ran.category === "completed" || ran.category === "aborted" ? ran.nts : ran.category === "not-measured" ? null : `${ran.category}: ${ran.nts}` };
   }
   if (emit.status !== 0) return { category: "not-measured", nts: `emit-c exited ${emit.status}: ${said.trim().split("\n")[0]}` };
-  return buildAndRun(emit, out);
+  return buildAndRun(emit, out, options);
 }
 
 /** Link what `emit-c` wrote into `out` and run it: completed, aborted or uncompilable-c. */
-function buildAndRun(emit, out) {
+function buildAndRun(emit, out, options) {
   const printed = linkCommand(emit.stdout ?? "");
   if (!printed) return { category: "not-measured", nts: "no link command in the emit output" };
+  const tools = options.address ? { ...TOOLS, cc: "clang" } : TOOLS;
+  // These flags enter the runtime-object cache key as well as the program
+  // build: an unsanitized cached runtime cannot stand in for the ASan arm.
+  const flags = options.address
+    ? [...printed.filter((arg) => !/^-O/.test(arg)), "-O1", "-g", "-fsanitize=address", "-fno-inline", "-fno-omit-frame-pointer"]
+    : printed;
   let args;
   try {
-    ({ args } = withCachedObjects(printed, out, TOOLS));
+    ({ args } = withCachedObjects(flags, out, tools));
   } catch (error) {
     return { category: "uncompilable-c", nts: firstCError(`${error.stdout ?? ""}${error.stderr ?? ""}`) };
   }
-  const link = spawnSync(CC, args, { cwd: out, encoding: "utf8", timeout: 180_000 });
+  const link = spawnSync(tools.cc, args, { cwd: out, encoding: "utf8", timeout: 180_000 });
   if (link.signal) return { category: "not-measured", nts: `cc ${link.signal}` };
   if (link.status !== 0) return { category: "uncompilable-c", nts: firstCError(`${link.stdout}${link.stderr}`) };
 
-  const ran = spawnSync("sh", capped(TOOLS, join(out, "program"), []), { encoding: "utf8", timeout: 30_000 });
+  // ASan reserves a large shadow address space. The normal cap is retained
+  // for emit-c; only the sanitized executable runs without that address cap.
+  const runTools = options.address ? { ...tools, memoryCapKb: 0 } : tools;
+  const runEnv = options.address
+    ? { ...env(), ASAN_OPTIONS: "detect_stack_use_after_return=1:detect_leaks=0" }
+    : env();
+  const ran = spawnSync("sh", capped(runTools, join(out, "program"), []), { encoding: "utf8", timeout: 30_000, env: runEnv });
   if (ran.error?.code === "ETIMEDOUT" || ran.signal === "SIGTERM") return { category: "not-measured", nts: "the program timed out" };
+  const addressError = /ERROR: AddressSanitizer: ([a-z-]+)/.exec(ran.stderr ?? "");
+  if (options.address && addressError) return { category: "aborted", nts: `AddressSanitizer: ${addressError[1]}` };
   const last = (ran.stderr ?? "").split("\n").filter((l) => l.startsWith("nts: "));
   const uncaught = last.find((l) => l.startsWith("nts: uncaught "));
   if (ran.signal || (ran.status !== 0 && !uncaught)) {
@@ -299,8 +316,9 @@ const backendOf = (name) =>
   /^\/\/\s*backend:\s*(jvm|llvm)\s*$/m.exec(readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8"))?.[1] ?? null;
 
 /** `nts check`: the lines that decide, verbatim, declined ones included. */
-function runCheck(dir, backend) {
-  const { NTS_BACKEND: _ambient, ...rest } = env();
+function runCheck(dir, backend, options) {
+  const { NTS_BACKEND: _ambient, NTS_RC: _rc, ...rest } = env();
+  if (options.rc) rest.NTS_RC = "1";
   const ran = spawnSync("sh", capped(TOOLS, NTS, ["check", dir]), {
     encoding: "utf8",
     timeout: 300_000,
@@ -334,11 +352,21 @@ function stableCheckText(text) {
   return text.replace(/\brefused:\s*\S+:\d+:\d+:\s+/g, "refused: ");
 }
 
+function memoryOptions(name) {
+  const source = readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8");
+  return {
+    rc: /^\/\/\s*provider:\s*rc\s*$/m.test(source),
+    address: /^\/\/\s*sanitizer:\s*address\s*$/m.test(source),
+  };
+}
+
 function measure(name) {
   const mode = runMode(name);
+  const options = memoryOptions(name);
+  if (mode === "check" && options.address) return { run: mode, category: "not-measured", nts: "the address sanitizer requires build mode", node: null };
   const dir = materialise(name, join(FIXTURES, name, "src"), mode);
-  if (mode === "check") return { run: "check", ...runCheck(dir, backendOf(name)), node: null };
-  const nts = runBuild(dir);
+  if (mode === "check") return { run: "check", ...runCheck(dir, backendOf(name), options), node: null };
+  const nts = runBuild(dir, options);
   if (nts.category === "refused" && nts.ran === null) return { run: "build", category: "not-measured", nts: "a refused program's artefact could not be run to the end", node: null };
   if (nts.category !== "completed") return { run: "build", ...nts, node: nts.category === "not-measured" ? null : runNode(dir) };
   const node = runNode(dir);
@@ -373,6 +401,20 @@ function selfCheck() {
     const nts = runBuild(d);
     return { nts, node: runNode(d) };
   };
+  // Exercise ASan's actual compile/cache/run path independently of the
+  // compiler defect. Fixing escape analysis must not invalidate this oracle.
+  if (chosen.some((name) => memoryOptions(name).address)) {
+    const out = join(SCRATCH, "self-asan");
+    mkdirSync(out, { recursive: true });
+    const asan = (source) => {
+      writeFileSync(join(out, "program.c"), source);
+      return buildAndRun({ stdout: "cc -std=c11 program.c -o program\n" }, out, { rc: false, address: true });
+    };
+    const safe = asan("int main(void) { return 0; }\n");
+    if (safe.category !== "completed" || safe.nts !== "exit 0") return `ASan control: ${JSON.stringify(safe)}`;
+    const fault = asan("__attribute__((noinline)) static volatile int *returned(void) { volatile int value = 7; return &value; }\nint main(void) { return *returned(); }\n");
+    if (fault.category !== "aborted" || fault.nts !== "AddressSanitizer: stack-use-after-return") return `ASan fault: ${JSON.stringify(fault)}`;
+  }
   const control = probe('observe("sum", String(1 + 2));\ndone();\n');
   if (control.nts.category !== "completed" || control.nts.nts !== control.node || !/Observed: sum=3;/.test(control.node)) {
     return `control: nts said ${JSON.stringify(control.nts)}, node said ${control.node}`;
@@ -415,7 +457,8 @@ if (broken) {
   console.log("  a harness that cannot tell agreement from disagreement cannot hold a record");
   process.exit(2);
 }
-console.log("  self-checks: control agrees with node, refusal arm refused and its artefact run");
+console.log("  self-checks: control agrees with node, refusal arm refused and its artefact run" +
+  (chosen.some((name) => memoryOptions(name).address) ? "; ASan control clean, use-after-return fault detected" : ""));
 
 let unexpected = 0;
 let loud = 0;
