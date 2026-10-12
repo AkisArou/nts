@@ -26,6 +26,60 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn accessor_reads_keep_checked_narrowing_and_actual_getter_absence() {
+    let Some(program) = prepared_fixture("accessor-narrowed-read") else {
+        return;
+    };
+    let flag = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "flag")
+        .expect("the predicate's checked field read must remain compiled");
+    assert!(flag.values.iter().any(|op| {
+        matches!(op.kind, OpKind::Unerase { .. }) && op.ty == hir::HirType::Bool
+    }));
+    assert!(program.uncompiled.iter().any(|(name, reason)| {
+        name == "assertedRead" && reason.contains("an erased value where a concrete")
+    }));
+    let nullable = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "observeNullable")
+        .expect("the getter's actual null can still return through unknown");
+    assert!(!nullable.values.iter().any(|op| {
+        matches!(op.kind, OpKind::Unerase { .. }) && op.ty == hir::HirType::Bool
+    }));
+}
+
+#[test]
+fn an_exact_source_allocation_keeps_its_typed_array_storage() {
+    let Some(program) = prepared_fixture("accessor-known-storage") else {
+        return;
+    };
+    assert!(
+        program
+            .interface_access
+            .families
+            .iter()
+            .any(|family| family.member == "entries"),
+        "the control must have a licensed field family"
+    );
+    let append = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "appendLocal")
+        .expect("a typed local read must not be lost to the family's erased ABI");
+    assert!(append.values.iter().any(
+        |op| matches!(&op.kind, OpKind::Call { callee: Callee::External(name), .. }
+                if name == "nts_array_push_ref")
+    ));
+    assert!(!append.values.iter().any(|op| {
+        matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
+            if program.interface_access.contains_selector(slot))
+    }));
+}
+
+#[test]
 fn preserving_fields_keeps_equivalent_optional_record_layouts_merged() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;

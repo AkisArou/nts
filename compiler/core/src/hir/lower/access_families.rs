@@ -166,6 +166,13 @@ impl FuncBuilder<'_> {
         face: TypeId,
         member: &str,
     ) -> Result<Option<super::ValueId>, nts_diagnostics::Diagnostic> {
+        // This object was allocated with exactly this storage. A wider
+        // family's erased ABI says nothing about the value in its own slot.
+        // Other owners still need dispatch: a conversion alone proves no
+        // relationship between their field positions.
+        if self.known_allocation(object) == Some(face) {
+            return Ok(None);
+        }
         let Some(family) = self
             .hierarchy
             .access_families
@@ -178,13 +185,11 @@ impl FuncBuilder<'_> {
         let callee = self
             .accessor_callee(at, face, member, "get ")?
             .ok_or_else(|| self.unsupported(at, "an unlicensed interface field read"))?;
-        Ok(Some(self.push_an_accessor_call(
-            at,
-            callee,
-            vec![object],
-            ty,
-            self.origin(at),
-        )))
+        let read = self.push_an_accessor_call(at, callee, vec![object], ty, self.origin(at));
+        // Dispatch chooses the concrete supplier, while the source node's
+        // checked narrowing chooses the payload to read. actual_field_read
+        // keeps this erased when a supplier's real absence contradicts it.
+        self.narrowed(at, read).map(Some)
     }
 
     pub(super) fn interface_field_place(
@@ -239,6 +244,9 @@ impl FuncBuilder<'_> {
         if let Some(HirType::Managed(super::ManagedType::Object(actual))) =
             self.bound_type(receiver)
             && actual != face
+            // An interface binding is its storage contract, not evidence of
+            // a concrete supplier. Keep the checker's narrowed face instead.
+            && !self.hierarchy.faces.contains(&actual)
         {
             return interfaces::property(self.snapshot, actual, &member).map(Read::Property);
         }
