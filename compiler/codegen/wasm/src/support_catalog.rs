@@ -109,10 +109,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("foreign/native ABI or ownership"),
     ),
     ("nts_array_slice_ref", Support::WasmHelper),
-    (
-        "nts_array_sort_str",
-        Support::Decline("array helper not yet implemented"),
-    ),
+    ("nts_array_sort_str", Support::WasmHelper),
     (
         "nts_array_splice",
         Support::Decline("array helper not yet implemented"),

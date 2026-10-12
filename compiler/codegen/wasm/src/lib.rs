@@ -10,6 +10,7 @@ mod array_init;
 mod array_join;
 mod array_lookup;
 mod array_methods;
+mod array_sort;
 mod arrays;
 mod body;
 mod callable_plan;

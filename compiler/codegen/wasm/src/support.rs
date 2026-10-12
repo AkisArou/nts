@@ -29,7 +29,8 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{Support, catalog, helper_support};
     use crate::{
-        array_copy, array_join, array_lookup, array_methods, erased_ops, host, raising, strings,
+        array_copy, array_join, array_lookup, array_methods, array_sort, erased_ops, host, raising,
+        strings,
     };
     use std::collections::BTreeSet;
 
@@ -49,6 +50,7 @@ mod tests {
             || array_copy::external(name).is_some()
             || array_lookup::external(name).is_some()
             || array_join::external(name).is_some()
+            || array_sort::external(name)
         {
             Some(Support::WasmHelper)
         } else {
@@ -121,6 +123,7 @@ mod tests {
             include_str!("array_copy.rs"),
             include_str!("array_lookup.rs"),
             include_str!("array_join.rs"),
+            include_str!("array_sort.rs"),
         ] {
             let function = source
                 .split_once("pub(crate) fn external(name:")

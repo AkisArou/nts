@@ -162,6 +162,21 @@ fn source_array_joins_agree_with_node() {
 }
 
 #[test]
+fn source_array_sorts_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-sort");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "array-sort-source",
+        &emitted,
+        "tooling/wasm/check-array-sort-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 328, "{output}");
+    assert_eq!(output["named_declines"], 1, "{output}");
+}
+
+#[test]
 fn source_array_copying_agrees_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");
     let emitted = emit_project(&fixture);
