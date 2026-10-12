@@ -26,6 +26,22 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn native_rows_do_not_break_a_private_generic_template_prefix() {
+    let Some(program) = prepared_fixture("accessor-private-template") else {
+        return;
+    };
+    assert!(!program.interface_access.families.is_empty());
+    assert!(
+        program
+            .funcs
+            .iter()
+            .any(|func| func.name == "observeNumber"),
+        "a source template with the same private declaration and storage must keep compiling: {:?}",
+        program.uncompiled
+    );
+}
+
+#[test]
 fn accessor_reads_keep_checked_narrowing_and_actual_getter_absence() {
     let Some(program) = prepared_fixture("accessor-narrowed-read") else {
         return;
@@ -35,9 +51,11 @@ fn accessor_reads_keep_checked_narrowing_and_actual_getter_absence() {
         .iter()
         .find(|func| func.name == "flag")
         .expect("the predicate's checked field read must remain compiled");
-    assert!(flag.values.iter().any(|op| {
-        matches!(op.kind, OpKind::Unerase { .. }) && op.ty == hir::HirType::Bool
-    }));
+    assert!(
+        flag.values
+            .iter()
+            .any(|op| { matches!(op.kind, OpKind::Unerase { .. }) && op.ty == hir::HirType::Bool })
+    );
     assert!(program.uncompiled.iter().any(|(name, reason)| {
         name == "assertedRead" && reason.contains("an erased value where a concrete")
     }));
@@ -46,9 +64,12 @@ fn accessor_reads_keep_checked_narrowing_and_actual_getter_absence() {
         .iter()
         .find(|func| func.name == "observeNullable")
         .expect("the getter's actual null can still return through unknown");
-    assert!(!nullable.values.iter().any(|op| {
-        matches!(op.kind, OpKind::Unerase { .. }) && op.ty == hir::HirType::Bool
-    }));
+    assert!(
+        !nullable
+            .values
+            .iter()
+            .any(|op| { matches!(op.kind, OpKind::Unerase { .. }) && op.ty == hir::HirType::Bool })
+    );
 }
 
 #[test]

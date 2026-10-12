@@ -27570,8 +27570,38 @@ impl<'a> FuncBuilder<'a> {
         if same_slot(want, have) {
             return true;
         }
-        if !want.names_the_same_member(have) {
+        // A generic use and its concrete copy name the same private member
+        // only when this body's source substitution makes every argument the
+        // same type. Layout rows may keep them physically separate; neither a
+        // different class nor a permuted generic use gains a positional proof.
+        let template_member = want.name == have.name
+            && want.name.starts_with('#')
+            && want
+                .declared_by
+                .zip(have.declared_by)
+                .is_some_and(|(one, other)| {
+                    class_symbol(self.snapshot, one)
+                        .is_some_and(|symbol| class_symbol(self.snapshot, other) == Some(symbol))
+                        && (is_a_generic_declaration(self.snapshot, one)
+                            || is_a_generic_declaration(self.snapshot, other))
+                        && self
+                            .snapshot
+                            .type_arguments
+                            .get(&one)
+                            .zip(self.snapshot.type_arguments.get(&other))
+                            .is_some_and(|(one, other)| {
+                                one.len() == other.len()
+                                    && one.iter().zip(other).all(|(one, other)| {
+                                        self.sources.get(one).unwrap_or(one)
+                                            == self.sources.get(other).unwrap_or(other)
+                                    })
+                            })
+                });
+        if !want.names_the_same_member(have) && !template_member {
             return false;
+        }
+        if want.ty == have.ty {
+            return true;
         }
         let named = |ty: &HirType| match ty {
             HirType::Managed(ManagedType::Object(id)) => self
@@ -80663,6 +80693,93 @@ fn is_override_name(name: &str) -> bool {
 mod tests {
     use super::super::{Field, Layout, Program};
     use super::TypeId;
+
+    #[test]
+    fn a_private_template_member_needs_equal_source_arguments_and_storage() {
+        use nts_semantic_schema::{
+            NodeId, SemanticSnapshot, SymbolFlags, SymbolId, SymbolRecord, TypeKind, TypeRecord,
+        };
+        let mut snapshot = SemanticSnapshot::default();
+        for index in 0..2 {
+            snapshot.symbols.push(SymbolRecord {
+                name: "SameName".to_owned(),
+                flags: SymbolFlags::CLASS,
+                declarations: vec![NodeId(index)],
+                ty: None,
+                aliased: None,
+            });
+        }
+        for symbol in [0, 0, 1, 0, 0] {
+            snapshot.types.push(TypeRecord {
+                kind: TypeKind::Object {
+                    properties: Vec::new(),
+                },
+                symbol: Some(SymbolId(symbol)),
+            });
+        }
+        for name in ["K", "V"] {
+            snapshot.types.push(TypeRecord {
+                kind: TypeKind::TypeParameter {
+                    name: name.to_owned(),
+                    constraint: None,
+                },
+                symbol: None,
+            });
+        }
+        snapshot
+            .type_arguments
+            .insert(TypeId(1), vec![TypeId(5), TypeId(6)]);
+        snapshot
+            .type_arguments
+            .insert(TypeId(2), vec![TypeId(5), TypeId(6)]);
+        snapshot
+            .type_arguments
+            .insert(TypeId(4), vec![TypeId(6), TypeId(5)]);
+        for kind in [TypeKind::Number, TypeKind::String] {
+            snapshot.types.push(TypeRecord { kind, symbol: None });
+        }
+        snapshot
+            .type_arguments
+            .insert(TypeId(0), vec![TypeId(7), TypeId(8)]);
+        snapshot
+            .type_arguments
+            .insert(TypeId(3), vec![TypeId(8), TypeId(7)]);
+        let mut probe = super::FuncBuilder::probe(&snapshot);
+        let member = |owner| Field {
+            name: "#value".to_owned(),
+            ty: super::HirType::NUMBER,
+            declared_by: Some(TypeId(owner)),
+            readonly: false,
+            written: None,
+        };
+        assert!(
+            !probe.one_slot(&member(1), &member(0)),
+            "an unbound template"
+        );
+        probe.sources.insert(TypeId(5), TypeId(7));
+        probe.sources.insert(TypeId(6), TypeId(8));
+        assert!(probe.one_slot(&member(1), &member(0)));
+        assert!(probe.one_slot(&member(0), &member(1)));
+        assert!(
+            !probe.one_slot(&member(2), &member(0)),
+            "different declarations"
+        );
+        assert!(
+            !probe.one_slot(&member(3), &member(0)),
+            "two concrete instances"
+        );
+        assert!(super::is_a_generic_declaration(&snapshot, TypeId(4)));
+        assert!(
+            !probe.one_slot(&member(4), &member(0)),
+            "a permuted template"
+        );
+        let mut different = member(0);
+        different.ty = super::HirType::Bool;
+        assert!(!probe.one_slot(&member(1), &different), "different storage");
+        different = member(0);
+        different.name = "#other".to_owned();
+        assert!(!probe.one_slot(&member(1), &different), "different members");
+    }
 
     #[test]
     #[allow(clippy::unwrap_used, clippy::expect_used)]
