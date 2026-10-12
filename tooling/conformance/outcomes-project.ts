@@ -45,17 +45,25 @@ export const runMode = (name) =>
  * prepended to `main.ts` in build mode, and a tsconfig whose `extends` is
  * **absolute**: a copied relative `extends` resolves to nothing, silently,
  * and the options vanish.
+ *
+ * The fixture's own `compilerOptions` are kept, `outDir` aside. A defect that
+ * needs an option is a different program without it: a stored `null` read
+ * under `noUncheckedIndexedAccess` was recorded as agreeing, because this
+ * copy wrote its own options and dropped the fixture's.
  */
 export function materialise(scratch, name, sources, mode) {
   const dir = join(scratch, name);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   cpSync(sources, join(dir, "src"), { recursive: true });
+  const config = join(dirname(sources), "tsconfig.json");
+  const own = existsSync(config) ? JSON.parse(readFileSync(config, "utf8")).compilerOptions ?? {} : {};
+  const { outDir: _outDir, ...options } = own;
   writeFileSync(
     join(dir, "tsconfig.json"),
     `${JSON.stringify({
       extends: join(ROOT, "tsconfig.fixtures.json"),
-      compilerOptions: { paths: { [`${RUNTIME_SPECIFIER}*`]: [`${RUNTIME_ROOT}/*`] } },
+      compilerOptions: { ...options, paths: { [`${RUNTIME_SPECIFIER}*`]: [`${RUNTIME_ROOT}/*`] } },
       include: ["src"],
     }, null, 2)}\n`,
   );
