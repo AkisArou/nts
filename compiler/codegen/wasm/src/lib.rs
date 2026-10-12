@@ -15,6 +15,7 @@ mod callable_plan;
 mod callables;
 mod cfg;
 mod contract;
+mod demand;
 mod erased;
 mod erased_ops;
 mod error;
@@ -22,12 +23,12 @@ mod gc;
 mod helpers;
 mod host;
 mod indexing;
+mod ir;
 mod module;
 mod numeric;
 mod object_plan;
 mod objects;
 mod raising;
-mod requirements;
 mod strings;
 mod support;
 mod types;
@@ -213,6 +214,13 @@ pub const NODE_LOADER: &str = include_str!("../../../../runtime/wasm/node.mjs");
 /// Validate against the precise scalar and managed M1 feature set.
 /// No default proposal set changes when wasmparser updates.
 pub fn validate(bytes: &[u8]) -> Result<(), EmitError> {
+    validate_named(bytes, &[])
+}
+
+/// Validate, naming the defined function that contains a failure. wasmparser
+/// prints every concrete type as `$type`, so without the function a type
+/// mismatch report does not say where it is.
+pub(crate) fn validate_named(bytes: &[u8], bodies: &[String]) -> Result<(), EmitError> {
     use wasmparser::WasmFeatures as F;
     let features = F::FLOATS
         | F::MUTABLE_GLOBAL
@@ -223,10 +231,22 @@ pub fn validate(bytes: &[u8]) -> Result<(), EmitError> {
         | F::BULK_MEMORY
         | F::GC
         | F::GC_TYPES;
-    wasmparser::Validator::new_with_features(features)
-        .validate_all(bytes)
-        .map(|_| ())
-        .map_err(|e| EmitError::InvalidWasm(e.to_string()))
+    let Err(error) = wasmparser::Validator::new_with_features(features).validate_all(bytes) else {
+        return Ok(());
+    };
+    let body = wasmparser::Parser::new(0)
+        .parse_all(bytes)
+        .filter_map(|payload| match payload {
+            Ok(wasmparser::Payload::CodeSectionEntry(body)) => Some(body.range()),
+            _ => None,
+        })
+        .position(|range| range.contains(&error.offset()));
+    Err(EmitError::InvalidWasm(
+        match body.and_then(|at| bodies.get(at)) {
+            Some(name) => format!("in `{name}`: {error}"),
+            None => error.to_string(),
+        },
+    ))
 }
 
 pub(crate) fn refuse(

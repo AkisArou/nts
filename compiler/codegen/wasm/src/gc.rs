@@ -118,12 +118,12 @@ pub(crate) struct Plan {
 impl Plan {
     #[cfg(test)]
     pub(crate) fn build(program: &Program) -> Result<Self, crate::EmitError> {
-        Self::with_resources(program, &crate::requirements::build(program))
+        Self::with_resources(program, &crate::demand::build(program))
     }
 
     pub(crate) fn with_resources(
         program: &Program,
-        resources: &crate::requirements::Requirements,
+        resources: &crate::demand::Demand,
     ) -> Result<Self, crate::EmitError> {
         let callables = crate::callable_plan::Plan::build(program, &resources.closure_calls)?;
         let virtuals = crate::callable_plan::Plan::build(program, &resources.virtual_calls)?;
@@ -746,7 +746,6 @@ impl<'a> Builder<'a> {
                     array.element.clone(),
                 ))),
                 ancestry: Vec::new(),
-                object: None,
             });
         }
         Ok((objects, arrays))

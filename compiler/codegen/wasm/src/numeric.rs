@@ -9,7 +9,7 @@ use crate::{
 use nts_core::hir::{BinOp, HirType, UnOp, ValueId};
 use wasm_encoder::Instruction as I;
 
-pub(crate) fn constant_int(b: &mut Body<'_>, value: i128, ty: &HirType) -> Result<(), Failure> {
+pub(crate) fn constant_int(b: &mut Body<'_, '_>, value: i128, ty: &HirType) -> Result<(), Failure> {
     // Unsigned slots share wasm's signed bit-pattern encoding. Check the
     // logical range first, then encode the identical low bits.
     let HirType::Int { bits, signed } = ty else {
@@ -38,7 +38,11 @@ pub(crate) fn constant_int(b: &mut Body<'_>, value: i128, ty: &HirType) -> Resul
     Ok(())
 }
 
-pub(crate) fn constant_float(b: &mut Body<'_>, value: f64, ty: &HirType) -> Result<(), Failure> {
+pub(crate) fn constant_float(
+    b: &mut Body<'_, '_>,
+    value: f64,
+    ty: &HirType,
+) -> Result<(), Failure> {
     match types::value_slot(ty)? {
         Slot::F64 => b.ins(&I::F64Const(value.into())),
         Slot::F32 => {
@@ -59,7 +63,7 @@ fn unsigned(ty: &HirType) -> bool {
     matches!(ty, HirType::Int { signed: false, .. })
 }
 
-pub(crate) fn convert(b: &mut Body<'_>, from: &HirType, to: &HirType) -> Result<(), Failure> {
+pub(crate) fn convert(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Result<(), Failure> {
     let source = types::value_slot(from)?;
     let target = types::value_slot(to)?;
     if matches!(to, HirType::Bool) {
@@ -161,13 +165,13 @@ pub(crate) fn convert(b: &mut Body<'_>, from: &HirType, to: &HirType) -> Result<
     Ok(())
 }
 
-fn push_as(b: &mut Body<'_>, value: ValueId, ty: &HirType) -> Result<(), Failure> {
+fn push_as(b: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> Result<(), Failure> {
     b.load(value)?;
     let from = b.ty(value).clone();
     convert(b, &from, ty)
 }
 
-fn truth_on_stack(b: &mut Body<'_>, slot: Slot) {
+fn truth_on_stack(b: &mut Body<'_, '_>, slot: Slot) {
     // abs(x)>0 is false for both zeroes AND NaN; x!=0 would be true for NaN.
     match slot {
         Slot::I32 => {
@@ -192,7 +196,7 @@ fn truth_on_stack(b: &mut Body<'_>, slot: Slot) {
 }
 
 pub(crate) fn unary(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     op: UnOp,
     operand: ValueId,
@@ -250,7 +254,7 @@ pub(crate) fn unary(
 }
 
 fn float_unary(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     operand: ValueId,
     out: &HirType,
     opcode: &I<'static>,
@@ -260,7 +264,7 @@ fn float_unary(
     convert(b, &HirType::Float { bits: 64 }, out)
 }
 
-fn absolute(b: &mut Body<'_>, operand: ValueId, out: &HirType) -> Result<(), Failure> {
+fn absolute(b: &mut Body<'_, '_>, operand: ValueId, out: &HirType) -> Result<(), Failure> {
     let slot = types::value_slot(out)?;
     if matches!(slot, Slot::F32 | Slot::F64) {
         push_as(b, operand, out)?;
@@ -301,7 +305,7 @@ fn absolute(b: &mut Body<'_>, operand: ValueId, out: &HirType) -> Result<(), Fai
     Ok(())
 }
 
-fn to_i32(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
+fn to_i32(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     match types::value_slot(b.ty(value))? {
         Slot::I32 => {}
@@ -316,7 +320,7 @@ fn to_i32(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
 }
 
 pub(crate) fn binary(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     op: BinOp,
     lhs: ValueId,
@@ -347,7 +351,7 @@ pub(crate) fn binary(
 }
 
 fn bitwise(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     opcode: &I<'static>,
     signed: bool,
@@ -371,7 +375,12 @@ enum Comparison {
     Ge,
 }
 
-fn comparison(b: &mut Body<'_>, op: Comparison, lhs: ValueId, rhs: ValueId) -> Result<(), Failure> {
+fn comparison(
+    b: &mut Body<'_, '_>,
+    op: Comparison,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Result<(), Failure> {
     if matches!(b.ty(lhs), HirType::Bool) != matches!(b.ty(rhs), HirType::Bool) {
         return Err(format!("comparison {op:?} between boolean and number").into());
     }
@@ -464,7 +473,7 @@ fn compare_opcode(slot: Slot, op: Comparison, signed: bool) -> I<'static> {
 }
 
 fn arithmetic(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     op: BinOp,
     lhs: ValueId,

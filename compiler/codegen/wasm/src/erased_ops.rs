@@ -5,12 +5,13 @@ use crate::{
     erased::{self, BOOLEAN, Helper, NULL, NUMBER, STRING, UNDEFINED},
     error::Failure,
     gc::ErasedTypes,
-    module::Symbols,
+    ir::Function,
+    module::Builder,
     numeric, strings,
     types::{Physical, Slot},
 };
 use nts_core::hir::{BinOp, HirType, ManagedType, UnOp, ValueId};
-use wasm_encoder::{BlockType, Function, HeapType, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 #[derive(Clone, Copy)]
 enum Value {
@@ -84,7 +85,7 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
 }
 
 pub(crate) fn runtime(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     helper: Helper,
     args: &[ValueId],
@@ -106,8 +107,7 @@ pub(crate) fn runtime(
     if matches!(helper, Helper::Number | Helper::Boolean) {
         b.ins(&I::Drop);
         let types = b
-            .symbols
-            .types
+            .types()
             .erased
             .ok_or_else(|| Failure::Invariant("unplanned erased projection".into()))?;
         let cases = if helper == Helper::Number {
@@ -151,7 +151,7 @@ pub(crate) fn equality_helper(lhs: &HirType, rhs: &HirType) -> Option<(Helper, b
 }
 
 pub(crate) fn binary(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     op: BinOp,
     lhs: ValueId,
@@ -169,7 +169,7 @@ pub(crate) fn binary(
     }
     Ok(())
 }
-pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(), Failure> {
     if !matches!(op, UnOp::Truthy | UnOp::Not) {
         return Err(format!("erased unary {op:?}").into());
     }
@@ -183,131 +183,104 @@ pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), F
 
 pub(crate) fn body(
     helper: Helper,
-    symbols: &Symbols<'_>,
+    m: &mut Builder<'_>,
     types: ErasedTypes,
 ) -> Result<Function, Failure> {
     match helper {
         Helper::BoxBoolean => {
-            let globals = erased::values(symbols)?;
-            let mut f = Function::new([]);
-            instructions(
-                &mut f,
-                &[
-                    I::LocalGet(0),
-                    I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))),
-                    I::GlobalGet(globals.boolean(true)),
-                    I::Else,
-                    I::GlobalGet(globals.boolean(false)),
-                    I::End,
-                    I::End,
-                ],
-            );
+            let yes = erased::singleton(m, erased::Singleton::True)?;
+            let no = erased::singleton(m, erased::Singleton::False)?;
+            let mut f = Function::default();
+            f.instructions(&[
+                I::LocalGet(0),
+                I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))),
+            ]);
+            f.global_get(yes);
+            f.instruction(&I::Else);
+            f.global_get(no);
+            f.instructions(&[I::End, I::End]);
             Ok(f)
         }
         Helper::Boolean => {
-            let mut f = Function::new([]);
+            let mut f = Function::default();
             payload(&mut f, 0, types.boolean);
             f.instruction(&I::End);
             Ok(f)
         }
-        Helper::Truthy => truthiness(symbols, types),
-        Helper::Equal => equality(symbols, types),
+        Helper::Truthy => truthiness(m, types),
+        Helper::Equal => equality(m, types),
         Helper::EqualNumber | Helper::EqualBoolean | Helper::EqualString => {
-            typed_equality(helper, symbols, types)
+            typed_equality(helper, m, types)
         }
         Helper::BoxNumber | Helper::Number | Helper::Tag => Err(Failure::Invariant(format!(
             "primitive helper {helper:?} routed to operators"
         ))),
     }
 }
-fn instructions(f: &mut Function, code: &[I<'_>]) {
-    for i in code {
-        f.instruction(i);
-    }
-}
 fn payload(f: &mut Function, local: u32, ty: u32) {
-    instructions(
-        f,
-        &[
-            I::LocalGet(local),
-            I::RefCastNonNull(HeapType::Concrete(ty)),
-            I::StructGet {
-                struct_type_index: ty,
-                field_index: 1,
-            },
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(local),
+        I::RefCastNonNull(HeapType::Concrete(ty)),
+        I::StructGet {
+            struct_type_index: ty,
+            field_index: 1,
+        },
+    ]);
 }
 fn when_tag(f: &mut Function, local: u32, tag: i32) {
-    instructions(
-        f,
-        &[
-            I::LocalGet(local),
-            I::I32Const(tag),
-            I::I32Eq,
-            I::If(BlockType::Empty),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(local),
+        I::I32Const(tag),
+        I::I32Eq,
+        I::If(BlockType::Empty),
+    ]);
 }
-fn equality(symbols: &Symbols<'_>, types: ErasedTypes) -> Result<Function, Failure> {
-    let tag = erased::callee(symbols, Helper::Tag)?;
-    let number = erased::callee(symbols, Helper::Number)?;
-    let string_eq = strings::callee(symbols, strings::Helper::Equal)?;
-    let mut f = Function::new_with_locals_types([ValType::I32]);
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(0),
-            I::Call(tag),
-            I::LocalTee(2),
-            I::LocalGet(1),
-            I::Call(tag),
-            I::I32Ne,
-            I::If(BlockType::Empty),
-            I::I32Const(0),
-            I::Return,
-            I::End,
-        ],
-    );
+fn equality(m: &mut Builder<'_>, types: ErasedTypes) -> Result<Function, Failure> {
+    let tag = erased::callee(m, Helper::Tag)?;
+    let number = erased::callee(m, Helper::Number)?;
+    let string_eq = strings::callee(m, strings::Helper::Equal)?;
+    let mut f = Function::new([ValType::I32]);
+    f.instruction(&I::LocalGet(0));
+    f.call(tag);
+    f.instructions(&[I::LocalTee(2), I::LocalGet(1)]);
+    f.call(tag);
+    f.instructions(&[
+        I::I32Ne,
+        I::If(BlockType::Empty),
+        I::I32Const(0),
+        I::Return,
+        I::End,
+    ]);
     when_tag(&mut f, 2, NUMBER);
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(0),
-            I::Call(number),
-            I::LocalGet(1),
-            I::Call(number),
-            I::F64Eq,
-            I::Return,
-            I::End,
-        ],
-    );
+    f.instruction(&I::LocalGet(0));
+    f.call(number);
+    f.instruction(&I::LocalGet(1));
+    f.call(number);
+    f.instructions(&[I::F64Eq, I::Return, I::End]);
     when_tag(&mut f, 2, STRING);
     payload(&mut f, 0, types.string);
     payload(&mut f, 1, types.string);
-    instructions(&mut f, &[I::Call(string_eq), I::Return, I::End]);
+    f.call(string_eq);
+    f.instructions(&[I::Return, I::End]);
     when_tag(&mut f, 2, BOOLEAN);
     payload(&mut f, 0, types.boolean);
     payload(&mut f, 1, types.boolean);
-    instructions(&mut f, &[I::I32Eq, I::Return, I::End]);
+    f.instructions(&[I::I32Eq, I::Return, I::End]);
     // The remaining admitted tags are the two unique absence singletons.
     // Object/function identity will use this same reference comparison.
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(0),
-            I::RefCastNullable(RefType::EQREF.heap_type),
-            I::LocalGet(1),
-            I::RefCastNullable(RefType::EQREF.heap_type),
-            I::RefEq,
-            I::End,
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(0),
+        I::RefCastNullable(RefType::EQREF.heap_type),
+        I::LocalGet(1),
+        I::RefCastNullable(RefType::EQREF.heap_type),
+        I::RefEq,
+        I::End,
+    ]);
     Ok(f)
 }
 fn typed_equality(
     helper: Helper,
-    symbols: &Symbols<'_>,
+    m: &mut Builder<'_>,
     types: ErasedTypes,
 ) -> Result<Function, Failure> {
     let expected = match helper {
@@ -320,40 +293,31 @@ fn typed_equality(
             )));
         }
     };
-    let mut f = Function::new([]);
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(0),
-            I::Call(erased::callee(symbols, Helper::Tag)?),
-            I::I32Const(expected),
-            I::I32Eq,
-            I::If(BlockType::Result(ValType::I32)),
-        ],
-    );
+    let tag = erased::callee(m, Helper::Tag)?;
+    let mut f = Function::default();
+    f.instruction(&I::LocalGet(0));
+    f.call(tag);
+    f.instructions(&[
+        I::I32Const(expected),
+        I::I32Eq,
+        I::If(BlockType::Result(ValType::I32)),
+    ]);
     match helper {
-        Helper::EqualNumber => instructions(
-            &mut f,
-            &[
-                I::LocalGet(0),
-                I::Call(erased::callee(symbols, Helper::Number)?),
-                I::LocalGet(1),
-                I::F64Eq,
-            ],
-        ),
+        Helper::EqualNumber => {
+            let number = erased::callee(m, Helper::Number)?;
+            f.instruction(&I::LocalGet(0));
+            f.call(number);
+            f.instructions(&[I::LocalGet(1), I::F64Eq]);
+        }
         Helper::EqualBoolean => {
             payload(&mut f, 0, types.boolean);
-            instructions(&mut f, &[I::LocalGet(1), I::I32Eq]);
+            f.instructions(&[I::LocalGet(1), I::I32Eq]);
         }
         Helper::EqualString => {
+            let equal = strings::callee(m, strings::Helper::Equal)?;
             payload(&mut f, 0, types.string);
-            instructions(
-                &mut f,
-                &[
-                    I::LocalGet(1),
-                    I::Call(strings::callee(symbols, strings::Helper::Equal)?),
-                ],
-            );
+            f.instruction(&I::LocalGet(1));
+            f.call(equal);
         }
         _ => {
             return Err(Failure::Invariant(format!(
@@ -361,76 +325,67 @@ fn typed_equality(
             )));
         }
     }
-    instructions(&mut f, &[I::Else, I::I32Const(0), I::End, I::End]);
+    f.instructions(&[I::Else, I::I32Const(0), I::End, I::End]);
     Ok(f)
 }
-fn truthiness(symbols: &Symbols<'_>, types: ErasedTypes) -> Result<Function, Failure> {
-    let mut f = Function::new_with_locals_types([ValType::I32, ValType::F64]);
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(0),
-            I::Call(erased::callee(symbols, Helper::Tag)?),
-            I::LocalSet(1),
-            I::LocalGet(1),
-            I::I32Const(UNDEFINED),
-            I::I32Eq,
-            I::LocalGet(1),
-            I::I32Const(NULL),
-            I::I32Eq,
-            I::I32Or,
-            I::If(BlockType::Empty),
-            I::I32Const(0),
-            I::Return,
-            I::End,
-        ],
-    );
+fn truthiness(m: &mut Builder<'_>, types: ErasedTypes) -> Result<Function, Failure> {
+    let tag = erased::callee(m, Helper::Tag)?;
+    let number = erased::callee(m, Helper::Number)?;
+    let length = strings::callee(m, strings::Helper::Length)?;
+    let mut f = Function::new([ValType::I32, ValType::F64]);
+    f.instruction(&I::LocalGet(0));
+    f.call(tag);
+    f.instructions(&[
+        I::LocalSet(1),
+        I::LocalGet(1),
+        I::I32Const(UNDEFINED),
+        I::I32Eq,
+        I::LocalGet(1),
+        I::I32Const(NULL),
+        I::I32Eq,
+        I::I32Or,
+        I::If(BlockType::Empty),
+        I::I32Const(0),
+        I::Return,
+        I::End,
+    ]);
     when_tag(&mut f, 1, BOOLEAN);
     payload(&mut f, 0, types.boolean);
-    instructions(&mut f, &[I::Return, I::End]);
+    f.instructions(&[I::Return, I::End]);
     when_tag(&mut f, 1, NUMBER);
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(0),
-            I::Call(erased::callee(symbols, Helper::Number)?),
-            I::LocalTee(2),
-            I::F64Const(0.0.into()),
-            I::F64Ne,
-            I::LocalGet(2),
-            I::LocalGet(2),
-            I::F64Eq,
-            I::I32And,
-            I::Return,
-            I::End,
-        ],
-    );
+    f.instruction(&I::LocalGet(0));
+    f.call(number);
+    f.instructions(&[
+        I::LocalTee(2),
+        I::F64Const(0.0.into()),
+        I::F64Ne,
+        I::LocalGet(2),
+        I::LocalGet(2),
+        I::F64Eq,
+        I::I32And,
+        I::Return,
+        I::End,
+    ]);
     when_tag(&mut f, 1, STRING);
     payload(&mut f, 0, types.string);
-    instructions(
-        &mut f,
-        &[
-            I::RefIsNull,
-            I::If(BlockType::Result(ValType::I32)),
-            I::I32Const(0),
-            I::Else,
-        ],
-    );
+    f.instructions(&[
+        I::RefIsNull,
+        I::If(BlockType::Result(ValType::I32)),
+        I::I32Const(0),
+        I::Else,
+    ]);
     payload(&mut f, 0, types.string);
-    instructions(
-        &mut f,
-        &[
-            I::Call(strings::callee(symbols, strings::Helper::Length)?),
-            I::I32Eqz,
-            I::I32Eqz,
-            I::End,
-            I::Return,
-            I::End,
-            I::LocalGet(0),
-            I::RefIsNull,
-            I::I32Eqz,
-            I::End,
-        ],
-    );
+    f.call(length);
+    f.instructions(&[
+        I::I32Eqz,
+        I::I32Eqz,
+        I::End,
+        I::Return,
+        I::End,
+        I::LocalGet(0),
+        I::RefIsNull,
+        I::I32Eqz,
+        I::End,
+    ]);
     Ok(f)
 }

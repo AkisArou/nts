@@ -1,6 +1,6 @@
 //! Callable sharing follows declared HIR ancestry, never matching capture shapes.
 
-use crate::{EmitError, error::Failure, requirements::ObjectUse};
+use crate::{EmitError, demand::ObjectUse, error::Failure};
 use nts_core::hir::{ClassId, HirType, Program};
 use std::collections::{BTreeMap, BTreeSet};
 

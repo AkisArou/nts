@@ -48,9 +48,6 @@ pub(crate) fn external(name: &str) -> Option<Method> {
     }
 }
 impl Method {
-    pub(crate) fn grows(self) -> bool {
-        matches!(self, Self::Push(_))
-    }
     pub(crate) fn boxes_number(self) -> bool {
         self == Self::Pop(Family::Value)
     }
@@ -82,7 +79,7 @@ impl Method {
 }
 
 pub(crate) fn call(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     name: &str,
     method: Method,
@@ -96,7 +93,7 @@ pub(crate) fn call(
     })
 }
 fn call_inner(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     method: Method,
     args: &[ValueId],
@@ -109,7 +106,7 @@ fn call_inner(
     if args.len() != arity {
         return Err(format!("array helper {method:?} arity mismatch").into());
     }
-    let shape = b.symbols.types.array(b.ty(args[0]))?;
+    let shape = b.types().array(b.ty(args[0]))?;
     if !method.accepts(&shape.element) {
         return Err(format!("array helper {method:?} element {:?}", shape.element).into());
     }
@@ -121,13 +118,13 @@ fn call_inner(
         Method::Truncate(_) | Method::KeepFirst => truncate(b, result, shape, args[0], args[1]),
     }
 }
-fn length(b: &mut Body<'_>, shape: &gc::Array, array: ValueId) -> Result<(), Failure> {
+fn length(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<(), Failure> {
     arrays::logical_length(b, array, shape.wrapper)
 }
-fn backing(b: &mut Body<'_>, shape: &gc::Array, array: ValueId) -> Result<(), Failure> {
+fn backing(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<(), Failure> {
     arrays::backing(b, array, shape.wrapper)
 }
-fn output(b: &mut Body<'_>, result: ValueId, actual: &HirType) -> Result<(), Failure> {
+fn output(b: &mut Body<'_, '_>, result: ValueId, actual: &HirType) -> Result<(), Failure> {
     if b.ty(result) == &HirType::Void {
         b.ins(&I::Drop);
         Ok(())
@@ -137,12 +134,12 @@ fn output(b: &mut Body<'_>, result: ValueId, actual: &HirType) -> Result<(), Fai
         objects::adapt(b, actual, &b.ty(result).clone())
     }
 }
-fn element(b: &mut Body<'_>, shape: &gc::Array, input: ValueId) -> Result<(), Failure> {
+fn element(b: &mut Body<'_, '_>, shape: &gc::Array, input: ValueId) -> Result<(), Failure> {
     b.load(input)?;
     objects::adapt(b, &b.ty(input).clone(), &shape.element)
 }
 fn push(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     shape: &gc::Array,
     array: ValueId,
@@ -151,17 +148,13 @@ fn push(
     length(b, shape, array)?;
     b.ins(&I::I32Const(-1));
     b.ins(&I::I32LtU);
-    contract::require(b)?;
-    let grow = *b
-        .symbols
-        .array_grow
-        .get(&shape.wrapper)
-        .ok_or_else(|| Failure::Invariant("unplanned array push growth".into()))?;
+    contract::require(b);
+    let grow = arrays::grow(b.m, shape)?;
     b.load(array)?;
     length(b, shape, array)?;
     b.ins(&I::I32Const(1));
     b.ins(&I::I32Add);
-    b.ins(&I::Call(grow));
+    b.call(grow);
     backing(b, shape, array)?;
     length(b, shape, array)?;
     element(b, shape, input)?;
@@ -177,14 +170,14 @@ fn push(
     length(b, shape, array)?;
     output(b, result, &U32)
 }
-fn last(b: &mut Body<'_>, shape: &gc::Array, array: ValueId) -> Result<(), Failure> {
+fn last(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<(), Failure> {
     length(b, shape, array)?;
     b.ins(&I::I32Const(1));
     b.ins(&I::I32Sub);
     Ok(())
 }
 fn pop(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     shape: &gc::Array,
     array: ValueId,
@@ -199,11 +192,11 @@ fn pop(
         length(b, shape, array)?;
         b.ins(&I::I32Const(0));
         b.ins(&I::I32GtU);
-        contract::require(b)?;
+        contract::require(b);
     } else {
         length(b, shape, array)?;
         b.ins(&I::If(BlockType::Result(
-            b.symbols.types.value_slot(&actual)?.wasm(),
+            b.types().value_slot(&actual)?.wasm(),
         )));
     }
     backing(b, shape, array)?;
@@ -227,9 +220,8 @@ fn pop(
     if family != Family::Number {
         b.ins(&I::Else);
         if family == Family::Value {
-            b.ins(&I::GlobalGet(
-                erased::values(b.symbols)?.for_tag(erased::UNDEFINED)?,
-            ));
+            let undefined = erased::singleton(b.m, erased::Singleton::Undefined)?;
+            b.global_get(undefined);
         } else {
             objects::default(b, &actual)?;
         }
@@ -238,7 +230,7 @@ fn pop(
     output(b, result, &actual)
 }
 fn fill(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     shape: &gc::Array,
     array: ValueId,
@@ -253,7 +245,7 @@ fn fill(
     output(b, result, &shape.ty)
 }
 fn truncate(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     shape: &gc::Array,
     array: ValueId,
@@ -268,7 +260,7 @@ fn truncate(
     b.ins(&I::F64ConvertI32U);
     b.ins(&I::F64Le);
     b.ins(&I::I32And);
-    contract::require(b)?;
+    contract::require(b);
     backing(b, shape, array)?;
     arrays::index(b, count)?;
     objects::default(b, &shape.element)?;

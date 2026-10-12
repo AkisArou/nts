@@ -4,12 +4,13 @@ use crate::{
     body::Body,
     error::Failure,
     helpers::Helper as ScalarHelper,
-    module::Symbols,
+    ir::Function,
+    module::{Builder, Func, FuncKey},
     numeric,
     types::{Physical, Slot},
 };
 use nts_core::hir::{BinOp, HirType, ManagedType, UnOp, ValueId};
-use wasm_encoder::{BlockType, Function, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, Instruction as I, RefType, ValType};
 
 pub(crate) const STRING: Physical = Physical::Reference(RefType::EXTERNREF);
 const NONNULL_STRING: Physical = Physical::Reference(RefType {
@@ -90,21 +91,8 @@ impl Helper {
             Self::FromCharCode => (vec![F64], STRING),
         }
     }
-    pub(crate) const fn dependencies(self) -> &'static [Self] {
-        match self {
-            Self::CharCodeAt => &[Self::Length, Self::Unit],
-            Self::CharAt | Self::Substring | Self::Slice => &[Self::Length, Self::SubstringBuiltin],
-            Self::FromCharCode => &[Self::FromCharCodeBuiltin],
-            Self::Length
-            | Self::Unit
-            | Self::Equal
-            | Self::Compare
-            | Self::Concat
-            | Self::SubstringBuiltin
-            | Self::FromCharCodeBuiltin => &[],
-        }
-    }
-    pub(crate) fn body(self, symbols: &Symbols<'_>) -> Result<Option<Function>, Failure> {
+    /// A module-local adapter body; builtins have none.
+    fn body(self, m: &mut Builder<'_>) -> Result<Function, Failure> {
         match self {
             Self::Length
             | Self::Unit
@@ -112,24 +100,20 @@ impl Helper {
             | Self::Compare
             | Self::Concat
             | Self::SubstringBuiltin
-            | Self::FromCharCodeBuiltin => Ok(None),
-            Self::CharCodeAt | Self::CharAt => indexed(self, symbols).map(Some),
-            Self::Substring | Self::Slice => substring(self, symbols).map(Some),
+            | Self::FromCharCodeBuiltin => Err(Failure::Invariant(format!(
+                "string builtin {self:?} has no module body"
+            ))),
+            Self::CharCodeAt | Self::CharAt => indexed(self, m),
+            Self::Substring | Self::Slice => substring(self, m),
             Self::FromCharCode => {
-                let to_int = symbols.helpers.get(&ScalarHelper::ToInt32).ok_or_else(|| {
-                    Failure::Invariant("unplanned fromCharCode numeric dependency".into())
-                })?;
-                let mut f = Function::new([]);
-                instructions(
-                    &mut f,
-                    &[
-                        I::LocalGet(0),
-                        I::Call(*to_int),
-                        I::Call(callee(symbols, Self::FromCharCodeBuiltin)?),
-                        I::End,
-                    ],
-                );
-                Ok(Some(f))
+                let to_int = crate::helpers::callee(m, ScalarHelper::ToInt32)?;
+                let from = callee(m, Self::FromCharCodeBuiltin)?;
+                let mut f = Function::default();
+                f.instruction(&I::LocalGet(0));
+                f.call(to_int);
+                f.call(from);
+                f.instruction(&I::End);
+                Ok(f)
             }
         }
     }
@@ -174,23 +158,19 @@ pub(crate) fn binary_helper(op: BinOp) -> Result<Helper, Failure> {
     }
 }
 
-pub(crate) fn call(b: &mut Body<'_>, helper: Helper) -> Result<(), Failure> {
-    b.ins(&I::Call(callee(b.symbols, helper)?));
+pub(crate) fn call(b: &mut Body<'_, '_>, helper: Helper) -> Result<(), Failure> {
+    let f = callee(b.m, helper)?;
+    b.call(f);
     Ok(())
 }
 
-pub(crate) fn constant(b: &mut Body<'_>, text: &str) -> Result<(), Failure> {
-    let global = b
-        .symbols
-        .literals
-        .get(text)
-        .copied()
-        .ok_or_else(|| Failure::Invariant("unplanned string literal".into()))?;
-    b.ins(&I::GlobalGet(global));
-    Ok(())
+/// A string literal: an immutable imported global, so reading it is free.
+pub(crate) fn constant(b: &mut Body<'_, '_>, text: &str) {
+    let global = b.m.literal(text);
+    b.global_get(global);
 }
 
-pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(), Failure> {
     if !matches!(op, UnOp::Truthy | UnOp::Not) {
         return Err(format!("string unary {op:?}").into());
     }
@@ -209,15 +189,24 @@ pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), F
     }
     Ok(())
 }
-pub(crate) fn callee(symbols: &Symbols<'_>, helper: Helper) -> Result<u32, Failure> {
-    symbols
-        .strings
-        .get(&helper)
-        .copied()
-        .ok_or_else(|| Failure::Invariant(format!("unplanned string helper {helper:?}")))
+/// The engine's string builtin, or the module-local adapter around one.
+pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failure> {
+    let (params, result) = helper.signature();
+    let key = FuncKey::String(helper);
+    if helper.builtin() {
+        return Ok(m.import(
+            key,
+            "wasm:js-string",
+            helper.name(),
+            params,
+            Some(result),
+            true,
+        ));
+    }
+    m.helper(key, helper.name(), params, Some(result), |m| helper.body(m))
 }
 
-pub(crate) fn length(b: &mut Body<'_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn length(b: &mut Body<'_, '_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
     crate::contract::nonnull(b, value)?;
     b.load(value)?;
     call(b, Helper::Length)?;
@@ -225,7 +214,7 @@ pub(crate) fn length(b: &mut Body<'_>, result: ValueId, value: ValueId) -> Resul
 }
 
 pub(crate) fn unit(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     string: ValueId,
     index: ValueId,
@@ -249,7 +238,11 @@ pub(crate) fn unit(
     numeric::convert(b, &index_type, &b.ty(result).clone())
 }
 
-fn unit_index_contract(b: &mut Body<'_>, string: ValueId, index: ValueId) -> Result<(), Failure> {
+fn unit_index_contract(
+    b: &mut Body<'_, '_>,
+    string: ValueId,
+    index: ValueId,
+) -> Result<(), Failure> {
     let ty = b.ty(index).clone();
     b.load(index)?;
     numeric::convert(b, &ty, &HirType::NUMBER)?;
@@ -269,11 +262,12 @@ fn unit_index_contract(b: &mut Body<'_>, string: ValueId, index: ValueId) -> Res
     b.ins(&I::F64ConvertI32U);
     b.ins(&I::F64Lt);
     b.ins(&I::I32And);
-    crate::contract::require(b)
+    crate::contract::require(b);
+    Ok(())
 }
 
 pub(crate) fn binary(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     op: BinOp,
     lhs: ValueId,
     rhs: ValueId,
@@ -320,7 +314,7 @@ pub(crate) fn binary(
 }
 
 pub(crate) fn runtime(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     helper: Helper,
     args: &[ValueId],
@@ -360,121 +354,90 @@ pub(crate) fn runtime(
     Ok(())
 }
 
-fn instructions(f: &mut Function, code: &[I<'_>]) {
-    for i in code {
-        f.instruction(i);
-    }
-}
-
 /// `ToIntegerOrInfinity` before testing bounds. NaN becomes zero, fractions
 /// truncate, and infinities/huge indices stay outside the range until checked.
-fn indexed(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, Failure> {
+fn indexed(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
     let char_at = helper == Helper::CharAt;
-    let mut f = Function::new_with_locals_types([ValType::F64]);
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(1),
-            I::LocalGet(1),
-            I::F64Eq,
-            I::If(BlockType::Result(ValType::F64)),
-            I::LocalGet(1),
-            I::F64Trunc,
-            I::Else,
-            I::F64Const(0.0.into()),
-            I::End,
-            I::LocalSet(2),
-            I::LocalGet(2),
-            I::F64Const(0.0.into()),
-            I::F64Ge,
-            I::LocalGet(2),
-            I::LocalGet(0),
-            I::Call(callee(symbols, Helper::Length)?),
-            I::F64ConvertI32U,
-            I::F64Lt,
-            I::I32And,
-            I::If(BlockType::Result(if char_at {
-                ValType::EXTERNREF
-            } else {
-                ValType::F64
-            })),
-            I::LocalGet(0),
+    let length = callee(m, Helper::Length)?;
+    let mut f = Function::new([ValType::F64]);
+    f.instructions(&[
+        I::LocalGet(1),
+        I::LocalGet(1),
+        I::F64Eq,
+        I::If(BlockType::Result(ValType::F64)),
+        I::LocalGet(1),
+        I::F64Trunc,
+        I::Else,
+        I::F64Const(0.0.into()),
+        I::End,
+        I::LocalSet(2),
+        I::LocalGet(2),
+        I::F64Const(0.0.into()),
+        I::F64Ge,
+        I::LocalGet(2),
+        I::LocalGet(0),
+    ]);
+    f.call(length);
+    f.instructions(&[
+        I::F64ConvertI32U,
+        I::F64Lt,
+        I::I32And,
+        I::If(BlockType::Result(if char_at {
+            ValType::EXTERNREF
+        } else {
+            ValType::F64
+        })),
+        I::LocalGet(0),
+        I::LocalGet(2),
+        I::I32TruncSatF64U,
+    ]);
+    if char_at {
+        let substring = callee(m, Helper::SubstringBuiltin)?;
+        let empty = m.literal("");
+        f.instructions(&[
             I::LocalGet(2),
             I::I32TruncSatF64U,
-        ],
-    );
-    if char_at {
-        instructions(
-            &mut f,
-            &[
-                I::LocalGet(2),
-                I::I32TruncSatF64U,
-                I::I32Const(1),
-                I::I32Add,
-                I::Call(callee(symbols, Helper::SubstringBuiltin)?),
-                I::Else,
-                I::GlobalGet(
-                    *symbols.literals.get("").ok_or_else(|| {
-                        Failure::Invariant("unplanned charAt empty string".into())
-                    })?,
-                ),
-            ],
-        );
+            I::I32Const(1),
+            I::I32Add,
+        ]);
+        f.call(substring);
+        f.instruction(&I::Else);
+        f.global_get(empty);
     } else {
-        instructions(
-            &mut f,
-            &[
-                I::Call(callee(symbols, Helper::Unit)?),
-                I::F64ConvertI32U,
-                I::Else,
-                I::F64Const(f64::NAN.into()),
-            ],
-        );
+        let unit = callee(m, Helper::Unit)?;
+        f.call(unit);
+        f.instructions(&[I::F64ConvertI32U, I::Else, I::F64Const(f64::NAN.into())]);
     }
-    instructions(&mut f, &[I::End, I::End]);
+    f.instructions(&[I::End, I::End]);
     Ok(f)
 }
 
-fn substring(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, Failure> {
+fn substring(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
     let slice = helper == Helper::Slice;
-    let mut f =
-        Function::new_with_locals_types([ValType::I32, ValType::I32, ValType::I32, ValType::F64]);
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(0),
-            I::Call(callee(symbols, Helper::Length)?),
-            I::LocalSet(3),
-        ],
-    );
+    let length = callee(m, Helper::Length)?;
+    let builtin = callee(m, Helper::SubstringBuiltin)?;
+    let mut f = Function::new([ValType::I32, ValType::I32, ValType::I32, ValType::F64]);
+    f.instruction(&I::LocalGet(0));
+    f.call(length);
+    f.instruction(&I::LocalSet(3));
     for (param, local) in [(1, 4), (2, 5)] {
         crate::indexing::clamp(&mut f, param, local, slice, 3, 6);
     }
     if !slice {
-        instructions(
-            &mut f,
-            &[
-                I::LocalGet(4),
-                I::LocalGet(5),
-                I::I32GtU,
-                I::If(BlockType::Empty),
-                I::LocalGet(4),
-                I::LocalGet(5),
-                I::LocalSet(4),
-                I::LocalSet(5),
-                I::End,
-            ],
-        );
-    }
-    instructions(
-        &mut f,
-        &[
-            I::LocalGet(0),
+        f.instructions(&[
             I::LocalGet(4),
             I::LocalGet(5),
-            I::Call(callee(symbols, Helper::SubstringBuiltin)?),
+            I::I32GtU,
+            I::If(BlockType::Empty),
+            I::LocalGet(4),
+            I::LocalGet(5),
+            I::LocalSet(4),
+            I::LocalSet(5),
             I::End,
-        ],
-    );
+        ]);
+    }
+    f.instructions(&[I::LocalGet(0), I::LocalGet(4), I::LocalGet(5)]);
+    f.call(builtin);
+    f.instruction(&I::End);
     Ok(f)
 }

@@ -4,75 +4,69 @@ use crate::{
     body::Body,
     contract, erased,
     error::Failure,
-    gc, numeric,
+    gc,
+    ir::{self, Function},
+    module::{Builder, Func, FuncKey, Global, GlobalKey},
+    numeric,
     object_plan::Object,
     types::{Physical, Slot},
 };
 use nts_core::hir::{BinOp, ClassId, HirType, ManagedType, UnOp, ValueId};
-use wasm_encoder::{
-    BlockType, ConstExpr, Function, GlobalSection, GlobalType, HeapType, Instruction as I, RefType,
-    ValType,
-};
+use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 pub(crate) const INSTANCE: &str = "object.instanceOf";
-pub(crate) fn globals(
-    symbols: &crate::module::Symbols<'_>,
-    section: &mut GlobalSection,
-) -> Result<(), Failure> {
-    let plan = symbols.types;
-    if plan.objects.descriptors.is_empty() {
-        return Ok(());
-    }
-    let root = plan
-        .root
-        .ok_or_else(|| Failure::Invariant("unplanned object root".into()))?;
-    for descriptor in &plan.objects.descriptors {
-        let mut code = vec![
+/// A class or array descriptor: identity, runtime kind, ancestry and the
+/// class's dispatch entries. Built once, on the first allocation that needs it.
+pub(crate) fn descriptor(
+    m: &mut Builder<'_>,
+    at: u32,
+    class: Option<ClassId>,
+) -> Result<Global, Failure> {
+    m.global(GlobalKey::Descriptor(at), |m| {
+        let plan = m.types;
+        let root = plan
+            .root
+            .ok_or_else(|| Failure::Invariant("unplanned object root".into()))?;
+        let descriptor = plan
+            .objects
+            .descriptors
+            .get(at as usize)
+            .ok_or_else(|| Failure::Invariant(format!("unplanned descriptor {at}")))?;
+        let mut code = ir::Code::default();
+        code.instructions(&[
             I::I32Const(descriptor.identity.cast_signed()),
             I::I32Const(descriptor.kind.cast_signed()),
-        ];
-        code.extend(
-            descriptor
-                .ancestry
-                .iter()
-                .map(|id| I::I32Const(id.cast_signed())),
-        );
-        code.push(I::ArrayNewFixed {
+        ]);
+        for id in &descriptor.ancestry {
+            code.instruction(&I::I32Const(id.cast_signed()));
+        }
+        code.instruction(&I::ArrayNewFixed {
             array_type_index: root.ancestry,
             array_size: u32::try_from(descriptor.ancestry.len())
                 .map_err(|_| Failure::Invariant("too many class ancestors".into()))?,
         });
-        code.extend(crate::callables::dispatch(symbols, descriptor.object)?);
-        code.push(I::StructNew(root.descriptor));
-        section.global(
-            GlobalType {
-                val_type: ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(root.descriptor),
-                }),
-                mutable: false,
-                shared: false,
-            },
-            &ConstExpr::extended(code),
-        );
-    }
-    Ok(())
+        crate::callables::dispatch(m, &mut code, class)?;
+        code.instruction(&I::StructNew(root.descriptor));
+        Ok((crate::module::constant_type(root.descriptor), code))
+    })
 }
-fn object<'a>(b: &Body<'a>, value: ValueId) -> Result<&'a Object, Failure> {
-    b.symbols.types.objects.object(b.ty(value))
+fn object<'p>(b: &Body<'_, 'p>, value: ValueId) -> Result<&'p Object, Failure> {
+    b.types().objects.object(b.ty(value))
 }
-pub(crate) fn new(b: &mut Body<'_>, result: ValueId, frame: bool) -> Result<(), Failure> {
+pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, frame: bool) -> Result<(), Failure> {
     if frame {
         return Err(Failure::Invariant(
             "frame allocation survived HostGc preparation".into(),
         ));
     }
+    let HirType::Managed(ManagedType::Object(class)) = *b.ty(result) else {
+        return Err(Failure::Invariant("ObjectNew of a non-object type".into()));
+    };
     let storage = object(b, result)?;
-    b.ins(&I::GlobalGet(
-        b.symbols.descriptor_base + storage.descriptor,
-    ));
-    for i in crate::callables::entries(b.symbols, storage)? {
-        b.ins(&i);
+    let descriptor = descriptor(b.m, storage.descriptor, Some(class))?;
+    b.global_get(descriptor);
+    for entry in crate::callables::entries(b.m, class, storage)? {
+        b.code.ref_func(entry);
     }
     for field in storage.fields.iter() {
         default(b, &field.ty)?;
@@ -80,25 +74,28 @@ pub(crate) fn new(b: &mut Body<'_>, result: ValueId, frame: bool) -> Result<(), 
     b.ins(&I::StructNew(storage.physical));
     Ok(())
 }
-pub(crate) fn default(b: &mut Body<'_>, ty: &HirType) -> Result<(), Failure> {
-    b.ins(&default_instruction(b.symbols, ty)?);
-    Ok(())
+pub(crate) fn default(b: &mut Body<'_, '_>, ty: &HirType) -> Result<(), Failure> {
+    push_default(b.m, &mut b.code, ty)
 }
-pub(crate) fn default_instruction(
-    symbols: &crate::module::Symbols<'_>,
+/// The zero value of a storage slot. An erased slot starts undefined, never
+/// as a null reference that no erased operation accepts.
+pub(crate) fn push_default(
+    m: &mut Builder<'_>,
+    f: &mut Function,
     ty: &HirType,
-) -> Result<I<'static>, Failure> {
-    Ok(match symbols.types.value_slot(ty)? {
-        Physical::Scalar(Slot::I32) => I::I32Const(0),
-        Physical::Scalar(Slot::I64) => I::I64Const(0),
-        Physical::Scalar(Slot::F32) => I::F32Const(0.0.into()),
-        Physical::Scalar(Slot::F64) => I::F64Const(0.0.into()),
+) -> Result<(), Failure> {
+    match m.types.value_slot(ty)? {
+        Physical::Scalar(Slot::I32) => f.instruction(&I::I32Const(0)),
+        Physical::Scalar(Slot::I64) => f.instruction(&I::I64Const(0)),
+        Physical::Scalar(Slot::F32) => f.instruction(&I::F32Const(0.0.into())),
+        Physical::Scalar(Slot::F64) => f.instruction(&I::F64Const(0.0.into())),
         Physical::Reference(_) if ty == &HirType::Erased => {
-            let values = erased::values(symbols)?;
-            I::GlobalGet(values.for_tag(erased::UNDEFINED)?)
+            let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
+            f.global_get(undefined);
         }
-        Physical::Reference(reference) => I::RefNull(reference.heap_type),
-    })
+        Physical::Reference(reference) => f.instruction(&I::RefNull(reference.heap_type)),
+    }
+    Ok(())
 }
 fn field(storage: &Object, at: u32) -> Result<&nts_core::hir::Field, Failure> {
     storage
@@ -143,7 +140,7 @@ fn get_instruction(ty: &HirType, physical: u32, field: u32) -> Result<I<'static>
     })
 }
 pub(crate) fn get(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     receiver: ValueId,
     at: u32,
@@ -160,7 +157,7 @@ pub(crate) fn get(
     adapt(b, &field.ty, &b.ty(result).clone())
 }
 pub(crate) fn set(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     receiver: ValueId,
     at: u32,
@@ -181,7 +178,7 @@ pub(crate) fn set(
     });
     Ok(())
 }
-pub(crate) fn adapt(b: &mut Body<'_>, from: &HirType, to: &HirType) -> Result<(), Failure> {
+pub(crate) fn adapt(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Result<(), Failure> {
     if from == to {
         return Ok(());
     }
@@ -191,7 +188,7 @@ pub(crate) fn adapt(b: &mut Body<'_>, from: &HirType, to: &HirType) -> Result<()
     if let (HirType::Managed(ManagedType::Object(_)), HirType::Managed(ManagedType::Object(_))) =
         (from, to)
     {
-        let plan = &b.symbols.types.objects;
+        let plan = &b.types().objects;
         if plan.subtype(plan.object(from)?.physical, plan.object(to)?.physical) {
             return Ok(());
         }
@@ -202,7 +199,7 @@ pub(crate) fn adapt(b: &mut Body<'_>, from: &HirType, to: &HirType) -> Result<()
     .into())
 }
 pub(crate) fn binary(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     op: BinOp,
     lhs: ValueId,
     rhs: ValueId,
@@ -228,7 +225,7 @@ pub(crate) fn is_reference(ty: &HirType) -> bool {
         HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_))
     )
 }
-pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(), Failure> {
     if !matches!(op, UnOp::Truthy | UnOp::Not) {
         return Err(format!("reference unary {op:?}").into());
     }
@@ -240,7 +237,7 @@ pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), F
     Ok(())
 }
 pub(crate) fn instance(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     value: ValueId,
     classes: &[ClassId],
 ) -> Result<(), Failure> {
@@ -249,28 +246,41 @@ pub(crate) fn instance(
     }
     let identities = classes
         .iter()
-        .map(|ty| b.symbols.types.objects.class(*ty))
+        .map(|ty| b.types().objects.class(*ty))
         .collect::<Result<Vec<_>, _>>()?;
     if b.ty(value) != &HirType::Erased && !is_reference(b.ty(value)) {
         b.ins(&I::I32Const(0));
         return Ok(());
     }
-    let callee = b
-        .symbols
-        .instance_of
-        .ok_or_else(|| Failure::Invariant("unplanned instanceof helper".into()))?;
+    let callee = instance_of(b.m)?;
     for (at, identity) in identities.iter().enumerate() {
         b.load(value)?;
         b.ins(&I::I32Const(identity.cast_signed()));
-        b.ins(&I::Call(callee));
+        b.call(callee);
         if at != 0 {
             b.ins(&I::I32Or);
         }
     }
     Ok(())
 }
-pub(crate) fn instance_body(root: gc::RootTypes) -> Function {
-    let mut f = Function::new_with_locals_types([
+fn instance_of(m: &mut Builder<'_>) -> Result<Func, Failure> {
+    let root = m
+        .types
+        .root
+        .ok_or_else(|| Failure::Invariant("missing object root".into()))?;
+    m.helper(
+        FuncKey::InstanceOf,
+        INSTANCE,
+        vec![
+            Physical::Reference(RefType::ANYREF),
+            Physical::Scalar(Slot::I32),
+        ],
+        Some(Physical::Scalar(Slot::I32)),
+        |_| Ok(instance_body(root)),
+    )
+}
+fn instance_body(root: gc::RootTypes) -> Function {
+    let mut f = Function::new([
         ValType::Ref(RefType {
             nullable: true,
             heap_type: HeapType::Concrete(root.ancestry),

@@ -1,7 +1,12 @@
 //! Exact scalar algorithms absent from wasm's numeric instruction set.
 
-use crate::types::Slot;
-use wasm_encoder::{BlockType, Function, Instruction as I, ValType};
+use crate::{
+    error::Failure,
+    ir::Function,
+    module::{Builder, Func, FuncKey},
+    types::{Physical, Slot},
+};
+use wasm_encoder::{BlockType, Instruction as I, ValType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Helper {
@@ -28,20 +33,40 @@ impl Helper {
     pub(crate) const fn imported(self) -> bool {
         matches!(self, Self::Remainder)
     }
-    pub(crate) fn body(self) -> Option<Function> {
-        match self {
-            Self::ToInt32 => Some(to_int32()),
-            Self::Round => Some(round()),
-            Self::Remainder => None,
-        }
+}
+
+/// The function implementing `helper`: Node's exact `%` for a floating
+/// remainder, a module-local body otherwise.
+pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failure> {
+    let (params, result) = helper.signature();
+    let params = params.into_iter().map(Physical::Scalar).collect();
+    let result = Some(Physical::Scalar(result));
+    let key = FuncKey::Numeric(helper);
+    if helper.imported() {
+        return Ok(m.import(key, "nts:host/v1", helper.name(), params, result, false));
     }
+    m.helper(
+        key,
+        format!("nts.{}", helper.name()),
+        params,
+        result,
+        |_| {
+            Ok(match helper {
+                Helper::ToInt32 => to_int32(),
+                Helper::Round => round(),
+                Helper::Remainder => {
+                    return Err(Failure::Invariant("remainder is a host import".into()));
+                }
+            })
+        },
+    )
 }
 
 /// Truncate the significand, reduce modulo 2^32 and apply the sign. Exponents
 /// at least 84 have no low 32 integer bits; nonfinite numbers and fractions below one
 /// yield zero. No out-of-range float-to-int trap or saturation is involved.
 fn to_int32() -> Function {
-    let mut f = Function::new([(1, ValType::I32), (2, ValType::I64)]);
+    let mut f = Function::with_groups([(1, ValType::I32), (2, ValType::I64)]);
     let instructions = [
         I::LocalGet(0),
         I::I64ReinterpretF64,
@@ -113,7 +138,7 @@ fn to_int32() -> Function {
 /// Floor plus a fractional comparison avoids x+0.5 rounding across a boundary.
 /// Large integral/nonfinite values are identities. Zero keeps the input sign.
 fn round() -> Function {
-    let mut f = Function::new([(1, ValType::F64)]);
+    let mut f = Function::with_groups([(1, ValType::F64)]);
     let instructions = [
         I::LocalGet(0),
         I::F64Abs,

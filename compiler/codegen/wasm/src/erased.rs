@@ -1,91 +1,72 @@
 //! Erased primitives use GC storage and the shared semantic tag numbers.
 
 use crate::{
-    body::Body, contract, error::Failure, gc::ErasedTypes, module::Symbols, numeric,
+    body::Body,
+    contract,
+    error::Failure,
+    gc::ErasedTypes,
+    ir::{self, Function},
+    module::{Builder, Func, FuncKey, Global, GlobalKey},
+    numeric,
     types::Physical,
 };
 use nts_core::hir::{Absent, HirType, ManagedType, ValueId, tags};
-use wasm_encoder::{
-    BlockType, ConstExpr, Function, GlobalSection, GlobalType, HeapType, Instruction as I, RefType,
-    ValType,
-};
+use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
-pub(crate) const SINGLETONS: u32 = 4;
 pub(crate) const UNDEFINED: i32 = tags::UNDEFINED.cast_signed();
 pub(crate) const BOOLEAN: i32 = tags::BOOLEAN.cast_signed();
 pub(crate) const NUMBER: i32 = tags::NUMBER.cast_signed();
 pub(crate) const STRING: i32 = tags::STRING.cast_signed();
 pub(crate) const NULL: i32 = tags::NULL.cast_signed();
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Globals {
-    undefined: u32,
-    null: u32,
-    false_: u32,
-    true_: u32,
+/// The four immutable erased values with no payload of their own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Singleton {
+    Undefined,
+    Null,
+    False,
+    True,
 }
 
-impl Globals {
-    pub(crate) const fn new(first: u32) -> Self {
-        Self {
-            undefined: first,
-            null: first + 1,
-            false_: first + 2,
-            true_: first + 3,
-        }
-    }
-    pub(crate) fn for_tag(self, tag: i32) -> Result<u32, Failure> {
+impl Singleton {
+    pub(crate) fn for_tag(tag: i32) -> Result<Self, Failure> {
         match tag {
-            UNDEFINED => Ok(self.undefined),
-            NULL => Ok(self.null),
-            BOOLEAN => Ok(self.false_),
+            UNDEFINED => Ok(Self::Undefined),
+            NULL => Ok(Self::Null),
+            BOOLEAN => Ok(Self::False),
             _ => Err(Failure::Invariant(format!("tag {tag} has no singleton"))),
         }
     }
-    pub(crate) const fn boolean(self, value: bool) -> u32 {
-        if value { self.true_ } else { self.false_ }
-    }
 }
 
-pub(crate) fn globals(types: ErasedTypes, section: &mut GlobalSection) {
-    for (ty, code) in [
-        (
-            types.tagged,
-            vec![I::I32Const(UNDEFINED), I::StructNew(types.tagged)],
-        ),
-        (
-            types.tagged,
-            vec![I::I32Const(NULL), I::StructNew(types.tagged)],
-        ),
-        (
-            types.boolean,
-            vec![
-                I::I32Const(BOOLEAN),
-                I::I32Const(0),
-                I::StructNew(types.boolean),
-            ],
-        ),
-        (
-            types.boolean,
-            vec![
-                I::I32Const(BOOLEAN),
-                I::I32Const(1),
-                I::StructNew(types.boolean),
-            ],
-        ),
-    ] {
-        section.global(
-            GlobalType {
-                val_type: ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(ty),
-                }),
-                mutable: false,
-                shared: false,
-            },
-            &ConstExpr::extended(code),
-        );
-    }
+/// An erased singleton: an immutable global built once per instance.
+pub(crate) fn singleton(m: &mut Builder<'_>, which: Singleton) -> Result<Global, Failure> {
+    let types = types(m)?;
+    m.global(GlobalKey::Singleton(which), |_| {
+        let mut code = ir::Code::default();
+        let ty = match which {
+            Singleton::Undefined | Singleton::Null => {
+                code.instructions(&[
+                    I::I32Const(if which == Singleton::Null {
+                        NULL
+                    } else {
+                        UNDEFINED
+                    }),
+                    I::StructNew(types.tagged),
+                ]);
+                types.tagged
+            }
+            Singleton::False | Singleton::True => {
+                code.instructions(&[
+                    I::I32Const(BOOLEAN),
+                    I::I32Const(i32::from(which == Singleton::True)),
+                    I::StructNew(types.boolean),
+                ]);
+                types.boolean
+            }
+        };
+        Ok((crate::module::constant_type(ty), code))
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -117,157 +98,138 @@ impl Helper {
             Self::EqualString => "value.equalString",
         }
     }
-    pub(crate) fn body(self, symbols: &Symbols<'_>) -> Result<Function, Failure> {
-        let types = types(symbols)?;
-        let mut f = Function::new([]);
+    fn body(self, m: &mut Builder<'_>) -> Result<Function, Failure> {
+        let types = types(m)?;
+        let mut f = Function::default();
         match self {
-            Self::BoxNumber => instructions(
-                &mut f,
-                &[
-                    I::LocalGet(0),
-                    I::F64Const((-1_073_741_824.0).into()),
-                    I::F64Ge,
-                    I::LocalGet(0),
-                    I::F64Const(1_073_741_823.0.into()),
-                    I::F64Le,
-                    I::I32And,
-                    I::LocalGet(0),
-                    I::F64Trunc,
-                    I::LocalGet(0),
-                    I::F64Eq,
-                    I::I32And,
-                    I::LocalGet(0),
-                    I::I64ReinterpretF64,
-                    I::I64Const(i64::MIN),
-                    I::I64Ne,
-                    I::I32And,
-                    I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))),
-                    I::LocalGet(0),
-                    I::I32TruncSatF64S,
-                    I::RefI31,
-                    I::Else,
-                    I::I32Const(NUMBER),
-                    I::LocalGet(0),
-                    I::StructNew(types.number),
-                    I::End,
-                ],
-            ),
-            Self::Number => instructions(
-                &mut f,
-                &[
-                    I::LocalGet(0),
-                    I::RefTestNonNull(HeapType::I31),
-                    I::If(BlockType::Result(ValType::F64)),
-                    I::LocalGet(0),
-                    I::RefCastNonNull(HeapType::I31),
-                    I::I31GetS,
-                    I::F64ConvertI32S,
-                    I::Else,
-                    I::LocalGet(0),
-                    I::RefCastNonNull(HeapType::Concrete(types.number)),
-                    I::StructGet {
-                        struct_type_index: types.number,
-                        field_index: 1,
-                    },
-                    I::End,
-                ],
-            ),
-            Self::Tag => physical_tag(&mut f, types, symbols.types.root),
+            Self::BoxNumber => f.instructions(&[
+                I::LocalGet(0),
+                I::F64Const((-1_073_741_824.0).into()),
+                I::F64Ge,
+                I::LocalGet(0),
+                I::F64Const(1_073_741_823.0.into()),
+                I::F64Le,
+                I::I32And,
+                I::LocalGet(0),
+                I::F64Trunc,
+                I::LocalGet(0),
+                I::F64Eq,
+                I::I32And,
+                I::LocalGet(0),
+                I::I64ReinterpretF64,
+                I::I64Const(i64::MIN),
+                I::I64Ne,
+                I::I32And,
+                I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))),
+                I::LocalGet(0),
+                I::I32TruncSatF64S,
+                I::RefI31,
+                I::Else,
+                I::I32Const(NUMBER),
+                I::LocalGet(0),
+                I::StructNew(types.number),
+                I::End,
+            ]),
+            Self::Number => f.instructions(&[
+                I::LocalGet(0),
+                I::RefTestNonNull(HeapType::I31),
+                I::If(BlockType::Result(ValType::F64)),
+                I::LocalGet(0),
+                I::RefCastNonNull(HeapType::I31),
+                I::I31GetS,
+                I::F64ConvertI32S,
+                I::Else,
+                I::LocalGet(0),
+                I::RefCastNonNull(HeapType::Concrete(types.number)),
+                I::StructGet {
+                    struct_type_index: types.number,
+                    field_index: 1,
+                },
+                I::End,
+            ]),
+            Self::Tag => physical_tag(&mut f, types, m.types.root),
             Self::BoxBoolean
             | Self::Boolean
             | Self::Truthy
             | Self::Equal
             | Self::EqualNumber
             | Self::EqualBoolean
-            | Self::EqualString => return crate::erased_ops::body(self, symbols, types),
+            | Self::EqualString => return crate::erased_ops::body(self, m, types),
         }
         f.instruction(&I::End);
         Ok(f)
     }
 }
 
-fn instructions(f: &mut Function, code: &[I<'_>]) {
-    for i in code {
-        f.instruction(i);
-    }
-}
-
 fn physical_tag(f: &mut Function, types: ErasedTypes, root: Option<crate::gc::RootTypes>) {
-    instructions(
-        f,
-        &[
-            I::LocalGet(0),
-            I::RefTestNonNull(HeapType::I31),
-            I::If(BlockType::Result(ValType::I32)),
-            I::I32Const(NUMBER),
-            I::Else,
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(0),
+        I::RefTestNonNull(HeapType::I31),
+        I::If(BlockType::Result(ValType::I32)),
+        I::I32Const(NUMBER),
+        I::Else,
+    ]);
     if let Some(root) = root {
-        instructions(
-            f,
-            &[
-                I::LocalGet(0),
-                I::RefTestNonNull(HeapType::Concrete(root.object)),
-                I::If(BlockType::Result(ValType::I32)),
-                I::LocalGet(0),
-                I::RefCastNonNull(HeapType::Concrete(root.object)),
-                I::StructGet {
-                    struct_type_index: root.object,
-                    field_index: 0,
-                },
-                I::StructGet {
-                    struct_type_index: root.descriptor,
-                    field_index: 1,
-                },
-                I::Else,
-            ],
-        );
-    }
-    instructions(
-        f,
-        &[
+        f.instructions(&[
             I::LocalGet(0),
-            I::RefCastNonNull(HeapType::Concrete(types.tagged)),
+            I::RefTestNonNull(HeapType::Concrete(root.object)),
+            I::If(BlockType::Result(ValType::I32)),
+            I::LocalGet(0),
+            I::RefCastNonNull(HeapType::Concrete(root.object)),
             I::StructGet {
-                struct_type_index: types.tagged,
+                struct_type_index: root.object,
                 field_index: 0,
             },
-        ],
-    );
+            I::StructGet {
+                struct_type_index: root.descriptor,
+                field_index: 1,
+            },
+            I::Else,
+        ]);
+    }
+    f.instructions(&[
+        I::LocalGet(0),
+        I::RefCastNonNull(HeapType::Concrete(types.tagged)),
+        I::StructGet {
+            struct_type_index: types.tagged,
+            field_index: 0,
+        },
+    ]);
     if root.is_some() {
         f.instruction(&I::End);
     }
     f.instruction(&I::End);
 }
-fn types(symbols: &Symbols<'_>) -> Result<ErasedTypes, Failure> {
-    symbols
-        .types
+fn types(m: &Builder<'_>) -> Result<ErasedTypes, Failure> {
+    m.types
         .erased
         .ok_or_else(|| Failure::Invariant("unplanned erased types".into()))
 }
-pub(crate) fn values(symbols: &Symbols<'_>) -> Result<Globals, Failure> {
-    symbols
-        .erased_globals
-        .ok_or_else(|| Failure::Invariant("unplanned erased singletons".into()))
-}
-pub(crate) fn call(body: &mut Body<'_>, helper: Helper) -> Result<(), Failure> {
-    body.ins(&I::Call(callee(body.symbols, helper)?));
+pub(crate) fn call(body: &mut Body<'_, '_>, helper: Helper) -> Result<(), Failure> {
+    let f = callee(body.m, helper)?;
+    body.call(f);
     Ok(())
 }
-pub(crate) fn callee(symbols: &Symbols<'_>, helper: Helper) -> Result<u32, Failure> {
-    symbols
-        .erased
-        .get(&helper)
-        .copied()
-        .ok_or_else(|| Failure::Invariant(format!("unplanned erased helper {helper:?}")))
+pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failure> {
+    let (params, result) = helper.signature();
+    m.helper(
+        FuncKey::Erased(helper),
+        helper.name(),
+        params,
+        Some(result),
+        |m| helper.body(m),
+    )
+}
+fn get_singleton(body: &mut Body<'_, '_>, which: Singleton) -> Result<(), Failure> {
+    let global = singleton(body.m, which)?;
+    body.global_get(global);
+    Ok(())
 }
 
-pub(crate) fn constant(body: &mut Body<'_>, result: ValueId, tag: i32) -> Result<(), Failure> {
-    match body.symbols.types.slot(body.ty(result))? {
+pub(crate) fn constant(body: &mut Body<'_, '_>, result: ValueId, tag: i32) -> Result<(), Failure> {
+    match body.types().slot(body.ty(result))? {
         Some(Physical::Reference(_)) if body.ty(result) == &HirType::Erased => {
-            let global = values(body.symbols)?.for_tag(tag)?;
-            body.ins(&I::GlobalGet(global));
+            get_singleton(body, Singleton::for_tag(tag)?)?;
         }
         Some(Physical::Reference(reference)) => body.ins(&I::RefNull(reference.heap_type)),
         _ => return Err(format!("absence constant in {:?}", body.ty(result)).into()),
@@ -275,17 +237,20 @@ pub(crate) fn constant(body: &mut Body<'_>, result: ValueId, tag: i32) -> Result
     Ok(())
 }
 
-pub(crate) fn erase(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Result<(), Failure> {
+pub(crate) fn erase(
+    body: &mut Body<'_, '_>,
+    value: ValueId,
+    absent: Absent,
+) -> Result<(), Failure> {
     match body.ty(value).clone() {
         HirType::Erased => body.load(value)?,
-        HirType::Void => body.ins(&I::GlobalGet(values(body.symbols)?.for_tag(UNDEFINED)?)),
+        HirType::Void => get_singleton(body, Singleton::Undefined)?,
         HirType::Bool => {
-            let globals = values(body.symbols)?;
             body.load(value)?;
             body.ins(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
-            body.ins(&I::GlobalGet(globals.boolean(true)));
+            get_singleton(body, Singleton::True)?;
             body.ins(&I::Else);
-            body.ins(&I::GlobalGet(globals.boolean(false)));
+            get_singleton(body, Singleton::False)?;
             body.ins(&I::End);
         }
         ty @ (HirType::Int { .. } | HirType::Float { .. }) => {
@@ -309,8 +274,8 @@ pub(crate) fn erase(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Resu
     Ok(())
 }
 
-fn erase_string(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Result<(), Failure> {
-    let ty = types(body.symbols)?.string;
+fn erase_string(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Result<(), Failure> {
+    let ty = types(body.m)?.string;
     let tag = match absent {
         Absent::Impossible => None,
         Absent::Null => Some(NULL),
@@ -323,7 +288,7 @@ fn erase_string(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Result<(
         body.load(value)?;
         body.ins(&I::RefIsNull);
         body.ins(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
-        body.ins(&I::GlobalGet(values(body.symbols)?.for_tag(tag)?));
+        get_singleton(body, Singleton::for_tag(tag)?)?;
         body.ins(&I::Else);
     }
     body.ins(&I::I32Const(STRING));
@@ -335,7 +300,7 @@ fn erase_string(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Result<(
     Ok(())
 }
 
-fn erase_reference(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Result<(), Failure> {
+fn erase_reference(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Result<(), Failure> {
     match absent {
         Absent::Impossible => {
             contract::nonnull(body, value)?;
@@ -350,7 +315,7 @@ fn erase_reference(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Resul
             } else {
                 UNDEFINED
             };
-            body.ins(&I::GlobalGet(values(body.symbols)?.for_tag(tag)?));
+            get_singleton(body, Singleton::for_tag(tag)?)?;
             body.ins(&I::Else);
             body.load(value)?;
             body.ins(&I::End);
@@ -359,8 +324,12 @@ fn erase_reference(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Resul
     Ok(())
 }
 
-pub(crate) fn unerase(body: &mut Body<'_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
-    let boxed = types(body.symbols)?;
+pub(crate) fn unerase(
+    body: &mut Body<'_, '_>,
+    result: ValueId,
+    value: ValueId,
+) -> Result<(), Failure> {
+    let boxed = types(body.m)?;
     body.load(value)?;
     match body.ty(result).clone() {
         HirType::Erased => {}
@@ -422,8 +391,8 @@ pub(crate) fn unerase(body: &mut Body<'_>, result: ValueId, value: ValueId) -> R
     Ok(())
 }
 
-fn unerase_reference(body: &mut Body<'_>, value: ValueId, ty: &HirType) -> Result<(), Failure> {
-    let Physical::Reference(reference) = body.symbols.types.value_slot(ty)? else {
+fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> Result<(), Failure> {
+    let Physical::Reference(reference) = body.types().value_slot(ty)? else {
         return Err(Failure::Invariant(
             "non-reference managed projection".into(),
         ));
@@ -448,7 +417,7 @@ fn unerase_reference(body: &mut Body<'_>, value: ValueId, ty: &HirType) -> Resul
 }
 
 pub(crate) fn projection_guard(
-    body: &mut Body<'_>,
+    body: &mut Body<'_, '_>,
     value: ValueId,
     cases: &[HeapType],
 ) -> Result<(), Failure> {
@@ -459,10 +428,11 @@ pub(crate) fn projection_guard(
             body.ins(&I::I32Or);
         }
     }
-    contract::require(body)
+    contract::require(body);
+    Ok(())
 }
 
-pub(crate) fn tag(body: &mut Body<'_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn tag(body: &mut Body<'_, '_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
     body.load(value)?;
     call(body, Helper::Tag)?;
     numeric::convert(

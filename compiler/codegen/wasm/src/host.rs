@@ -3,11 +3,11 @@
 use crate::{
     body::Body,
     error::Failure,
+    module::FuncKey,
     numeric, strings,
     types::{Physical, Slot},
 };
 use nts_core::hir::{HirType, ValueId};
-use wasm_encoder::Instruction as I;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Shape {
@@ -146,7 +146,7 @@ impl Service {
     }
     pub(crate) fn call(
         self,
-        body: &mut Body<'_>,
+        body: &mut Body<'_, '_>,
         result: ValueId,
         args: &[ValueId],
     ) -> Result<(), Failure> {
@@ -154,9 +154,14 @@ impl Service {
         if params.len() != args.len() {
             return Err(format!("host primitive `{}` arity mismatch", self.name).into());
         }
-        let callee = *body.symbols.host.get(self.name).ok_or_else(|| {
-            Failure::Invariant(format!("unplanned host primitive `{}`", self.name))
-        })?;
+        let callee = body.m.import(
+            FuncKey::Host(self.name),
+            "nts:host/v1",
+            self.name,
+            params.clone(),
+            Some(output),
+            false,
+        );
         for (&arg, slot) in args.iter().zip(params) {
             body.load(arg)?;
             match slot {
@@ -171,7 +176,7 @@ impl Service {
                 }
             }
         }
-        body.ins(&I::Call(callee));
+        body.call(callee);
         match output {
             Physical::Scalar(Slot::F64) => {
                 numeric::convert(body, &HirType::NUMBER, &body.ty(result).clone())

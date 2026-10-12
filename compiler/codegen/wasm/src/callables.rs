@@ -1,14 +1,19 @@
 //! Typed immutable entries call the body HIR puts in each slot.
 
 use crate::{
-    EmitError, body::Body, callable_plan::ResolvedEntry, contract, error::Failure, gc,
-    module::Symbols, object_plan::Object, objects, requirements::Requirements,
+    body::Body,
+    callable_plan::ResolvedEntry,
+    contract,
+    error::Failure,
+    gc,
+    ir::{self, Function},
+    module::{Builder, Func, FuncKey, GlobalKey},
+    object_plan::Object,
+    objects,
 };
 use nts_core::hir::{ClassId, HirType, ManagedType, Program, ValueId};
-use std::collections::{BTreeMap, BTreeSet};
-use wasm_encoder::{
-    ConstExpr, Function, GlobalSection, GlobalType, HeapType, Instruction as I, RefType, ValType,
-};
+use std::collections::BTreeMap;
+use wasm_encoder::{HeapType, Instruction as I};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Face {
@@ -36,82 +41,25 @@ impl Face {
     }
 }
 
+/// The entry for one slot of one concrete layout: it casts the shared
+/// receiver to the layout's own storage and calls the body HIR put there.
 #[derive(Debug)]
-pub(crate) struct Thunk {
-    pub(crate) face: Face,
-    pub(crate) physical: u32,
-    pub(crate) slot: u32,
-    pub(crate) signature: u32,
+struct Thunk {
+    face: Face,
+    physical: u32,
+    slot: u32,
+    signature: u32,
     target: String,
     receiver: HirType,
     params: usize,
 }
-impl Thunk {
-    pub(crate) const fn key(&self) -> (Face, u32, u32) {
-        (self.face, self.physical, self.slot)
-    }
-    pub(crate) fn name(&self) -> String {
-        format!(
-            "{}.entry<{},{}>",
-            self.face.label(),
-            self.physical,
-            self.slot
-        )
-    }
-}
-#[derive(Debug)]
-pub(crate) struct Static {
-    pub(crate) ty: ClassId,
-    pub(crate) global: u32,
-}
-pub(crate) fn allocations(
-    resources: &Requirements,
-    plan: &gc::Plan,
-) -> Result<BTreeSet<u32>, EmitError> {
-    resources
-        .allocations
-        .iter()
-        .map(|(&ty, use_)| {
-            plan.objects
-                .object(&HirType::Managed(ManagedType::Object(ty)))
-                .map(|o| o.physical)
-                .map_err(|e| e.at(&use_.function, &use_.origin))
-        })
-        .collect()
-}
-pub(crate) fn statics(
-    resources: &Requirements,
-    plan: &gc::Plan,
-    base: u32,
-) -> Result<BTreeMap<u32, Static>, EmitError> {
-    let mut result = BTreeMap::new();
-    for (&ty, use_) in &resources.static_closures {
-        let storage = plan
-            .objects
-            .object(&HirType::Managed(ManagedType::Object(ty)))
-            .map_err(|e| e.at(&use_.function, &use_.origin))?;
-        if !nts_core::hir::has_a_closure_body(ty) || !storage.fields.is_empty() {
-            return Err(Failure::Unsupported(format!(
-                "static closure `{}` has captures or no closure body",
-                storage.name
-            ))
-            .at(&use_.function, &use_.origin));
-        }
-        result
-            .entry(storage.physical)
-            .or_insert(Static { ty, global: 0 });
-    }
-    for (at, static_) in result.values_mut().enumerate() {
-        static_.global = base + crate::module::index(at);
-    }
-    Ok(result)
-}
-fn entry<'a>(
-    symbols: &'a Symbols<'_>,
+
+fn entry<'p>(
+    types: &'p gc::Plan,
     storage: &Object,
     slot: u32,
     face: Face,
-) -> Result<&'a ResolvedEntry, Failure> {
+) -> Result<&'p ResolvedEntry, Failure> {
     let root = face.root(storage).ok_or_else(|| {
         format!(
             "{} `{}` has no HIR-proven dispatch contract",
@@ -119,7 +67,7 @@ fn entry<'a>(
             storage.name
         )
     })?;
-    face.groups(symbols.types)
+    face.groups(types)
         .get(&root)
         .and_then(|g| g.entries.get(&slot))
         .ok_or_else(|| {
@@ -129,35 +77,7 @@ fn entry<'a>(
             ))
         })
 }
-pub(crate) fn plan(
-    program: &Program,
-    types: &gc::Plan,
-    resources: &Requirements,
-) -> Result<Vec<Thunk>, EmitError> {
-    let mut result = BTreeMap::new();
-    for face in [Face::Closure, Face::Virtual] {
-        for (&ty, use_) in &resources.allocations {
-            let allocation = HirType::Managed(ManagedType::Object(ty));
-            let storage = types
-                .objects
-                .object(&allocation)
-                .map_err(|e| e.at(&use_.function, &use_.origin))?;
-            let Some(root) = face.root(storage) else {
-                continue;
-            };
-            let layout = program.layout(ty).ok_or_else(|| {
-                Failure::Invariant(format!("unplanned allocation {ty:?}"))
-                    .at(&use_.function, &use_.origin)
-            })?;
-            for e in face.groups(types)[&root].entries.values() {
-                let thunk = thunk(program, types, layout, storage, e, face)
-                    .map_err(|error| error.at(&use_.function, &use_.origin))?;
-                result.entry(thunk.key()).or_insert(thunk);
-            }
-        }
-    }
-    Ok(result.into_values().collect())
-}
+
 fn thunk(
     program: &Program,
     types: &gc::Plan,
@@ -219,6 +139,7 @@ fn thunk(
         params: func.params.len(),
     })
 }
+
 fn result_widens(types: &gc::Plan, from: &HirType, to: &HirType) -> Result<bool, Failure> {
     if from == to {
         return Ok(true);
@@ -233,78 +154,95 @@ fn result_widens(types: &gc::Plan, from: &HirType, to: &HirType) -> Result<bool,
     }
     Ok(false)
 }
-pub(crate) fn thunk_body(thunk: &Thunk, symbols: &Symbols<'_>) -> Result<Function, Failure> {
-    let mut f = Function::new([]);
-    let receiver = symbols.types.objects.object(&thunk.receiver)?;
+
+/// The typed entry function for one slot of an allocated class, validated
+/// against the slot's shared contract before it exists.
+fn thunk_func(m: &mut Builder<'_>, face: Face, class: ClassId, slot: u32) -> Result<Func, Failure> {
+    let types = m.types;
+    let storage = types
+        .objects
+        .object(&HirType::Managed(ManagedType::Object(class)))?;
+    let resolved = entry(types, storage, slot, face)?;
+    let layout = m
+        .program
+        .layout(class)
+        .ok_or_else(|| Failure::Invariant(format!("unplanned allocation {class:?}")))?;
+    let thunk = thunk(m.program, types, layout, storage, resolved, face)?;
+    m.helper_typed(
+        FuncKey::Thunk(face, thunk.physical, thunk.slot),
+        format!(
+            "{}.entry<{},{}>",
+            thunk.face.label(),
+            thunk.physical,
+            thunk.slot
+        ),
+        thunk.signature,
+        |m| thunk_body(&thunk, m),
+    )
+}
+
+fn thunk_body(thunk: &Thunk, m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let receiver = m.types.objects.object(&thunk.receiver)?;
+    let target = m.program_func(&thunk.target)?;
+    let mut f = Function::default();
     f.instruction(&I::LocalGet(0));
     f.instruction(&I::RefCastNonNull(HeapType::Concrete(receiver.physical)));
     for at in 1..thunk.params {
         f.instruction(&I::LocalGet(crate::module::index(at)));
     }
-    let target = symbols
-        .functions
-        .get(thunk.target.as_str())
-        .copied()
-        .ok_or_else(|| Failure::Invariant(format!("unresolved closure body `{}`", thunk.target)))?;
-    f.instruction(&I::Call(target));
+    f.call(target);
     f.instruction(&I::End);
     Ok(f)
 }
-pub(crate) fn entries(symbols: &Symbols<'_>, storage: &Object) -> Result<Vec<I<'static>>, Failure> {
+
+/// The closure entries an allocation of `class` stores, in field order.
+pub(crate) fn entries(
+    m: &mut Builder<'_>,
+    class: ClassId,
+    storage: &Object,
+) -> Result<Vec<Func>, Failure> {
     let Some(root) = storage.callable else {
         return Ok(Vec::new());
     };
-    symbols.types.callables[&root]
-        .entries
-        .values()
-        .map(|entry| {
-            symbols
-                .thunks
-                .get(&(Face::Closure, storage.physical, entry.slot))
-                .copied()
-                .map(I::RefFunc)
-                .ok_or_else(|| {
-                    Failure::Invariant(format!(
-                        "unplanned entry {} of `{}`",
-                        entry.slot, storage.name
-                    ))
-                })
-        })
+    let slots: Vec<u32> = m.types.callables[&root].entries.keys().copied().collect();
+    slots
+        .into_iter()
+        .map(|slot| thunk_func(m, Face::Closure, class, slot))
         .collect()
 }
+
+/// A descriptor's dispatch object: the class entries for an allocated class
+/// with virtual slots, otherwise a null reference.
 pub(crate) fn dispatch(
-    symbols: &Symbols<'_>,
-    physical: Option<u32>,
-) -> Result<Vec<I<'static>>, Failure> {
-    let Some(physical) = physical.filter(|p| symbols.allocations.contains(p)) else {
-        return Ok(vec![I::RefNull(HeapType::ANY)]);
-    };
-    let Some(root) = symbols.types.objects.virtual_group(physical) else {
-        return Ok(vec![I::RefNull(HeapType::ANY)]);
-    };
-    let group = &symbols.types.virtuals[&root];
-    let mut code = group
-        .entries
-        .values()
-        .map(|entry| {
-            symbols
-                .thunks
-                .get(&(Face::Virtual, physical, entry.slot))
-                .copied()
-                .map(I::RefFunc)
-                .ok_or_else(|| {
-                    Failure::Invariant(format!(
-                        "unplanned class entry {} for physical type {physical}",
-                        entry.slot
-                    ))
-                })
+    m: &mut Builder<'_>,
+    code: &mut ir::Code,
+    class: Option<ClassId>,
+) -> Result<(), Failure> {
+    let types = m.types;
+    let virtual_root = class
+        .map(|class| {
+            types
+                .objects
+                .object(&HirType::Managed(ManagedType::Object(class)))
+                .map(|storage| storage.virtual_)
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    code.push(I::StructNew(group.base));
-    Ok(code)
+        .transpose()?
+        .flatten();
+    let (Some(class), Some(root)) = (class, virtual_root) else {
+        code.instruction(&I::RefNull(HeapType::ANY));
+        return Ok(());
+    };
+    let group = &types.virtuals[&root];
+    for &slot in group.entries.keys() {
+        let entry = thunk_func(m, Face::Virtual, class, slot)?;
+        code.ref_func(entry);
+    }
+    code.instruction(&I::StructNew(group.base));
+    Ok(())
 }
+
 pub(crate) fn call(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     slot: u32,
     args: &[ValueId],
@@ -313,9 +251,10 @@ pub(crate) fn call(
     let Some((&receiver, params)) = args.split_first() else {
         return Err("closure call has no receiver".into());
     };
-    let storage = b.symbols.types.objects.object(b.ty(receiver))?;
-    let entry = entry(b.symbols, storage, slot, face)?;
-    let group = &face.groups(b.symbols.types)[&face
+    let types = b.types();
+    let storage = types.objects.object(b.ty(receiver))?;
+    let entry = entry(types, storage, slot, face)?;
+    let group = &face.groups(types)[&face
         .root(storage)
         .ok_or_else(|| Failure::Invariant("missing callable base".into()))?];
     if params.len() != entry.params.len() {
@@ -333,9 +272,7 @@ pub(crate) fn call(
     }
     b.load(receiver)?;
     if face == Face::Virtual {
-        let root = b
-            .symbols
-            .types
+        let root = types
             .root
             .ok_or_else(|| Failure::Invariant("unplanned class root".into()))?;
         b.ins(&I::StructGet {
@@ -355,36 +292,35 @@ pub(crate) fn call(
     b.ins(&I::CallRef(entry.signature));
     objects::adapt(b, &entry.result, &b.ty(result).clone())
 }
-pub(crate) fn static_value(b: &mut Body<'_>, result: ValueId) -> Result<(), Failure> {
-    let storage = b.symbols.types.objects.object(b.ty(result))?;
-    let global = b
-        .symbols
-        .static_closures
-        .get(&storage.physical)
-        .ok_or_else(|| Failure::Invariant(format!("unplanned static closure `{}`", storage.name)))?
-        .global;
-    b.ins(&I::GlobalGet(global));
-    Ok(())
-}
-pub(crate) fn globals(symbols: &Symbols<'_>, section: &mut GlobalSection) -> Result<(), Failure> {
-    for static_ in symbols.static_closures.values() {
-        let storage = symbols
-            .types
-            .objects
-            .object(&HirType::Managed(ManagedType::Object(static_.ty)))?;
-        let mut code = vec![I::GlobalGet(symbols.descriptor_base + storage.descriptor)];
-        code.extend(entries(symbols, storage)?);
-        section.global(
-            GlobalType {
-                val_type: ValType::Ref(RefType {
-                    nullable: false,
-                    heap_type: HeapType::Concrete(storage.physical),
-                }),
-                mutable: false,
-                shared: false,
-            },
-            &ConstExpr::extended(code.into_iter().chain([I::StructNew(storage.physical)])),
-        );
+
+/// A capture-free named function: one immutable instance whose identity
+/// every use shares.
+pub(crate) fn static_value(b: &mut Body<'_, '_>, result: ValueId) -> Result<(), Failure> {
+    let HirType::Managed(ManagedType::Object(class)) = *b.ty(result) else {
+        return Err(Failure::Invariant(
+            "static closure of a non-object type".into(),
+        ));
+    };
+    let types = b.types();
+    let storage = types.objects.object(b.ty(result))?;
+    if !nts_core::hir::has_a_closure_body(class) || !storage.fields.is_empty() {
+        return Err(format!(
+            "static closure `{}` has captures or no closure body",
+            storage.name
+        )
+        .into());
     }
+    let global =
+        b.m.global(GlobalKey::StaticClosure(storage.physical), |m| {
+            let descriptor = objects::descriptor(m, storage.descriptor, Some(class))?;
+            let mut code = ir::Code::default();
+            code.global_get(descriptor);
+            for entry in entries(m, class, storage)? {
+                code.ref_func(entry);
+            }
+            code.instruction(&I::StructNew(storage.physical));
+            Ok((crate::module::constant_type(storage.physical), code))
+        })?;
+    b.global_get(global);
     Ok(())
 }

@@ -1,5 +1,6 @@
 //! Number endpoints shared by string and array slices.
-use wasm_encoder::{BlockType, Function, Instruction as I, ValType};
+use crate::ir::Function;
+use wasm_encoder::{BlockType, Instruction as I, ValType};
 
 /// `ToIntegerOrInfinity` keeps infinities and maps NaN to zero.
 pub(crate) fn integer(f: &mut Function, param: u32) {

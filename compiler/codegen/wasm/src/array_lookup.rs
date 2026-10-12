@@ -5,12 +5,13 @@ use crate::{
     contract, erased,
     error::Failure,
     gc,
-    module::Symbols,
+    ir::Function,
+    module::{Builder, Func, FuncKey},
     numeric, objects, strings,
     types::{Physical, Slot},
 };
 use nts_core::hir::{HirType, ManagedType, ValueId};
-use wasm_encoder::{BlockType, Function, HeapType, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
@@ -66,16 +67,16 @@ impl Helper {
     fn boolean(self) -> bool {
         matches!(self, Self::Includes | Self::IncludesStringValue)
     }
-    pub(crate) fn signature(
+    fn signature(
         self,
         shape: &gc::Array,
-        symbols: &Symbols<'_>,
+        types: &gc::Plan,
     ) -> Result<(Vec<Physical>, Physical), Failure> {
         let array = Physical::Reference(RefType {
             nullable: true,
             heap_type: HeapType::Concrete(shape.wrapper),
         });
-        let element = symbols.types.value_slot(&shape.element)?;
+        let element = types.value_slot(&shape.element)?;
         let needle = if self.indexed() {
             Physical::Scalar(Slot::F64)
         } else if self.erased_needle() {
@@ -95,7 +96,7 @@ impl Helper {
     }
 }
 pub(crate) fn call(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     name: &str,
     method: Method,
@@ -109,7 +110,7 @@ pub(crate) fn call(
     })
 }
 fn inner(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     method: Method,
     args: &[ValueId],
@@ -118,7 +119,7 @@ fn inner(
         return Err("lookup arity mismatch".into());
     }
     let helper = method.helper;
-    let shape = b.symbols.types.array(b.ty(args[0]))?;
+    let shape = b.types().array(b.ty(args[0]))?;
     let accepted = match method.family {
         Family::Number => shape.element == HirType::NUMBER,
         Family::String => strings::is_string(&shape.element),
@@ -149,13 +150,9 @@ fn inner(
     } else {
         b.load(args[1])?;
     }
-    strings::constant(b, &b.func.name.clone())?;
-    let target = b
-        .symbols
-        .array_lookup
-        .get(&(shape.wrapper, helper))
-        .ok_or_else(|| Failure::Invariant("unplanned array lookup helper".into()))?;
-    b.ins(&I::Call(*target));
+    strings::constant(b, &b.func.name.clone());
+    let target = callee(b.m, helper, shape)?;
+    b.call(target);
     let actual = if helper == Helper::At {
         shape.element.clone()
     } else if helper == Helper::AtValue {
@@ -174,10 +171,19 @@ fn inner(
         objects::adapt(b, &actual, &b.ty(result).clone())
     }
 }
-fn ins(f: &mut Function, code: &[I<'_>]) {
-    for i in code {
-        f.instruction(i);
-    }
+/// The module-local lookup helper for one array storage shape.
+fn callee(m: &mut Builder<'_>, helper: Helper, shape: &gc::Array) -> Result<Func, Failure> {
+    let (params, result) = helper.signature(shape, m.types)?;
+    m.helper(
+        FuncKey::ArrayLookup(shape.wrapper, helper),
+        format!("array.{helper:?}<{:?}>", shape.element),
+        params,
+        Some(result),
+        |m| body(helper, shape, m),
+    )
+}
+fn ins(f: &mut Function, code: &[I<'static>]) {
+    f.instructions(code);
 }
 fn length(f: &mut Function, shape: &gc::Array) {
     ins(
@@ -192,7 +198,7 @@ fn length(f: &mut Function, shape: &gc::Array) {
         ],
     );
 }
-fn get(f: &mut Function, shape: &gc::Array, index: &[I<'_>]) -> Result<(), Failure> {
+fn get(f: &mut Function, shape: &gc::Array, index: &[I<'static>]) -> Result<(), Failure> {
     ins(
         f,
         &[
@@ -208,36 +214,28 @@ fn get(f: &mut Function, shape: &gc::Array, index: &[I<'_>]) -> Result<(), Failu
     Ok(())
 }
 /// A helper consumes a validity condition and the caller's diagnostic name.
-fn require(f: &mut Function, symbols: &Symbols<'_>) -> Result<(), Failure> {
-    let target = symbols
-        .input_decline
-        .ok_or_else(|| Failure::Invariant("unplanned array lookup diagnostic".into()))?;
-    ins(
-        f,
-        &[
-            I::I32Eqz,
-            I::If(BlockType::Empty),
-            I::LocalGet(2),
-            I::Call(target),
-            I::Unreachable,
-            I::End,
-        ],
+fn require(f: &mut Function, m: &mut Builder<'_>) {
+    let target = m.import(
+        FuncKey::InputDecline,
+        "nts:host/v1",
+        contract::IMPORT,
+        vec![strings::STRING],
+        None,
+        false,
     );
-    Ok(())
+    ins(f, &[I::I32Eqz, I::If(BlockType::Empty), I::LocalGet(2)]);
+    f.call(target);
+    ins(f, &[I::Unreachable, I::End]);
 }
-pub(crate) fn body(
-    helper: Helper,
-    shape: &gc::Array,
-    symbols: &Symbols<'_>,
-) -> Result<Function, Failure> {
+fn body(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
     if helper.indexed() {
-        indexed(helper, shape, symbols)
+        indexed(helper, shape, m)
     } else {
-        search(helper, shape, symbols)
+        search(helper, shape, m)
     }
 }
-fn indexed(helper: Helper, shape: &gc::Array, symbols: &Symbols<'_>) -> Result<Function, Failure> {
-    let mut f = Function::new_with_locals_types([ValType::I32, ValType::F64]);
+fn indexed(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let mut f = Function::new([ValType::I32, ValType::F64]);
     length(&mut f, shape);
     crate::indexing::integer(&mut f, 1);
     ins(
@@ -266,28 +264,25 @@ fn indexed(helper: Helper, shape: &gc::Array, symbols: &Symbols<'_>) -> Result<F
     if helper == Helper::AtValue {
         f.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
     } else {
-        require(&mut f, symbols)?;
+        require(&mut f, m);
     }
     get(&mut f, shape, &[I::LocalGet(4), I::I32TruncSatF64U])?;
     if helper == Helper::AtValue {
-        ins(
-            &mut f,
-            &[
-                I::Call(erased::callee(symbols, erased::Helper::BoxNumber)?),
-                I::Else,
-                I::GlobalGet(erased::values(symbols)?.for_tag(erased::UNDEFINED)?),
-                I::End,
-            ],
-        );
+        let boxed = erased::callee(m, erased::Helper::BoxNumber)?;
+        let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
+        f.call(boxed);
+        f.instruction(&I::Else);
+        f.global_get(undefined);
+        f.instruction(&I::End);
     }
     f.instruction(&I::End);
     Ok(f)
 }
-fn search(helper: Helper, shape: &gc::Array, symbols: &Symbols<'_>) -> Result<Function, Failure> {
-    let element = symbols.types.value_slot(&shape.element)?.wasm();
+fn search(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let element = m.types.value_slot(&shape.element)?.wasm();
     // Params: array, needle, diagnostic name. Locals: length, step, index,
     // element, projected string needle, string-tag validity.
-    let mut f = Function::new_with_locals_types([
+    let mut f = Function::new([
         ValType::I32,
         ValType::I32,
         ValType::I32,
@@ -297,7 +292,7 @@ fn search(helper: Helper, shape: &gc::Array, symbols: &Symbols<'_>) -> Result<Fu
     ]);
     length(&mut f, shape);
     if strings::is_string(&shape.element) {
-        string_needle(&mut f, helper, symbols)?;
+        string_needle(&mut f, helper, m)?;
     }
     ins(
         &mut f,
@@ -327,7 +322,7 @@ fn search(helper: Helper, shape: &gc::Array, symbols: &Symbols<'_>) -> Result<Fu
     f.instruction(&I::LocalSet(5));
     get(&mut f, shape, &[I::LocalGet(5)])?;
     f.instruction(&I::LocalSet(6));
-    equal(&mut f, helper, shape, symbols)?;
+    equal(&mut f, helper, shape, m)?;
     f.instruction(&I::If(BlockType::Empty));
     if helper.boolean() {
         f.instruction(&I::I32Const(1));
@@ -356,17 +351,18 @@ fn search(helper: Helper, shape: &gc::Array, symbols: &Symbols<'_>) -> Result<Fu
     f.instruction(&I::End);
     Ok(f)
 }
-fn string_needle(f: &mut Function, helper: Helper, symbols: &Symbols<'_>) -> Result<(), Failure> {
+fn string_needle(f: &mut Function, helper: Helper, m: &mut Builder<'_>) -> Result<(), Failure> {
     if helper.erased_needle() {
-        let types = symbols
+        let types = m
             .types
             .erased
             .ok_or_else(|| Failure::Invariant("unplanned string needle types".into()))?;
+        let tag = erased::callee(m, erased::Helper::Tag)?;
+        f.instruction(&I::LocalGet(1));
+        f.call(tag);
         ins(
             f,
             &[
-                I::LocalGet(1),
-                I::Call(erased::callee(symbols, erased::Helper::Tag)?),
                 I::I32Const(erased::STRING),
                 I::I32Eq,
                 I::LocalTee(8),
@@ -398,7 +394,7 @@ fn equal(
     f: &mut Function,
     helper: Helper,
     shape: &gc::Array,
-    symbols: &Symbols<'_>,
+    m: &mut Builder<'_>,
 ) -> Result<(), Failure> {
     if shape.element == HirType::NUMBER {
         ins(f, &[I::LocalGet(6), I::LocalGet(1), I::F64Eq]);
@@ -421,7 +417,8 @@ fn equal(
         // Nullable string storage cannot distinguish a hole, undefined and
         // null. Refuse those observations rather than inventing presence bits.
         ins(f, &[I::LocalGet(6), I::RefIsNull, I::I32Eqz]);
-        require(f, symbols)?;
+        require(f, m);
+        let equal = strings::callee(m, strings::Helper::Equal)?;
         ins(
             f,
             &[
@@ -429,12 +426,10 @@ fn equal(
                 I::If(BlockType::Result(ValType::I32)),
                 I::LocalGet(6),
                 I::LocalGet(7),
-                I::Call(strings::callee(symbols, strings::Helper::Equal)?),
-                I::Else,
-                I::I32Const(0),
-                I::End,
             ],
         );
+        f.call(equal);
+        ins(f, &[I::Else, I::I32Const(0), I::End]);
     } else {
         ins(f, &[I::LocalGet(6), I::LocalGet(1), I::RefEq]);
     }

@@ -1,17 +1,19 @@
 //! Typed local assignment, edge copies and lexical branch binding.
 
 use crate::{
-    EmitError, FunctionRoute, InstructionOrigin, cfg,
+    EmitError, FunctionRoute, cfg,
     error::Failure,
+    gc,
     helpers::Helper,
-    module::Symbols,
+    ir,
+    module::Builder,
     numeric,
     types::{Physical, Slot},
 };
 use nts_codegen_common::{Copy, edge_copies};
 use nts_core::hir::{BlockId, Callee, Func, OpKind, Terminator, ValueId};
 use std::collections::BTreeMap;
-use wasm_encoder::{BlockType, Function, Instruction as I};
+use wasm_encoder::{BlockType, Instruction as I};
 
 #[cfg(test)]
 mod tests {
@@ -44,30 +46,10 @@ mod tests {
         ];
         let plan = cfg::plan(&f).unwrap();
         let p = crate::test_common::program(vec![f.clone()]);
-        let slots = crate::gc::Plan::build(&p).unwrap();
-        let symbols = Symbols {
-            functions: rustc_hash::FxHashMap::default(),
-            helpers: BTreeMap::new(),
-            types: &slots,
-            strings: BTreeMap::new(),
-            literals: rustc_hash::FxHashMap::default(),
-            global_base: 0,
-            host: BTreeMap::new(),
-            erased_globals: None,
-            raising: None,
-            raising_results: &BTreeMap::new(),
-            array_copy: BTreeMap::new(),
-            array_lookup: BTreeMap::new(),
-            erased: BTreeMap::new(),
-            input_decline: None,
-            descriptor_base: 0,
-            instance_of: None,
-            array_grow: BTreeMap::new(),
-            thunks: BTreeMap::new(),
-            static_closures: BTreeMap::new(),
-            allocations: std::collections::BTreeSet::new(),
-        };
-        let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
+        let slots = gc::Plan::build(&p).unwrap();
+        let results = BTreeMap::new();
+        let mut m = Builder::new(&p, &slots, &results);
+        let mut body = Body::new(&f, &mut m, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
         // Actual fault injection: removing the enclosing loop's label must
         // fail, never become a language decline or an irreducible fallback.
@@ -78,78 +60,6 @@ mod tests {
         );
         assert!(error.to_string().contains("out-of-scope"));
         assert!(!error.to_string().contains("NTS5001"));
-    }
-
-    #[test]
-    fn missing_planned_bindings_are_internal_errors_through_value_operations() {
-        use nts_core::hir::{HirType, ManagedType, UnOp};
-        let string = HirType::Managed(ManagedType::String);
-        let mut literal = function("brokenLiteral", &[], string.clone());
-        let text = value(
-            &mut literal,
-            OpKind::ConstString("x".into()),
-            string.clone(),
-        );
-        literal
-            .blocks
-            .push(block(&[], &[text], Terminator::Return(Some(text))));
-        let mut numeric = function("brokenNumericHelper", &[], HirType::NUMBER);
-        let number = value(&mut numeric, OpKind::ConstFloat(1.5), HirType::NUMBER);
-        let rounded = value(
-            &mut numeric,
-            OpKind::Unary {
-                op: UnOp::Round,
-                operand: number,
-            },
-            HirType::NUMBER,
-        );
-        numeric.blocks.push(block(
-            &[],
-            &[number, rounded],
-            Terminator::Return(Some(rounded)),
-        ));
-        let mut length = function(
-            "brokenStringHelper",
-            std::slice::from_ref(&string),
-            HirType::NUMBER,
-        );
-        let arg = value(&mut length, OpKind::Param(0), string);
-        let len = value(&mut length, OpKind::Length(arg), HirType::NUMBER);
-        length
-            .blocks
-            .push(block(&[], &[arg, len], Terminator::Return(Some(len))));
-        for f in [literal, numeric, length] {
-            let p = crate::test_common::program(vec![f.clone()]);
-            let slots = crate::gc::Plan::build(&p).unwrap();
-            // Fault injection: no binding was installed for any planned helper
-            // or literal. The failure must survive numeric/string adaptation.
-            let symbols = Symbols {
-                functions: rustc_hash::FxHashMap::default(),
-                helpers: BTreeMap::new(),
-                types: &slots,
-                strings: BTreeMap::new(),
-                literals: rustc_hash::FxHashMap::default(),
-                global_base: 0,
-                host: BTreeMap::new(),
-                erased_globals: None,
-                raising: None,
-                raising_results: &BTreeMap::new(),
-                array_copy: BTreeMap::new(),
-                array_lookup: BTreeMap::new(),
-                erased: BTreeMap::new(),
-                input_decline: None,
-                descriptor_base: 0,
-                instance_of: None,
-                array_grow: BTreeMap::new(),
-                thunks: BTreeMap::new(),
-                static_closures: BTreeMap::new(),
-                allocations: std::collections::BTreeSet::new(),
-            };
-            let error = emit(&f, 0, &symbols).unwrap_err();
-            assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));
-            assert!(error.to_string().contains("unplanned"));
-            assert!(!error.to_string().contains("NTS5001"));
-        }
     }
 }
 
@@ -162,32 +72,30 @@ enum Label {
 }
 
 #[derive(Debug)]
-pub(crate) struct Body<'a> {
-    pub(crate) func: &'a Func,
-    pub(crate) code: Function,
-    pub(crate) symbols: &'a Symbols<'a>,
+pub(crate) struct Body<'b, 'p> {
+    pub(crate) func: &'b Func,
+    pub(crate) code: ir::Function,
+    pub(crate) m: &'b mut Builder<'p>,
     values: Vec<Option<u32>>,
     scratch: BTreeMap<(u32, Physical), u32>,
     pc: Option<u32>,
     cases: BTreeMap<BlockId, u32>,
     labels: Vec<Label>,
-    origins: Vec<InstructionOrigin>,
-    index: u32,
     edges: usize,
     visited: Vec<bool>,
 }
 
-pub(crate) fn emit(
+/// Lower one verified function to an IR body and its CFG route.
+pub(crate) fn lower(
     func: &Func,
-    index: u32,
-    symbols: &Symbols<'_>,
-) -> Result<(Function, FunctionRoute, Vec<InstructionOrigin>), EmitError> {
+    m: &mut Builder<'_>,
+) -> Result<(ir::Function, FunctionRoute), EmitError> {
     crate::array_init::check(func)?;
     let plan = cfg::plan(func).map_err(|reason| EmitError::Structuring {
         function: func.name.clone(),
         reason,
     })?;
-    let mut body = Body::new(func, index, symbols, &plan)?;
+    let mut body = Body::new(func, m, &plan)?;
     if let Some(structure) = &plan.structure {
         body.tree(BlockId(0), structure)?;
     } else {
@@ -211,16 +119,12 @@ pub(crate) fn emit(
         blocks: plan.order.len(),
         edges: body.edges,
     };
-    Ok((body.code, route, body.origins))
+    Ok((body.code, route))
 }
 
-impl<'a> Body<'a> {
-    fn new(
-        func: &'a Func,
-        index: u32,
-        symbols: &'a Symbols<'a>,
-        plan: &cfg::Plan,
-    ) -> Result<Self, EmitError> {
+impl<'b, 'p> Body<'b, 'p> {
+    fn new(func: &'b Func, m: &'b mut Builder<'p>, plan: &cfg::Plan) -> Result<Self, EmitError> {
+        let types = m.types;
         let mut locals = Vec::new();
         let mut next = crate::module::index(func.params.len());
         let mut values = vec![None; func.values.len()];
@@ -238,8 +142,7 @@ impl<'a> Body<'a> {
         }
         for value in live {
             let op = func.value(value);
-            let slot = symbols
-                .types
+            let slot = types
                 .slot(&op.ty)
                 .map_err(|failure| failure.at(&func.name, &op.origin))?;
             if !matches!(op.kind, OpKind::Param(_))
@@ -257,8 +160,7 @@ impl<'a> Body<'a> {
             {
                 for copy in edge_copies(&func.blocks[to.0 as usize].params, &args) {
                     if let Copy::Save { temp, from } = copy {
-                        let slot = symbols
-                            .types
+                        let slot = types
                             .value_slot(&func.value(from).ty)
                             .map_err(|failure| failure.at(&func.name, &func.value(from).origin))?;
                         scratch.entry((temp, slot)).or_insert_with(|| {
@@ -286,22 +188,33 @@ impl<'a> Body<'a> {
             .collect();
         Ok(Self {
             func,
-            code: Function::new_with_locals_types(locals),
-            symbols,
+            code: ir::Function::new(locals),
+            m,
             values,
             scratch,
             pc,
             cases,
             labels: Vec::new(),
-            origins: Vec::new(),
-            index,
             edges: 0,
             visited: vec![false; func.blocks.len()],
         })
     }
 
-    pub(crate) fn ins(&mut self, i: &I<'_>) {
+    /// The whole-program type plan, which outlives this body.
+    pub(crate) fn types(&self) -> &'p gc::Plan {
+        self.m.types
+    }
+    pub(crate) fn ins(&mut self, i: &I<'static>) {
         self.code.instruction(i);
+    }
+    pub(crate) fn call(&mut self, f: crate::module::Func) {
+        self.code.call(f);
+    }
+    pub(crate) fn global_get(&mut self, g: crate::module::Global) {
+        self.code.global_get(g);
+    }
+    pub(crate) fn global_set(&mut self, g: crate::module::Global) {
+        self.code.global_set(g);
     }
     pub(crate) fn local(&self, value: ValueId) -> Result<u32, Failure> {
         self.values[value.0 as usize]
@@ -316,12 +229,8 @@ impl<'a> Body<'a> {
         &self.func.value(value).ty
     }
     pub(crate) fn helper(&mut self, helper: Helper) -> Result<(), Failure> {
-        let index = self
-            .symbols
-            .helpers
-            .get(&helper)
-            .ok_or_else(|| Failure::Invariant(format!("unplanned scalar helper {helper:?}")))?;
-        self.ins(&I::Call(*index));
+        let f = crate::helpers::callee(self.m, helper)?;
+        self.call(f);
         Ok(())
     }
     fn depth(&self, label: Label) -> Result<u32, Failure> {
@@ -463,21 +372,19 @@ impl<'a> Body<'a> {
         if std::mem::replace(&mut self.visited[block.0 as usize], true) {
             return Err(self.structuring(format!("b{} was emitted twice", block.0)));
         }
-        for id in &self.func.blocks[block.0 as usize].ops {
-            let op = self.func.value(*id);
-            self.origins.push(InstructionOrigin {
-                function: self.index,
-                offset: self.code.byte_len(),
-                origin: op.origin.clone(),
-            });
+        let func = self.func;
+        for id in &func.blocks[block.0 as usize].ops {
+            let op = func.value(*id);
+            self.code.mark(op.origin.clone());
             self.op(*id)
-                .map_err(|failure| failure.at(&self.func.name, &op.origin))?;
+                .map_err(|failure| failure.at(&func.name, &op.origin))?;
         }
         Ok(())
     }
     fn block(&mut self, block: BlockId) -> Result<(), EmitError> {
         self.actions(block)?;
-        self.terminator(&self.func.blocks[block.0 as usize].terminator)
+        let func = self.func;
+        self.terminator(&func.blocks[block.0 as usize].terminator)
             .map_err(|why| self.structuring(why))
     }
     fn copies(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), Failure> {
@@ -490,7 +397,7 @@ impl<'a> Body<'a> {
                 }
                 Copy::Save { temp, from } => {
                     self.load(from)?;
-                    let slot = self.symbols.types.value_slot(self.ty(from))?;
+                    let slot = self.types().value_slot(self.ty(from))?;
                     let local = self.scratch.get(&(temp, slot)).copied().ok_or_else(|| {
                         Failure::Invariant(format!("unplanned edge temporary {temp}: {slot:?}"))
                     })?;
@@ -564,7 +471,7 @@ impl<'a> Body<'a> {
             OpKind::ConstBool(value) => self.ins(&I::I32Const(i32::from(*value))),
             OpKind::ConstInt(value) => numeric::constant_int(self, *value, &op.ty)?,
             OpKind::ConstFloat(value) => numeric::constant_float(self, *value, &op.ty)?,
-            OpKind::ConstString(value) => crate::strings::constant(self, value)?,
+            OpKind::ConstString(value) => crate::strings::constant(self, value),
             OpKind::Erase { value, absent } => self.erase(id, *value, *absent)?,
             OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
@@ -601,17 +508,19 @@ impl<'a> Body<'a> {
             OpKind::Unary { op, operand } => self.unary(id, *op, *operand)?,
             OpKind::Convert(value) => self.convert(id, *value)?,
             OpKind::GlobalGet(global) => {
-                self.ins(&I::GlobalGet(self.symbols.global_base + *global));
+                let g = crate::module::program_global(self.m, *global)?;
+                self.global_get(g);
             }
             OpKind::GlobalSet { global, value } => {
                 self.load(*value)?;
-                self.ins(&I::GlobalSet(self.symbols.global_base + *global));
+                let g = crate::module::program_global(self.m, *global)?;
+                self.global_set(g);
                 return Ok(());
             }
-            OpKind::Call { callee, args, .. } => self.call(id, callee, args)?,
+            OpKind::Call { callee, args, .. } => self.call_op(id, callee, args)?,
             OpKind::Return(value) => return self.return_value(*value),
             OpKind::ConstUndefined => {
-                if self.symbols.types.slot(&op.ty)?.is_none() {
+                if self.types().slot(&op.ty)?.is_none() {
                     return Ok(());
                 }
                 crate::erased::constant(self, id, crate::erased::UNDEFINED)?;
@@ -651,7 +560,7 @@ impl<'a> Body<'a> {
                 return Err(format!("operation outside M1a: {:?}", op.kind).into());
             }
         }
-        if self.symbols.types.slot(&op.ty)?.is_some() {
+        if self.types().slot(&op.ty)?.is_some() {
             self.ins(&I::LocalSet(self.local(id)?));
         }
         Ok(())
@@ -670,7 +579,7 @@ impl<'a> Body<'a> {
         absent: nts_core::hir::Absent,
     ) -> Result<(), Failure> {
         if self
-            .symbols
+            .m
             .raising_results
             .get(&self.func.name)
             .is_some_and(|results| results.contains(&id))
@@ -743,16 +652,19 @@ impl<'a> Body<'a> {
         }
         numeric::convert(self, &from, &to)
     }
-    fn call(&mut self, result: ValueId, callee: &Callee, args: &[ValueId]) -> Result<(), Failure> {
+    fn call_op(
+        &mut self,
+        result: ValueId,
+        callee: &Callee,
+        args: &[ValueId],
+    ) -> Result<(), Failure> {
         match callee {
             Callee::Direct(name) => {
-                let at = self.symbols.functions.get(name.as_str()).ok_or_else(|| {
-                    Failure::Invariant(format!("unresolved direct callee `{name}`"))
-                })?;
+                let target = self.m.program_func(name)?;
                 for arg in args {
                     self.load(*arg)?;
                 }
-                self.ins(&I::Call(*at));
+                self.call(target);
             }
             Callee::External(name) => {
                 if let Some(helper) = crate::raising::external(name) {

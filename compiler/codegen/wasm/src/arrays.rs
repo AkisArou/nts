@@ -1,8 +1,17 @@
 //! Array wrappers keep identity while typed backing storage grows.
 
-use crate::{body::Body, contract, erased, error::Failure, gc, module::Symbols, numeric, objects};
+use crate::{
+    body::Body,
+    contract, erased,
+    error::Failure,
+    gc,
+    ir::Function,
+    module::{Builder, Func, FuncKey},
+    numeric, objects,
+    types::{Physical, Slot},
+};
 use nts_core::hir::{HirType, ManagedType, OpKind, ValueId};
-use wasm_encoder::{BlockType, Function, HeapType, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 const U32: HirType = HirType::Int {
     bits: 32,
@@ -10,7 +19,11 @@ const U32: HirType = HirType::Int {
 };
 const F64: HirType = HirType::Float { bits: 64 };
 
-pub(crate) fn operation(b: &mut Body<'_>, result: ValueId, kind: &OpKind) -> Result<(), Failure> {
+pub(crate) fn operation(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    kind: &OpKind,
+) -> Result<(), Failure> {
     match kind {
         OpKind::ArrayNew { length, .. } => new(b, result, *length),
         OpKind::ArrayGet {
@@ -33,18 +46,18 @@ pub(crate) fn operation(b: &mut Body<'_>, result: ValueId, kind: &OpKind) -> Res
 pub(crate) fn is_array(ty: &HirType) -> bool {
     matches!(ty, HirType::Managed(ManagedType::Array(_)))
 }
-fn storage<'a>(b: &Body<'a>, array: ValueId) -> Result<&'a gc::Array, Failure> {
-    b.symbols.types.array(b.ty(array))
+fn storage<'p>(b: &Body<'_, 'p>, array: ValueId) -> Result<&'p gc::Array, Failure> {
+    b.types().array(b.ty(array))
 }
-pub(crate) fn number(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn number(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     numeric::convert(b, &b.ty(value).clone(), &F64)
 }
-pub(crate) fn index(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn index(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     numeric::convert(b, &b.ty(value).clone(), &U32)
 }
-pub(crate) fn whole_nonnegative(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn whole_nonnegative(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
     match b.ty(value) {
         HirType::Int {
             bits: 8 | 16 | 32,
@@ -90,7 +103,7 @@ pub(crate) fn whole_nonnegative(b: &mut Body<'_>, value: ValueId) -> Result<(), 
     }
     Ok(())
 }
-pub(crate) fn logical_length(b: &mut Body<'_>, array: ValueId, ty: u32) -> Result<(), Failure> {
+pub(crate) fn logical_length(b: &mut Body<'_, '_>, array: ValueId, ty: u32) -> Result<(), Failure> {
     b.load(array)?;
     b.ins(&I::StructGet {
         struct_type_index: ty,
@@ -99,7 +112,7 @@ pub(crate) fn logical_length(b: &mut Body<'_>, array: ValueId, ty: u32) -> Resul
     Ok(())
 }
 fn valid_index(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     array: ValueId,
     value: ValueId,
     append: bool,
@@ -141,15 +154,16 @@ fn valid_index(
     b.ins(&I::I32And);
     Ok(())
 }
-pub(crate) fn new(b: &mut Body<'_>, result: ValueId, length: ValueId) -> Result<(), Failure> {
+pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Result<(), Failure> {
     let array = storage(b, result)?;
     whole_nonnegative(b, length)?;
     number(b, length)?;
     b.ins(&I::F64Const(f64::from(u32::MAX).into()));
     b.ins(&I::F64Le);
     b.ins(&I::I32And);
-    contract::require(b)?;
-    b.ins(&I::GlobalGet(b.symbols.descriptor_base + array.descriptor));
+    contract::require(b);
+    let descriptor = objects::descriptor(b.m, array.descriptor, None)?;
+    b.global_get(descriptor);
     index(b, length)?;
     objects::default(b, &array.element)?;
     index(b, length)?;
@@ -157,13 +171,13 @@ pub(crate) fn new(b: &mut Body<'_>, result: ValueId, length: ValueId) -> Result<
     b.ins(&I::StructNew(array.wrapper));
     Ok(())
 }
-pub(crate) fn length(b: &mut Body<'_>, result: ValueId, array: ValueId) -> Result<(), Failure> {
+pub(crate) fn length(b: &mut Body<'_, '_>, result: ValueId, array: ValueId) -> Result<(), Failure> {
     let ty = storage(b, array)?.wrapper;
     contract::nonnull(b, array)?;
     logical_length(b, array, ty)?;
     numeric::convert(b, &U32, &b.ty(result).clone())
 }
-pub(crate) fn backing(b: &mut Body<'_>, array: ValueId, ty: u32) -> Result<(), Failure> {
+pub(crate) fn backing(b: &mut Body<'_, '_>, array: ValueId, ty: u32) -> Result<(), Failure> {
     b.load(array)?;
     b.ins(&I::StructGet {
         struct_type_index: ty,
@@ -197,7 +211,7 @@ pub(crate) fn get_instruction(array: &gc::Array) -> Result<I<'static>, Failure> 
     })
 }
 pub(crate) fn get(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     array: ValueId,
     at: ValueId,
@@ -215,7 +229,7 @@ pub(crate) fn get(
         }
         b.ins(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
     } else {
-        contract::require(b)?;
+        contract::require(b);
     }
     backing(b, array, shape.wrapper)?;
     index(b, at)?;
@@ -223,15 +237,14 @@ pub(crate) fn get(
     objects::adapt(b, &shape.element, &b.ty(result).clone())?;
     if absent {
         b.ins(&I::Else);
-        b.ins(&I::GlobalGet(
-            erased::values(b.symbols)?.for_tag(erased::UNDEFINED)?,
-        ));
+        let undefined = erased::singleton(b.m, erased::Singleton::Undefined)?;
+        b.global_get(undefined);
         b.ins(&I::End);
     }
     Ok(())
 }
 pub(crate) fn set(
-    b: &mut Body<'_>,
+    b: &mut Body<'_, '_>,
     result: ValueId,
     array: ValueId,
     at: ValueId,
@@ -245,7 +258,7 @@ pub(crate) fn set(
     contract::nonnull(b, array)?;
     let append = checked && nts_core::hir::array_write_may_grow(b.func, array);
     valid_index(b, array, at, append)?;
-    contract::require(b)?;
+    contract::require(b);
     if append {
         append_slot(b, array, at, shape.wrapper)?;
     }
@@ -256,13 +269,13 @@ pub(crate) fn set(
     b.ins(&I::ArraySet(shape.backing));
     Ok(())
 }
-fn append_slot(b: &mut Body<'_>, array: ValueId, at: ValueId, ty: u32) -> Result<(), Failure> {
-    let helper = b
-        .symbols
-        .array_grow
+fn append_slot(b: &mut Body<'_, '_>, array: ValueId, at: ValueId, ty: u32) -> Result<(), Failure> {
+    let shape = b
+        .types()
+        .arrays
         .get(&ty)
-        .copied()
         .ok_or_else(|| Failure::Invariant(format!("unplanned array growth for type {ty}")))?;
+    let helper = grow(b.m, shape)?;
     index(b, at)?;
     logical_length(b, array, ty)?;
     b.ins(&I::I32Eq);
@@ -270,12 +283,12 @@ fn append_slot(b: &mut Body<'_>, array: ValueId, at: ValueId, ty: u32) -> Result
     logical_length(b, array, ty)?;
     b.ins(&I::I32Const(-1));
     b.ins(&I::I32LtU);
-    contract::require(b)?;
+    contract::require(b);
     b.load(array)?;
     logical_length(b, array, ty)?;
     b.ins(&I::I32Const(1));
     b.ins(&I::I32Add);
-    b.ins(&I::Call(helper));
+    b.call(helper);
     b.load(array)?;
     logical_length(b, array, ty)?;
     b.ins(&I::I32Const(1));
@@ -287,15 +300,32 @@ fn append_slot(b: &mut Body<'_>, array: ValueId, at: ValueId, ty: u32) -> Result
     b.ins(&I::End);
     Ok(())
 }
-pub(crate) fn grow_body(shape: &gc::Array, symbols: &Symbols<'_>) -> Result<Function, Failure> {
-    let mut f = Function::new_with_locals_types([
+/// The helper that grows an array's backing to at least a capacity,
+/// preserving the wrapper and therefore every alias of it.
+pub(crate) fn grow(m: &mut Builder<'_>, shape: &gc::Array) -> Result<Func, Failure> {
+    m.helper(
+        FuncKey::ArrayGrow(shape.wrapper),
+        format!("array.grow<{:?}>", shape.element),
+        vec![
+            Physical::Reference(RefType {
+                nullable: true,
+                heap_type: HeapType::Concrete(shape.wrapper),
+            }),
+            Physical::Scalar(Slot::I32),
+        ],
+        None,
+        |m| grow_body(shape, m),
+    )
+}
+fn grow_body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let mut f = Function::new([
         ValType::I32,
         ValType::Ref(RefType {
             nullable: true,
             heap_type: HeapType::Concrete(shape.backing),
         }),
     ]);
-    for i in [
+    f.instructions(&[
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
@@ -333,7 +363,9 @@ pub(crate) fn grow_body(shape: &gc::Array, symbols: &Symbols<'_>) -> Result<Func
         I::I32Const(4),
         I::LocalSet(2),
         I::End,
-        objects::default_instruction(symbols, &shape.element)?,
+    ]);
+    objects::push_default(m, &mut f, &shape.element)?;
+    f.instructions(&[
         I::LocalGet(2),
         I::ArrayNew(shape.backing),
         I::LocalSet(3),
@@ -362,8 +394,6 @@ pub(crate) fn grow_body(shape: &gc::Array, symbols: &Symbols<'_>) -> Result<Func
             field_index: 2,
         },
         I::End,
-    ] {
-        f.instruction(&i);
-    }
+    ]);
     Ok(f)
 }
