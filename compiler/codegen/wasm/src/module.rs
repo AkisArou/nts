@@ -276,11 +276,11 @@ fn bodies(
         code.function(&function);
     }
     for helper in &resources.erased {
-        let types = symbols.types.erased.ok_or_else(|| EmitError::Invariant {
+        let function = helper.body(symbols).map_err(|error| EmitError::Invariant {
             function: helper.name().into(),
-            reason: "missing erased type plan".into(),
+            reason: error.to_string(),
         })?;
-        code.function(&helper.body(types));
+        code.function(&function);
     }
     Ok(Bodies {
         code,

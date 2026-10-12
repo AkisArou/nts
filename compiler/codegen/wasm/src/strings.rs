@@ -195,14 +195,21 @@ pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), F
         return Err(format!("string unary {op:?}").into());
     }
     b.load(value)?;
+    b.ins(&I::RefIsNull);
+    b.ins(&I::If(BlockType::Result(ValType::I32)));
+    b.ins(&I::I32Const(0));
+    b.ins(&I::Else);
+    b.load(value)?;
     call(b, Helper::Length)?;
     b.ins(&I::I32Eqz);
-    if op == UnOp::Truthy {
+    b.ins(&I::I32Eqz);
+    b.ins(&I::End);
+    if op == UnOp::Not {
         b.ins(&I::I32Eqz);
     }
     Ok(())
 }
-fn callee(symbols: &Symbols<'_>, helper: Helper) -> Result<u32, Failure> {
+pub(crate) fn callee(symbols: &Symbols<'_>, helper: Helper) -> Result<u32, Failure> {
     symbols
         .strings
         .get(&helper)

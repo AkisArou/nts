@@ -1,25 +1,20 @@
 //! Erased primitives use GC storage and the shared semantic tag numbers.
 
 use crate::{
-    body::Body,
-    error::Failure,
-    gc::ErasedTypes,
-    module::Symbols,
-    numeric,
-    types::{Physical, Slot},
+    body::Body, error::Failure, gc::ErasedTypes, module::Symbols, numeric, types::Physical,
 };
-use nts_core::hir::{Absent, HirType, ManagedType, ValueId};
+use nts_core::hir::{Absent, HirType, ManagedType, ValueId, tags};
 use wasm_encoder::{
     BlockType, ConstExpr, Function, GlobalSection, GlobalType, HeapType, Instruction as I, RefType,
     ValType,
 };
 
 pub(crate) const SINGLETONS: u32 = 4;
-pub(crate) const UNDEFINED: i32 = 0;
-pub(crate) const BOOLEAN: i32 = 1;
-pub(crate) const NUMBER: i32 = 2;
-pub(crate) const STRING: i32 = 3;
-pub(crate) const NULL: i32 = 7;
+pub(crate) const UNDEFINED: i32 = tags::UNDEFINED.cast_signed();
+pub(crate) const BOOLEAN: i32 = tags::BOOLEAN.cast_signed();
+pub(crate) const NUMBER: i32 = tags::NUMBER.cast_signed();
+pub(crate) const STRING: i32 = tags::STRING.cast_signed();
+pub(crate) const NULL: i32 = tags::NULL.cast_signed();
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Globals {
@@ -97,6 +92,13 @@ pub(crate) enum Helper {
     BoxNumber,
     Number,
     Tag,
+    BoxBoolean,
+    Boolean,
+    Truthy,
+    Equal,
+    EqualNumber,
+    EqualBoolean,
+    EqualString,
 }
 
 impl Helper {
@@ -105,18 +107,17 @@ impl Helper {
             Self::BoxNumber => "value.boxNumber",
             Self::Number => "value.number",
             Self::Tag => "value.tag",
+            Self::BoxBoolean => "value.boxBoolean",
+            Self::Boolean => "value.boolean",
+            Self::Truthy => "value.truthy",
+            Self::Equal => "value.equal",
+            Self::EqualNumber => "value.equalNumber",
+            Self::EqualBoolean => "value.equalBoolean",
+            Self::EqualString => "value.equalString",
         }
     }
-    pub(crate) fn signature(self) -> (Vec<Physical>, Physical) {
-        let number = Physical::Scalar(Slot::F64);
-        let erased = Physical::Reference(RefType::ANYREF);
-        match self {
-            Self::BoxNumber => (vec![number], erased),
-            Self::Number => (vec![erased], number),
-            Self::Tag => (vec![erased], Physical::Scalar(Slot::I32)),
-        }
-    }
-    pub(crate) fn body(self, types: ErasedTypes) -> Function {
+    pub(crate) fn body(self, symbols: &Symbols<'_>) -> Result<Function, Failure> {
+        let types = types(symbols)?;
         let mut f = Function::new([]);
         match self {
             Self::BoxNumber => instructions(
@@ -187,9 +188,16 @@ impl Helper {
                     I::End,
                 ],
             ),
+            Self::BoxBoolean
+            | Self::Boolean
+            | Self::Truthy
+            | Self::Equal
+            | Self::EqualNumber
+            | Self::EqualBoolean
+            | Self::EqualString => return crate::erased_ops::body(self, symbols, types),
         }
         f.instruction(&I::End);
-        f
+        Ok(f)
     }
 }
 
@@ -204,19 +212,21 @@ fn types(symbols: &Symbols<'_>) -> Result<ErasedTypes, Failure> {
         .erased
         .ok_or_else(|| Failure::Invariant("unplanned erased types".into()))
 }
-fn values(symbols: &Symbols<'_>) -> Result<Globals, Failure> {
+pub(crate) fn values(symbols: &Symbols<'_>) -> Result<Globals, Failure> {
     symbols
         .erased_globals
         .ok_or_else(|| Failure::Invariant("unplanned erased singletons".into()))
 }
 pub(crate) fn call(body: &mut Body<'_>, helper: Helper) -> Result<(), Failure> {
-    let index = *body
-        .symbols
+    body.ins(&I::Call(callee(body.symbols, helper)?));
+    Ok(())
+}
+pub(crate) fn callee(symbols: &Symbols<'_>, helper: Helper) -> Result<u32, Failure> {
+    symbols
         .erased
         .get(&helper)
-        .ok_or_else(|| Failure::Invariant(format!("unplanned erased helper {helper:?}")))?;
-    body.ins(&I::Call(index));
-    Ok(())
+        .copied()
+        .ok_or_else(|| Failure::Invariant(format!("unplanned erased helper {helper:?}")))
 }
 
 pub(crate) fn constant(body: &mut Body<'_>, result: ValueId, tag: i32) -> Result<(), Failure> {

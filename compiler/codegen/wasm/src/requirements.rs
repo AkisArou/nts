@@ -1,6 +1,6 @@
 //! Demand-driven instruction resources, classified exhaustively from live HIR.
 
-use crate::{erased, helpers::Helper, host, strings};
+use crate::{erased, erased_ops, helpers::Helper, host, strings};
 use nts_core::hir::{BinOp, Callee, Func, HirType, OpKind, Program, UnOp};
 use std::collections::BTreeSet;
 
@@ -28,12 +28,41 @@ impl Requirements {
                     self.require(helper);
                 } else if let Some(service) = host::external(name) {
                     self.host.insert(service);
+                } else if let Some(helper) = erased_ops::external(name) {
+                    self.require_erased(helper);
                 }
             }
             Callee::Direct(_)
             | Callee::Virtual { .. }
             | Callee::Closure { .. }
             | Callee::Native(_) => {}
+        }
+    }
+    fn require_erased(&mut self, helper: erased::Helper) {
+        use erased::Helper as E;
+        if !self.erased.insert(helper) {
+            return;
+        }
+        match helper {
+            E::Equal | E::Truthy => {
+                self.require_erased(E::Tag);
+                self.require_erased(E::Number);
+                self.require(if helper == E::Equal {
+                    strings::Helper::Equal
+                } else {
+                    strings::Helper::Length
+                });
+            }
+            E::EqualNumber => {
+                self.require_erased(E::Tag);
+                self.require_erased(E::Number);
+            }
+            E::EqualBoolean => self.require_erased(E::Tag),
+            E::EqualString => {
+                self.require_erased(E::Tag);
+                self.require(strings::Helper::Equal);
+            }
+            E::BoxNumber | E::Number | E::Tag | E::BoxBoolean | E::Boolean => {}
         }
     }
     fn require(&mut self, helper: strings::Helper) {
@@ -121,6 +150,9 @@ fn helper_for(
         OpKind::Convert(value) => {
             if strings::is_string(&func.value(value).ty) && func.value(id).ty == HirType::Bool {
                 result.require(strings::Helper::Length);
+            } else if func.value(value).ty == HirType::Erased && func.value(id).ty == HirType::Bool
+            {
+                result.require_erased(erased::Helper::Truthy);
             }
             None
         }
@@ -181,6 +213,8 @@ fn unary(
 ) -> Option<Helper> {
     if strings::is_string(&func.value(operand).ty) && matches!(op, UnOp::Truthy | UnOp::Not) {
         result.require(strings::Helper::Length);
+    } else if func.value(operand).ty == HirType::Erased && matches!(op, UnOp::Truthy | UnOp::Not) {
+        result.require_erased(erased::Helper::Truthy);
     }
     match op {
         UnOp::Round => Some(Helper::Round),
@@ -206,6 +240,13 @@ fn binary(
     rhs: nts_core::hir::ValueId,
     result: &mut Requirements,
 ) -> Option<Helper> {
+    if matches!(op, BinOp::Eq | BinOp::Ne)
+        && let Some((helper, _)) =
+            erased_ops::equality_helper(&func.value(lhs).ty, &func.value(rhs).ty)
+    {
+        result.require_erased(helper);
+        return None;
+    }
     if strings::is_string(&func.value(lhs).ty) && strings::is_string(&func.value(rhs).ty) {
         if let Ok(helper) = strings::binary_helper(op) {
             result.require(helper);

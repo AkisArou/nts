@@ -45,6 +45,9 @@ pub(crate) fn run(
         String::from_utf8_lossy(&result.stderr)
     );
     let output = serde_json::from_slice(&result.stdout).unwrap();
+    if retained.is_some() {
+        std::fs::write(artifact.join("execution.json"), &result.stdout).unwrap();
+    }
     if retained.is_none() {
         std::fs::remove_dir_all(artifact).unwrap();
     }

@@ -629,7 +629,12 @@ impl<'a> Body<'a> {
         lhs: ValueId,
         rhs: ValueId,
     ) -> Result<(), Failure> {
-        if crate::strings::is_string(self.ty(lhs)) || crate::strings::is_string(self.ty(rhs)) {
+        if self.ty(lhs) == &nts_core::hir::HirType::Erased
+            || self.ty(rhs) == &nts_core::hir::HirType::Erased
+        {
+            crate::erased_ops::binary(self, id, op, lhs, rhs)
+        } else if crate::strings::is_string(self.ty(lhs)) || crate::strings::is_string(self.ty(rhs))
+        {
             crate::strings::binary(self, op, lhs, rhs)
         } else {
             numeric::binary(self, id, op, lhs, rhs)
@@ -641,7 +646,9 @@ impl<'a> Body<'a> {
         op: nts_core::hir::UnOp,
         value: ValueId,
     ) -> Result<(), Failure> {
-        if crate::strings::is_string(self.ty(value)) {
+        if self.ty(value) == &nts_core::hir::HirType::Erased {
+            crate::erased_ops::truthy(self, op, value)
+        } else if crate::strings::is_string(self.ty(value)) {
             crate::strings::truthy(self, op, value)
         } else {
             numeric::unary(self, id, op, value)
@@ -650,6 +657,12 @@ impl<'a> Body<'a> {
     fn convert(&mut self, id: ValueId, value: ValueId) -> Result<(), Failure> {
         let from = self.ty(value).clone();
         let to = self.ty(id).clone();
+        if from == nts_core::hir::HirType::Erased && to == nts_core::hir::HirType::Bool {
+            return crate::erased_ops::truthy(self, nts_core::hir::UnOp::Truthy, value);
+        }
+        if from == nts_core::hir::HirType::Erased && to == from {
+            return self.load(value);
+        }
         if crate::strings::is_string(&from) && to == nts_core::hir::HirType::Bool {
             return crate::strings::truthy(self, nts_core::hir::UnOp::Truthy, value);
         }
@@ -675,6 +688,8 @@ impl<'a> Body<'a> {
                     crate::strings::runtime(self, result, helper, args)?;
                 } else if let Some(service) = crate::host::external(name) {
                     service.call(self, result, args)?;
+                } else if let Some(helper) = crate::erased_ops::external(name) {
+                    crate::erased_ops::runtime(self, result, helper, args)?;
                 } else {
                     return Err(format!(
                         "runtime/external helper `{name}` is outside the implemented Wasm helper surface"
