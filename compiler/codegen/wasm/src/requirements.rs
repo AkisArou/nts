@@ -1,12 +1,13 @@
 //! Demand-driven instruction resources, classified exhaustively from live HIR.
 
-use crate::{helpers::Helper, strings};
+use crate::{helpers::Helper, host, strings};
 use nts_core::hir::{BinOp, Callee, Func, HirType, OpKind, Program, UnOp};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Default)]
 pub(crate) struct Requirements {
     pub(crate) numeric: BTreeSet<Helper>,
+    pub(crate) host: BTreeSet<&'static host::Service>,
     pub(crate) strings: BTreeSet<strings::Helper>,
     pub(crate) literals: BTreeSet<String>,
 }
@@ -77,6 +78,8 @@ fn helper_for(
                 Callee::External(name) => {
                     if let Some(helper) = strings::external(name) {
                         result.require(helper);
+                    } else if let Some(service) = host::external(name) {
+                        result.host.insert(service);
                     }
                 }
                 Callee::Direct(_)

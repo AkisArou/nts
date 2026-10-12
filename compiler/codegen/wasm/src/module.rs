@@ -22,6 +22,7 @@ pub(crate) struct Symbols<'a> {
     pub(crate) strings: BTreeMap<strings::Helper, u32>,
     pub(crate) literals: FxHashMap<&'a str, u32>,
     pub(crate) global_base: u32,
+    pub(crate) host: BTreeMap<&'static str, u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -123,8 +124,15 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         strings: BTreeMap::new(),
         literals: FxHashMap::default(),
         global_base: index(resources.literals.len()),
+        host: BTreeMap::new(),
     };
     let mut required_imports = scalar_imports(helpers, &mut types, &mut imports, &mut symbols)?;
+    required_imports.extend(host_imports(
+        &resources,
+        &mut types,
+        &mut imports,
+        &mut symbols,
+    )?);
     let builtins = string_imports(&resources, &mut types, &mut imports, &mut symbols)?;
     let imported_functions = imports.len();
     let constants = literal_imports(
@@ -278,6 +286,30 @@ fn scalar_imports(
         );
     }
     Ok(required_imports)
+}
+
+fn host_imports(
+    resources: &requirements::Requirements,
+    types: &mut Types,
+    imports: &mut ImportSection,
+    symbols: &mut Symbols<'_>,
+) -> Result<Vec<crate::Import>, EmitError> {
+    let mut records = Vec::new();
+    for service in &resources.host {
+        let (params, result) = service.signature();
+        let id = imports.len();
+        let ty = types.intern(Signature {
+            params: params.clone(),
+            result: Some(result),
+        });
+        imports.import("nts:host/v1", service.name, EntityType::Function(ty));
+        symbols.host.insert(service.name, id);
+        records.push(
+            crate::Import::function("nts:host/v1", service.name, &params, Some(result))
+                .map_err(EmitError::InvalidWasm)?,
+        );
+    }
+    Ok(records)
 }
 
 fn string_imports(

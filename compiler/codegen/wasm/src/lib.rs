@@ -10,6 +10,7 @@ mod cfg;
 mod error;
 mod gc;
 mod helpers;
+mod host;
 mod module;
 mod numeric;
 mod requirements;

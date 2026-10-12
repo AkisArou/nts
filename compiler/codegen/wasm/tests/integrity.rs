@@ -27,12 +27,12 @@ fn a_counting_marker_after_host_gc_preparation_declines_at_its_origin() {
 
 #[test]
 fn external_runtime_calls_decline_by_name_with_source_origin() {
-    let mut f = function("unsupportedMath", &[F64], F64);
+    let mut f = function("unsupportedClock", &[F64], F64);
     let arg = value(&mut f, OpKind::Param(0), F64);
     let call = value(
         &mut f,
         OpKind::Call {
-            callee: Callee::External("nts_math_cos".to_owned()),
+            callee: Callee::External("nts_date_now".to_owned()),
             args: vec![arg],
             frame: None,
         },
@@ -46,8 +46,8 @@ fn external_runtime_calls_decline_by_name_with_source_origin() {
     };
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].code, "NTS5001");
-    assert!(diagnostics[0].message.contains("unsupportedMath"));
-    assert!(diagnostics[0].message.contains("nts_math_cos"));
+    assert!(diagnostics[0].message.contains("unsupportedClock"));
+    assert!(diagnostics[0].message.contains("nts_date_now"));
     assert_eq!(diagnostics[0].primary, common::hir::origin().location);
 }
 

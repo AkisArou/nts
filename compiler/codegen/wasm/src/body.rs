@@ -52,6 +52,7 @@ mod tests {
             strings: BTreeMap::new(),
             literals: rustc_hash::FxHashMap::default(),
             global_base: 0,
+            host: BTreeMap::new(),
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -116,6 +117,7 @@ mod tests {
                 strings: BTreeMap::new(),
                 literals: rustc_hash::FxHashMap::default(),
                 global_base: 0,
+                host: BTreeMap::new(),
             };
             let error = emit(&f, 0, &symbols).unwrap_err();
             assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));
@@ -663,6 +665,8 @@ impl<'a> Body<'a> {
             Callee::External(name) => {
                 if let Some(helper) = crate::strings::external(name) {
                     crate::strings::runtime(self, result, helper, args)?;
+                } else if let Some(service) = crate::host::external(name) {
+                    service.call(self, result, args)?;
                 } else {
                     return Err(format!(
                         "runtime/external helper `{name}` is outside the implemented Wasm helper surface"

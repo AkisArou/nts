@@ -5,12 +5,26 @@ export class WasmInputDecline extends TypeError {
 }
 
 const f64 = Object.freeze({ kind: 'f64' });
-const services = Object.freeze({ remainder: Object.freeze({
+const primitiveServices = { remainder: Object.freeze({
   params: [f64, f64], result: f64, call: (left, right) => left % right,
-}) });
+}) };
 const extern = Object.freeze({ kind: 'externref', nullable: true });
 const string = Object.freeze({ kind: 'externref', nullable: false });
 const i32 = Object.freeze({ kind: 'i32' });
+// Capture primitive functions when the host loads, before compiled user code
+// can modify globals. None of these entries accepts an arbitrary object.
+const apply = Reflect.apply, number = Number;
+for (const name of ['acos', 'asin', 'atan', 'cbrt', 'cos', 'cosh', 'exp', 'expm1', 'fround', 'log', 'log10', 'log1p', 'log2', 'sign', 'sin', 'sinh', 'tan', 'tanh']) {
+  primitiveServices[`nts_math_${name}`] = Object.freeze({ params: [f64], result: f64, call: Math[name] });
+}
+for (const name of ['atan2', 'hypot', 'imul', 'pow']) {
+  primitiveServices[`nts_math_${name}`] = Object.freeze({ params: [f64, f64], result: f64, call: Math[name] });
+}
+const numberString = Number.prototype.toString;
+primitiveServices.nts_number_to_string = Object.freeze({ params: [f64], result: extern, call: value => apply(numberString, value, []) });
+primitiveServices.nts_parse_float = Object.freeze({ params: [extern], result: f64, call: number.parseFloat });
+primitiveServices.nts_parse_int = Object.freeze({ params: [extern, f64], result: f64, call: number.parseInt });
+const services = Object.freeze(primitiveServices);
 const builtins = Object.freeze({
   length: { params: [extern], result: i32 },
   charCodeAt: { params: [extern, i32], result: i32 },
