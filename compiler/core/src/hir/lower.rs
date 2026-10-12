@@ -27422,8 +27422,10 @@ impl<'a> FuncBuilder<'a> {
             return Ok(None);
         };
         self.carried_owners_fit(id, *source, *face)?;
-        self.unrelated_class_keeps_its_methods(id, *source, *face)?;
+        // Asked only of a conversion the layouts admit: one they refuse
+        // already says why, and that sentence stays the one a reader sees.
         let Some(why) = self.not_a_prefix(id, *source, *face) else {
+            self.unrelated_class_keeps_its_methods(id, *source, *face)?;
             return Ok(None);
         };
         if !self.hierarchy.access_families.carries(*source, *face) {
@@ -27433,6 +27435,8 @@ impl<'a> FuncBuilder<'a> {
             );
             return Err(self.unsupported(id, &why.spell(&source, &face)));
         }
+        // A view fixes where fields are read, not which methods run.
+        self.unrelated_class_keeps_its_methods(id, *source, *face)?;
         Ok(Some(OpKind::FieldView {
             value,
             source: *source,
