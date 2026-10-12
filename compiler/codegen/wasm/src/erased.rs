@@ -264,29 +264,41 @@ pub(crate) fn erase(
     absent: Absent,
 ) -> Result<(), Failure> {
     match body.ty(value).clone() {
-        HirType::Erased => body.load(value)?,
         HirType::Void => get_singleton(body, Singleton::Undefined)?,
-        HirType::Bool => {
+        HirType::Managed(ManagedType::String) => erase_string(body, value, absent)?,
+        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
+            erase_reference(body, value, absent)?;
+        }
+        ty => {
             body.load(value)?;
+            erase_stack(body, &ty)?;
+        }
+    }
+    Ok(())
+}
+
+/// Erases the value on the stack, held in storage of type `ty`. A string or a
+/// reference arrives non-null: what a null one means is the caller's to say.
+pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), Failure> {
+    match ty {
+        HirType::Erased | HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {}
+        HirType::Bool => {
             body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
             get_singleton(body, Singleton::True)?;
             body.instruction(&I::Else);
             get_singleton(body, Singleton::False)?;
             body.instruction(&I::End);
         }
-        ty @ (HirType::Int { .. } | HirType::Float { .. }) => {
-            body.load(value)?;
-            numeric::convert(body, &ty, &HirType::NUMBER)?;
+        HirType::Int { .. } | HirType::Float { .. } => {
+            numeric::convert(body, ty, &HirType::NUMBER)?;
             call(body, Helper::BoxNumber)?;
         }
-        HirType::Managed(ManagedType::String) => erase_string(body, value, absent)?,
-        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
-            erase_reference(body, value, absent)?;
-        }
-        ty @ (HirType::Managed(_)
+        HirType::Managed(ManagedType::String) => body.instruction(&I::AnyConvertExtern),
+        HirType::Void
+        | HirType::Managed(_)
         | HirType::BigInt
         | HirType::NativePointer(_)
-        | HirType::Never) => {
+        | HirType::Never => {
             return Err(
                 format!("erasing {ty:?} is outside the current primitive implementation").into(),
             );
@@ -312,7 +324,7 @@ fn erase_string(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Resu
         body.instruction(&I::Else);
     }
     body.load(value)?;
-    body.instruction(&I::AnyConvertExtern);
+    erase_stack(body, &HirType::Managed(ManagedType::String))?;
     if tag.is_some() {
         body.instruction(&I::End);
     }

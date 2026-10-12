@@ -1,8 +1,10 @@
 //! Closed array helper contracts over the same identity-preserving wrappers.
 
-use crate::{arrays, body::Body, contract, erased, error::Failure, gc, numeric, objects};
-use nts_core::hir::{HirType, ManagedType, ValueId};
-use wasm_encoder::{BlockType, Instruction as I};
+use crate::{
+    arrays, body::Body, contract, erased, error::Failure, gc, numeric, objects, types::Physical,
+};
+use nts_core::hir::{HirType, ManagedType, OpKind, ValueId};
+use wasm_encoder::{BlockType, Instruction as I, RefType, ValType};
 
 const U32: HirType = HirType::Int {
     bits: 32,
@@ -23,6 +25,8 @@ pub(crate) enum Method {
     Fill(Family),
     Truncate(Family),
     KeepFirst,
+    /// `xs[i]` read as an erased value: `undefined` where node answers it.
+    Element,
 }
 
 pub(crate) fn external(name: &str) -> Option<Method> {
@@ -44,6 +48,7 @@ pub(crate) fn external(name: &str) -> Option<Method> {
         "nts_array_keep_first" => Some(Method::KeepFirst),
         "nts_array_set_length_ref" => Some(Truncate(Reference)),
         "nts_array_set_length_value" => Some(Truncate(Value)),
+        "nts_array_element" => Some(Method::Element),
         _ => None,
     }
 }
@@ -59,7 +64,8 @@ impl Method {
     }
     fn accepts(self, element: &HirType) -> bool {
         let family = match self {
-            Self::KeepFirst => return true, // Header contract is descriptor-width generic.
+            // Header contracts that are descriptor-width generic.
+            Self::KeepFirst | Self::Element => return true,
             Self::Push(f) | Self::Pop(f) | Self::Fill(f) | Self::Truncate(f) => f,
         };
         match family {
@@ -106,12 +112,18 @@ fn call_inner(
     if args.len() != arity {
         return Err(format!("array helper {method:?} arity mismatch").into());
     }
-    let shape = b.types().array(b.ty(args[0]))?;
+    let array = if method == Method::Element {
+        erased_from(b, args[0])?
+    } else {
+        args[0]
+    };
+    let shape = b.types().array(b.ty(array))?;
     if !method.accepts(&shape.element) {
         return Err(format!("array helper {method:?} element {:?}", shape.element).into());
     }
-    contract::nonnull(b, args[0])?;
+    contract::nonnull(b, array)?;
     match method {
+        Method::Element => element_value(b, result, shape, array, args[1]),
         Method::Push(_) => push(b, result, shape, args[0], args[1]),
         Method::Pop(family) => pop(b, result, shape, args[0], family),
         Method::Fill(_) => fill(b, result, shape, args[0], args[1]),
@@ -169,6 +181,64 @@ fn push(
     });
     length(b, shape, array)?;
     output(b, result, &U32)
+}
+/// The array an erased operand was made from.
+///
+/// `nts_array_element` takes its array erased, and the C runtime asks the
+/// descriptor what the slots hold. Every caller erases an array whose storage
+/// it knows, and a Wasm array is typed by that storage, so the read goes to
+/// the array the erasure was made from. An erased operand from anywhere else
+/// is refused by name.
+fn erased_from(b: &Body<'_, '_>, erased: ValueId) -> Result<ValueId, Failure> {
+    match b.func.value(erased).kind {
+        OpKind::Erase { value, .. } if arrays::is_array(b.ty(value)) => Ok(value),
+        _ => Err("an erased array whose storage this read cannot see".into()),
+    }
+}
+/// `nts_array_element`: an element read that answers `undefined` for an index
+/// naming no element, as node does, where a typed read traps.
+///
+/// A null reference slot is refused by name. One storage type holds both
+/// absences: `(T | null)[]` stores `null` there and a JavaScript array
+/// `undefined`, so either answer is wrong for the other. (The C runtime
+/// answers `undefined`, which node contradicts for the first.) Holes never get
+/// here: an array whose unset slots are observed is declined before this.
+fn element_value(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    shape: &gc::Array,
+    array: ValueId,
+    at: ValueId,
+) -> Result<(), Failure> {
+    if b.ty(at) != &HirType::NUMBER {
+        return Err(Failure::Invariant("nts_array_element index type".into()));
+    }
+    let present = match b.types().value_slot(&shape.element)? {
+        Physical::Reference(slot) if shape.element != HirType::Erased => Some(RefType {
+            nullable: false,
+            ..slot
+        }),
+        Physical::Reference(_) | Physical::Scalar(_) => None,
+    };
+    arrays::valid_index(b, array, at, false)?;
+    b.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+    if let Some(present) = present {
+        b.instruction(&I::Block(BlockType::Result(ValType::Ref(present))));
+    }
+    backing(b, shape, array)?;
+    arrays::index(b, at)?;
+    b.instruction(&arrays::get_instruction(shape)?);
+    if present.is_some() {
+        b.instruction(&I::BrOnNonNull(0));
+        contract::refuse(b)?;
+        b.instruction(&I::End);
+    }
+    erased::erase_stack(b, &shape.element)?;
+    b.instruction(&I::Else);
+    let undefined = erased::singleton(b.m, erased::Singleton::Undefined)?;
+    b.global_get(undefined);
+    b.instruction(&I::End);
+    output(b, result, &HirType::Erased)
 }
 fn last(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<(), Failure> {
     length(b, shape, array)?;

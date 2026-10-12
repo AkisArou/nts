@@ -133,6 +133,21 @@ fn source_array_lookup_agrees_with_node() {
 }
 
 #[test]
+fn source_array_element_reads_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-element");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "array-element-source",
+        &emitted,
+        "tooling/wasm/check-array-element-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 1286, "{output}");
+    assert_eq!(output["named_declines"], 1, "{output}");
+}
+
+#[test]
 fn source_array_copying_agrees_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");
     let emitted = emit_project(&fixture);

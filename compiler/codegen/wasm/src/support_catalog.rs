@@ -23,10 +23,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ),
     ("nts_array_concat_ref", Support::WasmHelper),
     ("nts_array_concat_value", Support::WasmHelper),
-    (
-        "nts_array_element",
-        Support::Decline("array helper not yet implemented"),
-    ),
+    ("nts_array_element", Support::Intrinsic),
     ("nts_array_extend", Support::WasmHelper),
     (
         "nts_array_extend_foreign",

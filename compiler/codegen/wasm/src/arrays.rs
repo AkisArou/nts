@@ -111,7 +111,7 @@ pub(crate) fn logical_length(b: &mut Body<'_, '_>, array: ValueId, ty: u32) -> R
     });
     Ok(())
 }
-fn valid_index(
+pub(crate) fn valid_index(
     b: &mut Body<'_, '_>,
     array: ValueId,
     value: ValueId,

@@ -44,13 +44,19 @@ pub(crate) fn decline(m: &mut Builder<'_>) -> Result<Func, Failure> {
 
 /// Consume an i32 validity condition; a failed condition never reaches storage.
 pub(crate) fn require(b: &mut Body<'_, '_>) -> Result<(), Failure> {
-    let target = decline(b.m)?;
     b.instruction(&I::I32Eqz);
     b.instruction(&I::If(BlockType::Empty));
+    refuse(b)?;
+    b.instruction(&I::End);
+    Ok(())
+}
+
+/// The refusal itself, where control reaching it is the failed condition.
+pub(crate) fn refuse(b: &mut Body<'_, '_>) -> Result<(), Failure> {
+    let target = decline(b.m)?;
     strings::constant(b, &b.func.name.clone());
     b.call(target);
     b.instruction(&I::Unreachable);
-    b.instruction(&I::End);
     Ok(())
 }
 pub(crate) fn nonnull(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
