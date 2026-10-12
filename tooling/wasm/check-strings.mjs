@@ -48,16 +48,18 @@ try {
 assert.ok(!WebAssembly.Module.imports(await WebAssembly.compile(bytes, { builtins: ['js-string'], importedStringConstants: "'" })).some(i => i.module === "'"));
 // An engine that ignores the compile options must fail to instantiate, loudly;
 // the glue never substitutes a JavaScript replacement for a builtin or a
-// literal. A fresh copy of the instance module compiles through the stand-in.
-const compile = WebAssembly.compile;
+// literal. A fresh copy of the instance module compiles through the stand-in:
+// node glue calls compile, browser glue compileStreaming.
+const { compile, compileStreaming } = WebAssembly;
 let ignoredOptionsRefused = false;
 try {
   WebAssembly.compile = input => compile(input);
+  WebAssembly.compileStreaming = input => compileStreaming(input);
   const ignoring = await import(`${pathToFileURL(path.join(artifact, 'program.instance.mjs')).href}?ignored-options`);
   assert.throws(() => ignoring.instantiate(), error => {
     // V8 reports the missing builtin module as a TypeError naming it.
     ignoredOptionsRefused = (error instanceof WebAssembly.LinkError || error instanceof TypeError) && String(error).includes('wasm:js-string');
     return ignoredOptionsRefused;
   }); cases++;
-} finally { WebAssembly.compile = compile; }
+} finally { Object.assign(WebAssembly, { compile, compileStreaming }); }
 console.log(JSON.stringify({ cases, builtins: manifest.builtins.length, ignoredOptionsRefused }));

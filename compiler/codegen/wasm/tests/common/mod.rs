@@ -40,15 +40,28 @@ pub(crate) fn run_with_node_flags(
         serde_json::to_vec_pretty(&emitted.manifest).unwrap(),
     )
     .unwrap();
-    let glue = nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node).unwrap();
+    // NTS_WASM_BROWSER runs every check in headless Chromium, on browser glue.
+    let browser = std::env::var_os("NTS_WASM_BROWSER").is_some();
+    let host = if browser {
+        nts_codegen_wasm::Host::Browser
+    } else {
+        nts_codegen_wasm::Host::Node
+    };
+    let glue = nts_codegen_wasm::glue(&emitted.manifest, host).unwrap();
     std::fs::write(artifact.join(nts_codegen_wasm::PROGRAM_FILE), glue.program).unwrap();
     std::fs::write(
         artifact.join(nts_codegen_wasm::INSTANCE_FILE),
         glue.instance,
     )
     .unwrap();
-    let result = Command::new("node")
-        .args(flags)
+    let mut command = Command::new("node");
+    if browser {
+        // The runner strips TypeScript types itself, so node flags do not apply.
+        command.arg(repository().join("tooling/wasm/browser/run.mjs"));
+    } else {
+        command.args(flags);
+    }
+    let result = command
         .arg(repository().join(script))
         .arg(&artifact)
         .args(args)

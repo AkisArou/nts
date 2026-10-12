@@ -28,13 +28,14 @@ same(wasm.global(), 17, 'static closure prefix leaves program globals in place')
 assert.throws(() => wasm.nullCall(1), e => e instanceof WasmInputDecline && e.message.includes('nullCall'));
 // An engine without typed function references rejects the module when it
 // compiles; the failure reaches the importer instead of a degraded program.
-const compile = WebAssembly.compile;
+// Node glue compiles with compile, browser glue with compileStreaming.
+const { compile, compileStreaming } = WebAssembly;
 let capability_refusal = false;
 try {
-  WebAssembly.compile = () => { throw new WebAssembly.CompileError('function references disabled'); };
+  WebAssembly.compile = WebAssembly.compileStreaming = () => { throw new WebAssembly.CompileError('function references disabled'); };
   await assert.rejects(import(`${loader.href}?function-references-disabled`), error => {
     capability_refusal = error instanceof WebAssembly.CompileError && String(error).includes('function references');
     return capability_refusal;
   });
-} finally { WebAssembly.compile = compile; }
+} finally { Object.assign(WebAssembly, { compile, compileStreaming }); }
 console.log(JSON.stringify({cases, named_declines: 1, separate_slots: [5, 6], sibling_capture_types: 2, immutable_static_identity: true, capability_refusal}));

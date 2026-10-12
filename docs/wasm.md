@@ -65,36 +65,52 @@ lands in gated slices, each keeping every example at 0 wrong:
 
 ### Host boundary: generated glue, not a loader
 
-`nts emit-wasm --out D [--host node|browser]` writes four files:
+`nts emit-wasm --out D [--host node|browser]` writes five files:
 
 | File | What it is |
 | --- | --- |
 | `program.wasm` | The module |
-| `program.mjs` | Generated per program |
+| `program.mjs` | The program's ES module: exactly its exports, `default` included |
+| `program.instance.mjs` | `instantiate()` for fresh instances, and `WasmInputDecline` |
 | `program.wasm.json` | Tooling sidecar (ABI 3): exports at logical types, imports, routes. Nothing reads it at run time |
 | `program.origins.json` | Instruction Origins for debugging |
 
-`program.mjs`:
+The glue is two files so that no name it needs can collide with a name the
+program exports. A program's export names are its own: `program.mjs` names
+them only as quoted export names, and every local it declares is the glue's.
 
-- **Compiles** with `builtins: ['js-string']` and `importedStringConstants`.
-  String literals are compile-time imported constants, so there is no
-  constants table.
-- **Imports.** It writes out the import object for exactly the module's
-  imports. Primitives are captured at load, so later changes to globals cannot
-  redirect them.
+- **Compiles** with `builtins: ['js-string']` and `importedStringConstants`
+  (`compile` from the file on Node, `compileStreaming(fetch(...))` in the
+  browser). String literals are compile-time imported constants, so there is
+  no constants table.
+- **Imports.** The import object holds exactly the module's imports. The
+  glue's table gives the Wasm type each JS value implements, and an import
+  declared with another type fails glue generation: an engine converts a JS
+  function's arguments silently, so the check cannot be left to it.
+- **Captures.** Every primitive a wrapper calls (`Object.is`,
+  `Number.isInteger`, `Math.fround`, `BigInt`, `Object.freeze`,
+  `WebAssembly.Instance`, the `Math` members) is captured when the glue loads,
+  so later changes to globals cannot redirect a check.
 - **Wrappers.** One straight-line wrapper per export, with only the checks its
-  declared type needs: `typeof`, integer range, literal-type guards. There is
-  no argument array. A missing argument is refused; an extra one is ignored, as
-  node ignores it. This is the user's D2 decision: always checked, with any
-  unchecked mode an explicit, named opt-in.
-- **Instances.** Importing it instantiates the program and runs the
-  initializer once, as importing the TS module does in node. `instantiate()`
-  makes independent instances.
+  declared type needs: `typeof`, integer range, and the numeric facts
+  specialization assumed (`mode: 0|1|2` is a whole number in [0, 2]). String
+  and boolean literal types are not yet guarded (follow-up F4). There is no
+  argument array. A missing argument is `undefined`, which no boundary type
+  holds, so it is refused; an extra one is ignored, as JavaScript ignores it.
+  This is the user's D2 decision: always checked, with any unchecked mode an
+  explicit, named opt-in.
+- **Results and globals** go through one conversion, so they cannot disagree:
+  a boolean must be 0 or 1, a string must be a primitive string, a 64-bit
+  integer must be a safe number (unsigned read as unsigned).
+- **Instances.** Importing `program.mjs` instantiates the program and runs the
+  initializer once, as importing the TS module does in node.
+  `instantiate()` makes independent instances.
 - **Globals.** A global that a function other than the initializer assigns
   stays a live binding, refreshed after calls. Others are constants.
 - **Capabilities.** The capability check is the compile itself. An engine
-  that ignores the builtin options fails the import loudly (`wasm:js-string`
-  unresolved); the glue never substitutes JS for a builtin.
+  that ignores the builtin options fails to instantiate, loudly
+  (`wasm:js-string` unresolved); the glue never substitutes JS for a builtin.
+  The failure is the engine's, not yet a named NTS error (follow-up F6).
 
 ### Exceptions
 
@@ -109,9 +125,15 @@ lands in gated slices, each keeping every example at 0 wrong:
   - a boxed number crosses one cold host call;
   - booleans and `undefined` are imported constants;
   - a compiled object keeps the approved named refusal.
-- **No pending raise survives an exit to the host.** The state is cleared
-  before every one (uncaught throws and the single input-refusal helper).
-  There are no activation exports, no snapshots and no per-call bookkeeping.
+- **No pending raise survives an exit to the host.** An uncaught throw and the
+  single input-refusal helper clear the state. In a module that raises, every
+  host entry's return also tests the flag and throws a pending raise uncaught.
+  Lowering never leaves one there; if it ever did, the exception would surface
+  as the throw it is rather than be lost or seen by a later call. A module
+  that never raises pays nothing. The backend reads no semantics from function
+  names (`execute.rs` renames every raising copy to pin that), so the rule is
+  at the host boundary rather than keyed on a copy's `@raises` name.
+- There are no activation exports, no snapshots and no per-call bookkeeping.
 
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
@@ -138,6 +160,31 @@ lands in gated slices, each keeping every example at 0 wrong:
   (paired, warm: 4.77–4.94 s against 4.79–5.49 s).
 - **Found for M2:** string concatenation called from JS costs about 6 ns per
   call against node's 0.5 ns cons-string.
+
+### Running in the browser
+
+`tooling/wasm/browser/run.mjs <script> <args...>` runs a check script in
+headless Chromium as node would run it:
+- `node:` imports resolve to the shims in `tooling/wasm/browser/node`;
+- filesystem paths are served over HTTP, a `.ts` file with its types stripped;
+- the script's stdout and exit code come back as the runner's.
+
+`NTS_WASM_BROWSER=1 cargo test -p nts-codegen-wasm` runs every execution test
+on browser glue in Chromium. `census.py --host browser` emits for the browser
+and runs each example's oracle there.
+
+### Follow-ups from the 1a review
+
+- **F4.** String and boolean literal parameter types are not guarded:
+  `aOrB(s: "a" | "b")` given `"c"` traps with an unnamed `unreachable` where
+  node returns `undefined`.
+- **F6.** A missing JSTag or ignored `importedStringConstants` fails closed,
+  but with the engine's error rather than a named NTS error.
+- **F7.** A lone surrogate cannot travel as an imported string constant
+  (import names are UTF-8). The frontend corrupts them upstream today; plan a
+  char-code fallback for when it preserves them.
+- **F8, remaining tests.** Class-keyed StaticClosure and Descriptor, poisoned
+  helpers by fault injection through a real body, and validate_global.
 
 ### Not yet done
 

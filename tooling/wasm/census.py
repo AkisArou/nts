@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--nts", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--only", help="comma-separated project names for an explicit follow-up")
+    parser.add_argument("--host", choices=["node", "browser"], default="node",
+                        help="emit for this host; browser runs each oracle in headless Chromium")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     binary = args.nts.resolve()
@@ -44,7 +46,7 @@ def main():
         "binary": str(binary), "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "root": str(root), "discovered": len(projects), "complete": False,
         "population": "bounded numeric/bool/string sweep; returns, primitive throws and live globals; not full M1 agree",
-        "frontend_jobs": 1, "rows": [],
+        "frontend_jobs": 1, "host": args.host, "rows": [],
     }
 
     def save():
@@ -70,7 +72,8 @@ def main():
         case_dir.mkdir(exist_ok=True)
         artifact = case_dir / "artifact"
         row = {"name": name, "config": str(config.relative_to(root))}
-        code, stdout, stderr = run([str(binary), "emit-wasm", str(config), "--out", str(artifact)], root, 180)
+        code, stdout, stderr = run([str(binary), "emit-wasm", str(config), "--host", args.host,
+                                    "--out", str(artifact)], root, 180)
         (case_dir / "compiler.stdout").write_bytes(stdout)
         (case_dir / "compiler.stderr").write_bytes(stderr)
         text = (stdout + stderr).decode(errors="replace")
@@ -99,8 +102,10 @@ def main():
                 row["reason"] = "no conventional src/main.ts oracle entry"
             else:
                 result_file = case_dir / "execution.json"
+                runner = (["node", str(root / "tooling/wasm/browser/run.mjs")] if args.host == "browser"
+                          else ["node", "--experimental-transform-types"])
                 status, stdout, stderr = run([
-                    "node", "--experimental-transform-types", str(root / "tooling/wasm/check-corpus-example.mjs"),
+                    *runner, str(root / "tooling/wasm/check-corpus-example.mjs"),
                     str(artifact), str(source), str(result_file),
                 ], root, 30)
                 (case_dir / "node.stdout").write_bytes(stdout)
