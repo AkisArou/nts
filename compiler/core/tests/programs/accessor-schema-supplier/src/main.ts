@@ -1,9 +1,15 @@
 interface Options { readonly label?: string; }
 
 interface Result { readonly label: string; }
+interface GetterResult { readonly text: string; }
 
 export class ComputedResult {
   get label(): string { return "computed"; }
+  get text(): string { return "computed text"; }
+}
+
+export function textOf(value: GetterResult): string {
+  return value.text;
 }
 
 function makeResult(): Result {

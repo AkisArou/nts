@@ -6831,6 +6831,9 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         options.foreign,
         options.interface_access,
     );
+    if options.interface_access == InterfaceAccess::PreserveFieldAccess {
+        lowered.program.interface_access.preserve_stored_fields();
+    }
     // Before the check, and every analysis after it, reads them.
     lowered.program.targets = options.targets;
     // On the program the lowering produced, before any pass renumbers a value

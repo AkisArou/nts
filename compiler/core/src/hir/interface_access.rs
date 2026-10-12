@@ -60,6 +60,15 @@ pub struct Plan {
 }
 
 impl Plan {
+    /// These source fields never become accessor calls. Clear their future
+    /// edges before settling and pruning can revive native-only helpers,
+    /// their classes or their refusals on a preserving backend.
+    pub(super) fn preserve_stored_fields(&mut self) {
+        for family in &mut self.families {
+            family.pending = false;
+        }
+    }
+
     pub(super) fn prune_views(&mut self, funcs: &[Func]) {
         let views: FxHashSet<_> = funcs
             .iter()
@@ -192,11 +201,9 @@ pub(super) fn materialize(program: &mut Program, mode: super::InterfaceAccess) -
     if mode == super::InterfaceAccess::PreserveFieldAccess {
         // These are precisely the stored operations source shaping left for
         // main's positional implementation. Its guard below still stops a
-        // disagreeing layout. Eager getter calls and FieldView operations were
+        // disagreeing layout. Getter calls and FieldView operations were
         // already explicit at lowering and are not rewritten here.
-        for family in &mut program.interface_access.families {
-            family.pending = false;
-        }
+        program.interface_access.preserve_stored_fields();
         return 0;
     }
     let direct = storage_proofs::direct_sites(program);

@@ -46,7 +46,15 @@ fn preserving_optional_storage_keeps_source_field_reads() {
         )
         .unwrap()
         .program;
-        for name in ["readLabel", "resultLabel"] {
+        if access == hir::InterfaceAccess::PreserveFieldAccess {
+            assert!(
+                program.funcs.iter().all(|func| {
+                    !func.name.contains("nts$get$") && !func.name.contains("nts$set$")
+                }),
+                "a preserved field must not revive a native-only accessor helper"
+            );
+        }
+        for name in ["readLabel", "resultLabel", "textOf"] {
             let read = program.funcs.iter().find(|f| f.name == name).unwrap();
             let dispatches = read.values.iter().any(|op| {
                 matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
