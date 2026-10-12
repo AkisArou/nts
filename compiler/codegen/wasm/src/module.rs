@@ -51,6 +51,7 @@ pub(crate) enum FuncKey {
     ArrayCopy(u32, crate::array_copy::Helper),
     ArrayLookup(u32, crate::array_lookup::Helper),
     Thunk(crate::callables::Face, u32, u32),
+    UnfilledUniform(u32),
     Raising(crate::raising::Helper),
     DeclineInput,
 }

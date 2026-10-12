@@ -53,3 +53,14 @@ export function classCatch(x: number, child: boolean): number {
   try { return item.run(x); }
   catch (e) { if (typeof e === 'number') return e - 3; return 99; }
 }
+// A closure stored at a function type it does not extend, called through
+// the uniform entries every function value carries. Lowering keeps
+// `attempt` unspecialized for closures that can throw, so the call goes
+// through the signature, not the closure's own class.
+function attempt(make: () => unknown): number {
+  try { make(); return 1; } catch (e) { return typeof e === 'number' ? e : 2; }
+}
+function failWith(x: number): never { throw x; }
+export function onlyThrows(x: number): number { return attempt(() => failWith(x)) + x; }
+export function mayThrow(x: number): number { return attempt(() => (x < 0 ? failWith(x) : x)) + x; }
+export function neverThrows(x: number): number { return attempt(() => x + 1) + x; }

@@ -2,7 +2,7 @@
 
 use crate::{
     body::Body,
-    callable_plan::ResolvedEntry,
+    callable_plan::{Resolved, ResolvedEntry},
     contract,
     error::Failure,
     gc,
@@ -54,12 +54,21 @@ struct Thunk {
     params: usize,
 }
 
+/// The group holding `slot` for a receiver stored as `storage`, and its entry:
+/// the callable root for a uniform closure slot, which every function value
+/// extends, or the receiver's own dispatch group.
 fn entry<'p>(
     types: &'p gc::Plan,
     storage: &Object,
     slot: u32,
     face: Face,
-) -> Result<&'p ResolvedEntry, Failure> {
+) -> Result<(&'p Resolved, &'p ResolvedEntry), Failure> {
+    if face == Face::Closure
+        && let Some(uniform) = &types.uniform
+        && let Some(entry) = uniform.entries.get(&slot)
+    {
+        return Ok((uniform, entry));
+    }
     let root = face.root(storage).ok_or_else(|| {
         format!(
             "{} `{}` has no HIR-proven dispatch contract",
@@ -67,9 +76,9 @@ fn entry<'p>(
             storage.name
         )
     })?;
-    face.groups(types)
-        .get(&root)
-        .and_then(|g| g.entries.get(&slot))
+    let group = face.groups(types).get(&root);
+    group
+        .and_then(|g| Some((g, g.entries.get(&slot)?)))
         .ok_or_else(|| {
             Failure::Invariant(format!(
                 "unplanned callable slot {slot} of `{}`",
@@ -162,11 +171,21 @@ fn thunk_func(m: &mut Builder<'_>, face: Face, class: ClassId, slot: u32) -> Res
     let storage = types
         .objects
         .object(&HirType::Managed(ManagedType::Object(class)))?;
-    let resolved = entry(types, storage, slot, face)?;
+    let (_, resolved) = entry(types, storage, slot, face)?;
     let layout = m
         .program
         .layout(class)
         .ok_or_else(|| Failure::Invariant(format!("unplanned allocation {class:?}")))?;
+    if face == Face::Closure
+        && crate::callable_plan::is_uniform(m.program, slot)
+        && layout
+            .methods
+            .get(slot as usize)
+            .and_then(Option::as_ref)
+            .is_none()
+    {
+        return unfilled(m, resolved);
+    }
     let thunk = thunk(m.program, types, layout, storage, resolved, face)?;
     m.helper_typed(
         FuncKey::Thunk(face, thunk.physical, thunk.slot),
@@ -195,16 +214,50 @@ fn thunk_body(thunk: &Thunk, m: &mut Builder<'_>) -> Result<Function, Failure> {
     Ok(f)
 }
 
-/// The closure entries an allocation of `class` stores, in field order.
+/// A uniform entry for a function value whose class does not fill it: a
+/// closure no call could reach by its signature. Like the JVM backend's stub,
+/// it refuses by name if a call ever does, rather than declining the
+/// allocation.
+fn unfilled(m: &mut Builder<'_>, entry: &ResolvedEntry) -> Result<Func, Failure> {
+    m.helper_typed(
+        FuncKey::UnfilledUniform(entry.slot),
+        format!("closure.unfilled<{}>", entry.slot),
+        entry.signature,
+        |m| {
+            let decline = crate::contract::decline(m)?;
+            let name = m.literal("a function value without this uniform entry");
+            let mut f = Function::default();
+            f.global_get(name);
+            f.call(decline);
+            f.instructions(&[I::Unreachable, I::End]);
+            Ok(f)
+        },
+    )
+}
+
+/// The entries an allocation of `class` stores, in field order: the uniform
+/// entries every function value carries, then its group's typed entries.
 pub(crate) fn entries(
     m: &mut Builder<'_>,
     class: ClassId,
     storage: &Object,
 ) -> Result<Vec<Func>, Failure> {
-    let Some(root) = storage.callable else {
+    let types = m.types;
+    let layout = m
+        .program
+        .layout(class)
+        .ok_or_else(|| Failure::Invariant(format!("unplanned allocation {class:?}")))?;
+    if !crate::callable_plan::is_callable_storage(m.program, layout) {
         return Ok(Vec::new());
-    };
-    let slots: Vec<u32> = m.types.callables[&root].entries.keys().copied().collect();
+    }
+    let mut slots: Vec<u32> = types
+        .uniform
+        .iter()
+        .flat_map(|uniform| uniform.entries.keys().copied())
+        .collect();
+    if let Some(root) = storage.callable {
+        slots.extend(types.callables[&root].entries.keys().copied());
+    }
     slots
         .into_iter()
         .map(|slot| thunk_func(m, Face::Closure, class, slot))
@@ -252,10 +305,7 @@ pub(crate) fn call(
     };
     let types = b.types();
     let storage = types.objects.object(b.ty(receiver))?;
-    let entry = entry(types, storage, slot, face)?;
-    let group = &face.groups(types)[&face
-        .root(storage)
-        .ok_or_else(|| Failure::Invariant("missing callable base".into()))?];
+    let (group, entry) = entry(types, storage, slot, face)?;
     if params.len() != entry.params.len() {
         return Err(format!(
             "closure `{}` slot {slot} argument count mismatch",

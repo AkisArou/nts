@@ -175,17 +175,19 @@ impl Plan {
         }
         Ok(object.identity)
     }
+    /// A function value's typed-entry group, if it has one, and where its
+    /// fields start: after the header, the uniform entries and that group.
     pub(crate) fn attach_callable(
         &mut self,
         ty: ClassId,
-        root: usize,
+        root: Option<usize>,
         fields: u32,
     ) -> Result<(), String> {
         let object = self
             .objects
             .get_mut(&ty)
             .ok_or_else(|| format!("unplanned callable {ty:?}"))?;
-        object.callable = Some(root);
+        object.callable = root;
         object.field_base = fields;
         Ok(())
     }

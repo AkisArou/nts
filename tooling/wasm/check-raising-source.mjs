@@ -17,6 +17,7 @@ function same(name, ...args) {
 for (const x of [NaN, Infinity, -Infinity, -0, 0, 1, -1, .5, -.5, 1073741823, 1073741824, -1073741824, -1073741825, Number.MIN_VALUE, Number.MAX_VALUE]) {
   for (const name of ['throwNumber', 'caughtNumber', 'nestedFinally', 'overrideFinally', 'rethrow', 'closureCatch']) same(name, x);
   for (const child of [false, true]) same('classCatch', x, child);
+  for (const name of ['onlyThrows', 'mayThrow', 'neverThrows']) same(name, x);
 }
 for (const x of [false, true]) same('throwBoolean', x);
 for (const x of ['', '\0', 'abc', '😀', '\ud800', '\udfff', 'a\ud800b']) {

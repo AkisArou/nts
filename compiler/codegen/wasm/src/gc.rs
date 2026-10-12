@@ -137,6 +137,10 @@ pub(crate) struct Plan {
     pub(crate) arrays: BTreeMap<u32, Array>,
     pub(crate) callables: BTreeMap<usize, crate::callable_plan::Resolved>,
     pub(crate) virtuals: BTreeMap<usize, crate::callable_plan::Resolved>,
+    /// The callable root and its uniform entries: every function value's
+    /// storage extends it, so a call through any function value reads the
+    /// entry here without a cast.
+    pub(crate) uniform: Option<crate::callable_plan::Resolved>,
 }
 
 impl Plan {
@@ -149,8 +153,8 @@ impl Plan {
         program: &Program,
         resources: &crate::demand::Demand,
     ) -> Result<Self, crate::EmitError> {
-        let callables = crate::callable_plan::Plan::build(program, &resources.closure_calls)?;
-        let virtuals = crate::callable_plan::Plan::build(program, &resources.virtual_calls)?;
+        let callables = crate::callable_plan::Plan::build(program, &resources.closure_calls, true)?;
+        let virtuals = crate::callable_plan::Plan::build(program, &resources.virtual_calls, false)?;
         let mut builder = Builder::new(program, callables, virtuals);
         // A raise carries an erased payload.
         if resources.raising {
@@ -326,6 +330,7 @@ struct Builder<'a> {
     callables: BTreeMap<usize, CallableNodes>,
     virtual_plan: crate::callable_plan::Plan,
     virtuals: BTreeMap<usize, CallableNodes>,
+    callable_root: Option<CallableNodes>,
 }
 
 impl<'a> Builder<'a> {
@@ -349,6 +354,7 @@ impl<'a> Builder<'a> {
             callables: BTreeMap::new(),
             virtual_plan,
             virtuals: BTreeMap::new(),
+            callable_root: None,
         }
     }
 
@@ -543,6 +549,15 @@ impl<'a> Builder<'a> {
         if let Some(id) = self.objects.get(&at) {
             return Ok(*id);
         }
+        let layout = &self.program.layouts[at];
+        if crate::callable_plan::is_signature(self.program, layout) {
+            if !layout.fields.is_empty() {
+                return Err(format!("signature `{}` declares fields", layout.name));
+            }
+            let id = self.callable_root()?;
+            self.objects.insert(at, id);
+            return Ok(id);
+        }
         let id = self.add(
             self.program.layouts[at].name.clone(),
             None,
@@ -580,10 +595,27 @@ impl<'a> Builder<'a> {
             .copied()
             .map(|root| self.callable(root))
             .transpose()?;
-        let base = if let Some(base) = layout.base {
-            self.object(base)?
-        } else {
-            callable.unwrap_or_else(|| self.root())
+        // A closure's storage starts with its group's typed entries, or with
+        // the callable root's, so every function value extends the root.
+        let callable = match callable {
+            Some(group) => Some(group),
+            None if crate::callable_plan::is_callable_storage(self.program, layout) => {
+                Some(self.callable_root()?)
+            }
+            None => None,
+        };
+        let base = match layout.base {
+            Some(base) => {
+                let base = self.object(base)?;
+                // A signature base is the callable root, and a closure with
+                // a typed group extends that group, which extends the root.
+                if Some(base) == self.callable_root.as_ref().map(|nodes| nodes.base) {
+                    callable.unwrap_or(base)
+                } else {
+                    base
+                }
+            }
+            None => callable.unwrap_or_else(|| self.root()),
         };
         let root = callable.unwrap_or_else(|| self.root());
         let mut fields = match &self.nodes[root.0].shape {
@@ -625,13 +657,56 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
-    fn callable(&mut self, root: usize) -> Result<NodeId, String> {
-        if let Some(nodes) = self.callables.get(&root) {
+    /// The root every function value's storage extends: the object header,
+    /// then one immutable entry per uniform slot the program calls, each
+    /// taking the callable and the program-wide number of erased arguments.
+    fn callable_root(&mut self) -> Result<NodeId, String> {
+        if let Some(nodes) = &self.callable_root {
             return Ok(nodes.base);
         }
         let object = self.root();
         let Shape::Struct(mut fields) = self.nodes[object.0].shape.clone() else {
             return Err("object root is not a struct".into());
+        };
+        let base = self.add(
+            "callable".into(),
+            Some(object),
+            false,
+            Shape::Struct(Vec::new()),
+        );
+        // Published before the entries, whose signatures name it.
+        self.callable_root = Some(CallableNodes {
+            base,
+            entries: BTreeMap::new(),
+        });
+        let erased = self
+            .request(&HirType::Erased)?
+            .ok_or("erased values have no storage")?;
+        let mut entries = BTreeMap::new();
+        for (slot, width) in self.callable_plan.uniform.clone() {
+            let mut params = vec![PendingSlot::Defined(base, true)];
+            params.extend(std::iter::repeat_n(erased, width));
+            let signature = self.add(
+                format!("uniform<{slot}>"),
+                None,
+                true,
+                Shape::Function(params, Some(erased)),
+            );
+            fields.push(Field::value(PendingSlot::Defined(signature, false), false));
+            entries.insert(slot, signature);
+        }
+        self.nodes[base.0].shape = Shape::Struct(fields);
+        self.callable_root = Some(CallableNodes { base, entries });
+        Ok(base)
+    }
+
+    fn callable(&mut self, root: usize) -> Result<NodeId, String> {
+        if let Some(nodes) = self.callables.get(&root) {
+            return Ok(nodes.base);
+        }
+        let object = self.callable_root()?;
+        let Shape::Struct(mut fields) = self.nodes[object.0].shape.clone() else {
+            return Err("callable root is not a struct".into());
         };
         let base = self.add(
             format!("callable<{}>", self.program.layouts[root].name),
@@ -810,17 +885,22 @@ impl<'a> Builder<'a> {
                 )
             })
             .collect::<BTreeMap<_, _>>();
-        for (&at, &root) in &self.callable_plan.members {
-            if self.objects.contains_key(&at) {
-                for ty in &self.program.layouts[at].types {
-                    objects.attach_callable(
-                        *ty,
-                        root,
-                        u32::try_from(self.callable_plan.groups[&root].len())
-                            .map_err(|_| "too many callable slots")?
-                            + 1,
-                    )?;
-                }
+        // A function value's fields follow the header, the uniform entries
+        // and its group's typed entries.
+        let uniform = u32::try_from(self.callable_plan.uniform.len())
+            .map_err(|_| "too many uniform slots")?;
+        for &at in self.objects.keys() {
+            let layout = &self.program.layouts[at];
+            let root = self.callable_plan.members.get(&at).copied();
+            if root.is_none() && !crate::callable_plan::is_callable_storage(self.program, layout) {
+                continue;
+            }
+            let typed = root.map_or(Ok(0), |root| {
+                u32::try_from(self.callable_plan.groups[&root].len())
+                    .map_err(|_| "too many callable slots")
+            })?;
+            for ty in &layout.types {
+                objects.attach_callable(*ty, root, 1 + uniform + typed)?;
             }
         }
         for (&at, &root) in &self.virtual_plan.members {
@@ -855,7 +935,49 @@ impl<'a> Builder<'a> {
         &self,
         indices: &[u32],
     ) -> BTreeMap<usize, crate::callable_plan::Resolved> {
-        Self::resolve_entries(&self.callables, &self.callable_plan, indices, 1)
+        let uniform = u32::try_from(self.callable_plan.uniform.len()).unwrap_or(u32::MAX);
+        Self::resolve_entries(&self.callables, &self.callable_plan, indices, 1 + uniform)
+    }
+
+    /// Each dispatch hierarchy's vtable entries, after the descriptor header.
+    fn resolved_virtuals(
+        &self,
+        indices: &[u32],
+    ) -> BTreeMap<usize, crate::callable_plan::Resolved> {
+        Self::resolve_entries(
+            &self.virtuals,
+            &self.virtual_plan,
+            indices,
+            DESCRIPTOR_HEADER,
+        )
+    }
+
+    /// The callable root and its uniform entries, each a field after the
+    /// header taking erased arguments and answering an erased value.
+    fn resolved_uniform(&self, indices: &[u32]) -> Option<crate::callable_plan::Resolved> {
+        let nodes = self.callable_root.as_ref()?;
+        let entries = self
+            .callable_plan
+            .uniform
+            .iter()
+            .enumerate()
+            .map(|(at, (&slot, &width))| {
+                (
+                    slot,
+                    crate::callable_plan::ResolvedEntry {
+                        slot,
+                        field: 1 + crate::module::index(at),
+                        signature: indices[nodes.entries[&slot].0],
+                        params: vec![HirType::Erased; width],
+                        result: HirType::Erased,
+                    },
+                )
+            })
+            .collect();
+        Some(crate::callable_plan::Resolved {
+            base: indices[nodes.base.0],
+            entries,
+        })
     }
     fn resolve_entries(
         nodes: &BTreeMap<usize, CallableNodes>,
@@ -963,12 +1085,8 @@ impl<'a> Builder<'a> {
         Ok(Plan {
             arrays,
             callables: self.resolved_callables(&indices),
-            virtuals: Self::resolve_entries(
-                &self.virtuals,
-                &self.virtual_plan,
-                &indices,
-                DESCRIPTOR_HEADER,
-            ),
+            uniform: self.resolved_uniform(&indices),
+            virtuals: self.resolved_virtuals(&indices),
             root: self.root.map(|nodes| RootTypes {
                 ancestry: indices[nodes.ancestry.0],
                 descriptor: indices[nodes.descriptor.0],
