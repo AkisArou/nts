@@ -18,6 +18,16 @@ pub(crate) fn run(
     script: &str,
     args: &[&Path],
 ) -> serde_json::Value {
+    run_with_node_flags(label, emitted, script, args, &[])
+}
+
+pub(crate) fn run_with_node_flags(
+    label: &str,
+    emitted: &nts_codegen_wasm::Emitted,
+    script: &str,
+    args: &[&Path],
+    flags: &[&str],
+) -> serde_json::Value {
     let retained = std::env::var_os("NTS_WASM_TEST_ARTIFACTS").map(PathBuf::from);
     let artifact = retained.as_ref().map_or_else(
         || std::env::temp_dir().join(format!("nts-wasm-{label}-{}", std::process::id())),
@@ -32,6 +42,7 @@ pub(crate) fn run(
     .unwrap();
     std::fs::write(artifact.join("node.mjs"), nts_codegen_wasm::NODE_LOADER).unwrap();
     let result = Command::new("node")
+        .args(flags)
         .arg(repository().join(script))
         .arg(&artifact)
         .args(args)

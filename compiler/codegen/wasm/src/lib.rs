@@ -6,6 +6,7 @@
 
 mod abi;
 mod array_init;
+mod array_methods;
 mod arrays;
 mod body;
 mod callable_plan;

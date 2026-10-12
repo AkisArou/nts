@@ -14,11 +14,14 @@ struct State {
     owner: BlockId,
     length: Option<u32>,
     initialized: BTreeSet<u32>,
+    filled: bool,
 }
 impl State {
     fn complete(&self) -> bool {
-        self.length
-            .is_some_and(|n| self.initialized.len() == n as usize)
+        self.filled
+            || self
+                .length
+                .is_some_and(|n| self.initialized.len() == n as usize)
     }
 }
 
@@ -43,7 +46,7 @@ fn constant(func: &Func, id: ValueId) -> Option<u32> {
     }
 }
 
-fn harmless(kind: &OpKind, allocation: ValueId) -> bool {
+fn harmless(func: &Func, kind: &OpKind, allocation: ValueId) -> bool {
     match kind {
         OpKind::Length(array) => *array == allocation,
         OpKind::ArraySet {
@@ -52,9 +55,28 @@ fn harmless(kind: &OpKind, allocation: ValueId) -> bool {
             value,
             ..
         } => *array == allocation && *index != allocation && *value != allocation,
+        kind if readies(func, kind, allocation) => true,
         // Every other use needs a complete array, including aliases which
         // could otherwise hide a later element read from this proof.
         _ => false,
+    }
+}
+
+fn readies(func: &Func, kind: &OpKind, allocation: ValueId) -> bool {
+    if let OpKind::Call {
+        callee: nts_core::hir::Callee::External(name),
+        args,
+        ..
+    } = kind
+    {
+        crate::array_methods::external(name).is_some_and(|method| {
+            method.initializes()
+                || (method.truncates()
+                    && args.get(1).is_some_and(|id| constant(func, *id) == Some(0)))
+        }) && args.first() == Some(&allocation)
+            && !args[1..].contains(&allocation)
+    } else {
+        false
     }
 }
 
@@ -82,6 +104,7 @@ pub(crate) fn check(func: &Func) -> Result<(), EmitError> {
                         owner: block,
                         length: constant(func, length),
                         initialized: BTreeSet::new(),
+                        filled: false,
                     },
                 );
             }
@@ -92,9 +115,11 @@ pub(crate) fn check(func: &Func) -> Result<(), EmitError> {
                 if state.owner != block || state.complete() {
                     continue;
                 }
-                if let OpKind::ArraySet { array, index, .. } = op.kind
+                if readies(func, &op.kind, allocation) {
+                    state.filled = true;
+                } else if let OpKind::ArraySet { array, index, .. } = op.kind
                     && array == allocation
-                    && harmless(&op.kind, allocation)
+                    && harmless(func, &op.kind, allocation)
                     && let Some(index) = constant(func, index)
                     && state.length.is_none_or(|n| index < n)
                 {
@@ -105,7 +130,7 @@ pub(crate) fn check(func: &Func) -> Result<(), EmitError> {
                 {
                     // The earlier guarded store must have succeeded on this
                     // execution before the read. Other slots remain unproven.
-                } else if !harmless(&op.kind, allocation) {
+                } else if !harmless(func, &op.kind, allocation) {
                     return Err(decline(func, id));
                 }
             }
@@ -122,7 +147,7 @@ pub(crate) fn check(func: &Func) -> Result<(), EmitError> {
                 if let Some(state) = states.get(&allocation)
                     && state.owner != block
                     && !state.complete()
-                    && !harmless(kind, allocation)
+                    && !harmless(func, kind, allocation)
                 {
                     return Err(decline(func, id));
                 }

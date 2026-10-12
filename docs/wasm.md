@@ -698,6 +698,15 @@ Branch-local stores cannot prove readiness on all paths. Unproven typed holes
 decline by function and source origin; `zeroed: false` retains HIR's explicit
 promise that lowering fills every slot before observation. Erased backing starts
 with the undefined singleton. This admission check changes no native lane.
+Closed push/pop/fill/truncation helper rows use the same wrapper and backing.
+Push can grow reference and erased arrays while preserving aliases; pop and
+truncation clear removed backing slots so retained capacity does not keep them
+alive. `pop_value` reads a number array and returns an erased optional number;
+`push_value` writes erased elements, following their distinct header contracts.
+Fill and truncation to zero establish readiness even for an unknown allocated
+length. Shrink validation precedes conversion and storage; hole-producing growth
+refuses through the input contract. Native buffer or foreign variants stay named
+declines. The remainder of the planned helper appendix is not yet implemented.
 M1 excludes buffer/view/DataView families; they are a separate boundary design.
 
 ### Closures and virtual calls

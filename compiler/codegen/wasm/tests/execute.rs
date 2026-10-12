@@ -48,6 +48,20 @@ fn source_typed_holes_decline_instead_of_returning_zero() {
 }
 
 #[test]
+fn source_array_helpers_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-methods");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "array-methods-source",
+        &emitted,
+        "tooling/wasm/check-array-methods-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 710);
+}
+
+#[test]
 fn scalar_typescript_agrees_with_node_exactly() {
     let fixture = common::repository().join("tooling/wasm/fixtures/scalars");
     let emitted = emit_project(&fixture);

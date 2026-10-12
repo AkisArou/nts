@@ -36,15 +36,15 @@ pub(crate) fn is_array(ty: &HirType) -> bool {
 fn storage<'a>(b: &Body<'a>, array: ValueId) -> Result<&'a gc::Array, Failure> {
     b.symbols.types.array(b.ty(array))
 }
-fn number(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn number(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     numeric::convert(b, &b.ty(value).clone(), &F64)
 }
-fn index(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn index(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     numeric::convert(b, &b.ty(value).clone(), &U32)
 }
-fn whole_nonnegative(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn whole_nonnegative(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
     match b.ty(value) {
         HirType::Int {
             bits: 8 | 16 | 32,
@@ -90,7 +90,7 @@ fn whole_nonnegative(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
     }
     Ok(())
 }
-fn logical_length(b: &mut Body<'_>, array: ValueId, ty: u32) -> Result<(), Failure> {
+pub(crate) fn logical_length(b: &mut Body<'_>, array: ValueId, ty: u32) -> Result<(), Failure> {
     b.load(array)?;
     b.ins(&I::StructGet {
         struct_type_index: ty,
@@ -163,7 +163,7 @@ pub(crate) fn length(b: &mut Body<'_>, result: ValueId, array: ValueId) -> Resul
     logical_length(b, array, ty)?;
     numeric::convert(b, &U32, &b.ty(result).clone())
 }
-fn backing(b: &mut Body<'_>, array: ValueId, ty: u32) -> Result<(), Failure> {
+pub(crate) fn backing(b: &mut Body<'_>, array: ValueId, ty: u32) -> Result<(), Failure> {
     b.load(array)?;
     b.ins(&I::StructGet {
         struct_type_index: ty,
@@ -171,7 +171,7 @@ fn backing(b: &mut Body<'_>, array: ValueId, ty: u32) -> Result<(), Failure> {
     });
     Ok(())
 }
-fn get_instruction(array: &gc::Array) -> Result<I<'static>, Failure> {
+pub(crate) fn get_instruction(array: &gc::Array) -> Result<I<'static>, Failure> {
     Ok(match &array.element {
         HirType::Int {
             bits: 8 | 16,

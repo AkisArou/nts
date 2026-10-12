@@ -135,6 +135,16 @@ impl Requirements {
                     if matches!(helper, erased::Helper::Number | erased::Helper::Boolean) {
                         self.contract(func);
                     }
+                } else if let Some(method) = crate::array_methods::external(name) {
+                    self.contract(func);
+                    if method.grows()
+                        && let Some(array) = args.first()
+                    {
+                        self.grow_arrays.insert(func.value(*array).ty.clone());
+                    }
+                    if method.boxes_number() {
+                        self.require_erased(erased::Helper::BoxNumber);
+                    }
                 }
             }
             Callee::Closure { slot } | Callee::Virtual { slot, .. } => {

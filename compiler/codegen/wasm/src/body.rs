@@ -729,6 +729,8 @@ impl<'a> Body<'a> {
                     service.call(self, result, args)?;
                 } else if let Some(helper) = crate::erased_ops::external(name) {
                     crate::erased_ops::runtime(self, result, helper, args)?;
+                } else if let Some(method) = crate::array_methods::external(name) {
+                    crate::array_methods::call(self, result, name, method, args)?;
                 } else {
                     return Err(format!(
                         "runtime/external helper `{name}` is outside the implemented Wasm helper surface"
