@@ -26,6 +26,79 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
+    let Some(program) = prepared_fixture("accessor-source-flow") else {
+        return;
+    };
+    for name in [
+        "readFace",
+        "observe",
+        "readValues",
+        "observeValues",
+        "nestedGetter",
+        "erasedMarker",
+        "readValue",
+        "observeValue",
+        "publishedHolder",
+    ] {
+        assert!(
+            program.funcs.iter().any(|func| func.name == name),
+            "{name} must remain compiled: {:?}",
+            program.uncompiled
+        );
+    }
+    let budget = program
+        .interface_access
+        .families
+        .iter()
+        .find(|family| family.member == "budget")
+        .expect("Computed flows to Face through calls and nested storage");
+    assert!(budget.owners.iter().any(|owner| {
+        program
+            .layout(*owner)
+            .is_some_and(|layout| layout.name == "Computed")
+    }));
+    assert!(
+        !program
+            .interface_access
+            .families
+            .iter()
+            .filter(|family| family.member == "value")
+            .flat_map(|family| &family.owners)
+            .any(|owner| program
+                .layout(*owner)
+                .is_some_and(|layout| layout.name == "UnrelatedGetter")),
+        "an unrelated exported getter cannot create a dependency for Value reads"
+    );
+    let read = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "readValues")
+        .unwrap();
+    assert!(
+        !read
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::Unerase { .. })),
+        "an unrelated optional array cannot change Values' typed payload"
+    );
+    let optional = program
+        .interface_access
+        .families
+        .iter()
+        .find(|family| family.member == "marker")
+        .expect("erased object suppliers retain absence through an assertion");
+    for name in ["Missing", "Marked"] {
+        assert!(
+            optional.owners.iter().any(|owner| program
+                .layout(*owner)
+                .is_some_and(|layout| layout.name == name)),
+            "erasure must preserve {name}"
+        );
+    }
+}
+
+#[test]
 fn native_rows_do_not_break_a_private_generic_template_prefix() {
     let Some(program) = prepared_fixture("accessor-private-template") else {
         return;

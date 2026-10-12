@@ -321,6 +321,7 @@ pub(super) struct Families {
     transports: FxHashSet<(TypeId, TypeId)>,
     transport_faces: FxHashSet<TypeId>,
     spread_safe: FxHashSet<TypeId>,
+    flow: super::access_family_flow::Bound,
 }
 
 impl Families {
@@ -387,7 +388,16 @@ impl Families {
                 .collect(),
         };
         let owners = Owners::collect(probe, hierarchy, &sources.literals);
-        let mut result = Self::default();
+        let flow = super::access_family_flow::Bound::collect(
+            probe,
+            &owners.all,
+            &sources.literals,
+            used.keys().copied(),
+        );
+        let mut result = Self {
+            flow,
+            ..Self::default()
+        };
         for (face, members) in used {
             let Some(properties) = properties(probe, face) else {
                 continue;
@@ -395,7 +405,9 @@ impl Families {
             let candidates: Vec<_> = owners
                 .candidates(properties)
                 .into_iter()
-                .filter(|owner| candidate_satisfies(probe, hierarchy, face, *owner, properties))
+                .filter(|owner| {
+                    candidate_satisfies(probe, hierarchy, &result.flow, face, *owner, properties)
+                })
                 .collect();
             if !candidates.is_empty()
                 && candidates.iter().all(|owner| {
@@ -471,17 +483,28 @@ impl Families {
 /// a face whose required members the declaration cannot supply.
 pub(super) fn reserves(probe: &FuncBuilder<'_>, owner: TypeId, face: TypeId) -> bool {
     properties(probe, face).is_some_and(|properties| {
-        candidate_satisfies(probe, &probe.hierarchy, face, owner, properties)
+        candidate_satisfies(
+            probe,
+            &probe.hierarchy,
+            &probe.hierarchy.access_families.flow,
+            face,
+            owner,
+            properties,
+        )
     })
 }
 
 fn candidate_satisfies(
     probe: &FuncBuilder<'_>,
     hierarchy: &Hierarchy,
+    flow: &super::access_family_flow::Bound,
     face: TypeId,
     owner: TypeId,
     properties: &[PropertyRecord],
 ) -> bool {
+    if !flow.permits(owner, face) {
+        return false;
+    }
     // Owners::candidates intersects these required names for concrete owners;
     // declaration-only reservations must observe the same membership rule.
     // An optional member cannot satisfy a required one either.

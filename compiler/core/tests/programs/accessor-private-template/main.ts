@@ -2,6 +2,7 @@ interface OptionalFlag { readonly flag?: boolean; }
 class Computed { get flag(): boolean { return true; } }
 export function readFlag(value: OptionalFlag): unknown { return value.flag; }
 export function makeComputed(): unknown { return new Computed(); }
+export function observeFlag(): unknown { return readFlag(new Computed()); }
 
 class Stream<T> {
   #value: T;

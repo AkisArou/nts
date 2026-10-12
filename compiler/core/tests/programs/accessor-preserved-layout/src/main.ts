@@ -14,3 +14,4 @@ export function makeSlot(n: number): ExplicitSlot {
   slot.value = n;
   return slot;
 }
+export function observeOptional(n: number): number { return readOptional(makeSlot(n)); }

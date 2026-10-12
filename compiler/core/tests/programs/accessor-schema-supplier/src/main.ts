@@ -19,6 +19,7 @@ function makeResult(): Result {
 export function resultLabel(): string {
   return makeResult().label;
 }
+export function computedResult(): Result { return new ComputedResult(); }
 
 export class Resource {
   state: { destroyed: boolean } | undefined;
@@ -35,6 +36,9 @@ export class Resource {
 export function readLabel(value: Options): string {
   return value.label ?? "absent";
 }
+export function computedText(): string { return textOf(new ComputedResult()); }
+export function computedLabel(): string { return readLabel(new ComputedResult()); }
+export function absentLabel(): string { return readLabel({}); }
 
 export function stateAfterDestroy(destroy: boolean): boolean {
   const resource = new Resource();

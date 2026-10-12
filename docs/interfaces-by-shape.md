@@ -233,7 +233,7 @@ instantiation is the rest.
 ## Part 2 — fields: the same tables, as accessors
 
 The native field implementation uses one whole-program family per used field.
-Every structural candidate must supply the read and, for a writable face, the
+Every flow-reached structural candidate must supply the read and, for a writable face, the
 write. Its table entry names a real function reading the concrete field or
 calling the concrete getter or setter. Shared bodies have the same storage,
 absence contract and ABI; their input facts are valid for every incoming face.
@@ -270,6 +270,22 @@ change its representation. These reservations license no extra suppliers.
 Unallocated generic closure templates do not become reachable merely because
 another closure uses the same slot: reached allocations, static closure values
 and explicitly published or runtime-called entries determine the live frames.
+
+Concrete suppliers follow source value transfers to the face, including nested
+property, array and callback contracts. Matching a member name alone creates no
+supplier. Source `any` and `unknown` conservatively retain the layouts that enter
+them; two unrelated optional payloads do not exchange values merely because
+both use erased physical storage. Licensing and row reservations consult this
+same membership fact. A family without a complete proof retains the existing
+positional field path and named layout stop.
+
+The current native JS bridge copies record results outward and refuses incoming
+object/reference-array parameters and object field setters. Erased inputs accept
+primitives. These copies cannot return as managed interface values. Published
+constructors construct their own class receiver; its source fields, calls and
+callbacks contribute their actual transfers. A future inbound managed-object
+bridge must add its constructed layouts and escaped layouts it can reintroduce
+to each exposed face's bound.
 
 A narrow stored field needs an initialization proof: an initializer, a parameter
 property, or an unconditional constructor write before the receiver can escape.
