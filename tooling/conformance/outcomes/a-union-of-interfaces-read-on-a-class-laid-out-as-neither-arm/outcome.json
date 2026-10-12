@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: a Round=1;a Block=2;a Both=4;a BothInOrder=6;",
+  "node": "exit 1; nts: uncaught Observed: a Round=1;a Block=2;a Both=3;a BothInOrder=6;",
+  "measured_with": "50d0a9c925d770f6",
+  "source": "measured"
+}
