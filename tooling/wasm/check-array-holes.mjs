@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+const [artifact] = process.argv.slice(2);
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
+const wasm = await instantiate(await readFile(path.join(artifact, 'program.wasm')), JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8')));
+assert.equal(wasm.partial(), 17);
+assert.equal(wasm.dense(), 17);
+console.log(JSON.stringify({cases: 2}));

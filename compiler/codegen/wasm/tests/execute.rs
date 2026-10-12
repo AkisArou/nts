@@ -7,7 +7,7 @@ use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::path::Path;
 
-fn emit_project(fixture: &Path) -> nts_codegen_wasm::Emitted {
+fn prepared_project(fixture: &Path) -> hir::Program {
     let tsgo = std::env::var("NTS_TSGO")
         .expect("NTS_TSGO required: wasm execution tests must not silently skip");
     let tsconfig = Utf8PathBuf::from_path_buf(fixture.join("tsconfig.json")).unwrap();
@@ -23,7 +23,28 @@ fn emit_project(fixture: &Path) -> nts_codegen_wasm::Emitted {
         },
     )
     .expect("prepared HIR verifies");
-    nts_codegen_wasm::emit(&prepared.program).expect("scalar fixture supported")
+    prepared.program
+}
+
+fn emit_project(fixture: &Path) -> nts_codegen_wasm::Emitted {
+    nts_codegen_wasm::emit(&prepared_project(fixture)).expect("scalar fixture supported")
+}
+
+#[test]
+fn source_typed_holes_decline_instead_of_returning_zero() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-holes");
+    let program = prepared_project(&fixture);
+    let nts_codegen_wasm::EmitError::Declined(diagnostics) =
+        nts_codegen_wasm::emit(&program).unwrap_err()
+    else {
+        panic!("expected typed-hole decline")
+    };
+    assert!(
+        diagnostics.iter().any(|d| d.code == "NTS5001"
+            && d.message.contains("hole")
+            && d.message.contains("typed array holes")),
+        "{diagnostics:?}"
+    );
 }
 
 #[test]

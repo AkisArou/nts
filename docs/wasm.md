@@ -690,6 +690,14 @@ Checked erased reads return undefined where HIR asks for it; typed reads beyond
 the compiler's supported input contract produce the harness's named decline,
 not a validator/runtime trap. Sparse growth and holes must follow the prepared
 array contract; decline shapes whose storage cannot express them.
+In particular, HIR's zero fill of a typed `new Array(n)` is not an undefined
+element representation. Wasm checks initialization before admitting observations:
+stores in the allocation block prove individual constant slots ready, complete
+initialization permits aliases/escape, and length-only use needs no such proof.
+Branch-local stores cannot prove readiness on all paths. Unproven typed holes
+decline by function and source origin; `zeroed: false` retains HIR's explicit
+promise that lowering fills every slot before observation. Erased backing starts
+with the undefined singleton. This admission check changes no native lane.
 M1 excludes buffer/view/DataView families; they are a separate boundary design.
 
 ### Closures and virtual calls

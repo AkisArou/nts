@@ -174,6 +174,7 @@ pub(crate) fn emit(
     index: u32,
     symbols: &Symbols<'_>,
 ) -> Result<(Function, FunctionRoute, Vec<InstructionOrigin>), EmitError> {
+    crate::array_init::check(func)?;
     let plan = cfg::plan(func).map_err(|reason| EmitError::Structuring {
         function: func.name.clone(),
         reason,
