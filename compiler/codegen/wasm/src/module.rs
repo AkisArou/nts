@@ -161,6 +161,8 @@ pub(crate) struct Builder<'p> {
     signatures: Types,
     funcs: Vec<FuncEntry>,
     func_keys: BTreeMap<FuncKey, Func>,
+    /// Each program function's HIR declaration, for its callers.
+    declarations: FxHashMap<&'p str, &'p HirFunc>,
     globals: Vec<GlobalEntry>,
     global_keys: BTreeMap<GlobalKey, Global>,
     /// Globals whose initializers are being built: a request for one of them
@@ -194,6 +196,7 @@ impl<'p> Builder<'p> {
             signatures: Types::new(types),
             funcs: Vec::new(),
             func_keys: BTreeMap::new(),
+            declarations: FxHashMap::default(),
             globals: Vec::new(),
             global_keys: BTreeMap::new(),
             building: BTreeSet::new(),
@@ -341,7 +344,7 @@ impl<'p> Builder<'p> {
 
     /// Declare a program function. Bodies are lowered afterwards, so direct
     /// and mutually recursive calls all resolve to declared symbols.
-    fn declare(&mut self, func: &HirFunc) -> Result<(), EmitError> {
+    fn declare(&mut self, func: &'p HirFunc) -> Result<(), EmitError> {
         let key = FuncKey::Program(func.name.clone());
         if self.func_keys.contains_key(&key) {
             return Err(EmitError::InvalidWasm(format!(
@@ -371,10 +374,22 @@ impl<'p> Builder<'p> {
             result,
             FuncKind::Defined(None),
         );
+        self.declarations.insert(&func.name, func);
         Ok(())
     }
 
     /// A program function, declared before any body is lowered.
+    /// A direct callee and its HIR declaration, whose parameter and result
+    /// types its callers transfer to and from.
+    pub(crate) fn direct(&self, name: &str) -> Result<(Func, &'p HirFunc), Failure> {
+        let declaration = self
+            .declarations
+            .get(name)
+            .copied()
+            .ok_or_else(|| Failure::Invariant(format!("undeclared direct callee `{name}`")))?;
+        Ok((self.program_func(name)?, declaration))
+    }
+
     pub(crate) fn program_func(&self, name: &str) -> Result<Func, Failure> {
         self.func_keys
             .get(&FuncKey::Program(name.to_owned()))

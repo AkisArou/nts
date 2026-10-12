@@ -32,6 +32,7 @@ mod objects;
 mod raising;
 mod strings;
 mod support;
+mod transfer;
 mod types;
 
 #[cfg(test)]

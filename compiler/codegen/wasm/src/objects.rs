@@ -174,25 +174,13 @@ pub(crate) fn set(
     });
     Ok(())
 }
+/// A field, element or call-slot move, or a `Convert`: a scalar converts;
+/// a reference transfers.
 pub(crate) fn adapt(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Result<(), Failure> {
-    if from == to {
-        return Ok(());
-    }
-    if from.is_scalar() && to.is_scalar() {
+    if from != to && from.is_scalar() && to.is_scalar() {
         return numeric::convert(b, from, to);
     }
-    if let (HirType::Managed(ManagedType::Object(_)), HirType::Managed(ManagedType::Object(_))) =
-        (from, to)
-    {
-        let plan = &b.types().objects;
-        if plan.subtype(plan.object(from)?.physical, plan.object(to)?.physical) {
-            return Ok(());
-        }
-    }
-    Err(format!(
-        "typed storage conversion from {from:?} to {to:?} lacks a physical subtype contract"
-    )
-    .into())
+    b.transfer(from, to)
 }
 pub(crate) fn binary(
     b: &mut Body<'_, '_>,

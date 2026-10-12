@@ -11,7 +11,7 @@ use crate::{
     types::{Physical, Slot},
 };
 use nts_codegen_common::{Copy, edge_copies};
-use nts_core::hir::{BlockId, Callee, Func, OpKind, Terminator, ValueId};
+use nts_core::hir::{BlockId, Callee, Func, HirType, OpKind, Terminator, ValueId};
 use std::collections::BTreeMap;
 use wasm_encoder::{BlockType, Instruction as I};
 
@@ -221,6 +221,11 @@ impl<'b, 'p> Body<'b, 'p> {
     pub(crate) fn instruction(&mut self, i: &I<'static>) {
         self.code.instruction(i);
     }
+    /// Move the value on top of the stack into a slot of type `wanted`.
+    pub(crate) fn transfer(&mut self, found: &HirType, wanted: &HirType) -> Result<(), Failure> {
+        let types = self.types();
+        crate::transfer::transfer(&mut self.code, types, found, wanted)
+    }
     /// The whole-program type plan, which outlives this body.
     pub(crate) fn types(&self) -> &'p gc::Plan {
         self.m.types
@@ -267,6 +272,22 @@ impl<'b, 'p> Body<'b, 'p> {
             reason: reason.to_string(),
         }
     }
+    /// A failure while lowering a block's terminator. A shape Wasm declines
+    /// is a named refusal, located at the block's last operation (terminators
+    /// carry no origin); anything else is a structurer error.
+    fn terminator_failure(&self, failure: Failure, block: BlockId) -> EmitError {
+        match failure {
+            Failure::Unsupported(_) => {
+                let func = self.func;
+                let origin = func.blocks[block.0 as usize]
+                    .ops
+                    .last()
+                    .map_or(&func.origin, |op| &func.value(*op).origin);
+                failure.at(&func.name, origin)
+            }
+            Failure::Invariant(reason) => self.structuring(reason),
+        }
+    }
     // Ramsey's doTree/nodeWithin: merge children are wrapped in reverse RPO
     // order, then translated in forward order. Nonmerge children are inlined
     // by branch(), which is called from the original terminator's position.
@@ -300,7 +321,8 @@ impl<'b, 'p> Body<'b, 'p> {
         args: &[ValueId],
         structure: &cfg::Structure,
     ) -> Result<(), EmitError> {
-        self.copies(to, args).map_err(|why| self.structuring(why))?;
+        self.copies(to, args)
+            .map_err(|failure| self.terminator_failure(failure, from))?;
         self.edges += 1;
         let label = if structure.rank[to.0 as usize] <= structure.rank[from.0 as usize] {
             Label::LoopHead(to)
@@ -344,7 +366,7 @@ impl<'b, 'p> Body<'b, 'p> {
             }
             Terminator::Return(value) => self
                 .return_value(value)
-                .map_err(|why| self.structuring(why)),
+                .map_err(|failure| self.terminator_failure(failure, id)),
             Terminator::Unreachable => {
                 self.instruction(&I::Unreachable);
                 Ok(())
@@ -390,14 +412,18 @@ impl<'b, 'p> Body<'b, 'p> {
         self.actions(block)?;
         let func = self.func;
         self.terminator(&func.blocks[block.0 as usize].terminator)
-            .map_err(|why| self.structuring(why))
+            .map_err(|failure| self.terminator_failure(failure, block))
     }
+    /// The moves an edge makes into its target's parameters. Each argument
+    /// transfers to its parameter's type, after any save that breaks a cycle.
     fn copies(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), Failure> {
+        let func = self.func;
         let mut saved = BTreeMap::new();
-        for copy in edge_copies(&self.func.blocks[target.0 as usize].params, args) {
+        for copy in edge_copies(&func.blocks[target.0 as usize].params, args) {
             match copy {
                 Copy::Move { to, from } => {
                     self.load(from)?;
+                    self.transfer(&func.value(from).ty, &func.value(to).ty)?;
                     self.instruction(&I::LocalSet(self.local(to)?));
                 }
                 Copy::Save { temp, from } => {
@@ -406,17 +432,18 @@ impl<'b, 'p> Body<'b, 'p> {
                     let local = self.scratch.get(&(temp, slot)).copied().ok_or_else(|| {
                         Failure::Invariant(format!("unplanned edge temporary {temp}: {slot:?}"))
                     })?;
-                    saved.insert(temp, slot);
+                    saved.insert(temp, (slot, from));
                     self.instruction(&I::LocalSet(local));
                 }
                 Copy::Restore { to, temp } => {
-                    let slot = saved.get(&temp).copied().ok_or_else(|| {
+                    let (slot, from) = saved.get(&temp).copied().ok_or_else(|| {
                         Failure::Invariant(format!("edge temporary {temp} restored before saving"))
                     })?;
                     let local = self.scratch.get(&(temp, slot)).copied().ok_or_else(|| {
                         Failure::Invariant(format!("unplanned edge temporary {temp}: {slot:?}"))
                     })?;
                     self.instruction(&I::LocalGet(local));
+                    self.transfer(&func.value(from).ty, &func.value(to).ty)?;
                     self.instruction(&I::LocalSet(self.local(to)?));
                 }
             }
@@ -507,15 +534,9 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::Binary { op, lhs, rhs } => self.binary(id, *op, *lhs, *rhs)?,
             OpKind::Unary { op, operand } => self.unary(id, *op, *operand)?,
             OpKind::Convert(value) => self.convert(id, *value)?,
-            OpKind::GlobalGet(global) => {
-                let g = crate::module::program_global(self.m, *global)?;
-                self.global_get(g);
-            }
+            OpKind::GlobalGet(global) => self.global(*global, None, &op.ty)?,
             OpKind::GlobalSet { global, value } => {
-                self.load(*value)?;
-                let g = crate::module::program_global(self.m, *global)?;
-                self.global_set(g);
-                return Ok(());
+                return self.global(*global, Some(*value), &op.ty);
             }
             OpKind::Call { callee, args, .. } => self.call_op(id, callee, args)?,
             OpKind::Return(value) => return self.return_value(*value),
@@ -565,11 +586,43 @@ impl<'b, 'p> Body<'b, 'p> {
         }
         Ok(())
     }
-    /// A return. A host entry in a module that raises first throws any raise
-    /// still pending, so none leaves wasm.
-    fn return_value(&mut self, value: Option<ValueId>) -> Result<(), Failure> {
-        if let Some(value) = value {
+    /// A program global's read, or its write of `stored`, transferring
+    /// between the global's declared type and the value's.
+    fn global(
+        &mut self,
+        global: u32,
+        stored: Option<ValueId>,
+        read: &HirType,
+    ) -> Result<(), Failure> {
+        let program = self.m.program;
+        let declared = &program
+            .globals
+            .get(global as usize)
+            .ok_or_else(|| Failure::Invariant(format!("unplanned program global {global}")))?
+            .ty;
+        let g = crate::module::program_global(self.m, global)?;
+        if let Some(value) = stored {
             self.load(value)?;
+            let func = self.func;
+            self.transfer(&func.value(value).ty, declared)?;
+            self.global_set(g);
+        } else {
+            self.global_get(g);
+            self.transfer(declared, read)?;
+        }
+        Ok(())
+    }
+    /// A return transfers its value to the declared result type. A function
+    /// declared `never` has no result, so a value it carries is not loaded. A
+    /// host entry in a module that raises first throws any raise still
+    /// pending, so none leaves wasm.
+    fn return_value(&mut self, value: Option<ValueId>) -> Result<(), Failure> {
+        let func = self.func;
+        if let Some(value) = value
+            && self.types().slot(&func.return_type)?.is_some()
+        {
+            self.load(value)?;
+            self.transfer(&func.value(value).ty, &func.return_type)?;
         }
         if self.m.raising && self.m.is_host_entry(self.m.program_func(&self.func.name)?) {
             crate::raising::leave(self)?;
@@ -665,11 +718,23 @@ impl<'b, 'p> Body<'b, 'p> {
     ) -> Result<(), Failure> {
         match callee {
             Callee::Direct(name) => {
-                let target = self.m.program_func(name)?;
-                for arg in args {
-                    self.load(*arg)?;
+                let func = self.func;
+                let (target, callee) = self.m.direct(name)?;
+                if callee.params.len() != args.len() {
+                    return Err(Failure::Invariant(format!(
+                        "direct call to `{name}` with {} arguments for {} parameters",
+                        args.len(),
+                        callee.params.len()
+                    )));
+                }
+                for (&arg, param) in args.iter().zip(&callee.params) {
+                    self.load(arg)?;
+                    self.transfer(&func.value(arg).ty, &param.ty)?;
                 }
                 self.call(target);
+                if self.types().slot(&callee.return_type)?.is_some() {
+                    self.transfer(&callee.return_type, &func.value(result).ty)?;
+                }
             }
             Callee::External(name) => {
                 if let Some(helper) = crate::raising::external(name) {

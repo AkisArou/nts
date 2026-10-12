@@ -9,8 +9,8 @@ use nts_semantic_schema::TypeId;
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, BTreeSet};
 use wasm_encoder::{
-    ArrayType, CompositeInnerType, CompositeType, FieldType, HeapType, RefType, StorageType,
-    StructType, SubType, TypeSection,
+    AbstractHeapType, ArrayType, CompositeInnerType, CompositeType, FieldType, HeapType, RefType,
+    StorageType, StructType, SubType, TypeSection,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -99,12 +99,22 @@ struct CallableNodes {
     entries: BTreeMap<u32, NodeId>,
 }
 
+/// What a defined type is, which decides the abstract types above it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Struct,
+    Array,
+    Func,
+}
+
 /// Module-local storage assignments. Numeric operations still use the smaller
 /// scalar Slot type, so a reference cannot accidentally select integer code.
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
     slots: FxHashMap<HirType, Physical>,
     groups: Vec<Vec<SubType>>,
+    /// Each defined type's declared supertype and kind, by type index.
+    supers: Vec<(Option<u32>, Kind)>,
     count: u32,
     pub(crate) erased: Option<ErasedTypes>,
     pub(crate) root: Option<RootTypes>,
@@ -223,6 +233,60 @@ impl Plan {
 
     pub(crate) const fn count(&self) -> u32 {
         self.count
+    }
+
+    /// Whether every value of heap type `a` is a value of `b`: a defined
+    /// type's declared supertype chain, then the abstract types above it.
+    pub(crate) fn heap_subtype(&self, a: HeapType, b: HeapType) -> bool {
+        use AbstractHeapType as A;
+        if a == b {
+            return true;
+        }
+        let kind = |at: u32| self.supers.get(at as usize).map(|&(_, kind)| kind);
+        match (a, b) {
+            (HeapType::Concrete(mut at), HeapType::Concrete(want)) => loop {
+                if at == want {
+                    return true;
+                }
+                match self.supers.get(at as usize) {
+                    Some(&(Some(parent), _)) => at = parent,
+                    _ => return false,
+                }
+            },
+            (HeapType::Concrete(at), HeapType::Abstract { shared: false, ty }) => matches!(
+                (kind(at), ty),
+                (Some(Kind::Struct), A::Struct | A::Eq | A::Any)
+                    | (Some(Kind::Array), A::Array | A::Eq | A::Any)
+                    | (Some(Kind::Func), A::Func)
+            ),
+            (HeapType::Abstract { shared: false, ty }, HeapType::Concrete(at)) => matches!(
+                (ty, kind(at)),
+                (A::None, Some(Kind::Struct | Kind::Array)) | (A::NoFunc, Some(Kind::Func))
+            ),
+            (
+                HeapType::Abstract {
+                    shared: false,
+                    ty: from,
+                },
+                HeapType::Abstract {
+                    shared: false,
+                    ty: to,
+                },
+            ) => matches!(
+                (from, to),
+                (A::I31 | A::Struct | A::Array, A::Eq | A::Any)
+                    | (A::Eq, A::Any)
+                    | (A::None, A::I31 | A::Struct | A::Array | A::Eq | A::Any)
+                    | (A::NoExtern, A::Extern)
+                    | (A::NoFunc, A::Func)
+            ),
+            _ => false,
+        }
+    }
+
+    /// Whether every value of reference type `a` is a value of `b`.
+    pub(crate) fn ref_subtype(&self, a: RefType, b: RefType) -> bool {
+        (b.nullable || !a.nullable) && self.heap_subtype(a.heap_type, b.heap_type)
     }
 }
 
@@ -794,6 +858,7 @@ impl<'a> Builder<'a> {
                 count = count.checked_add(1).ok_or("too many wasm types")?;
             }
         }
+        let supers = self.supers(&ordered, &indices);
         let resolve = |slot| -> Physical {
             match slot {
                 PendingSlot::Scalar(slot) => Physical::Scalar(slot),
@@ -872,8 +937,25 @@ impl<'a> Builder<'a> {
                 .map(|(ty, slot)| (ty, resolve(slot)))
                 .collect(),
             groups,
+            supers,
             count,
         })
+    }
+    /// Each type's declared supertype and kind, in type-index order.
+    fn supers(&self, ordered: &[Vec<usize>], indices: &[u32]) -> Vec<(Option<u32>, Kind)> {
+        ordered
+            .iter()
+            .flatten()
+            .map(|&id| {
+                let node = &self.nodes[id];
+                let kind = match node.shape {
+                    Shape::Struct(_) => Kind::Struct,
+                    Shape::Array(_) => Kind::Array,
+                    Shape::Function(..) => Kind::Func,
+                };
+                (node.base.map(|base| indices[base.0]), kind)
+            })
+            .collect()
     }
     fn order_bases(&self, components: Vec<Vec<usize>>) -> Result<Vec<Vec<usize>>, String> {
         let mut ordered = Vec::new();
