@@ -33,7 +33,9 @@ fn classes(p: &mut Program) {
             vec![field("value"), field("extra")],
             Some(BASE),
         ),
-        (OTHER, "Other", vec![field("value")], None),
+        // Unrelated in shape too: the engine treats identically shaped
+        // types as one, so a class with `Base`'s exact shape would be `Base`.
+        (OTHER, "Other", vec![field("value"), field("other")], None),
     ] {
         p.layouts.push(Layout {
             types: vec![ClassId(id)],
@@ -184,7 +186,7 @@ fn a_downcast_is_one_checked_cast_and_an_upcast_is_free() {
 fn unrelated_storage_is_refused_by_name() {
     let mut confused = function("confused", &[F64], F64);
     let mut ops = vec![];
-    let o = filled(&mut confused, &mut ops, OTHER, 1);
+    let o = filled(&mut confused, &mut ops, OTHER, 2);
     let w = call_widen(&mut confused, &mut ops, o, object(BASE));
     let read = op(
         &mut confused,

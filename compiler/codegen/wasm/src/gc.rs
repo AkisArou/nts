@@ -120,6 +120,10 @@ pub(crate) struct Plan {
     groups: Vec<Vec<SubType>>,
     /// Each defined type's declared supertype and kind, by type index.
     supers: Vec<(Option<u32>, Kind)>,
+    /// Each defined type's identity as the engine sees it, by type index:
+    /// two types are one type when their rec groups are structurally
+    /// identical (Wasm's iso-recursive equivalence), whatever their indices.
+    canonical: Vec<u32>,
     count: u32,
     pub(crate) erased: Option<ErasedTypes>,
     pub(crate) root: Option<RootTypes>,
@@ -250,7 +254,7 @@ impl Plan {
         let kind = |at: u32| self.supers.get(at as usize).map(|&(_, kind)| kind);
         match (a, b) {
             (HeapType::Concrete(mut at), HeapType::Concrete(want)) => loop {
-                if at == want {
+                if at == want || self.same(at, want) {
                     return true;
                 }
                 match self.supers.get(at as usize) {
@@ -287,6 +291,14 @@ impl Plan {
             ),
             _ => false,
         }
+    }
+
+    /// Whether the engine sees two defined types as one.
+    fn same(&self, a: u32, b: u32) -> bool {
+        matches!(
+            (self.canonical.get(a as usize), self.canonical.get(b as usize)),
+            (Some(a), Some(b)) if a == b && *a != u32::MAX
+        )
     }
 
     /// Whether every value of reference type `a` is a value of `b`.
@@ -881,6 +893,7 @@ impl<'a> Builder<'a> {
             }
         }
         let supers = self.supers(&ordered, &indices);
+        let canonical = self.canonical(&ordered, &indices);
         let resolve = |slot| -> Physical {
             match slot {
                 PendingSlot::Scalar(slot) => Physical::Scalar(slot),
@@ -965,10 +978,78 @@ impl<'a> Builder<'a> {
                 .collect(),
             groups,
             supers,
+            canonical,
             count,
         })
     }
     /// Each type's declared supertype and kind, in type-index order.
+    /// Each type's canonical identity, in type-index order. A rec group's key
+    /// is its members' structure, naming a type inside the group by its
+    /// offset and one outside it by that type's canonical identity; the
+    /// groups are ordered dependency-first, so every outside identity is
+    /// already known. Equal keys are one group to the engine.
+    fn canonical(&self, ordered: &[Vec<usize>], indices: &[u32]) -> Vec<u32> {
+        let mut place = vec![(0, 0); self.nodes.len()];
+        for (group, members) in ordered.iter().enumerate() {
+            for (offset, &id) in members.iter().enumerate() {
+                place[id] = (group, offset);
+            }
+        }
+        let mut identity = vec![0_u32; self.nodes.len()];
+        let mut groups: FxHashMap<String, usize> = FxHashMap::default();
+        let mut types: FxHashMap<(usize, usize), u32> = FxHashMap::default();
+        for (group, members) in ordered.iter().enumerate() {
+            let name = |id: NodeId| match place[id.0] {
+                (other, offset) if other == group => format!("@{offset}"),
+                _ => format!("#{}", identity[id.0]),
+            };
+            let slot = |slot: &PendingSlot| match slot {
+                PendingSlot::Scalar(scalar) => format!("{scalar:?}"),
+                PendingSlot::Reference(reference) => format!("{reference:?}"),
+                PendingSlot::Defined(id, nullable) => format!("{}{nullable}", name(*id)),
+            };
+            let field =
+                |field: &Field| format!("{}{:?}{}", slot(&field.slot), field.packed, field.mutable);
+            let key = members
+                .iter()
+                .map(|&id| {
+                    let node = &self.nodes[id];
+                    let shape = match &node.shape {
+                        Shape::Struct(fields) => {
+                            format!(
+                                "s({})",
+                                fields.iter().map(field).collect::<Vec<_>>().join(",")
+                            )
+                        }
+                        Shape::Array(element) => format!("a({})", field(element)),
+                        Shape::Function(params, result) => format!(
+                            "f({})->{}",
+                            params.iter().map(slot).collect::<Vec<_>>().join(","),
+                            result.as_ref().map(slot).unwrap_or_default()
+                        ),
+                    };
+                    format!(
+                        "{}<{}>{shape}",
+                        node.final_,
+                        node.base.map(name).unwrap_or_default()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(";");
+            let next = groups.len();
+            let canonical = *groups.entry(key).or_insert(next);
+            for (offset, &id) in members.iter().enumerate() {
+                let next = u32::try_from(types.len()).unwrap_or(u32::MAX);
+                identity[id] = *types.entry((canonical, offset)).or_insert(next);
+            }
+        }
+        let mut by_index = vec![u32::MAX; indices.len()];
+        for (id, &at) in indices.iter().enumerate() {
+            by_index[at as usize] = identity[id];
+        }
+        by_index
+    }
+
     fn supers(&self, ordered: &[Vec<usize>], indices: &[u32]) -> Vec<(Option<u32>, Kind)> {
         ordered
             .iter()
@@ -1122,6 +1203,79 @@ mod tests {
         let mut module = wasm_encoder::Module::new();
         module.section(&plan.encode());
         module.finish()
+    }
+
+    /// Two layouts of one shape are one type to the engine (iso-recursive
+    /// equivalence), and so to the relation `transfer` decides with; a
+    /// different shape is not, and neither is an array of it.
+    #[test]
+    fn structurally_identical_types_are_one_type() {
+        let mut p = typed_program(&[
+            object(1),
+            object(2),
+            object(3),
+            HirType::Managed(ManagedType::Array(Box::new(object(1)))),
+            HirType::Managed(ManagedType::Array(Box::new(object(2)))),
+            HirType::Managed(ManagedType::Array(Box::new(object(3)))),
+        ]);
+        p.layouts.push(layout(
+            1,
+            "One",
+            vec![field("x", HirType::Float { bits: 64 })],
+            None,
+        ));
+        p.layouts.push(layout(
+            2,
+            "Same",
+            vec![field("x", HirType::Float { bits: 64 })],
+            None,
+        ));
+        p.layouts
+            .push(layout(3, "Other", vec![field("x", HirType::Bool)], None));
+        let plan = Plan::build(&p).unwrap();
+        let heap = |ty: HirType| match plan.value_slot(&ty).unwrap() {
+            Physical::Reference(reference) => reference.heap_type,
+            Physical::Scalar(_) => unreachable!(),
+        };
+        let array = |id| HirType::Managed(ManagedType::Array(Box::new(object(id))));
+        assert_ne!(heap(object(1)), heap(object(2)));
+        // The validator is the authority: a function returning its `from`
+        // parameter as `to` validates exactly when the relation says so.
+        let validates = |from: HeapType, to: HeapType| {
+            let mut types = plan.encode();
+            let reference = |heap_type| {
+                wasm_encoder::ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type,
+                })
+            };
+            types.ty().function([reference(from)], [reference(to)]);
+            let mut functions = wasm_encoder::FunctionSection::new();
+            functions.function(plan.count());
+            let mut code = wasm_encoder::CodeSection::new();
+            let mut body = wasm_encoder::Function::new([]);
+            body.instruction(&wasm_encoder::Instruction::LocalGet(0));
+            body.instruction(&wasm_encoder::Instruction::End);
+            code.function(&body);
+            let mut module = wasm_encoder::Module::new();
+            module.section(&types).section(&functions).section(&code);
+            crate::validate(&module.finish()).is_ok()
+        };
+        for (from, to, expected) in [
+            (object(1), object(2), true),
+            (object(2), object(1), true),
+            (object(1), object(3), false),
+            (array(1), array(2), true),
+            (array(1), array(3), false),
+        ] {
+            let (from, to) = (heap(from), heap(to));
+            assert_eq!(plan.heap_subtype(from, to), expected, "{from:?} -> {to:?}");
+            assert_eq!(
+                validates(from, to),
+                expected,
+                "validator: {from:?} -> {to:?}"
+            );
+        }
     }
 
     #[test]

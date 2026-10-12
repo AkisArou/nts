@@ -13,6 +13,11 @@
 //! - **anything else** (sibling classes, a string where an object is wanted)
 //!   is refused by name, because no Wasm cast between them can succeed.
 //!
+//! "Related" is the engine's relation: types whose rec groups are
+//! structurally identical are one Wasm type, so two classes of one shape,
+//! which TypeScript's structural typing lets stand for each other, need no
+//! cast between them.
+//!
 //! Scalars never change here: the verifier admits a scalar only into a slot
 //! of its own type, and `Convert` is the one operation that changes one.
 
