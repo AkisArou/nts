@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
 const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
 const wasm = instantiate();
 const inputs = [NaN, -Infinity, Infinity, -0, 0, -1, 1, -0.5, 0.5, -2, 2, 1e-300, 1e300, 2 ** 32 + 1, 2 ** 52 - 1];

@@ -150,16 +150,11 @@ fn pending() -> Func {
         .push(block(&[], &ops, Terminator::Return(Some(flag))));
     f
 }
-fn caught_object(uncaught_it: bool) -> Func {
-    let mut f = function(
-        if uncaught_it {
-            "uncaughtObject"
-        } else {
-            "caughtObject"
-        },
-        &[],
-        HirType::Bool,
-    );
+/// An object thrown uncaught keeps its named refusal. Raised and caught, it
+/// keeps its identity: the entry allocates it, its raising copy raises it, and
+/// the entry takes the payload back and compares.
+fn uncaught_object() -> Func {
+    let mut f = function("uncaughtObject", &[], HirType::Bool);
     let mut ops = vec![];
     let object = op(
         &mut f,
@@ -168,48 +163,137 @@ fn caught_object(uncaught_it: bool) -> Func {
         object(),
     );
     let payload = erase(&mut f, &mut ops, object);
-    if uncaught_it {
-        uncaught(&mut f, &mut ops, payload);
-        f.blocks.push(block(&[], &ops, Terminator::Unreachable));
-    } else {
-        call(&mut f, &mut ops, "nts_raise", vec![payload], HirType::Void);
-        let taken = call(&mut f, &mut ops, "nts_raise_take", vec![], HirType::Erased);
-        let identity = op(
-            &mut f,
-            &mut ops,
-            OpKind::Binary {
-                op: BinOp::Eq,
-                lhs: taken,
-                rhs: payload,
-            },
-            HirType::Bool,
-        );
-        f.blocks
-            .push(block(&[], &ops, Terminator::Return(Some(identity))));
-    }
+    uncaught(&mut f, &mut ops, payload);
+    f.blocks.push(block(&[], &ops, Terminator::Unreachable));
     f
 }
-/// A raise left pending when an input refusal leaves wasm: the refusal must
-/// clear it, or the next call would observe a stale raise.
-fn refusal() -> Func {
-    let mut f = function("refusal", &[F64], F64);
+fn caught_object() -> Vec<Func> {
+    let mut copy = function("caughtObject@raises", &[object()], HirType::Bool);
+    copy.exported = false;
+    let mut ops = vec![];
+    let input = op(&mut copy, &mut ops, OpKind::Param(0), object());
+    let payload = erase(&mut copy, &mut ops, input);
+    call(
+        &mut copy,
+        &mut ops,
+        "nts_raise",
+        vec![payload],
+        HirType::Void,
+    );
+    let placeholder = op(&mut copy, &mut ops, OpKind::ConstBool(false), HirType::Bool);
+    copy.blocks
+        .push(block(&[], &ops, Terminator::Return(Some(placeholder))));
+    let mut entry = function("caughtObject", &[], HirType::Bool);
+    let mut ops = vec![];
+    let allocated = op(
+        &mut entry,
+        &mut ops,
+        OpKind::ObjectNew { frame: false },
+        object(),
+    );
+    call_to(
+        &mut entry,
+        &mut ops,
+        Callee::Direct("caughtObject@raises".into()),
+        vec![allocated],
+        HirType::Bool,
+    );
+    let taken = call(
+        &mut entry,
+        &mut ops,
+        "nts_raise_take",
+        vec![],
+        HirType::Erased,
+    );
+    let expected = erase(&mut entry, &mut ops, allocated);
+    let identity = op(
+        &mut entry,
+        &mut ops,
+        OpKind::Binary {
+            op: BinOp::Eq,
+            lhs: taken,
+            rhs: expected,
+        },
+        HirType::Bool,
+    );
+    entry
+        .blocks
+        .push(block(&[], &ops, Terminator::Return(Some(identity))));
+    vec![copy, entry]
+}
+/// A host entry that records a raise and returns, which lowering never emits:
+/// the raise must reach JS as a throw, not be lost or seen by the next call.
+fn leaky() -> Func {
+    let mut f = function("leaky", &[F64], F64);
     let mut ops = vec![];
     let input = op(&mut f, &mut ops, OpKind::Param(0), F64);
     let payload = erase(&mut f, &mut ops, input);
     call(&mut f, &mut ops, "nts_raise", vec![payload], HirType::Void);
-    let null = op(&mut f, &mut ops, OpKind::ConstNull, string());
-    let length = op(&mut f, &mut ops, OpKind::Length(null), F64);
     f.blocks
-        .push(block(&[], &ops, Terminator::Return(Some(length))));
+        .push(block(&[], &ops, Terminator::Return(Some(input))));
     f
 }
+/// A raise left pending when an input refusal leaves wasm: the raising copy
+/// records a raise, then refuses an input before returning to its caller. The
+/// refusal must clear the raise, or the next call would observe it.
+fn refusal() -> Vec<Func> {
+    let mut copy = function("refusal@raises", &[F64], F64);
+    copy.exported = false;
+    let mut ops = vec![];
+    let input = op(&mut copy, &mut ops, OpKind::Param(0), F64);
+    let payload = erase(&mut copy, &mut ops, input);
+    call(
+        &mut copy,
+        &mut ops,
+        "nts_raise",
+        vec![payload],
+        HirType::Void,
+    );
+    let null = op(&mut copy, &mut ops, OpKind::ConstNull, string());
+    let length = op(&mut copy, &mut ops, OpKind::Length(null), F64);
+    copy.blocks
+        .push(block(&[], &ops, Terminator::Return(Some(length))));
+    let mut entry = function("refusal", &[F64], F64);
+    let mut ops = vec![];
+    let input = op(&mut entry, &mut ops, OpKind::Param(0), F64);
+    let result = call_to(
+        &mut entry,
+        &mut ops,
+        Callee::Direct("refusal@raises".into()),
+        vec![input],
+        F64,
+    );
+    let raised = call(&mut entry, &mut ops, "nts_raising", vec![], HirType::Bool);
+    entry.blocks.push(block(
+        &[],
+        &ops,
+        Terminator::Branch {
+            cond: raised,
+            then_target: BlockId(1),
+            then_args: vec![],
+            else_target: BlockId(2),
+            else_args: vec![],
+        },
+    ));
+    let mut ops = vec![];
+    let taken = call(
+        &mut entry,
+        &mut ops,
+        "nts_raise_take",
+        vec![],
+        HirType::Erased,
+    );
+    uncaught(&mut entry, &mut ops, taken);
+    entry.blocks.push(block(&[], &ops, Terminator::Unreachable));
+    entry
+        .blocks
+        .push(block(&[], &[], Terminator::Return(Some(result))));
+    vec![copy, entry]
+}
 fn fixture() -> nts_core::hir::Program {
-    let mut funcs = vec![
-        pending(),
-        refusal(),
-        caught_object(false),
-        caught_object(true),
-    ];
+    let mut funcs = vec![pending(), uncaught_object(), leaky()];
+    funcs.extend(caught_object());
+    funcs.extend(refusal());
     for raising in [true, false] {
         let prefix = if raising { "raise" } else { "uncaught" };
         for (suffix, ty, null) in [

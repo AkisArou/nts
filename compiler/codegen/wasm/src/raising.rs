@@ -3,9 +3,13 @@
 //! A raise records an erased payload and sets a flag; callers test the flag
 //! after each raising call and either take the payload or propagate. An
 //! uncaught throw leaves wasm as the thrown JS value itself, through
-//! `WebAssembly.JSTag`, so no host wrapper does per-call bookkeeping. The
-//! pending state is cleared on every exit to the host, so a later call never
-//! observes a stale raise.
+//! `WebAssembly.JSTag`, so no host wrapper does per-call bookkeeping.
+//!
+//! No exit to the host leaves a raise pending. An uncaught throw and an input
+//! refusal clear it. A host entry's return tests the flag and throws a pending
+//! raise uncaught: lowering never leaves one there, and if it ever did, the
+//! exception would surface as a throw rather than be lost or seen by a later
+//! call. A module that never raises pays nothing.
 //!
 //! This is the interim lowering. Native exception handling replaces it once
 //! prepared HIR carries exception regions.
@@ -221,6 +225,22 @@ fn uncaught(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
     f.call(decline);
     f.instructions(&[I::Unreachable, I::End, I::LocalGet(3)]);
     f.throw(js);
+    Ok(())
+}
+
+/// The check before a host entry returns: a raise still pending is thrown
+/// uncaught, as the JS value it denotes. The return value, if any, stays on
+/// the stack beneath the check.
+pub(crate) fn leave(b: &mut Body<'_, '_>) -> Result<(), Failure> {
+    let flag = state(b.m, Slot::Flag)?;
+    let take = callee(b.m, Helper::Take)?;
+    let uncaught = callee(b.m, Helper::Uncaught)?;
+    b.global_get(flag);
+    b.instruction(&I::If(BlockType::Empty));
+    b.call(take);
+    strings::constant(b, &b.func.name.clone());
+    b.call(uncaught);
+    b.instructions(&[I::Unreachable, I::End]);
     Ok(())
 }
 

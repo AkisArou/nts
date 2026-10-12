@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const [artifact, fixture] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
 const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
 const wasm = instantiate();
 const graph = JSON.parse(await readFile(fixture, 'utf8')).successors;

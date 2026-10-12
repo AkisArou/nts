@@ -40,9 +40,11 @@ pub(crate) fn run_with_node_flags(
         serde_json::to_vec_pretty(&emitted.manifest).unwrap(),
     )
     .unwrap();
+    let glue = nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node).unwrap();
+    std::fs::write(artifact.join(nts_codegen_wasm::PROGRAM_FILE), glue.program).unwrap();
     std::fs::write(
-        artifact.join("program.mjs"),
-        nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node).unwrap(),
+        artifact.join(nts_codegen_wasm::INSTANCE_FILE),
+        glue.instance,
     )
     .unwrap();
     let result = Command::new("node")

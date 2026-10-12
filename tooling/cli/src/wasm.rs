@@ -18,15 +18,9 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         .find(|pair| pair[0] == "--out")
         .map(|pair| Utf8PathBuf::from(&pair[1]))
     else {
-        bail!(
-            "emit-wasm requires --out <directory> for program.wasm and its program.mjs host module"
-        );
+        bail!("emit-wasm requires --out <directory> for program.wasm and its JS glue");
     };
-    let host = match args
-        .windows(2)
-        .find(|pair| pair[0] == "--host")
-        .map(|pair| pair[1].as_str())
-    {
+    let host = match host(args)?.as_deref() {
         None | Some("node") => nts_codegen_wasm::Host::Node,
         Some("browser") => nts_codegen_wasm::Host::Browser,
         Some(other) => bail!("emit-wasm --host must be `node` or `browser`, not `{other}`"),
@@ -100,14 +94,37 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
     )?;
     std::fs::create_dir_all(&out)?;
     std::fs::write(out.join("program.wasm"), &emitted.bytes)?;
-    std::fs::write(out.join("program.mjs"), glue)?;
+    std::fs::write(out.join(nts_codegen_wasm::PROGRAM_FILE), glue.program)?;
+    std::fs::write(out.join(nts_codegen_wasm::INSTANCE_FILE), glue.instance)?;
     std::fs::write(out.join("program.wasm.json"), manifest)?;
     std::fs::write(out.join("program.origins.json"), origins)?;
     println!(
-        "wrote {} wasm bytes, {} function(s), {} global(s) and their host module to {out}",
+        "wrote {} wasm bytes, {} function(s), {} global(s) and their JS glue to {out}",
         emitted.bytes.len(),
         emitted.manifest.exports.len(),
         emitted.manifest.globals.len()
     );
     Ok(())
+}
+
+/// The `--host` value, as `--host <value>` or `--host=<value>`. Given twice,
+/// or with no value, it is an error rather than a silent default.
+fn host(args: &[String]) -> Result<Option<String>> {
+    let mut found = None;
+    for (at, arg) in args.iter().enumerate() {
+        let value = if arg == "--host" {
+            let Some(value) = args.get(at + 1) else {
+                bail!("emit-wasm --host needs a value: `node` or `browser`");
+            };
+            value.clone()
+        } else if let Some(value) = arg.strip_prefix("--host=") {
+            value.to_owned()
+        } else {
+            continue;
+        };
+        if found.replace(value).is_some() {
+            bail!("emit-wasm --host is given more than once");
+        }
+    }
+    Ok(found)
 }

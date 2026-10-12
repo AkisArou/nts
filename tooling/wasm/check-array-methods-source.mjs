@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact, source] = process.argv.slice(2);
 const oracle = await import(pathToFileURL(source));
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
 const wasm = instantiate();
 let cases = 0;
 function same(actual, expected) { assert.ok(Object.is(actual, expected), `${String(actual)} != ${String(expected)}`); cases++; }

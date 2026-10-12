@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 const [directory, source] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(resolve(directory, 'program.mjs')));
+const { instantiate } = await import(pathToFileURL(resolve(directory, 'program.instance.mjs')));
 const api = instantiate();
 const graphs = JSON.parse(await readFile(source, 'utf8'));
 let cases = 0;

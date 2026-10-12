@@ -45,7 +45,7 @@ use nts_semantic_schema::SCHEMA_VERSION;
 /// proj` took `published` as the tsconfig and failed with "`published` is not a
 /// tsconfig" -- flag order deciding whether a command works, which is the shape
 /// the comment in `named_project` records twice already.
-const TAKES_A_VALUE: [&str; 4] = ["--out", "--entry", "--product", "--os"];
+const TAKES_A_VALUE: [&str; 5] = ["--out", "--entry", "--product", "--os", "--host"];
 
 /// The tsconfig a command was pointed at, *and* its dependencies acquired.
 ///
@@ -605,7 +605,7 @@ EMITTING ONE BACKEND
   emit-c       render the program as C, to --out or stdout
   emit-llvm    render the program as textual LLVM IR, to stdout (--os windows)
   emit-jvm     render the program as class files, to --out
-  emit-wasm    render a scalar WebAssembly module and Node loader, to --out
+  emit-wasm    render a WebAssembly module and its JS glue, to --out (--host node|browser)
 
 BINDINGS
   bind-c       generate a TypeScript declaration from a C header

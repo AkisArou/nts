@@ -362,7 +362,7 @@ pub fn check(
             }
         }
         Backend::Wasm => bail!(
-            "NTS5001: wasm declines the existing check runner during scalar bring-up; use emit-wasm and the Node loader"
+            "NTS5001: wasm declines the existing check runner during bring-up; use emit-wasm and its generated program.mjs"
         ),
     };
     // `NTS_TSGO`, then the frontend this repository builds, and only then the

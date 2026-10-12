@@ -169,6 +169,8 @@ pub(crate) struct Builder<'p> {
     /// Imported exception tags: `(module, field, function type)`.
     tags: Vec<(&'static str, &'static str, u32)>,
     exports: Vec<(String, Export)>,
+    /// Functions the host calls: the public exports and the initializer.
+    host_entries: BTreeSet<Func>,
     /// Whether any body uses the explicit raising convention, whose pending
     /// state every exit to the host must clear.
     pub(crate) raising: bool,
@@ -197,6 +199,7 @@ impl<'p> Builder<'p> {
             building: BTreeSet::new(),
             tags: Vec::new(),
             exports: Vec::new(),
+            host_entries: BTreeSet::new(),
             raising,
         }
     }
@@ -468,6 +471,12 @@ impl<'p> Builder<'p> {
 
     pub(crate) fn export_func(&mut self, name: &str, func: Func) {
         self.exports.push((name.to_owned(), Export::Func(func)));
+        self.host_entries.insert(func);
+    }
+
+    /// Whether the host calls `func` directly, so its returns leave wasm.
+    pub(crate) fn is_host_entry(&self, func: Func) -> bool {
+        self.host_entries.contains(&func)
     }
 
     pub(crate) fn export_global(&mut self, name: &str, global: Global) {

@@ -8,13 +8,14 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 const checker=fileURLToPath(new URL('./check-corpus-example.mjs',import.meta.url));
 
-// `glue` stands in for a generated program.mjs.
+// `glue` stands in for a generated program.instance.mjs; program.mjs imports it.
 function probe(glue,source,exports=[]) {
   const dir=mkdtempSync(path.join(tmpdir(),'nts-wasm-census-control-'));
   try {
     writeFileSync(path.join(dir,'program.wasm'),new Uint8Array());
     writeFileSync(path.join(dir,'program.wasm.json'),JSON.stringify({exports,globals:[]}));
-    writeFileSync(path.join(dir,'program.mjs'),`export class WasmInputDecline extends TypeError { code = 'NTS5001'; }\n${glue}`);
+    writeFileSync(path.join(dir,'program.instance.mjs'),`export class WasmInputDecline extends TypeError { code = 'NTS5001'; }\n${glue}`);
+    writeFileSync(path.join(dir,'program.mjs'),`import './program.instance.mjs';`);
     const oracle=path.join(dir,'oracle.mjs');writeFileSync(oracle,source);
     const output=path.join(dir,'execution.json');
     const result=spawnSync(process.execPath,[checker,dir,oracle,output],{encoding:'utf8',timeout:10000});

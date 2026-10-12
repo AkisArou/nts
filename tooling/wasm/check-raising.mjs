@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
+// Importing program.mjs runs the initializer, as importing the TS module does;
+// program.instance.mjs makes fresh instances.
 const glue = pathToFileURL(path.join(artifact, 'program.mjs'));
+const instances = pathToFileURL(path.join(artifact, 'program.instance.mjs'));
 const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
 let cases = 0;
 function caught(fn) { try { return { raised: false, value: fn() }; } catch (value) { return { raised: true, value }; } }
@@ -14,7 +17,7 @@ if (manifest.init !== null) {
   assert.equal(result.raised, true); assert.equal(result.value, 'init payload');
   console.log(JSON.stringify({ cases: 1, init_throw: true }));
 } else {
-  const { instantiate, WasmInputDecline } = await import(glue);
+  const { instantiate, WasmInputDecline } = await import(instances);
   const wasm = instantiate();
   const other = instantiate();
   for (const prefix of ['raise', 'uncaught']) {
@@ -29,6 +32,8 @@ if (manifest.init !== null) {
   }
   for (let n = 0; n < 32; n++) { assert.equal(wasm.caughtObject(), true); assert.equal(wasm.pending(), 0); cases += 2; }
   assert.throws(() => wasm.uncaughtObject(), e => e instanceof WasmInputDecline && String(e).includes('uncaughtObject') && String(e).includes('identity bridge')); cases++;
+  // A host entry returning with a raise pending throws it instead.
+  for (const value of [5, -0, 0.5]) { throwsValue(() => wasm.leaky(value), value); assert.equal(wasm.pending(), 0); cases++; }
   // A refusal leaving wasm with a raise pending clears it first.
   assert.throws(() => wasm.refusal(23), e => e instanceof WasmInputDecline && String(e).includes('refusal')); cases++;
   const stale_state_cleared = wasm.pending() === 0; assert.ok(stale_state_cleared); cases++;

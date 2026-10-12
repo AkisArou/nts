@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
 const wasm = instantiate();
 assert.equal(wasm.partial(), 17);
 assert.equal(wasm.dense(), 17);

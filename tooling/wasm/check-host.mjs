@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const url = pathToFileURL(path.join(artifact, 'program.mjs'));
+const url = pathToFileURL(path.join(artifact, 'program.instance.mjs'));
 const { instantiate, WasmInputDecline } = await import(url);
 const wasm = instantiate();
 let cases = 0;

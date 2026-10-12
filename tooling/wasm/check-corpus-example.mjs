@@ -36,9 +36,10 @@ try {
   try {
     // Importing the generated module instantiates it and runs the module
     // initializer, as importing the source module does in node.
-    const glue = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
-    WasmInputDecline = glue.WasmInputDecline;
-    wasm = glue.instantiate();
+    await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+    const instances = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
+    WasmInputDecline = instances.WasmInputDecline;
+    wasm = instances.instantiate();
   } catch (value) {
     if (value instanceof WebAssembly.CompileError || value instanceof WebAssembly.LinkError || value instanceof WebAssembly.RuntimeError) throw value;
     report.phase = 'module-initialization';

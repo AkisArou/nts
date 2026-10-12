@@ -40,7 +40,7 @@ mod test_common;
 
 pub use abi::{Import, ImportType, ValueType};
 pub use cfg::Route;
-pub use glue::{Host, glue};
+pub use glue::{Glue, Host, INSTANCE_FILE, PROGRAM_FILE, glue};
 use nts_core::hir::{Program, verify::Invalid};
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;

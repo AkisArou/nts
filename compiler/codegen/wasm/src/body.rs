@@ -342,13 +342,9 @@ impl<'b, 'p> Body<'b, 'p> {
                 self.close();
                 Ok(())
             }
-            Terminator::Return(value) => {
-                if let Some(v) = value {
-                    self.load(v).map_err(|why| self.structuring(why))?;
-                }
-                self.instruction(&I::Return);
-                Ok(())
-            }
+            Terminator::Return(value) => self
+                .return_value(value)
+                .map_err(|why| self.structuring(why)),
             Terminator::Unreachable => {
                 self.instruction(&I::Unreachable);
                 Ok(())
@@ -444,12 +440,7 @@ impl<'b, 'p> Body<'b, 'p> {
     }
     fn terminator(&mut self, terminator: &Terminator) -> Result<(), Failure> {
         match terminator {
-            Terminator::Return(value) => {
-                if let Some(v) = value {
-                    self.load(*v)?;
-                }
-                self.instruction(&I::Return);
-            }
+            Terminator::Return(value) => self.return_value(*value)?,
             Terminator::Jump { target, args } => self.edge(*target, args)?,
             Terminator::Branch {
                 cond,
@@ -574,9 +565,14 @@ impl<'b, 'p> Body<'b, 'p> {
         }
         Ok(())
     }
+    /// A return. A host entry in a module that raises first throws any raise
+    /// still pending, so none leaves wasm.
     fn return_value(&mut self, value: Option<ValueId>) -> Result<(), Failure> {
         if let Some(value) = value {
             self.load(value)?;
+        }
+        if self.m.raising && self.m.is_host_entry(self.m.program_func(&self.func.name)?) {
+            crate::raising::leave(self)?;
         }
         self.instruction(&I::Return);
         Ok(())

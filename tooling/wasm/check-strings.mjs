@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
 const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
 const bytes = await readFile(path.join(artifact, 'program.wasm'));
 const wasm = instantiate();
@@ -46,13 +46,15 @@ try {
 } finally { String.fromCharCode = fromCharCode; }
 // Literals are imported string constants: compile-time, never ordinary imports.
 assert.ok(!WebAssembly.Module.imports(await WebAssembly.compile(bytes, { builtins: ['js-string'], importedStringConstants: "'" })).some(i => i.module === "'"));
-// An engine that ignores the compile options must fail the import loudly; the
-// glue never substitutes a JavaScript replacement for a builtin or a literal.
+// An engine that ignores the compile options must fail to instantiate, loudly;
+// the glue never substitutes a JavaScript replacement for a builtin or a
+// literal. A fresh copy of the instance module compiles through the stand-in.
 const compile = WebAssembly.compile;
 let ignoredOptionsRefused = false;
 try {
   WebAssembly.compile = input => compile(input);
-  await assert.rejects(import(`${pathToFileURL(path.join(artifact, 'program.mjs')).href}?ignored-options`), error => {
+  const ignoring = await import(`${pathToFileURL(path.join(artifact, 'program.instance.mjs')).href}?ignored-options`);
+  assert.throws(() => ignoring.instantiate(), error => {
     // V8 reports the missing builtin module as a TypeError naming it.
     ignoredOptionsRefused = (error instanceof WebAssembly.LinkError || error instanceof TypeError) && String(error).includes('wasm:js-string');
     return ignoredOptionsRefused;
