@@ -759,8 +759,15 @@ fn converted(
     if matches!(from, HirType::Void | HirType::Never) {
         return builder.push(OpKind::ConstUndefined, HirType::Erased, origin.clone());
     }
+    // A stored row's storage already meets the family's contract, so it only
+    // ever erases or converts a number. A default reads the face's own slot,
+    // which can be erased where the family answers a number: `HTTPDuplex`
+    // keeps `writableHighWaterMark` as an `NtsValue` and its getter suppliers
+    // return `double`, and a `Convert` there was C that does not compile.
     let kind = if *to == HirType::Erased {
         OpKind::Erase { value, absent }
+    } else if *from == HirType::Erased {
+        OpKind::Unerase { value }
     } else {
         OpKind::Convert(value)
     };
