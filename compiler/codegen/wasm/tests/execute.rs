@@ -87,6 +87,38 @@ fn a_class_from_an_unrelated_hierarchy_of_one_shape_is_refused() {
     );
 }
 
+/// Same-shape unrelated classes with fields only: the lowering admits the move,
+/// and Wasm's transfer decides it by storage. Storage that one declared parent
+/// separates is refused by name; storage of one shape is one type and agrees.
+#[test]
+fn a_class_whose_storage_has_other_parents_is_refused() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/storage-of-other-parents");
+    let error = nts_codegen_wasm::emit(&prepared_project(&fixture))
+        .map(|_| ())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains(
+            "NTS5001: wasm declines `as1`: a `S2` where a `S1` is wanted: no Wasm cast relates their storage"
+        ),
+        "{error}"
+    );
+}
+#[test]
+fn same_shape_classes_without_parents_share_storage_and_agree() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/storage-of-one-shape");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "storage-of-one-shape",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 34, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 #[test]
 fn source_typed_holes_decline_instead_of_returning_zero() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-holes");
