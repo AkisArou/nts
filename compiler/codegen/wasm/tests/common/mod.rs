@@ -1,7 +1,6 @@
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used)]
 
-mod hir;
-pub(crate) use hir::*;
+pub(crate) mod hir;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -19,7 +18,11 @@ pub(crate) fn run(
     script: &str,
     args: &[&Path],
 ) -> serde_json::Value {
-    let artifact = std::env::temp_dir().join(format!("nts-wasm-{label}-{}", std::process::id()));
+    let retained = std::env::var_os("NTS_WASM_TEST_ARTIFACTS").map(PathBuf::from);
+    let artifact = retained.as_ref().map_or_else(
+        || std::env::temp_dir().join(format!("nts-wasm-{label}-{}", std::process::id())),
+        |root| root.join(label),
+    );
     std::fs::create_dir_all(&artifact).unwrap();
     std::fs::write(artifact.join("program.wasm"), &emitted.bytes).unwrap();
     std::fs::write(
@@ -42,6 +45,8 @@ pub(crate) fn run(
         String::from_utf8_lossy(&result.stderr)
     );
     let output = serde_json::from_slice(&result.stdout).unwrap();
-    std::fs::remove_dir_all(artifact).unwrap();
+    if retained.is_none() {
+        std::fs::remove_dir_all(artifact).unwrap();
+    }
     output
 }

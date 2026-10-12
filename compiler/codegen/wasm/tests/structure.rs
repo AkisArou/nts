@@ -2,7 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 mod common;
 
-use common::{I32, U32, block, function, origin, program, value};
+use common::hir::{I32, U32, block, function, origin, program, value};
 use nts_codegen_wasm::Route;
 use nts_core::hir::{BinOp, Block, BlockId, Func, Global, HirType, OpKind, Terminator, ValueId};
 use std::collections::BTreeSet;

@@ -2,7 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 mod common;
 
-use common::{F64, I32, U32, block, function, program, value};
+use common::hir::{F64, I32, U32, block, function, program, value};
 use nts_core::hir::{BinOp, HirType, OpKind, Terminator, UnOp};
 
 fn conversion(name: &str, from: &HirType, to: &HirType) -> nts_core::hir::Func {

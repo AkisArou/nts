@@ -2,7 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 mod common;
 
-use common::{F64, block, function, program, value};
+use common::hir::{F64, block, function, program, value};
 use nts_codegen_wasm::EmitError;
 use nts_core::hir::{BinOp, Callee, HirType, OpKind, ParamShape, Program, Terminator};
 
@@ -22,7 +22,7 @@ fn a_counting_marker_after_host_gc_preparation_declines_at_its_origin() {
     assert_eq!(diagnostics[0].code, "NTS2001");
     assert!(diagnostics[0].message.contains("countingMismatch"));
     assert!(diagnostics[0].message.contains("Retain"));
-    assert_eq!(diagnostics[0].primary, common::origin().location);
+    assert_eq!(diagnostics[0].primary, common::hir::origin().location);
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn external_runtime_calls_decline_by_name_with_source_origin() {
     assert_eq!(diagnostics[0].code, "NTS5001");
     assert!(diagnostics[0].message.contains("unsupportedMath"));
     assert!(diagnostics[0].message.contains("nts_math_cos"));
-    assert_eq!(diagnostics[0].primary, common::origin().location);
+    assert_eq!(diagnostics[0].primary, common::hir::origin().location);
 }
 
 #[test]
@@ -112,11 +112,11 @@ fn optional_public_parameters_decline_without_filling_them_with_zero() {
 fn a_shared_i32_slot_does_not_make_boolean_equal_to_number() {
     let mut f = function(
         "mixedEquality",
-        &[HirType::Bool, common::I32],
+        &[HirType::Bool, common::hir::I32],
         HirType::Bool,
     );
     let lhs = value(&mut f, OpKind::Param(0), HirType::Bool);
-    let rhs = value(&mut f, OpKind::Param(1), common::I32);
+    let rhs = value(&mut f, OpKind::Param(1), common::hir::I32);
     let out = value(
         &mut f,
         OpKind::Binary {
