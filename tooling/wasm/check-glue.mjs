@@ -22,4 +22,20 @@ assert.equal(program.sync, 1); cases++;
 program.bump(5);
 assert.equal(program.sync, 5); cases++;
 assert.equal(fresh.sync, 1); cases++;
+// Redefining the Wasm accessors after load redirects nothing: the glue
+// captured Global.prototype.value and Instance.prototype.exports.
+const value = Object.getOwnPropertyDescriptor(WebAssembly.Global.prototype, 'value');
+const exportsOf = Object.getOwnPropertyDescriptor(WebAssembly.Instance.prototype, 'exports');
+try {
+  Object.defineProperty(WebAssembly.Global.prototype, 'value', { ...value, get() { return 'tampered'; } });
+  Object.defineProperty(WebAssembly.Instance.prototype, 'exports', { ...exportsOf, get() { return { e0: () => 'tampered' }; } });
+  program.bump(7);
+  assert.equal(program.sync, 7); cases++;
+  const tampered = instantiate();
+  assert.equal(tampered.sync, 1); cases++;
+  assert.equal(tampered.instantiate(1), 1); cases++;
+} finally {
+  Object.defineProperty(WebAssembly.Global.prototype, 'value', value);
+  Object.defineProperty(WebAssembly.Instance.prototype, 'exports', exportsOf);
+}
 console.log(JSON.stringify({ cases, exports: names.length }));
