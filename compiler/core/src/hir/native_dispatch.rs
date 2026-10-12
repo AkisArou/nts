@@ -255,6 +255,19 @@ fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String
             }
         }
     }
+    // A selector's default is called only by a dispatch through that
+    // selector. Where no surviving call reads it, the default is as
+    // unreferenced as an omitted column's rows, and C rejects an unused
+    // static (`benches/cases/in-narrowing`, -Werror,-Wunused-function).
+    for (selector, body) in program.interface_access.defaults() {
+        if !table
+            .columns
+            .get(selector as usize)
+            .is_some_and(Option::is_some)
+        {
+            candidates.insert(body);
+        }
+    }
     let by_name: FxHashMap<&str, &Func> = program
         .funcs
         .iter()

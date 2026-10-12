@@ -370,7 +370,8 @@ typedef struct NtsHeader {
  * write -- answers for it, and such a class needs no table at all. One null
  * test on the table and one on the entry, and no branch the compiler cannot
  * turn into a select. */
-static inline void *nts_family_row(const NtsDescriptor *descriptor, uint32_t column, void *fallback) {
+static inline void *nts_family_row(const NtsDescriptor *descriptor,
+                                   uint32_t column, void *fallback) {
   void *const *methods = descriptor->methods;
   void *row = methods ? methods[column] : NULL;
   return row ? row : fallback;
