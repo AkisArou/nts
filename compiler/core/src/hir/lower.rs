@@ -27422,6 +27422,7 @@ impl<'a> FuncBuilder<'a> {
             return Ok(None);
         };
         self.carried_owners_fit(id, *source, *face)?;
+        self.unrelated_class_keeps_its_methods(id, *source, *face)?;
         let Some(why) = self.not_a_prefix(id, *source, *face) else {
             return Ok(None);
         };
@@ -27467,6 +27468,76 @@ impl<'a> FuncBuilder<'a> {
             }
         }
         Ok(())
+    }
+
+    /// **An object keeps its own methods whatever type it is held at.**
+    ///
+    /// TypeScript lets an object of one class stand where an unrelated class
+    /// of the same shape is wanted -- classes are structural -- and the
+    /// layouts agree, so the conversion is a plain cast. But a call through
+    /// the target class names the target's methods: `as2(new S1()).f()` ran
+    /// `S2#f` on an `S1`, 28 of 29 cases wrong on every backend
+    /// (`tooling/conformance/outcomes/a-method-called-through-a-same-shape-unrelated-class`).
+    ///
+    /// Related means one extends the other, along the `extends` chain only:
+    /// `class A implements B` with `B` a class gives `A` `B`'s shape and not
+    /// its bodies. Two instantiations of one generic class are one class. A
+    /// target with no methods of its own or inherited has nothing to misname,
+    /// and its fields are the layout question `not_a_prefix` answers.
+    fn unrelated_class_keeps_its_methods(
+        &mut self,
+        id: NodeId,
+        source: TypeId,
+        target: TypeId,
+    ) -> Result<(), Diagnostic> {
+        let (source, target) = (self.class_behind(source), self.class_behind(target));
+        let (Some(from), Some(to)) = (
+            class_symbol(self.snapshot, source),
+            class_symbol(self.snapshot, target),
+        ) else {
+            return Ok(());
+        };
+        if from == to || self.extends(source, target) || self.extends(target, source) {
+            return Ok(());
+        }
+        let mut class = Some(target);
+        let mut methods = false;
+        for _ in 0..64 {
+            let Some(here) = class else { break };
+            methods |= self
+                .hierarchy
+                .declares
+                .get(&here)
+                .is_some_and(|declared| !declared.is_empty());
+            class = self.hierarchy.base.get(&here).copied();
+        }
+        if !methods {
+            return Ok(());
+        }
+        let (source, target) = (
+            self.type_in_a_message(source),
+            self.type_in_a_message(target),
+        );
+        Err(self.unsupported(
+            id,
+            &format!(
+                "{source} where the unrelated class {target} is wanted -- a call through \
+                 {target} names its methods, and this object's are its own class's"
+            ),
+        ))
+    }
+
+    /// Whether `ty` is `ancestor` or extends it, along `extends` alone.
+    fn extends(&self, ty: TypeId, ancestor: TypeId) -> bool {
+        let mut at = Some(ty);
+        for _ in 0..64 {
+            let Some(here) = at else { return false };
+            if here == ancestor {
+                return true;
+            }
+            at = self.hierarchy.base.get(&here).copied();
+        }
+        false
     }
 
     fn not_a_prefix(&mut self, id: NodeId, from: TypeId, to: TypeId) -> Option<NotAPrefix> {
