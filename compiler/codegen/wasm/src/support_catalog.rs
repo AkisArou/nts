@@ -110,14 +110,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ),
     ("nts_array_slice_ref", Support::WasmHelper),
     ("nts_array_sort_str", Support::WasmHelper),
-    (
-        "nts_array_splice",
-        Support::Decline("array helper not yet implemented"),
-    ),
-    (
-        "nts_array_splice_ref",
-        Support::Decline("array helper not yet implemented"),
-    ),
+    ("nts_array_splice", Support::WasmHelper),
+    ("nts_array_splice_ref", Support::WasmHelper),
     (
         "nts_array_to_string",
         Support::Decline("array helper not yet implemented"),

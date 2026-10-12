@@ -17,5 +17,11 @@ for(const from of endpoints) for(const to of endpoints) {
 for(const [numbers,values] of [[true,[NaN,Infinity,-Infinity,-0,0,1,-1,.5,Number.MIN_VALUE,Number.MAX_VALUE]],[false,['','abc','\0','😀','\ud800','\udfff']]]) {
  for(const x of values) for(const y of values) for(const [numeric,string,count] of [['concatAt','concatString',4],['reverseAt','reverseString',5],['spreadAt','spreadString',6]]) {for(let at=0;at<=count;at++) same(numbers?numeric:string,x,y,at);}
 }
+for(const start of endpoints) for(const count of endpoints) {
+  const removed=[1,2,3,4].splice(start,count).length;
+  for(let at=0;at<=removed;at++) same('spliceRemoved',start,count,at);
+  const rest=[1,2,3,4]; rest.splice(start,count);
+  for(let at=0;at<rest.length;at++) {same('spliceRest',start,count,at); same('spliceString','\ud800','😀',start,count,at);}
+}
 same('reverseIdentity'); same('copyDistinct');
 console.log(JSON.stringify({cases,named_declines}));

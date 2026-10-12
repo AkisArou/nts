@@ -17,6 +17,8 @@ use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
     Slice,
+    /// Removal only: the removed run, as a new array; the rest move down.
+    Splice,
     Concat,
     Extend,
     Reverse,
@@ -28,10 +30,12 @@ pub(crate) struct Method {
 }
 pub(crate) fn external(name: &str) -> Option<Method> {
     use Family::{Number, Reference, Value};
-    use Helper::{Concat, Extend, Reverse, Slice};
+    use Helper::{Concat, Extend, Reverse, Slice, Splice};
     let (helper, family) = match name {
         "nts_array_slice" => (Slice, Number),
         "nts_array_slice_ref" => (Slice, Reference),
+        "nts_array_splice" => (Splice, Number),
+        "nts_array_splice_ref" => (Splice, Reference),
         "nts_array_concat" => (Concat, Number),
         "nts_array_concat_ref" => (Concat, Reference),
         "nts_array_concat_value" => (Concat, Value),
@@ -50,7 +54,7 @@ impl Helper {
             heap_type: HeapType::Concrete(shape.wrapper),
         });
         match self {
-            Self::Slice => (
+            Self::Slice | Self::Splice => (
                 vec![
                     array,
                     Physical::Scalar(crate::types::Slot::F64),
@@ -86,7 +90,7 @@ fn inner(
     args: &[ValueId],
 ) -> Result<(), Failure> {
     let arity = match method.helper {
-        Helper::Slice => 3,
+        Helper::Slice | Helper::Splice => 3,
         Helper::Concat | Helper::Extend => 2,
         Helper::Reverse => 1,
     };
@@ -129,7 +133,7 @@ fn inner(
         contract::require(b)?;
     }
     b.load(args[0])?;
-    if method.helper == Helper::Slice {
+    if matches!(method.helper, Helper::Slice | Helper::Splice) {
         arrays::number(b, args[1])?;
         arrays::number(b, args[2])?;
     } else if args.len() == 2 {
@@ -224,6 +228,14 @@ fn body(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Functi
             ValType::F64,
             backing_type,
         ]),
+        Helper::Splice => Function::new([
+            ValType::I32,
+            ValType::I32,
+            ValType::I32,
+            ValType::F64,
+            backing_type,
+            ValType::I32,
+        ]),
         Helper::Concat => Function::new([ValType::I32, ValType::I32, ValType::I32, backing_type]),
         Helper::Extend => Function::new([ValType::I32, ValType::I32, ValType::I32]),
         Helper::Reverse => Function::new([
@@ -235,6 +247,7 @@ fn body(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Functi
     };
     match helper {
         Helper::Slice => slice(&mut f, shape, m)?,
+        Helper::Splice => splice(&mut f, shape, m)?,
         Helper::Concat => {
             length(&mut f, shape, 0, 2);
             length(&mut f, shape, 1, 3);
@@ -304,6 +317,49 @@ fn slice(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Result<(),
     backing(f, shape, 0);
     f.instructions(&[I::LocalGet(4), I::LocalGet(5)]);
     copy(f, shape);
+    wrap(f, shape, m, 5, 7)
+}
+/// Params: array, start, count. Locals: length, start, count taken, scratch,
+/// the removed run, and what remains from the start. The start is relative to
+/// the length and the count clamped to what remains, as C clamps them. The
+/// vacated tail is reset so it holds no reference after the array shortens.
+fn splice(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Result<(), Failure> {
+    length(f, shape, 0, 3);
+    indexing::clamp(f, 1, 4, true, 3, 6);
+    f.instructions(&[I::LocalGet(3), I::LocalGet(4), I::I32Sub, I::LocalSet(8)]);
+    indexing::clamp(f, 2, 5, false, 8, 6);
+    allocate(f, shape, m, 5, 7)?;
+    f.instructions(&[I::LocalGet(7), I::I32Const(0)]);
+    backing(f, shape, 0);
+    f.instructions(&[I::LocalGet(4), I::LocalGet(5)]);
+    copy(f, shape);
+    backing(f, shape, 0);
+    f.instruction(&I::LocalGet(4));
+    backing(f, shape, 0);
+    f.instructions(&[
+        I::LocalGet(4),
+        I::LocalGet(5),
+        I::I32Add,
+        I::LocalGet(8),
+        I::LocalGet(5),
+        I::I32Sub,
+    ]);
+    copy(f, shape);
+    backing(f, shape, 0);
+    f.instructions(&[I::LocalGet(3), I::LocalGet(5), I::I32Sub]);
+    objects::push_default(m, f, &shape.element)?;
+    f.instructions(&[
+        I::LocalGet(5),
+        I::ArrayFill(shape.backing),
+        I::LocalGet(0),
+        I::LocalGet(3),
+        I::LocalGet(5),
+        I::I32Sub,
+        I::StructSet {
+            struct_type_index: shape.wrapper,
+            field_index: 1,
+        },
+    ]);
     wrap(f, shape, m, 5, 7)
 }
 fn reverse(f: &mut Function, shape: &gc::Array) -> Result<(), Failure> {

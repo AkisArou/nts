@@ -9,3 +9,6 @@ export function reverseIdentity(): boolean { const a:number[]=[]; return a.rever
 export function copyDistinct(): boolean { const a:number[]=[]; return a.slice()!==a && a.concat(a)!==a; }
 export function spreadAt(x: number, y: number, at: number): number { const a=[x,y]; return [y,...a,x,...a][at]; }
 export function spreadString(x: string, y: string, at: number): string { const a=[x,y]; return [y,...a,x,...a][at]; }
+export function spliceRemoved(start: number, count: number, at: number): number { const a=[1,2,3,4]; return a.splice(start,count)[at]; }
+export function spliceRest(start: number, count: number, at: number): number { const a=[1,2,3,4]; const alias=a; a.splice(start,count); return alias[at]+alias.length*100; }
+export function spliceString(x: string, y: string, start: number, count: number, at: number): string { const a=[x,y,x,y]; a.splice(start,count); return a[at]; }
