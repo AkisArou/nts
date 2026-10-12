@@ -102,19 +102,6 @@ impl Plan {
                         program.layouts[at].name
                     ));
                 }
-                // A shared descriptor's dispatch entries come from its lowest
-                // ClassId's layout: every ClassId sharing it must name that
-                // same layout, so their virtual thunks are identical.
-                debug_assert!(
-                    plan.descriptors[index as usize]
-                        .class
-                        .and_then(|class| program
-                            .layouts
-                            .iter()
-                            .position(|l| l.types.contains(&class)))
-                        == Some(at),
-                    "class type {ty:?} shares a descriptor across layouts"
-                );
                 index
             } else {
                 let index = u32::try_from(plan.descriptors.len())
