@@ -28,6 +28,7 @@ pub(crate) struct Symbols<'a> {
     pub(crate) input_decline: Option<u32>,
     pub(crate) descriptor_base: u32,
     pub(crate) instance_of: Option<u32>,
+    pub(crate) array_grow: BTreeMap<u32, u32>,
 }
 
 impl<'a> Symbols<'a> {
@@ -47,6 +48,7 @@ impl<'a> Symbols<'a> {
             global_base: descriptor_base + index(plan.objects.descriptors.len()),
             descriptor_base,
             instance_of: None,
+            array_grow: BTreeMap::new(),
             host: BTreeMap::new(),
             erased: BTreeMap::new(),
             input_decline: None,
@@ -263,6 +265,26 @@ fn declare_managed_adapters(
         symbols.instance_of = Some(id);
         names.append(id, crate::objects::INSTANCE);
     }
+    for array in symbols
+        .types
+        .arrays
+        .values()
+        .filter(|a| resources.grow_arrays.contains(&a.ty))
+    {
+        let id = imported_functions + functions.len();
+        functions.function(types.intern(Signature {
+            params: vec![
+                Physical::Reference(wasm_encoder::RefType {
+                    nullable: true,
+                    heap_type: wasm_encoder::HeapType::Concrete(array.wrapper),
+                }),
+                Physical::Scalar(crate::types::Slot::I32),
+            ],
+            result: None,
+        }));
+        symbols.array_grow.insert(array.wrapper, id);
+        names.append(id, &format!("array.grow<{:?}>", array.element));
+    }
 }
 
 struct Bodies {
@@ -325,6 +347,15 @@ fn bodies(
             reason: "missing object root".into(),
         })?;
         code.function(&crate::objects::instance_body(root));
+    }
+    for &wrapper in symbols.array_grow.keys() {
+        let array = &symbols.types.arrays[&wrapper];
+        let function =
+            crate::arrays::grow_body(array, symbols).map_err(|error| EmitError::Invariant {
+                function: format!("array.grow<{:?}>", array.element),
+                reason: error.to_string(),
+            })?;
+        code.function(&function);
     }
     Ok(Bodies {
         code,

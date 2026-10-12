@@ -58,6 +58,7 @@ mod tests {
             input_decline: None,
             descriptor_base: 0,
             instance_of: None,
+            array_grow: BTreeMap::new(),
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -128,6 +129,7 @@ mod tests {
                 input_decline: None,
                 descriptor_base: 0,
                 instance_of: None,
+                array_grow: BTreeMap::new(),
             };
             let error = emit(&f, 0, &symbols).unwrap_err();
             assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));
@@ -555,8 +557,15 @@ impl<'a> Body<'a> {
             OpKind::InstanceOf { value, classes } => {
                 crate::objects::instance(self, *value, classes)?;
             }
+            kind
+            @ (OpKind::ArrayNew { .. } | OpKind::ArrayGet { .. } | OpKind::ArraySet { .. }) => {
+                crate::arrays::operation(self, id, kind)?;
+            }
             OpKind::Length(value) if crate::strings::is_string(self.ty(*value)) => {
                 crate::strings::length(self, id, *value)?;
+            }
+            OpKind::Length(value) if crate::arrays::is_array(self.ty(*value)) => {
+                crate::arrays::length(self, id, *value)?;
             }
             OpKind::StringUnitAt {
                 string,
@@ -577,13 +586,7 @@ impl<'a> Body<'a> {
                 return Ok(());
             }
             OpKind::Call { callee, args, .. } => self.call(id, callee, args)?,
-            OpKind::Return(value) => {
-                if let Some(value) = value {
-                    self.load(*value)?;
-                }
-                self.ins(&I::Return);
-                return Ok(());
-            }
+            OpKind::Return(value) => return self.return_value(*value),
             OpKind::ConstUndefined => {
                 if self.symbols.types.slot(&op.ty)?.is_none() {
                     return Ok(());
@@ -613,9 +616,7 @@ impl<'a> Body<'a> {
             }
             OpKind::DispatchSlot(_)
             | OpKind::ConstTemplate { .. }
-            | OpKind::ArrayNew { .. }
             | OpKind::Length(_)
-            | OpKind::ArrayGet { .. }
             | OpKind::CellReady { .. }
             | OpKind::ClosureStatic
             | OpKind::SharedFieldGet { .. }
@@ -624,14 +625,20 @@ impl<'a> Body<'a> {
             | OpKind::Await { .. }
             | OpKind::Yield { .. }
             | OpKind::Suspend { .. }
-            | OpKind::PromiseSubscribe { .. }
-            | OpKind::ArraySet { .. } => {
+            | OpKind::PromiseSubscribe { .. } => {
                 return Err(format!("operation outside M1a: {:?}", op.kind).into());
             }
         }
         if self.symbols.types.slot(&op.ty)?.is_some() {
             self.ins(&I::LocalSet(self.local(id)?));
         }
+        Ok(())
+    }
+    fn return_value(&mut self, value: Option<ValueId>) -> Result<(), Failure> {
+        if let Some(value) = value {
+            self.load(value)?;
+        }
+        self.ins(&I::Return);
         Ok(())
     }
     fn binary(

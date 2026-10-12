@@ -5,6 +5,7 @@
 //! runtime helper families follow the reviewed plan in `docs/wasm.md`.
 
 mod abi;
+mod arrays;
 mod body;
 mod cfg;
 mod contract;

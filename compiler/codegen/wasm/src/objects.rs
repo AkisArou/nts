@@ -76,18 +76,24 @@ pub(crate) fn new(b: &mut Body<'_>, result: ValueId, frame: bool) -> Result<(), 
     Ok(())
 }
 pub(crate) fn default(b: &mut Body<'_>, ty: &HirType) -> Result<(), Failure> {
-    match b.symbols.types.value_slot(ty)? {
-        Physical::Scalar(Slot::I32) => b.ins(&I::I32Const(0)),
-        Physical::Scalar(Slot::I64) => b.ins(&I::I64Const(0)),
-        Physical::Scalar(Slot::F32) => b.ins(&I::F32Const(0.0.into())),
-        Physical::Scalar(Slot::F64) => b.ins(&I::F64Const(0.0.into())),
-        Physical::Reference(_) if ty == &HirType::Erased => {
-            let values = erased::values(b.symbols)?;
-            b.ins(&I::GlobalGet(values.for_tag(erased::UNDEFINED)?));
-        }
-        Physical::Reference(reference) => b.ins(&I::RefNull(reference.heap_type)),
-    }
+    b.ins(&default_instruction(b.symbols, ty)?);
     Ok(())
+}
+pub(crate) fn default_instruction(
+    symbols: &crate::module::Symbols<'_>,
+    ty: &HirType,
+) -> Result<I<'static>, Failure> {
+    Ok(match symbols.types.value_slot(ty)? {
+        Physical::Scalar(Slot::I32) => I::I32Const(0),
+        Physical::Scalar(Slot::I64) => I::I64Const(0),
+        Physical::Scalar(Slot::F32) => I::F32Const(0.0.into()),
+        Physical::Scalar(Slot::F64) => I::F64Const(0.0.into()),
+        Physical::Reference(_) if ty == &HirType::Erased => {
+            let values = erased::values(symbols)?;
+            I::GlobalGet(values.for_tag(erased::UNDEFINED)?)
+        }
+        Physical::Reference(reference) => I::RefNull(reference.heap_type),
+    })
 }
 fn field(storage: &Object, at: u32) -> Result<&nts_core::hir::Field, Failure> {
     storage

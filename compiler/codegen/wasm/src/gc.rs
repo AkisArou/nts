@@ -7,13 +7,13 @@ use crate::{
 use nts_core::hir::{HirType, ManagedType, Program};
 use nts_semantic_schema::TypeId;
 use rustc_hash::FxHashMap;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use wasm_encoder::{
     ArrayType, CompositeInnerType, CompositeType, FieldType, HeapType, RefType, StorageType,
     StructType, SubType, TypeSection,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct NodeId(usize);
 
 #[derive(Debug, Clone, Copy)]
@@ -83,6 +83,15 @@ struct ErasedNodes {
     string: NodeId,
 }
 
+#[derive(Debug)]
+pub(crate) struct Array {
+    pub(crate) ty: HirType,
+    pub(crate) element: HirType,
+    pub(crate) wrapper: u32,
+    pub(crate) backing: u32,
+    pub(crate) descriptor: u32,
+}
+
 /// Module-local storage assignments. Numeric operations still use the smaller
 /// scalar Slot type, so a reference cannot accidentally select integer code.
 #[derive(Debug, Default)]
@@ -93,6 +102,7 @@ pub(crate) struct Plan {
     pub(crate) erased: Option<ErasedTypes>,
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
+    pub(crate) arrays: BTreeMap<u32, Array>,
 }
 
 impl Plan {
@@ -164,6 +174,22 @@ impl Plan {
             .ok_or_else(|| Failure::Invariant(format!("no value slot for {ty:?}")))
     }
 
+    pub(crate) fn array(&self, ty: &HirType) -> Result<&Array, Failure> {
+        if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
+            return Err(format!("array storage for {ty:?}").into());
+        }
+        let Physical::Reference(RefType {
+            heap_type: HeapType::Concrete(wrapper),
+            ..
+        }) = self.value_slot(ty)?
+        else {
+            return Err(Failure::Invariant("non-concrete array storage".into()));
+        };
+        self.arrays
+            .get(&wrapper)
+            .ok_or_else(|| Failure::Invariant(format!("unplanned array wrapper {wrapper}")))
+    }
+
     pub(crate) fn encode(&self) -> TypeSection {
         let mut section = TypeSection::new();
         for group in &self.groups {
@@ -192,6 +218,7 @@ struct Builder<'a> {
     nodes: Vec<Node>,
     objects: FxHashMap<usize, NodeId>,
     arrays: FxHashMap<HirType, NodeId>,
+    backings: FxHashMap<NodeId, NodeId>,
     root: Option<RootNodes>,
     work: Vec<Work>,
     erased: Option<ErasedNodes>,
@@ -205,6 +232,7 @@ impl<'a> Builder<'a> {
             nodes: Vec::new(),
             objects: FxHashMap::default(),
             arrays: FxHashMap::default(),
+            backings: FxHashMap::default(),
             root: None,
             work: Vec::new(),
             erased: None,
@@ -488,6 +516,7 @@ impl<'a> Builder<'a> {
             true,
             Shape::Array(field),
         );
+        self.backings.insert(id, backing);
         let Shape::Struct(mut fields) = self.nodes[root.0].shape.clone() else {
             return Err("object root is not a struct".into());
         };
@@ -517,6 +546,54 @@ impl<'a> Builder<'a> {
                 deps.into_iter().collect()
             })
             .collect()
+    }
+    fn metadata(
+        &self,
+        indices: &[u32],
+    ) -> Result<(crate::object_plan::Plan, BTreeMap<u32, Array>), String> {
+        let mut objects = crate::object_plan::Plan::build(
+            self.program,
+            &self
+                .objects
+                .iter()
+                .map(|(&at, id)| (at, indices[id.0]))
+                .collect(),
+        )?;
+        let mut arrays = self
+            .arrays
+            .iter()
+            .map(|(element, id)| {
+                (
+                    indices[id.0],
+                    Array {
+                        ty: HirType::Managed(ManagedType::Array(Box::new(element.clone()))),
+                        element: element.clone(),
+                        wrapper: indices[id.0],
+                        backing: indices[self.backings[id].0],
+                        descriptor: 0,
+                    },
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let identity = objects
+            .descriptors
+            .iter()
+            .map(|d| d.identity)
+            .max()
+            .map_or(Some(0), |id| id.checked_add(1))
+            .ok_or_else(|| "too many semantic identities".to_owned())?;
+        for array in arrays.values_mut() {
+            array.descriptor = u32::try_from(objects.descriptors.len())
+                .map_err(|_| "too many array descriptors")?;
+            objects.descriptors.push(crate::object_plan::Descriptor {
+                identity,
+                kind: nts_core::hir::tags::of_reference(&ManagedType::Array(Box::new(
+                    array.element.clone(),
+                ))),
+                ancestry: Vec::new(),
+            });
+        }
+        Ok((objects, arrays))
     }
     fn finish(self) -> Result<Plan, String> {
         let graph = self.dependencies();
@@ -579,20 +656,15 @@ impl<'a> Builder<'a> {
                     .collect()
             })
             .collect();
+        let (objects, arrays) = self.metadata(&indices)?;
         Ok(Plan {
+            arrays,
             root: self.root.map(|nodes| RootTypes {
                 ancestry: indices[nodes.ancestry.0],
                 descriptor: indices[nodes.descriptor.0],
                 object: indices[nodes.object.0],
             }),
-            objects: crate::object_plan::Plan::build(
-                self.program,
-                &self
-                    .objects
-                    .iter()
-                    .map(|(&layout, id)| (layout, indices[id.0]))
-                    .collect(),
-            )?,
+            objects,
             erased: self.erased.map(|nodes| ErasedTypes {
                 tagged: indices[nodes.tagged.0],
                 number: indices[nodes.number.0],

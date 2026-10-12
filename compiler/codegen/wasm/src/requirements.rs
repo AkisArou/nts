@@ -20,8 +20,14 @@ pub(crate) struct Requirements {
     pub(crate) input_contract: bool,
     pub(crate) referenced_objects: BTreeMap<ClassId, ObjectUse>,
     pub(crate) instance_of: bool,
+    pub(crate) grow_arrays: rustc_hash::FxHashSet<HirType>,
 }
 impl Requirements {
+    fn growth(&mut self, func: &Func, array: nts_core::hir::ValueId, checked: bool) {
+        if checked && nts_core::hir::array_write_may_grow(func, array) {
+            self.grow_arrays.insert(func.value(array).ty.clone());
+        }
+    }
     fn unit(&mut self, func: &Func, checked: bool) {
         self.contract(func);
         if !checked {
@@ -201,7 +207,10 @@ fn helper_for(
             result.instance(func, id, classes);
             None
         }
-        OpKind::FieldGet { .. } | OpKind::FieldSet { .. } => {
+        OpKind::FieldGet { .. }
+        | OpKind::FieldSet { .. }
+        | OpKind::ArrayNew { .. }
+        | OpKind::ArrayGet { .. } => {
             result.contract(func);
             None
         }
@@ -212,8 +221,13 @@ fn helper_for(
         OpKind::Length(value) => {
             if strings::is_string(&func.value(value).ty) {
                 result.require(strings::Helper::Length);
-                result.contract(func);
             }
+            result.contract(func);
+            None
+        }
+        OpKind::ArraySet { array, checked, .. } => {
+            result.contract(func);
+            result.growth(func, array, checked);
             None
         }
         OpKind::StringUnitAt { checked, .. } => {
@@ -254,8 +268,6 @@ fn helper_for(
         | OpKind::ConstBool(_)
         | OpKind::ConstTemplate { .. }
         | OpKind::Return(_)
-        | OpKind::ArrayNew { .. }
-        | OpKind::ArrayGet { .. }
         | OpKind::Retain(_)
         | OpKind::Release(_)
         | OpKind::GlobalGet(_)
@@ -271,8 +283,7 @@ fn helper_for(
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. }
-        | OpKind::PromiseSubscribe { .. }
-        | OpKind::ArraySet { .. } => None,
+        | OpKind::PromiseSubscribe { .. } => None,
     }
 }
 
