@@ -63,6 +63,11 @@ pub(crate) struct ErasedTypes {
     pub(crate) string: u32,
 }
 
+/// The fields every descriptor starts with: semantic identity, runtime kind
+/// and ancestry. A class with virtual methods has a vtable: a descriptor
+/// subtype whose further fields are its method entries.
+pub(crate) const DESCRIPTOR_HEADER: u32 = 3;
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RootTypes {
     pub(crate) ancestry: u32,
@@ -358,12 +363,11 @@ impl<'a> Builder<'a> {
         let descriptor = self.add(
             "descriptor".into(),
             None,
-            true,
+            false,
             Shape::Struct(vec![
                 Field::value(PendingSlot::Scalar(Slot::I32), false), // semantic identity
                 Field::value(PendingSlot::Scalar(Slot::I32), false), // runtime kind
                 Field::value(PendingSlot::Defined(ancestry, true), false),
-                Field::value(PendingSlot::Reference(RefType::ANYREF), false), // dispatch object
             ]),
         );
         let root = self.add(
@@ -549,9 +553,13 @@ impl<'a> Builder<'a> {
 
     fn complete_object(&mut self, at: usize, id: NodeId) -> Result<(), String> {
         let layout = &self.program.layouts[at];
-        if let Some(&root) = self.virtual_plan.members.get(&at) {
-            self.dispatch(root)?;
-        }
+        let vtable = self
+            .virtual_plan
+            .members
+            .get(&at)
+            .copied()
+            .map(|root| self.dispatch(root))
+            .transpose()?;
         let callable = self
             .callable_plan
             .members
@@ -571,6 +579,12 @@ impl<'a> Builder<'a> {
                 return Err(format!("base of `{}` is not an object", layout.name));
             }
         };
+        // Every class of a dispatch hierarchy holds its exact vtable type: an
+        // immutable field may narrow in a subtype, so a virtual call reads its
+        // entries without a cast.
+        if let Some(vtable) = vtable {
+            fields[0] = Field::value(PendingSlot::Defined(vtable, false), false);
+        }
         // HIR fields include the base prefix; the descriptor is physical only.
         if let Some(base) = self.program.base_layout(layout) {
             let base_layout = &self.program.layouts[base];
@@ -640,12 +654,20 @@ impl<'a> Builder<'a> {
         Ok(base)
     }
 
+    /// The vtable of one dispatch hierarchy: the descriptor header, then one
+    /// immutable entry per virtual slot the program calls.
     fn dispatch(&mut self, root: usize) -> Result<NodeId, String> {
         if let Some(nodes) = self.virtuals.get(&root) {
             return Ok(nodes.base);
         }
         let object = self.root();
-        let mut fields = Vec::new();
+        let descriptor = self
+            .root
+            .map(|nodes| nodes.descriptor)
+            .ok_or("missing object root")?;
+        let Shape::Struct(mut fields) = self.nodes[descriptor.0].shape.clone() else {
+            return Err("descriptor is not a struct".into());
+        };
         let mut entries = BTreeMap::new();
         for entry in self.virtual_plan.groups[&root]
             .values()
@@ -670,8 +692,8 @@ impl<'a> Builder<'a> {
             entries.insert(entry.slot, signature);
         }
         let base = self.add(
-            format!("dispatch<{}>", self.program.layouts[root].name),
-            None,
+            format!("vtable<{}>", self.program.layouts[root].name),
+            Some(descriptor),
             true,
             Shape::Struct(fields),
         );
@@ -918,7 +940,12 @@ impl<'a> Builder<'a> {
         Ok(Plan {
             arrays,
             callables: self.resolved_callables(&indices),
-            virtuals: Self::resolve_entries(&self.virtuals, &self.virtual_plan, &indices, 0),
+            virtuals: Self::resolve_entries(
+                &self.virtuals,
+                &self.virtual_plan,
+                &indices,
+                DESCRIPTOR_HEADER,
+            ),
             root: self.root.map(|nodes| RootTypes {
                 ancestry: indices[nodes.ancestry.0],
                 descriptor: indices[nodes.descriptor.0],

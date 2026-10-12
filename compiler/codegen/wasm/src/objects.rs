@@ -41,9 +41,10 @@ pub(crate) fn descriptor(m: &mut Builder<'_>, at: u32) -> Result<Global, Failure
             array_size: u32::try_from(descriptor.ancestry.len())
                 .map_err(|_| Failure::Invariant("too many class ancestors".into()))?,
         });
-        crate::callables::dispatch(m, &mut code, descriptor.class)?;
-        code.instruction(&I::StructNew(root.descriptor));
-        Ok((crate::module::constant_type(root.descriptor), code))
+        let ty =
+            crate::callables::dispatch(m, &mut code, descriptor.class)?.unwrap_or(root.descriptor);
+        code.instruction(&I::StructNew(ty));
+        Ok((crate::module::constant_type(ty), code))
     })
 }
 fn object<'p>(b: &Body<'_, 'p>, value: ValueId) -> Result<&'p Object, Failure> {

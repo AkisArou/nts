@@ -211,13 +211,14 @@ pub(crate) fn entries(
         .collect()
 }
 
-/// A descriptor's dispatch object: the class entries for an allocated class
-/// with virtual slots, otherwise a null reference.
+/// A descriptor's vtable entries, pushed after its header, for an allocated
+/// class with virtual slots: the vtable type they complete, or none for a
+/// plain descriptor.
 pub(crate) fn dispatch(
     m: &mut Builder<'_>,
     code: &mut ir::Code,
     class: Option<ClassId>,
-) -> Result<(), Failure> {
+) -> Result<Option<u32>, Failure> {
     let types = m.types;
     let virtual_root = class
         .map(|class| {
@@ -229,16 +230,14 @@ pub(crate) fn dispatch(
         .transpose()?
         .flatten();
     let (Some(class), Some(root)) = (class, virtual_root) else {
-        code.instruction(&I::RefNull(HeapType::ANY));
-        return Ok(());
+        return Ok(None);
     };
     let group = &types.virtuals[&root];
     for &slot in group.entries.keys() {
         let entry = thunk_func(m, Face::Virtual, class, slot)?;
         code.ref_func(entry);
     }
-    code.instruction(&I::StructNew(group.base));
-    Ok(())
+    Ok(Some(group.base))
 }
 
 pub(crate) fn call(
@@ -272,18 +271,11 @@ pub(crate) fn call(
     }
     b.load(receiver)?;
     if face == Face::Virtual {
-        let root = types
-            .root
-            .ok_or_else(|| Failure::Invariant("unplanned class root".into()))?;
+        // The receiver's class holds its hierarchy's exact vtable type.
         b.instruction(&I::StructGet {
-            struct_type_index: root.object,
+            struct_type_index: storage.physical,
             field_index: 0,
         });
-        b.instruction(&I::StructGet {
-            struct_type_index: root.descriptor,
-            field_index: 3,
-        });
-        b.instruction(&I::RefCastNonNull(HeapType::Concrete(group.base)));
     }
     b.instruction(&I::StructGet {
         struct_type_index: group.base,
