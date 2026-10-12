@@ -307,6 +307,7 @@ pub(super) fn object_names(func: &Func) -> FxHashMap<ValueId, Vec<ValueId>> {
                 match &op.kind {
                     OpKind::Erase { value: inner, .. }
                     | OpKind::Unerase { value: inner }
+                    | OpKind::FieldView { value: inner, .. }
                     | OpKind::Convert(inner) => {
                         changed |= note(&mut named, *value, *inner);
                     }

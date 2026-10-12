@@ -25,3 +25,19 @@ export function survivesOwnerRelease(n: number): string {
   const another = returnView(n + 2);
   return view.name + "/" + another.name;
 }
+
+class StoredNamed {
+  constructor(readonly name: string) {}
+}
+class GetterNamed {
+  constructor(private n: number) {}
+  get name(): string { return "c" + this.n; }
+}
+function readName(value: Named): string { return value.name; }
+
+// The stored field and computed getter dispatch through the same face. RC
+// must keep the frame-local stored string until the later map loop reads it.
+export function namesFromFrameArray(n: number): string {
+  const all: Named[] = [new StoredNamed("p" + n), new GetterNamed(n)];
+  return all.map((value) => readName(value)).join(",");
+}
