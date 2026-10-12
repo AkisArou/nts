@@ -431,6 +431,20 @@ fn declare_fields(
     interface: bool,
     origin: &nts_semantic_schema::Origin,
 ) -> Result<(), Diagnostic> {
+    #[cfg(debug_assertions)]
+    for index in 0..layout.fields.len() {
+        let owner = hierarchy::declares_field(program, layout, index);
+        debug_assert!(
+            hierarchy::ancestry(program, layout)
+                .iter()
+                .any(|ancestor| std::ptr::eq(*ancestor, owner))
+                && index >= hierarchy::inherited(program, owner)
+                && index < owner.fields.len(),
+            "{}.{} names a field owner that does not declare it in the emitted ancestry",
+            layout.name,
+            index,
+        );
+    }
     // Two properties that mangle to one field name.
     //
     // `jvm_member_name` maps everything DEX forbids to `$`, which is not
