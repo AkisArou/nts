@@ -160,6 +160,21 @@ them only as quoted export names, and every local it declares is the glue's.
   sits at one depth in every display that holds it, `instanceof` checks the
   display's length and reads that slot; a class at two depths keeps the scan.
 
+### Function values (1c)
+
+A call through a function value that knows the signature but not the class
+uses a uniform entry: the erased entry or its raising twin, which lowering
+builds at one program-wide width.
+- `$Callable` extends the object root with one immutable entry per uniform
+  slot the program calls.
+- A signature layout is stored as `$Callable` itself.
+- Every closure's storage extends `$Callable`: its typed-entry group first,
+  then its captures.
+- A closure handed to a signature-typed parameter is a free upcast, and a
+  uniform call reads its entry without a cast.
+- An allocated closure that does not fill a uniform slot stores a stub that
+  refuses by name if called, as the JVM fills its unfilled entries.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
