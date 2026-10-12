@@ -14,3 +14,9 @@ export function recordValue(n: number): number {
   const values: Base[] = [new Base(), new Derived()];
   return values[n > 0 ? 0 : 1]!.toJSON().value;
 }
+// The record layouts must actually reach the optional face. Merely having an
+// unrelated structurally compatible face does not give them native rows.
+export function recordLabel(n: number): string {
+  const record = n > 0 ? new Derived().toJSON() : new Base().toJSON();
+  return label(record as OptionalLabel);
+}

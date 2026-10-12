@@ -40,6 +40,7 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
         "readValue",
         "observeValue",
         "publishedHolder",
+        "copyDetails",
     ] {
         assert!(
             program.funcs.iter().any(|func| func.name == name),
@@ -143,6 +144,13 @@ fn accessor_reads_keep_checked_narrowing_and_actual_getter_absence() {
             .iter()
             .any(|op| { matches!(op.kind, OpKind::Unerase { .. }) && op.ty == hir::HirType::Bool })
     );
+    for name in ["Query#read", "observeQuery"] {
+        assert!(
+            program.funcs.iter().any(|func| func.name == name),
+            "checked narrowing of a concrete stored field must remain compiled: {name}: {:?}",
+            program.uncompiled
+        );
+    }
 }
 
 #[test]

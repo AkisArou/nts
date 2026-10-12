@@ -26,3 +26,18 @@ export function observeNullable(): unknown {
   const value: NullableFace = new Nullable() as NullableFace;
   return value.nullableFlag;
 }
+
+interface QueryFace { query?: string | number[] | null; }
+class Query {
+  query: string | number[] | null = null;
+  constructor(n: number) { this.query = [n]; }
+  read(): number { return readQuery(this); }
+}
+function arraySize(value: number[]): number { return value.length; }
+function readQuery(value: QueryFace): number {
+  if (value.query !== null && value.query !== undefined && typeof value.query === "object") {
+    return arraySize(value.query);
+  }
+  return 0;
+}
+export function observeQuery(n: number): number { return new Query(n).read(); }

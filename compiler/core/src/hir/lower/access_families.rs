@@ -248,7 +248,14 @@ impl FuncBuilder<'_> {
             // a concrete supplier. Keep the checker's narrowed face instead.
             && !self.hierarchy.faces.contains(&actual)
         {
-            return interfaces::property(self.snapshot, actual, &member).map(Read::Property);
+            // A source copy reads this concrete storage directly. Its declared
+            // field type describes the stored ABI; the source node still
+            // licenses checked narrowing of the payload, just as on a class
+            // read without a family. Getters keep their actual result contract:
+            // assignment or assertion cannot remove an absence they return.
+            return interfaces::property(self.snapshot, actual, &member)
+                .filter(|property| property.kind != MemberKind::Field)
+                .map(Read::Property);
         }
         self.hierarchy
             .access_families
@@ -327,6 +334,15 @@ pub(super) struct Families {
 impl Families {
     pub(super) fn changes_transport(&self, face: TypeId) -> bool {
         self.transport_faces.contains(&face)
+    }
+    /// Licensing a layout's own fields does not change how its existing
+    /// objects reach that layout. Keep the original record-copy path when
+    /// the complete family contains only that exact source storage.
+    fn changed_transport_faces(&self) -> FxHashSet<TypeId> {
+        self.transports
+            .iter()
+            .filter_map(|(owner, face)| (owner != face).then_some(*face))
+            .collect()
     }
     pub(super) fn permits_spread(&self, face: TypeId) -> bool {
         self.spread_safe.contains(&face)
@@ -466,7 +482,7 @@ impl Families {
                 result.by_site.insert(site, families);
             }
         }
-        result.transport_faces = result.transports.iter().map(|(_, face)| *face).collect();
+        result.transport_faces = result.changed_transport_faces();
         result
     }
 

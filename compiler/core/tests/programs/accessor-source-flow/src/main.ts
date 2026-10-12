@@ -45,3 +45,14 @@ export class PublicHolder {
   observe(): number { return readFace(this.held); }
 }
 export function publishedHolder(n: number): number { return new PublicHolder(n).observe(); }
+
+interface Details { budget?: number; note?: string; }
+function makeDetails(n: number): Details {
+  const details: Details = {};
+  details.budget = n;
+  return details;
+}
+export function copyDetails(n: number): unknown {
+  const details = makeDetails(n);
+  return {...details};
+}
