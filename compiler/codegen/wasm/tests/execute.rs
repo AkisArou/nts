@@ -115,7 +115,7 @@ fn source_array_helpers_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 1078);
+    assert_eq!(output["cases"], 1386);
 }
 
 #[test]

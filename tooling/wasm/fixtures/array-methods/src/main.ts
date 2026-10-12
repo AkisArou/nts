@@ -42,6 +42,18 @@ export function shiftThenRead(n: number, x: number, at: number): number {
   a.push(-7);
   return a[at] + a.length * 1000;
 }
+// `unshift` puts an element first and moves the rest up one slot.
+export function unshiftThenRead(n: number, x: number, at: number): number {
+  const a = counted(n, x);
+  const length = a.unshift(-7);
+  return a[at] + length * 1000;
+}
+export function unshiftText(n: number, at: number): number {
+  const words = ['a', 'bb', 'ccc', 'dddd'];
+  const a: string[] = [];
+  for (let i = 0; i < n; i++) a.unshift(words[i & 3]);
+  return a.length * 100 + (at < a.length ? a[at].length : 0);
+}
 export function shiftText(n: number, at: number): number {
   const words = ['a', 'bb', 'ccc', 'dddd'];
   const a: string[] = [];

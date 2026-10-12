@@ -21,6 +21,8 @@ pub(crate) enum Family {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Method {
     Push(Family),
+    /// `push` at the front: the rest move up one slot.
+    Unshift(Family),
     Pop(Family),
     /// `pop` at the front: the rest move down one slot.
     Shift(Family),
@@ -33,11 +35,13 @@ pub(crate) enum Method {
 
 pub(crate) fn external(name: &str) -> Option<Method> {
     use Family::{Boolean, Number, Reference, Value};
-    use Method::{Fill, Pop, Push, Shift, Truncate};
+    use Method::{Fill, Pop, Push, Shift, Truncate, Unshift};
     match name {
         "nts_array_push" => Some(Push(Number)),
         "nts_array_push_ref" => Some(Push(Reference)),
         "nts_array_push_value" => Some(Push(Value)),
+        "nts_array_unshift" => Some(Unshift(Number)),
+        "nts_array_unshift_ref" => Some(Unshift(Reference)),
         "nts_array_pop" => Some(Pop(Number)),
         "nts_array_pop_ref" => Some(Pop(Reference)),
         // This suffix names the result, unlike push/set_length_value. The
@@ -72,7 +76,12 @@ impl Method {
         let family = match self {
             // Header contracts that are descriptor-width generic.
             Self::KeepFirst | Self::Element => return true,
-            Self::Push(f) | Self::Pop(f) | Self::Shift(f) | Self::Fill(f) | Self::Truncate(f) => f,
+            Self::Push(f)
+            | Self::Unshift(f)
+            | Self::Pop(f)
+            | Self::Shift(f)
+            | Self::Fill(f)
+            | Self::Truncate(f) => f,
         };
         match family {
             Family::Number if self.truncates() => element.is_scalar(),
@@ -130,7 +139,8 @@ fn call_inner(
     contract::nonnull(b, array)?;
     match method {
         Method::Element => element_value(b, result, shape, array, args[1]),
-        Method::Push(_) => push(b, result, shape, args[0], args[1]),
+        Method::Push(_) => put(b, result, shape, args[0], args[1], End::Back),
+        Method::Unshift(_) => put(b, result, shape, args[0], args[1], End::Front),
         Method::Pop(family) => take(b, result, shape, args[0], family, End::Back),
         Method::Shift(family) => take(b, result, shape, args[0], family, End::Front),
         Method::Fill(_) => fill(b, result, shape, args[0], args[1]),
@@ -157,12 +167,14 @@ fn element(b: &mut Body<'_, '_>, shape: &gc::Array, input: ValueId) -> Result<()
     b.load(input)?;
     objects::adapt(b, &b.ty(input).clone(), &shape.element)
 }
-fn push(
+/// `push` and `unshift`, answering the new length.
+fn put(
     b: &mut Body<'_, '_>,
     result: ValueId,
     shape: &gc::Array,
     array: ValueId,
     input: ValueId,
+    end: End,
 ) -> Result<(), Failure> {
     length(b, shape, array)?;
     b.instruction(&I::I32Const(-1));
@@ -175,7 +187,22 @@ fn push(
     b.instruction(&I::I32Add);
     b.call(grow);
     backing(b, shape, array)?;
-    length(b, shape, array)?;
+    match end {
+        End::Back => length(b, shape, array)?,
+        End::Front => {
+            // The rest move up one slot; `array.copy` allows the overlap.
+            b.instruction(&I::I32Const(1));
+            backing(b, shape, array)?;
+            b.instruction(&I::I32Const(0));
+            length(b, shape, array)?;
+            b.instruction(&I::ArrayCopy {
+                array_type_index_dst: shape.backing,
+                array_type_index_src: shape.backing,
+            });
+            backing(b, shape, array)?;
+            b.instruction(&I::I32Const(0));
+        }
+    }
     element(b, shape, input)?;
     b.instruction(&I::ArraySet(shape.backing));
     b.load(array)?;
@@ -253,7 +280,7 @@ fn last(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<(), F
     b.instruction(&I::I32Sub);
     Ok(())
 }
-/// Which end `take` removes an element from.
+/// Which end `put` and `take` work at.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum End {
     Front,

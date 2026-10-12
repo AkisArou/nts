@@ -126,14 +126,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_array_unlend",
         Support::Decline("native/string-buffer boundary"),
     ),
-    (
-        "nts_array_unshift",
-        Support::Decline("array helper not yet implemented"),
-    ),
-    (
-        "nts_array_unshift_ref",
-        Support::Decline("array helper not yet implemented"),
-    ),
+    ("nts_array_unshift", Support::Intrinsic),
+    ("nts_array_unshift_ref", Support::Intrinsic),
     (
         "nts_array_writable",
         Support::Decline("array helper not yet implemented"),

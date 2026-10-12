@@ -17,7 +17,8 @@ for (const x of [NaN, Infinity, -Infinity, -0, 0, 1, -1, .5, Number.MIN_VALUE, N
     same(wasm.shiftOrDefault(n,x),oracle.shiftOrDefault(n,x));
     if(n>0) same(wasm.shiftAsserted(n,x),oracle.shiftAsserted(n,x));
     for(let at=0;at<n;at++) same(wasm.shiftThenRead(n,x,at),oracle.shiftThenRead(n,x,at));
+    for(let at=0;at<=n;at++) same(wasm.unshiftThenRead(n,x,at),oracle.unshiftThenRead(n,x,at));
   }
 }
-for(let n=0;n<=6;n++) for(let at=0;at<=n;at++) same(wasm.shiftText(n,at),oracle.shiftText(n,at));
+for(let n=0;n<=6;n++) for(let at=0;at<=n;at++) { same(wasm.shiftText(n,at),oracle.shiftText(n,at)); same(wasm.unshiftText(n,at),oracle.unshiftText(n,at)); }
 console.log(JSON.stringify({cases}));
