@@ -100,6 +100,20 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
 }
 
 #[test]
+fn stored_record_results_keep_the_existing_positional_path() {
+    let Some(program) = prepared_fixture("accessor-stored-result") else {
+        return;
+    };
+    for name in ["observeDirect", "read"] {
+        assert!(
+            program.funcs.iter().any(|func| func.name == name),
+            "a stored record result cannot lose its existing positional path: {name}: {:?}",
+            program.uncompiled
+        );
+    }
+}
+
+#[test]
 fn native_rows_do_not_break_a_private_generic_template_prefix() {
     let Some(program) = prepared_fixture("accessor-private-template") else {
         return;

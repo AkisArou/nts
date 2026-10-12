@@ -797,6 +797,16 @@ fn family(
             )
     });
     let same_absences = actual_absences == declared_absences;
+    // A typed stored record still needs its source result layout. Distinct
+    // schema ids may later merge, but no such proof exists here. Widening this
+    // read to NtsValue would discard main's positional result path before it
+    // can be shaped. Leave the family unlicensed and keep that existing path.
+    if !uniform
+        && matches!(declared, HirType::Managed(super::ManagedType::Object(_)))
+        && supplies.iter().all(|supply| matches!(supply.reader, Reader::Stored))
+    {
+        return Err("stored record results without one proven source storage contract");
+    }
     let returns = if uniform && same_absences {
         declared.clone()
     } else {
