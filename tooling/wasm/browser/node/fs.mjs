@@ -8,9 +8,16 @@ function request(method, file, body) {
   xhr.send(body ?? null);
   return xhr;
 }
+// A refusal and an absence are different answers: 403 is EACCES.
+function failure(status, file) {
+  const code = status === 403 ? 'EACCES' : 'ENOENT';
+  const error = new Error(`${code}: ${file}`);
+  error.code = code;
+  return error;
+}
 export function readFileSync(file, encoding) {
   const xhr = request('GET', String(file));
-  if (xhr.status !== 200) { const error = new Error(`ENOENT: ${file}`); error.code = 'ENOENT'; throw error; }
+  if (xhr.status !== 200) throw failure(xhr.status, file);
   if (!encoding) throw new TypeError('the browser shim reads text only; pass an encoding');
   return xhr.responseText;
 }

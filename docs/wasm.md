@@ -87,10 +87,13 @@ them only as quoted export names, and every local it declares is the glue's.
   glue's table gives the Wasm type each JS value implements, and an import
   declared with another type fails glue generation: an engine converts a JS
   function's arguments silently, so the check cannot be left to it.
-- **Captures.** Every primitive a wrapper calls (`Object.is`,
+- **Captures.** The primitives a wrapper calls (`Object.is`,
   `Number.isInteger`, `Math.fround`, `BigInt`, `Object.freeze`,
-  `WebAssembly.Instance`, the `Math` members) is captured when the glue loads,
-  so later changes to globals cannot redirect a check.
+  `WebAssembly.Instance`, the `Math` members) are captured when the glue loads.
+  Two accessors are not yet (follow-up F5b): `WebAssembly.Global.prototype.value`,
+  read on every global read and `sync()`, and
+  `WebAssembly.Instance.prototype.exports`, read on each `instantiate()`.
+  Redefining either can still change what a wrapper returns.
 - **Wrappers.** One straight-line wrapper per export, with only the checks its
   declared type needs: `typeof`, integer range, and the numeric facts
   specialization assumed (`mode: 0|1|2` is a whole number in [0, 2]). String
@@ -126,11 +129,14 @@ them only as quoted export names, and every local it declares is the glue's.
   - booleans and `undefined` are imported constants;
   - a compiled object keeps the approved named refusal.
 - **No pending raise survives an exit to the host.** An uncaught throw and the
-  single input-refusal helper clear the state. In a module that raises, every
-  host entry's return also tests the flag and throws a pending raise uncaught.
-  Lowering never leaves one there; if it ever did, the exception would surface
-  as the throw it is rather than be lost or seen by a later call. A module
-  that never raises pays nothing. The backend reads no semantics from function
+  single input-refusal helper clear the state. In a module that uses the
+  raising helpers, every host entry's return also tests the flag and throws a
+  pending raise uncaught. Lowering never leaves one there; if it ever did, the
+  exception would surface as the throw it is rather than be lost or seen by a
+  later call. A module with no raising helper pays nothing. The check is
+  keyed on any raising helper today, `nts_uncaught` included, so a module that
+  only throws uncaught pays it on every export (follow-up F3b: key it on
+  `nts_raise`). The backend reads no semantics from function
   names (`execute.rs` renames every raising copy to pin that), so the rule is
   at the host boundary rather than keyed on a copy's `@raises` name.
 - There are no activation exports, no snapshots and no per-call bookkeeping.
@@ -173,6 +179,21 @@ headless Chromium as node would run it:
 on browser glue in Chromium. `census.py --host browser` emits for the browser
 and runs each example's oracle there.
 
+A run ends as a node run does: when no timer is pending, and with 1 for an
+uncaught throw or an unhandled rejection. Its result is decided before
+cleanup and cleanup never changes it: Chromium runs in its own process
+group, which is killed and awaited, and only then is its profile removed,
+with retries. SIGTERM stops the browser first, and the census sets the
+runner's deadline (25 s) below its own (30 s), so a timed-out row orphans
+nothing. Confinement is checked on real paths, and a refusal reads as
+`EACCES`, distinct from a missing file.
+
+The one browser failure seen on 2026-10-12 (`array_lookup`, its output lost)
+is, most likely, the race this removes. The review reproduced it on the same
+test: `rm` of the profile threw `ENOTEMPTY` while Chromium was still dying,
+the runner exited 1, and the script's output was discarded. That loss is
+also why the failure's text was missing.
+
 ### Follow-ups from the 1a review
 
 - **F4.** String and boolean literal parameter types are not guarded:
@@ -185,15 +206,13 @@ and runs each example's oracle there.
   char-code fallback for when it preserves them.
 - **F8, remaining tests.** Class-keyed StaticClosure and Descriptor, poisoned
   helpers by fault injection through a real body, and validate_global.
-
-### Open item: one unexplained browser failure
-
-`array_lookup::numeric_string_identity_and_optional_lookup_match_js` failed
-once, in the first full `NTS_WASM_BROWSER=1` suite run of 2026-10-12, and its
-message was lost to an output filter. It has not recurred: 6 later full runs,
-3 isolated runs and 50 exact runs at two workers under gate load all passed.
-A failing check now writes its full output to `failure.txt` beside the kept
-artifact, so a recurrence will carry its text.
+- **Test debt from the review.** Reverting any of these fails no test today:
+  - F2's import signature table: no mismatch or unknown `nts_math_*` test;
+  - F5's captures: no tamper test;
+  - F9's `--host` forms: `tooling/cli/tests/wasm.rs` does not exercise them;
+  - F1's globals: no i64, u64, bool or string public global in a test.
+- **F10.** Its assertion is tautological (descriptors are keyed by layout
+  index); replace it with one that can fail, or drop it.
 
 ### Not yet done
 

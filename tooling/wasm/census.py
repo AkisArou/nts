@@ -14,12 +14,21 @@ from pathlib import Path
 import subprocess
 
 
-def run(args, cwd, timeout):
-    try:
-        result = subprocess.run(args, cwd=cwd, capture_output=True, timeout=timeout)
-        return result.returncode, result.stdout, result.stderr
-    except subprocess.TimeoutExpired as error:
-        return None, error.stdout or b"", error.stderr or b""
+def run(args, cwd, timeout, env=None):
+    """Run to completion, or stop it at `timeout`: SIGTERM first, so a runner
+    can stop what it started, and SIGKILL only if that is not enough."""
+    with subprocess.Popen(args, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+            return process.returncode, stdout, stderr
+        except subprocess.TimeoutExpired:
+            process.terminate()
+            try:
+                stdout, stderr = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+            return None, stdout or b"", stderr or b""
 
 
 def main():
@@ -104,10 +113,16 @@ def main():
                 result_file = case_dir / "execution.json"
                 runner = (["node", str(root / "tooling/wasm/browser/run.mjs")] if args.host == "browser"
                           else ["node", "--experimental-transform-types"])
+                # The browser runner's own deadline fires first, so it stops
+                # Chromium itself; the oracle's per-call 1 s timeout has no
+                # browser equivalent, and that deadline bounds it instead.
+                env = {**os.environ, "NTS_BROWSER_TIMEOUT_MS": "25000"}
                 status, stdout, stderr = run([
                     *runner, str(root / "tooling/wasm/check-corpus-example.mjs"),
                     str(artifact), str(source), str(result_file),
-                ], root, 30)
+                ], root, 30, env)
+                if args.host == "browser" and status == 124:
+                    status = None
                 (case_dir / "node.stdout").write_bytes(stdout)
                 (case_dir / "node.stderr").write_bytes(stderr)
                 row["node_status"] = status

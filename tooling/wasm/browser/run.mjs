@@ -12,10 +12,17 @@
 // An artifact emitted with `--host browser` loads its module the browser way,
 // through compileStreaming(fetch(...)). NTS_CHROMIUM names the browser
 // (default `chromium`); NTS_BROWSER_TIMEOUT_MS bounds one run (default
-// 120000), and a run that exceeds it exits 124.
+// 120000), and a run that exceeds it exits 124. A caller with its own
+// deadline sets this below it: a runner killed outright cannot stop the
+// browser it started. SIGTERM, SIGINT and SIGHUP stop the browser and remove
+// its profile first.
+//
+// The run's result is decided before cleanup, and cleanup never changes it:
+// the browser's whole process group is killed and awaited, then its profile
+// is removed with retries, and a failure to remove it is a note on stderr.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { stripTypeScriptTypes } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -28,9 +35,15 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repository = path.resolve(here, '../../..');
 const pathLike = arg => arg.startsWith('/') || arg.startsWith('.') || existsSync(arg);
 const args = rawArgs.map(arg => (pathLike(arg) ? path.resolve(arg) : arg));
+const real = file => (existsSync(file) ? realpathSync(file) : file);
 const roots = [repository, path.dirname(path.resolve(script)), ...args.filter(pathLike).map(arg =>
-  existsSync(arg) && statSync(arg).isDirectory() ? arg : path.dirname(arg))];
-const inside = file => roots.some(root => file === root || file.startsWith(root + path.sep));
+  existsSync(arg) && statSync(arg).isDirectory() ? arg : path.dirname(arg))].map(real);
+// Confinement is checked on the real path, so a link inside a root cannot
+// serve a file outside every root.
+const inside = file => {
+  const resolved = existsSync(file) ? realpathSync(file) : path.join(real(path.dirname(file)), path.basename(file));
+  return roots.some(root => resolved === root || resolved.startsWith(root + path.sep));
+};
 const types = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.ts': 'text/javascript',
   '.wasm': 'application/wasm', '.json': 'application/json' };
 const shims = { 'node:assert/strict': 'assert', 'node:assert': 'assert', 'node:url': 'url',
@@ -48,6 +61,19 @@ const out = [], err = [];
 const text = values => values.map(value => typeof value === 'string' ? value : String(value)).join(' ');
 console.log = (...values) => out.push(text(values));
 console.error = (...values) => err.push(text(values));
+// node exits when nothing is left to run, so the page tracks its timers and
+// reports only when none is pending; an interval keeps it alive until it is
+// cleared, as it keeps node alive.
+const { setTimeout: later, clearTimeout: cancel, setInterval: every, clearInterval: stop } = globalThis;
+const live = new Set();
+globalThis.setTimeout = (callback, delay, ...rest) => {
+  const id = later(() => { live.delete(id); if (typeof callback === 'function') callback(...rest); }, delay);
+  live.add(id);
+  return id;
+};
+globalThis.clearTimeout = id => { live.delete(id); cancel(id); };
+globalThis.setInterval = (...rest) => { const id = every(...rest); live.add(id); return id; };
+globalThis.clearInterval = id => { live.delete(id); stop(id); };
 let reported = false;
 function report(code) {
   if (reported) return;
@@ -64,15 +90,23 @@ globalThis.process = {
   // fs shim drops any write made while unwinding.
   exit(code = this.exitCode ?? 0) { this.exited = true; report(code); throw new Exit(\`process.exit(\${code})\`); },
 };
-addEventListener('unhandledrejection', event => {
-  if (event.reason instanceof Exit) return;
-  err.push(String(event.reason?.stack ?? event.reason)); report(1);
-});
+// An uncaught throw or an unhandled rejection ends a node run with 1.
+function fail(error) {
+  if (error instanceof Exit) return;
+  err.push(String(error?.stack ?? error));
+  report(1);
+}
+addEventListener('unhandledrejection', event => fail(event.reason));
+addEventListener('error', event => fail(event.error ?? event.message));
+const turn = () => new Promise(resolve => later(resolve, 0));
 try {
   await import(${JSON.stringify(`/fs${encode(path.resolve(script))}`)});
+  do { await turn(); } while (live.size);
+  // One more turn, so a rejection nobody handled is reported before success.
+  await turn();
   report(process.exitCode ?? 0);
 } catch (error) {
-  if (!(error instanceof Exit)) { err.push(String(error?.stack ?? error)); report(1); }
+  fail(error);
 }
 </script>`;
 }
@@ -100,7 +134,7 @@ async function serve(request, response, finish) {
   for (const [prefix, writing] of [['/fs/', false], ['/write/', true]]) {
     if (!url.pathname.startsWith(prefix)) continue;
     const file = path.resolve(decodeURIComponent(url.pathname.slice(prefix.length - 1)));
-    if (!inside(file)) return send(403, `outside the served roots: ${file}`);
+    if (!inside(file)) return send(403, `refused: outside the served roots: ${file}`);
     if (writing) {
       if (request.method !== 'POST') return send(405);
       await writeFile(file, await body());
@@ -122,6 +156,7 @@ async function serve(request, response, finish) {
 }
 
 const timeout = Number(process.env.NTS_BROWSER_TIMEOUT_MS ?? 120000);
+const delay = ms => new Promise(resolve => { setTimeout(resolve, ms); });
 let finish;
 const finished = new Promise(resolve => { finish = resolve; });
 const server = createServer((request, response) => {
@@ -132,14 +167,44 @@ const server = createServer((request, response) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const profile = await mkdtemp(path.join(tmpdir(), 'nts-chromium-'));
+// Its own process group, so stopping it stops every process it started.
 const browser = spawn(process.env.NTS_CHROMIUM ?? 'chromium', [
   '--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-extensions',
   '--disable-background-networking', '--disable-sync', '--mute-audio', `--user-data-dir=${profile}`,
   `http://127.0.0.1:${server.address().port}/`,
-], { stdio: ['ignore', 'ignore', 'pipe'] });
+], { stdio: ['ignore', 'ignore', 'pipe'], detached: true });
 let browserLog = '';
 browser.stderr.on('data', chunk => { browserLog += chunk; });
-const exited = new Promise(resolve => browser.on('exit', code => resolve({ browserExit: code })));
+const browserExited = new Promise(resolve => browser.once('exit', resolve));
+const exited = browserExited.then(code => ({ browserExit: code }));
+
+/** Kill the browser's process group and wait for every member to be gone. */
+async function stopBrowser() {
+  try { process.kill(-browser.pid, 'SIGKILL'); } catch { /* already gone */ }
+  await Promise.race([browserExited, delay(5000)]);
+  for (const deadline = Date.now() + 5000; Date.now() < deadline; await delay(50)) {
+    try { process.kill(-browser.pid, 0); } catch { return; }
+  }
+}
+let cleaning;
+/** Stop the browser and the server, then remove the profile; never throws. */
+function cleanup() {
+  cleaning ??= (async () => {
+    await stopBrowser();
+    server.closeAllConnections();
+    server.close();
+    try {
+      await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    } catch (error) {
+      process.stderr.write(`note: could not remove ${profile}: ${error.message}\n`);
+    }
+    if (process.env.NTS_BROWSER_REPORT_PROFILE) process.stderr.write(`profile ${profile}\n`);
+  })();
+  return cleaning;
+}
+for (const [signal, code] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) {
+  process.once(signal, () => { cleanup().finally(() => process.exit(code)); });
+}
 let timer;
 const result = await Promise.race([
   finished,
@@ -147,10 +212,7 @@ const result = await Promise.race([
   new Promise(resolve => { timer = setTimeout(() => resolve({ timedOut: true }), timeout); }),
 ]);
 clearTimeout(timer);
-browser.kill('SIGKILL');
-server.closeAllConnections();
-server.close();
-await rm(profile, { recursive: true, force: true });
+await cleanup();
 if (result.timedOut) {
   process.stderr.write(`browser run timed out after ${timeout} ms\n`);
   process.exit(124);

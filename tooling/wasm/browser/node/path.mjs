@@ -10,9 +10,12 @@ function normalize(file) {
   return (absolute ? '/' : '') + parts.join('/') || (absolute ? '/' : '.');
 }
 export function join(...parts) { return normalize(parts.filter(Boolean).join('/')); }
+// Right to left until a part is absolute, then against the working directory.
 export function resolve(...parts) {
   let file = '';
-  for (const part of parts) file = part.startsWith('/') ? part : `${file}/${part}`;
+  for (let at = parts.length - 1; at >= 0 && !file.startsWith('/'); at--) {
+    if (parts[at]) file = file ? `${parts[at]}/${file}` : parts[at];
+  }
   return normalize(file.startsWith('/') ? file : `${globalThis.process.cwd()}/${file}`);
 }
 export function dirname(file) { const at = file.lastIndexOf('/'); return at <= 0 ? (at === 0 ? '/' : '.') : file.slice(0, at); }

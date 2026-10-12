@@ -10,6 +10,10 @@ function same(a, b) {
   if (Object.is(a, b)) return true;
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
   if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  if (a instanceof Date) return Object.is(a.getTime(), b.getTime());
+  if (a instanceof RegExp) return String(a) === String(b);
+  if (a instanceof Map) return a.size === b.size && [...a].every(([key, value]) => b.has(key) && same(value, b.get(key)));
+  if (a instanceof Set) return a.size === b.size && [...a].every(value => b.has(value) || [...b].some(other => same(value, other)));
   const keys = Reflect.ownKeys(a);
   if (keys.length !== Reflect.ownKeys(b).length) return false;
   return keys.every(key => Object.hasOwn(b, key) && same(a[key], b[key]));
