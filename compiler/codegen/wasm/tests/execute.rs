@@ -57,16 +57,33 @@ fn emit_project(fixture: &Path) -> nts_codegen_wasm::Emitted {
 /// Two same-shape classes from unrelated dispatch hierarchies are one Wasm
 /// type to the engine, but their vtables give one slot two meanings: moving
 /// one into the other is refused by name, never run as the wrong method.
+///
+/// **The lowering refuses it now, before any backend sees it.** A call through
+/// `P` names `P`'s methods on every backend, not only through a Wasm vtable,
+/// so an object of the unrelated `Q` held at `P` is refused where it is
+/// converted (`unrelated_class_keeps_its_methods`); `asP` and its caller never
+/// reach this emitter. The Wasm transfer refusal stays for storage the
+/// lowering admits -- tests/transfer.rs pins it on a method-less pair.
 #[test]
 fn a_class_from_an_unrelated_hierarchy_of_one_shape_is_refused() {
     let fixture = common::repository().join("tooling/wasm/fixtures/unrelated-hierarchies");
-    let error = nts_codegen_wasm::emit(&prepared_project(&fixture))
-        .map(|_| ())
-        .unwrap_err()
-        .to_string();
+    let program = prepared_project(&fixture);
+    let refused = program
+        .uncompiled
+        .iter()
+        .find(|(name, _)| name == "asP")
+        .map(|(_, why)| why.as_str());
     assert!(
-        error.contains("NTS5001: wasm declines `asP`: a `Q` where a `P` is wanted"),
-        "{error}"
+        refused.is_some_and(|why| why.contains("where the unrelated class `P` is wanted")),
+        "{:?}",
+        program.uncompiled
+    );
+    assert!(
+        !program
+            .funcs
+            .iter()
+            .any(|func| func.name == "asP" || func.name == "probe"),
+        "neither the conversion nor its caller is compiled"
     );
 }
 
