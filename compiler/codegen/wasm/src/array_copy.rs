@@ -120,13 +120,13 @@ fn inner(
         }
         contract::nonnull(b, args[1])?;
         arrays::logical_length(b, args[0], shape.wrapper)?;
-        b.ins(&I::F64ConvertI32U);
+        b.instruction(&I::F64ConvertI32U);
         arrays::logical_length(b, args[1], shape.wrapper)?;
-        b.ins(&I::F64ConvertI32U);
-        b.ins(&I::F64Add);
-        b.ins(&I::F64Const(f64::from(u32::MAX).into()));
-        b.ins(&I::F64Le);
-        contract::require(b);
+        b.instruction(&I::F64ConvertI32U);
+        b.instruction(&I::F64Add);
+        b.instruction(&I::F64Const(f64::from(u32::MAX).into()));
+        b.instruction(&I::F64Le);
+        contract::require(b)?;
     }
     b.load(args[0])?;
     if method.helper == Helper::Slice {
@@ -138,7 +138,7 @@ fn inner(
     let target = callee(b.m, method.helper, shape)?;
     b.call(target);
     if b.ty(result) == &HirType::Void && method.helper != Helper::Extend {
-        b.ins(&I::Drop);
+        b.instruction(&I::Drop);
     }
     Ok(())
 }
@@ -154,33 +154,24 @@ fn callee(m: &mut Builder<'_>, helper: Helper, shape: &gc::Array) -> Result<Func
         |m| body(helper, shape, m),
     )
 }
-fn ins(f: &mut Function, code: &[I<'static>]) {
-    f.instructions(code);
-}
 fn length(f: &mut Function, shape: &gc::Array, input: u32, local: u32) {
-    ins(
-        f,
-        &[
-            I::LocalGet(input),
-            I::StructGet {
-                struct_type_index: shape.wrapper,
-                field_index: 1,
-            },
-            I::LocalSet(local),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(input),
+        I::StructGet {
+            struct_type_index: shape.wrapper,
+            field_index: 1,
+        },
+        I::LocalSet(local),
+    ]);
 }
 fn backing(f: &mut Function, shape: &gc::Array, input: u32) {
-    ins(
-        f,
-        &[
-            I::LocalGet(input),
-            I::StructGet {
-                struct_type_index: shape.wrapper,
-                field_index: 2,
-            },
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(input),
+        I::StructGet {
+            struct_type_index: shape.wrapper,
+            field_index: 2,
+        },
+    ]);
 }
 fn allocate(
     f: &mut Function,
@@ -190,14 +181,11 @@ fn allocate(
     local: u32,
 ) -> Result<(), Failure> {
     objects::push_default(m, f, &shape.element)?;
-    ins(
-        f,
-        &[
-            I::LocalGet(count),
-            I::ArrayNew(shape.backing),
-            I::LocalSet(local),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(count),
+        I::ArrayNew(shape.backing),
+        I::LocalSet(local),
+    ]);
     Ok(())
 }
 fn wrap(
@@ -207,17 +195,14 @@ fn wrap(
     count: u32,
     local: u32,
 ) -> Result<(), Failure> {
-    let descriptor = objects::descriptor(m, shape.descriptor, None)?;
+    let descriptor = objects::descriptor(m, shape.descriptor)?;
     f.global_get(descriptor);
-    ins(
-        f,
-        &[
-            I::LocalGet(count),
-            I::LocalGet(local),
-            I::RefAsNonNull,
-            I::StructNew(shape.wrapper),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(count),
+        I::LocalGet(local),
+        I::RefAsNonNull,
+        I::StructNew(shape.wrapper),
+    ]);
     Ok(())
 }
 fn copy(f: &mut Function, shape: &gc::Array) {
@@ -253,53 +238,44 @@ fn body(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Functi
         Helper::Concat => {
             length(&mut f, shape, 0, 2);
             length(&mut f, shape, 1, 3);
-            ins(
-                &mut f,
-                &[I::LocalGet(2), I::LocalGet(3), I::I32Add, I::LocalSet(4)],
-            );
+            f.instructions(&[I::LocalGet(2), I::LocalGet(3), I::I32Add, I::LocalSet(4)]);
             allocate(&mut f, shape, m, 4, 5)?;
-            ins(&mut f, &[I::LocalGet(5), I::I32Const(0)]);
+            f.instructions(&[I::LocalGet(5), I::I32Const(0)]);
             backing(&mut f, shape, 0);
-            ins(&mut f, &[I::I32Const(0), I::LocalGet(2)]);
+            f.instructions(&[I::I32Const(0), I::LocalGet(2)]);
             copy(&mut f, shape);
-            ins(&mut f, &[I::LocalGet(5), I::LocalGet(2)]);
+            f.instructions(&[I::LocalGet(5), I::LocalGet(2)]);
             backing(&mut f, shape, 1);
-            ins(&mut f, &[I::I32Const(0), I::LocalGet(3)]);
+            f.instructions(&[I::I32Const(0), I::LocalGet(3)]);
             copy(&mut f, shape);
             wrap(&mut f, shape, m, 4, 5)?;
         }
         Helper::Extend => {
             length(&mut f, shape, 0, 2);
             length(&mut f, shape, 1, 3);
-            ins(
-                &mut f,
-                &[
-                    I::LocalGet(2),
-                    I::LocalGet(3),
-                    I::I32Add,
-                    I::LocalSet(4),
-                    I::LocalGet(0),
-                    I::LocalGet(4),
-                ],
-            );
+            f.instructions(&[
+                I::LocalGet(2),
+                I::LocalGet(3),
+                I::I32Add,
+                I::LocalSet(4),
+                I::LocalGet(0),
+                I::LocalGet(4),
+            ]);
             let grow = arrays::grow(m, shape)?;
             f.call(grow);
             backing(&mut f, shape, 0);
             f.instruction(&I::LocalGet(2));
             backing(&mut f, shape, 1);
-            ins(&mut f, &[I::I32Const(0), I::LocalGet(3)]);
+            f.instructions(&[I::I32Const(0), I::LocalGet(3)]);
             copy(&mut f, shape);
-            ins(
-                &mut f,
-                &[
-                    I::LocalGet(0),
-                    I::LocalGet(4),
-                    I::StructSet {
-                        struct_type_index: shape.wrapper,
-                        field_index: 1,
-                    },
-                ],
-            );
+            f.instructions(&[
+                I::LocalGet(0),
+                I::LocalGet(4),
+                I::StructSet {
+                    struct_type_index: shape.wrapper,
+                    field_index: 1,
+                },
+            ]);
         }
         Helper::Reverse => reverse(&mut f, shape)?,
     }
@@ -310,93 +286,78 @@ fn slice(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Result<(),
     length(f, shape, 0, 3);
     indexing::clamp(f, 1, 4, true, 3, 6);
     indexing::clamp(f, 2, 5, true, 3, 6);
-    ins(
-        f,
-        &[
-            I::LocalGet(5),
-            I::LocalGet(4),
-            I::I32GtU,
-            I::If(BlockType::Result(ValType::I32)),
-            I::LocalGet(5),
-            I::LocalGet(4),
-            I::I32Sub,
-            I::Else,
-            I::I32Const(0),
-            I::End,
-            I::LocalSet(5),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(5),
+        I::LocalGet(4),
+        I::I32GtU,
+        I::If(BlockType::Result(ValType::I32)),
+        I::LocalGet(5),
+        I::LocalGet(4),
+        I::I32Sub,
+        I::Else,
+        I::I32Const(0),
+        I::End,
+        I::LocalSet(5),
+    ]);
     allocate(f, shape, m, 5, 7)?;
-    ins(f, &[I::LocalGet(7), I::I32Const(0)]);
+    f.instructions(&[I::LocalGet(7), I::I32Const(0)]);
     backing(f, shape, 0);
-    ins(f, &[I::LocalGet(4), I::LocalGet(5)]);
+    f.instructions(&[I::LocalGet(4), I::LocalGet(5)]);
     copy(f, shape);
     wrap(f, shape, m, 5, 7)
 }
 fn reverse(f: &mut Function, shape: &gc::Array) -> Result<(), Failure> {
     length(f, shape, 0, 1);
-    ins(
-        f,
-        &[
-            I::LocalGet(1),
-            I::I32Const(2),
-            I::I32LtU,
-            I::If(BlockType::Empty),
-            I::LocalGet(0),
-            I::Return,
-            I::End,
-            I::LocalGet(1),
-            I::I32Const(1),
-            I::I32Sub,
-            I::LocalSet(3),
-            I::Block(BlockType::Empty),
-            I::Loop(BlockType::Empty),
-            I::LocalGet(2),
-            I::LocalGet(3),
-            I::I32GeU,
-            I::BrIf(1),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(1),
+        I::I32Const(2),
+        I::I32LtU,
+        I::If(BlockType::Empty),
+        I::LocalGet(0),
+        I::Return,
+        I::End,
+        I::LocalGet(1),
+        I::I32Const(1),
+        I::I32Sub,
+        I::LocalSet(3),
+        I::Block(BlockType::Empty),
+        I::Loop(BlockType::Empty),
+        I::LocalGet(2),
+        I::LocalGet(3),
+        I::I32GeU,
+        I::BrIf(1),
+    ]);
     backing(f, shape, 0);
-    ins(
-        f,
-        &[
-            I::LocalGet(2),
-            arrays::get_instruction(shape)?,
-            I::LocalSet(4),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(2),
+        arrays::get_instruction(shape)?,
+        I::LocalSet(4),
+    ]);
     backing(f, shape, 0);
     f.instruction(&I::LocalGet(2));
     backing(f, shape, 0);
-    ins(
-        f,
-        &[
-            I::LocalGet(3),
-            arrays::get_instruction(shape)?,
-            I::ArraySet(shape.backing),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(3),
+        arrays::get_instruction(shape)?,
+        I::ArraySet(shape.backing),
+    ]);
     backing(f, shape, 0);
-    ins(
-        f,
-        &[
-            I::LocalGet(3),
-            I::LocalGet(4),
-            I::ArraySet(shape.backing),
-            I::LocalGet(2),
-            I::I32Const(1),
-            I::I32Add,
-            I::LocalSet(2),
-            I::LocalGet(3),
-            I::I32Const(1),
-            I::I32Sub,
-            I::LocalSet(3),
-            I::Br(0),
-            I::End,
-            I::End,
-            I::LocalGet(0),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(3),
+        I::LocalGet(4),
+        I::ArraySet(shape.backing),
+        I::LocalGet(2),
+        I::I32Const(1),
+        I::I32Add,
+        I::LocalSet(2),
+        I::LocalGet(3),
+        I::I32Const(1),
+        I::I32Sub,
+        I::LocalSet(3),
+        I::Br(0),
+        I::End,
+        I::End,
+        I::LocalGet(0),
+    ]);
     Ok(())
 }

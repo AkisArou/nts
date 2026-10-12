@@ -231,7 +231,7 @@ pub(crate) fn constant(body: &mut Body<'_, '_>, result: ValueId, tag: i32) -> Re
         Some(Physical::Reference(_)) if body.ty(result) == &HirType::Erased => {
             get_singleton(body, Singleton::for_tag(tag)?)?;
         }
-        Some(Physical::Reference(reference)) => body.ins(&I::RefNull(reference.heap_type)),
+        Some(Physical::Reference(reference)) => body.instruction(&I::RefNull(reference.heap_type)),
         _ => return Err(format!("absence constant in {:?}", body.ty(result)).into()),
     }
     Ok(())
@@ -247,11 +247,11 @@ pub(crate) fn erase(
         HirType::Void => get_singleton(body, Singleton::Undefined)?,
         HirType::Bool => {
             body.load(value)?;
-            body.ins(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+            body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
             get_singleton(body, Singleton::True)?;
-            body.ins(&I::Else);
+            body.instruction(&I::Else);
             get_singleton(body, Singleton::False)?;
-            body.ins(&I::End);
+            body.instruction(&I::End);
         }
         ty @ (HirType::Int { .. } | HirType::Float { .. }) => {
             body.load(value)?;
@@ -286,16 +286,16 @@ fn erase_string(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Resu
     }
     if let Some(tag) = tag {
         body.load(value)?;
-        body.ins(&I::RefIsNull);
-        body.ins(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+        body.instruction(&I::RefIsNull);
+        body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
         get_singleton(body, Singleton::for_tag(tag)?)?;
-        body.ins(&I::Else);
+        body.instruction(&I::Else);
     }
-    body.ins(&I::I32Const(STRING));
+    body.instruction(&I::I32Const(STRING));
     body.load(value)?;
-    body.ins(&I::StructNew(ty));
+    body.instruction(&I::StructNew(ty));
     if tag.is_some() {
-        body.ins(&I::End);
+        body.instruction(&I::End);
     }
     Ok(())
 }
@@ -308,17 +308,17 @@ fn erase_reference(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> R
         }
         Absent::Null | Absent::Undefined => {
             body.load(value)?;
-            body.ins(&I::RefIsNull);
-            body.ins(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+            body.instruction(&I::RefIsNull);
+            body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
             let tag = if absent == Absent::Null {
                 NULL
             } else {
                 UNDEFINED
             };
             get_singleton(body, Singleton::for_tag(tag)?)?;
-            body.ins(&I::Else);
+            body.instruction(&I::Else);
             body.load(value)?;
-            body.ins(&I::End);
+            body.instruction(&I::End);
         }
     }
     Ok(())
@@ -334,17 +334,17 @@ pub(crate) fn unerase(
     match body.ty(result).clone() {
         HirType::Erased => {}
         HirType::Bool => {
-            body.ins(&I::Drop);
+            body.instruction(&I::Drop);
             projection_guard(body, value, &[HeapType::Concrete(boxed.boolean)])?;
             body.load(value)?;
-            body.ins(&I::RefCastNonNull(HeapType::Concrete(boxed.boolean)));
-            body.ins(&I::StructGet {
+            body.instruction(&I::RefCastNonNull(HeapType::Concrete(boxed.boolean)));
+            body.instruction(&I::StructGet {
                 struct_type_index: boxed.boolean,
                 field_index: 1,
             });
         }
         ty @ (HirType::Int { .. } | HirType::Float { .. }) => {
-            body.ins(&I::Drop);
+            body.instruction(&I::Drop);
             projection_guard(
                 body,
                 value,
@@ -355,30 +355,30 @@ pub(crate) fn unerase(
             numeric::convert(body, &HirType::NUMBER, &ty)?;
         }
         HirType::Managed(ManagedType::String) => {
-            body.ins(&I::Drop);
+            body.instruction(&I::Drop);
             body.load(value)?;
             call(body, Helper::Tag)?;
-            body.ins(&I::I32Const(NULL));
-            body.ins(&I::I32Eq);
+            body.instruction(&I::I32Const(NULL));
+            body.instruction(&I::I32Eq);
             body.load(value)?;
             call(body, Helper::Tag)?;
-            body.ins(&I::I32Const(UNDEFINED));
-            body.ins(&I::I32Eq);
-            body.ins(&I::I32Or);
-            body.ins(&I::If(BlockType::Result(ValType::EXTERNREF)));
-            body.ins(&I::RefNull(HeapType::EXTERN));
-            body.ins(&I::Else);
+            body.instruction(&I::I32Const(UNDEFINED));
+            body.instruction(&I::I32Eq);
+            body.instruction(&I::I32Or);
+            body.instruction(&I::If(BlockType::Result(ValType::EXTERNREF)));
+            body.instruction(&I::RefNull(HeapType::EXTERN));
+            body.instruction(&I::Else);
             projection_guard(body, value, &[HeapType::Concrete(boxed.string)])?;
             body.load(value)?;
-            body.ins(&I::RefCastNonNull(HeapType::Concrete(boxed.string)));
-            body.ins(&I::StructGet {
+            body.instruction(&I::RefCastNonNull(HeapType::Concrete(boxed.string)));
+            body.instruction(&I::StructGet {
                 struct_type_index: boxed.string,
                 field_index: 1,
             });
-            body.ins(&I::End);
+            body.instruction(&I::End);
         }
         ty @ HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
-            body.ins(&I::Drop);
+            body.instruction(&I::Drop);
             unerase_reference(body, value, &ty)?;
         }
         ty => {
@@ -399,20 +399,20 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
     };
     body.load(value)?;
     call(body, Helper::Tag)?;
-    body.ins(&I::I32Const(NULL));
-    body.ins(&I::I32Eq);
+    body.instruction(&I::I32Const(NULL));
+    body.instruction(&I::I32Eq);
     body.load(value)?;
     call(body, Helper::Tag)?;
-    body.ins(&I::I32Const(UNDEFINED));
-    body.ins(&I::I32Eq);
-    body.ins(&I::I32Or);
-    body.ins(&I::If(BlockType::Result(ValType::Ref(reference))));
-    body.ins(&I::RefNull(reference.heap_type));
-    body.ins(&I::Else);
+    body.instruction(&I::I32Const(UNDEFINED));
+    body.instruction(&I::I32Eq);
+    body.instruction(&I::I32Or);
+    body.instruction(&I::If(BlockType::Result(ValType::Ref(reference))));
+    body.instruction(&I::RefNull(reference.heap_type));
+    body.instruction(&I::Else);
     projection_guard(body, value, &[reference.heap_type])?;
     body.load(value)?;
-    body.ins(&I::RefCastNonNull(reference.heap_type));
-    body.ins(&I::End);
+    body.instruction(&I::RefCastNonNull(reference.heap_type));
+    body.instruction(&I::End);
     Ok(())
 }
 
@@ -423,13 +423,12 @@ pub(crate) fn projection_guard(
 ) -> Result<(), Failure> {
     for (at, case) in cases.iter().enumerate() {
         body.load(value)?;
-        body.ins(&I::RefTestNonNull(*case));
+        body.instruction(&I::RefTestNonNull(*case));
         if at != 0 {
-            body.ins(&I::I32Or);
+            body.instruction(&I::I32Or);
         }
     }
-    contract::require(body);
-    Ok(())
+    contract::require(body)
 }
 
 pub(crate) fn tag(body: &mut Body<'_, '_>, result: ValueId, value: ValueId) -> Result<(), Failure> {

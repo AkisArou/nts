@@ -55,11 +55,7 @@ fn captured_math_formatting_and_parsing_agree_and_ignore_later_global_mutation()
     funcs.push(wrapper("nts_parse_int", &[string, F64], F64));
     let emitted = nts_codegen_wasm::emit(&program(funcs)).unwrap();
     assert_eq!(emitted.manifest.imports.len(), 25);
-    assert!(
-        emitted.manifest.builtins.is_empty()
-            && emitted.manifest.constants.is_empty()
-            && emitted.manifest.features.is_empty()
-    );
+    assert!(emitted.manifest.builtins.is_empty() && emitted.manifest.features.is_empty());
     let report = common::run(
         "host-primitives",
         &emitted,

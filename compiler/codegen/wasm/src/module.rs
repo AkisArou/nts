@@ -2,10 +2,12 @@
 //! key; the assembler assigns indices only after lowering is complete.
 //!
 //! Nothing is declared in advance, so nothing the program does not use reaches
-//! the module, and no index base is computed by hand. A `Func` or `Global`
-//! symbol exists only because the `Builder` interned it, and the assembler
-//! refuses a raw index-bearing instruction, so an index nothing requested
-//! cannot be encoded.
+//! the module, and no index base is computed by hand. A function, global or
+//! tag index exists only through a `Func`, `Global` or `Tag` symbol the
+//! `Builder` interned, and the assembler encodes a raw instruction only if
+//! `ir::admitted` lists it, so no function, global or tag index nothing
+//! requested can be encoded. Type, field and `call_ref` indices are raw by
+//! design: the whole-program type plan fixes them before lowering.
 
 use crate::{
     BoundaryType, EmitError, Emitted, FunctionExport, GlobalExport, InfiniteBound,
@@ -30,6 +32,10 @@ pub(crate) struct Func(u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct Global(u32);
 
+/// An exception tag the builder interned; its index is assigned at assembly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct Tag(u32);
+
 /// Every function the module can contain, named by what it means.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum FuncKey {
@@ -45,16 +51,17 @@ pub(crate) enum FuncKey {
     ArrayLookup(u32, crate::array_lookup::Helper),
     Thunk(crate::callables::Face, u32, u32),
     Raising(crate::raising::Helper),
-    Throw(crate::raising::Throw),
+    DeclineInput,
 }
 
 /// Every global the module can contain, named by what it means.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum GlobalKey {
     Literal(String),
+    Host(&'static str),
     Singleton(crate::erased::Singleton),
     Descriptor(u32),
-    StaticClosure(u32),
+    StaticClosure(nts_core::hir::ClassId),
     Raising(crate::raising::Slot),
     Program(u32),
 }
@@ -67,6 +74,12 @@ enum FuncKind {
     },
     /// `None` while the body is being generated.
     Defined(Option<ir::Function>),
+    /// Its body failed. Every later request receives the same failure, so a
+    /// refusal is reported at each requesting site, never silently reused.
+    Failed {
+        unsupported: bool,
+        reason: String,
+    },
 }
 
 #[derive(Debug)]
@@ -80,7 +93,13 @@ struct FuncEntry {
 
 #[derive(Debug)]
 enum GlobalKind {
-    Import { module: &'static str, field: String },
+    /// A `builtin` import is supplied by the engine at compile time, such as
+    /// an imported string constant, and is not an ordinary host import.
+    Import {
+        module: &'static str,
+        field: String,
+        builtin: bool,
+    },
     Defined(ir::Code),
 }
 
@@ -147,8 +166,12 @@ pub(crate) struct Builder<'p> {
     /// Globals whose initializers are being built: a request for one of them
     /// is a dependency cycle, which no constant expression can express.
     building: BTreeSet<GlobalKey>,
-    constants: Vec<crate::StringConstant>,
+    /// Imported exception tags: `(module, field, function type)`.
+    tags: Vec<(&'static str, &'static str, u32)>,
     exports: Vec<(String, Export)>,
+    /// Whether any body uses the explicit raising convention, whose pending
+    /// state every exit to the host must clear.
+    pub(crate) raising: bool,
 }
 
 pub(crate) fn index(i: usize) -> u32 {
@@ -160,6 +183,7 @@ impl<'p> Builder<'p> {
         program: &'p Program,
         types: &'p gc::Plan,
         raising_results: &'p BTreeMap<String, BTreeSet<ValueId>>,
+        raising: bool,
     ) -> Self {
         Self {
             program,
@@ -171,27 +195,13 @@ impl<'p> Builder<'p> {
             globals: Vec::new(),
             global_keys: BTreeMap::new(),
             building: BTreeSet::new(),
-            constants: Vec::new(),
+            tags: Vec::new(),
             exports: Vec::new(),
+            raising,
         }
     }
 
     fn push(
-        &mut self,
-        key: FuncKey,
-        name: String,
-        params: Vec<Physical>,
-        result: Option<Physical>,
-        kind: FuncKind,
-    ) -> Func {
-        let ty = self.signatures.intern(Signature {
-            params: params.clone(),
-            result,
-        });
-        self.push_typed(key, name, ty, params, result, kind)
-    }
-
-    fn push_typed(
         &mut self,
         key: FuncKey,
         name: String,
@@ -212,9 +222,36 @@ impl<'p> Builder<'p> {
         id
     }
 
-    /// Whether lowering requested this function.
-    pub(crate) fn has(&self, key: &FuncKey) -> bool {
-        self.func_keys.contains_key(key)
+    fn signature_type(&mut self, params: &[Physical], result: Option<Physical>) -> u32 {
+        self.signatures.intern(Signature {
+            params: params.to_vec(),
+            result,
+        })
+    }
+
+    /// The function already interned for `key`. A key names one function:
+    /// every request gives the same name and type. A key whose body failed
+    /// refuses each requester with its failure.
+    fn existing(&self, key: &FuncKey, name: &str, ty: u32) -> Option<Result<Func, Failure>> {
+        let id = *self.func_keys.get(key)?;
+        let entry = &self.funcs[id.0 as usize];
+        debug_assert!(
+            entry.name == name && entry.ty == ty,
+            "{key:?} requested as `{name}` with type {ty}, interned as `{}` with type {}",
+            entry.name,
+            entry.ty
+        );
+        Some(match &entry.kind {
+            FuncKind::Failed {
+                unsupported: true,
+                reason,
+            } => Err(Failure::Unsupported(reason.clone())),
+            FuncKind::Failed {
+                unsupported: false,
+                reason,
+            } => Err(Failure::Invariant(reason.clone())),
+            FuncKind::Import { .. } | FuncKind::Defined(_) => Ok(id),
+        })
     }
 
     /// An imported function, typed by its physical signature.
@@ -227,12 +264,14 @@ impl<'p> Builder<'p> {
         result: Option<Physical>,
         builtin: bool,
     ) -> Func {
-        if let Some(id) = self.func_keys.get(&key) {
-            return *id;
+        let ty = self.signature_type(&params, result);
+        if let Some(Ok(id)) = self.existing(&key, field, ty) {
+            return id;
         }
         self.push(
             key,
             field.into(),
+            ty,
             params,
             result,
             FuncKind::Import { module, builtin },
@@ -251,13 +290,8 @@ impl<'p> Builder<'p> {
         result: Option<Physical>,
         body: impl FnOnce(&mut Self) -> Result<ir::Function, Failure>,
     ) -> Result<Func, Failure> {
-        if let Some(id) = self.func_keys.get(&key) {
-            return Ok(*id);
-        }
-        let id = self.push(key, name.into(), params, result, FuncKind::Defined(None));
-        let function = body(self)?;
-        self.funcs[id.0 as usize].kind = FuncKind::Defined(Some(function));
-        Ok(id)
+        let ty = self.signature_type(&params, result);
+        self.define(key, name.into(), ty, params, result, body)
     }
 
     /// A module-local function whose type is a planned GC function type, such
@@ -269,18 +303,35 @@ impl<'p> Builder<'p> {
         ty: u32,
         body: impl FnOnce(&mut Self) -> Result<ir::Function, Failure>,
     ) -> Result<Func, Failure> {
-        if let Some(id) = self.func_keys.get(&key) {
-            return Ok(*id);
+        self.define(key, name.into(), ty, Vec::new(), None, body)
+    }
+
+    fn define(
+        &mut self,
+        key: FuncKey,
+        name: String,
+        ty: u32,
+        params: Vec<Physical>,
+        result: Option<Physical>,
+        body: impl FnOnce(&mut Self) -> Result<ir::Function, Failure>,
+    ) -> Result<Func, Failure> {
+        if let Some(existing) = self.existing(&key, &name, ty) {
+            return existing;
         }
-        let id = self.push_typed(
-            key,
-            name.into(),
-            ty,
-            Vec::new(),
-            None,
-            FuncKind::Defined(None),
-        );
-        let function = body(self)?;
+        let id = self.push(key, name, ty, params, result, FuncKind::Defined(None));
+        let built = body(self);
+        self.funcs[id.0 as usize].kind = match &built {
+            Ok(_) => FuncKind::Defined(None),
+            Err(Failure::Unsupported(reason)) => FuncKind::Failed {
+                unsupported: true,
+                reason: reason.clone(),
+            },
+            Err(Failure::Invariant(reason)) => FuncKind::Failed {
+                unsupported: false,
+                reason: reason.clone(),
+            },
+        };
+        let function = built?;
         self.funcs[id.0 as usize].kind = FuncKind::Defined(Some(function));
         Ok(id)
     }
@@ -308,9 +359,11 @@ impl<'p> Builder<'p> {
             .types
             .slot(&func.return_type)
             .map_err(|failure| failure.at(&func.name, &func.origin))?;
+        let ty = self.signature_type(&params, result);
         self.push(
             key,
             func.name.clone(),
+            ty,
             params,
             result,
             FuncKind::Defined(None),
@@ -326,7 +379,7 @@ impl<'p> Builder<'p> {
             .ok_or_else(|| Failure::Invariant(format!("unresolved direct callee `{name}`")))
     }
 
-    fn define(&mut self, id: Func, function: ir::Function) {
+    fn set_body(&mut self, id: Func, function: ir::Function) {
         self.funcs[id.0 as usize].kind = FuncKind::Defined(Some(function));
     }
 
@@ -357,18 +410,27 @@ impl<'p> Builder<'p> {
         Ok(id)
     }
 
-    /// An immutable string literal, supplied by the host at instantiation, so
-    /// reading one makes no call.
+    /// An immutable string literal: an imported string constant, which the
+    /// engine supplies at compile time, so reading one makes no call.
     pub(crate) fn literal(&mut self, text: &str) -> Global {
-        let key = GlobalKey::Literal(text.to_owned());
+        self.imported_global(GlobalKey::Literal(text.to_owned()), "'", text, true)
+    }
+
+    /// A JS value the host supplies as an immutable `externref` global.
+    pub(crate) fn host_global(&mut self, name: &'static str) -> Global {
+        self.imported_global(GlobalKey::Host(name), "nts:host/v1", name, false)
+    }
+
+    fn imported_global(
+        &mut self,
+        key: GlobalKey,
+        module: &'static str,
+        field: &str,
+        builtin: bool,
+    ) -> Global {
         if let Some(id) = self.global_keys.get(&key) {
             return *id;
         }
-        let symbol = format!("s{}", self.constants.len());
-        self.constants.push(crate::StringConstant {
-            symbol: symbol.clone(),
-            value: text.to_owned(),
-        });
         let id = Global(index(self.globals.len()));
         self.globals.push(GlobalEntry {
             ty: GlobalType {
@@ -377,12 +439,31 @@ impl<'p> Builder<'p> {
                 shared: false,
             },
             kind: GlobalKind::Import {
-                module: "nts:constants",
-                field: symbol,
+                module,
+                field: field.to_owned(),
+                builtin,
             },
         });
         self.global_keys.insert(key, id);
         id
+    }
+
+    /// `WebAssembly.JSTag`: a throw with it reaches JS as the value itself,
+    /// and a JS exception thrown into wasm is caught with it.
+    pub(crate) fn js_tag(&mut self) -> Tag {
+        if let Some(at) = self
+            .tags
+            .iter()
+            .position(|(m, f, _)| (*m, *f) == ("js", "tag"))
+        {
+            return Tag(index(at));
+        }
+        let ty = self.signatures.intern(Signature {
+            params: vec![crate::strings::STRING],
+            result: None,
+        });
+        self.tags.push(("js", "tag", ty));
+        Tag(index(self.tags.len() - 1))
     }
 
     pub(crate) fn export_func(&mut self, name: &str, func: Func) {
@@ -403,9 +484,14 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
         .iter()
         .filter(|f| !f.abstract_declaration)
         .collect();
-    let mut m = Builder::new(program, &plan, &demand.raising_results);
+    let mut m = Builder::new(program, &plan, &demand.raising_results, demand.raising);
     for func in &funcs {
         m.declare(func)?;
+    }
+    // Every program global's storage and initial value is checked, used or
+    // not, before the public surface and the bodies.
+    for global in &program.globals {
+        validate_global(&m, global)?;
     }
     let mut manifest = manifest(program, &funcs, &mut m)?;
     let mut routes = Vec::new();
@@ -416,7 +502,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
                 let id = m
                     .program_func(&func.name)
                     .map_err(|f| f.at(&func.name, &func.origin))?;
-                m.define(id, function);
+                m.set_body(id, function);
                 routes.push(route);
             }
             Err(EmitError::Declined(diagnostics)) => declines.extend(diagnostics),
@@ -426,15 +512,9 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     if !declines.is_empty() {
         return Err(EmitError::Declined(declines));
     }
-    manifest.activation =
-        crate::raising::exports(&mut m).map_err(|error| EmitError::Invariant {
-            function: "activation exports".into(),
-            reason: error.to_string(),
-        })?;
-    let assembled = assemble(m)?;
+    let assembled = assemble(&m)?;
     manifest.imports = assembled.imports;
     manifest.builtins = assembled.builtins;
-    manifest.constants = assembled.constants;
     manifest.features = assembled.features;
     manifest.functions = routes;
     Ok(Emitted {
@@ -445,16 +525,6 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
 }
 
 fn preflight(program: &Program) -> Result<(), EmitError> {
-    if let Some((_, name)) = program
-        .public_api
-        .iter()
-        .find(|(_, name)| name.starts_with(crate::raising::PREFIX))
-    {
-        return Err(EmitError::UnsupportedSurface {
-            name: name.clone(),
-            reason: "reserved Wasm activation export prefix".into(),
-        });
-    }
     if let Some((name, _)) = program.public_namespaces.first() {
         return Err(EmitError::UnsupportedSurface {
             name: name.clone(),
@@ -468,6 +538,16 @@ fn preflight(program: &Program) -> Result<(), EmitError> {
         });
     }
     Ok(())
+}
+
+fn validate_global(m: &Builder<'_>, global: &nts_core::hir::Global) -> Result<(), EmitError> {
+    let check = || -> Result<(), Failure> {
+        if let Physical::Scalar(_) = m.types.value_slot(&global.ty)? {
+            initial(global.initial, &global.ty)?;
+        }
+        Ok(())
+    };
+    check().map_err(|failure| failure.at(&format!("global {}", global.name), &global.origin))
 }
 
 /// A program global, created on its first read, write or export.
@@ -618,6 +698,7 @@ fn manifest(
                 name: published.clone(),
                 symbol: published.clone(),
                 ty,
+                live: assigned_after_init(program, index(*at)),
             });
         } else {
             return Err(surface_decline(program, published));
@@ -625,18 +706,29 @@ fn manifest(
     }
     let init = initializer(&definitions, &names, m)?;
     Ok(Manifest {
-        abi: 2,
+        abi: 3,
         host: "js".to_owned(),
         exports,
         globals,
         init,
-        activation: None,
         imports: Vec::new(),
         builtins: Vec::new(),
-        constants: Vec::new(),
         features: Vec::new(),
         functions: Vec::new(),
     })
+}
+
+/// Whether a function other than the module initializer assigns the global.
+fn assigned_after_init(program: &Program, at: u32) -> bool {
+    program
+        .funcs
+        .iter()
+        .filter(|f| !f.abstract_declaration && f.name != nts_core::hir::lower::MODULE_INIT)
+        .any(|f| {
+            f.values
+                .iter()
+                .any(|op| matches!(op.kind, nts_core::hir::OpKind::GlobalSet { global, .. } if global == at))
+        })
 }
 
 fn initializer(
@@ -733,7 +825,6 @@ struct Assembled {
     origins: Vec<InstructionOrigin>,
     imports: Vec<crate::Import>,
     builtins: Vec<crate::Import>,
-    constants: Vec<crate::StringConstant>,
     features: Vec<String>,
 }
 
@@ -741,46 +832,43 @@ struct Assembled {
 struct Indices {
     funcs: Vec<u32>,
     globals: Vec<u32>,
+    /// Interned positions of the functions in index order.
+    func_order: Vec<usize>,
+}
+
+/// Interned positions in index order: `imported` ones first, then the rest,
+/// each group in interning order.
+fn index_order<T>(entries: &[T], imported: impl Fn(&T) -> bool) -> Vec<usize> {
+    let (first, rest): (Vec<_>, Vec<_>) =
+        (0..entries.len()).partition(|&at| imported(&entries[at]));
+    first.into_iter().chain(rest).collect()
 }
 
 impl Indices {
     fn new(m: &Builder<'_>) -> Self {
+        let func_order = index_order(&m.funcs, |f| matches!(f.kind, FuncKind::Import { .. }));
+        let global_order = index_order(&m.globals, |g| matches!(g.kind, GlobalKind::Import { .. }));
         let mut funcs = vec![0; m.funcs.len()];
-        let imported = m
-            .funcs
-            .iter()
-            .enumerate()
-            .filter(|(_, f)| matches!(f.kind, FuncKind::Import { .. }));
-        let defined = m
-            .funcs
-            .iter()
-            .enumerate()
-            .filter(|(_, f)| matches!(f.kind, FuncKind::Defined(_)));
-        for (next, (at, _)) in imported.chain(defined).enumerate() {
+        for (next, &at) in func_order.iter().enumerate() {
             funcs[at] = index(next);
         }
         let mut globals = vec![0; m.globals.len()];
-        let imported = m
-            .globals
-            .iter()
-            .enumerate()
-            .filter(|(_, g)| matches!(g.kind, GlobalKind::Import { .. }));
-        let defined = m
-            .globals
-            .iter()
-            .enumerate()
-            .filter(|(_, g)| matches!(g.kind, GlobalKind::Defined(_)));
-        for (next, (at, _)) in imported.chain(defined).enumerate() {
+        for (next, &at) in global_order.iter().enumerate() {
             globals[at] = index(next);
         }
-        Self { funcs, globals }
+        Self {
+            funcs,
+            globals,
+            func_order,
+        }
     }
 
     fn resolve(&self, inst: &ir::Inst) -> Result<I<'static>, Failure> {
         Ok(match inst {
-            ir::Inst::Op(i) if ir::names_an_index(i) => {
+            ir::Inst::Op(i) if !ir::admitted(i) => {
                 return Err(Failure::Invariant(format!(
-                    "raw index-bearing instruction {i:?} bypassed the module symbols"
+                    "raw instruction {i:?} is not admitted: it names a function, global or tag \
+                     outside the module symbols, or has not been reviewed"
                 )));
             }
             ir::Inst::Op(i) => i.clone(),
@@ -788,6 +876,8 @@ impl Indices {
             ir::Inst::RefFunc(f) => I::RefFunc(self.funcs[f.0 as usize]),
             ir::Inst::GlobalGet(g) => I::GlobalGet(self.globals[g.0 as usize]),
             ir::Inst::GlobalSet(g) => I::GlobalSet(self.globals[g.0 as usize]),
+            // Every tag is imported, so its symbol is its index.
+            ir::Inst::Throw(t) => I::Throw(t.0),
         })
     }
 }
@@ -811,17 +901,39 @@ fn imports(
         }
     }
     for entry in &m.globals {
-        if let GlobalKind::Import { module, field } = &entry.kind {
+        if let GlobalKind::Import {
+            module,
+            field,
+            builtin,
+        } = &entry.kind
+        {
             section.import(module, field, EntityType::Global(entry.ty));
-            records.push(crate::Import {
-                module: (*module).into(),
-                name: field.clone(),
-                ty: crate::ImportType::Global {
-                    ty: crate::ValueType::Externref { nullable: true },
-                    mutable: false,
-                },
-            });
+            if !builtin {
+                records.push(crate::Import {
+                    module: (*module).into(),
+                    name: field.clone(),
+                    ty: crate::ImportType::Global {
+                        ty: crate::ValueType::Externref { nullable: true },
+                        mutable: false,
+                    },
+                });
+            }
         }
+    }
+    for &(module, field, ty) in &m.tags {
+        section.import(
+            module,
+            field,
+            EntityType::Tag(wasm_encoder::TagType {
+                kind: wasm_encoder::TagKind::Exception,
+                func_type_idx: ty,
+            }),
+        );
+        records.push(crate::Import {
+            module: module.into(),
+            name: field.into(),
+            ty: crate::ImportType::Tag,
+        });
     }
     Ok((section, records, builtins))
 }
@@ -845,28 +957,27 @@ fn code(m: &Builder<'_>, at: &Indices) -> Result<Encoded, EmitError> {
         origins: Vec::new(),
         declared: BTreeSet::new(),
     };
-    let order = m
-        .funcs
-        .iter()
-        .enumerate()
-        .filter(|(_, f)| matches!(f.kind, FuncKind::Import { .. }))
-        .chain(
-            m.funcs
-                .iter()
-                .enumerate()
-                .filter(|(_, f)| matches!(f.kind, FuncKind::Defined(_))),
-        );
-    for (position, entry) in order {
+    for &position in &at.func_order {
+        let entry = &m.funcs[position];
         let index = at.funcs[position];
-        // An import is already named by its import entry.
-        let FuncKind::Defined(body) = &entry.kind else {
-            continue;
+        let body = match &entry.kind {
+            // An import is already named by its import entry.
+            FuncKind::Import { .. } => continue,
+            FuncKind::Defined(Some(body)) => body,
+            FuncKind::Defined(None) => {
+                return Err(EmitError::Invariant {
+                    function: entry.name.clone(),
+                    reason: "requested function has no body".into(),
+                });
+            }
+            FuncKind::Failed { reason, .. } => {
+                return Err(EmitError::Invariant {
+                    function: entry.name.clone(),
+                    reason: format!("a failed body reached assembly: {reason}"),
+                });
+            }
         };
         out.names.append(index, &entry.name);
-        let body = body.as_ref().ok_or_else(|| EmitError::Invariant {
-            function: entry.name.clone(),
-            reason: "requested function has no body".into(),
-        })?;
         out.functions.function(entry.ty);
         let mut encoded = wasm_encoder::Function::new_with_locals_types(body.locals.clone());
         let mut marks = body.code.marks.iter().peekable();
@@ -918,11 +1029,11 @@ fn globals(
     Ok(section)
 }
 
-fn assemble(m: Builder<'_>) -> Result<Assembled, EmitError> {
-    let at = Indices::new(&m);
-    let (import_section, imports, builtins) = imports(&m)?;
-    let mut code = code(&m, &at)?;
-    let global_section = globals(&m, &at, &mut code.declared)?;
+fn assemble(m: &Builder<'_>) -> Result<Assembled, EmitError> {
+    let at = Indices::new(m);
+    let (import_section, imports, builtins) = imports(m)?;
+    let mut code = code(m, &at)?;
+    let global_section = globals(m, &at, &mut code.declared)?;
     let mut exports = ExportSection::new();
     for (name, export) in &m.exports {
         match export {
@@ -963,12 +1074,14 @@ fn assemble(m: Builder<'_>) -> Result<Assembled, EmitError> {
     if m.func_keys.keys().any(|k| matches!(k, FuncKey::Thunk(..))) {
         features.push("function-references".into());
     }
+    if !m.tags.is_empty() {
+        features.push("exceptions".into());
+    }
     Ok(Assembled {
         bytes,
         origins: code.origins,
         imports,
         builtins,
-        constants: m.constants,
         features,
     })
 }
@@ -1010,14 +1123,28 @@ mod tests {
 
     #[test]
     fn a_raw_index_bearing_instruction_cannot_be_encoded() {
-        // Fault injection: a body that names a function or global by raw
-        // index bypasses the symbols. Assembly refuses it as an internal
-        // error naming the function; the index is never encoded.
-        for forged in [I::Call(0), I::GlobalGet(0), I::RefFunc(0)] {
+        // Fault injection: a body naming a function, global, tag or table by
+        // raw index bypasses the symbols, and an instruction nobody reviewed
+        // may too. Assembly refuses both as an internal error naming the
+        // function; neither is ever encoded.
+        for forged in [
+            I::Call(0),
+            I::GlobalGet(0),
+            I::GlobalSet(0),
+            I::RefFunc(0),
+            I::ReturnCall(0),
+            I::Throw(0),
+            I::TableGet(0),
+            I::CallIndirect {
+                type_index: 0,
+                table_index: 0,
+            },
+            I::MemoryGrow(0),
+        ] {
             let p = program(vec![]);
             let plan = gc::Plan::build(&p).unwrap();
             let results = BTreeMap::new();
-            let mut m = Builder::new(&p, &plan, &results);
+            let mut m = Builder::new(&p, &plan, &results, false);
             m.helper(
                 FuncKey::Program("forged".into()),
                 "forged",
@@ -1031,12 +1158,12 @@ mod tests {
                 },
             )
             .unwrap();
-            let error = assemble(m).map(|_| ()).unwrap_err();
+            let error = assemble(&m).map(|_| ()).unwrap_err();
             assert!(
                 matches!(&error, EmitError::Invariant { function, .. } if function == "forged"),
                 "{error}"
             );
-            assert!(error.to_string().contains("bypassed the module symbols"));
+            assert!(error.to_string().contains("is not admitted"), "{error}");
             assert!(!error.to_string().contains("NTS5001"));
         }
     }
@@ -1063,8 +1190,7 @@ mod tests {
         assert_eq!(sections(&emitted.bytes), [0, 1, 0, 1]);
         let manifest = &emitted.manifest;
         assert!(manifest.imports.is_empty() && manifest.builtins.is_empty());
-        assert!(manifest.constants.is_empty() && manifest.features.is_empty());
-        assert!(manifest.activation.is_none());
+        assert!(manifest.features.is_empty());
     }
 
     #[test]
@@ -1088,7 +1214,7 @@ mod tests {
         let manifest = &emitted.manifest;
         let builtins: Vec<_> = manifest.builtins.iter().map(|i| i.name.as_str()).collect();
         assert_eq!(builtins, ["equals"]);
-        assert!(manifest.imports.is_empty() && manifest.constants.is_empty());
+        assert!(manifest.imports.is_empty());
         // One builtin import, one defined function, no global, no GC type.
         assert_eq!(sections(&emitted.bytes)[..3], [1, 1, 0]);
     }

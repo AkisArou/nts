@@ -36,11 +36,15 @@ pub(crate) fn run_with_node_flags(
     std::fs::create_dir_all(&artifact).unwrap();
     std::fs::write(artifact.join("program.wasm"), &emitted.bytes).unwrap();
     std::fs::write(
-        artifact.join("program.json"),
+        artifact.join("program.wasm.json"),
         serde_json::to_vec_pretty(&emitted.manifest).unwrap(),
     )
     .unwrap();
-    std::fs::write(artifact.join("node.mjs"), nts_codegen_wasm::NODE_LOADER).unwrap();
+    std::fs::write(
+        artifact.join("program.mjs"),
+        nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node).unwrap(),
+    )
+    .unwrap();
     let result = Command::new("node")
         .args(flags)
         .arg(repository().join(script))

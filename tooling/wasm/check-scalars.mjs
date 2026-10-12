@@ -5,9 +5,9 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const [artifact, source] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
-const manifest = JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8'));
-const wasm = await instantiate(await readFile(path.join(artifact, 'program.wasm')), manifest);
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
+const wasm = instantiate();
 const js = await import(pathToFileURL(source));
 let cases = 0;
 function compare(name, args) {

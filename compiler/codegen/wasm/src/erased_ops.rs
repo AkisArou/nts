@@ -105,7 +105,7 @@ pub(crate) fn runtime(
     }
     // Equality helpers guard their own tags before projecting a payload.
     if matches!(helper, Helper::Number | Helper::Boolean) {
-        b.ins(&I::Drop);
+        b.instruction(&I::Drop);
         let types = b
             .types()
             .erased
@@ -165,7 +165,7 @@ pub(crate) fn binary(
     let args = if swap { [rhs, lhs] } else { [lhs, rhs] };
     runtime(b, result, helper, &args)?;
     if op == BinOp::Ne {
-        b.ins(&I::I32Eqz);
+        b.instruction(&I::I32Eqz);
     }
     Ok(())
 }
@@ -176,7 +176,7 @@ pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(
     b.load(value)?;
     erased::call(b, Helper::Truthy)?;
     if op == UnOp::Not {
-        b.ins(&I::I32Eqz);
+        b.instruction(&I::I32Eqz);
     }
     Ok(())
 }

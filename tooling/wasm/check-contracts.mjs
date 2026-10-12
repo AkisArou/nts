@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const { instantiate, WasmInputDecline } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
-const manifest = JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8'));
-const wasm = await instantiate(await readFile(path.join(artifact, 'program.wasm')), manifest);
+const { instantiate, WasmInputDecline } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
+const wasm = instantiate();
 let named_declines = 0;
 for (const [name, args] of [
   ['numberFromString', ['123']], ['booleanFromNumber', [1]], ['stringFromBoolean', [true]],

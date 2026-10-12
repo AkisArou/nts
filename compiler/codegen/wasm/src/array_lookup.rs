@@ -163,7 +163,7 @@ fn inner(
         HirType::NUMBER
     };
     if b.ty(result) == &HirType::Void {
-        b.ins(&I::Drop);
+        b.instruction(&I::Drop);
         Ok(())
     } else if actual == HirType::NUMBER {
         numeric::convert(b, &actual, &b.ty(result).clone())
@@ -182,50 +182,35 @@ fn callee(m: &mut Builder<'_>, helper: Helper, shape: &gc::Array) -> Result<Func
         |m| body(helper, shape, m),
     )
 }
-fn ins(f: &mut Function, code: &[I<'static>]) {
-    f.instructions(code);
-}
 fn length(f: &mut Function, shape: &gc::Array) {
-    ins(
-        f,
-        &[
-            I::LocalGet(0),
-            I::StructGet {
-                struct_type_index: shape.wrapper,
-                field_index: 1,
-            },
-            I::LocalSet(3),
-        ],
-    );
+    f.instructions(&[
+        I::LocalGet(0),
+        I::StructGet {
+            struct_type_index: shape.wrapper,
+            field_index: 1,
+        },
+        I::LocalSet(3),
+    ]);
 }
 fn get(f: &mut Function, shape: &gc::Array, index: &[I<'static>]) -> Result<(), Failure> {
-    ins(
-        f,
-        &[
-            I::LocalGet(0),
-            I::StructGet {
-                struct_type_index: shape.wrapper,
-                field_index: 2,
-            },
-        ],
-    );
-    ins(f, index);
+    f.instructions(&[
+        I::LocalGet(0),
+        I::StructGet {
+            struct_type_index: shape.wrapper,
+            field_index: 2,
+        },
+    ]);
+    f.instructions(index);
     f.instruction(&arrays::get_instruction(shape)?);
     Ok(())
 }
 /// A helper consumes a validity condition and the caller's diagnostic name.
-fn require(f: &mut Function, m: &mut Builder<'_>) {
-    let target = m.import(
-        FuncKey::InputDecline,
-        "nts:host/v1",
-        contract::IMPORT,
-        vec![strings::STRING],
-        None,
-        false,
-    );
-    ins(f, &[I::I32Eqz, I::If(BlockType::Empty), I::LocalGet(2)]);
+fn require(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
+    let target = contract::decline(m)?;
+    f.instructions(&[I::I32Eqz, I::If(BlockType::Empty), I::LocalGet(2)]);
     f.call(target);
-    ins(f, &[I::Unreachable, I::End]);
+    f.instructions(&[I::Unreachable, I::End]);
+    Ok(())
 }
 fn body(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
     if helper.indexed() {
@@ -238,33 +223,30 @@ fn indexed(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Fun
     let mut f = Function::new([ValType::I32, ValType::F64]);
     length(&mut f, shape);
     crate::indexing::integer(&mut f, 1);
-    ins(
-        &mut f,
-        &[
-            I::LocalTee(4),
-            I::F64Const(0.0.into()),
-            I::F64Lt,
-            I::If(BlockType::Empty),
-            I::LocalGet(3),
-            I::F64ConvertI32U,
-            I::LocalGet(4),
-            I::F64Add,
-            I::LocalSet(4),
-            I::End,
-            I::LocalGet(4),
-            I::F64Const(0.0.into()),
-            I::F64Ge,
-            I::LocalGet(4),
-            I::LocalGet(3),
-            I::F64ConvertI32U,
-            I::F64Lt,
-            I::I32And,
-        ],
-    );
+    f.instructions(&[
+        I::LocalTee(4),
+        I::F64Const(0.0.into()),
+        I::F64Lt,
+        I::If(BlockType::Empty),
+        I::LocalGet(3),
+        I::F64ConvertI32U,
+        I::LocalGet(4),
+        I::F64Add,
+        I::LocalSet(4),
+        I::End,
+        I::LocalGet(4),
+        I::F64Const(0.0.into()),
+        I::F64Ge,
+        I::LocalGet(4),
+        I::LocalGet(3),
+        I::F64ConvertI32U,
+        I::F64Lt,
+        I::I32And,
+    ]);
     if helper == Helper::AtValue {
         f.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
     } else {
-        require(&mut f, m);
+        require(&mut f, m)?;
     }
     get(&mut f, shape, &[I::LocalGet(4), I::I32TruncSatF64U])?;
     if helper == Helper::AtValue {
@@ -294,28 +276,22 @@ fn search(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Func
     if strings::is_string(&shape.element) {
         string_needle(&mut f, helper, m)?;
     }
-    ins(
-        &mut f,
-        &[
-            I::Block(BlockType::Empty),
-            I::Loop(BlockType::Empty),
-            I::LocalGet(4),
-            I::LocalGet(3),
-            I::I32GeU,
-            I::BrIf(1),
-        ],
-    );
+    f.instructions(&[
+        I::Block(BlockType::Empty),
+        I::Loop(BlockType::Empty),
+        I::LocalGet(4),
+        I::LocalGet(3),
+        I::I32GeU,
+        I::BrIf(1),
+    ]);
     if helper == Helper::LastIndexOf {
-        ins(
-            &mut f,
-            &[
-                I::LocalGet(3),
-                I::I32Const(1),
-                I::I32Sub,
-                I::LocalGet(4),
-                I::I32Sub,
-            ],
-        );
+        f.instructions(&[
+            I::LocalGet(3),
+            I::I32Const(1),
+            I::I32Sub,
+            I::LocalGet(4),
+            I::I32Sub,
+        ]);
     } else {
         f.instruction(&I::LocalGet(4));
     }
@@ -327,22 +303,19 @@ fn search(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Func
     if helper.boolean() {
         f.instruction(&I::I32Const(1));
     } else {
-        ins(&mut f, &[I::LocalGet(5), I::F64ConvertI32U]);
+        f.instructions(&[I::LocalGet(5), I::F64ConvertI32U]);
     }
-    ins(
-        &mut f,
-        &[
-            I::Return,
-            I::End,
-            I::LocalGet(4),
-            I::I32Const(1),
-            I::I32Add,
-            I::LocalSet(4),
-            I::Br(0),
-            I::End,
-            I::End,
-        ],
-    );
+    f.instructions(&[
+        I::Return,
+        I::End,
+        I::LocalGet(4),
+        I::I32Const(1),
+        I::I32Add,
+        I::LocalSet(4),
+        I::Br(0),
+        I::End,
+        I::End,
+    ]);
     f.instruction(&if helper.boolean() {
         I::I32Const(0)
     } else {
@@ -360,33 +333,27 @@ fn string_needle(f: &mut Function, helper: Helper, m: &mut Builder<'_>) -> Resul
         let tag = erased::callee(m, erased::Helper::Tag)?;
         f.instruction(&I::LocalGet(1));
         f.call(tag);
-        ins(
-            f,
-            &[
-                I::I32Const(erased::STRING),
-                I::I32Eq,
-                I::LocalTee(8),
-                I::If(BlockType::Empty),
-                I::LocalGet(1),
-                I::RefCastNonNull(HeapType::Concrete(types.string)),
-                I::StructGet {
-                    struct_type_index: types.string,
-                    field_index: 1,
-                },
-                I::LocalSet(7),
-                I::End,
-            ],
-        );
+        f.instructions(&[
+            I::I32Const(erased::STRING),
+            I::I32Eq,
+            I::LocalTee(8),
+            I::If(BlockType::Empty),
+            I::LocalGet(1),
+            I::RefCastNonNull(HeapType::Concrete(types.string)),
+            I::StructGet {
+                struct_type_index: types.string,
+                field_index: 1,
+            },
+            I::LocalSet(7),
+            I::End,
+        ]);
     } else {
-        ins(
-            f,
-            &[
-                I::LocalGet(1),
-                I::LocalSet(7),
-                I::I32Const(1),
-                I::LocalSet(8),
-            ],
-        );
+        f.instructions(&[
+            I::LocalGet(1),
+            I::LocalSet(7),
+            I::I32Const(1),
+            I::LocalSet(8),
+        ]);
     }
     Ok(())
 }
@@ -397,41 +364,35 @@ fn equal(
     m: &mut Builder<'_>,
 ) -> Result<(), Failure> {
     if shape.element == HirType::NUMBER {
-        ins(f, &[I::LocalGet(6), I::LocalGet(1), I::F64Eq]);
+        f.instructions(&[I::LocalGet(6), I::LocalGet(1), I::F64Eq]);
         if helper.boolean() {
-            ins(
-                f,
-                &[
-                    I::LocalGet(6),
-                    I::LocalGet(6),
-                    I::F64Ne,
-                    I::LocalGet(1),
-                    I::LocalGet(1),
-                    I::F64Ne,
-                    I::I32And,
-                    I::I32Or,
-                ],
-            );
+            f.instructions(&[
+                I::LocalGet(6),
+                I::LocalGet(6),
+                I::F64Ne,
+                I::LocalGet(1),
+                I::LocalGet(1),
+                I::F64Ne,
+                I::I32And,
+                I::I32Or,
+            ]);
         }
     } else if strings::is_string(&shape.element) {
         // Nullable string storage cannot distinguish a hole, undefined and
         // null. Refuse those observations rather than inventing presence bits.
-        ins(f, &[I::LocalGet(6), I::RefIsNull, I::I32Eqz]);
-        require(f, m);
+        f.instructions(&[I::LocalGet(6), I::RefIsNull, I::I32Eqz]);
+        require(f, m)?;
         let equal = strings::callee(m, strings::Helper::Equal)?;
-        ins(
-            f,
-            &[
-                I::LocalGet(8),
-                I::If(BlockType::Result(ValType::I32)),
-                I::LocalGet(6),
-                I::LocalGet(7),
-            ],
-        );
+        f.instructions(&[
+            I::LocalGet(8),
+            I::If(BlockType::Result(ValType::I32)),
+            I::LocalGet(6),
+            I::LocalGet(7),
+        ]);
         f.call(equal);
-        ins(f, &[I::Else, I::I32Const(0), I::End]);
+        f.instructions(&[I::Else, I::I32Const(0), I::End]);
     } else {
-        ins(f, &[I::LocalGet(6), I::LocalGet(1), I::RefEq]);
+        f.instructions(&[I::LocalGet(6), I::LocalGet(1), I::RefEq]);
     }
     Ok(())
 }

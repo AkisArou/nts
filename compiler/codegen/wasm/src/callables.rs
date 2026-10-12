@@ -275,21 +275,21 @@ pub(crate) fn call(
         let root = types
             .root
             .ok_or_else(|| Failure::Invariant("unplanned class root".into()))?;
-        b.ins(&I::StructGet {
+        b.instruction(&I::StructGet {
             struct_type_index: root.object,
             field_index: 0,
         });
-        b.ins(&I::StructGet {
+        b.instruction(&I::StructGet {
             struct_type_index: root.descriptor,
             field_index: 3,
         });
-        b.ins(&I::RefCastNonNull(HeapType::Concrete(group.base)));
+        b.instruction(&I::RefCastNonNull(HeapType::Concrete(group.base)));
     }
-    b.ins(&I::StructGet {
+    b.instruction(&I::StructGet {
         struct_type_index: group.base,
         field_index: entry.field,
     });
-    b.ins(&I::CallRef(entry.signature));
+    b.instruction(&I::CallRef(entry.signature));
     objects::adapt(b, &entry.result, &b.ty(result).clone())
 }
 
@@ -310,17 +310,16 @@ pub(crate) fn static_value(b: &mut Body<'_, '_>, result: ValueId) -> Result<(), 
         )
         .into());
     }
-    let global =
-        b.m.global(GlobalKey::StaticClosure(storage.physical), |m| {
-            let descriptor = objects::descriptor(m, storage.descriptor, Some(class))?;
-            let mut code = ir::Code::default();
-            code.global_get(descriptor);
-            for entry in entries(m, class, storage)? {
-                code.ref_func(entry);
-            }
-            code.instruction(&I::StructNew(storage.physical));
-            Ok((crate::module::constant_type(storage.physical), code))
-        })?;
+    let global = b.m.global(GlobalKey::StaticClosure(class), |m| {
+        let descriptor = objects::descriptor(m, storage.descriptor)?;
+        let mut code = ir::Code::default();
+        code.global_get(descriptor);
+        for entry in entries(m, class, storage)? {
+            code.ref_func(entry);
+        }
+        code.instruction(&I::StructNew(storage.physical));
+        Ok((crate::module::constant_type(storage.physical), code))
+    })?;
     b.global_get(global);
     Ok(())
 }

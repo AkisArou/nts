@@ -50,9 +50,8 @@ fn typed_host_imports_strings_gc_probes_and_capability_failures() {
         base: None,
     });
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
-    assert_eq!(emitted.manifest.abi, 2);
+    assert_eq!(emitted.manifest.abi, 3);
     assert_eq!(emitted.manifest.features, ["gc"]);
     let report = common::run("host", &emitted, "tooling/wasm/check-host.mjs", &[]);
-    assert!(report["cases"].as_u64().unwrap() >= 35);
-    assert_eq!(report["ignoredOptionsRefused"], true);
+    assert!(report["cases"].as_u64().unwrap() >= 23);
 }

@@ -31,6 +31,9 @@ pub(crate) struct Descriptor {
     pub(crate) identity: u32,
     pub(crate) kind: u32,
     pub(crate) ancestry: Vec<u32>,
+    /// The lowest class type this descriptor serves, which supplies its
+    /// dispatch entries; none for an array descriptor.
+    pub(crate) class: Option<ClassId>,
 }
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
@@ -104,6 +107,7 @@ impl Plan {
                     identity: identities[&key],
                     kind,
                     ancestry,
+                    class: Some(ty),
                 });
                 descriptors.insert((at, key), (index, kind));
                 index

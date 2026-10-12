@@ -4,8 +4,8 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact, source] = process.argv.slice(2);
 const oracle = await import(pathToFileURL(source));
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
-const wasm = await instantiate(await readFile(path.join(artifact, 'program.wasm')), JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8')));
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const wasm = instantiate();
 let cases = 0, thrownCases = 0;
 function answer(fn) { try { return [false, fn()]; } catch (value) { return [true, value]; } }
 function same(name, ...args) {

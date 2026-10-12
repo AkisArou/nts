@@ -1,4 +1,14 @@
-//! Explicit prepared-HIR raising, isolated by module-local host activations.
+//! Prepared HIR's explicit raising convention within one instance.
+//!
+//! A raise records an erased payload and sets a flag; callers test the flag
+//! after each raising call and either take the payload or propagate. An
+//! uncaught throw leaves wasm as the thrown JS value itself, through
+//! `WebAssembly.JSTag`, so no host wrapper does per-call bookkeeping. The
+//! pending state is cleared on every exit to the host, so a later call never
+//! observes a stale raise.
+//!
+//! This is the interim lowering. Native exception handling replaces it once
+//! prepared HIR carries exception regions.
 
 use crate::{
     body::Body,
@@ -12,73 +22,26 @@ use crate::{
 use nts_core::hir::{HirType, ValueId};
 use wasm_encoder::{BlockType, GlobalType, HeapType, Instruction as I, RefType, ValType};
 
-pub(crate) const PREFIX: &str = "$nts$activation$";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
-    Enter,
-    Leave,
-    Raising,
-    Publish,
     Raise,
     Take,
+    Uncaught,
 }
 impl Helper {
-    pub(crate) const ALL: [Self; 6] = [
-        Self::Enter,
-        Self::Leave,
-        Self::Raising,
-        Self::Publish,
-        Self::Raise,
-        Self::Take,
-    ];
-    pub(crate) const fn name(self) -> &'static str {
+    const fn name(self) -> &'static str {
         match self {
-            Self::Enter => "$nts$activation$enter",
-            Self::Leave => "$nts$activation$leave",
-            Self::Raising => "$nts$activation$raising",
-            Self::Publish => "$nts$activation$publish",
             Self::Raise => "raise.record",
             Self::Take => "raise.take",
+            Self::Uncaught => "raise.uncaught",
         }
     }
-    pub(crate) fn signature(self) -> (Vec<Physical>, Option<Physical>) {
+    fn signature(self) -> (Vec<Physical>, Option<Physical>) {
+        let erased = Physical::Reference(RefType::ANYREF);
         match self {
-            Self::Enter | Self::Leave => (vec![], None),
-            Self::Raising => (vec![], Some(Physical::Scalar(Scalar::I32))),
-            Self::Publish => (vec![strings::STRING], None),
-            Self::Raise => (vec![Physical::Reference(RefType::ANYREF)], None),
-            Self::Take => (vec![], Some(Physical::Reference(RefType::ANYREF))),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Throw {
-    Number,
-    Boolean,
-    String,
-    Undefined,
-    Null,
-    Decline,
-}
-impl Throw {
-    pub(crate) const fn name(self) -> &'static str {
-        match self {
-            Self::Number => "throwNumber",
-            Self::Boolean => "throwBoolean",
-            Self::String => "throwString",
-            Self::Undefined => "throwUndefined",
-            Self::Null => "throwNull",
-            Self::Decline => "uncaughtDecline",
-        }
-    }
-    pub(crate) fn params(self) -> Vec<Physical> {
-        match self {
-            Self::Number => vec![Physical::Scalar(Scalar::F64)],
-            Self::Boolean => vec![Physical::Scalar(Scalar::I32)],
-            Self::String | Self::Decline => vec![strings::STRING],
-            Self::Undefined | Self::Null => vec![],
+            Self::Raise => (vec![erased], None),
+            Self::Take => (vec![], Some(erased)),
+            Self::Uncaught => (vec![erased, strings::STRING], None),
         }
     }
 }
@@ -88,15 +51,13 @@ impl Throw {
 pub(crate) enum Slot {
     Flag,
     Payload,
-    Active,
-    Stack,
 }
 
 fn state(m: &mut Builder<'_>, slot: Slot) -> Result<Global, Failure> {
     m.global(GlobalKey::Raising(slot), |m| {
         let mut init = ir::Code::default();
         let ty = match slot {
-            Slot::Flag | Slot::Active => {
+            Slot::Flag => {
                 init.instruction(&I::I32Const(0));
                 ValType::I32
             }
@@ -104,14 +65,6 @@ fn state(m: &mut Builder<'_>, slot: Slot) -> Result<Global, Failure> {
                 let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
                 init.global_get(undefined);
                 ValType::Ref(RefType::ANYREF)
-            }
-            Slot::Stack => {
-                let frame = HeapType::Concrete(activation(m)?);
-                init.instruction(&I::RefNull(frame));
-                ValType::Ref(RefType {
-                    nullable: true,
-                    heap_type: frame,
-                })
             }
         };
         Ok((
@@ -124,22 +77,8 @@ fn state(m: &mut Builder<'_>, slot: Slot) -> Result<Global, Failure> {
         ))
     })
 }
-fn activation(m: &Builder<'_>) -> Result<u32, Failure> {
-    m.types
-        .activation
-        .ok_or_else(|| Failure::Invariant("unplanned activation frame".into()))
-}
-fn throw(m: &mut Builder<'_>, throw: Throw) -> Func {
-    m.import(
-        FuncKey::Throw(throw),
-        "nts:host/v1",
-        throw.name(),
-        throw.params(),
-        None,
-        false,
-    )
-}
-pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failure> {
+
+fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failure> {
     let (params, result) = helper.signature();
     m.helper(
         FuncKey::Raising(helper),
@@ -150,30 +89,16 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
     )
 }
 
-/// The activation exports exist only when a body used the raising
-/// convention; the host wrapper enters and leaves around every public call.
-pub(crate) fn exports(m: &mut Builder<'_>) -> Result<Option<crate::Activation>, Failure> {
-    if !Helper::ALL
-        .iter()
-        .any(|helper| m.has(&FuncKey::Raising(*helper)))
-    {
-        return Ok(None);
-    }
-    for helper in [
-        Helper::Enter,
-        Helper::Leave,
-        Helper::Raising,
-        Helper::Publish,
-    ] {
-        let f = callee(m, helper)?;
-        m.export_func(helper.name(), f);
-    }
-    Ok(Some(crate::Activation {
-        enter: Helper::Enter.name().into(),
-        leave: Helper::Leave.name().into(),
-        raising: Helper::Raising.name().into(),
-        publish: Helper::Publish.name().into(),
-    }))
+/// Reset the pending raise: done before any exit to the host.
+pub(crate) fn clear(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
+    let flag = state(m, Slot::Flag)?;
+    let payload = state(m, Slot::Payload)?;
+    let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
+    f.instruction(&I::I32Const(0));
+    f.global_set(flag);
+    f.global_get(undefined);
+    f.global_set(payload);
+    Ok(())
 }
 
 fn body(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
@@ -181,46 +106,10 @@ fn body(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
     let payload = state(m, Slot::Payload)?;
     let mut f = match helper {
         Helper::Take => Function::new([ValType::Ref(RefType::ANYREF)]),
-        Helper::Publish => Function::new([ValType::I32]),
-        Helper::Enter | Helper::Leave | Helper::Raising | Helper::Raise => Function::default(),
+        Helper::Uncaught => Function::new([ValType::I32, ValType::EXTERNREF]),
+        Helper::Raise => Function::default(),
     };
     match helper {
-        Helper::Enter => {
-            let active = state(m, Slot::Active)?;
-            let stack = state(m, Slot::Stack)?;
-            let frame = activation(m)?;
-            f.global_get(active);
-            f.instruction(&I::If(BlockType::Empty));
-            f.global_get(flag);
-            f.global_get(payload);
-            f.global_get(stack);
-            f.instruction(&I::StructNew(frame));
-            f.global_set(stack);
-            f.instructions(&[I::End, I::I32Const(1)]);
-            f.global_set(active);
-            clear(&mut f, m, flag, payload)?;
-        }
-        Helper::Leave => {
-            let active = state(m, Slot::Active)?;
-            let stack = state(m, Slot::Stack)?;
-            let frame = activation(m)?;
-            f.global_get(stack);
-            f.instructions(&[I::RefIsNull, I::If(BlockType::Empty)]);
-            clear(&mut f, m, flag, payload)?;
-            f.instruction(&I::I32Const(0));
-            f.global_set(active);
-            f.instruction(&I::Else);
-            for (field, global) in [(0, flag), (1, payload), (2, stack)] {
-                f.global_get(stack);
-                f.instruction(&I::StructGet {
-                    struct_type_index: frame,
-                    field_index: field,
-                });
-                f.global_set(global);
-            }
-            f.instruction(&I::End);
-        }
-        Helper::Raising => f.global_get(flag),
         Helper::Raise => {
             f.instruction(&I::LocalGet(0));
             f.global_set(payload);
@@ -230,93 +119,108 @@ fn body(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
         Helper::Take => {
             f.global_get(payload);
             f.instruction(&I::LocalSet(0));
-            clear(&mut f, m, flag, payload)?;
+            clear(&mut f, m)?;
             f.instruction(&I::LocalGet(0));
         }
-        Helper::Publish => publish(&mut f, m, flag, payload)?,
+        Helper::Uncaught => uncaught(&mut f, m)?,
     }
     f.instruction(&I::End);
     Ok(f)
 }
-fn clear(
-    f: &mut Function,
-    m: &mut Builder<'_>,
-    flag: Global,
-    payload: Global,
-) -> Result<(), Failure> {
-    let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
-    f.instruction(&I::I32Const(0));
-    f.global_set(flag);
-    f.global_get(undefined);
-    f.global_set(payload);
-    Ok(())
-}
-fn publish(
-    f: &mut Function,
-    m: &mut Builder<'_>,
-    flag: Global,
-    payload: Global,
-) -> Result<(), Failure> {
+
+/// Throw an erased payload to the host as the JS value it denotes.
+///
+/// Parameters: 0 payload, 1 the throwing function's name. Locals: 2 tag,
+/// 3 the JS value. A compiled object or function has no identity-preserving
+/// JS form yet, so it keeps its named refusal instead of becoming an opaque
+/// value or a manufactured Error.
+fn uncaught(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
     let tag = erased::callee(m, erased::Helper::Tag)?;
-    f.global_get(flag);
-    f.instructions(&[I::I32Eqz, I::If(BlockType::Empty), I::Return, I::End]);
-    f.global_get(payload);
+    let number = erased::callee(m, erased::Helper::Number)?;
+    let boolean = erased::callee(m, erased::Helper::Boolean)?;
+    let to_number = m.import(
+        FuncKey::Host("toNumber"),
+        "nts:host/v1",
+        "toNumber",
+        vec![Physical::Scalar(Scalar::F64)],
+        Some(strings::STRING),
+        false,
+    );
+    let decline = m.import(
+        FuncKey::Host("uncaughtDecline"),
+        "nts:host/v1",
+        "uncaughtDecline",
+        vec![strings::STRING],
+        None,
+        false,
+    );
+    let undefined = m.host_global("undefined");
+    let yes = m.host_global("true");
+    let no = m.host_global("false");
+    let string = m
+        .types
+        .erased
+        .ok_or_else(|| Failure::Invariant("missing erased string box".into()))?
+        .string;
+    let js = m.js_tag();
+    clear(f, m)?;
+    f.instruction(&I::LocalGet(0));
     f.call(tag);
-    f.instruction(&I::LocalSet(1));
-    for (kind, throw_kind) in [
-        (erased::NUMBER, Throw::Number),
-        (erased::BOOLEAN, Throw::Boolean),
-        (erased::STRING, Throw::String),
-        (erased::UNDEFINED, Throw::Undefined),
-        (erased::NULL, Throw::Null),
-    ] {
+    f.instruction(&I::LocalSet(2));
+    f.instruction(&I::Block(BlockType::Empty));
+    let case = |f: &mut Function, kind: i32| {
         f.instructions(&[
-            I::LocalGet(1),
+            I::LocalGet(2),
             I::I32Const(kind),
             I::I32Eq,
             I::If(BlockType::Empty),
         ]);
-        match throw_kind {
-            Throw::Number | Throw::Boolean => {
-                let helper = if throw_kind == Throw::Number {
-                    erased::Helper::Number
-                } else {
-                    erased::Helper::Boolean
-                };
-                let project = erased::callee(m, helper)?;
-                f.global_get(payload);
-                f.call(project);
-            }
-            Throw::String => {
-                let ty = m
-                    .types
-                    .erased
-                    .ok_or_else(|| Failure::Invariant("missing erased throw types".into()))?
-                    .string;
-                f.global_get(payload);
-                f.instructions(&[
-                    I::RefCastNonNull(HeapType::Concrete(ty)),
-                    I::StructGet {
-                        struct_type_index: ty,
-                        field_index: 1,
-                    },
-                ]);
-            }
-            Throw::Undefined | Throw::Null => {}
-            Throw::Decline => {
-                return Err(Failure::Invariant(
-                    "decline classified as primitive throw".into(),
-                ));
-            }
-        }
-        let import = throw(m, throw_kind);
-        f.call(import);
-        f.instructions(&[I::Unreachable, I::End]);
-    }
-    let decline = throw(m, Throw::Decline);
+    };
+    let found = |f: &mut Function| f.instructions(&[I::LocalSet(3), I::Br(1), I::End]);
+    // A small integer is an i31, which externalizes as the same JS number.
+    case(f, erased::NUMBER);
+    f.instructions(&[
+        I::LocalGet(0),
+        I::RefTestNonNull(HeapType::I31),
+        I::If(BlockType::Result(ValType::EXTERNREF)),
+        I::LocalGet(0),
+        I::ExternConvertAny,
+        I::Else,
+        I::LocalGet(0),
+    ]);
+    f.call(number);
+    f.call(to_number);
+    f.instruction(&I::End);
+    found(f);
+    case(f, erased::BOOLEAN);
     f.instruction(&I::LocalGet(0));
+    f.call(boolean);
+    f.instruction(&I::If(BlockType::Result(ValType::EXTERNREF)));
+    f.global_get(yes);
+    f.instruction(&I::Else);
+    f.global_get(no);
+    f.instruction(&I::End);
+    found(f);
+    case(f, erased::STRING);
+    f.instructions(&[
+        I::LocalGet(0),
+        I::RefCastNonNull(HeapType::Concrete(string)),
+        I::StructGet {
+            struct_type_index: string,
+            field_index: 1,
+        },
+    ]);
+    found(f);
+    case(f, erased::UNDEFINED);
+    f.global_get(undefined);
+    found(f);
+    case(f, erased::NULL);
+    f.instruction(&I::RefNull(HeapType::EXTERN));
+    found(f);
+    f.instruction(&I::LocalGet(1));
     f.call(decline);
-    f.instruction(&I::Unreachable);
+    f.instructions(&[I::Unreachable, I::End, I::LocalGet(3)]);
+    f.throw(js);
     Ok(())
 }
 
@@ -328,11 +232,11 @@ pub(crate) fn erase_result(
     let flag = state(b.m, Slot::Flag)?;
     let undefined = erased::singleton(b.m, erased::Singleton::Undefined)?;
     b.global_get(flag);
-    b.ins(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+    b.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
     b.global_get(undefined);
-    b.ins(&I::Else);
+    b.instruction(&I::Else);
     erased::erase(b, value, absent)?;
-    b.ins(&I::End);
+    b.instruction(&I::End);
     Ok(())
 }
 
@@ -359,11 +263,6 @@ pub(crate) fn call(
     source: Source,
     args: &[ValueId],
 ) -> Result<(), Failure> {
-    let helper = match source {
-        Source::Raise | Source::Uncaught => Helper::Raise,
-        Source::Raising => Helper::Raising,
-        Source::Take => Helper::Take,
-    };
     let valid = match source {
         Source::Raise => {
             args.len() == 1
@@ -394,16 +293,30 @@ pub(crate) fn call(
             format!("runtime helper `{name}` signature outside explicit raising contract").into(),
         );
     }
-    if let Some(arg) = args.first() {
-        b.load(*arg)?;
-    }
-    let f = callee(b.m, helper)?;
-    b.call(f);
-    if matches!(source, Source::Uncaught) {
-        strings::constant(b, &b.func.name.clone());
-        let publish = callee(b.m, Helper::Publish)?;
-        b.call(publish);
-        b.ins(&I::Unreachable);
+    match source {
+        Source::Raising => {
+            let flag = state(b.m, Slot::Flag)?;
+            b.global_get(flag);
+        }
+        Source::Raise | Source::Take => {
+            for arg in args {
+                b.load(*arg)?;
+            }
+            let helper = if matches!(source, Source::Raise) {
+                Helper::Raise
+            } else {
+                Helper::Take
+            };
+            let f = callee(b.m, helper)?;
+            b.call(f);
+        }
+        Source::Uncaught => {
+            b.load(args[0])?;
+            strings::constant(b, &b.func.name.clone());
+            let f = callee(b.m, Helper::Uncaught)?;
+            b.call(f);
+            b.instruction(&I::Unreachable);
+        }
     }
     Ok(())
 }

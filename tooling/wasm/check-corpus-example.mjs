@@ -30,16 +30,21 @@ function invoke(fn, args) {
 }
 
 try {
-  const manifest = JSON.parse(readFileSync(path.join(artifact, 'program.json'), 'utf8'));
-  const { instantiate, WasmInputDecline } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
+  const manifest = JSON.parse(readFileSync(path.join(artifact, 'program.wasm.json'), 'utf8'));
   report.phase = 'wasm-load'; save();
-  let wasm;
+  let wasm, WasmInputDecline;
   try {
-    wasm = await instantiate(readFileSync(path.join(artifact, 'program.wasm')), manifest);
+    // Importing the generated module instantiates it and runs the module
+    // initializer, as importing the source module does in node.
+    const glue = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+    WasmInputDecline = glue.WasmInputDecline;
+    wasm = glue.instantiate();
   } catch (value) {
     if (value instanceof WebAssembly.CompileError || value instanceof WebAssembly.LinkError || value instanceof WebAssembly.RuntimeError) throw value;
     report.phase = 'module-initialization';
-    if (value instanceof WasmInputDecline) {
+    // A failed import exposes no class to test against; a named refusal is a
+    // TypeError carrying the NTS5001 code.
+    if (value instanceof TypeError && value.code === 'NTS5001') {
       report.moduleInitDecline = display(value); save(); process.exit(0);
     }
     let expected;

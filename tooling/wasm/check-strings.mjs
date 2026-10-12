@@ -3,10 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
-const manifest = JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8'));
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
 const bytes = await readFile(path.join(artifact, 'program.wasm'));
-const wasm = await instantiate(bytes, manifest);
+const wasm = instantiate();
 const strings = ['', '\0', 'a', 'abc', 'é世', '😀', '\ud800', '\udfff', 'a\ud800b', 'x😀y', '�'];
 const indices = [NaN, Infinity, -Infinity, -0, 0, -0.5, 0.5, -1, 1, -1.5, 1.5, 2, 3, 9, -9, 2 ** 32, -(2 ** 32), 1e100, -1e100, 2 ** 32 + 1, 2 ** 53, -(2 ** 53)];
 let cases = 0;
@@ -44,13 +44,18 @@ try {
   String.fromCharCode = () => 'tampered';
   same(wasm.fromCharCode(0xd800), fromCharCode(0xd800));
 } finally { String.fromCharCode = fromCharCode; }
-for (const mutate of [
-  m => { m.constants[0].value = null; },
-  m => { m.constants.push(structuredClone(m.constants[0])); },
-  m => { m.imports.find(i => i.kind === 'global').mutable = true; },
-  m => { m.constants.pop(); },
-]) {
-  const altered = structuredClone(manifest); mutate(altered);
-  await assert.rejects(instantiate(bytes, altered), error => error instanceof TypeError || error instanceof WebAssembly.LinkError); cases++;
-}
-console.log(JSON.stringify({ cases, literals: manifest.constants.length, builtins: manifest.builtins.length }));
+// Literals are imported string constants: compile-time, never ordinary imports.
+assert.ok(!WebAssembly.Module.imports(await WebAssembly.compile(bytes, { builtins: ['js-string'], importedStringConstants: "'" })).some(i => i.module === "'"));
+// An engine that ignores the compile options must fail the import loudly; the
+// glue never substitutes a JavaScript replacement for a builtin or a literal.
+const compile = WebAssembly.compile;
+let ignoredOptionsRefused = false;
+try {
+  WebAssembly.compile = input => compile(input);
+  await assert.rejects(import(`${pathToFileURL(path.join(artifact, 'program.mjs')).href}?ignored-options`), error => {
+    // V8 reports the missing builtin module as a TypeError naming it.
+    ignoredOptionsRefused = (error instanceof WebAssembly.LinkError || error instanceof TypeError) && String(error).includes('wasm:js-string');
+    return ignoredOptionsRefused;
+  }); cases++;
+} finally { WebAssembly.compile = compile; }
+console.log(JSON.stringify({ cases, builtins: manifest.builtins.length, ignoredOptionsRefused }));

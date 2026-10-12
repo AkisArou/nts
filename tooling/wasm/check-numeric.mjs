@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
-const manifest = JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8'));
-const wasm = await instantiate(await readFile(path.join(artifact, 'program.wasm')), manifest);
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
+const wasm = instantiate();
 let cases = 0;
 function same(name, args, expected) { assert.ok(Object.is(wasm[name](...args), expected), `${name}(${args}) expected ${expected}`); cases++; }
 for (const value of [0, 1, 2147483647, 2147483648, 4294967295]) {

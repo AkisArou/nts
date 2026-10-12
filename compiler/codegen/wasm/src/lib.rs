@@ -20,6 +20,7 @@ mod erased;
 mod erased_ops;
 mod error;
 mod gc;
+mod glue;
 mod helpers;
 mod host;
 mod indexing;
@@ -37,8 +38,9 @@ mod types;
 #[path = "../tests/common/hir.rs"]
 mod test_common;
 
-pub use abi::{Import, ImportType, StringConstant, ValueType};
+pub use abi::{Import, ImportType, ValueType};
 pub use cfg::Route;
+pub use glue::{Host, glue};
 use nts_core::hir::{Program, verify::Invalid};
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;
@@ -54,7 +56,9 @@ pub struct Emitted {
     pub origins: Vec<InstructionOrigin>,
 }
 
-/// The loader's ABI contract, resolved once before body emission.
+/// What the module exports and imports, at logical types. The generated glue
+/// is written from it; tooling reads it as the `program.wasm.json` sidecar.
+/// Nothing reads it at run time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
     pub abi: u32,
@@ -62,22 +66,12 @@ pub struct Manifest {
     pub exports: Vec<FunctionExport>,
     pub globals: Vec<GlobalExport>,
     pub init: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub activation: Option<Activation>,
+    /// Ordinary imports, in module order. Recognized builtins and imported
+    /// string constants are compile-time and appear in neither list.
     pub imports: Vec<Import>,
     pub builtins: Vec<Import>,
-    pub constants: Vec<StringConstant>,
     pub features: Vec<String>,
     pub functions: Vec<FunctionRoute>,
-}
-
-/// Private scalar/string functions used only by the instance's host wrapper.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Activation {
-    pub enter: String,
-    pub leave: String,
-    pub raising: String,
-    pub publish: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,6 +118,9 @@ pub struct GlobalExport {
     pub name: String,
     pub symbol: String,
     pub ty: BoundaryType,
+    /// Whether a function other than the module initializer assigns it, so
+    /// an importer's binding must follow it.
+    pub live: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,9 +205,6 @@ pub fn emit(program: &Program) -> Result<Emitted, EmitError> {
     module::emit(program)
 }
 
-/// The reviewed Node loader; callers copy it beside the module and manifest.
-pub const NODE_LOADER: &str = include_str!("../../../../runtime/wasm/node.mjs");
-
 /// Validate against the precise scalar and managed M1 feature set.
 /// No default proposal set changes when wasmparser updates.
 pub fn validate(bytes: &[u8]) -> Result<(), EmitError> {
@@ -230,7 +224,8 @@ pub(crate) fn validate_named(bytes: &[u8], bodies: &[String]) -> Result<(), Emit
         | F::FUNCTION_REFERENCES
         | F::BULK_MEMORY
         | F::GC
-        | F::GC_TYPES;
+        | F::GC_TYPES
+        | F::EXCEPTIONS;
     let Err(error) = wasmparser::Validator::new_with_features(features).validate_all(bytes) else {
         return Ok(());
     };

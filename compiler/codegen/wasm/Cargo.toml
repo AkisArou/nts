@@ -13,13 +13,13 @@ nts-diagnostics.workspace = true
 nts-semantic-schema.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 wasm-encoder.workspace = true
 wasmparser.workspace = true
 
 [dev-dependencies]
 camino.workspace = true
 nts-frontend-ts.workspace = true
-serde_json.workspace = true
 
 [lints]
 workspace = true

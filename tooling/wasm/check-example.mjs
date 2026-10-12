@@ -6,9 +6,9 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const [artifact, source] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
-const manifest = JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8'));
-const wasm = await instantiate(await readFile(path.join(artifact, 'program.wasm')), manifest);
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
+const wasm = instantiate();
 const js = await import(pathToFileURL(path.resolve(source)));
 const pool = [NaN, -Infinity, Infinity, -0, 0, 1, -1, 0.5, -0.5, 3, 7, 20,
   2147483647, -2147483648, 2147483648, 4294967295, Number.MAX_SAFE_INTEGER];

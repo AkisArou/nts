@@ -48,7 +48,7 @@ mod tests {
         let p = crate::test_common::program(vec![f.clone()]);
         let slots = gc::Plan::build(&p).unwrap();
         let results = BTreeMap::new();
-        let mut m = Builder::new(&p, &slots, &results);
+        let mut m = Builder::new(&p, &slots, &results, false);
         let mut body = Body::new(&f, &mut m, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
         // Actual fault injection: removing the enclosing loop's label must
@@ -71,6 +71,8 @@ enum Label {
     Other,
 }
 
+/// Lowering state for one function. Instruction methods reach its code
+/// through `Deref`.
 #[derive(Debug)]
 pub(crate) struct Body<'b, 'p> {
     pub(crate) func: &'b Func,
@@ -83,6 +85,19 @@ pub(crate) struct Body<'b, 'p> {
     labels: Vec<Label>,
     edges: usize,
     visited: Vec<bool>,
+}
+
+impl std::ops::Deref for Body<'_, '_> {
+    type Target = ir::Function;
+    fn deref(&self) -> &ir::Function {
+        &self.code
+    }
+}
+
+impl std::ops::DerefMut for Body<'_, '_> {
+    fn deref_mut(&mut self) -> &mut ir::Function {
+        &mut self.code
+    }
 }
 
 /// Lower one verified function to an IR body and its CFG route.
@@ -111,8 +126,8 @@ pub(crate) fn lower(
     {
         return Err(body.structuring("structurer block/edge-coverage mismatch"));
     }
-    body.ins(&I::Unreachable);
-    body.ins(&I::End);
+    body.instruction(&I::Unreachable);
+    body.instruction(&I::End);
     let route = FunctionRoute {
         name: func.name.clone(),
         route: plan.route(),
@@ -200,21 +215,15 @@ impl<'b, 'p> Body<'b, 'p> {
         })
     }
 
+    /// An instruction. Inherent rather than reached through `Deref`, so an
+    /// argument computed from the body, such as `self.local(v)?`, borrows it
+    /// before the call does (two-phase borrows).
+    pub(crate) fn instruction(&mut self, i: &I<'static>) {
+        self.code.instruction(i);
+    }
     /// The whole-program type plan, which outlives this body.
     pub(crate) fn types(&self) -> &'p gc::Plan {
         self.m.types
-    }
-    pub(crate) fn ins(&mut self, i: &I<'static>) {
-        self.code.instruction(i);
-    }
-    pub(crate) fn call(&mut self, f: crate::module::Func) {
-        self.code.call(f);
-    }
-    pub(crate) fn global_get(&mut self, g: crate::module::Global) {
-        self.code.global_get(g);
-    }
-    pub(crate) fn global_set(&mut self, g: crate::module::Global) {
-        self.code.global_set(g);
     }
     pub(crate) fn local(&self, value: ValueId) -> Result<u32, Failure> {
         self.values[value.0 as usize]
@@ -222,7 +231,7 @@ impl<'b, 'p> Body<'b, 'p> {
     }
     pub(crate) fn load(&mut self, value: ValueId) -> Result<(), Failure> {
         let local = self.local(value)?;
-        self.ins(&I::LocalGet(local));
+        self.instruction(&I::LocalGet(local));
         Ok(())
     }
     pub(crate) fn ty(&self, value: ValueId) -> &nts_core::hir::HirType {
@@ -241,7 +250,7 @@ impl<'b, 'p> Body<'b, 'p> {
             .ok_or_else(|| Failure::Invariant(format!("edge to out-of-scope {label:?}")))
     }
     fn open(&mut self, loop_: bool, label: Label) {
-        self.ins(&if loop_ {
+        self.instruction(&if loop_ {
             I::Loop(BlockType::Empty)
         } else {
             I::Block(BlockType::Empty)
@@ -249,7 +258,7 @@ impl<'b, 'p> Body<'b, 'p> {
         self.labels.push(label);
     }
     fn close(&mut self) {
-        self.ins(&I::End);
+        self.instruction(&I::End);
         self.labels.pop();
     }
     fn structuring(&self, reason: impl std::fmt::Display) -> EmitError {
@@ -307,7 +316,7 @@ impl<'b, 'p> Body<'b, 'p> {
             return self.tree(to, structure);
         };
         let depth = self.depth(label).map_err(|why| self.structuring(why))?;
-        self.ins(&I::Br(depth));
+        self.instruction(&I::Br(depth));
         Ok(())
     }
     fn structured_terminator(
@@ -325,10 +334,10 @@ impl<'b, 'p> Body<'b, 'p> {
                 else_args,
             } => {
                 self.load(cond).map_err(|why| self.structuring(why))?;
-                self.ins(&I::If(BlockType::Empty));
+                self.instruction(&I::If(BlockType::Empty));
                 self.labels.push(Label::Other);
                 self.branch(id, then_target, &then_args, structure)?;
-                self.ins(&I::Else);
+                self.instruction(&I::Else);
                 self.branch(id, else_target, &else_args, structure)?;
                 self.close();
                 Ok(())
@@ -337,11 +346,11 @@ impl<'b, 'p> Body<'b, 'p> {
                 if let Some(v) = value {
                     self.load(v).map_err(|why| self.structuring(why))?;
                 }
-                self.ins(&I::Return);
+                self.instruction(&I::Return);
                 Ok(())
             }
             Terminator::Unreachable => {
-                self.ins(&I::Unreachable);
+                self.instruction(&I::Unreachable);
                 Ok(())
             }
             Terminator::FellThrough => Err(self.structuring("a reachable FellThrough terminator")),
@@ -353,9 +362,9 @@ impl<'b, 'p> Body<'b, 'p> {
         for id in order.iter().rev() {
             self.open(false, Label::Target(*id));
         }
-        self.ins(&I::LocalGet(self.pc.expect("dispatcher has its PC")));
+        self.instruction(&I::LocalGet(self.pc.expect("dispatcher has its PC")));
         let targets = (0..crate::module::index(order.len())).collect::<Vec<_>>();
-        self.ins(&I::BrTable(
+        self.instruction(&I::BrTable(
             targets.into(),
             crate::module::index(order.len()) + 1,
         ));
@@ -365,7 +374,7 @@ impl<'b, 'p> Body<'b, 'p> {
         }
         self.close();
         self.close();
-        self.ins(&I::Unreachable);
+        self.instruction(&I::Unreachable);
         Ok(())
     }
     fn actions(&mut self, block: BlockId) -> Result<(), EmitError> {
@@ -393,7 +402,7 @@ impl<'b, 'p> Body<'b, 'p> {
             match copy {
                 Copy::Move { to, from } => {
                     self.load(from)?;
-                    self.ins(&I::LocalSet(self.local(to)?));
+                    self.instruction(&I::LocalSet(self.local(to)?));
                 }
                 Copy::Save { temp, from } => {
                     self.load(from)?;
@@ -402,7 +411,7 @@ impl<'b, 'p> Body<'b, 'p> {
                         Failure::Invariant(format!("unplanned edge temporary {temp}: {slot:?}"))
                     })?;
                     saved.insert(temp, slot);
-                    self.ins(&I::LocalSet(local));
+                    self.instruction(&I::LocalSet(local));
                 }
                 Copy::Restore { to, temp } => {
                     let slot = saved.get(&temp).copied().ok_or_else(|| {
@@ -411,8 +420,8 @@ impl<'b, 'p> Body<'b, 'p> {
                     let local = self.scratch.get(&(temp, slot)).copied().ok_or_else(|| {
                         Failure::Invariant(format!("unplanned edge temporary {temp}: {slot:?}"))
                     })?;
-                    self.ins(&I::LocalGet(local));
-                    self.ins(&I::LocalSet(self.local(to)?));
+                    self.instruction(&I::LocalGet(local));
+                    self.instruction(&I::LocalSet(self.local(to)?));
                 }
             }
         }
@@ -421,14 +430,14 @@ impl<'b, 'p> Body<'b, 'p> {
     fn edge(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), Failure> {
         self.copies(target, args)?;
         if let Some(pc) = self.pc {
-            self.ins(&I::I32Const(
+            self.instruction(&I::I32Const(
                 i32::try_from(self.cases[&target])
                     .map_err(|_| "more than 2^31 dispatcher cases")?,
             ));
-            self.ins(&I::LocalSet(pc));
-            self.ins(&I::Br(self.depth(Label::Dispatch)?));
+            self.instruction(&I::LocalSet(pc));
+            self.instruction(&I::Br(self.depth(Label::Dispatch)?));
         } else {
-            self.ins(&I::Br(self.depth(Label::Target(target))?));
+            self.instruction(&I::Br(self.depth(Label::Target(target))?));
         }
         self.edges += 1;
         Ok(())
@@ -439,7 +448,7 @@ impl<'b, 'p> Body<'b, 'p> {
                 if let Some(v) = value {
                     self.load(*v)?;
                 }
-                self.ins(&I::Return);
+                self.instruction(&I::Return);
             }
             Terminator::Jump { target, args } => self.edge(*target, args)?,
             Terminator::Branch {
@@ -450,14 +459,14 @@ impl<'b, 'p> Body<'b, 'p> {
                 else_args,
             } => {
                 self.load(*cond)?;
-                self.ins(&I::If(BlockType::Empty));
+                self.instruction(&I::If(BlockType::Empty));
                 self.labels.push(Label::Other);
                 self.edge(*then_target, then_args)?;
-                self.ins(&I::Else);
+                self.instruction(&I::Else);
                 self.edge(*else_target, else_args)?;
                 self.close();
             }
-            Terminator::Unreachable => self.ins(&I::Unreachable),
+            Terminator::Unreachable => self.instruction(&I::Unreachable),
             Terminator::FellThrough => {
                 return Err(("a reachable FellThrough terminator".to_owned()).into());
             }
@@ -468,7 +477,7 @@ impl<'b, 'p> Body<'b, 'p> {
         let op = self.func.value(id);
         match &op.kind {
             OpKind::Param(_) | OpKind::BlockParam(_) => return Ok(()),
-            OpKind::ConstBool(value) => self.ins(&I::I32Const(i32::from(*value))),
+            OpKind::ConstBool(value) => self.instruction(&I::I32Const(i32::from(*value))),
             OpKind::ConstInt(value) => numeric::constant_int(self, *value, &op.ty)?,
             OpKind::ConstFloat(value) => numeric::constant_float(self, *value, &op.ty)?,
             OpKind::ConstString(value) => crate::strings::constant(self, value),
@@ -561,7 +570,7 @@ impl<'b, 'p> Body<'b, 'p> {
             }
         }
         if self.types().slot(&op.ty)?.is_some() {
-            self.ins(&I::LocalSet(self.local(id)?));
+            self.instruction(&I::LocalSet(self.local(id)?));
         }
         Ok(())
     }
@@ -569,7 +578,7 @@ impl<'b, 'p> Body<'b, 'p> {
         if let Some(value) = value {
             self.load(value)?;
         }
-        self.ins(&I::Return);
+        self.instruction(&I::Return);
         Ok(())
     }
     fn erase(

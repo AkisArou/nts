@@ -17,11 +17,7 @@ use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 pub(crate) const INSTANCE: &str = "object.instanceOf";
 /// A class or array descriptor: identity, runtime kind, ancestry and the
 /// class's dispatch entries. Built once, on the first allocation that needs it.
-pub(crate) fn descriptor(
-    m: &mut Builder<'_>,
-    at: u32,
-    class: Option<ClassId>,
-) -> Result<Global, Failure> {
+pub(crate) fn descriptor(m: &mut Builder<'_>, at: u32) -> Result<Global, Failure> {
     m.global(GlobalKey::Descriptor(at), |m| {
         let plan = m.types;
         let root = plan
@@ -45,7 +41,7 @@ pub(crate) fn descriptor(
             array_size: u32::try_from(descriptor.ancestry.len())
                 .map_err(|_| Failure::Invariant("too many class ancestors".into()))?,
         });
-        crate::callables::dispatch(m, &mut code, class)?;
+        crate::callables::dispatch(m, &mut code, descriptor.class)?;
         code.instruction(&I::StructNew(root.descriptor));
         Ok((crate::module::constant_type(root.descriptor), code))
     })
@@ -63,7 +59,7 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, frame: bool) -> Result<
         return Err(Failure::Invariant("ObjectNew of a non-object type".into()));
     };
     let storage = object(b, result)?;
-    let descriptor = descriptor(b.m, storage.descriptor, Some(class))?;
+    let descriptor = descriptor(b.m, storage.descriptor)?;
     b.global_get(descriptor);
     for entry in crate::callables::entries(b.m, class, storage)? {
         b.code.ref_func(entry);
@@ -71,7 +67,7 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, frame: bool) -> Result<
     for field in storage.fields.iter() {
         default(b, &field.ty)?;
     }
-    b.ins(&I::StructNew(storage.physical));
+    b.instruction(&I::StructNew(storage.physical));
     Ok(())
 }
 pub(crate) fn default(b: &mut Body<'_, '_>, ty: &HirType) -> Result<(), Failure> {
@@ -149,7 +145,7 @@ pub(crate) fn get(
     let field = field(storage, at)?;
     contract::nonnull(b, receiver)?;
     b.load(receiver)?;
-    b.ins(&get_instruction(
+    b.instruction(&get_instruction(
         &field.ty,
         storage.physical,
         field_index(storage, at)?,
@@ -172,7 +168,7 @@ pub(crate) fn set(
     b.load(receiver)?;
     b.load(value)?;
     adapt(b, &b.ty(value).clone(), &field.ty)?;
-    b.ins(&I::StructSet {
+    b.instruction(&I::StructSet {
         struct_type_index: storage.physical,
         field_index: field_index(storage, at)?,
     });
@@ -213,9 +209,9 @@ pub(crate) fn binary(
         }
         b.load(value)?;
     }
-    b.ins(&I::RefEq);
+    b.instruction(&I::RefEq);
     if op == BinOp::Ne {
-        b.ins(&I::I32Eqz);
+        b.instruction(&I::I32Eqz);
     }
     Ok(())
 }
@@ -230,9 +226,9 @@ pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(
         return Err(format!("reference unary {op:?}").into());
     }
     b.load(value)?;
-    b.ins(&I::RefIsNull);
+    b.instruction(&I::RefIsNull);
     if op == UnOp::Truthy {
-        b.ins(&I::I32Eqz);
+        b.instruction(&I::I32Eqz);
     }
     Ok(())
 }
@@ -249,16 +245,16 @@ pub(crate) fn instance(
         .map(|ty| b.types().objects.class(*ty))
         .collect::<Result<Vec<_>, _>>()?;
     if b.ty(value) != &HirType::Erased && !is_reference(b.ty(value)) {
-        b.ins(&I::I32Const(0));
+        b.instruction(&I::I32Const(0));
         return Ok(());
     }
     let callee = instance_of(b.m)?;
     for (at, identity) in identities.iter().enumerate() {
         b.load(value)?;
-        b.ins(&I::I32Const(identity.cast_signed()));
+        b.instruction(&I::I32Const(identity.cast_signed()));
         b.call(callee);
         if at != 0 {
-            b.ins(&I::I32Or);
+            b.instruction(&I::I32Or);
         }
     }
     Ok(())

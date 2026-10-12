@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const { instantiate } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
-const manifest = JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8'));
-const wasm = await instantiate(await readFile(path.join(artifact, 'program.wasm')), manifest);
+const { instantiate } = await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
+const wasm = instantiate();
 let cases = 0;
 function same(actual, expected) { assert.ok(Object.is(actual, expected), `${String(actual)} != ${String(expected)}`); cases++; }
 const numbers = [NaN, Infinity, -Infinity, -0, 0, 1, -1, 0.5, -0.5, 2 ** 30 - 1, 2 ** 30, -(2 ** 30), -(2 ** 30) - 1,

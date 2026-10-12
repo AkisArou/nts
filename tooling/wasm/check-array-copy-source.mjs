@@ -4,8 +4,8 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact, source]=process.argv.slice(2);
 const oracle=await import(pathToFileURL(source));
-const {instantiate,WasmInputDecline}=await import(pathToFileURL(path.join(artifact,'node.mjs')));
-const wasm=await instantiate(await readFile(path.join(artifact,'program.wasm')),JSON.parse(await readFile(path.join(artifact,'program.json'),'utf8')));
+const {instantiate,WasmInputDecline}=await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+const wasm=instantiate();
 let cases=0,named_declines=0;
 function same(name,...args) {const expected=oracle[name](...args); if(expected===undefined) {assert.throws(()=>wasm[name](...args),e=>e instanceof WasmInputDecline); named_declines++;} else {const actual=wasm[name](...args); assert.ok(Object.is(actual,expected),`${name}: ${String(actual)} != ${String(expected)}`); cases++;}}
 const endpoints=[NaN,Infinity,-Infinity,-0,0,1,-1,3,-3,4,-4,.9,-.9,1.5,-1.5,4294967296];

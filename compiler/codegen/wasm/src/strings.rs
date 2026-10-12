@@ -175,17 +175,17 @@ pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(
         return Err(format!("string unary {op:?}").into());
     }
     b.load(value)?;
-    b.ins(&I::RefIsNull);
-    b.ins(&I::If(BlockType::Result(ValType::I32)));
-    b.ins(&I::I32Const(0));
-    b.ins(&I::Else);
+    b.instruction(&I::RefIsNull);
+    b.instruction(&I::If(BlockType::Result(ValType::I32)));
+    b.instruction(&I::I32Const(0));
+    b.instruction(&I::Else);
     b.load(value)?;
     call(b, Helper::Length)?;
-    b.ins(&I::I32Eqz);
-    b.ins(&I::I32Eqz);
-    b.ins(&I::End);
+    b.instruction(&I::I32Eqz);
+    b.instruction(&I::I32Eqz);
+    b.instruction(&I::End);
     if op == UnOp::Not {
-        b.ins(&I::I32Eqz);
+        b.instruction(&I::I32Eqz);
     }
     Ok(())
 }
@@ -248,22 +248,21 @@ fn unit_index_contract(
     numeric::convert(b, &ty, &HirType::NUMBER)?;
     b.load(index)?;
     numeric::convert(b, &ty, &HirType::NUMBER)?;
-    b.ins(&I::F64Trunc);
-    b.ins(&I::F64Eq);
+    b.instruction(&I::F64Trunc);
+    b.instruction(&I::F64Eq);
     b.load(index)?;
     numeric::convert(b, &ty, &HirType::NUMBER)?;
-    b.ins(&I::F64Const(0.0.into()));
-    b.ins(&I::F64Ge);
-    b.ins(&I::I32And);
+    b.instruction(&I::F64Const(0.0.into()));
+    b.instruction(&I::F64Ge);
+    b.instruction(&I::I32And);
     b.load(index)?;
     numeric::convert(b, &ty, &HirType::NUMBER)?;
     b.load(string)?;
     call(b, Helper::Length)?;
-    b.ins(&I::F64ConvertI32U);
-    b.ins(&I::F64Lt);
-    b.ins(&I::I32And);
-    crate::contract::require(b);
-    Ok(())
+    b.instruction(&I::F64ConvertI32U);
+    b.instruction(&I::F64Lt);
+    b.instruction(&I::I32And);
+    crate::contract::require(b)
 }
 
 pub(crate) fn binary(
@@ -285,10 +284,10 @@ pub(crate) fn binary(
     call(b, helper)?;
     match op {
         BinOp::Eq | BinOp::Concat => {}
-        BinOp::Ne => b.ins(&I::I32Eqz),
+        BinOp::Ne => b.instruction(&I::I32Eqz),
         BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
-            b.ins(&I::I32Const(0));
-            b.ins(&match op {
+            b.instruction(&I::I32Const(0));
+            b.instruction(&match op {
                 BinOp::Lt => I::I32LtS,
                 BinOp::Le => I::I32LeS,
                 BinOp::Gt => I::I32GtS,

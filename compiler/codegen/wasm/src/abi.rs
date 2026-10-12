@@ -55,6 +55,7 @@ pub enum ImportType {
         ty: ValueType,
         mutable: bool,
     },
+    Tag,
 }
 
 impl Import {
@@ -76,12 +77,6 @@ impl Import {
             },
         })
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StringConstant {
-    pub symbol: String,
-    pub value: String,
 }
 
 pub(crate) fn requires_gc(slot: Physical) -> bool {

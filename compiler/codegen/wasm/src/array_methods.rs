@@ -126,7 +126,7 @@ fn backing(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<()
 }
 fn output(b: &mut Body<'_, '_>, result: ValueId, actual: &HirType) -> Result<(), Failure> {
     if b.ty(result) == &HirType::Void {
-        b.ins(&I::Drop);
+        b.instruction(&I::Drop);
         Ok(())
     } else if matches!(actual, HirType::Int { .. } | HirType::Float { .. }) {
         numeric::convert(b, actual, &b.ty(result).clone())
@@ -146,24 +146,24 @@ fn push(
     input: ValueId,
 ) -> Result<(), Failure> {
     length(b, shape, array)?;
-    b.ins(&I::I32Const(-1));
-    b.ins(&I::I32LtU);
-    contract::require(b);
+    b.instruction(&I::I32Const(-1));
+    b.instruction(&I::I32LtU);
+    contract::require(b)?;
     let grow = arrays::grow(b.m, shape)?;
     b.load(array)?;
     length(b, shape, array)?;
-    b.ins(&I::I32Const(1));
-    b.ins(&I::I32Add);
+    b.instruction(&I::I32Const(1));
+    b.instruction(&I::I32Add);
     b.call(grow);
     backing(b, shape, array)?;
     length(b, shape, array)?;
     element(b, shape, input)?;
-    b.ins(&I::ArraySet(shape.backing));
+    b.instruction(&I::ArraySet(shape.backing));
     b.load(array)?;
     length(b, shape, array)?;
-    b.ins(&I::I32Const(1));
-    b.ins(&I::I32Add);
-    b.ins(&I::StructSet {
+    b.instruction(&I::I32Const(1));
+    b.instruction(&I::I32Add);
+    b.instruction(&I::StructSet {
         struct_type_index: shape.wrapper,
         field_index: 1,
     });
@@ -172,8 +172,8 @@ fn push(
 }
 fn last(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<(), Failure> {
     length(b, shape, array)?;
-    b.ins(&I::I32Const(1));
-    b.ins(&I::I32Sub);
+    b.instruction(&I::I32Const(1));
+    b.instruction(&I::I32Sub);
     Ok(())
 }
 fn pop(
@@ -190,18 +190,18 @@ fn pop(
     };
     if family == Family::Number {
         length(b, shape, array)?;
-        b.ins(&I::I32Const(0));
-        b.ins(&I::I32GtU);
-        contract::require(b);
+        b.instruction(&I::I32Const(0));
+        b.instruction(&I::I32GtU);
+        contract::require(b)?;
     } else {
         length(b, shape, array)?;
-        b.ins(&I::If(BlockType::Result(
+        b.instruction(&I::If(BlockType::Result(
             b.types().value_slot(&actual)?.wasm(),
         )));
     }
     backing(b, shape, array)?;
     last(b, shape, array)?;
-    b.ins(&arrays::get_instruction(shape)?);
+    b.instruction(&arrays::get_instruction(shape)?);
     if family == Family::Value {
         erased::call(b, erased::Helper::BoxNumber)?;
     }
@@ -210,22 +210,22 @@ fn pop(
     backing(b, shape, array)?;
     last(b, shape, array)?;
     objects::default(b, &shape.element)?;
-    b.ins(&I::ArraySet(shape.backing));
+    b.instruction(&I::ArraySet(shape.backing));
     b.load(array)?;
     last(b, shape, array)?;
-    b.ins(&I::StructSet {
+    b.instruction(&I::StructSet {
         struct_type_index: shape.wrapper,
         field_index: 1,
     });
     if family != Family::Number {
-        b.ins(&I::Else);
+        b.instruction(&I::Else);
         if family == Family::Value {
             let undefined = erased::singleton(b.m, erased::Singleton::Undefined)?;
             b.global_get(undefined);
         } else {
             objects::default(b, &actual)?;
         }
-        b.ins(&I::End);
+        b.instruction(&I::End);
     }
     output(b, result, &actual)
 }
@@ -237,10 +237,10 @@ fn fill(
     input: ValueId,
 ) -> Result<(), Failure> {
     backing(b, shape, array)?;
-    b.ins(&I::I32Const(0));
+    b.instruction(&I::I32Const(0));
     element(b, shape, input)?;
     length(b, shape, array)?;
-    b.ins(&I::ArrayFill(shape.backing));
+    b.instruction(&I::ArrayFill(shape.backing));
     b.load(array)?;
     output(b, result, &shape.ty)
 }
@@ -257,20 +257,20 @@ fn truncate(
     arrays::whole_nonnegative(b, count)?;
     arrays::number(b, count)?;
     length(b, shape, array)?;
-    b.ins(&I::F64ConvertI32U);
-    b.ins(&I::F64Le);
-    b.ins(&I::I32And);
-    contract::require(b);
+    b.instruction(&I::F64ConvertI32U);
+    b.instruction(&I::F64Le);
+    b.instruction(&I::I32And);
+    contract::require(b)?;
     backing(b, shape, array)?;
     arrays::index(b, count)?;
     objects::default(b, &shape.element)?;
     length(b, shape, array)?;
     arrays::index(b, count)?;
-    b.ins(&I::I32Sub);
-    b.ins(&I::ArrayFill(shape.backing));
+    b.instruction(&I::I32Sub);
+    b.instruction(&I::ArrayFill(shape.backing));
     b.load(array)?;
     arrays::index(b, count)?;
-    b.ins(&I::StructSet {
+    b.instruction(&I::StructSet {
         struct_type_index: shape.wrapper,
         field_index: 1,
     });

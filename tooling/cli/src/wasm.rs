@@ -18,7 +18,18 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         .find(|pair| pair[0] == "--out")
         .map(|pair| Utf8PathBuf::from(&pair[1]))
     else {
-        bail!("emit-wasm requires --out <directory> for program.wasm, program.json and node.mjs");
+        bail!(
+            "emit-wasm requires --out <directory> for program.wasm and its program.mjs host module"
+        );
+    };
+    let host = match args
+        .windows(2)
+        .find(|pair| pair[0] == "--host")
+        .map(|pair| pair[1].as_str())
+    {
+        None | Some("node") => nts_codegen_wasm::Host::Node,
+        Some("browser") => nts_codegen_wasm::Host::Browser,
+        Some(other) => bail!("emit-wasm --host must be `node` or `browser`, not `{other}`"),
     };
     let tsconfig = project(args)?;
     let mut source = frontend_for(&tsconfig, frontend_binary())?;
@@ -72,7 +83,9 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         }
         Err(error) => return Err(error.into()),
     };
-    // All declines and both validators precede the first output mutation.
+    // All declines, both validators and the glue precede the first output
+    // mutation.
+    let glue = nts_codegen_wasm::glue(&emitted.manifest, host).map_err(anyhow::Error::msg)?;
     let manifest = serde_json::to_vec_pretty(&emitted.manifest)?;
     let sources: Vec<_> = snapshot
         .sources
@@ -87,11 +100,11 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
     )?;
     std::fs::create_dir_all(&out)?;
     std::fs::write(out.join("program.wasm"), &emitted.bytes)?;
-    std::fs::write(out.join("program.json"), manifest)?;
-    std::fs::write(out.join("node.mjs"), nts_codegen_wasm::NODE_LOADER)?;
+    std::fs::write(out.join("program.mjs"), glue)?;
+    std::fs::write(out.join("program.wasm.json"), manifest)?;
     std::fs::write(out.join("program.origins.json"), origins)?;
     println!(
-        "wrote {} wasm bytes, {} function(s), {} global(s) and the Node loader to {out}",
+        "wrote {} wasm bytes, {} function(s), {} global(s) and their host module to {out}",
         emitted.bytes.len(),
         emitted.manifest.exports.len(),
         emitted.manifest.globals.len()

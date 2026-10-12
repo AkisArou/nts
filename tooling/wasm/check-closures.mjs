@@ -3,11 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 const [artifact] = process.argv.slice(2);
-const loader = pathToFileURL(path.join(artifact, 'node.mjs'));
+const loader = pathToFileURL(path.join(artifact, 'program.mjs'));
 const { instantiate, WasmInputDecline } = await import(loader);
-const manifest = JSON.parse(await readFile(path.join(artifact, 'program.json'), 'utf8'));
-const bytes = await readFile(path.join(artifact, 'program.wasm'));
-const wasm = await instantiate(bytes, manifest);
+const manifest = JSON.parse(await readFile(path.join(artifact, 'program.wasm.json'), 'utf8'));
+const wasm = instantiate();
 let cases = 0;
 function same(actual, expected, name) { assert.ok(Object.is(actual, expected), `${name}: ${String(actual)} != ${String(expected)}`); cases++; }
 const classes = manifest.exports.map(e => e.name).filter(n => n.startsWith('call_')).map(n => Number(n.split('_')[1])).sort((a, b) => a - b);
@@ -27,16 +26,14 @@ same(wasm.functionTag(), 4, 'function runtime tag');
 for (const s of ['', 'abc', '😀', '\ud800', '\udfff', 'a\ud800b']) same(wasm.capturedString(s), s, 'captured primitive string');
 same(wasm.global(), 17, 'static closure prefix leaves program globals in place');
 assert.throws(() => wasm.nullCall(1), e => e instanceof WasmInputDecline && e.message.includes('nullCall'));
-const fresh = await import(`${loader.href}?function-references-disabled`);
+// An engine without typed function references rejects the module when it
+// compiles; the failure reaches the importer instead of a degraded program.
 const compile = WebAssembly.compile;
 let capability_refusal = false;
 try {
-  WebAssembly.compile = (input, options) => {
-    if (input.length < 100 && input.includes(210) && input.includes(20)) throw new WebAssembly.CompileError('function references disabled');
-    return compile(input, options);
-  };
-  await assert.rejects(fresh.instantiate(bytes, manifest), error => {
-    capability_refusal = error.code === 'NTS5001' && String(error).includes('function-references');
+  WebAssembly.compile = () => { throw new WebAssembly.CompileError('function references disabled'); };
+  await assert.rejects(import(`${loader.href}?function-references-disabled`), error => {
+    capability_refusal = error instanceof WebAssembly.CompileError && String(error).includes('function references');
     return capability_refusal;
   });
 } finally { WebAssembly.compile = compile; }

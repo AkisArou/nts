@@ -24,12 +24,12 @@ pub(crate) fn constant_int(b: &mut Body<'_, '_>, value: i128, ty: &HirType) -> R
         Slot::I32 => {
             let raw =
                 u32::try_from(value.rem_euclid(1_i128 << 32)).map_err(|_| "integer encoding")?;
-            b.ins(&I::I32Const(i32::from_ne_bytes(raw.to_ne_bytes())));
+            b.instruction(&I::I32Const(i32::from_ne_bytes(raw.to_ne_bytes())));
         }
         Slot::I64 => {
             let raw =
                 u64::try_from(value.rem_euclid(1_i128 << 64)).map_err(|_| "integer encoding")?;
-            b.ins(&I::I64Const(i64::from_ne_bytes(raw.to_ne_bytes())));
+            b.instruction(&I::I64Const(i64::from_ne_bytes(raw.to_ne_bytes())));
         }
         Slot::F32 | Slot::F64 => {
             return Err(format!("integer literal in a noninteger slot {ty:?}").into());
@@ -44,13 +44,13 @@ pub(crate) fn constant_float(
     ty: &HirType,
 ) -> Result<(), Failure> {
     match types::value_slot(ty)? {
-        Slot::F64 => b.ins(&I::F64Const(value.into())),
+        Slot::F64 => b.instruction(&I::F64Const(value.into())),
         Slot::F32 => {
             #[allow(
                 clippy::cast_possible_truncation,
                 reason = "HIR explicitly selected f32 storage"
             )]
-            b.ins(&I::F32Const((value as f32).into()));
+            b.instruction(&I::F32Const((value as f32).into()));
         }
         Slot::I32 | Slot::I64 => {
             return Err(format!("floating literal in an integer slot {ty:?}").into());
@@ -125,30 +125,30 @@ pub(crate) fn convert(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Res
         }),
     };
     if let Some(op) = op {
-        b.ins(&op);
+        b.instruction(&op);
     }
     match to {
         HirType::Int {
             bits: 8,
             signed: true,
-        } => b.ins(&I::I32Extend8S),
+        } => b.instruction(&I::I32Extend8S),
         HirType::Int {
             bits: 16,
             signed: true,
-        } => b.ins(&I::I32Extend16S),
+        } => b.instruction(&I::I32Extend16S),
         HirType::Int {
             bits: 8,
             signed: false,
         } => {
-            b.ins(&I::I32Const(255));
-            b.ins(&I::I32And);
+            b.instruction(&I::I32Const(255));
+            b.instruction(&I::I32And);
         }
         HirType::Int {
             bits: 16,
             signed: false,
         } => {
-            b.ins(&I::I32Const(65535));
-            b.ins(&I::I32And);
+            b.instruction(&I::I32Const(65535));
+            b.instruction(&I::I32And);
         }
         HirType::Bool | HirType::Int { bits: 32 | 64, .. } | HirType::Float { bits: 32 | 64 } => {}
         HirType::Int { .. }
@@ -175,22 +175,22 @@ fn truth_on_stack(b: &mut Body<'_, '_>, slot: Slot) {
     // abs(x)>0 is false for both zeroes AND NaN; x!=0 would be true for NaN.
     match slot {
         Slot::I32 => {
-            b.ins(&I::I32Eqz);
-            b.ins(&I::I32Eqz);
+            b.instruction(&I::I32Eqz);
+            b.instruction(&I::I32Eqz);
         }
         Slot::I64 => {
-            b.ins(&I::I64Eqz);
-            b.ins(&I::I32Eqz);
+            b.instruction(&I::I64Eqz);
+            b.instruction(&I::I32Eqz);
         }
         Slot::F32 => {
-            b.ins(&I::F32Abs);
-            b.ins(&I::F32Const(0.0_f32.into()));
-            b.ins(&I::F32Gt);
+            b.instruction(&I::F32Abs);
+            b.instruction(&I::F32Const(0.0_f32.into()));
+            b.instruction(&I::F32Gt);
         }
         Slot::F64 => {
-            b.ins(&I::F64Abs);
-            b.ins(&I::F64Const(0.0.into()));
-            b.ins(&I::F64Gt);
+            b.instruction(&I::F64Abs);
+            b.instruction(&I::F64Const(0.0.into()));
+            b.instruction(&I::F64Gt);
         }
     }
 }
@@ -208,7 +208,7 @@ pub(crate) fn unary(
             b.load(operand)?;
             truth_on_stack(b, types::value_slot(b.ty(operand))?);
             if op == UnOp::Not {
-                b.ins(&I::I32Eqz);
+                b.instruction(&I::I32Eqz);
             }
         }
         UnOp::ToInt32 | UnOp::ToUint32 => {
@@ -221,22 +221,22 @@ pub(crate) fn unary(
         }
         UnOp::Neg => match slot {
             Slot::I32 => {
-                b.ins(&I::I32Const(0));
+                b.instruction(&I::I32Const(0));
                 push_as(b, operand, &out)?;
-                b.ins(&I::I32Sub);
+                b.instruction(&I::I32Sub);
             }
             Slot::I64 => {
-                b.ins(&I::I64Const(0));
+                b.instruction(&I::I64Const(0));
                 push_as(b, operand, &out)?;
-                b.ins(&I::I64Sub);
+                b.instruction(&I::I64Sub);
             }
             Slot::F32 => {
                 push_as(b, operand, &out)?;
-                b.ins(&I::F32Neg);
+                b.instruction(&I::F32Neg);
             }
             Slot::F64 => {
                 push_as(b, operand, &out)?;
-                b.ins(&I::F64Neg);
+                b.instruction(&I::F64Neg);
             }
         },
         UnOp::Abs => absolute(b, operand, &out)?,
@@ -260,7 +260,7 @@ fn float_unary(
     opcode: &I<'static>,
 ) -> Result<(), Failure> {
     push_as(b, operand, &HirType::Float { bits: 64 })?;
-    b.ins(opcode);
+    b.instruction(opcode);
     convert(b, &HirType::Float { bits: 64 }, out)
 }
 
@@ -268,7 +268,7 @@ fn absolute(b: &mut Body<'_, '_>, operand: ValueId, out: &HirType) -> Result<(),
     let slot = types::value_slot(out)?;
     if matches!(slot, Slot::F32 | Slot::F64) {
         push_as(b, operand, out)?;
-        b.ins(&if slot == Slot::F32 {
+        b.instruction(&if slot == Slot::F32 {
             I::F32Abs
         } else {
             I::F64Abs
@@ -279,29 +279,29 @@ fn absolute(b: &mut Body<'_, '_>, operand: ValueId, out: &HirType) -> Result<(),
         return push_as(b, operand, out);
     }
     push_as(b, operand, out)?;
-    b.ins(&if slot == Slot::I32 {
+    b.instruction(&if slot == Slot::I32 {
         I::I32Const(0)
     } else {
         I::I64Const(0)
     });
     push_as(b, operand, out)?;
-    b.ins(&if slot == Slot::I32 {
+    b.instruction(&if slot == Slot::I32 {
         I::I32Sub
     } else {
         I::I64Sub
     });
     push_as(b, operand, out)?;
-    b.ins(&if slot == Slot::I32 {
+    b.instruction(&if slot == Slot::I32 {
         I::I32Const(0)
     } else {
         I::I64Const(0)
     });
-    b.ins(&if slot == Slot::I32 {
+    b.instruction(&if slot == Slot::I32 {
         I::I32GeS
     } else {
         I::I64GeS
     });
-    b.ins(&I::Select);
+    b.instruction(&I::Select);
     Ok(())
 }
 
@@ -309,9 +309,9 @@ fn to_i32(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     match types::value_slot(b.ty(value))? {
         Slot::I32 => {}
-        Slot::I64 => b.ins(&I::I32WrapI64),
+        Slot::I64 => b.instruction(&I::I32WrapI64),
         Slot::F32 => {
-            b.ins(&I::F64PromoteF32);
+            b.instruction(&I::F64PromoteF32);
             b.helper(Helper::ToInt32)?;
         }
         Slot::F64 => b.helper(Helper::ToInt32)?,
@@ -360,7 +360,7 @@ fn bitwise(
 ) -> Result<(), Failure> {
     to_i32(b, lhs)?;
     to_i32(b, rhs)?;
-    b.ins(opcode);
+    b.instruction(opcode);
     let out = b.ty(result).clone();
     convert(b, &HirType::Int { bits: 32, signed }, &out)
 }
@@ -391,7 +391,7 @@ fn comparison(
     let signed = !unsigned(b.ty(lhs));
     b.load(lhs)?;
     b.load(rhs)?;
-    b.ins(&compare_opcode(slot, op, signed));
+    b.instruction(&compare_opcode(slot, op, signed));
     Ok(())
 }
 
@@ -500,7 +500,7 @@ fn arithmetic(
         b.load(rhs)?;
         b.load(lhs)?;
         b.load(rhs)?;
-        b.ins(&compare_opcode(
+        b.instruction(&compare_opcode(
             slot,
             if op == BinOp::Min {
                 Comparison::Le
@@ -509,7 +509,7 @@ fn arithmetic(
             },
             !unsigned(b.ty(lhs)),
         ));
-        b.ins(&I::Select);
+        b.instruction(&I::Select);
         return Ok(());
     }
     // Prepared integral operations consume core's representation proofs:
@@ -520,7 +520,7 @@ fn arithmetic(
     let instruction = arithmetic_opcode(slot, op, !unsigned(&ty))?;
     b.load(lhs)?;
     b.load(rhs)?;
-    b.ins(&instruction);
+    b.instruction(&instruction);
     Ok(())
 }
 

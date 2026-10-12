@@ -118,7 +118,8 @@ fn builtin_strings_literals_live_globals_and_js_ranges_execute_exactly() {
     }
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
     assert!(emitted.manifest.features.is_empty());
-    assert!(emitted.manifest.constants.len() >= 3);
+    // Literals are imported string constants: compile-time, not host imports.
+    assert!(!emitted.manifest.imports.iter().any(|i| i.module == "'"));
     assert!(
         emitted
             .manifest
@@ -128,6 +129,7 @@ fn builtin_strings_literals_live_globals_and_js_ranges_execute_exactly() {
     );
     let report = common::run("strings", &emitted, "tooling/wasm/check-strings.mjs", &[]);
     assert!(report["cases"].as_u64().unwrap() > 10_000);
+    assert_eq!(report["ignoredOptionsRefused"], true);
 }
 
 fn operators() -> Vec<Func> {

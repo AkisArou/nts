@@ -51,7 +51,7 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
             vec![],
             root.join("tooling/wasm/fixtures/declines"),
             "NTS5001",
-            "unsupportedMath",
+            "unsupportedBigInt",
         ),
         ("rc", vec!["--rc"], supported.clone(), "NTS2001", "--rc"),
     ] {
