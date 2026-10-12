@@ -887,6 +887,36 @@ call's placeholder result is never consumed. No process-global singleton state.
 `nts_uncaught` crosses to the JS host as the actual thrown value; compiler defects
 and named input declines remain distinct from source-language exceptions.
 
+### M1b activation ABI detail proposed for review
+
+The pending flag and erased payload live in module globals. A private recursive
+GC activation frame stores a saved flag, payload and previous frame; only nested
+public entry allocates one. Outermost entry resets the state without allocating.
+Leave restores the enclosing activation, or clears the outermost payload. The
+implementation uses a worklist/SCC type node, as for other recursive GC data.
+
+To make cleanup run after any host-crossing throw or input refusal, the Node
+wrapper enters once and leaves in `finally`, including module initialization.
+This needs an optional ABI2 `activation` record naming four private function
+exports: `enter() -> void`, `leave() -> void`, `raising() -> i32`, and
+`publish(functionName: externref) -> void`. These are declared and checked against
+the actual module export set, kept out of the source namespace, and use names
+allocated against all existing public/global/init names. Modules without raising
+resources have no record or activation work. This is a pending ABI detail, not
+an implemented exception result or an approved extension yet.
+
+`publish` never consumes a failed call's placeholder result. It extracts only
+admitted primitive/string/absence payloads and throws the actual JS value through
+fixed typed host imports. A compiled object/function payload at this boundary
+gets the reviewed named refusal; internally caught GC payloads retain identity.
+`nts_uncaught` uses the same publication path without replacing HIR's explicit
+raising edges. Only `nts_raise_take` consumes and clears a handled payload.
+Throwing host services remain named declines until they have a reviewed adapter.
+No GC source references or function references cross these private scalar/string
+exports. Acceptance includes repeat calls after throws/refusals, two instances,
+module-init failure, and a controlled nested-entry probe which restores an
+already pending enclosing payload.
+
 Native wasm `throw`/`try_table`/exnref are available, as the probes show. Native
 EH is an **M2 priority**, requiring region-aware exception lowering, not an instruction-for-
 instruction replacement of `nts_raise`: immediate native unwinding would bypass
