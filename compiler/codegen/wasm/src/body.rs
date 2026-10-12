@@ -624,7 +624,7 @@ impl<'b, 'p> Body<'b, 'p> {
             self.load(value)?;
             self.transfer(&func.value(value).ty, &func.return_type)?;
         }
-        if self.m.raising && self.m.is_host_entry(self.m.program_func(&self.func.name)?) {
+        if self.m.raises && self.m.is_host_entry(self.m.program_func(&self.func.name)?) {
             crate::raising::leave(self)?;
         }
         self.instruction(&I::Return);

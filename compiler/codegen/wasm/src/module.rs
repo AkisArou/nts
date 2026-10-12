@@ -177,6 +177,9 @@ pub(crate) struct Builder<'p> {
     /// Whether any body uses the explicit raising convention, whose pending
     /// state every exit to the host must clear.
     pub(crate) raising: bool,
+    /// Whether any body records a raise, so a host entry's return must check
+    /// for one still pending. A module that only throws uncaught does not.
+    pub(crate) raises: bool,
 }
 
 pub(crate) fn index(i: usize) -> u32 {
@@ -205,6 +208,7 @@ impl<'p> Builder<'p> {
             exports: Vec::new(),
             host_entries: BTreeSet::new(),
             raising,
+            raises: raising,
         }
     }
 
@@ -510,6 +514,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
         .filter(|f| !f.abstract_declaration)
         .collect();
     let mut m = Builder::new(program, &plan, &demand.raising_results, demand.raising);
+    m.raises = demand.raises;
     for func in &funcs {
         m.declare(func)?;
     }

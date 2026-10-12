@@ -17,8 +17,11 @@ pub(crate) struct ObjectUse {
 #[derive(Debug, Default)]
 pub(crate) struct Demand {
     /// Whether any body uses the explicit raising convention, which needs the
-    /// activation frame type.
+    /// erased payload type and the pending raise state.
     pub(crate) raising: bool,
+    /// Whether any body records a raise (`nts_raise`): only then can a raise
+    /// be pending when a host entry returns.
+    pub(crate) raises: bool,
     /// Per raising-slot function, its erased returns: their adapter must pass
     /// a failed call's placeholder through without reading it.
     pub(crate) raising_results: BTreeMap<String, BTreeSet<ValueId>>,
@@ -119,8 +122,9 @@ fn operation(demand: &mut Demand, func: &Func, id: ValueId) {
 fn call(demand: &mut Demand, func: &Func, id: ValueId, target: &Callee, args: &[ValueId]) {
     match target {
         Callee::External(name) => {
-            if crate::raising::external(name).is_some() {
+            if let Some(source) = crate::raising::external(name) {
                 demand.raising = true;
+                demand.raises |= matches!(source, crate::raising::Source::Raise);
             }
         }
         Callee::Closure { slot } | Callee::Virtual { slot, .. } => {

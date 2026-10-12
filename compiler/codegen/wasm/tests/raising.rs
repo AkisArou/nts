@@ -386,3 +386,26 @@ fn parameter_values_exist_even_without_block_pseudo_ops() {
         .push(block(&[], &[], Terminator::Return(Some(param))));
     nts_codegen_wasm::emit(&program(vec![f])).unwrap();
 }
+
+/// The host-entry check for a pending raise is keyed on a body recording
+/// one: a module that only throws uncaught takes no payload anywhere, and one
+/// that records a raise checks at its entries.
+#[test]
+fn only_a_recorded_raise_costs_the_host_entry_check() {
+    let named = |bytes: &[u8], name: &[u8]| bytes.windows(name.len()).any(|w| w == name);
+    // An export that returns, beside one that throws uncaught: only a
+    // return can carry the check.
+    let mut returns = function("identity", &[F64], F64);
+    let input = value(&mut returns, OpKind::Param(0), F64);
+    returns
+        .blocks
+        .push(block(&[], &[input], Terminator::Return(Some(input))));
+    let mut funcs = thrown("uncaughtNumber", Some(&F64), false, false);
+    funcs.push(returns);
+    let uncaught_only = program(funcs);
+    let emitted = nts_codegen_wasm::emit(&uncaught_only).unwrap();
+    assert!(!named(&emitted.bytes, b"raise.take"));
+    let recorded = program(vec![leaky()]);
+    let emitted = nts_codegen_wasm::emit(&recorded).unwrap();
+    assert!(named(&emitted.bytes, b"raise.take"));
+}
