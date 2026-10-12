@@ -172,3 +172,82 @@ fn a_specialized_closure_does_not_keep_its_unallocated_template() {
     assert!(entries > 0, "the allocated closure keeps callable entries");
     assert!(!program.funcs.iter().any(|func| func.name == "read"));
 }
+
+#[test]
+fn reached_factories_public_callbacks_and_nested_runtime_reactions_keep_their_bodies() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/reachable-closure-controls/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    let prepared = hir::prepare(&snapshot).expect("the closure controls verify");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let program = &prepared.program;
+    for name in [
+        "lateFactory",
+        "suppliedCallback",
+        "escapingCallback",
+        "raisingCallback",
+        "runtimeFactory",
+    ] {
+        assert!(program.funcs.iter().any(|func| func.name == name));
+    }
+    let mut callback_allocations = 0;
+    for func in &program.funcs {
+        if !func
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, hir::OpKind::PromiseSubscribe { .. }))
+        {
+            continue;
+        }
+        if !func.params.first().is_some_and(|param| {
+            matches!(
+                param.ty,
+                hir::HirType::Managed(hir::ManagedType::Object(ty)) if hir::has_a_closure_body(ty)
+            )
+        }) {
+            continue;
+        }
+        for op in &func.values {
+            let hir::HirType::Managed(hir::ManagedType::Object(owner)) = op.ty else {
+                continue;
+            };
+            if !hir::has_a_closure_body(owner)
+                || !matches!(
+                    op.kind,
+                    hir::OpKind::ObjectNew { .. } | hir::OpKind::ClosureStatic
+                )
+            {
+                continue;
+            }
+            callback_allocations += 1;
+            let layout = program.layout(owner).unwrap();
+            assert!(
+                layout.methods.iter().flatten().any(|name| {
+                    program
+                        .funcs
+                        .iter()
+                        .any(|body| &body.name == name && !body.blocks.is_empty())
+                }),
+                "the frame allocated by a runtime callback keeps a callable body"
+            );
+        }
+    }
+    assert!(
+        callback_allocations > 0,
+        "the control allocates a frame inside a runtime callback"
+    );
+    assert!(
+        program
+            .funcs
+            .iter()
+            .any(|func| func.name.ends_with("@raises")),
+        "the throwing public callback keeps a raising entry"
+    );
+}
