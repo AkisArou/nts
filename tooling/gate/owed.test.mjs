@@ -82,6 +82,15 @@ test("the hand-written rules still decide what they name", () => {
   owes("runtime/node/path/index.ts", ["definitions", "integrity-runtime", "addons", "compile-time"]);
 });
 
+test("the WebAssembly backend owes its executable fixtures and downstream CLI checks", () => {
+  owes("compiler/codegen/wasm/src/body.rs", ["tests", "interop", "config"]);
+  // Native runtime inputs also reach Wasm through the workspace's crate
+  // graph. An unplaced new backend must not turn that reach into everything.
+  const rules = owed([{ path: "runtime/c/nts_runtime.h", added: false }]);
+  assert.ok(rules.some((r) => r.name === "the WebAssembly backend, through the crate graph"));
+  assert.ok(!rules.some((r) => r.full));
+});
+
 test("every step the rules can owe exists", () => {
   const all = new Set(allSteps());
   for (const p of ["compiler/core/src/lib.rs", "runtime/node/fs/index.ts", "tsconfig.fixtures.json", "tooling/gate/costs.mjs"]) {
