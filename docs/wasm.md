@@ -2,14 +2,15 @@
 
 Status: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
 on 2026-10-11 UTC). Additional exception evidence is recorded below.
-Scanned revision: `e52ddc97e160` on `wasm/m0`. M1a scalar bring-up is implemented
-in the lane worktree, with the execution evidence below. The shared HostGc provider
+M0 scanned revision: `e52ddc97e160` on `wasm/m0`. M1a scalar bring-up landed
+as `2a4e53739bf2`, with the execution evidence below. The shared HostGc provider
 landed as `786f23a48f11` after MainClaude approved the scoped core overlap
 and the independent JVM review. The full green gate ran on source-identical
 `e9fab5a2730c`; the reviewer accepted the rebase that preserved two unrelated
 notes lines. Its core hunks are limited to the provider enum and native
-placement/provision selection. The Wasm driver selects HostGc. M1a still
-requires its own review and gate.
+placement/provision selection. The Wasm driver selects HostGc. M1b is at static
+scan/design review; no managed implementation or new performance measurement
+is claimed.
 
 ## Current M1a implementation and evidence
 
@@ -156,9 +157,208 @@ the logical-layout and async/`for await` preparation tests. Test/build workers
 are capped at two; frontend test workers are one. Evidence logs, per-function
 route manifests and emitted modules are retained under the lane's
 `mainctl/wasm-evidence` directory.
-Still required before M1a lands: reviewer approval and its own full owed gate.
+MainClaude approved M1a and its tooling reach repair. The final pinned full gate
+`20261012T013517-714631` passed: 42 PASS, 0 FAIL, one approved on-device skip,
+23 min 35 s at 24 CPU slots. All landing commits were owed-audited; the final
+rebase preserved the implementation patch exactly over unrelated main docs.
 The full hostile-pool M1 wasm differential and startup/performance measurements
 have not run; those claims are not implied by these bring-up results.
+
+## M1b implementation scan and review points
+
+This amendment is a static scan at landed M1a `2a4e53739bf2`, not an M1b
+implementation or a new execution/performance result. The representation plan
+below consumes the approved M0 design. The outstanding literal contract and
+host ABI details are review points; neither has been silently implemented.
+
+Keep the route populations separate:
+
+| Population | Measured route inventory |
+| --- | --- |
+| Real examples at M1a | 518 projects; 40 emitted and bounded-agree, 478 named declines; 288 emitted functions, all structured, zero dispatcher |
+| Generated arbitrary graphs | 600 functions; 256 structured, 344 dispatcher; independent T1/T2 classification and 48,000 bounded execution comparisons |
+| Saved generator CFG | Scalarized `triangle__resume`, 16 blocks/18 edges, dispatcher; establishes control flow, not generator execution |
+| Real runtime modules on Wasm | Unmeasured: the 29-module emission/route scan was explicitly deferred to M1b acceptance. Native/JVM runtime comparisons do not measure Wasm routes |
+
+Retain the serial runtime runner and parameterize its candidate pin for M1b;
+its current saved version targets M1a. Record each emitted runtime module's
+function routes, named declines, invalid modules and unclassified failures.
+Emission/validation alone does not establish runtime behavioral agreement.
+
+### Input contracts confirmed by the scan
+
+At this revision there are 56 `OpKind`, 15 `ManagedType` and five `Callee`
+variants. The 283 literal names in `runtime::declared_names()` are all present
+in the existing conservative 505-name appendix. Its planned M1 groups contain
+50 numeric, 48 string, 52 array and 54 value/control names; the other 301 names
+have explicit decline reasons. These counts describe obligations, not 204
+implemented helpers. Generated-name and conditional header declarations still
+need the header-oracle check described below.
+
+| Source contract | M1b consequence |
+| --- | --- |
+| `HirType::Managed`; `Layout.base`, fields and methods | Plan GC types before instructions; native byte offsets are irrelevant. Validate invariant mutable base storage and each callable slot |
+| `Program.classes`; `InstanceOf.classes` | Preserve semantic identity separately from structurally equal GC types |
+| `Erase.absent`; `ConstNull`/`ConstUndefined` | Null storage does not determine an erased absence tag. Consume the explicit `Absent` fact |
+| `ClosureStatic`; fresh `ObjectNew` closures | Cache the named function object only; capture-free arrows still have fresh identity |
+| `ArrayNew.zeroed`; `ArrayGet.checked`; `ArraySet` | Initialization and index semantics are distinct facts. No holes-as-zero substitution or fractional-index truncation |
+| `StringUnitAt.checked` and the string helpers | An unchecked unit read requires HIR's range proof; checked `charCodeAt` preserves NaN rather than a builtin trap |
+| `nts_raise`, `nts_raising`, `nts_raise_take`, `nts_uncaught` | Lower the existing explicit convention. Functions carry no general `may_raise` effect field; do not guess one from names |
+| `hir/runtime.rs` scalar signatures | `None` means omitted non-scalar storage, not a type suitable for a GC signature. Resolve actual HIR argument/result types |
+| JVM `closures.rs`, `unbox.rs`, `ops.rs` | Carry over verified owner/common-base checks. Their target-specific boxing/representation passes are not Wasm preparation passes |
+
+MainCodex's stage B adds `FieldView` and an explicit accessor capability.
+The Wasm review of `93fcf107d` plus `31a20cf72` is complete: body emission
+refuses FieldView by name, helper discovery explicitly needs no scalar helper,
+and both the CLI and tests select `PreserveFieldAccess`. `Options::new` requires
+that choice; `InterfaceAccess` and `Options` have no default. Preserve these
+choices when rebasing; HostGc does not imply interface dispatch support.
+
+### Implementation order within the approved representation
+
+1. Build one immutable physical-type/host/helper plan before encoding. Extend
+   `types.rs` beyond numeric `Slot`, resolving each reference through the plan;
+   `body.rs` and parallel edge copies use that same physical slot. Add the GC
+   dependency graph and deterministic recursive groups, class descriptors,
+   signature interning and exhaustive managed-type classification. Unsupported
+   reachable types produce named declines; a missing planned symbol is an
+   integrity error. Keep scalar-only modules free of managed runtime helpers.
+2. Add JS strings: literal globals, length/unit reads, equality/order/concat,
+   normalized substring operations and selected captured formatting/math
+   imports. One `StringOps` plan supplies concrete storage and instructions.
+   It does not copy strings through linear memory. Extend the public wrapper
+   with strict primitive-string input/output checks and existing numeric facts.
+3. Add supported erased values with the approved i31/boxed-f64 representation,
+   distinct absence/boolean singletons and string boxes. Preserve negative zero,
+   NaN, infinities, cross-representation numeric equality and reference identity.
+   `Erase`, `TagOf`, `Unerase` and helper implementations share one tag contract.
+4. Add ordinary object/array allocation and fields, stable array wrappers,
+   growth, checked reads/stores and the supported array helper catalog. Add
+   class/closure entries and typed `call_ref` thunks using HIR-established
+   callable signatures and bases. Keep interface access/dispatch, foreign
+   storage, presence-bit families and unsupported sparse shapes named declines.
+5. Implement the explicit raising helpers and instance-local state. Run caught
+   throw/finally traces through direct, virtual and closure calls, then the
+   reviewed public boundary subset. Async/generator protocols and native EH
+   remain their later milestones; state-machine CFGs already have a sound route.
+
+The implementation stays in `compiler/codegen/wasm`, `runtime/wasm`,
+`tooling/wasm`, their fixtures and this document. No new dependency, native
+runtime change, core pass or `Backend::ALL` expansion is proposed here.
+New shared CLI/gate/differential edits require a separate scoped announcement.
+
+### Literal fidelity: core/front-end request before safe string landing
+
+The existing
+[isolating blocker](../tooling/conformance/blockers/a-lone-surrogate-in-a-string-literal/src/main.ts)
+and [comparison outcome](../tooling/conformance/outcomes/lone-surrogates-compare-as-one-character/src/main.ts)
+record corruption of unpaired surrogate literals before prepared HIR. The
+current code confirms the transport limitation: semantic
+`LiteralValue::String(String)` becomes `OpKind::ConstString(String)`;
+`lower_string` reads the checker's literal type and does not read source escapes.
+The frontend classifier copies a JSON string value into that Rust string.
+This scan did not rerun the recorded defect or adjudicate the older fixtures'
+differing descriptions of the wire encoder.
+
+JS extern strings preserve a lone code unit supplied by the host or built with
+`String.fromCharCode`. They cannot recover a source literal whose cooked value
+already changed. A backend cannot distinguish legitimate U+FFFD from replacement
+characters, and constant folding can consume the corrupted value before emission.
+Do not re-cook source text in Wasm or infer fidelity from replacement characters.
+
+Request one backend-neutral contract from the core/front-end owner: either
+faithful cooked UTF-16 units (or a specified lossless encoding) through semantic
+values, literal HIR, constant consumers and all emitters, or an authoritative
+named frontend refusal before information is lost. A refusal needs to cover all
+literal-derived constants, not only residual ConstString operations. The named
+blocker, valid-pair control, runtime-built lone unit, legitimate U+FFFD, embedded
+NUL and foldable comparisons are the acceptance fixtures.
+
+This is an unresolved no-wrong-answer landing prerequisite, not a Wasm-only
+representation change. It has been entered in the core owner's inbox. No
+front-end/core file was changed by this scan.
+
+### Host ABI details submitted for review
+
+The M0 import surface and primitive scalar/string boundary are approved. The
+following concrete manifest/loader details still need review before publication:
+
+- Use a new manifest ABI version when the physical/import contract expands.
+  Describe each required import with module, name, kind and resolved type;
+  immutable literal globals carry their string value separately from their
+  stable identifier. Keep the reviewed `nts:constants` namespace and validate
+  every ordinary import before initialization. Do not overload ABI 1's list
+  of scalar `nts` function names with mixed globals and builtin records.
+- Keep builtin requirements separate from ordinary reflected imports.
+  Enabled builtins are checked at compile time and disappear from
+  `WebAssembly.Module.imports()`. The loader therefore checks ordinary imports
+  against that reflection and verifies builtin capability with an execution
+  probe. Missing support produces a named capability refusal, never silent
+  substitution. Builtin substring and code-unit reads need the adapters
+  already required by M0 because their range conventions differ from JS methods.
+  See the [primary builtin specification](https://github.com/WebAssembly/js-string-builtins/blob/main/proposals/js-string-builtins/Overview.md).
+- Retain the public scalar/string subset. Public arrays, compiled object
+  references, callable references and general erased values remain named
+  signature declines until their bridge is reviewed. Internal use of these
+  representations is M1b work. An opaque engine GC value does not establish
+  transparent JS property access or JS object identity.
+- Separate input refusal and internal invariant failures from source raising.
+  Checked typed indices outside the supported input contract retain a named
+  input refusal; source `throw` follows HIR's raising edges. A failed compiled
+  call's placeholder result must never reach a public result decoder.
+- Clarify uncaught compiled-object payloads at the JS boundary before claiming
+  exception parity. Scalar/string/absence payloads can preserve their JS value;
+  an opaque GC object does not expose source `message`, properties or prototype.
+  Recommendation: keep that unsupported publication path a named decline until
+  an identity-preserving bridge is reviewed. Do not manufacture a JS Error or
+  stringify an arbitrary thrown value. Caught compiled errors remain internal.
+
+The exception flag/payload remain per instance. Activation entry/leave restores
+state on normal completion, named boundary refusal and a host exception;
+`raise_take` clears only a pending raise. Host imports that can throw need an
+explicit adapter into the raising convention or a named decline. They cannot
+unwind past HIR catch/finally blocks accidentally. A JS reentry test must isolate
+nested state once a supported callback boundary exists; M1b has no generic
+callback bridge from which to claim that test passed.
+
+### Acceptance population and instruments
+
+Extend the existing same-source oracle before counting any newly emitted
+project as agreeing. Its current argument pool is numeric/bool and its thrown
+answers are always classified as mismatches. Add primitive string pools
+(empty, NUL, BMP, astral pairs, host-supplied lone units) and source throw values;
+compare code units and side-effect/finally traces, preserving `Object.is`
+numeric behavior. A case skipped for an unsupported boundary is counted
+explicitly. Malformed manifests, missing builtins, corrupt recursive types,
+missing dispatch entries and wrong typed fields must fail the integrity runner.
+
+Required fixtures cover number/string erasure, absence versus null, two classes
+with equal storage, base-field ownership, recursive reference fields, class
+virtual calls, mixed closures with a real common base, static/fresh function
+identity, alias-preserving array growth, nested/reference/erased arrays and
+checked fractional/NaN indices. For unsupported holes, interface access and
+presence semantics, verify the named refusal rather than an expected wrong value.
+Check the literal-fidelity fixtures above even when a frontend refusal is used.
+
+Refresh all discovered examples, not just those newly supported, with every
+project accounted for and zero wrong answers/invalid modules. Freeze the exact
+project list in evidence; the M1a baseline contains 518, but do not silently
+omit any subsequently added examples. Report per-function structured/dispatcher
+routes separately for emitted real examples, emitted runtime modules, generated
+graphs and saved CFG fixtures. Include the 29-module serial runtime emission
+census; behavioral runtime checks are a separate instrument.
+
+Refresh raw/gzip module, manifest, loader and support-runtime sizes, including a
+scalar-only artifact proving unused managed families stay absent. Run strict
+format/clippy, relevant Wasm/host/oracle tests, the Backend-match audit and the
+Cargo.lock resolution check. Native lanes must remain unchanged and all full
+regression-gate obligations remain. No throughput/startup claim comes from this
+scan; real paired benchmarks and native-EH experiments remain M2 work.
+
+Gate and land only after review points are settled and acceptance is green.
+Use the lane inbox handshake and atomic GATE-RUNNING claim, default full gate
+parallelism and its memory budget; the two-worker limit applies to ad-hoc
+frontend work. Record owed.mjs for the final commit and preserve exact pins.
 
 ## Recommendation and build composition
 
