@@ -87,13 +87,12 @@ them only as quoted export names, and every local it declares is the glue's.
   glue's table gives the Wasm type each JS value implements, and an import
   declared with another type fails glue generation: an engine converts a JS
   function's arguments silently, so the check cannot be left to it.
-- **Captures.** The primitives a wrapper calls (`Object.is`,
+- **Captures.** Every primitive a wrapper calls (`Object.is`,
   `Number.isInteger`, `Math.fround`, `BigInt`, `Object.freeze`,
-  `WebAssembly.Instance`, the `Math` members) are captured when the glue loads.
-  Two accessors are not yet (follow-up F5b): `WebAssembly.Global.prototype.value`,
-  read on every global read and `sync()`, and
-  `WebAssembly.Instance.prototype.exports`, read on each `instantiate()`.
-  Redefining either can still change what a wrapper returns.
+  `WebAssembly.Instance`, the `Math` members) and the two accessors it reads
+  (`WebAssembly.Global.prototype.value`, `WebAssembly.Instance.prototype.exports`)
+  are captured when the glue loads, so redefining them later redirects
+  nothing; check-glue redefines both accessors to show it.
 - **Wrappers.** One straight-line wrapper per export, with only the checks its
   declared type needs: `typeof`, integer range, and the numeric facts
   specialization assumed (`mode: 0|1|2` is a whole number in [0, 2]). String
@@ -133,13 +132,33 @@ them only as quoted export names, and every local it declares is the glue's.
   raising helpers, every host entry's return also tests the flag and throws a
   pending raise uncaught. Lowering never leaves one there; if it ever did, the
   exception would surface as the throw it is rather than be lost or seen by a
-  later call. A module with no raising helper pays nothing. The check is
-  keyed on any raising helper today, `nts_uncaught` included, so a module that
-  only throws uncaught pays it on every export (follow-up F3b: key it on
-  `nts_raise`). The backend reads no semantics from function
+  later call. The check is emitted only where some body records a raise
+  (`nts_raise`): a module that only throws uncaught, or never throws, pays
+  nothing. The backend reads no semantics from function
   names (`execute.rs` renames every raising copy to pin that), so the rule is
   at the host boundary rather than keyed on a copy's `@raises` name.
 - There are no activation exports, no snapshots and no per-call bookkeeping.
+
+### References and classes (1b)
+
+- **One transfer rule** (`transfer.rs`). The HIR verifier lets a non-erased
+  reference flow into any other reference slot: a direct-call argument or
+  result, an edge, a return, a global, a field, an array element. Wasm types
+  the slot, so each move is decided from the type plan's own subtype
+  relation:
+  - an upcast is free;
+  - a downcast is a checked `ref.cast`, which holds in a correct program
+    (the JVM's checkcast precedent);
+  - unrelated storage is refused by name.
+- **Typed vtables.** A descriptor is a header (identity, kind, display). A
+  class in a dispatch hierarchy has a vtable: a final descriptor subtype
+  holding one immutable entry per virtual slot the program calls. Every class
+  of the hierarchy narrows its immutable field 0 to that vtable type, so a
+  virtual call is `struct.get`, `struct.get`, `call_ref`, with no cast.
+- **Class tests read one display slot.** The descriptor's ancestry is a
+  display, root first, so an ancestor's position is its depth. Where a class
+  sits at one depth in every display that holds it, `instanceof` checks the
+  display's length and reads that slot; a class at two depths keeps the scan.
 
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
@@ -206,13 +225,12 @@ also why the failure's text was missing.
   char-code fallback for when it preserves them.
 - **F8, remaining tests.** Class-keyed StaticClosure and Descriptor, poisoned
   helpers by fault injection through a real body, and validate_global.
-- **Test debt from the review.** Reverting any of these fails no test today:
-  - F2's import signature table: no mismatch or unknown `nts_math_*` test;
-  - F5's captures: no tamper test;
-  - F9's `--host` forms: `tooling/cli/tests/wasm.rs` does not exercise them;
-  - F1's globals: no i64, u64, bool or string public global in a test.
-- **F10.** Its assertion is tautological (descriptors are keyed by layout
-  index); replace it with one that can fail, or drop it.
+- **Closed in 1b:** the live accessors (F5b), the entry check keyed on
+  `nts_raise` (F3b), the tautological assertion (F10, dropped), and the test
+  debt: the import-type table (F2, a glue unit test), the accessor captures
+  (F5, check-glue), every `--host` spelling (F9, the CLI test) and 64-bit,
+  boolean and string public globals (F1, tests/globals.rs). Each test fails
+  when its fix is reverted.
 
 ### Not yet done
 
