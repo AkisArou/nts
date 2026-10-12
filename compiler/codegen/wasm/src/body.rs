@@ -61,6 +61,7 @@ mod tests {
             array_grow: BTreeMap::new(),
             thunks: BTreeMap::new(),
             static_closures: BTreeMap::new(),
+            allocations: std::collections::BTreeSet::new(),
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -134,6 +135,7 @@ mod tests {
                 array_grow: BTreeMap::new(),
                 thunks: BTreeMap::new(),
                 static_closures: BTreeMap::new(),
+                allocations: std::collections::BTreeSet::new(),
             };
             let error = emit(&f, 0, &symbols).unwrap_err();
             assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));
@@ -733,13 +735,11 @@ impl<'a> Body<'a> {
                 }
             }
             Callee::Native(function) => return Err(format!("native call {function:?}").into()),
-            Callee::Virtual { declared, .. } => {
-                return Err(
-                    format!("virtual/interface dispatch `{declared}` is outside M1a").into(),
-                );
+            Callee::Virtual { slot, .. } => {
+                crate::callables::call(self, result, *slot, args, crate::callables::Face::Virtual)?;
             }
             Callee::Closure { slot } => {
-                crate::callables::call(self, result, *slot, args)?;
+                crate::callables::call(self, result, *slot, args, crate::callables::Face::Closure)?;
             }
         }
         Ok(())

@@ -15,7 +15,11 @@ use wasm_encoder::{
 };
 
 pub(crate) const INSTANCE: &str = "object.instanceOf";
-pub(crate) fn globals(plan: &gc::Plan, section: &mut GlobalSection) -> Result<(), Failure> {
+pub(crate) fn globals(
+    symbols: &crate::module::Symbols<'_>,
+    section: &mut GlobalSection,
+) -> Result<(), Failure> {
+    let plan = symbols.types;
     if plan.objects.descriptors.is_empty() {
         return Ok(());
     }
@@ -33,15 +37,13 @@ pub(crate) fn globals(plan: &gc::Plan, section: &mut GlobalSection) -> Result<()
                 .iter()
                 .map(|id| I::I32Const(id.cast_signed())),
         );
-        code.extend([
-            I::ArrayNewFixed {
-                array_type_index: root.ancestry,
-                array_size: u32::try_from(descriptor.ancestry.len())
-                    .map_err(|_| Failure::Invariant("too many class ancestors".into()))?,
-            },
-            I::RefNull(HeapType::ANY),
-            I::StructNew(root.descriptor),
-        ]);
+        code.push(I::ArrayNewFixed {
+            array_type_index: root.ancestry,
+            array_size: u32::try_from(descriptor.ancestry.len())
+                .map_err(|_| Failure::Invariant("too many class ancestors".into()))?,
+        });
+        code.extend(crate::callables::dispatch(symbols, descriptor.object)?);
+        code.push(I::StructNew(root.descriptor));
         section.global(
             GlobalType {
                 val_type: ValType::Ref(RefType {

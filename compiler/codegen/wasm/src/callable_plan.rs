@@ -85,6 +85,52 @@ impl Plan {
     }
 }
 
+pub(crate) fn check_virtual(
+    program: &Program,
+    types: &crate::gc::Plan,
+    declarations: &BTreeMap<(ClassId, u32, String), ObjectUse>,
+) -> Result<(), EmitError> {
+    for ((ty, slot, declared), use_) in declarations {
+        let check = || -> Result<(), Failure> {
+            let storage = types
+                .objects
+                .object(&HirType::Managed(nts_core::hir::ManagedType::Object(*ty)))?;
+            let root = storage
+                .virtual_
+                .ok_or_else(|| Failure::Invariant("unplanned virtual receiver".into()))?;
+            let entry = types.virtuals[&root]
+                .entries
+                .get(slot)
+                .ok_or_else(|| Failure::Invariant(format!("unplanned class slot {slot}")))?;
+            let func = program
+                .funcs
+                .iter()
+                .find(|f| &f.name == declared)
+                .ok_or_else(|| {
+                    Failure::Invariant(format!("unresolved virtual declaration `{declared}`"))
+                })?;
+            let receiver = func.params.first().ok_or_else(|| {
+                Failure::Invariant(format!("virtual declaration `{declared}` has no receiver"))
+            })?;
+            let target = types.objects.object(&receiver.ty)?;
+            if !types.objects.subtype(storage.physical, target.physical)
+                || !func
+                    .params
+                    .iter()
+                    .skip(1)
+                    .map(|p| &p.ty)
+                    .eq(entry.params.iter())
+                || func.return_type != entry.result
+            {
+                return Err(format!("virtual declaration `{declared}` does not share the supported common signature of slot {slot} on `{}`", storage.name).into());
+            }
+            Ok(())
+        };
+        check().map_err(|error| error.at(&use_.function, &use_.origin))?;
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 pub(crate) struct ResolvedEntry {
     pub(crate) slot: u32,

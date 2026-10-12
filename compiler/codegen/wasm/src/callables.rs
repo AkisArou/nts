@@ -5,13 +5,40 @@ use crate::{
     module::Symbols, object_plan::Object, objects, requirements::Requirements,
 };
 use nts_core::hir::{ClassId, HirType, ManagedType, Program, ValueId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use wasm_encoder::{
     ConstExpr, Function, GlobalSection, GlobalType, HeapType, Instruction as I, RefType, ValType,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Face {
+    Closure,
+    Virtual,
+}
+impl Face {
+    fn root(self, storage: &Object) -> Option<usize> {
+        match self {
+            Self::Closure => storage.callable,
+            Self::Virtual => storage.virtual_,
+        }
+    }
+    fn groups(self, types: &gc::Plan) -> &BTreeMap<usize, crate::callable_plan::Resolved> {
+        match self {
+            Self::Closure => &types.callables,
+            Self::Virtual => &types.virtuals,
+        }
+    }
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Closure => "closure",
+            Self::Virtual => "class",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Thunk {
+    pub(crate) face: Face,
     pub(crate) physical: u32,
     pub(crate) slot: u32,
     pub(crate) signature: u32,
@@ -19,10 +46,38 @@ pub(crate) struct Thunk {
     receiver: HirType,
     params: usize,
 }
+impl Thunk {
+    pub(crate) const fn key(&self) -> (Face, u32, u32) {
+        (self.face, self.physical, self.slot)
+    }
+    pub(crate) fn name(&self) -> String {
+        format!(
+            "{}.entry<{},{}>",
+            self.face.label(),
+            self.physical,
+            self.slot
+        )
+    }
+}
 #[derive(Debug)]
 pub(crate) struct Static {
     pub(crate) ty: ClassId,
     pub(crate) global: u32,
+}
+pub(crate) fn allocations(
+    resources: &Requirements,
+    plan: &gc::Plan,
+) -> Result<BTreeSet<u32>, EmitError> {
+    resources
+        .allocations
+        .iter()
+        .map(|(&ty, use_)| {
+            plan.objects
+                .object(&HirType::Managed(ManagedType::Object(ty)))
+                .map(|o| o.physical)
+                .map_err(|e| e.at(&use_.function, &use_.origin))
+        })
+        .collect()
 }
 pub(crate) fn statics(
     resources: &Requirements,
@@ -55,13 +110,16 @@ fn entry<'a>(
     symbols: &'a Symbols<'_>,
     storage: &Object,
     slot: u32,
+    face: Face,
 ) -> Result<&'a ResolvedEntry, Failure> {
-    let root = storage
-        .callable
-        .ok_or_else(|| format!("closure `{}` has no HIR-proven callable base", storage.name))?;
-    symbols
-        .types
-        .callables
+    let root = face.root(storage).ok_or_else(|| {
+        format!(
+            "{} `{}` has no HIR-proven dispatch contract",
+            face.label(),
+            storage.name
+        )
+    })?;
+    face.groups(symbols.types)
         .get(&root)
         .and_then(|g| g.entries.get(&slot))
         .ok_or_else(|| {
@@ -77,23 +135,25 @@ pub(crate) fn plan(
     resources: &Requirements,
 ) -> Result<Vec<Thunk>, EmitError> {
     let mut result = BTreeMap::new();
-    for (&ty, use_) in &resources.allocations {
-        let allocation = HirType::Managed(ManagedType::Object(ty));
-        let storage = types
-            .objects
-            .object(&allocation)
-            .map_err(|e| e.at(&use_.function, &use_.origin))?;
-        let Some(root) = storage.callable else {
-            continue;
-        };
-        let layout = program.layout(ty).ok_or_else(|| {
-            Failure::Invariant(format!("unplanned allocation {ty:?}"))
-                .at(&use_.function, &use_.origin)
-        })?;
-        for e in types.callables[&root].entries.values() {
-            let thunk = thunk(program, types, layout, storage, e)
-                .map_err(|error| error.at(&use_.function, &use_.origin))?;
-            result.entry((storage.physical, e.slot)).or_insert(thunk);
+    for face in [Face::Closure, Face::Virtual] {
+        for (&ty, use_) in &resources.allocations {
+            let allocation = HirType::Managed(ManagedType::Object(ty));
+            let storage = types
+                .objects
+                .object(&allocation)
+                .map_err(|e| e.at(&use_.function, &use_.origin))?;
+            let Some(root) = face.root(storage) else {
+                continue;
+            };
+            let layout = program.layout(ty).ok_or_else(|| {
+                Failure::Invariant(format!("unplanned allocation {ty:?}"))
+                    .at(&use_.function, &use_.origin)
+            })?;
+            for e in face.groups(types)[&root].entries.values() {
+                let thunk = thunk(program, types, layout, storage, e, face)
+                    .map_err(|error| error.at(&use_.function, &use_.origin))?;
+                result.entry(thunk.key()).or_insert(thunk);
+            }
         }
     }
     Ok(result.into_values().collect())
@@ -104,12 +164,20 @@ fn thunk(
     layout: &nts_core::hir::Layout,
     storage: &Object,
     entry: &ResolvedEntry,
+    face: Face,
 ) -> Result<Thunk, Failure> {
     let target = layout
         .methods
         .get(entry.slot as usize)
         .and_then(Option::as_ref)
-        .ok_or_else(|| format!("closure `{}` has unfilled slot {}", layout.name, entry.slot))?;
+        .ok_or_else(|| {
+            format!(
+                "{} `{}` has unfilled slot {}",
+                face.label(),
+                layout.name,
+                entry.slot
+            )
+        })?;
     let func = program
         .funcs
         .iter()
@@ -131,15 +199,18 @@ fn thunk(
             .skip(1)
             .map(|p| &p.ty)
             .eq(entry.params.iter())
-        || func.return_type != entry.result
+        || !result_widens(types, &func.return_type, &entry.result)?
     {
         return Err(format!(
-            "closure `{target}` is incompatible with slot {} of `{}`",
-            entry.slot, layout.name
+            "{} `{target}` is incompatible with slot {} of `{}`",
+            face.label(),
+            entry.slot,
+            layout.name
         )
         .into());
     }
     Ok(Thunk {
+        face,
         physical: storage.physical,
         slot: entry.slot,
         signature: entry.signature,
@@ -147,6 +218,20 @@ fn thunk(
         receiver: receiver.ty.clone(),
         params: func.params.len(),
     })
+}
+fn result_widens(types: &gc::Plan, from: &HirType, to: &HirType) -> Result<bool, Failure> {
+    if from == to {
+        return Ok(true);
+    }
+    if matches!(from, HirType::Managed(ManagedType::Object(_)))
+        && matches!(to, HirType::Managed(ManagedType::Object(_)))
+    {
+        return Ok(types.objects.subtype(
+            types.objects.object(from)?.physical,
+            types.objects.object(to)?.physical,
+        ));
+    }
+    Ok(false)
 }
 pub(crate) fn thunk_body(thunk: &Thunk, symbols: &Symbols<'_>) -> Result<Function, Failure> {
     let mut f = Function::new([]);
@@ -175,7 +260,7 @@ pub(crate) fn entries(symbols: &Symbols<'_>, storage: &Object) -> Result<Vec<I<'
         .map(|entry| {
             symbols
                 .thunks
-                .get(&(storage.physical, entry.slot))
+                .get(&(Face::Closure, storage.physical, entry.slot))
                 .copied()
                 .map(I::RefFunc)
                 .ok_or_else(|| {
@@ -187,19 +272,51 @@ pub(crate) fn entries(symbols: &Symbols<'_>, storage: &Object) -> Result<Vec<I<'
         })
         .collect()
 }
+pub(crate) fn dispatch(
+    symbols: &Symbols<'_>,
+    physical: Option<u32>,
+) -> Result<Vec<I<'static>>, Failure> {
+    let Some(physical) = physical.filter(|p| symbols.allocations.contains(p)) else {
+        return Ok(vec![I::RefNull(HeapType::ANY)]);
+    };
+    let Some(root) = symbols.types.objects.virtual_group(physical) else {
+        return Ok(vec![I::RefNull(HeapType::ANY)]);
+    };
+    let group = &symbols.types.virtuals[&root];
+    let mut code = group
+        .entries
+        .values()
+        .map(|entry| {
+            symbols
+                .thunks
+                .get(&(Face::Virtual, physical, entry.slot))
+                .copied()
+                .map(I::RefFunc)
+                .ok_or_else(|| {
+                    Failure::Invariant(format!(
+                        "unplanned class entry {} for physical type {physical}",
+                        entry.slot
+                    ))
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    code.push(I::StructNew(group.base));
+    Ok(code)
+}
 pub(crate) fn call(
     b: &mut Body<'_>,
     result: ValueId,
     slot: u32,
     args: &[ValueId],
+    face: Face,
 ) -> Result<(), Failure> {
     let Some((&receiver, params)) = args.split_first() else {
         return Err("closure call has no receiver".into());
     };
     let storage = b.symbols.types.objects.object(b.ty(receiver))?;
-    let entry = entry(b.symbols, storage, slot)?;
-    let group = &b.symbols.types.callables[&storage
-        .callable
+    let entry = entry(b.symbols, storage, slot, face)?;
+    let group = &face.groups(b.symbols.types)[&face
+        .root(storage)
         .ok_or_else(|| Failure::Invariant("missing callable base".into()))?];
     if params.len() != entry.params.len() {
         return Err(format!(
@@ -215,6 +332,22 @@ pub(crate) fn call(
         objects::adapt(b, &b.ty(arg).clone(), ty)?;
     }
     b.load(receiver)?;
+    if face == Face::Virtual {
+        let root = b
+            .symbols
+            .types
+            .root
+            .ok_or_else(|| Failure::Invariant("unplanned class root".into()))?;
+        b.ins(&I::StructGet {
+            struct_type_index: root.object,
+            field_index: 0,
+        });
+        b.ins(&I::StructGet {
+            struct_type_index: root.descriptor,
+            field_index: 3,
+        });
+        b.ins(&I::RefCastNonNull(HeapType::Concrete(group.base)));
+    }
     b.ins(&I::StructGet {
         struct_type_index: group.base,
         field_index: entry.field,

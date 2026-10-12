@@ -719,6 +719,15 @@ register the referenced thunks. Modules using those entries require an executed
 `function-references` host probe, including `ref.func`, `call_ref` and declarative
 elements; capability failure is a named refusal.
 
+The class path puts a separate immutable dispatch struct in the descriptor.
+Its demanded slots use a common receiver contract and typed funcrefs; per-layout
+thunks select the actual inherited or overridden body. The declared call
+signature is checked against that contract before emission. Capturing closures
+and class entries have distinct plan keys. An object's result can widen along a
+declared GC subtype relation while retaining its reference and descriptor;
+unproven argument/result contracts decline. No class method table is inferred
+from physical layout equality.
+
 A flat global function table with `call_indirect` is the alternative. It may win
 on code size or an engine's optimizer; benchmark monomorphic and polymorphic
 `dispatch`/`closures` kernels before finalizing the dispatch storage. It introduces

@@ -22,6 +22,7 @@ pub(crate) struct Object {
     pub(crate) name: String,
     pub(crate) field_base: u32,
     pub(crate) callable: Option<usize>,
+    pub(crate) virtual_: Option<usize>,
     identity: u32,
     nominal: bool,
 }
@@ -30,12 +31,14 @@ pub(crate) struct Descriptor {
     pub(crate) identity: u32,
     pub(crate) kind: u32,
     pub(crate) ancestry: Vec<u32>,
+    pub(crate) object: Option<u32>,
 }
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
     objects: FxHashMap<ClassId, Object>,
     pub(crate) descriptors: Vec<Descriptor>,
     parents: FxHashMap<u32, u32>,
+    virtuals: FxHashMap<u32, usize>,
 }
 fn identity(program: &Program, at: usize, ty: ClassId) -> Result<Identity, String> {
     let classes = program
@@ -103,6 +106,7 @@ impl Plan {
                     identity: identities[&key],
                     kind,
                     ancestry,
+                    object: Some(layouts[&at]),
                 });
                 descriptors.insert((at, key), (index, kind));
                 index
@@ -117,6 +121,7 @@ impl Plan {
                     name: layout.name.clone(),
                     field_base: 1,
                     callable: None,
+                    virtual_: None,
                     identity: identities[&key],
                     nominal: matches!(key, Identity::Class(_)),
                 },
@@ -171,6 +176,18 @@ impl Plan {
             };
             from = *parent;
         }
+    }
+    pub(crate) fn attach_virtual(&mut self, ty: ClassId, root: usize) -> Result<(), String> {
+        let object = self
+            .objects
+            .get_mut(&ty)
+            .ok_or_else(|| format!("unplanned dispatch object {ty:?}"))?;
+        object.virtual_ = Some(root);
+        self.virtuals.insert(object.physical, root);
+        Ok(())
+    }
+    pub(crate) fn virtual_group(&self, physical: u32) -> Option<usize> {
+        self.virtuals.get(&physical).copied()
     }
 }
 fn ancestry(

@@ -22,6 +22,8 @@ pub(crate) struct Requirements {
     pub(crate) instance_of: bool,
     pub(crate) grow_arrays: rustc_hash::FxHashSet<HirType>,
     pub(crate) closure_calls: BTreeMap<(ClassId, u32), ObjectUse>,
+    pub(crate) virtual_calls: BTreeMap<(ClassId, u32), ObjectUse>,
+    pub(crate) virtual_declarations: BTreeMap<(ClassId, u32, String), ObjectUse>,
     pub(crate) allocations: BTreeMap<ClassId, ObjectUse>,
     pub(crate) static_closures: BTreeMap<ClassId, ObjectUse>,
 }
@@ -135,21 +137,32 @@ impl Requirements {
                     }
                 }
             }
-            Callee::Closure { slot } => {
+            Callee::Closure { slot } | Callee::Virtual { slot, .. } => {
                 self.contract(func);
                 if let Some(receiver) = args.first()
                     && let HirType::Managed(nts_core::hir::ManagedType::Object(ty)) =
                         func.value(*receiver).ty
                 {
-                    self.closure_calls
-                        .entry((ty, *slot))
-                        .or_insert_with(|| ObjectUse {
-                            function: func.name.clone(),
-                            origin: func.value(id).origin.clone(),
-                        });
+                    if let Callee::Virtual { declared, .. } = target {
+                        self.virtual_declarations
+                            .entry((ty, *slot, declared.clone()))
+                            .or_insert_with(|| ObjectUse {
+                                function: func.name.clone(),
+                                origin: func.value(id).origin.clone(),
+                            });
+                    }
+                    let entries = if matches!(target, Callee::Closure { .. }) {
+                        &mut self.closure_calls
+                    } else {
+                        &mut self.virtual_calls
+                    };
+                    entries.entry((ty, *slot)).or_insert_with(|| ObjectUse {
+                        function: func.name.clone(),
+                        origin: func.value(id).origin.clone(),
+                    });
                 }
             }
-            Callee::Direct(_) | Callee::Virtual { .. } | Callee::Native(_) => {}
+            Callee::Direct(_) | Callee::Native(_) => {}
         }
     }
     fn require_erased(&mut self, helper: erased::Helper) {

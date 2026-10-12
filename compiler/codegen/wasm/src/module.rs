@@ -29,8 +29,9 @@ pub(crate) struct Symbols<'a> {
     pub(crate) descriptor_base: u32,
     pub(crate) instance_of: Option<u32>,
     pub(crate) array_grow: BTreeMap<u32, u32>,
-    pub(crate) thunks: BTreeMap<(u32, u32), u32>,
+    pub(crate) thunks: BTreeMap<(crate::callables::Face, u32, u32), u32>,
     pub(crate) static_closures: BTreeMap<u32, crate::callables::Static>,
+    pub(crate) allocations: std::collections::BTreeSet<u32>,
 }
 
 impl<'a> Symbols<'a> {
@@ -65,6 +66,7 @@ impl<'a> Symbols<'a> {
             array_grow: BTreeMap::new(),
             thunks: BTreeMap::new(),
             static_closures,
+            allocations: crate::callables::allocations(resources, plan)?,
             host: BTreeMap::new(),
             erased: BTreeMap::new(),
             input_decline: None,
@@ -267,11 +269,8 @@ fn declare_thunks(
     for thunk in thunks {
         let id = imported_functions + functions.len();
         functions.function(thunk.signature);
-        symbols.thunks.insert((thunk.physical, thunk.slot), id);
-        names.append(
-            id,
-            &format!("closure.entry<{},{}>", thunk.physical, thunk.slot),
-        );
+        symbols.thunks.insert(thunk.key(), id);
+        names.append(id, &thunk.name());
     }
 }
 
@@ -402,7 +401,7 @@ fn bodies(
     for thunk in thunks {
         let function =
             crate::callables::thunk_body(thunk, symbols).map_err(|error| EmitError::Invariant {
-                function: format!("closure.entry<{},{}>", thunk.physical, thunk.slot),
+                function: thunk.name(),
                 reason: error.to_string(),
             })?;
         code.function(&function);
@@ -611,7 +610,7 @@ fn globals(program: &Program, symbols: &Symbols<'_>) -> Result<GlobalSection, Em
     if let Some(types) = symbols.types.erased {
         crate::erased::globals(types, &mut section);
     }
-    crate::objects::globals(symbols.types, &mut section).map_err(|error| EmitError::Invariant {
+    crate::objects::globals(symbols, &mut section).map_err(|error| EmitError::Invariant {
         function: "object descriptors".into(),
         reason: error.to_string(),
     })?;

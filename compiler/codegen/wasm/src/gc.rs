@@ -111,6 +111,7 @@ pub(crate) struct Plan {
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
     pub(crate) callables: BTreeMap<usize, crate::callable_plan::Resolved>,
+    pub(crate) virtuals: BTreeMap<usize, crate::callable_plan::Resolved>,
 }
 
 impl Plan {
@@ -124,7 +125,8 @@ impl Plan {
         resources: &crate::requirements::Requirements,
     ) -> Result<Self, crate::EmitError> {
         let callables = crate::callable_plan::Plan::build(program, &resources.closure_calls)?;
-        let mut builder = Builder::new(program, callables);
+        let virtuals = crate::callable_plan::Plan::build(program, &resources.virtual_calls)?;
+        let mut builder = Builder::new(program, callables, virtuals);
         for (ty, use_) in &resources.referenced_objects {
             builder
                 .request(&HirType::Managed(ManagedType::Object(*ty)))
@@ -158,13 +160,15 @@ impl Plan {
                 )])
             })?;
         }
-        builder
+        let plan = builder
             .complete()
             .and_then(|()| builder.finish())
             .map_err(|reason| crate::EmitError::UnsupportedSurface {
                 name: "managed type graph".into(),
                 reason,
-            })
+            })?;
+        crate::callable_plan::check_virtual(program, &plan, &resources.virtual_declarations)?;
+        Ok(plan)
     }
 
     pub(crate) fn slot(&self, ty: &HirType) -> Result<Option<Physical>, Failure> {
@@ -233,10 +237,16 @@ struct Builder<'a> {
     erased: Option<ErasedNodes>,
     callable_plan: crate::callable_plan::Plan,
     callables: BTreeMap<usize, CallableNodes>,
+    virtual_plan: crate::callable_plan::Plan,
+    virtuals: BTreeMap<usize, CallableNodes>,
 }
 
 impl<'a> Builder<'a> {
-    fn new(program: &'a Program, callable_plan: crate::callable_plan::Plan) -> Self {
+    fn new(
+        program: &'a Program,
+        callable_plan: crate::callable_plan::Plan,
+        virtual_plan: crate::callable_plan::Plan,
+    ) -> Self {
         Self {
             program,
             slots: FxHashMap::default(),
@@ -249,6 +259,8 @@ impl<'a> Builder<'a> {
             erased: None,
             callable_plan,
             callables: BTreeMap::new(),
+            virtual_plan,
+            virtuals: BTreeMap::new(),
         }
     }
 
@@ -467,6 +479,9 @@ impl<'a> Builder<'a> {
 
     fn complete_object(&mut self, at: usize, id: NodeId) -> Result<(), String> {
         let layout = &self.program.layouts[at];
+        if let Some(&root) = self.virtual_plan.members.get(&at) {
+            self.dispatch(root)?;
+        }
         let callable = self
             .callable_plan
             .members
@@ -555,6 +570,44 @@ impl<'a> Builder<'a> {
         Ok(base)
     }
 
+    fn dispatch(&mut self, root: usize) -> Result<NodeId, String> {
+        if let Some(nodes) = self.virtuals.get(&root) {
+            return Ok(nodes.base);
+        }
+        let object = self.root();
+        let mut fields = Vec::new();
+        let mut entries = BTreeMap::new();
+        for entry in self.virtual_plan.groups[&root]
+            .values()
+            .cloned()
+            .collect::<Vec<_>>()
+        {
+            let mut params = vec![PendingSlot::Defined(object, true)];
+            for ty in &entry.params {
+                params.push(
+                    self.request(ty)?
+                        .ok_or_else(|| format!("dispatch parameter {ty:?} has no storage"))?,
+                );
+            }
+            let result = self.request(&entry.result)?;
+            let signature = self.add(
+                format!("method<{},{}>", self.program.layouts[root].name, entry.slot),
+                None,
+                true,
+                Shape::Function(params, result),
+            );
+            fields.push(Field::value(PendingSlot::Defined(signature, false), false));
+            entries.insert(entry.slot, signature);
+        }
+        let base = self.add(
+            format!("dispatch<{}>", self.program.layouts[root].name),
+            None,
+            true,
+            Shape::Struct(fields),
+        );
+        self.virtuals.insert(root, CallableNodes { base, entries });
+        Ok(base)
+    }
     fn array(&mut self, element: &HirType) -> NodeId {
         if let Some(id) = self.arrays.get(element) {
             return *id;
@@ -655,6 +708,13 @@ impl<'a> Builder<'a> {
                 }
             }
         }
+        for (&at, &root) in &self.virtual_plan.members {
+            if self.objects.contains_key(&at) {
+                for ty in &self.program.layouts[at].types {
+                    objects.attach_virtual(*ty, root)?;
+                }
+            }
+        }
         let identity = objects
             .descriptors
             .iter()
@@ -671,6 +731,7 @@ impl<'a> Builder<'a> {
                     array.element.clone(),
                 ))),
                 ancestry: Vec::new(),
+                object: None,
             });
         }
         Ok((objects, arrays))
@@ -679,14 +740,22 @@ impl<'a> Builder<'a> {
         &self,
         indices: &[u32],
     ) -> BTreeMap<usize, crate::callable_plan::Resolved> {
-        self.callables
+        Self::resolve_entries(&self.callables, &self.callable_plan, indices, 1)
+    }
+    fn resolve_entries(
+        nodes: &BTreeMap<usize, CallableNodes>,
+        plan: &crate::callable_plan::Plan,
+        indices: &[u32],
+        offset: u32,
+    ) -> BTreeMap<usize, crate::callable_plan::Resolved> {
+        nodes
             .iter()
             .map(|(&root, nodes)| {
                 (
                     root,
                     crate::callable_plan::Resolved {
                         base: indices[nodes.base.0],
-                        entries: self.callable_plan.groups[&root]
+                        entries: plan.groups[&root]
                             .iter()
                             .enumerate()
                             .map(|(field, (&slot, entry))| {
@@ -694,7 +763,7 @@ impl<'a> Builder<'a> {
                                     slot,
                                     crate::callable_plan::ResolvedEntry {
                                         slot,
-                                        field: crate::module::index(field) + 1,
+                                        field: crate::module::index(field) + offset,
                                         signature: indices[nodes.entries[&slot].0],
                                         params: entry.params.clone(),
                                         result: entry.result.clone(),
@@ -778,6 +847,7 @@ impl<'a> Builder<'a> {
         Ok(Plan {
             arrays,
             callables: self.resolved_callables(&indices),
+            virtuals: Self::resolve_entries(&self.virtuals, &self.virtual_plan, &indices, 0),
             root: self.root.map(|nodes| RootTypes {
                 ancestry: indices[nodes.ancestry.0],
                 descriptor: indices[nodes.descriptor.0],
