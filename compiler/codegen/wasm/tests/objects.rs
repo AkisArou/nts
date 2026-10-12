@@ -598,3 +598,49 @@ fn class_identity_inheritance_fields_and_erasure_execute_exactly() {
     let report = common::run("objects", &emitted, "tooling/wasm/check-objects.mjs", &[]);
     assert!(report["cases"].as_u64().unwrap() > 500);
 }
+
+/// One class identity on two layouts at different depths: a root layout and
+/// one under an unrelated base. Its class test cannot read one display slot,
+/// so it scans; every other class still reads one.
+#[test]
+fn a_class_at_two_depths_is_tested_by_scanning() {
+    const BASE: u32 = 30;
+    const AT_ROOT: u32 = 31;
+    const UNDER_BASE: u32 = 32;
+    let funcs = vec![
+        nominal("rootIsSplit", AT_ROOT, AT_ROOT, false),
+        nominal("underIsSplit", UNDER_BASE, AT_ROOT, true),
+        nominal("baseIsSplit", BASE, AT_ROOT, false),
+        nominal("underIsBase", UNDER_BASE, BASE, false),
+        nominal("rootIsBase", AT_ROOT, BASE, true),
+    ];
+    let mut p = program(funcs);
+    p.layouts
+        .push(layout(&[BASE], "Base", vec![field("value", F64)], None));
+    p.layouts
+        .push(layout(&[AT_ROOT], "SplitRoot", vec![], None));
+    p.layouts.push(layout(
+        &[UNDER_BASE],
+        "SplitUnder",
+        vec![field("value", F64)],
+        Some(BASE),
+    ));
+    p.classes.push(ClassIdentity {
+        symbol: 130,
+        name: "Base".into(),
+        types: vec![ClassId(BASE)],
+    });
+    p.classes.push(ClassIdentity {
+        symbol: 131,
+        name: "Split".into(),
+        types: vec![ClassId(AT_ROOT), ClassId(UNDER_BASE)],
+    });
+    let emitted = nts_codegen_wasm::emit(&p).unwrap();
+    let report = common::run(
+        "class-at-two-depths",
+        &emitted,
+        "tooling/wasm/check-class-depths.mjs",
+        &[],
+    );
+    assert_eq!(report["cases"], 5);
+}

@@ -229,24 +229,97 @@ pub(crate) fn instance(
     if classes.is_empty() {
         return Err("instanceof without a class".into());
     }
-    let identities = classes
+    let objects = &b.types().objects;
+    let tests = classes
         .iter()
-        .map(|ty| b.types().objects.class(*ty))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|ty| {
+            let identity = objects.class(*ty)?;
+            Ok((identity, objects.depth(identity)))
+        })
+        .collect::<Result<Vec<_>, Failure>>()?;
     if b.ty(value) != &HirType::Erased && !is_reference(b.ty(value)) {
         b.instruction(&I::I32Const(0));
         return Ok(());
     }
-    let callee = instance_of(b.m)?;
-    for (at, identity) in identities.iter().enumerate() {
+    for (at, &(identity, depth)) in tests.iter().enumerate() {
         b.load(value)?;
         b.instruction(&I::I32Const(identity.cast_signed()));
-        b.call(callee);
+        // One display read where the class sits at one depth everywhere;
+        // otherwise the scan.
+        if let Some(depth) = depth {
+            b.instruction(&I::I32Const(depth.cast_signed()));
+            let callee = instance_at(b.m)?;
+            b.call(callee);
+        } else {
+            let callee = instance_of(b.m)?;
+            b.call(callee);
+        }
         if at != 0 {
             b.instruction(&I::I32Or);
         }
     }
     Ok(())
+}
+
+/// `value instanceof` the class `identity` at display position `depth`.
+fn instance_at(m: &mut Builder<'_>) -> Result<Func, Failure> {
+    let root = m
+        .types
+        .root
+        .ok_or_else(|| Failure::Invariant("missing object root".into()))?;
+    m.helper(
+        FuncKey::InstanceAt,
+        "object.instanceAt",
+        vec![
+            Physical::Reference(RefType::ANYREF),
+            Physical::Scalar(Slot::I32),
+            Physical::Scalar(Slot::I32),
+        ],
+        Some(Physical::Scalar(Slot::I32)),
+        |_| Ok(instance_at_body(root)),
+    )
+}
+fn instance_at_body(root: gc::RootTypes) -> Function {
+    let mut f = Function::new([ValType::Ref(RefType {
+        nullable: true,
+        heap_type: HeapType::Concrete(root.ancestry),
+    })]);
+    for i in [
+        I::LocalGet(0),
+        I::RefTestNonNull(HeapType::Concrete(root.object)),
+        I::I32Eqz,
+        I::If(BlockType::Empty),
+        I::I32Const(0),
+        I::Return,
+        I::End,
+        I::LocalGet(0),
+        I::RefCastNonNull(HeapType::Concrete(root.object)),
+        I::StructGet {
+            struct_type_index: root.object,
+            field_index: 0,
+        },
+        I::StructGet {
+            struct_type_index: root.descriptor,
+            field_index: 2,
+        },
+        I::LocalTee(3),
+        I::ArrayLen,
+        I::LocalGet(2),
+        I::I32LeU,
+        I::If(BlockType::Empty),
+        I::I32Const(0),
+        I::Return,
+        I::End,
+        I::LocalGet(3),
+        I::LocalGet(2),
+        I::ArrayGet(root.ancestry),
+        I::LocalGet(1),
+        I::I32Eq,
+        I::End,
+    ] {
+        f.instruction(&i);
+    }
+    f
 }
 fn instance_of(m: &mut Builder<'_>) -> Result<Func, Failure> {
     let root = m

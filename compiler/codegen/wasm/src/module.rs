@@ -46,6 +46,7 @@ pub(crate) enum FuncKey {
     Host(&'static str),
     InputDecline,
     InstanceOf,
+    InstanceAt,
     ArrayGrow(u32),
     ArrayCopy(u32, crate::array_copy::Helper),
     ArrayLookup(u32, crate::array_lookup::Helper),

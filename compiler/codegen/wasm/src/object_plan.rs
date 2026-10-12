@@ -30,6 +30,7 @@ pub(crate) struct Object {
 pub(crate) struct Descriptor {
     pub(crate) identity: u32,
     pub(crate) kind: u32,
+    /// The display: every ancestor's identity, root first, the class's last.
     pub(crate) ancestry: Vec<u32>,
     /// The lowest class type this descriptor serves, which supplies its
     /// dispatch entries; none for an array descriptor.
@@ -40,6 +41,9 @@ pub(crate) struct Plan {
     objects: FxHashMap<ClassId, Object>,
     pub(crate) descriptors: Vec<Descriptor>,
     parents: FxHashMap<u32, u32>,
+    /// Each identity's position in every display that holds it, where that
+    /// position is the same in all of them; `None` where it is not.
+    depths: BTreeMap<u32, Option<u32>>,
 }
 fn identity(program: &Program, at: usize, ty: ClassId) -> Result<Identity, String> {
     let classes = program
@@ -147,6 +151,19 @@ impl Plan {
                 plan.parents.insert(layouts[&at], layouts[parent]);
             }
         }
+        for descriptor in &plan.descriptors {
+            for (depth, &identity) in descriptor.ancestry.iter().enumerate() {
+                let depth = u32::try_from(depth).ok();
+                plan.depths
+                    .entry(identity)
+                    .and_modify(|known| {
+                        if *known != depth {
+                            *known = None;
+                        }
+                    })
+                    .or_insert(depth);
+            }
+        }
         Ok(plan)
     }
     pub(crate) fn object(&self, ty: &HirType) -> Result<&Object, Failure> {
@@ -156,6 +173,11 @@ impl Plan {
         self.objects
             .get(id)
             .ok_or_else(|| Failure::Invariant(format!("unplanned object {id:?}")))
+    }
+    /// Where `identity` sits in the display of every object that has it, if
+    /// that is one position: a class test is then one array read.
+    pub(crate) fn depth(&self, identity: u32) -> Option<u32> {
+        self.depths.get(&identity).copied().flatten()
     }
     pub(crate) fn class(&self, id: ClassId) -> Result<u32, Failure> {
         let object = self.object(&HirType::Managed(ManagedType::Object(id)))?;
@@ -207,7 +229,7 @@ fn ancestry(
     keys: &BTreeMap<ClassId, (usize, Identity)>,
     identities: &BTreeMap<Identity, u32>,
 ) -> Result<Vec<u32>, String> {
-    let mut result = BTreeSet::from([identities[&key]]);
+    let mut display = vec![identities[&key]];
     let mut seen = BTreeSet::new();
     loop {
         if !seen.insert(at) {
@@ -219,8 +241,11 @@ fn ancestry(
         let &(parent, key) = keys
             .get(&base)
             .ok_or_else(|| format!("unplanned ancestor {base:?}"))?;
-        result.insert(identities[&key]);
+        display.push(identities[&key]);
         at = parent;
     }
-    Ok(result.into_iter().collect())
+    // A display: the root's identity first, the class's own last, so an
+    // ancestor's position is its depth.
+    display.reverse();
+    Ok(display)
 }
