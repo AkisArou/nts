@@ -428,7 +428,8 @@ struct Hierarchy {
     literal_methods: std::sync::Arc<literal_methods::Supplies>,
     /// A complete, shared contract for reads and writes through a field face.
     access_families: std::sync::Arc<access_families::Families>,
-    /// Declared-face storage after reservations, computed once before bodies.
+    /// Declared-face and actual source-supplier storage after reservations,
+    /// computed once before bodies.
     /// Anonymous schemas may reserve entries only to alias one of these rows.
     /// This set is independent of the order a body demands its layouts.
     field_aliases: std::sync::Arc<Vec<Layout>>,
@@ -15138,17 +15139,33 @@ fn field_aliases(
     probe.hierarchy = hierarchy.clone();
     probe.closures = closures.to_vec();
     wire_naming(&mut probe, naming);
-    let mut faces: Vec<_> = hierarchy.faces.iter().copied().collect();
-    faces.sort_unstable();
-    for face in faces {
-        // Unrepresentable faces remain refused at their actual use site.
+    let targets: std::collections::BTreeSet<_> = hierarchy
+        .faces
+        .iter()
+        .copied()
+        .chain(
+            hierarchy
+                .access_families
+                .licensed
+                .iter()
+                .flat_map(|family| {
+                    family
+                        .supplies
+                        .iter()
+                        .map(|supply| supply.owner)
+                        .filter(|owner| class_symbol(snapshot, *owner).is_none())
+                }),
+        )
+        .collect();
+    for target in &targets {
+        // Unrepresentable schemas remain refused at their actual use site.
         // This probe publishes geometry, never extra program layouts or bodies.
-        let _ = probe.layout_of(NodeId(0), face);
+        let _ = probe.layout_of(NodeId(0), *target);
     }
     probe
         .layouts
         .into_iter()
-        .filter(|layout| layout.types.iter().any(|ty| hierarchy.faces.contains(ty)))
+        .filter(|layout| layout.types.iter().any(|ty| targets.contains(ty)))
         .collect()
 }
 
@@ -52584,7 +52601,8 @@ impl<'a> FuncBuilder<'a> {
             }
         }
         // Anonymous schemas acquire reservations only as an alias of declared
-        // face storage, including its complete method table. The fixed set was
+        // face or actual source-supplier storage, including the complete
+        // method table. The fixed set was
         // computed before bodies: visiting an anonymous schema first must not
         // decide whether it shares a row. No new concrete supplier is licensed.
         if !self.hierarchy.faces.contains(&ty)
@@ -80613,6 +80631,64 @@ fn is_override_name(name: &str) -> bool {
 mod tests {
     use super::super::{Field, Layout, Program};
     use super::TypeId;
+
+    #[test]
+    #[allow(clippy::unwrap_used, clippy::expect_used)]
+    fn an_anonymous_field_schema_shares_its_source_supplier_in_either_demand_order() {
+        use nts_frontend_ts::{SemanticSource, TsgoApi};
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
+        let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/programs/accessor-schema-supplier/tsconfig.json");
+        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+        let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
+        let readers =
+            super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
+        let closures = super::collect_closures(&snapshot, &readers);
+        let (hierarchy, naming) =
+            super::hierarchy_and_naming(&snapshot, foreign, &closures, &readers);
+        let schemas: Vec<_> = snapshot
+            .types
+            .iter()
+            .enumerate()
+            .filter_map(|(at, record)| {
+                let super::TypeKind::Object { properties } = &record.kind else {
+                    return None;
+                };
+                (properties.len() == 1 && properties[0].name == "destroyed")
+                    .then(|| TypeId(u32::try_from(at).unwrap()))
+            })
+            .collect();
+        assert!(
+            schemas.len() >= 2,
+            "the declaration and literal must be distinct source types"
+        );
+        for reversed in [false, true] {
+            let mut probe = super::FuncBuilder::new(&snapshot, foreign);
+            probe.hierarchy = hierarchy.clone();
+            probe.closures = closures.clone();
+            super::wire_naming(&mut probe, &naming);
+            let mut schemas = schemas.clone();
+            if reversed {
+                schemas.reverse();
+            }
+            for schema in schemas {
+                probe.layout_of(super::NodeId(0), schema).unwrap();
+            }
+            assert_eq!(
+                probe
+                    .layouts
+                    .iter()
+                    .filter(|layout| {
+                        layout.fields.len() == 1 && layout.fields[0].name == "destroyed"
+                    })
+                    .count(),
+                1,
+                "schema demand order reversed={reversed}"
+            );
+        }
+    }
 
     #[test]
     #[allow(clippy::unwrap_used, clippy::expect_used)]
