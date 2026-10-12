@@ -175,6 +175,47 @@ builds at one program-wide width.
 - An allocated closure that does not fill a uniform slot stores a stub that
   refuses by name if called, as the JVM fills its unfilled entries.
 
+### Erased strings (1d)
+
+- An erased string is the JS string itself, internalized with
+  `any.convert_extern`; erasing one allocates nothing, and the box type is
+  gone from the type plan.
+- A JS string is the one erased value outside `eq`, so the tag helper's first
+  test is `ref.test (ref null eq)`. It admits null, so a null reference, which
+  no erased value is, still reaches the cast that traps.
+- **Speed is unchanged** on `tooling/wasm/bench/erased` (exploratory, load 5):
+  eraseStrings 1.42 ns both ways, eraseNumbers 2.32 both. Every erased kernel
+  is 2.7–7.5x behind node. V8 inlines all of the loop's helper calls (traced
+  with `--trace-wasm-inlining`) but does not fold box → tag → unbox, which C
+  gets from clang. That is R7's work.
+
+### Arrays (1e)
+
+- **`nts_array_element`**, the erased read that answers `undefined` past the
+  end, under `noUncheckedIndexedAccess` and in JS destructuring:
+  - The C runtime asks the descriptor what the slots hold. Every caller erases
+    an array whose storage it knows, so Wasm reads the array the erasure was
+    made from.
+  - An erased operand with no visible array behind it is refused by name.
+  - A null reference slot is refused by name: one storage holds `null` for
+    `(T | null)[]` and `undefined` for a JS array. C answers `undefined`,
+    which is wrong for the first
+    (`outcomes/a-stored-null-read-through-an-unchecked-index`).
+- **`join`** over string and number arrays: the JS string builtin `concat`,
+  with numbers through `Number.prototype.toString`. A null string slot joins as
+  "", as both absences do in node (C crashes there:
+  `outcomes/a-join-over-an-absent-string-element`).
+- **`shift` and `unshift`** are `pop` and `push` at the front, the rest moved
+  by `array.copy`. **`splice(start, count)`**, removal only, sits beside
+  `slice` and clamps as C does.
+- **`sort()` with no comparator** over strings: C's stable bottom-up merge
+  sort, comparing with the JS string builtin `compare` (UTF-16 code units). A
+  null slot is refused by name: node sorts `undefined` last and `null` as
+  "null".
+- Same-shape unrelated classes with fields only are one Wasm storage type and
+  agree. When a declared parent separates their storage, `transfer` refuses
+  the move by name (`fixtures/storage-of-other-parents`).
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
