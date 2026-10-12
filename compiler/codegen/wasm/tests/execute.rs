@@ -23,6 +23,24 @@ fn prepared_project(fixture: &Path) -> hir::Program {
         },
     )
     .expect("prepared HIR verifies");
+    for func in &prepared.program.funcs {
+        for block in &func.blocks {
+            for &id in &block.ops {
+                if let hir::OpKind::Call {
+                    callee: hir::Callee::External(name),
+                    ..
+                } = &func.value(id).kind
+                {
+                    assert!(
+                        nts_codegen_wasm::helper_support(name).is_some(),
+                        "unclassified prepared helper {name} in {} ({})",
+                        func.name,
+                        fixture.display()
+                    );
+                }
+            }
+        }
+    }
     prepared.program
 }
 

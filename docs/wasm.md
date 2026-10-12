@@ -1355,6 +1355,21 @@ pass by assigning a generic default decline in that test. Also enumerate actual
 external calls in prepared fixtures/runtime corpora, including synthesized names.
 A new helper must make a test fail until it receives a named support decision.
 
+The M1b literal catalog now has 507 explicit rows: 17 intrinsics/builtins,
+46 module-local helpers, 25 typed host imports and 419 named declines. These
+are current bindings, not the appendix's implementation plan. In addition to
+the 505 scanned names it includes the synthesized `nts_concat_fn` alias and
+`nts_string_view`, whose borrowed native storage declines. The declaration
+oracle reads clang's function AST for both native and Windows-enabled headers;
+the checked manifest records 416 native and 48 conditional names. Tests cover
+all 283 core-declared names, require sorted unique rows, compare every admitted
+route with its real binding, check synthesized bindings and enumerate external
+calls in the prepared source fixtures. Unknown names have no catalog row and
+refuse by name; a supported row without a binding is an internal error. Existing
+typed helper planners remain authoritative for each call's physical signature.
+All 59 package tests and strict local clippy pass. Runtime-corpus external names
+and all-example acceptance remain separate pending populations.
+
 Do not use the scalar signature table as a full GC type schema: its `None`
 positions intentionally omit the managed/non-scalar type. Backend helper planning
 must check actual HIR arguments/results and the semantic contract. Full typed
@@ -1612,6 +1627,7 @@ or native storage does not become supported because its name shares a prefix.
 | `nts_com_take` | Decline: foreign/native ABI or ownership |
 | `nts_com_unlend` | Decline: foreign/native ABI or ownership |
 | `nts_concat` | M1 string |
+| `nts_concat_fn` | M1 string; synthesized alias |
 | `nts_concat_into` | Decline: native frame-storage helper |
 | `nts_console_write` | M1 value/control |
 | `nts_counted_allocations` | Decline: native memory/provider contract |
@@ -1880,6 +1896,7 @@ or native storage does not become supported because its name shares a prefix.
 | `nts_string_to_utf16` | Decline: native/string-buffer boundary |
 | `nts_string_truthy` | M1 string |
 | `nts_string_unlend` | Decline: native/string-buffer boundary |
+| `nts_string_view` | Decline: borrowed native string-view storage |
 | `nts_strings_from_cstrings` | Decline: foreign/native ABI or ownership |
 | `nts_strings_to_cstrings` | Decline: foreign/native ABI or ownership |
 | `nts_strings_to_hstrings` | Decline: foreign/native ABI or ownership |

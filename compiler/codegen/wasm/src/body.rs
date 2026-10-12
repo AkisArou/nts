@@ -770,9 +770,11 @@ impl<'a> Body<'a> {
                 } else if let Some(method) = crate::array_lookup::external(name) {
                     crate::array_lookup::call(self, result, name, method, args)?;
                 } else {
-                    return Err(format!(
-                        "runtime/external helper `{name}` is outside the implemented Wasm helper surface"
-                    ).into());
+                    return Err(match crate::helper_support(name) {
+                        Some(crate::Support::Decline(reason)) => format!("runtime/external helper `{name}`: {reason}").into(),
+                        Some(crate::Support::Intrinsic | crate::Support::WasmHelper | crate::Support::HostImport) => Failure::Invariant(format!("cataloged helper `{name}` has no implementation binding")),
+                        None => format!("unclassified runtime/external helper `{name}` is outside the implemented Wasm helper surface").into(),
+                    });
                 }
             }
             Callee::Native(function) => return Err(format!("native call {function:?}").into()),

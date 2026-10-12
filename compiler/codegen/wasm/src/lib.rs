@@ -29,6 +29,7 @@ mod objects;
 mod raising;
 mod requirements;
 mod strings;
+mod support;
 mod types;
 
 #[cfg(test)]
@@ -41,6 +42,7 @@ use nts_core::hir::{Program, verify::Invalid};
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;
 use serde::{Deserialize, Serialize};
+pub use support::{Support, helper_support};
 pub use types::BoundaryType;
 
 /// A complete artifact; failed/declined programs never return partial bytes.
