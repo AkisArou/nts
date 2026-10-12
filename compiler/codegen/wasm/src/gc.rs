@@ -54,6 +54,22 @@ struct Node {
     shape: Shape,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ErasedTypes {
+    pub(crate) tagged: u32,
+    pub(crate) number: u32,
+    pub(crate) boolean: u32,
+    pub(crate) string: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ErasedNodes {
+    tagged: NodeId,
+    number: NodeId,
+    boolean: NodeId,
+    string: NodeId,
+}
+
 /// Module-local storage assignments. Numeric operations still use the smaller
 /// scalar Slot type, so a reference cannot accidentally select integer code.
 #[derive(Debug, Default)]
@@ -61,6 +77,7 @@ pub(crate) struct Plan {
     slots: FxHashMap<HirType, Physical>,
     groups: Vec<Vec<SubType>>,
     count: u32,
+    pub(crate) erased: Option<ErasedTypes>,
 }
 
 impl Plan {
@@ -149,6 +166,7 @@ struct Builder<'a> {
     arrays: FxHashMap<HirType, NodeId>,
     root: Option<NodeId>,
     work: Vec<Work>,
+    erased: Option<ErasedNodes>,
 }
 
 impl<'a> Builder<'a> {
@@ -161,6 +179,7 @@ impl<'a> Builder<'a> {
             arrays: FxHashMap::default(),
             root: None,
             work: Vec::new(),
+            erased: None,
         }
     }
 
@@ -209,6 +228,47 @@ impl<'a> Builder<'a> {
         root
     }
 
+    fn erased_types(&mut self) {
+        if self.erased.is_some() {
+            return;
+        }
+        let tag = Field::value(PendingSlot::Scalar(Slot::I32), false);
+        let tagged = self.add("erased tag".into(), None, false, Shape::Struct(vec![tag]));
+        let number = self.add(
+            "erased number".into(),
+            Some(tagged),
+            true,
+            Shape::Struct(vec![
+                tag,
+                Field::value(PendingSlot::Scalar(Slot::F64), false),
+            ]),
+        );
+        let boolean = self.add(
+            "erased boolean".into(),
+            Some(tagged),
+            true,
+            Shape::Struct(vec![
+                tag,
+                Field::value(PendingSlot::Scalar(Slot::I32), false),
+            ]),
+        );
+        let string = self.add(
+            "erased string".into(),
+            Some(tagged),
+            true,
+            Shape::Struct(vec![
+                tag,
+                Field::value(PendingSlot::Reference(RefType::EXTERNREF), false),
+            ]),
+        );
+        self.erased = Some(ErasedNodes {
+            tagged,
+            number,
+            boolean,
+            string,
+        });
+    }
+
     fn request(&mut self, ty: &HirType) -> Result<Option<PendingSlot>, String> {
         if matches!(ty, HirType::Void | HirType::Never) {
             return Ok(None);
@@ -227,7 +287,10 @@ impl<'a> Builder<'a> {
             HirType::Managed(ManagedType::Array(element)) => {
                 PendingSlot::Defined(self.array(element), true)
             }
-            HirType::Erased => PendingSlot::Reference(RefType::ANYREF),
+            HirType::Erased => {
+                self.erased_types();
+                PendingSlot::Reference(RefType::ANYREF)
+            }
             HirType::Managed(ManagedType::BoxedBigInt) | HirType::BigInt => {
                 return Err("bigint storage outside M1b".into());
             }
@@ -483,6 +546,12 @@ impl<'a> Builder<'a> {
             })
             .collect();
         Ok(Plan {
+            erased: self.erased.map(|nodes| ErasedTypes {
+                tagged: indices[nodes.tagged.0],
+                number: indices[nodes.number.0],
+                boolean: indices[nodes.boolean.0],
+                string: indices[nodes.string.0],
+            }),
             slots: self
                 .slots
                 .into_iter()

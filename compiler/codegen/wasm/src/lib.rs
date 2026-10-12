@@ -7,6 +7,7 @@
 mod abi;
 mod body;
 mod cfg;
+mod erased;
 mod error;
 mod gc;
 mod helpers;

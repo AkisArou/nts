@@ -53,6 +53,8 @@ mod tests {
             literals: rustc_hash::FxHashMap::default(),
             global_base: 0,
             host: BTreeMap::new(),
+            erased_globals: None,
+            erased: BTreeMap::new(),
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -118,6 +120,8 @@ mod tests {
                 literals: rustc_hash::FxHashMap::default(),
                 global_base: 0,
                 host: BTreeMap::new(),
+                erased_globals: None,
+                erased: BTreeMap::new(),
             };
             let error = emit(&f, 0, &symbols).unwrap_err();
             assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));
@@ -531,6 +535,10 @@ impl<'a> Body<'a> {
             OpKind::ConstInt(value) => numeric::constant_int(self, *value, &op.ty)?,
             OpKind::ConstFloat(value) => numeric::constant_float(self, *value, &op.ty)?,
             OpKind::ConstString(value) => crate::strings::constant(self, value)?,
+            OpKind::Erase { value, absent } => crate::erased::erase(self, *value, *absent)?,
+            OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
+            OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
+            OpKind::ConstNull => crate::erased::constant(self, id, crate::erased::NULL)?,
             OpKind::Length(value) if crate::strings::is_string(self.ty(*value)) => {
                 crate::strings::length(self, id, *value)?;
             }
@@ -560,7 +568,12 @@ impl<'a> Body<'a> {
                 self.ins(&I::Return);
                 return Ok(());
             }
-            OpKind::ConstUndefined if self.symbols.types.slot(&op.ty)?.is_none() => return Ok(()),
+            OpKind::ConstUndefined => {
+                if self.symbols.types.slot(&op.ty)?.is_none() {
+                    return Ok(());
+                }
+                crate::erased::constant(self, id, crate::erased::UNDEFINED)?;
+            }
             OpKind::Retain(_) | OpKind::Release(_) => {
                 return Err(format!("host-managed provider mismatch: {:?}", op.kind).into());
             }
@@ -584,14 +597,9 @@ impl<'a> Body<'a> {
             }
             OpKind::DispatchSlot(_)
             | OpKind::ConstTemplate { .. }
-            | OpKind::Erase { .. }
-            | OpKind::TagOf { .. }
-            | OpKind::Unerase { .. }
             | OpKind::ArrayNew { .. }
             | OpKind::Length(_)
             | OpKind::ArrayGet { .. }
-            | OpKind::ConstNull
-            | OpKind::ConstUndefined
             | OpKind::ObjectNew { .. }
             | OpKind::CellReady { .. }
             | OpKind::ClosureStatic

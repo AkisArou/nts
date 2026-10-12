@@ -23,6 +23,31 @@ pub(crate) struct Symbols<'a> {
     pub(crate) literals: FxHashMap<&'a str, u32>,
     pub(crate) global_base: u32,
     pub(crate) host: BTreeMap<&'static str, u32>,
+    pub(crate) erased_globals: Option<crate::erased::Globals>,
+    pub(crate) erased: BTreeMap<crate::erased::Helper, u32>,
+}
+
+impl<'a> Symbols<'a> {
+    fn new(plan: &'a gc::Plan, resources: &requirements::Requirements) -> Self {
+        Self {
+            functions: FxHashMap::default(),
+            helpers: BTreeMap::new(),
+            types: plan,
+            strings: BTreeMap::new(),
+            literals: FxHashMap::default(),
+            global_base: index(resources.literals.len())
+                + if plan.erased.is_some() {
+                    crate::erased::SINGLETONS
+                } else {
+                    0
+                },
+            host: BTreeMap::new(),
+            erased: BTreeMap::new(),
+            erased_globals: plan
+                .erased
+                .map(|_| crate::erased::Globals::new(index(resources.literals.len()))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -117,15 +142,7 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
     let helpers = &resources.numeric;
     let mut types = Types::new(&plan);
     let mut imports = ImportSection::new();
-    let mut symbols = Symbols {
-        functions: FxHashMap::default(),
-        helpers: BTreeMap::new(),
-        types: &plan,
-        strings: BTreeMap::new(),
-        literals: FxHashMap::default(),
-        global_base: index(resources.literals.len()),
-        host: BTreeMap::new(),
-    };
+    let mut symbols = Symbols::new(&plan, &resources);
     let mut required_imports = scalar_imports(helpers, &mut types, &mut imports, &mut symbols)?;
     required_imports.extend(host_imports(
         &resources,
@@ -172,7 +189,17 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         &mut symbols,
         imported_functions,
     );
-    let globals = globals(program, &plan)?;
+    for helper in &resources.erased {
+        let (params, result) = helper.signature();
+        let id = imported_functions + functions.len();
+        functions.function(types.intern(Signature {
+            params,
+            result: Some(result),
+        }));
+        symbols.erased.insert(*helper, id);
+        names.append(id, helper.name());
+    }
+    let globals = globals(program, &symbols)?;
     let mut exports = ExportSection::new();
     let mut manifest = manifest(program, funcs, &symbols, required_imports, &mut exports)?;
     manifest.builtins = builtins;
@@ -247,6 +274,13 @@ fn bodies(
                 reason: "missing helper body".into(),
             })?;
         code.function(&function);
+    }
+    for helper in &resources.erased {
+        let types = symbols.types.erased.ok_or_else(|| EmitError::Invariant {
+            function: helper.name().into(),
+            reason: "missing erased type plan".into(),
+        })?;
+        code.function(&helper.body(types));
     }
     Ok(Bodies {
         code,
@@ -418,13 +452,22 @@ fn encode(
     module.finish()
 }
 
-fn globals(program: &Program, plan: &gc::Plan) -> Result<GlobalSection, EmitError> {
+fn globals(program: &Program, symbols: &Symbols<'_>) -> Result<GlobalSection, EmitError> {
     let mut section = GlobalSection::new();
+    if let Some(types) = symbols.types.erased {
+        crate::erased::globals(types, &mut section);
+    }
     for global in &program.globals {
         let result = (|| {
-            let slot = plan.value_slot(&global.ty)?;
+            let slot = symbols.types.value_slot(&global.ty)?;
             let initial = match slot {
                 Physical::Scalar(_) => initial(global.initial, &global.ty)?,
+                Physical::Reference(_) if global.ty == HirType::Erased => {
+                    let values = symbols.erased_globals.ok_or_else(|| {
+                        crate::error::Failure::Invariant("missing erased global initializer".into())
+                    })?;
+                    ConstExpr::global_get(values.for_tag(crate::erased::UNDEFINED)?)
+                }
                 Physical::Reference(reference) => ConstExpr::ref_null(reference.heap_type),
             };
             section.global(

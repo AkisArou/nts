@@ -1,6 +1,6 @@
 //! Demand-driven instruction resources, classified exhaustively from live HIR.
 
-use crate::{helpers::Helper, host, strings};
+use crate::{erased, helpers::Helper, host, strings};
 use nts_core::hir::{BinOp, Callee, Func, HirType, OpKind, Program, UnOp};
 use std::collections::BTreeSet;
 
@@ -10,8 +10,32 @@ pub(crate) struct Requirements {
     pub(crate) host: BTreeSet<&'static host::Service>,
     pub(crate) strings: BTreeSet<strings::Helper>,
     pub(crate) literals: BTreeSet<String>,
+    pub(crate) erased: BTreeSet<erased::Helper>,
 }
 impl Requirements {
+    fn unerase(&mut self, ty: &HirType) {
+        if matches!(*ty, HirType::Int { .. } | HirType::Float { .. }) {
+            self.erased.insert(erased::Helper::Number);
+        }
+        if strings::is_string(ty) {
+            self.erased.insert(erased::Helper::Tag);
+        }
+    }
+    fn call(&mut self, target: &Callee) {
+        match target {
+            Callee::External(name) => {
+                if let Some(helper) = strings::external(name) {
+                    self.require(helper);
+                } else if let Some(service) = host::external(name) {
+                    self.host.insert(service);
+                }
+            }
+            Callee::Direct(_)
+            | Callee::Virtual { .. }
+            | Callee::Closure { .. }
+            | Callee::Native(_) => {}
+        }
+    }
     fn require(&mut self, helper: strings::Helper) {
         if !self.strings.insert(helper) {
             return;
@@ -53,6 +77,23 @@ fn helper_for(
     match func.value(id).kind {
         OpKind::Unary { op, operand } => unary(func, op, operand, result),
         OpKind::Binary { op, lhs, rhs } => binary(func, id, op, lhs, rhs, result),
+        OpKind::Erase { value, .. } => {
+            if matches!(
+                func.value(value).ty,
+                HirType::Int { .. } | HirType::Float { .. }
+            ) {
+                result.erased.insert(erased::Helper::BoxNumber);
+            }
+            None
+        }
+        OpKind::Unerase { .. } => {
+            result.unerase(&func.value(id).ty);
+            None
+        }
+        OpKind::TagOf { .. } => {
+            result.erased.insert(erased::Helper::Tag);
+            None
+        }
         OpKind::ConstString(ref text) => {
             result.literals.insert(text.clone());
             None
@@ -74,19 +115,7 @@ fn helper_for(
         OpKind::Call {
             callee: ref target, ..
         } => {
-            match target {
-                Callee::External(name) => {
-                    if let Some(helper) = strings::external(name) {
-                        result.require(helper);
-                    } else if let Some(service) = host::external(name) {
-                        result.host.insert(service);
-                    }
-                }
-                Callee::Direct(_)
-                | Callee::Virtual { .. }
-                | Callee::Closure { .. }
-                | Callee::Native(_) => {}
-            }
+            result.call(target);
             None
         }
         OpKind::Convert(value) => {
@@ -118,9 +147,6 @@ fn helper_for(
         | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstTemplate { .. }
-        | OpKind::Erase { .. }
-        | OpKind::TagOf { .. }
-        | OpKind::Unerase { .. }
         | OpKind::Return(_)
         | OpKind::ArrayNew { .. }
         | OpKind::ArrayGet { .. }
