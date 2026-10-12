@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "aborted",
-  "nts": "the program was killed by signal 11 without refusing anything -- a crash, not a declined case",
+  "category": "agrees",
+  "nts": "checked 87 cases across 3 function(s) | agreed on every case",
   "node": null,
-  "measured_with": "72a8767836514a2c",
+  "measured_with": "ce3f8459311a3e45",
   "source": "measured"
 }

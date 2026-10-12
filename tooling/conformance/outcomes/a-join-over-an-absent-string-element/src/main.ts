@@ -10,6 +10,8 @@
 // The control differs in one thing: the same join with every element present.
 //
 // Found writing `join` for the Wasm lane, which joins a null slot as "".
+// Fixed in the C runtime, which LLVM links: a null slot joins as nothing, and
+// the record now pins the agreement beside the control.
 export function absentLength(n: number): number {
   const xs: (string | undefined)[] = ["a".repeat(n & 3), undefined];
   return xs.join(",").length;
