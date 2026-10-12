@@ -48,6 +48,14 @@ pub(super) fn declare(
             program.interface_access.note_selector(*slot);
         }
     }
+    // Preserved stored operations never call native family helpers. Construct
+    // only families already called by source lowering, so unused bodies cannot
+    // demand extra layouts before reachability has a chance to discard them.
+    let used = if hierarchy.preserve_field_layouts {
+        used_selectors(program)
+    } else {
+        rustc_hash::FxHashSet::default()
+    };
     let mut context = Context {
         snapshot,
         hierarchy,
@@ -76,69 +84,115 @@ pub(super) fn declare(
                     !shares_storage(&program.layouts[face], &program.layouts[owner], field)
                 })
             });
-        let getter = entry(hierarchy, family, false, false);
-        let setter = family
-            .writes
-            .as_ref()
-            .map(|_| entry(hierarchy, family, true, false));
-        functions.push(shell(snapshot, family, getter.declared.clone(), false));
-        if let Some(setter) = &setter {
-            functions.push(shell(snapshot, family, setter.declared.clone(), true));
-        }
-        for writes in [false, true] {
-            if writes && setter.is_none() {
-                continue;
-            }
-            if has_raising_entry(hierarchy, family, writes) {
-                functions.push(shell(
-                    snapshot,
-                    family,
-                    entry(hierarchy, family, writes, true).declared,
-                    writes,
-                ));
-            }
-        }
-        for supply in &family.supplies {
-            let Some(owner) = layouts.of_class(supply.owner) else {
-                continue;
-            };
-            for writes in [false, true] {
-                if writes && setter.is_none() {
-                    continue;
-                }
-                fill(
-                    &mut context,
-                    program,
-                    family,
-                    supply,
-                    (owner, writes, false),
-                    &mut functions,
-                );
-                if has_raising_entry(hierarchy, family, writes) {
-                    fill(
-                        &mut context,
-                        program,
-                        family,
-                        supply,
-                        (owner, writes, true),
-                        &mut functions,
-                    );
-                }
-            }
-        }
-        program.interface_access.push(interface_access::Family {
+        let plan = interface_access::Family {
             face: family.face,
             member: family.member.clone(),
             field,
-            getter,
-            setter,
+            getter: entry(hierarchy, family, false, false),
+            setter: family
+                .writes
+                .as_ref()
+                .map(|_| entry(hierarchy, family, true, false)),
             raising: raising_entries(hierarchy, family),
             owners: family.supplies.iter().map(|supply| supply.owner).collect(),
             pending: dispatch && !family.eager,
             stored_dispatch: dispatch && !family.eager,
-        });
+        };
+        if !hierarchy.preserve_field_layouts
+            || plan.entries().any(|entry| used.contains(&entry.slot))
+        {
+            declare_functions(
+                &mut context,
+                program,
+                &layouts,
+                family,
+                &plan,
+                &mut functions,
+            );
+        }
+        program.interface_access.push(plan);
     }
     program.funcs.extend(functions);
+}
+
+fn used_selectors(program: &Program) -> rustc_hash::FxHashSet<u32> {
+    program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match op.kind {
+            OpKind::Call {
+                callee: Callee::Virtual { slot, .. },
+                ..
+            } => Some(slot),
+            _ => None,
+        })
+        .collect()
+}
+
+fn declare_functions(
+    context: &mut Context<'_>,
+    program: &mut Program,
+    layouts: &LayoutIndex,
+    family: &Family,
+    plan: &interface_access::Family,
+    functions: &mut Vec<Func>,
+) {
+    functions.push(shell(
+        context.snapshot,
+        family,
+        plan.getter.declared.clone(),
+        false,
+    ));
+    if let Some(setter) = &plan.setter {
+        functions.push(shell(
+            context.snapshot,
+            family,
+            setter.declared.clone(),
+            true,
+        ));
+    }
+    for writes in [false, true] {
+        if writes && plan.setter.is_none() {
+            continue;
+        }
+        if has_raising_entry(context.hierarchy, family, writes) {
+            functions.push(shell(
+                context.snapshot,
+                family,
+                entry(context.hierarchy, family, writes, true).declared,
+                writes,
+            ));
+        }
+    }
+    for supply in &family.supplies {
+        let Some(owner) = layouts.of_class(supply.owner) else {
+            continue;
+        };
+        for writes in [false, true] {
+            if writes && plan.setter.is_none() {
+                continue;
+            }
+            fill(
+                context,
+                program,
+                family,
+                supply,
+                (owner, writes, false),
+                functions,
+            );
+            if has_raising_entry(context.hierarchy, family, writes) {
+                fill(
+                    context,
+                    program,
+                    family,
+                    supply,
+                    (owner, writes, true),
+                    functions,
+                );
+            }
+        }
+    }
 }
 
 fn note_native_views(hierarchy: &Hierarchy, program: &mut Program) {

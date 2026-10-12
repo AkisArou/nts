@@ -75,6 +75,38 @@ fn preserving_fields_keeps_equivalent_optional_record_layouts_merged() {
 }
 
 #[test]
+fn preserving_stored_fields_does_not_construct_unused_native_bodies() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/interface-fields/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    for access in [
+        hir::InterfaceAccess::Materialize,
+        hir::InterfaceAccess::PreserveFieldAccess,
+    ] {
+        let lowered = hir::lower::lower_with_access(
+            &snapshot,
+            &[],
+            &rustc_hash::FxHashMap::default(),
+            access,
+        );
+        let program = &lowered.program;
+        assert!(!program.interface_access.families.is_empty());
+        let has_body = program
+            .funcs
+            .iter()
+            .any(|func| func.name.contains("nts$get$") || func.name.contains("nts$set$"));
+        assert_eq!(
+            has_body,
+            access == hir::InterfaceAccess::Materialize,
+            "unused helper bodies must not demand layouts before pruning"
+        );
+    }
+}
+
+#[test]
 fn preserving_optional_storage_keeps_source_field_reads() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;
