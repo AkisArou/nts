@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "invalid-hir",
-  "nts": "invalid HIR: CallArgumentType { func: \"render\", callee: \"Closure0#call\", at: 1, expected: Managed(Object(TypeId(23))), found: Erased }",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: rendered=3;",
   "node": "exit 1; nts: uncaught Observed: rendered=3;",
-  "measured_with": "82c65520cbe233b6",
+  "measured_with": "231b21662f70ccf2",
   "source": "measured"
 }

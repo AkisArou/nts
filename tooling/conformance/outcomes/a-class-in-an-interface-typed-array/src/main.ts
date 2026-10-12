@@ -1,5 +1,13 @@
-// expect: NTS1001 `Thing` where `Named` is wanted
-
+// run: check
+//
+// **Moved from blockers/ by Part 2 stage B, 2026-10-12.** This program was a
+// named refusal: the conversion it makes is not a layout prefix, and main
+// refuses it rather than read one class's field at another's offset. Stage B
+// reads through the interface's accessor family instead, so the conversion
+// stands and every read finds the object's own field: it agrees with node on
+// C, LLVM and RC, and the JVM declines it by name until stage C. The record
+// pins that agreement; the history below is what the refusal was.
+//
 // A class instance stored into an **interface-typed array**, at three
 // entrances: the literal, `push`, and an indexed store.
 //

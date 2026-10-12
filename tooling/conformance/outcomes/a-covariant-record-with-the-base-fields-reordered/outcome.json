@@ -2,8 +2,8 @@
   "run": "build",
   "category": "refused",
   "nts": "NTS1001 `Reordered#toJSON` is reached through `Entry#toJSON` and returns a `ReorderedJSON` where the caller reads a `EntryJSON` -- the declared record's fields are not a prefix of what arrives, so every field after the first disagreement is read at the wrong offset",
-  "ran": "SIGSEGV",
+  "ran": "exit 1; nts: uncaught Observed: through the base=r 4;",
   "node": "exit 1; nts: uncaught Observed: through the base=r 4;",
-  "measured_with": "277c7f209946856b",
+  "measured_with": "231b21662f70ccf2",
   "source": "measured"
 }
