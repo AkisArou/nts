@@ -618,7 +618,7 @@ BINDINGS
 INSPECTING
   frontend     what the frontend answered, before lowering
   types        every type the frontend resolved, as the schema records it
-  hir          the lowered program; --prepared is what a backend receives
+  hir          the lowered program; --prepared [--backend c|llvm|jvm|wasm] shows backend preparation
   facts        the facts lowering derived; --prepared for the prepared program
   refusals     every construct this program was refused for, with its reason
   layouts      the object layouts the program produces
@@ -2552,6 +2552,37 @@ fn entry_names() -> Vec<String> {
         .collect()
 }
 
+fn hir_preparation() -> Result<(
+    nts_codegen_common::Backend,
+    hir::Provider,
+    hir::InterfaceAccess,
+)> {
+    let arguments: Vec<_> = std::env::args().collect();
+    let backend: nts_codegen_common::Backend =
+        match arguments.iter().position(|arg| arg == "--backend") {
+            Some(at) => arguments
+                .get(at + 1)
+                .context("--backend requires c, llvm, jvm or wasm")?
+                .parse()
+                .map_err(anyhow::Error::msg)?,
+            None => nts_codegen_common::Backend::C,
+        };
+    let (provider, interface_access) = match backend {
+        nts_codegen_common::Backend::C | nts_codegen_common::Backend::Llvm => {
+            (selected_provider(), hir::InterfaceAccess::Materialize)
+        }
+        nts_codegen_common::Backend::Jvm | nts_codegen_common::Backend::Wasm => (
+            nts_codegen_common::provider::host_gc(
+                backend.name(),
+                selected_provider() == hir::Provider::ReferenceCounting,
+            )
+            .map_err(anyhow::Error::msg)?,
+            hir::InterfaceAccess::PreserveFieldAccess,
+        ),
+    };
+    Ok((backend, provider, interface_access))
+}
+
 fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
     // Call resolution is not optional here: without it a call site has no known
@@ -2586,6 +2617,11 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // Raw lowering stays the default because it is what maps onto the source.
     let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
     let (program, diagnostics) = if want_passes {
+        let (backend, provider, interface_access) = hir_preparation()?;
+        println!(
+            "preparation: backend={} interface-access={interface_access:?} provider={provider:?}",
+            backend.name()
+        );
         let emission = Emission::from_flags();
         let entry = selected_roots(emission.shape);
         // **The foreign table, which this did not pass and every emitter does.**
@@ -2622,7 +2658,8 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
             None => configured_abis(tsconfig)?,
         };
         let options = hir::Options {
-            provider: selected_provider(),
+            provider,
+            interface_access,
             foreign: &foreign,
             entry_files: &entry_files,
             targets,
@@ -8416,6 +8453,7 @@ fn emit_options<'a>(
     // flags and the config are read.
     hir::Options {
         provider: selected_provider(),
+        interface_access: hir::InterfaceAccess::Materialize,
         roots: entry.map_or_else(
             || configured.unwrap_or(hir::reachable::Roots::EveryExport),
             hir::reachable::Roots::Entry,
@@ -8527,6 +8565,7 @@ fn emit_jvm(
         targets,
     );
     options.provider = provider;
+    options.interface_access = hir::InterfaceAccess::PreserveFieldAccess;
     let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),

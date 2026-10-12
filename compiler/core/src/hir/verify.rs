@@ -361,6 +361,7 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
 }
 
 fn check_interface_access(program: &Program, problems: &mut Vec<Invalid>) {
+    super::interface_access::verify_mode(program, problems);
     check_native_views(program, problems);
     let functions: rustc_hash::FxHashMap<_, _> = program
         .funcs

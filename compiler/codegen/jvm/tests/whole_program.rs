@@ -49,6 +49,7 @@ fn run_whole(name: &str, source: &str) -> Option<(i32, String, String)> {
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
+            interface_access: hir::InterfaceAccess::PreserveFieldAccess,
             provider: hir::Provider::NoGc,
             ..hir::Options::default()
         },

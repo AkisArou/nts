@@ -44,6 +44,7 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         emission.scalar_targets(),
     );
     options.provider = provider;
+    options.interface_access = hir::InterfaceAccess::PreserveFieldAccess;
     let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),

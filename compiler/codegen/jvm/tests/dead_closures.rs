@@ -59,6 +59,7 @@ fn lowered_from(name: &str, source: &str) -> Option<(hir::Program, std::path::Pa
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
+            interface_access: hir::InterfaceAccess::PreserveFieldAccess,
             provider: hir::Provider::NoGc,
             ..hir::Options::default()
         },

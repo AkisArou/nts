@@ -55,6 +55,7 @@ fn prepared() -> Option<hir::Program> {
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
+            interface_access: hir::InterfaceAccess::PreserveFieldAccess,
             provider: hir::Provider::NoGc,
             ..hir::Options::default()
         },

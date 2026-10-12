@@ -1837,7 +1837,13 @@ fn jvm_case(
     } else {
         Some(workload(case)?)
     };
-    let program = prepared_program(tsconfig, entry, true, provider)?;
+    let program = prepared_program(
+        tsconfig,
+        entry,
+        true,
+        provider,
+        hir::InterfaceAccess::PreserveFieldAccess,
+    )?;
     let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&program, "jvm");
     if !mismatches.is_empty() {
         let messages = mismatches
@@ -2247,7 +2253,13 @@ fn emit(
     provider: hir::Provider,
     llvm: bool,
 ) -> Result<String> {
-    let program = prepared_program(tsconfig, entry, specialize, provider)?;
+    let program = prepared_program(
+        tsconfig,
+        entry,
+        specialize,
+        provider,
+        hir::InterfaceAccess::Materialize,
+    )?;
     if llvm {
         let emitted = nts_codegen_llvm::emit(&program, nts_codegen_llvm::Platform::SYSV_X86_64);
         // Silent by default: the second backend refuses whole categories of
@@ -2280,6 +2292,7 @@ fn prepared_program(
     entry: &[String],
     specialize: bool,
     provider: hir::Provider,
+    interface_access: hir::InterfaceAccess,
 ) -> Result<hir::Program> {
     // `NTS_TSGO`, then the frontend this repository builds, and only then the
     // bare name -- the order the CLI, the suite and the differential all use.
@@ -2315,6 +2328,7 @@ fn prepared_program(
         &hir::Options {
             specialize_numbers: specialize,
             provider,
+            interface_access,
             roots: hir::reachable::Roots::Entry(entry),
             // Empty, which is what a project with only `include` has and what
             // this harness synthesises for every case. It is also what this

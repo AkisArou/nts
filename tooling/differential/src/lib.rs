@@ -418,6 +418,10 @@ pub fn check(
     // runtime's defines, and nowhere else.
     let options = hir::Options {
         provider,
+        interface_access: match backend {
+            Backend::C | Backend::Llvm => hir::InterfaceAccess::Materialize,
+            Backend::Jvm | Backend::Wasm => hir::InterfaceAccess::PreserveFieldAccess,
+        },
         ..hir::Options::default()
     };
     let prepared = match hir::prepare_with(&snapshot, &options) {

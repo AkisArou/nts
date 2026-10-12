@@ -108,6 +108,7 @@ fn operation(demand: &mut Demand, func: &Func, id: ValueId) {
         | OpKind::ClosureStatic
         | OpKind::FieldGet { .. }
         | OpKind::SharedFieldGet { .. }
+        | OpKind::FieldView { .. }
         | OpKind::OpenFieldGet { .. }
         | OpKind::OpenFieldSet { .. }
         | OpKind::FieldSet { .. }

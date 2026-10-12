@@ -19,6 +19,7 @@ fn prepared_project(fixture: &Path) -> hir::Program {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::HostGc,
+            interface_access: hir::InterfaceAccess::PreserveFieldAccess,
             ..hir::Options::default()
         },
     )

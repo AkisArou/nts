@@ -135,6 +135,7 @@ pub(super) fn declare(
             raising: raising_entries(hierarchy, family),
             owners: family.supplies.iter().map(|supply| supply.owner).collect(),
             pending: dispatch && !family.eager,
+            stored_dispatch: dispatch && !family.eager,
         });
     }
     program.funcs.extend(functions);

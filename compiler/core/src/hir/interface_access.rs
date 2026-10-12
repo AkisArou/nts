@@ -29,6 +29,9 @@ pub struct Family {
     pub owners: Vec<TypeId>,
     /// Pure storage reads wait until concrete source copies have been made.
     pub pending: bool,
+    /// The source family needs dispatch for its stored operations. This fact
+    /// survives materialization so the verifier can check the backend choice.
+    pub stored_dispatch: bool,
 }
 
 impl Family {
@@ -50,6 +53,7 @@ pub struct Plan {
     /// A live transfer retains its explicit `FieldView` operation through all
     /// copies; the JVM consumes that operation rather than deriving a cast.
     pub native_views: BTreeSet<(TypeId, TypeId)>,
+    pub mode: Option<super::InterfaceAccess>,
     by_field: FxHashMap<(TypeId, u32), usize>,
     by_selector: FxHashMap<u32, usize>,
     selectors: FxHashSet<u32>,
@@ -131,7 +135,7 @@ impl Plan {
         unavailable.get(&slot).map(String::as_str)
     }
 
-    fn entry<'a>(&'a self, func: &Func, kind: &OpKind) -> Option<&'a Entry> {
+    fn stored_entry<'a>(&'a self, func: &Func, kind: &OpKind) -> Option<(&'a Family, &'a Entry)> {
         let (object, field, writes) = match kind {
             OpKind::FieldGet { object, field } => (*object, *field, false),
             OpKind::FieldSet { object, field, .. } => (*object, *field, true),
@@ -144,14 +148,20 @@ impl Plan {
             return None;
         }
         let family = self.families.get(*self.by_field.get(&(face, field))?)?;
-        if !family.pending {
+        if !family.stored_dispatch {
             return None;
         }
-        if writes {
+        let entry = if writes {
             family.setter.as_ref()
         } else {
             Some(&family.getter)
-        }
+        }?;
+        Some((family, entry))
+    }
+
+    fn entry<'a>(&'a self, func: &Func, kind: &OpKind) -> Option<&'a Entry> {
+        let (family, entry) = self.stored_entry(func, kind)?;
+        family.pending.then_some(entry)
     }
 
     /// A field that will become a call already keeps its declaration and rows
@@ -177,7 +187,18 @@ impl Plan {
 }
 
 /// Run after source shaping, before numeric storage and signature decisions.
-pub(super) fn materialize(program: &mut Program) -> usize {
+pub(super) fn materialize(program: &mut Program, mode: super::InterfaceAccess) -> usize {
+    program.interface_access.mode = Some(mode);
+    if mode == super::InterfaceAccess::PreserveFieldAccess {
+        // These are precisely the stored operations source shaping left for
+        // main's positional implementation. Its guard below still stops a
+        // disagreeing layout. Eager getter calls and FieldView operations were
+        // already explicit at lowering and are not rewritten here.
+        for family in &mut program.interface_access.families {
+            family.pending = false;
+        }
+        return 0;
+    }
     let direct = storage_proofs::direct_sites(program);
     let plan = &program.interface_access;
     let mut replaced = 0;
@@ -209,4 +230,54 @@ pub(super) fn materialize(program: &mut Program) -> usize {
         family.pending = false;
     }
     replaced
+}
+
+pub(super) fn verify_mode(program: &Program, problems: &mut Vec<super::verify::Invalid>) {
+    let Some(mode) = program.interface_access.mode else {
+        return;
+    };
+    let direct = if mode == super::InterfaceAccess::Materialize {
+        storage_proofs::direct_sites(program)
+    } else {
+        Vec::new()
+    };
+    for (at, func) in program.funcs.iter().enumerate() {
+        for value in func.blocks.iter().flat_map(|block| &block.ops) {
+            let op = func.value(*value);
+            let invalid = match mode {
+                super::InterfaceAccess::Materialize => {
+                    program
+                        .interface_access
+                        .stored_entry(func, &op.kind)
+                        .is_some()
+                        && !direct[at].contains(value)
+                }
+                super::InterfaceAccess::PreserveFieldAccess => {
+                    if let OpKind::Call {
+                        callee: Callee::Virtual { slot, .. },
+                        ..
+                    } = op.kind
+                    {
+                        program
+                            .interface_access
+                            .by_selector
+                            .get(&slot)
+                            .is_some_and(|family| {
+                                program.interface_access.families[*family].stored_dispatch
+                            })
+                    } else {
+                        false
+                    }
+                }
+            };
+            if invalid {
+                problems.push(super::verify::Invalid::InvalidInterfaceAccess {
+                    reason: format!(
+                        "{}: field operation disagrees with {mode:?} preparation",
+                        func.name
+                    ),
+                });
+            }
+        }
+    }
 }

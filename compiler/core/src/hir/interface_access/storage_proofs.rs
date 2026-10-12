@@ -45,7 +45,7 @@ impl Proof<'_> {
             .flat_map(|(at, block)| {
                 block.ops.iter().filter_map(move |value| {
                     let kind = &func.value(*value).kind;
-                    self.program.interface_access.entry(func, kind)?;
+                    self.program.interface_access.stored_entry(func, kind)?;
                     let object = match kind {
                         OpKind::FieldGet { object, .. } | OpKind::FieldSet { object, .. } => {
                             *object

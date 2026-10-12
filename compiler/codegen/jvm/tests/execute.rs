@@ -96,6 +96,7 @@ fn run(example: &str, body: &str) -> Option<String> {
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
+            interface_access: hir::InterfaceAccess::PreserveFieldAccess,
             provider: hir::Provider::NoGc,
             ..hir::Options::default()
         },

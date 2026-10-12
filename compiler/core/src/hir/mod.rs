@@ -4918,11 +4918,24 @@ pub enum Provider {
     ReferenceCounting,
 }
 
+/// How a backend implements licensed stored-field families. This capability
+/// is independent of the memory provider: a host collector does not imply
+/// that the backend implements accessor dispatch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InterfaceAccess {
+    #[default]
+    Materialize,
+    /// Keep positional field operations and their existing layout guards.
+    /// Getter calls and non-prefix field views still require dispatch support.
+    PreserveFieldAccess,
+}
+
 /// What to compile, and how.
 #[derive(Debug, Clone, Copy)]
 pub struct Options<'a> {
     /// The memory discipline. See [`Provider`].
     pub provider: Provider,
+    pub interface_access: InterfaceAccess,
     /// Whether a callback returning to the program's foreign loop is a
     /// checkpoint: `nts_checkpoint_after_callbacks`, which the entry point of
     /// a program whose loop is `GLib`'s turns on. Decided once, by the loop
@@ -4961,6 +4974,7 @@ impl Default for Options<'_> {
     fn default() -> Self {
         Self {
             provider: Provider::NoGc,
+            interface_access: InterfaceAccess::Materialize,
             // No loop is known to checkpoint after a callback until a build
             // says whose loop the program runs.
             callbacks_checkpoint: false,
@@ -6839,7 +6853,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
     let pruned = pruned + dropped;
     let unions_split = split_unions(&mut program);
-    interface_access::materialize(&mut program);
+    interface_access::materialize(&mut program, options.interface_access);
     // After the copies that give a call its class, so that only an access
     // through an interface whose class is lost is tested.
     interface_fields::guard(&mut program);

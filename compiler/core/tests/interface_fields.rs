@@ -26,6 +26,68 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn stored_field_capability_is_independent_of_the_memory_provider() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/interface-fields/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    for provider in [hir::Provider::NoGc, hir::Provider::HostGc] {
+        for interface_access in [
+            hir::InterfaceAccess::Materialize,
+            hir::InterfaceAccess::PreserveFieldAccess,
+        ] {
+            let mut program = hir::prepare_with(
+                &snapshot,
+                &hir::Options {
+                    provider,
+                    interface_access,
+                    ..hir::Options::default()
+                },
+            )
+            .unwrap()
+            .program;
+            let read = program
+                .funcs
+                .iter()
+                .find(|func| func.name == "nameOf")
+                .unwrap();
+            let dispatches = read.values.iter().any(|op| {
+                matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
+                    if program.interface_access.contains_selector(slot))
+            });
+            assert_eq!(
+                dispatches,
+                interface_access == hir::InterfaceAccess::Materialize
+            );
+            if interface_access == hir::InterfaceAccess::PreserveFieldAccess {
+                assert!(
+                    read.values
+                        .iter()
+                        .any(|op| matches!(op.kind, OpKind::FieldGet { .. }))
+                );
+                assert!(
+                    read.values.iter().any(|op| {
+                        matches!(&op.kind, OpKind::Call { callee: Callee::External(name), .. }
+                        if name == "nts_refused")
+                    }),
+                    "the preserved positional read must retain its layout guard"
+                );
+            }
+            program.interface_access.mode = Some(match interface_access {
+                hir::InterfaceAccess::Materialize => hir::InterfaceAccess::PreserveFieldAccess,
+                hir::InterfaceAccess::PreserveFieldAccess => hir::InterfaceAccess::Materialize,
+            });
+            assert!(
+                hir::verify::verify(&program).is_err(),
+                "the verifier must reject a changed preparation contract"
+            );
+        }
+    }
+}
+
+#[test]
 fn non_prefix_field_views_keep_their_license_and_cannot_become_plain_casts() {
     let Some(program) = prepared_fixture("interface-field-view") else {
         return;
