@@ -67,13 +67,21 @@ pub(crate) fn run_with_node_flags(
         .args(args)
         .output()
         .expect("Node installed");
-    assert!(
-        result.status.success(),
-        "artifact {}\n{}\n{}",
-        artifact.display(),
-        String::from_utf8_lossy(&result.stdout),
-        String::from_utf8_lossy(&result.stderr)
-    );
+    if !result.status.success() {
+        // The whole output goes to a file beside the kept artifact as well as
+        // into the panic: a filter over test output once dropped the only
+        // copy of a failure's text.
+        let failure = artifact.join("failure.txt");
+        let text = format!(
+            "{script} {}\nstatus {}\n--- stdout\n{}\n--- stderr\n{}\n",
+            artifact.display(),
+            result.status,
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        std::fs::write(&failure, &text).unwrap();
+        panic!("check failed; full output in {}\n{text}", failure.display());
+    }
     let output = serde_json::from_slice(&result.stdout).unwrap();
     if retained.is_some() {
         std::fs::write(artifact.join("execution.json"), &result.stdout).unwrap();

@@ -186,6 +186,15 @@ and runs each example's oracle there.
 - **F8, remaining tests.** Class-keyed StaticClosure and Descriptor, poisoned
   helpers by fault injection through a real body, and validate_global.
 
+### Open item: one unexplained browser failure
+
+`array_lookup::numeric_string_identity_and_optional_lookup_match_js` failed
+once, in the first full `NTS_WASM_BROWSER=1` suite run of 2026-10-12, and its
+message was lost to an output filter. It has not recurred: 6 later full runs,
+3 isolated runs and 50 exact runs at two workers under gate load all passed.
+A failing check now writes its full output to `failure.txt` beside the kept
+artifact, so a recurrence will carry its text.
+
 ### Not yet done
 
 - **The catalog/profile consolidation:** `support_catalog.rs`, the
