@@ -507,3 +507,56 @@ fn program(manifest: &Manifest) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    use super::{Host, glue};
+    use crate::{Import, ImportType, Manifest, ValueType};
+
+    fn generate(name: &str, ty: ImportType) -> Result<(), String> {
+        let manifest = Manifest {
+            abi: 3,
+            host: "js".into(),
+            exports: vec![],
+            globals: vec![],
+            init: None,
+            imports: vec![Import {
+                module: "nts:host/v1".into(),
+                name: name.into(),
+                ty,
+            }],
+            builtins: vec![],
+            features: vec![],
+            functions: vec![],
+        };
+        glue(&manifest, Host::Node).map(|_| ())
+    }
+    fn number(params: usize) -> ImportType {
+        ImportType::Function {
+            params: vec![ValueType::F64; params],
+            result: Some(ValueType::F64),
+        }
+    }
+
+    #[test]
+    fn a_host_import_is_checked_against_the_value_that_provides_it() {
+        generate("nts_math_sin", number(1)).unwrap();
+        generate("nts_math_pow", number(2)).unwrap();
+        // A declared type the JS value does not implement, which an engine
+        // would coerce silently.
+        let error = generate(
+            "nts_math_sin",
+            ImportType::Function {
+                params: vec![ValueType::I32],
+                result: Some(ValueType::F64),
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("`nts_math_sin` is declared"), "{error}");
+        assert!(generate("nts_math_pow", number(1)).is_err());
+        // A Math member outside the fixed list has no host value at all.
+        let error = generate("nts_math_random", number(0)).unwrap_err();
+        assert!(error.contains("no JS host value"), "{error}");
+    }
+}
