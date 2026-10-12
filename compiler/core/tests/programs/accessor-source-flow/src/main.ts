@@ -56,3 +56,12 @@ export function copyDetails(n: number): unknown {
   const details = makeDetails(n);
   return {...details};
 }
+
+// The wrapper's library signature is not the function's receiving contract.
+interface Receiver { value: number; }
+class ReceiverClass { constructor(public value: number) {} }
+function readReceiver(this: Receiver): number { return this.value; }
+export function explicitReceivers(n: number): number {
+  return readReceiver.call({value: n}) + readReceiver.apply({value: n + 1}, [])
+    + readReceiver.bind({value: n + 2})() + readReceiver.call(new ReceiverClass(n + 3));
+}

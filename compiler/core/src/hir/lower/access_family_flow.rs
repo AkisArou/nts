@@ -369,6 +369,29 @@ impl<'p, 's> Graph<'p, 's> {
     fn call(&mut self, at: NodeId, literals: &FxHashMap<NodeId, TypeId>) {
         let probe = self.probe;
         let type_at = |at: NodeId| probe.snapshot.node_types.get(&at).copied();
+        // CallableFunction.call/apply/bind have their own library signature.
+        // The first argument is received by the underlying function's `this`
+        // contract, not by the library wrapper's callable receiver contract.
+        let function = probe.through_call_or_apply(at).or_else(|| {
+            let callee = probe.through_assertions(*probe.children(at).first()?);
+            let (function, name) = probe.member_access(callee)?;
+            let member = *probe.children(callee).last()?;
+            let ty = *probe.snapshot.node_types.get(&function)?;
+            (name == "bind" && probe.function_type_of_receiver(member, ty).is_some())
+                .then_some(function)
+        });
+        if let Some(function) = function
+            && let Some(ty) = type_at(function)
+            && let Some(TypeKind::Function(signature)) = probe
+                .snapshot
+                .types
+                .get(ty.0 as usize)
+                .map(|record| &record.kind)
+            && let Some(this_type) = probe.snapshot.signatures[signature.0 as usize].this_type
+            && let Some(receiver) = probe.arguments_of(at).first()
+        {
+            self.transfer(self.expression(*receiver, literals), Some(this_type));
+        }
         if let Some(signature) = probe
             .snapshot
             .call_targets

@@ -100,6 +100,57 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
 }
 
 #[test]
+fn explicit_function_receivers_keep_their_proven_storage() {
+    let Some(program) = prepared_fixture("accessor-source-flow") else {
+        return;
+    };
+    let reader = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "readReceiver@this")
+        .unwrap();
+    let accepted: Vec<_> = reader
+        .values
+        .iter()
+        .filter_map(|op| match &op.kind {
+            OpKind::InstanceOf { classes, .. } => Some(classes.as_slice()),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|ty| program.layout(*ty))
+        .collect();
+    let caller = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "explicitReceivers")
+        .unwrap();
+    let allocations: Vec<_> = caller
+        .values
+        .iter()
+        .filter(|op| matches!(op.kind, OpKind::ObjectNew { .. }))
+        .filter_map(|op| match op.ty {
+            hir::HirType::Managed(hir::ManagedType::Object(ty)) => program.layout(ty),
+            _ => None,
+        })
+        .filter(|layout| layout.fields.iter().any(|field| field.name == "value"))
+        .collect();
+    assert_eq!(
+        allocations.len(),
+        4,
+        "all call, apply, bind and concrete receivers are exercised"
+    );
+    for layout in allocations {
+        assert!(
+            accepted
+                .iter()
+                .any(|accepted| std::ptr::eq(*accepted, layout)),
+            "the receiver guard must accept the source allocation's proven storage: {}",
+            layout.name
+        );
+    }
+}
+
+#[test]
 fn stored_record_results_keep_the_existing_positional_path() {
     let Some(program) = prepared_fixture("accessor-stored-result") else {
         return;
