@@ -3,7 +3,7 @@
 use crate::{
     body::Body,
     error::Failure,
-    module::FuncKey,
+    module::{Builder, Func, FuncKey},
     numeric, strings,
     types::{Physical, Slot},
 };
@@ -144,6 +144,18 @@ impl Service {
             Shape::ParseInt => (vec![strings::STRING, number], number),
         }
     }
+    /// The host's import of this service.
+    pub(crate) fn callee(self, m: &mut Builder<'_>) -> Func {
+        let (params, output) = self.signature();
+        m.import(
+            FuncKey::Host(self.name),
+            "nts:host/v1",
+            self.name,
+            params,
+            Some(output),
+            false,
+        )
+    }
     pub(crate) fn call(
         self,
         body: &mut Body<'_, '_>,
@@ -154,14 +166,7 @@ impl Service {
         if params.len() != args.len() {
             return Err(format!("host primitive `{}` arity mismatch", self.name).into());
         }
-        let callee = body.m.import(
-            FuncKey::Host(self.name),
-            "nts:host/v1",
-            self.name,
-            params.clone(),
-            Some(output),
-            false,
-        );
+        let callee = self.callee(body.m);
         for (&arg, slot) in args.iter().zip(params) {
             body.load(arg)?;
             match slot {

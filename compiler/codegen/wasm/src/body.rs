@@ -754,6 +754,8 @@ impl<'b, 'p> Body<'b, 'p> {
                     crate::array_copy::call(self, result, name, method, args)?;
                 } else if let Some(method) = crate::array_lookup::external(name) {
                     crate::array_lookup::call(self, result, name, method, args)?;
+                } else if let Some(join) = crate::array_join::external(name) {
+                    crate::array_join::call(self, result, name, join, args)?;
                 } else {
                     return Err(match crate::helper_support(name) {
                         Some(crate::Support::Decline(reason)) => format!("runtime/external helper `{name}`: {reason}").into(),

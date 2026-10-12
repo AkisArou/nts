@@ -61,14 +61,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_array_index_of_ref", Support::WasmHelper),
     ("nts_array_index_of_str", Support::WasmHelper),
     ("nts_array_index_of_str_value", Support::WasmHelper),
-    (
-        "nts_array_join_num",
-        Support::Decline("array helper not yet implemented"),
-    ),
-    (
-        "nts_array_join_str",
-        Support::Decline("array helper not yet implemented"),
-    ),
+    ("nts_array_join_num", Support::WasmHelper),
+    ("nts_array_join_str", Support::WasmHelper),
     ("nts_array_keep_first", Support::Intrinsic),
     ("nts_array_last_index_of", Support::WasmHelper),
     (

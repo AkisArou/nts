@@ -148,6 +148,20 @@ fn source_array_element_reads_agree_with_node() {
 }
 
 #[test]
+fn source_array_joins_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-join");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "array-join-source",
+        &emitted,
+        "tooling/wasm/check-array-join-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 1249, "{output}");
+}
+
+#[test]
 fn source_array_copying_agrees_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");
     let emitted = emit_project(&fixture);

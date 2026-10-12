@@ -28,7 +28,9 @@ pub fn helper_support(name: &str) -> Option<Support> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{Support, catalog, helper_support};
-    use crate::{array_copy, array_lookup, array_methods, erased_ops, host, raising, strings};
+    use crate::{
+        array_copy, array_join, array_lookup, array_methods, erased_ops, host, raising, strings,
+    };
     use std::collections::BTreeSet;
 
     fn binding(name: &str) -> Option<Support> {
@@ -46,6 +48,7 @@ mod tests {
             || erased_ops::external(name).is_some()
             || array_copy::external(name).is_some()
             || array_lookup::external(name).is_some()
+            || array_join::external(name).is_some()
         {
             Some(Support::WasmHelper)
         } else {
@@ -117,6 +120,7 @@ mod tests {
             include_str!("array_methods.rs"),
             include_str!("array_copy.rs"),
             include_str!("array_lookup.rs"),
+            include_str!("array_join.rs"),
         ] {
             let function = source
                 .split_once("pub(crate) fn external(name:")

@@ -7,6 +7,7 @@
 mod abi;
 mod array_copy;
 mod array_init;
+mod array_join;
 mod array_lookup;
 mod array_methods;
 mod arrays;
