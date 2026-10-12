@@ -1,6 +1,7 @@
 # WebAssembly backend: design and bring-up plan
 
-Status: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
+Status: being reworked on `wasm/rework` (see "Architecture after the rework").
+Earlier: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
 on 2026-10-11 UTC). Additional exception evidence is recorded below.
 M0 scanned revision: `e52ddc97e160` on `wasm/m0`. M1a scalar bring-up landed
 as `2a4e53739bf2`, with the execution evidence below. The shared HostGc provider
@@ -22,6 +23,130 @@ including a deliberately incorrect host API returning undefined where Node
 throws it. Real emitted fixtures match 122 raising cases (39 throws) and 198
 array/string cases, with 150 input refusals recorded separately. The complete
 example population has not yet been rerun with this instrument.
+
+## Architecture after the rework (2026-10-12)
+
+**This section is current.** Text below it that describes the generic Node
+loader, the ABI 2 manifest, string-constant tables or the activation exports
+is superseded; each such section carries a note.
+
+The Wasm lane moved to a Claude session on 2026-10-12. The user decided to
+rework M1b before anything lands (plan: `mainctl/WASM-PLAN.md`). The rework
+lands in gated slices, each keeping every example at 0 wrong:
+
+- step 0: one-walk lowering;
+- 1a: host boundary and exceptions;
+- 1b: reference `transfer`;
+- 1c: `$Callable`;
+- 1d: unboxed erased strings;
+- 1e: arrays.
+
+### Compiler structure
+
+- **Type plan.** `demand.rs` collects the whole-program type facts, and
+  `gc::Plan` builds every GC type before lowering. Recursive groups need the
+  complete graph, so this is the one up-front plan.
+- **One lowering walk.** It decides everything else. `body.rs` lowers each
+  function into a thin IR (`ir.rs`): wasm-encoder instructions, except that
+  function, global and tag operands are symbols.
+- **The builder** (`module.rs`) interns every function, import, global and tag
+  by semantic key on first request, and generates a helper's body then.
+  Nothing unrequested exists, so a scalar program has no import, global,
+  helper or GC type.
+  - A helper whose body fails poisons its key: every requester receives the
+    failure.
+- **The assembler** assigns indices (imports first) and encodes. It refuses
+  any raw instruction that `ir::admitted` does not list, so no function,
+  global or tag index bypasses a symbol, and a new wasm-encoder variant is
+  refused until reviewed. Type, field and `call_ref` indices are raw by
+  design: the type plan fixes them.
+- **Validation errors name the function**: wasmparser prints every concrete
+  type as `$type`.
+
+### Host boundary: generated glue, not a loader
+
+`nts emit-wasm --out D [--host node|browser]` writes four files:
+
+| File | What it is |
+| --- | --- |
+| `program.wasm` | The module |
+| `program.mjs` | Generated per program |
+| `program.wasm.json` | Tooling sidecar (ABI 3): exports at logical types, imports, routes. Nothing reads it at run time |
+| `program.origins.json` | Instruction Origins for debugging |
+
+`program.mjs`:
+
+- **Compiles** with `builtins: ['js-string']` and `importedStringConstants`.
+  String literals are compile-time imported constants, so there is no
+  constants table.
+- **Imports.** It writes out the import object for exactly the module's
+  imports. Primitives are captured at load, so later changes to globals cannot
+  redirect them.
+- **Wrappers.** One straight-line wrapper per export, with only the checks its
+  declared type needs: `typeof`, integer range, literal-type guards. There is
+  no argument array. A missing argument is refused; an extra one is ignored, as
+  node ignores it. This is the user's D2 decision: always checked, with any
+  unchecked mode an explicit, named opt-in.
+- **Instances.** Importing it instantiates the program and runs the
+  initializer once, as importing the TS module does in node. `instantiate()`
+  makes independent instances.
+- **Globals.** A global that a function other than the initializer assigns
+  stays a live binding, refreshed after calls. Others are constants.
+- **Capabilities.** The capability check is the compile itself. An engine
+  that ignores the builtin options fails the import loudly (`wasm:js-string`
+  unresolved); the glue never substitutes JS for a builtin.
+
+### Exceptions
+
+- **The interim protocol.** Prepared HIR's explicit raising convention is
+  kept, until the core exception-region contract (MainClaude, after stage B
+  and the escape fix) allows native `try_table`. Raising happens only inside
+  raising copies, and every ordinary entry ends an uncaught throw with
+  `nts_uncaught`.
+- **Uncaught throws** leave wasm as the thrown JS value itself, through
+  `WebAssembly.JSTag`:
+  - i31 values and strings externalize directly;
+  - a boxed number crosses one cold host call;
+  - booleans and `undefined` are imported constants;
+  - a compiled object keeps the approved named refusal.
+- **No pending raise survives an exit to the host.** The state is cleared
+  before every one (uncaught throws and the single input-refusal helper).
+  There are no activation exports, no snapshots and no per-call bookkeeping.
+
+### Measurements at 301fac624 (exploratory; no quiet window)
+
+- **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
+  causes A and B, fixed by 1b and 1c), 0 wrong.
+  - 0 of 519 rows differ in outcome, case count or input refusals from the
+    rebased M1b baseline f091a36cb.
+- **Boundary**, `tooling/wasm/bench/boundary.mjs`, monomorphic call sites, ns
+  per call:
+  - generated wrapper over raw export: `add` 2.94 vs 1.53, `both` 2.33 vs
+    2.03, `join` 6.57 vs 5.96, `nothing` 1.16 vs 1.15;
+  - the old loader cost about 35 ns per scalar call;
+  - node inlines these tiny functions (0.2–0.6 ns), which no boundary
+    crossing can match;
+  - wasm→JS: a `Math.sin` import call per iteration ties node (13.07 vs
+    13.16).
+- **Production bytes** (module + glue against the old module + manifest +
+  loader, both emitted by pinned binaries and gzipped by node's zlib at its
+  default level), raw/gzip:
+  - scalars fixture: 16,130/3,950 against 35,181/6,809;
+  - `examples/loops`: 5,961/2,122 against 20,729/5,809;
+  - `examples/bitwise`: 3,948/1,617 against 18,595/5,239.
+- **Compile time:** emitting all examples is unchanged by the restructure
+  (paired, warm: 4.77–4.94 s against 4.79–5.49 s).
+- **Found for M2:** string concatenation called from JS costs about 6 ns per
+  call against node's 0.5 ns cons-string.
+
+### Not yet done
+
+- **The catalog/profile consolidation:** `support_catalog.rs`, the
+  per-module `external()` functions, and the source-scraping coverage tests
+  that run python3/clang.
+- **The hostile-pool `agree` lane:** the census is a bounded sweep.
+- **The 29-module runtime route census.**
+- **The browser host**, beyond `--host browser` loading.
 
 ## Current M1a implementation and evidence
 
@@ -295,6 +420,10 @@ repair is queued after stage B and the native escape repair. No front-end/core
 file was changed by the scan or by M1b type planning.
 
 ### Host ABI details approved for implementation
+
+> **Superseded (2026-10-12 rework):** the generic loader, ABI 2 manifest,
+> constants table and activation exports described here were replaced by
+> generated glue and `WebAssembly.JSTag`; see "Architecture after the rework".
 
 The M0 import surface and primitive scalar/string boundary are approved. The
 following concrete manifest/loader details were approved in the amendment review:
@@ -927,6 +1056,10 @@ and named input declines remain distinct from source-language exceptions.
 
 ### M1b activation ABI detail (approved)
 
+> **Superseded (2026-10-12 rework):** the generic loader, ABI 2 manifest,
+> constants table and activation exports described here were replaced by
+> generated glue and `WebAssembly.JSTag`; see "Architecture after the rework".
+
 The pending flag and erased payload live in module globals. A private recursive
 GC activation frame stores a saved flag, payload and previous frame; only nested
 public entry allocates one. Outermost entry resets the state without allocating.
@@ -1247,6 +1380,10 @@ and differential checking again. Include function/local/type/field names in a
 name section; strip it only in a measured shipping profile.
 
 ## Host import surface and generated JS
+
+> **Superseded (2026-10-12 rework):** the generic loader, ABI 2 manifest,
+> constants table and activation exports described here were replaced by
+> generated glue and `WebAssembly.JSTag`; see "Architecture after the rework".
 
 The manifest lists only transitively used imports. Separate semantic helper
 resolution from the final imports: a helper may lower to wasm instructions,
