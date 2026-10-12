@@ -56,6 +56,7 @@ mod tests {
             erased_globals: None,
             raising: None,
             raising_results: &BTreeMap::new(),
+            array_copy: BTreeMap::new(),
             erased: BTreeMap::new(),
             input_decline: None,
             descriptor_base: 0,
@@ -132,6 +133,7 @@ mod tests {
                 erased_globals: None,
                 raising: None,
                 raising_results: &BTreeMap::new(),
+                array_copy: BTreeMap::new(),
                 erased: BTreeMap::new(),
                 input_decline: None,
                 descriptor_base: 0,
@@ -761,6 +763,8 @@ impl<'a> Body<'a> {
                     crate::erased_ops::runtime(self, result, helper, args)?;
                 } else if let Some(method) = crate::array_methods::external(name) {
                     crate::array_methods::call(self, result, name, method, args)?;
+                } else if let Some(method) = crate::array_copy::external(name) {
+                    crate::array_copy::call(self, result, name, method, args)?;
                 } else {
                     return Err(format!(
                         "runtime/external helper `{name}` is outside the implemented Wasm helper surface"

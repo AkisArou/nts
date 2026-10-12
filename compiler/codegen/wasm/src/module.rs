@@ -31,6 +31,7 @@ pub(crate) struct Symbols<'a> {
     pub(crate) descriptor_base: u32,
     pub(crate) instance_of: Option<u32>,
     pub(crate) array_grow: BTreeMap<u32, u32>,
+    pub(crate) array_copy: BTreeMap<(u32, crate::array_copy::Helper), u32>,
     pub(crate) thunks: BTreeMap<(crate::callables::Face, u32, u32), u32>,
     pub(crate) static_closures: BTreeMap<u32, crate::callables::Static>,
     pub(crate) allocations: std::collections::BTreeSet<u32>,
@@ -79,6 +80,7 @@ impl<'a> Symbols<'a> {
             descriptor_base,
             instance_of: None,
             array_grow: BTreeMap::new(),
+            array_copy: BTreeMap::new(),
             thunks: BTreeMap::new(),
             static_closures,
             allocations: crate::callables::allocations(resources, plan)?,
@@ -368,6 +370,35 @@ fn declare_managed_adapters(
         names.append(id, &format!("array.grow<{:?}>", array.element));
     }
     declare_raising(types, functions, names, symbols, imported_functions);
+    declare_array_copy(
+        resources,
+        types,
+        functions,
+        names,
+        symbols,
+        imported_functions,
+    );
+}
+
+fn declare_array_copy(
+    resources: &requirements::Requirements,
+    types: &mut Types,
+    functions: &mut FunctionSection,
+    names: &mut NameMap,
+    symbols: &mut Symbols<'_>,
+    imported_functions: u32,
+) {
+    for shape in symbols.types.arrays.values() {
+        if let Some(helpers) = resources.copy_arrays.get(&shape.ty) {
+            for &helper in helpers {
+                let (params, result) = helper.signature(shape);
+                let id = imported_functions + functions.len();
+                functions.function(types.intern(Signature { params, result }));
+                symbols.array_copy.insert((shape.wrapper, helper), id);
+                names.append(id, &format!("array.{helper:?}<{:?}>", shape.element));
+            }
+        }
+    }
 }
 
 struct Bodies {
@@ -452,6 +483,7 @@ fn bodies(
             code.function(&function);
         }
     }
+    array_copy_bodies(&mut code, symbols)?;
     for thunk in thunks {
         let function =
             crate::callables::thunk_body(thunk, symbols).map_err(|error| EmitError::Invariant {
@@ -474,6 +506,20 @@ fn bodies(
         routes,
         origins,
     })
+}
+
+fn array_copy_bodies(code: &mut CodeSection, symbols: &Symbols<'_>) -> Result<(), EmitError> {
+    for &(wrapper, helper) in symbols.array_copy.keys() {
+        let shape = &symbols.types.arrays[&wrapper];
+        let function = crate::array_copy::body(helper, shape, symbols).map_err(|error| {
+            EmitError::Invariant {
+                function: format!("array.{helper:?}<{:?}>", shape.element),
+                reason: error.to_string(),
+            }
+        })?;
+        code.function(&function);
+    }
+    Ok(())
 }
 
 fn scalar_imports(

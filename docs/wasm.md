@@ -706,7 +706,21 @@ alive. `pop_value` reads a number array and returns an erased optional number;
 Fill and truncation to zero establish readiness even for an unknown allocated
 length. Shrink validation precedes conversion and storage; hole-producing growth
 refuses through the input contract. Native buffer or foreign variants stay named
-declines. The remainder of the planned helper appendix is not yet implemented.
+declines.
+
+Closed slice/concat/extend/reverse rows now share the typed backing plan. Slice
+uses the same `ToIntegerOrInfinity` normalization as string slices. Slice and
+concat return fresh wrappers even for empty results; extend grows the existing
+wrapper and reads its backing after growth, preserving self-extension and
+aliases; reverse returns its original wrapper. Copies preserve element identity
+and clear no live source slots. Length addition is checked before conversion or
+allocation. Mutable element storage must match exactly, including the erased
+concat family; native and foreign copy variants remain named declines.
+The copying increment passed 53 package tests, including 16,183 independent HIR
+comparisons and 2,742 source comparisons. Its 7,429 HIR and 920 source input
+refusals are recorded separately from comparisons. These bounded probes do not
+establish the pending all-example/runtime acceptance or performance results.
+The remainder of the planned helper appendix is not yet implemented.
 M1 excludes buffer/view/DataView families; they are a separate boundary design.
 
 ### Closures and virtual calls

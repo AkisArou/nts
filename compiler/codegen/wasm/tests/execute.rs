@@ -68,6 +68,21 @@ fn source_array_helpers_agree_with_node() {
 }
 
 #[test]
+fn source_array_copying_agrees_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "array-copy-source",
+        &emitted,
+        "tooling/wasm/check-array-copy-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert!(output["cases"].as_u64().unwrap() > 2000);
+    assert!(output["named_declines"].as_u64().unwrap() > 500);
+}
+
+#[test]
 fn source_raising_slots_handlers_and_finalizers_agree_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/raising");
     let emitted = emit_project(&fixture);

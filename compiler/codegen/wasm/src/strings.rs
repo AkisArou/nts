@@ -448,7 +448,7 @@ fn substring(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, Failure>
         ],
     );
     for (param, local) in [(1, 4), (2, 5)] {
-        normalize_index(&mut f, param, local, slice);
+        crate::indexing::clamp(&mut f, param, local, slice, 3, 6);
     }
     if !slice {
         instructions(
@@ -477,41 +477,4 @@ fn substring(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, Failure>
         ],
     );
     Ok(f)
-}
-
-fn normalize_index(f: &mut Function, param: u32, local: u32, relative: bool) {
-    instructions(f, &[I::LocalGet(param), I::F64Trunc]);
-    if relative {
-        instructions(
-            f,
-            &[
-                I::LocalTee(6),
-                I::F64Const(0.0.into()),
-                I::F64Lt,
-                I::If(BlockType::Result(ValType::F64)),
-                I::LocalGet(3),
-                I::F64ConvertI32U,
-                I::LocalGet(6),
-                I::F64Add,
-                I::Else,
-                I::LocalGet(6),
-                I::End,
-            ],
-        );
-    }
-    // Saturation implements NaN -> 0 and clamps negative/large infinities;
-    // the remaining upper bound is the unsigned UTF-16 length.
-    instructions(
-        f,
-        &[
-            I::I32TruncSatF64U,
-            I::LocalTee(local),
-            I::LocalGet(3),
-            I::I32GtU,
-            I::If(BlockType::Empty),
-            I::LocalGet(3),
-            I::LocalSet(local),
-            I::End,
-        ],
-    );
 }

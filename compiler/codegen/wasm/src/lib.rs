@@ -5,6 +5,7 @@
 //! runtime helper families follow the reviewed plan in `docs/wasm.md`.
 
 mod abi;
+mod array_copy;
 mod array_init;
 mod array_methods;
 mod arrays;
@@ -19,6 +20,7 @@ mod error;
 mod gc;
 mod helpers;
 mod host;
+mod indexing;
 mod module;
 mod numeric;
 mod object_plan;

@@ -23,6 +23,7 @@ pub(crate) struct Requirements {
     pub(crate) referenced_objects: BTreeMap<ClassId, ObjectUse>,
     pub(crate) instance_of: bool,
     pub(crate) grow_arrays: rustc_hash::FxHashSet<HirType>,
+    pub(crate) copy_arrays: rustc_hash::FxHashMap<HirType, BTreeSet<crate::array_copy::Helper>>,
     pub(crate) closure_calls: BTreeMap<(ClassId, u32), ObjectUse>,
     pub(crate) virtual_calls: BTreeMap<(ClassId, u32), ObjectUse>,
     pub(crate) virtual_declarations: BTreeMap<(ClassId, u32, String), ObjectUse>,
@@ -152,6 +153,18 @@ impl Requirements {
                     }
                     if method.boxes_number() {
                         self.require_erased(erased::Helper::BoxNumber);
+                    }
+                } else if let Some(method) = crate::array_copy::external(name) {
+                    self.contract(func);
+                    if let Some(array) = args.first() {
+                        let ty = func.value(*array).ty.clone();
+                        self.copy_arrays
+                            .entry(ty.clone())
+                            .or_default()
+                            .insert(method.helper);
+                        if method.helper == crate::array_copy::Helper::Extend {
+                            self.grow_arrays.insert(ty);
+                        }
                     }
                 }
             }
