@@ -168,10 +168,17 @@ fn validator_rejects_bad_stack_types_and_unapproved_features() {
         nts_codegen_wasm::validate(&module.finish()),
         Err(EmitError::InvalidWasm(_))
     ));
-    let mut gc = TypeSection::new();
-    gc.ty().struct_([]);
+    // GC is part of M1b. Linear-memory memory64 remains outside its feature set.
+    let mut memory = wasm_encoder::MemorySection::new();
+    memory.memory(wasm_encoder::MemoryType {
+        minimum: 0,
+        maximum: None,
+        memory64: true,
+        shared: false,
+        page_size_log2: None,
+    });
     let mut module = Module::new();
-    module.section(&gc);
+    module.section(&memory);
     assert!(matches!(
         nts_codegen_wasm::validate(&module.finish()),
         Err(EmitError::InvalidWasm(_))

@@ -9,8 +9,8 @@ and the independent JVM review. The full green gate ran on source-identical
 `e9fab5a2730c`; the reviewer accepted the rebase that preserved two unrelated
 notes lines. Its core hunks are limited to the provider enum and native
 placement/provision selection. The Wasm driver selects HostGc. M1b is at static
-scan/design review; no managed implementation or new performance measurement
-is claimed.
+implementation following review of the scan amendment below. Managed type
+planning is the first step; no M1b corpus or new performance result is claimed.
 
 ## Current M1a implementation and evidence
 
@@ -168,8 +168,10 @@ have not run; those claims are not implied by these bring-up results.
 
 This amendment is a static scan at landed M1a `2a4e53739bf2`, not an M1b
 implementation or a new execution/performance result. The representation plan
-below consumes the approved M0 design. The outstanding literal contract and
-host ABI details are review points; neither has been silently implemented.
+below consumes the approved M0 design. MainClaude decided the amendment on
+2026-10-12 (~05:40 Athens): the expanded typed manifest ABI and public
+uncaught-object decline are approved. The literal fidelity repair stays in the
+shared core/front-end queue after stage B and the native escape repair.
 
 Keep the route populations separate:
 
@@ -274,14 +276,17 @@ literal-derived constants, not only residual ConstString operations. The named
 blocker, valid-pair control, runtime-built lone unit, legitimate U+FFFD, embedded
 NUL and foldable comparisons are the acceptance fixtures.
 
-This is an unresolved no-wrong-answer landing prerequisite, not a Wasm-only
-representation change. It has been entered in the core owner's inbox. No
-front-end/core file was changed by this scan.
+MainClaude explicitly decided this existing shared defect is not an M1b landing
+prerequisite. Its recorded outcomes must be reported separately against the
+other lanes; they are not agreements with Node and must not be relabelled as
+successes. A new Wasm mismatch still fails acceptance. The backend-neutral
+repair is queued after stage B and the native escape repair. No front-end/core
+file was changed by the scan or by M1b type planning.
 
-### Host ABI details submitted for review
+### Host ABI details approved for implementation
 
 The M0 import surface and primitive scalar/string boundary are approved. The
-following concrete manifest/loader details still need review before publication:
+following concrete manifest/loader details were approved in the amendment review:
 
 - Use a new manifest ABI version when the physical/import contract expands.
   Describe each required import with module, name, kind and resolved type;
@@ -355,7 +360,7 @@ Cargo.lock resolution check. Native lanes must remain unchanged and all full
 regression-gate obligations remain. No throughput/startup claim comes from this
 scan; real paired benchmarks and native-EH experiments remain M2 work.
 
-Gate and land only after review points are settled and acceptance is green.
+Gate and land only when the reviewed acceptance is green.
 Use the lane inbox handshake and atomic GATE-RUNNING claim, default full gate
 parallelism and its memory budget; the two-worker limit applies to ad-hoc
 frontend work. Record owed.mjs for the final commit and preserve exact pins.

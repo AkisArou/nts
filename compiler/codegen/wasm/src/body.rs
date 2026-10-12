@@ -5,7 +5,7 @@ use crate::{
     helpers::Helper,
     module::Symbols,
     numeric, refuse,
-    types::{self, Slot},
+    types::{Physical, Slot},
 };
 use nts_codegen_common::{Copy, edge_copies};
 use nts_core::hir::{BlockId, Callee, Func, OpKind, Terminator, ValueId};
@@ -14,15 +14,11 @@ use std::collections::BTreeMap;
 use wasm_encoder::{BlockType, Function, Instruction as I};
 
 #[cfg(test)]
-#[path = "../tests/common/hir.rs"]
-mod test_common;
-
-#[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use test_common::{block, function, value};
+    use crate::test_common::{block, function, value};
 
     #[test]
     fn a_corrupt_scope_plan_is_a_named_internal_error() {
@@ -47,9 +43,12 @@ mod tests {
             block(&[], &[], Terminator::Return(None)),
         ];
         let plan = cfg::plan(&f).unwrap();
+        let p = crate::test_common::program(vec![f.clone()]);
+        let slots = crate::gc::Plan::build(&p).unwrap();
         let symbols = Symbols {
             functions: rustc_hash::FxHashMap::default(),
             helpers: BTreeMap::new(),
+            types: &slots,
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -79,7 +78,7 @@ pub(crate) struct Body<'a> {
     pub(crate) code: Function,
     pub(crate) symbols: &'a Symbols<'a>,
     values: Vec<Option<u32>>,
-    scratch: BTreeMap<(u32, Slot), u32>,
+    scratch: BTreeMap<(u32, Physical), u32>,
     pc: Option<u32>,
     cases: BTreeMap<BlockId, u32>,
     labels: Vec<Label>,
@@ -143,7 +142,10 @@ impl<'a> Body<'a> {
         }
         for value in live {
             let op = func.value(value);
-            let slot = types::slot(&op.ty).map_err(|why| refuse(func, &op.origin, why))?;
+            let slot = symbols
+                .types
+                .slot(&op.ty)
+                .map_err(|why| refuse(func, &op.origin, why))?;
             if let OpKind::Param(at) = op.kind {
                 values[value.0 as usize] = Some(at);
             } else if let Some(slot) = slot {
@@ -159,7 +161,9 @@ impl<'a> Body<'a> {
             {
                 for copy in edge_copies(&func.blocks[to.0 as usize].params, &args) {
                     if let Copy::Save { temp, from } = copy {
-                        let slot = types::value_slot(&func.value(from).ty)
+                        let slot = symbols
+                            .types
+                            .value_slot(&func.value(from).ty)
                             .map_err(|why| refuse(func, &func.value(from).origin, why))?;
                         scratch.entry((temp, slot)).or_insert_with(|| {
                             let id = next;
@@ -204,7 +208,7 @@ impl<'a> Body<'a> {
         self.code.instruction(i);
     }
     pub(crate) fn local(&self, value: ValueId) -> Result<u32, String> {
-        self.values[value.0 as usize].ok_or_else(|| format!("%{} has no scalar local", value.0))
+        self.values[value.0 as usize].ok_or_else(|| format!("%{} has no value local", value.0))
     }
     pub(crate) fn load(&mut self, value: ValueId) -> Result<(), String> {
         let local = self.local(value)?;
@@ -380,6 +384,7 @@ impl<'a> Body<'a> {
             .map_err(|why| self.structuring(why))
     }
     fn copies(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), String> {
+        let mut saved = BTreeMap::new();
         for copy in edge_copies(&self.func.blocks[target.0 as usize].params, args) {
             match copy {
                 Copy::Move { to, from } => {
@@ -388,14 +393,26 @@ impl<'a> Body<'a> {
                 }
                 Copy::Save { temp, from } => {
                     self.load(from)?;
-                    self.ins(&I::LocalSet(
-                        self.scratch[&(temp, types::value_slot(self.ty(from))?)],
-                    ));
+                    let slot = self.symbols.types.value_slot(self.ty(from))?;
+                    let local = self
+                        .scratch
+                        .get(&(temp, slot))
+                        .copied()
+                        .ok_or_else(|| format!("unplanned edge temporary {temp}: {slot:?}"))?;
+                    saved.insert(temp, slot);
+                    self.ins(&I::LocalSet(local));
                 }
                 Copy::Restore { to, temp } => {
-                    self.ins(&I::LocalGet(
-                        self.scratch[&(temp, types::value_slot(self.ty(to))?)],
-                    ));
+                    let slot = saved
+                        .get(&temp)
+                        .copied()
+                        .ok_or_else(|| format!("edge temporary {temp} restored before saving"))?;
+                    let local = self
+                        .scratch
+                        .get(&(temp, slot))
+                        .copied()
+                        .ok_or_else(|| format!("unplanned edge temporary {temp}: {slot:?}"))?;
+                    self.ins(&I::LocalGet(local));
                     self.ins(&I::LocalSet(self.local(to)?));
                 }
             }
@@ -474,7 +491,7 @@ impl<'a> Body<'a> {
                 self.ins(&I::Return);
                 return Ok(());
             }
-            OpKind::ConstUndefined if types::slot(&op.ty)?.is_none() => return Ok(()),
+            OpKind::ConstUndefined if self.symbols.types.slot(&op.ty)?.is_none() => return Ok(()),
             OpKind::Retain(_) | OpKind::Release(_) => {
                 return Err(format!("host-managed provider mismatch: {:?}", op.kind));
             }
@@ -525,7 +542,7 @@ impl<'a> Body<'a> {
                 return Err(format!("operation outside M1a: {:?}", op.kind));
             }
         }
-        if types::slot(&op.ty)?.is_some() {
+        if self.symbols.types.slot(&op.ty)?.is_some() {
             self.ins(&I::LocalSet(self.local(id)?));
         }
         Ok(())

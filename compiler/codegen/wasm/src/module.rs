@@ -2,10 +2,7 @@
 
 use crate::{
     BoundaryType, EmitError, Emitted, FunctionExport, GlobalExport, InfiniteBound, Manifest,
-    NumberBound, NumberGuard, Parameter, body,
-    helpers::Helper,
-    refuse,
-    types::{self, Slot},
+    NumberBound, NumberGuard, Parameter, body, gc, helpers::Helper, refuse, types::Physical,
 };
 use nts_core::hir::{BinOp, Func, HirType, OpKind, ParamShape, Program, UnOp};
 use nts_diagnostics::Diagnostic;
@@ -20,29 +17,40 @@ use wasm_encoder::{
 pub(crate) struct Symbols<'a> {
     pub(crate) functions: FxHashMap<&'a str, u32>,
     pub(crate) helpers: BTreeMap<Helper, u32>,
+    pub(crate) types: &'a gc::Plan,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Signature {
-    params: Vec<Slot>,
-    result: Option<Slot>,
+    params: Vec<Physical>,
+    result: Option<Physical>,
 }
 
 #[derive(Debug, Default)]
 struct Types {
     section: TypeSection,
     ids: FxHashMap<Signature, u32>,
+    next: u32,
 }
 
 impl Types {
+    fn new(plan: &gc::Plan) -> Self {
+        Self {
+            section: plan.encode(),
+            ids: FxHashMap::default(),
+            next: plan.count(),
+        }
+    }
+
     fn intern(&mut self, signature: Signature) -> u32 {
         if let Some(id) = self.ids.get(&signature) {
             return *id;
         }
-        let id = self.section.len();
+        let id = self.next;
+        self.next += 1;
         self.section.ty().function(
             signature.params.iter().map(|s| s.wasm()),
-            signature.result.map(Slot::wasm),
+            signature.result.map(Physical::wasm),
         );
         self.ids.insert(signature, id);
         id
@@ -53,13 +61,18 @@ pub(crate) fn index(i: usize) -> u32 {
     u32::try_from(i).expect("a wasm module index fits u32")
 }
 
-fn signature(func: &Func) -> Result<Signature, Diagnostic> {
+fn signature(func: &Func, plan: &gc::Plan) -> Result<Signature, Diagnostic> {
     let params = func
         .params
         .iter()
-        .map(|p| types::value_slot(&p.ty).map_err(|why| refuse(func, &p.origin, why)))
+        .map(|p| {
+            plan.value_slot(&p.ty)
+                .map_err(|why| refuse(func, &p.origin, why))
+        })
         .collect::<Result<Vec<_>, _>>()?;
-    let result = types::slot(&func.return_type).map_err(|why| refuse(func, &func.origin, why))?;
+    let result = plan
+        .slot(&func.return_type)
+        .map_err(|why| refuse(func, &func.origin, why))?;
     Ok(Signature { params, result })
 }
 
@@ -206,24 +219,26 @@ fn preflight(program: &Program) -> Result<(), EmitError> {
 }
 
 fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> {
+    let plan = gc::Plan::build(program)?;
     let signatures = funcs
         .iter()
-        .map(|func| signature(func))
+        .map(|func| signature(func, &plan))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|d| EmitError::Declined(vec![d]))?;
     let helpers = helper_set(program);
-    let mut types = Types::default();
+    let mut types = Types::new(&plan);
     let mut imports = ImportSection::new();
     let mut symbols = Symbols {
         functions: FxHashMap::default(),
         helpers: BTreeMap::new(),
+        types: &plan,
     };
     let mut required_imports = Vec::new();
     for helper in helpers.iter().filter(|h| h.imported()) {
         let (params, result) = helper.signature();
         let ty = types.intern(Signature {
-            params,
-            result: Some(result),
+            params: params.into_iter().map(Physical::Scalar).collect(),
+            result: Some(Physical::Scalar(result)),
         });
         let id = imports.len();
         imports.import("nts", helper.name(), EntityType::Function(ty));
@@ -247,13 +262,13 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         let (params, result) = helper.signature();
         let id = imports.len() + functions.len();
         functions.function(types.intern(Signature {
-            params,
-            result: Some(result),
+            params: params.into_iter().map(Physical::Scalar).collect(),
+            result: Some(Physical::Scalar(result)),
         }));
         symbols.helpers.insert(*helper, id);
         names.append(id, &format!("nts.{}", helper.name()));
     }
-    let globals = globals(program)?;
+    let globals = globals(program, &plan)?;
     let mut exports = ExportSection::new();
     let manifest = manifest(program, funcs, &symbols, required_imports, &mut exports)?;
     let mut code = CodeSection::new();
@@ -323,12 +338,15 @@ fn encode(
     module.finish()
 }
 
-fn globals(program: &Program) -> Result<GlobalSection, EmitError> {
+fn globals(program: &Program, plan: &gc::Plan) -> Result<GlobalSection, EmitError> {
     let mut section = GlobalSection::new();
     for global in &program.globals {
         let result = (|| {
-            let slot = types::value_slot(&global.ty)?;
-            let initial = initial(global.initial, &global.ty)?;
+            let slot = plan.value_slot(&global.ty)?;
+            let initial = match slot {
+                Physical::Scalar(_) => initial(global.initial, &global.ty)?,
+                Physical::Reference(reference) => ConstExpr::ref_null(reference.heap_type),
+            };
             section.global(
                 GlobalType {
                     val_type: slot.wasm(),
@@ -445,12 +463,12 @@ fn manifest(
                 .iter()
                 .map(parameter)
                 .collect::<Result<_, _>>()
-                .map_err(EmitError::InvalidWasm)?;
+                .map_err(|why| EmitError::Declined(vec![refuse(func, &func.origin, why)]))?;
             exports.push(FunctionExport {
                 name: published.clone(),
                 params,
                 result: BoundaryType::from_hir(&func.return_type)
-                    .map_err(EmitError::InvalidWasm)?,
+                    .map_err(|why| EmitError::Declined(vec![refuse(func, &func.origin, why)]))?,
             });
         } else if let Some((at, global)) = global_definitions.get(emitted.as_str()) {
             if global.deferred && !program.global_is_initialized(index(*at)) {
@@ -466,7 +484,13 @@ fn manifest(
             globals.push(GlobalExport {
                 name: published.clone(),
                 symbol: published.clone(),
-                ty: BoundaryType::from_hir(&global.ty).map_err(EmitError::InvalidWasm)?,
+                ty: BoundaryType::from_hir(&global.ty).map_err(|why| {
+                    EmitError::Declined(vec![Diagnostic::error(
+                        "NTS5001",
+                        format!("wasm declines public global `{published}`: {why}"),
+                        global.origin.location,
+                    )])
+                })?,
             });
         } else {
             return Err(surface_decline(program, published));

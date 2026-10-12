@@ -6,10 +6,15 @@
 
 mod body;
 mod cfg;
+mod gc;
 mod helpers;
 mod module;
 mod numeric;
 mod types;
+
+#[cfg(test)]
+#[path = "../tests/common/hir.rs"]
+mod test_common;
 
 pub use cfg::Route;
 use nts_core::hir::{Program, verify::Invalid};
@@ -161,11 +166,18 @@ pub fn emit(program: &Program) -> Result<Emitted, EmitError> {
 /// The reviewed Node loader; callers copy it beside the module and manifest.
 pub const NODE_LOADER: &str = include_str!("../../../../runtime/wasm/node.mjs");
 
-/// Validate against the precise feature set used by the scalar bring-up slice.
+/// Validate against the precise scalar and managed M1 feature set.
 /// No default proposal set changes when wasmparser updates.
 pub fn validate(bytes: &[u8]) -> Result<(), EmitError> {
     use wasmparser::WasmFeatures as F;
-    let features = F::FLOATS | F::MUTABLE_GLOBAL | F::SIGN_EXTENSION | F::SATURATING_FLOAT_TO_INT;
+    let features = F::FLOATS
+        | F::MUTABLE_GLOBAL
+        | F::SIGN_EXTENSION
+        | F::SATURATING_FLOAT_TO_INT
+        | F::REFERENCE_TYPES
+        | F::FUNCTION_REFERENCES
+        | F::GC
+        | F::GC_TYPES;
     wasmparser::Validator::new_with_features(features)
         .validate_all(bytes)
         .map(|_| ())

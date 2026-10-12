@@ -2,7 +2,7 @@
 
 use nts_core::hir::HirType;
 use serde::{Deserialize, Serialize};
-use wasm_encoder::ValType;
+use wasm_encoder::{RefType, ValType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Slot {
@@ -19,6 +19,22 @@ impl Slot {
             Self::I64 => ValType::I64,
             Self::F32 => ValType::F32,
             Self::F64 => ValType::F64,
+        }
+    }
+}
+
+/// A resolved module-local slot. Numeric selection only accepts Scalar's Slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum Physical {
+    Scalar(Slot),
+    Reference(RefType),
+}
+
+impl Physical {
+    pub(crate) const fn wasm(self) -> ValType {
+        match self {
+            Self::Scalar(slot) => slot.wasm(),
+            Self::Reference(reference) => ValType::Ref(reference),
         }
     }
 }
