@@ -56,6 +56,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{Callee, Func, OpKind, Program};
 
+mod dispatch;
+
 /// Where a walk over the call graph starts.
 #[derive(Debug, Clone, Copy)]
 pub enum Roots<'a> {
@@ -594,6 +596,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
         .map(|(at, func)| (func.name.as_str(), at))
         .collect();
     let hierarchy = Hierarchy::build(program);
+    let mut dispatch = dispatch::Dispatch::build(program);
     let mut reached: FxHashSet<&str> = FxHashSet::default();
     let mut pending: Vec<&str> = root_names(program, roots);
     // **And what the outside calls through a function it is handed.** A
@@ -620,15 +623,14 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
         let Some(func) = by_name.get(name).map(|at| &program.funcs[*at]) else {
             continue;
         };
+        let mut targets = dispatch.enter(func);
         for op in &func.values {
             // What the runtime calls back is reached, whether or not anything here
             // calls it: see [`called_back`].
             let handed = called_back(&op.kind);
-            let mut targets = if handed.is_empty() {
-                Vec::new()
-            } else {
-                callback_targets(program, &hierarchy, func, handed)
-            };
+            if !handed.is_empty() {
+                targets.extend(callback_targets(program, &hierarchy, func, handed));
+            }
             targets.extend(printed_through_an_erasure(program, func, &op.kind));
             targets.extend(
                 program
@@ -644,11 +646,9 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             {
                 targets.push(declared);
             }
-            // A virtual call reaches *every* implementation of its slot, because
-            // which one runs is decided by a receiver this cannot see. Keeping
-            // only the one the static type names would prune an override that a
-            // table still points at, and a table entry the linker cannot resolve
-            // is a link error at best.
+            // A virtual call reaches every class row. Source closure rows
+            // additionally need a live frame; dispatch tracks allocations and
+            // explicitly reached entries together with the used slots.
             match &op.kind {
                 OpKind::Call {
                     callee: Callee::Direct(target),
@@ -666,21 +666,15 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
                 OpKind::Call {
                     callee: Callee::Virtual { slot, .. } | Callee::Closure { slot },
                     ..
-                } => targets.extend(
-                    program
-                        .layouts
-                        .iter()
-                        .filter_map(|layout| layout.methods.get(*slot as usize))
-                        .filter_map(|method| method.as_deref()),
-                ),
+                } => targets.extend(dispatch.targets(*slot)),
                 _ => {}
             }
-            for target in targets {
-                if let Some(callee) = by_name.get(target).map(|at| &program.funcs[*at])
-                    && reached.insert(callee.name.as_str())
-                {
-                    pending.push(callee.name.as_str());
-                }
+        }
+        for target in targets {
+            if let Some(callee) = by_name.get(target).map(|at| &program.funcs[*at])
+                && reached.insert(callee.name.as_str())
+            {
+                pending.push(callee.name.as_str());
             }
         }
     }

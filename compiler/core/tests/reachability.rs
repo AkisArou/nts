@@ -123,3 +123,52 @@ fn a_declared_surface_is_checked_against_the_source() {
     let good = vec!["pipeline".to_owned()];
     assert!(hir::reachable::undeclared(&prepared.program, &good).is_empty());
 }
+
+#[test]
+fn a_specialized_closure_does_not_keep_its_unallocated_template() {
+    let Some(prepared) = prepared("a-structural-function-carrying-a-throw") else {
+        return;
+    };
+    let program = &prepared.program;
+    let allocated: std::collections::HashSet<_> = program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter(|op| {
+            matches!(
+                op.kind,
+                hir::OpKind::ObjectNew { .. } | hir::OpKind::ClosureStatic
+            )
+        })
+        .filter_map(|op| match op.ty {
+            hir::HirType::Managed(hir::ManagedType::Object(owner))
+                if hir::has_a_closure_body(owner) =>
+            {
+                Some(owner)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !allocated.is_empty(),
+        "the specialized closure must still exist"
+    );
+    let mut entries = 0;
+    for func in &program.funcs {
+        if let Some(hir::Param {
+            ty: hir::HirType::Managed(hir::ManagedType::Object(owner)),
+            ..
+        }) = func.params.first()
+            && hir::has_a_closure_body(*owner)
+        {
+            entries += 1;
+            assert!(
+                allocated.contains(owner),
+                "{} belongs to an unallocated template",
+                func.name
+            );
+        }
+    }
+    assert!(entries > 0, "the allocated closure keeps callable entries");
+    assert!(!program.funcs.iter().any(|func| func.name == "read"));
+}
