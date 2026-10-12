@@ -259,15 +259,28 @@ fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String
     // selector. Where no surviving call reads it, the default is as
     // unreferenced as an omitted column's rows, and C rejects an unused
     // static (`benches/cases/in-narrowing`, -Werror,-Wunused-function).
-    for (selector, body) in program.interface_access.defaults() {
-        if !table
+    //
+    // **One body can serve two selectors** -- a getter's and its raising
+    // twin's -- so it is unreferenced only when *none* of them is read.
+    // Asked per selector, an unread raising twin dropped `aborted`'s default
+    // while the ordinary selector still called it, and five runtime modules
+    // named an undeclared function.
+    let read = |selector: u32| {
+        table
             .columns
             .get(selector as usize)
             .is_some_and(Option::is_some)
-        {
-            candidates.insert(body);
-        }
+    };
+    let mut serves: FxHashMap<&str, bool> = FxHashMap::default();
+    for (selector, body) in program.interface_access.defaults() {
+        *serves.entry(body).or_default() |= read(selector);
     }
+    candidates.extend(
+        serves
+            .into_iter()
+            .filter(|(_, read)| !read)
+            .map(|(body, _)| body),
+    );
     let by_name: FxHashMap<&str, &Func> = program
         .funcs
         .iter()
