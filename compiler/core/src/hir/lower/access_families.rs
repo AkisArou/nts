@@ -803,7 +803,9 @@ fn family(
     // can be shaped. Leave the family unlicensed and keep that existing path.
     if !uniform
         && matches!(declared, HirType::Managed(super::ManagedType::Object(_)))
-        && supplies.iter().all(|supply| matches!(supply.reader, Reader::Stored))
+        && supplies
+            .iter()
+            .all(|supply| matches!(supply.reader, Reader::Stored))
     {
         return Err("stored record results without one proven source storage contract");
     }
