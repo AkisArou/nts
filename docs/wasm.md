@@ -4,11 +4,12 @@ Status: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
 on 2026-10-11 UTC). Additional exception evidence is recorded below.
 Scanned revision: `e52ddc97e160` on `wasm/m0`. M1a scalar bring-up is implemented
 in the lane worktree, with the execution evidence below. The shared HostGc provider
-is implemented in a separate core draft after MainClaude approved the named
-`hir/mod.rs` overlap with MainCodex. Its core hunks are limited to the provider
-enum and native placement/provision selection. The Wasm driver selects HostGc.
-The core draft must be reviewed, gated and landed before M1a lands through its
-own review and gate.
+landed as `786f23a48f11` after MainClaude approved the scoped core overlap
+and the independent JVM review. The full green gate ran on source-identical
+`e9fab5a2730c`; the reviewer accepted the rebase that preserved two unrelated
+notes lines. Its core hunks are limited to the provider enum and native
+placement/provision selection. The Wasm driver selects HostGc. M1a still
+requires its own review and gate.
 
 ## Current M1a implementation and evidence
 
@@ -87,15 +88,17 @@ It cannot enter the existing native runner and report C's answers as wasm.
 source diagnostics at the emitter boundary. Unsupported language shapes use
 `NTS5001`.
 
-Execution evidence on Node 24.20.0, against the scanned core revision:
+Execution evidence on Node 24.20.0, using the landed HostGc core:
 
 | Population | Result |
 | --- | --- |
 | Same-source scalar TS fixture | 165,016 exact `Object.is` comparisons, including full-exponent IEEE bit-pattern sampling, NaN, infinities, signed zero, rounding ties, shifts, arithmetic/comparison, labelled loops, recursion and live globals; 42 functions, all structured |
+| Arbitrary CFGs | 600 graphs checked against an independent T1/T2 reducibility oracle: 256 structured, 344 dispatcher; 48,000 exact execution comparisons with bounded fuel and side-effect traces; every generated module validates |
 | Saved full `triangle__resume` CFG and cyclic phi swap | 20,514 exact comparisons; all 16 original generator graph blocks and 18 edges; 4,835 cyclic paths, maximum 39 visits; generator graph dispatches, phi swap is structured |
 | Typed numeric HIR fixture | 188 exact cases for unsigned widening/comparison/min/max, i32-min absolute value, negation retaining `-0`, safe i64 carriers, proven signed/unsigned integer div/rem and float-to-integer storage; no imports |
 | Public boundary fixture | 164 checks including void/undefined, scalar widths, aliases, declared facts, explicit infinite bounds, wrong arity, unsafe 64-bit results and five malformed manifests |
 | Existing `examples/loops` and `examples/bitwise` | 102 and 136 bounded scalar comparisons respectively; zero input declines, no dispatch, no imports; loops includes three nested labels and a break through `finally` |
+| Structurer integrity | A corrupted enclosing-loop scope plan produces a named internal compiler error; no source decline or dispatcher fallback |
 | Integrity/refusal tests | Seven tests distinguish named helper/optional/public-shape/provider declines from unresolved direct callees, invalid mixed bool/number equality HIR, invalid stack typing and unapproved GC features |
 | All discovered examples | 518 projects accounted for: 40 emitted, validated/linked and bounded-agree; 478 named project declines (including one intentional frontend TS2322 fixture); 2,061 compared cases and 18 named input declines; 0 observed wrong answers, integrity failures, unmeasured projects or timeouts |
 | Actual `emit-wasm` CLI | Executes the same scalar source population; writes source Origins; required `--out`, named `--rc` and `nts_math_cos` refusals precede output mutation; existing check runner refuses wasm |
@@ -109,20 +112,32 @@ repository's full hostile-pool `agree` instrument. The census sweeps numeric/boo
 arguments and checks live scalar globals; its 478 named declines and 18 input
 declines are reported separately from agreement. Follow-up runs resolved the
 `.js` entry, multi-source publication and local config-package resolution gaps;
-all 518 discovered projects are accounted for in `m1a-corpus/report.json`.
+all 518 discovered projects are accounted for in the refreshed
+`m1a-ramsey-corpus/report.json`. Every emitted module records each function
+with its route and reachable block/edge counts; the retained fixture manifests
+and census route inventory expose those records for review.
 
 Deterministic artifact inventory (`inspect.mjs`, gzip level 9; independently
 compressed files summed, no startup/throughput claim):
 
 | Artifact | Wasm raw / gzip | Manifest raw / gzip | Loader raw / gzip | Production total raw / gzip |
 | --- | --- | --- | --- | --- |
-| Scalar fixture | 4,128 / 1,864 B | 17,195 / 803 B | 4,993 / 1,760 B | 26,316 / 4,427 B |
-| `examples/loops` | 4,318 / 1,366 B | 3,095 / 391 B | 4,993 / 1,760 B | 12,406 / 3,517 B |
-| `examples/bitwise` | 1,634 / 811 B | 3,195 / 364 B | 4,993 / 1,760 B | 9,822 / 2,935 B |
+| Scalar fixture | 3,818 / 1,842 B | 17,195 / 803 B | 4,993 / 1,760 B | 26,006 / 4,405 B |
+| `examples/loops` | 3,718 / 1,332 B | 3,095 / 391 B | 4,993 / 1,760 B | 11,806 / 3,483 B |
+| `examples/bitwise` | 1,484 / 791 B | 3,195 / 364 B | 4,993 / 1,760 B | 9,672 / 2,915 B |
 
 The scalar total, including the loader and manifest, is below the provisional
-32 KiB raw smoke budget. The optional Origins sidecar is 88,122 raw / 2,659 gzip bytes;
+32 KiB raw smoke budget. The optional Origins sidecar is 88,113 raw / 2,663 gzip bytes;
 the loader does not read it. No unused helper family is emitted in these modules.
+
+The workspace-wide `Backend` audit finds two affected exhaustive matches:
+`Backend::name` handles `Self::Wasm` as `"wasm"`; differential `check` refuses
+`Backend::Wasm` explicitly before preparation or runner selection. The private
+native renderer is reached only after that guard. Neither match has a wildcard.
+`ALL` remains C/LLVM/JVM and `RECOGNIZED` adds Wasm, checked by the common test.
+The lockfile was regenerated through Cargo and the baseline resolutions
+retained: no existing crate version moved. Added packages are the Wasm crate,
+wasm-encoder/wasmparser, bitflags and leb128fmt.
 
 Dependencies are exactly pinned to wasm-encoder/wasmparser 0.261.0. Their
 published Cargo manifests declare Rust 1.88.0 and
@@ -133,16 +148,17 @@ allows only floats, mutable globals, sign extension and saturating float-to-int
 instructions. GC/reference/EH proposals join explicitly with their implementation,
 not through library defaults. No npm or external wasm tool was added.
 
-Checks run: `cargo fmt --all`, strict workspace clippy with all targets, 173 core
-and 33 common unit tests, 13 wasm integration tests, the actual CLI test, and the
-existing CLI usage coverage test. The HostGc draft additionally passes two
-preparation tests covering logical layouts and async/`for await` lifetimes, plus
-the JVM's early `--rc` refusal test. Test/build workers are capped at two. Evidence logs and emitted
-modules are retained under the lane's `mainctl/wasm-evidence` directory.
-Still required before landing: independent JVM review and landing of the separate
-HostGc draft, the candidate's full owed gate, and reviewer approval. Complete workspace test
-execution, the full hostile-pool M1 wasm differential and startup/performance measurements
-have not run; those counts and claims are not implied by these bring-up results.
+Checks run for the Ramsey revision: `cargo fmt --all`, strict workspace clippy
+with all targets, 33 common unit tests, 14 wasm integration tests plus the
+structurer scope-fault unit test, and the actual CLI and early JVM `--rc` tests.
+The shared HostGc gate additionally passed the full workspace checks, including
+the logical-layout and async/`for await` preparation tests. Test/build workers
+are capped at two; frontend test workers are one. Evidence logs, per-function
+route manifests and emitted modules are retained under the lane's
+`mainctl/wasm-evidence` directory.
+Still required before M1a lands: reviewer approval and its own full owed gate.
+The full hostile-pool M1 wasm differential and startup/performance measurements
+have not run; those claims are not implied by these bring-up results.
 
 ## Recommendation and build composition
 
@@ -239,7 +255,7 @@ Insertion sites remain provider-neutral; foreign/nonmanaged ownership markers
 remain and the boundary check diagnoses them. MainClaude explicitly approved
 one test-only `HostGc` arm in the C execution helper; no C emission code changes.
 
-Core draft `e9fab5a2730c` was compared against a clean `e52ddc97e160` pin.
+Reviewed core `e9fab5a2730c` was compared against a clean `e52ddc97e160` pin.
 The final candidate binary's SHA-256 is
 `058df473eb81301e1ae1f05842a23aae0b8d28b448b77f16698a0dfbc2273301`;
 both arms record their source and applied-diff provenance. Across all 518
@@ -260,9 +276,17 @@ normalized hashes. The comparator fails on unexplained bytes, status/diagnostic
 changes or lost classes/jars, and rejects the historical preflight that caught
 two `for await` refusals. Final reports and exact hashes are indexed in
 `mainctl/wasm-evidence/HOSTGC-FINAL-EVIDENCE.md`; the failed preflight is archived
-separately. Independent JVM review and the full core gate are still required.
-All 40 emitted Wasm corpus modules, manifests and loaders remain byte-identical
-after HostGc integration, and the refreshed bounded census has the same totals.
+separately. Independent JVM review accepted the corrected evidence. The full
+core gate passed 42 checks with the approved Android device skip and the
+provider landed. The subsequent benchmark-driver artifact comparison accounts
+for all 62 cases: all 166 classes and all 62 runtime jars are byte-identical,
+with no status or diagnostic changes. Those JVM timings carry without a
+paired re-time.
+Before the Ramsey amendment, all 40 emitted Wasm corpus modules, manifests
+and loaders stayed byte-identical after HostGc integration. The Ramsey
+revision preserves that population and its bounded answers; all 288 emitted
+corpus functions use the structured route. Its new CFG translation changes
+wasm bytes and instruction Origins; refreshed sizes are recorded above.
 
 | HIR work | Under `HostGc` |
 | --- | --- |
