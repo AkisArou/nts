@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use wasm_encoder::{BlockType, Function, Instruction as I};
 
 #[cfg(test)]
-#[path = "../tests/common/mod.rs"]
+#[path = "../tests/common/hir.rs"]
 mod test_common;
 
 #[cfg(test)]
