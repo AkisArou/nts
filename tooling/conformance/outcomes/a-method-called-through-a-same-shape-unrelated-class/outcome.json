@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | Error: 28 case(s) disagree between the compiled program and node",
+  "category": "agrees",
+  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet | refused: NTS1003 `throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet",
   "node": null,
-  "measured_with": "1068aa10fea9c1d6",
+  "measured_with": "757d1e813a36f5e5",
   "source": "measured"
 }

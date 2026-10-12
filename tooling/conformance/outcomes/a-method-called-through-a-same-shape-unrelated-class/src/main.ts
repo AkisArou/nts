@@ -7,9 +7,11 @@
 // LLVM, the JVM and RC, with nothing refused (28 of 29 cases). The control
 // differs in one thing: the same call through the object's own class.
 //
-// Found by the review of the Wasm lane's slice 1b, which reproduces it too.
+// Found by the review of the Wasm lane's slice 1b, which reproduced it too.
 // The method a class-typed value runs is its object's, not its static type's,
-// once an unrelated class of the same shape can be converted to it.
+// so the conversion is now refused by name when the target class has methods
+// (`unrelated_class_keeps_its_methods`); the control still agrees, and the
+// record pins both.
 class S1 { v = 1; f(): number { return 1; } }
 class S2 { v = 1; f(): number { return 2; } }
 function as2(s: S1): S2 { return s; }
