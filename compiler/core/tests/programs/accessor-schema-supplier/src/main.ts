@@ -1,5 +1,19 @@
 interface Options { readonly label?: string; }
 
+interface Result { readonly label: string; }
+
+export class ComputedResult {
+  get label(): string { return "computed"; }
+}
+
+function makeResult(): Result {
+  return { label: "stored" };
+}
+
+export function resultLabel(): string {
+  return makeResult().label;
+}
+
 export class Resource {
   state: { destroyed: boolean } | undefined;
   constructor() {

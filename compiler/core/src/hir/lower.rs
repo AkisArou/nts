@@ -15191,7 +15191,8 @@ pub fn lower_with(
 
 /// The selected backend capability also controls source reads whose stored
 /// suppliers differ in representation or absence. A preserving backend keeps
-/// the declared field operation; user getters still require dispatch.
+/// the declared field operation, even if another supplier is a user getter.
+/// The existing field guard checks those reads; getter-only families dispatch.
 #[must_use]
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn lower_with_access(
@@ -15219,6 +15220,10 @@ pub fn lower_with_access(
     if interface_access == super::InterfaceAccess::PreserveFieldAccess {
         for family in &mut std::sync::Arc::make_mut(&mut hierarchy.access_families).licensed {
             family.eager = family.eager
+                && !family
+                    .supplies
+                    .iter()
+                    .any(|supply| matches!(supply.reader, access_families::Reader::Stored))
                 && family
                     .supplies
                     .iter()

@@ -46,22 +46,24 @@ fn preserving_optional_storage_keeps_source_field_reads() {
         )
         .unwrap()
         .program;
-        let read = program
-            .funcs
-            .iter()
-            .find(|f| f.name == "readLabel")
-            .unwrap();
-        let dispatches = read.values.iter().any(|op| {
-            matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
-                if program.interface_access.contains_selector(slot))
-        });
-        assert_eq!(dispatches, access == hir::InterfaceAccess::Materialize);
-        if access == hir::InterfaceAccess::PreserveFieldAccess {
-            assert!(
-                read.values
-                    .iter()
-                    .any(|op| matches!(op.kind, OpKind::FieldGet { .. }))
+        for name in ["readLabel", "resultLabel"] {
+            let read = program.funcs.iter().find(|f| f.name == name).unwrap();
+            let dispatches = read.values.iter().any(|op| {
+                matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
+                    if program.interface_access.contains_selector(slot))
+            });
+            assert_eq!(
+                dispatches,
+                access == hir::InterfaceAccess::Materialize,
+                "{name}"
             );
+            if access == hir::InterfaceAccess::PreserveFieldAccess {
+                assert!(
+                    read.values
+                        .iter()
+                        .any(|op| matches!(op.kind, OpKind::FieldGet { .. }))
+                );
+            }
         }
     }
 }
