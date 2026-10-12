@@ -26,6 +26,55 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
 }
 
 #[test]
+fn preserving_fields_keeps_equivalent_optional_record_layouts_merged() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/accessor-preserved-layout/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    for access in [
+        hir::InterfaceAccess::Materialize,
+        hir::InterfaceAccess::PreserveFieldAccess,
+    ] {
+        let lowered = hir::lower::lower_with_access(
+            &snapshot,
+            &[],
+            &rustc_hash::FxHashMap::default(),
+            access,
+        );
+        let program = &lowered.program;
+        assert!(program.interface_access.families.len() >= 2);
+        let layout = |name| {
+            let function = program.funcs.iter().find(|func| func.name == name).unwrap();
+            let hir::HirType::Managed(hir::ManagedType::Object(ty)) = function.params[0].ty else {
+                panic!("record parameter");
+            };
+            program.layout(ty).unwrap()
+        };
+        let optional = layout("readOptional");
+        let explicit = layout("readExplicit");
+        assert_eq!(
+            optional
+                .fields
+                .iter()
+                .map(|field| (&field.name, &field.ty))
+                .collect::<Vec<_>>(),
+            explicit
+                .fields
+                .iter()
+                .map(|field| (&field.name, &field.ty))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            std::ptr::eq(optional, explicit),
+            access == hir::InterfaceAccess::PreserveFieldAccess,
+            "optional membership differs, but preserving storage has the same geometry"
+        );
+    }
+}
+
+#[test]
 fn preserving_optional_storage_keeps_source_field_reads() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;

@@ -428,6 +428,9 @@ struct Hierarchy {
     literal_methods: std::sync::Arc<literal_methods::Supplies>,
     /// A complete, shared contract for reads and writes through a field face.
     access_families: std::sync::Arc<access_families::Families>,
+    /// A preserving backend keeps the original stored layout geometry.
+    /// Native-only accessor reservations must not split its merged records.
+    preserve_field_layouts: bool,
     /// Declared-face and actual source-supplier storage after reservations,
     /// computed once before bodies.
     /// Anonymous schemas may reserve entries only to alias one of these rows.
@@ -15219,6 +15222,7 @@ pub fn lower_with_access(
     // layout. See `hierarchy_and_naming` for why the two are built together.
     let (mut hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
     if interface_access == super::InterfaceAccess::PreserveFieldAccess {
+        hierarchy.preserve_field_layouts = true;
         for family in &mut std::sync::Arc::make_mut(&mut hierarchy.access_families).licensed {
             family.eager = false;
         }
@@ -52601,6 +52605,9 @@ impl<'a> FuncBuilder<'a> {
         let mut reserved = Vec::new();
         for ((root, member), slot) in &self.hierarchy.slots {
             if let Some((family, writes)) = self.hierarchy.access_families.for_key(*root, member) {
+                if self.hierarchy.preserve_field_layouts {
+                    continue;
+                }
                 let direct = family.supplies.iter().find(|supply| supply.owner == ty);
                 let supply = direct.or_else(|| self.field_reservation(ty, fields, family));
                 if let Some(supply) = supply {

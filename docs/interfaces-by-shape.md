@@ -264,8 +264,8 @@ its required fields. Owner-qualified reservation
 names must not prevent otherwise identical literal and interface layouts from
 sharing storage. User-code accessors retain their concrete owner identity.
 An anonymous callback-return schema reserves rows only when its complete storage
-and table match a declared face. The comparison uses the fixed set of face
-layouts computed before bodies, so visiting the anonymous schema first cannot
+and table match a declared face or an actual non-class source supplier. The
+comparison uses that fixed set of layouts computed before bodies, so visiting the anonymous schema first cannot
 change its representation. These reservations license no extra suppliers.
 Unallocated generic closure templates do not become reachable merely because
 another closure uses the same slot: reached allocations, static closure values
@@ -278,7 +278,17 @@ fields can return undefined; incomplete supplies retain named stops. Spread and
 own-property reflection require separate evidence about every concrete own shape
 and literal allocation. A prototype getter is not an own property.
 
-The JVM currently declines these dispatch sites as NTS4001, classified as
+Preparation requires an explicit interface-access capability, separately from
+the memory provider. C and LLVM select `Materialize`; JVM and Wasm select
+`PreserveFieldAccess` until they implement field-family dispatch. Preserving
+keeps declared field operations and their existing layout guard, clears future
+native-helper edges before settling, and omits native row reservations while
+storage layouts merge. Optional and required schemas with identical storage
+therefore keep their original shared representation. Actual getter operations
+and non-prefix views remain explicit. `nts hir <project> --prepared --backend
+jvm` prints the JVM preparation and names the selected mode and provider.
+
+The JVM currently declines the new dispatch sites as NTS4001, classified as
 `interface field accessor dispatch`. Stateful JVM interfaces are stage C.
 Native-only field selectors therefore do not generate JVM slot forwarders;
 direct calls to concrete helper bodies remain available. Projecting default
