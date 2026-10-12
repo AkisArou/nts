@@ -3988,7 +3988,15 @@ NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep) {
   uint32_t count = a->header.length;
   uint32_t total = count > 1u ? sep->length * (count - 1u) : 0u;
   int wide = count > 1u && (sep->flags & NTS_TWO_BYTE) != 0;
+  /* **An absent element joins as nothing.** A `(string | undefined)[]` or a
+   * `(string | null)[]` keeps its absent slots as null references, and JS
+   * joins `null` and `undefined` alike as the empty string. Read without the
+   * test, the slot's length was a load through null: SIGSEGV on C and LLVM
+   * (tooling/conformance/outcomes/a-join-over-an-absent-string-element). */
   for (uint32_t at = 0; at < count; at++) {
+    if (!items[at]) {
+      continue;
+    }
     total += items[at]->length;
     wide |= (items[at]->flags & NTS_TWO_BYTE) != 0;
   }
@@ -3998,6 +4006,9 @@ NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep) {
     if (at != 0) {
       nts_copy_units(out, written, sep, wide);
       written += sep->length;
+    }
+    if (!items[at]) {
+      continue;
     }
     nts_copy_units(out, written, items[at], wide);
     written += items[at]->length;
