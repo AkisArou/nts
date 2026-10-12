@@ -44,6 +44,7 @@ impl Field {
 enum Shape {
     Struct(Vec<Field>),
     Array(Field),
+    Function(Vec<PendingSlot>, Option<PendingSlot>),
 }
 
 #[derive(Debug)]
@@ -92,6 +93,12 @@ pub(crate) struct Array {
     pub(crate) descriptor: u32,
 }
 
+#[derive(Debug)]
+struct CallableNodes {
+    base: NodeId,
+    entries: BTreeMap<u32, NodeId>,
+}
+
 /// Module-local storage assignments. Numeric operations still use the smaller
 /// scalar Slot type, so a reference cannot accidentally select integer code.
 #[derive(Debug, Default)]
@@ -103,6 +110,7 @@ pub(crate) struct Plan {
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
+    pub(crate) callables: BTreeMap<usize, crate::callable_plan::Resolved>,
 }
 
 impl Plan {
@@ -115,7 +123,8 @@ impl Plan {
         program: &Program,
         resources: &crate::requirements::Requirements,
     ) -> Result<Self, crate::EmitError> {
-        let mut builder = Builder::new(program);
+        let callables = crate::callable_plan::Plan::build(program, &resources.closure_calls)?;
+        let mut builder = Builder::new(program, callables);
         for (ty, use_) in &resources.referenced_objects {
             builder
                 .request(&HirType::Managed(ManagedType::Object(*ty)))
@@ -222,10 +231,12 @@ struct Builder<'a> {
     root: Option<RootNodes>,
     work: Vec<Work>,
     erased: Option<ErasedNodes>,
+    callable_plan: crate::callable_plan::Plan,
+    callables: BTreeMap<usize, CallableNodes>,
 }
 
 impl<'a> Builder<'a> {
-    fn new(program: &'a Program) -> Self {
+    fn new(program: &'a Program, callable_plan: crate::callable_plan::Plan) -> Self {
         Self {
             program,
             slots: FxHashMap::default(),
@@ -236,6 +247,8 @@ impl<'a> Builder<'a> {
             root: None,
             work: Vec::new(),
             erased: None,
+            callable_plan,
+            callables: BTreeMap::new(),
         }
     }
 
@@ -454,15 +467,24 @@ impl<'a> Builder<'a> {
 
     fn complete_object(&mut self, at: usize, id: NodeId) -> Result<(), String> {
         let layout = &self.program.layouts[at];
+        let callable = self
+            .callable_plan
+            .members
+            .get(&at)
+            .copied()
+            .map(|root| self.callable(root))
+            .transpose()?;
         let base = if let Some(base) = layout.base {
             self.object(base)?
         } else {
-            self.root()
+            callable.unwrap_or_else(|| self.root())
         };
-        let root = self.root();
+        let root = callable.unwrap_or_else(|| self.root());
         let mut fields = match &self.nodes[root.0].shape {
             Shape::Struct(fields) => fields.clone(),
-            Shape::Array(_) => return Err(format!("base of `{}` is not an object", layout.name)),
+            Shape::Array(_) | Shape::Function(..) => {
+                return Err(format!("base of `{}` is not an object", layout.name));
+            }
         };
         // HIR fields include the base prefix; the descriptor is physical only.
         if let Some(base) = self.program.base_layout(layout) {
@@ -489,6 +511,48 @@ impl<'a> Builder<'a> {
         self.nodes[id.0].base = Some(base);
         self.nodes[id.0].shape = Shape::Struct(fields);
         Ok(())
+    }
+
+    fn callable(&mut self, root: usize) -> Result<NodeId, String> {
+        if let Some(nodes) = self.callables.get(&root) {
+            return Ok(nodes.base);
+        }
+        let object = self.root();
+        let Shape::Struct(mut fields) = self.nodes[object.0].shape.clone() else {
+            return Err("object root is not a struct".into());
+        };
+        let base = self.add(
+            format!("callable<{}>", self.program.layouts[root].name),
+            Some(object),
+            false,
+            Shape::Struct(Vec::new()),
+        );
+        let mut entries = BTreeMap::new();
+        for entry in self.callable_plan.groups[&root]
+            .values()
+            .cloned()
+            .collect::<Vec<_>>()
+        {
+            let mut params = vec![PendingSlot::Defined(base, true)];
+            for ty in &entry.params {
+                params.push(
+                    self.request(ty)?
+                        .ok_or_else(|| format!("callable parameter {ty:?} has no storage"))?,
+                );
+            }
+            let result = self.request(&entry.result)?;
+            let signature = self.add(
+                format!("entry<{},{}>", self.program.layouts[root].name, entry.slot),
+                None,
+                true,
+                Shape::Function(params, result),
+            );
+            fields.push(Field::value(PendingSlot::Defined(signature, false), false));
+            entries.insert(entry.slot, signature);
+        }
+        self.nodes[base.0].shape = Shape::Struct(fields);
+        self.callables.insert(root, CallableNodes { base, entries });
+        Ok(base)
     }
 
     fn array(&mut self, element: &HirType) -> NodeId {
@@ -534,12 +598,15 @@ impl<'a> Builder<'a> {
                 if let Some(base) = node.base {
                     deps.insert(base.0);
                 }
-                let fields = match &node.shape {
-                    Shape::Struct(fields) => fields.as_slice(),
-                    Shape::Array(field) => std::slice::from_ref(field),
+                let slots = match &node.shape {
+                    Shape::Struct(fields) => fields.iter().map(|f| f.slot).collect::<Vec<_>>(),
+                    Shape::Array(field) => vec![field.slot],
+                    Shape::Function(params, result) => {
+                        params.iter().chain(result).copied().collect()
+                    }
                 };
-                for field in fields {
-                    if let PendingSlot::Defined(id, _) = field.slot {
+                for slot in slots {
+                    if let PendingSlot::Defined(id, _) = slot {
                         deps.insert(id.0);
                     }
                 }
@@ -575,6 +642,19 @@ impl<'a> Builder<'a> {
                 )
             })
             .collect::<BTreeMap<_, _>>();
+        for (&at, &root) in &self.callable_plan.members {
+            if self.objects.contains_key(&at) {
+                for ty in &self.program.layouts[at].types {
+                    objects.attach_callable(
+                        *ty,
+                        root,
+                        u32::try_from(self.callable_plan.groups[&root].len())
+                            .map_err(|_| "too many callable slots")?
+                            + 1,
+                    )?;
+                }
+            }
+        }
         let identity = objects
             .descriptors
             .iter()
@@ -594,6 +674,38 @@ impl<'a> Builder<'a> {
             });
         }
         Ok((objects, arrays))
+    }
+    fn resolved_callables(
+        &self,
+        indices: &[u32],
+    ) -> BTreeMap<usize, crate::callable_plan::Resolved> {
+        self.callables
+            .iter()
+            .map(|(&root, nodes)| {
+                (
+                    root,
+                    crate::callable_plan::Resolved {
+                        base: indices[nodes.base.0],
+                        entries: self.callable_plan.groups[&root]
+                            .iter()
+                            .enumerate()
+                            .map(|(field, (&slot, entry))| {
+                                (
+                                    slot,
+                                    crate::callable_plan::ResolvedEntry {
+                                        slot,
+                                        field: crate::module::index(field) + 1,
+                                        signature: indices[nodes.entries[&slot].0],
+                                        params: entry.params.clone(),
+                                        result: entry.result.clone(),
+                                    },
+                                )
+                            })
+                            .collect(),
+                    },
+                )
+            })
+            .collect()
     }
     fn finish(self) -> Result<Plan, String> {
         let graph = self.dependencies();
@@ -637,6 +749,12 @@ impl<'a> Builder<'a> {
                             Shape::Array(field) => {
                                 CompositeInnerType::Array(ArrayType(encode_field(field)))
                             }
+                            Shape::Function(params, result) => {
+                                CompositeInnerType::Func(wasm_encoder::FuncType::new(
+                                    params.iter().map(|slot| resolve(*slot).wasm()),
+                                    result.map(|slot| resolve(slot).wasm()),
+                                ))
+                            }
                         };
                         SubType {
                             is_final: node.final_,
@@ -659,6 +777,7 @@ impl<'a> Builder<'a> {
         let (objects, arrays) = self.metadata(&indices)?;
         Ok(Plan {
             arrays,
+            callables: self.resolved_callables(&indices),
             root: self.root.map(|nodes| RootTypes {
                 ancestry: indices[nodes.ancestry.0],
                 descriptor: indices[nodes.descriptor.0],

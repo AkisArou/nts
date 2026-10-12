@@ -7,6 +7,8 @@
 mod abi;
 mod arrays;
 mod body;
+mod callable_plan;
+mod callables;
 mod cfg;
 mod contract;
 mod erased;
@@ -199,6 +201,7 @@ pub fn validate(bytes: &[u8]) -> Result<(), EmitError> {
         | F::SATURATING_FLOAT_TO_INT
         | F::REFERENCE_TYPES
         | F::FUNCTION_REFERENCES
+        | F::BULK_MEMORY
         | F::GC
         | F::GC_TYPES;
     wasmparser::Validator::new_with_features(features)

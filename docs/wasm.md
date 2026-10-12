@@ -708,6 +708,17 @@ already the answer to which body occupies which slot, including ordinary bodies
 in raising slots. Never derive raising names by simply appending `@raises`.
 Closure calls use the same typed entry machinery as class calls.
 
+The M1b closure implementation uses only the root and slot relationships HIR
+declares. Each demanded slot contributes an immutable typed entry to its callable
+base; capture fields follow that resolved prefix. Ordinary and raising slots
+remain separate even when their physical signatures match. Only allocated
+concrete layouts receive thunks, and an unfilled or incompatible entry refuses
+before emission. Named-function globals preserve singleton identity; fresh
+`ObjectNew` allocations retain their own identity. Declarative element segments
+register the referenced thunks. Modules using those entries require an executed
+`function-references` host probe, including `ref.func`, `call_ref` and declarative
+elements; capability failure is a named refusal.
+
 A flat global function table with `call_indirect` is the alternative. It may win
 on code size or an engine's optimizer; benchmark monomorphic and polymorphic
 `dispatch`/`closures` kernels before finalizing the dispatch storage. It introduces

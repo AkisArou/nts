@@ -29,33 +29,49 @@ pub(crate) struct Symbols<'a> {
     pub(crate) descriptor_base: u32,
     pub(crate) instance_of: Option<u32>,
     pub(crate) array_grow: BTreeMap<u32, u32>,
+    pub(crate) thunks: BTreeMap<(u32, u32), u32>,
+    pub(crate) static_closures: BTreeMap<u32, crate::callables::Static>,
 }
 
 impl<'a> Symbols<'a> {
-    fn new(plan: &'a gc::Plan, resources: &requirements::Requirements) -> Self {
+    fn required_features(&self) -> Vec<String> {
+        let mut features = Vec::new();
+        if self.types.requires_gc() {
+            features.push("gc".into());
+        }
+        if !self.thunks.is_empty() {
+            features.push("function-references".into());
+        }
+        features
+    }
+    fn new(plan: &'a gc::Plan, resources: &requirements::Requirements) -> Result<Self, EmitError> {
         let descriptor_base = index(resources.literals.len())
             + if plan.erased.is_some() {
                 crate::erased::SINGLETONS
             } else {
                 0
             };
-        Self {
+        let static_base = descriptor_base + index(plan.objects.descriptors.len());
+        let static_closures = crate::callables::statics(resources, plan, static_base)?;
+        Ok(Self {
             functions: FxHashMap::default(),
             helpers: BTreeMap::new(),
             types: plan,
             strings: BTreeMap::new(),
             literals: FxHashMap::default(),
-            global_base: descriptor_base + index(plan.objects.descriptors.len()),
+            global_base: static_base + index(static_closures.len()),
             descriptor_base,
             instance_of: None,
             array_grow: BTreeMap::new(),
+            thunks: BTreeMap::new(),
+            static_closures,
             host: BTreeMap::new(),
             erased: BTreeMap::new(),
             input_decline: None,
             erased_globals: plan
                 .erased
                 .map(|_| crate::erased::Globals::new(index(resources.literals.len()))),
-        }
+        })
     }
 }
 
@@ -151,7 +167,8 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
     let helpers = &resources.numeric;
     let mut types = Types::new(&plan);
     let mut imports = ImportSection::new();
-    let mut symbols = Symbols::new(&plan, &resources);
+    let mut symbols = Symbols::new(&plan, &resources)?;
+    let thunks = crate::callables::plan(program, &plan, &resources)?;
     let mut required_imports = scalar_imports(helpers, &mut types, &mut imports, &mut symbols)?;
     required_imports.extend(host_imports(
         &resources,
@@ -206,22 +223,27 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         &mut symbols,
         imported_functions,
     );
+    declare_thunks(
+        &thunks,
+        &mut functions,
+        &mut names,
+        &mut symbols,
+        imported_functions,
+    );
     let globals = globals(program, &symbols)?;
     let mut exports = ExportSection::new();
     let mut manifest = manifest(program, funcs, &symbols, required_imports, &mut exports)?;
     manifest.builtins = builtins;
     manifest.constants = constants;
-    if plan.requires_gc() {
-        manifest.features.push("gc".into());
-    }
-    let bodies = bodies(funcs, &resources, &symbols)?;
+    manifest.features = symbols.required_features();
+    let bodies = bodies(funcs, &resources, &symbols, &thunks)?;
     let bytes = encode(
         &types.section,
         &imports,
         &functions,
         &globals,
         &exports,
-        &bodies.code,
+        &bodies,
         &names,
     );
     crate::validate(&bytes)?;
@@ -233,6 +255,24 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         },
         origins: bodies.origins,
     })
+}
+
+fn declare_thunks(
+    thunks: &[crate::callables::Thunk],
+    functions: &mut FunctionSection,
+    names: &mut NameMap,
+    symbols: &mut Symbols<'_>,
+    imported_functions: u32,
+) {
+    for thunk in thunks {
+        let id = imported_functions + functions.len();
+        functions.function(thunk.signature);
+        symbols.thunks.insert((thunk.physical, thunk.slot), id);
+        names.append(
+            id,
+            &format!("closure.entry<{},{}>", thunk.physical, thunk.slot),
+        );
+    }
 }
 
 fn declare_managed_adapters(
@@ -289,6 +329,7 @@ fn declare_managed_adapters(
 
 struct Bodies {
     code: CodeSection,
+    elements: wasm_encoder::ElementSection,
     routes: Vec<crate::FunctionRoute>,
     origins: Vec<crate::InstructionOrigin>,
 }
@@ -297,6 +338,7 @@ fn bodies(
     funcs: &[&Func],
     resources: &requirements::Requirements,
     symbols: &Symbols<'_>,
+    thunks: &[crate::callables::Thunk],
 ) -> Result<Bodies, EmitError> {
     let mut code = CodeSection::new();
     let mut routes = Vec::new();
@@ -357,7 +399,24 @@ fn bodies(
             })?;
         code.function(&function);
     }
+    for thunk in thunks {
+        let function =
+            crate::callables::thunk_body(thunk, symbols).map_err(|error| EmitError::Invariant {
+                function: format!("closure.entry<{},{}>", thunk.physical, thunk.slot),
+                reason: error.to_string(),
+            })?;
+        code.function(&function);
+    }
     Ok(Bodies {
+        elements: {
+            let mut section = wasm_encoder::ElementSection::new();
+            if !symbols.thunks.is_empty() {
+                section.declared(wasm_encoder::Elements::Functions(
+                    symbols.thunks.values().copied().collect::<Vec<_>>().into(),
+                ));
+            }
+            section
+        },
         code,
         routes,
         origins,
@@ -526,7 +585,7 @@ fn encode(
     functions: &FunctionSection,
     globals: &GlobalSection,
     exports: &ExportSection,
-    code: &CodeSection,
+    bodies: &Bodies,
     names: &NameMap,
 ) -> Vec<u8> {
     let mut module = Module::new();
@@ -537,7 +596,10 @@ fn encode(
     module.section(functions);
     module.section(globals);
     module.section(exports);
-    module.section(code);
+    if !bodies.elements.is_empty() {
+        module.section(&bodies.elements);
+    }
+    module.section(&bodies.code);
     let mut name_section = NameSection::new();
     name_section.functions(names);
     module.section(&name_section);
@@ -551,6 +613,10 @@ fn globals(program: &Program, symbols: &Symbols<'_>) -> Result<GlobalSection, Em
     }
     crate::objects::globals(symbols.types, &mut section).map_err(|error| EmitError::Invariant {
         function: "object descriptors".into(),
+        reason: error.to_string(),
+    })?;
+    crate::callables::globals(symbols, &mut section).map_err(|error| EmitError::Invariant {
+        function: "static closures".into(),
         reason: error.to_string(),
     })?;
     for global in &program.globals {

@@ -69,6 +69,9 @@ pub(crate) fn new(b: &mut Body<'_>, result: ValueId, frame: bool) -> Result<(), 
     b.ins(&I::GlobalGet(
         b.symbols.descriptor_base + storage.descriptor,
     ));
+    for i in crate::callables::entries(b.symbols, storage)? {
+        b.ins(&i);
+    }
     for field in storage.fields.iter() {
         default(b, &field.ty)?;
     }
@@ -101,8 +104,8 @@ fn field(storage: &Object, at: u32) -> Result<&nts_core::hir::Field, Failure> {
         .get(at as usize)
         .ok_or_else(|| Failure::Invariant(format!("class `{}` has no field {at}", storage.name)))
 }
-fn field_index(at: u32) -> Result<u32, Failure> {
-    at.checked_add(1)
+fn field_index(storage: &Object, at: u32) -> Result<u32, Failure> {
+    at.checked_add(storage.field_base)
         .ok_or_else(|| Failure::Invariant("too many object fields".into()))
 }
 fn get_instruction(ty: &HirType, physical: u32, field: u32) -> Result<I<'static>, Failure> {
@@ -150,7 +153,7 @@ pub(crate) fn get(
     b.ins(&get_instruction(
         &field.ty,
         storage.physical,
-        field_index(at)?,
+        field_index(storage, at)?,
     )?);
     adapt(b, &field.ty, &b.ty(result).clone())
 }
@@ -172,7 +175,7 @@ pub(crate) fn set(
     adapt(b, &b.ty(value).clone(), &field.ty)?;
     b.ins(&I::StructSet {
         struct_type_index: storage.physical,
-        field_index: field_index(at)?,
+        field_index: field_index(storage, at)?,
     });
     Ok(())
 }

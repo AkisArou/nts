@@ -55,15 +55,18 @@ function functionType(record, expected) {
 // Extra compile options may be ignored; a successful compile alone is insufficient.
 const gcProbe = Uint8Array.from([0,97,115,109,1,0,0,0,1,7,2,95,0,96,0,1,127,3,2,1,1,7,9,1,5,112,114,111,98,101,0,0,10,8,1,6,0,251,1,0,209,11]);
 const stringProbe = Uint8Array.from([0,97,115,109,1,0,0,0,1,6,1,96,1,111,1,127,2,25,1,14,119,97,115,109,58,106,115,45,115,116,114,105,110,103,6,108,101,110,103,116,104,0,0,7,9,1,5,112,114,111,98,101,0,0]);
+const functionProbe = Uint8Array.from([0,97,115,109,1,0,0,0,1,5,1,96,0,1,127,3,3,2,0,0,7,9,1,5,112,114,111,98,101,0,1,9,5,1,3,0,1,0,10,13,2,4,0,65,42,11,6,0,210,0,20,0,11]);
+const probes = Object.freeze({ gc: gcProbe, 'js-string': stringProbe, 'function-references': functionProbe });
 const capabilities = new Map();
 async function capability(name) {
   if (!capabilities.has(name)) capabilities.set(name, (async () => {
     try {
-      const module = await WebAssembly.compile(name === 'gc' ? gcProbe : stringProbe,
-        { builtins: name === 'gc' ? [] : ['js-string'] });
+      const module = await WebAssembly.compile(probes[name],
+        { builtins: name === 'js-string' ? ['js-string'] : [] });
       if (WebAssembly.Module.imports(module).length !== 0) throw new Error('builtin option ignored');
       const instance = new WebAssembly.Instance(module);
-      if (name === 'gc' ? instance.exports.probe() !== 0 : instance.exports.probe('\ud800x') !== 2) throw new Error('probe answer');
+      const answer = name === 'js-string' ? instance.exports.probe('\ud800x') : instance.exports.probe();
+      if (answer !== (name === 'gc' ? 0 : name === 'js-string' ? 2 : 42)) throw new Error('probe answer');
     } catch { throw new WasmInputDecline(name, 'host capability execution probe failed', 'requires'); }
   })());
   await capabilities.get(name);
@@ -158,7 +161,7 @@ export async function instantiate(bytes, manifest) {
     names.add(key);
   }
   for (const feature of manifest.features) {
-    if (feature !== 'gc') throw new WasmInputDecline(feature, 'unsupported required capability', 'requires');
+    if (!['gc', 'function-references'].includes(feature)) throw new WasmInputDecline(feature, 'unsupported required capability', 'requires');
     await capability(feature);
   }
   if (manifest.builtins.length) await capability('js-string');

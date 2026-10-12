@@ -20,6 +20,8 @@ pub(crate) struct Object {
     pub(crate) descriptor: u32,
     pub(crate) fields: Arc<[Field]>,
     pub(crate) name: String,
+    pub(crate) field_base: u32,
+    pub(crate) callable: Option<usize>,
     identity: u32,
     nominal: bool,
 }
@@ -113,6 +115,8 @@ impl Plan {
                     descriptor,
                     fields: Arc::clone(&fields[&at]),
                     name: layout.name.clone(),
+                    field_base: 1,
+                    callable: None,
                     identity: identities[&key],
                     nominal: matches!(key, Identity::Class(_)),
                 },
@@ -142,6 +146,20 @@ impl Plan {
             );
         }
         Ok(object.identity)
+    }
+    pub(crate) fn attach_callable(
+        &mut self,
+        ty: ClassId,
+        root: usize,
+        fields: u32,
+    ) -> Result<(), String> {
+        let object = self
+            .objects
+            .get_mut(&ty)
+            .ok_or_else(|| format!("unplanned callable {ty:?}"))?;
+        object.callable = Some(root);
+        object.field_base = fields;
+        Ok(())
     }
     pub(crate) fn subtype(&self, mut from: u32, to: u32) -> bool {
         loop {

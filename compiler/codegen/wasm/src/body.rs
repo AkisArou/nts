@@ -59,6 +59,8 @@ mod tests {
             descriptor_base: 0,
             instance_of: None,
             array_grow: BTreeMap::new(),
+            thunks: BTreeMap::new(),
+            static_closures: BTreeMap::new(),
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -130,6 +132,8 @@ mod tests {
                 descriptor_base: 0,
                 instance_of: None,
                 array_grow: BTreeMap::new(),
+                thunks: BTreeMap::new(),
+                static_closures: BTreeMap::new(),
             };
             let error = emit(&f, 0, &symbols).unwrap_err();
             assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));
@@ -548,6 +552,7 @@ impl<'a> Body<'a> {
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
             OpKind::ConstNull => crate::erased::constant(self, id, crate::erased::NULL)?,
             OpKind::ObjectNew { frame } => crate::objects::new(self, id, *frame)?,
+            OpKind::ClosureStatic => crate::callables::static_value(self, id)?,
             OpKind::FieldGet { object, field } => crate::objects::get(self, id, *object, *field)?,
             OpKind::FieldSet {
                 object,
@@ -618,7 +623,6 @@ impl<'a> Body<'a> {
             | OpKind::ConstTemplate { .. }
             | OpKind::Length(_)
             | OpKind::CellReady { .. }
-            | OpKind::ClosureStatic
             | OpKind::SharedFieldGet { .. }
             | OpKind::OpenFieldGet { .. }
             | OpKind::OpenFieldSet { .. }
@@ -735,7 +739,7 @@ impl<'a> Body<'a> {
                 );
             }
             Callee::Closure { slot } => {
-                return Err(format!("closure dispatch slot {slot} is outside M1a").into());
+                crate::callables::call(self, result, *slot, args)?;
             }
         }
         Ok(())

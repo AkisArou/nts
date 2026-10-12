@@ -21,11 +21,26 @@ pub(crate) struct Requirements {
     pub(crate) referenced_objects: BTreeMap<ClassId, ObjectUse>,
     pub(crate) instance_of: bool,
     pub(crate) grow_arrays: rustc_hash::FxHashSet<HirType>,
+    pub(crate) closure_calls: BTreeMap<(ClassId, u32), ObjectUse>,
+    pub(crate) allocations: BTreeMap<ClassId, ObjectUse>,
+    pub(crate) static_closures: BTreeMap<ClassId, ObjectUse>,
 }
 impl Requirements {
     fn growth(&mut self, func: &Func, array: nts_core::hir::ValueId, checked: bool) {
         if checked && nts_core::hir::array_write_may_grow(func, array) {
             self.grow_arrays.insert(func.value(array).ty.clone());
+        }
+    }
+    fn allocation(&mut self, func: &Func, id: nts_core::hir::ValueId, static_: bool) {
+        if let HirType::Managed(nts_core::hir::ManagedType::Object(ty)) = func.value(id).ty {
+            let use_ = || ObjectUse {
+                function: func.name.clone(),
+                origin: func.value(id).origin.clone(),
+            };
+            self.allocations.entry(ty).or_insert_with(use_);
+            if static_ {
+                self.static_closures.entry(ty).or_insert_with(use_);
+            }
         }
     }
     fn unit(&mut self, func: &Func, checked: bool) {
@@ -94,7 +109,13 @@ impl Requirements {
         self.input_contract = true;
         self.literals.insert(func.name.clone());
     }
-    fn call(&mut self, func: &Func, target: &Callee) {
+    fn call(
+        &mut self,
+        func: &Func,
+        id: nts_core::hir::ValueId,
+        target: &Callee,
+        args: &[nts_core::hir::ValueId],
+    ) {
         match target {
             Callee::External(name) => {
                 if let Some(helper) = strings::external(name) {
@@ -114,10 +135,21 @@ impl Requirements {
                     }
                 }
             }
-            Callee::Direct(_)
-            | Callee::Virtual { .. }
-            | Callee::Closure { .. }
-            | Callee::Native(_) => {}
+            Callee::Closure { slot } => {
+                self.contract(func);
+                if let Some(receiver) = args.first()
+                    && let HirType::Managed(nts_core::hir::ManagedType::Object(ty)) =
+                        func.value(*receiver).ty
+                {
+                    self.closure_calls
+                        .entry((ty, *slot))
+                        .or_insert_with(|| ObjectUse {
+                            function: func.name.clone(),
+                            origin: func.value(id).origin.clone(),
+                        });
+                }
+            }
+            Callee::Direct(_) | Callee::Virtual { .. } | Callee::Native(_) => {}
         }
     }
     fn require_erased(&mut self, helper: erased::Helper) {
@@ -186,63 +218,61 @@ fn helper_for(
     result: &mut Requirements,
 ) -> Option<Helper> {
     match func.value(id).kind {
-        OpKind::Unary { op, operand } => unary(func, op, operand, result),
-        OpKind::Binary { op, lhs, rhs } => binary(func, id, op, lhs, rhs, result),
+        OpKind::Unary { op, operand } => return unary(func, op, operand, result),
+        OpKind::Binary { op, lhs, rhs } => return binary(func, id, op, lhs, rhs, result),
         OpKind::Erase { value, absent } => {
             result.erase(func, value, absent);
-            None
         }
         OpKind::Unerase { .. } => {
             result.unerase(&func.value(id).ty);
             if func.value(id).ty != HirType::Erased {
                 result.contract(func);
             }
-            None
         }
         OpKind::TagOf { .. } => {
             result.erased.insert(erased::Helper::Tag);
-            None
         }
         OpKind::InstanceOf { ref classes, .. } => {
             result.instance(func, id, classes);
-            None
+        }
+        OpKind::ObjectNew { .. } | OpKind::ClosureStatic => {
+            result.allocation(
+                func,
+                id,
+                matches!(func.value(id).kind, OpKind::ClosureStatic),
+            );
         }
         OpKind::FieldGet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::ArrayNew { .. }
         | OpKind::ArrayGet { .. } => {
             result.contract(func);
-            None
         }
         OpKind::ConstString(ref text) => {
             result.literals.insert(text.clone());
-            None
         }
         OpKind::Length(value) => {
             if strings::is_string(&func.value(value).ty) {
                 result.require(strings::Helper::Length);
             }
             result.contract(func);
-            None
         }
         OpKind::ArraySet { array, checked, .. } => {
             result.contract(func);
             result.growth(func, array, checked);
-            None
         }
         OpKind::StringUnitAt { checked, .. } => {
             result.unit(func, checked);
-            None
         }
         OpKind::Call {
-            callee: ref target, ..
+            callee: ref target,
+            ref args,
+            ..
         } => {
-            result.call(func, target);
-            None
+            result.call(func, id, target, args);
         }
         OpKind::Convert(value) => {
             result.conversion(func, id, value);
-            None
         }
         OpKind::NativeLoad { .. }
         | OpKind::NativeStore { .. }
@@ -274,17 +304,16 @@ fn helper_for(
         | OpKind::GlobalSet { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined
-        | OpKind::ObjectNew { .. }
         | OpKind::CellReady { .. }
-        | OpKind::ClosureStatic
         | OpKind::SharedFieldGet { .. }
         | OpKind::OpenFieldGet { .. }
         | OpKind::OpenFieldSet { .. }
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. }
-        | OpKind::PromiseSubscribe { .. } => None,
+        | OpKind::PromiseSubscribe { .. } => {}
     }
+    None
 }
 
 fn unary(
