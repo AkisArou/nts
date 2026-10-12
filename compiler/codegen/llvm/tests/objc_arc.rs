@@ -212,7 +212,7 @@ fn prepare(name: &str, provider: hir::Provider) -> Option<(Utf8PathBuf, hir::Pre
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(hir::InterfaceAccess::Materialize)
             },
         )
         .unwrap(),

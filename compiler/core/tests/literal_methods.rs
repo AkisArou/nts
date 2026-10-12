@@ -29,7 +29,7 @@ fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(hir::InterfaceAccess::Materialize)
             },
         )
         .unwrap();

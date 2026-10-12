@@ -41,7 +41,7 @@ fn prepared(name: &str) -> Option<hir::Program> {
     let options = hir::Options {
         provider: hir::Provider::NoGc,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::default()
+        ..hir::Options::new(hir::InterfaceAccess::Materialize)
     };
     Some(hir::prepare_unverified(&snapshot, &options).program)
 }

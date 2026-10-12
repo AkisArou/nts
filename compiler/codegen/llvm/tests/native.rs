@@ -36,7 +36,7 @@ fn prepare_with_files(
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     );
     Some((
@@ -119,7 +119,7 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
             &snapshot,
             &hir::Options {
                 callbacks_checkpoint,
-                ..hir::Options::default()
+                ..hir::Options::new(hir::InterfaceAccess::Materialize)
             },
         )
         .unwrap();
@@ -1696,7 +1696,7 @@ export function roundTrip(n: number): number { return echo(high()) + n; }
         &snapshot,
         &hir::Options {
             targets: hir::native::Targets::only(unsigned),
-            ..hir::Options::default()
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     )
     .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
@@ -5695,7 +5695,7 @@ export function probe(seed: number): number {
         &snapshot,
         &hir::Options {
             targets: hir::native::Targets::of(&[sysv, win64]),
-            ..hir::Options::default()
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     )
     .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
@@ -5900,7 +5900,7 @@ export function wide(): void { take_long(2147483648n as c_long); }
                 &snapshot,
                 &hir::Options {
                     targets: hir::native::Targets::of(targets),
-                    ..hir::Options::default()
+                    ..hir::Options::new(hir::InterfaceAccess::Materialize)
                 },
             ) {
                 Err(hir::Unprepared::Rejected(errors)) => errors

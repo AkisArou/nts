@@ -34,7 +34,13 @@ fn prepared(name: &str) -> Option<hir::Program> {
     let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare_unverified(&snapshot, &hir::Options::default()).program)
+    Some(
+        hir::prepare_unverified(
+            &snapshot,
+            &hir::Options::new(hir::InterfaceAccess::Materialize),
+        )
+        .program,
+    )
 }
 
 /// Whether the closure call reachable from this exported function is a dispatch

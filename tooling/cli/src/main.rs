@@ -1481,7 +1481,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
         targets,
-        ..hir::Options::default()
+        ..hir::Options::new(hir::InterfaceAccess::Materialize)
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     let program = &prepared.program;
@@ -1608,7 +1608,7 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
         targets,
-        ..hir::Options::default()
+        ..hir::Options::new(hir::InterfaceAccess::Materialize)
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     for (name, why) in &prepared.program.uncompiled {
@@ -2659,7 +2659,6 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         };
         let options = hir::Options {
             provider,
-            interface_access,
             foreign: &foreign,
             entry_files: &entry_files,
             targets,
@@ -2676,7 +2675,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
                 || configured.unwrap_or(hir::reachable::Roots::EveryExport),
                 hir::reachable::Roots::Entry,
             ),
-            ..hir::Options::default()
+            ..hir::Options::new(interface_access)
         };
         // An invalid program is exactly the one worth reading, so the
         // complaints are printed and the program is dumped anyway.
@@ -8438,6 +8437,7 @@ fn emit_options<'a>(
     configured: Option<hir::reachable::Roots<'a>>,
     callbacks_checkpoint: bool,
     targets: nts_core::hir::native::Targets,
+    interface_access: hir::InterfaceAccess,
 ) -> hir::Options<'a> {
     // **`!entry.is_empty()` was never false.** This read the flags itself and
     // asked `entry.is_empty()`, and the entry list always held at least
@@ -8453,7 +8453,6 @@ fn emit_options<'a>(
     // flags and the config are read.
     hir::Options {
         provider: selected_provider(),
-        interface_access: hir::InterfaceAccess::Materialize,
         roots: entry.map_or_else(
             || configured.unwrap_or(hir::reachable::Roots::EveryExport),
             hir::reachable::Roots::Entry,
@@ -8467,7 +8466,7 @@ fn emit_options<'a>(
         foreign,
         callbacks_checkpoint,
         targets,
-        ..hir::Options::default()
+        ..hir::Options::new(interface_access)
     }
 }
 
@@ -8498,6 +8497,7 @@ fn emit_llvm(
             configured,
             emission.host.checkpoints_after_callbacks(),
             targets,
+            hir::InterfaceAccess::Materialize,
         ),
     ) {
         Ok(prepared) => prepared,
@@ -8563,9 +8563,9 @@ fn emit_jvm(
         configured,
         false,
         targets,
+        hir::InterfaceAccess::PreserveFieldAccess,
     );
     options.provider = provider;
-    options.interface_access = hir::InterfaceAccess::PreserveFieldAccess;
     let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
@@ -8775,6 +8775,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
             configured,
             emission.host.checkpoints_after_callbacks(),
             targets,
+            hir::InterfaceAccess::Materialize,
         ),
     ) {
         Ok(prepared) => prepared,

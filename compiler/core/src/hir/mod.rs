@@ -4848,7 +4848,7 @@ fn reconcile(program: &mut Program) -> usize {
 }
 
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Unprepared> {
-    prepare_with(snapshot, &Options::default())
+    prepare_with(snapshot, &Options::new(InterfaceAccess::Materialize))
 }
 
 /// Why [`prepare_with`] produced no program.
@@ -4921,9 +4921,8 @@ pub enum Provider {
 /// How a backend implements licensed stored-field families. This capability
 /// is independent of the memory provider: a host collector does not imply
 /// that the backend implements accessor dispatch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InterfaceAccess {
-    #[default]
     Materialize,
     /// Keep positional field operations and their existing layout guards.
     /// Getter calls and non-prefix field views still require dispatch support.
@@ -4970,11 +4969,13 @@ pub struct Options<'a> {
     pub targets: native::Targets,
 }
 
-impl Default for Options<'_> {
-    fn default() -> Self {
+impl Options<'_> {
+    /// Select the backend's accessor capability before setting other options.
+    /// There is deliberately no default for this representation decision.
+    pub fn new(interface_access: InterfaceAccess) -> Self {
         Self {
             provider: Provider::NoGc,
-            interface_access: InterfaceAccess::Materialize,
+            interface_access,
             // No loop is known to checkpoint after a callback until a build
             // says whose loop the program runs.
             callbacks_checkpoint: false,

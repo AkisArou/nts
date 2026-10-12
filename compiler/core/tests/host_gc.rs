@@ -12,12 +12,16 @@ fn host_gc_keeps_logical_layouts_without_native_placement_or_counting() {
         Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/objects/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
     assert!(!snapshot.has_errors());
-    let native = hir::prepare_with(&snapshot, &hir::Options::default()).unwrap();
+    let native = hir::prepare_with(
+        &snapshot,
+        &hir::Options::new(hir::InterfaceAccess::Materialize),
+    )
+    .unwrap();
     let managed = hir::prepare_with(
         &snapshot,
         &hir::Options {
             provider: Provider::HostGc,
-            ..hir::Options::default()
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     )
     .unwrap();
@@ -68,7 +72,7 @@ fn async_frames_only_have_lifetime_markers_for_native_providers() {
                 &snapshot,
                 &hir::Options {
                     provider,
-                    ..hir::Options::default()
+                    ..hir::Options::new(hir::InterfaceAccess::Materialize)
                 },
             )
             .unwrap();

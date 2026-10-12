@@ -20,7 +20,7 @@ fn prepared(fixture: &str, provider: Provider) -> Option<Program> {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::default()
+                ..hir::Options::new(hir::InterfaceAccess::Materialize)
             },
         )
         .expect("valid prepared HIR")

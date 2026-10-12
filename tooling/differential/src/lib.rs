@@ -416,13 +416,13 @@ pub fn check(
     // without the other compares a program that never releases against an
     // allocator that expects it to. Hence [`counting`], asked here and at the
     // runtime's defines, and nowhere else.
+    let interface_access = match backend {
+        Backend::C | Backend::Llvm => hir::InterfaceAccess::Materialize,
+        Backend::Jvm | Backend::Wasm => hir::InterfaceAccess::PreserveFieldAccess,
+    };
     let options = hir::Options {
         provider,
-        interface_access: match backend {
-            Backend::C | Backend::Llvm => hir::InterfaceAccess::Materialize,
-            Backend::Jvm | Backend::Wasm => hir::InterfaceAccess::PreserveFieldAccess,
-        },
-        ..hir::Options::default()
+        ..hir::Options::new(interface_access)
     };
     let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,

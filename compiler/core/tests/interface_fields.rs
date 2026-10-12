@@ -42,8 +42,7 @@ fn stored_field_capability_is_independent_of_the_memory_provider() {
                 &snapshot,
                 &hir::Options {
                     provider,
-                    interface_access,
-                    ..hir::Options::default()
+                    ..hir::Options::new(interface_access)
                 },
             )
             .unwrap()
@@ -164,7 +163,7 @@ fn a_field_view_outlives_its_replaced_owner_under_reference_counting() {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::ReferenceCounting,
-            ..hir::Options::default()
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     )
     .expect("the view's alias and ownership remain valid after RC insertion");

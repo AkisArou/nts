@@ -329,7 +329,7 @@ fn build_and_run_transformed(
         &snapshot,
         &hir::Options {
             provider,
-            ..hir::Options::default()
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     )
     .expect("prepared HIR should verify");

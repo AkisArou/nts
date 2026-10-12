@@ -134,9 +134,8 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
-            interface_access: hir::InterfaceAccess::PreserveFieldAccess,
             provider: hir::Provider::NoGc,
-            ..hir::Options::default()
+            ..hir::Options::new(hir::InterfaceAccess::PreserveFieldAccess)
         },
     )
     .expect("prepared HIR should verify");

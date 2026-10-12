@@ -90,7 +90,7 @@ fn the_entry_surface_pipeline_produces_valid_hir() {
     };
     let options = hir::Options {
         roots: Roots::EntrySurface,
-        ..hir::Options::default()
+        ..hir::Options::new(hir::InterfaceAccess::Materialize)
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     if let Err(problems) = hir::verify::verify(&prepared.program) {
