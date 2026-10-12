@@ -10,6 +10,8 @@ use std::collections::BTreeMap;
 
 use super::{Callee, Func, HirType, ManagedType, OpKind, Program, TypeId};
 
+mod storage_proofs;
+
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub slot: u32,
@@ -158,10 +160,14 @@ impl Plan {
 
 /// Run after source shaping, before numeric storage and signature decisions.
 pub(super) fn materialize(program: &mut Program) -> usize {
+    let direct = storage_proofs::direct_sites(program);
     let plan = &program.interface_access;
     let mut replaced = 0;
-    for func in &mut program.funcs {
+    for (func, direct) in program.funcs.iter_mut().zip(direct) {
         for at in 0..func.values.len() {
+            if direct.contains(&super::ValueId(u32::try_from(at).unwrap_or(u32::MAX))) {
+                continue;
+            }
             let Some(entry) = plan.entry(func, &func.values[at].kind) else {
                 continue;
             };

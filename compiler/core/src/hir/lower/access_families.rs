@@ -139,6 +139,26 @@ impl Read<'_> {
 }
 
 impl FuncBuilder<'_> {
+    /// A known allocation has its own concrete layout. Other receivers need
+    /// the whole-program own-shape proof, independently of field dispatch.
+    pub(super) fn known_allocation(&self, mut value: super::ValueId) -> Option<TypeId> {
+        for _ in 0..32 {
+            match &self.values[value.0 as usize].kind {
+                super::OpKind::ObjectNew { .. } => {
+                    let HirType::Managed(super::ManagedType::Object(owner)) =
+                        self.values[value.0 as usize].ty
+                    else {
+                        return None;
+                    };
+                    return Some(owner);
+                }
+                super::OpKind::Convert(source) => value = *source,
+                _ => return None,
+            }
+        }
+        None
+    }
+
     pub(super) fn interface_field_read(
         &mut self,
         at: NodeId,
@@ -209,7 +229,10 @@ impl FuncBuilder<'_> {
         }
         let at = self.field_read_site(at)?;
         if self.kind_of(at) == Some(syntax::BINDING_ELEMENT) {
-            return self.field_access_family(at).map(Read::Family);
+            return self
+                .field_access_family(at)
+                .filter(|family| family.eager)
+                .map(Read::Family);
         }
         let (receiver, member) = self.member_access(at)?;
         let face = self.snapshot.node_types.get(&receiver).copied()?;
@@ -222,6 +245,7 @@ impl FuncBuilder<'_> {
         self.hierarchy
             .access_families
             .get(face, &member)
+            .filter(|family| family.eager)
             .map(Read::Family)
     }
 
@@ -363,18 +387,7 @@ impl Families {
             let candidates: Vec<_> = owners
                 .candidates(properties)
                 .into_iter()
-                .filter(|owner| {
-                    // The method planner excludes provably disjoint signatures
-                    // too. Unknown or bivariant supplies remain candidates.
-                    properties.iter().all(|wanted| {
-                        !hierarchy
-                            .declares
-                            .get(&face)
-                            .is_some_and(|methods| methods.contains(&wanted.name))
-                            || interfaces::property(probe.snapshot, *owner, &wanted.name)
-                                .is_none_or(|found| interfaces::candidate(probe, found, wanted))
-                    })
-                })
+                .filter(|owner| candidate_satisfies(probe, hierarchy, face, *owner, properties))
                 .collect();
             if !candidates.is_empty()
                 && candidates.iter().all(|owner| {
@@ -443,6 +456,34 @@ impl Families {
             .and_then(|members| members.get(member))
             .and_then(|at| self.licensed.get(*at))
     }
+}
+
+fn candidate_satisfies(
+    probe: &FuncBuilder<'_>,
+    hierarchy: &Hierarchy,
+    face: TypeId,
+    owner: TypeId,
+    properties: &[PropertyRecord],
+) -> bool {
+    // An optional member cannot satisfy a required one. Such a type is
+    // disjoint from this face before ABI adaptation.
+    if properties.iter().any(|wanted| {
+        !wanted.optional
+            && interfaces::property(probe.snapshot, owner, &wanted.name)
+                .is_some_and(|found| found.optional)
+    }) {
+        return false;
+    }
+    // The method planner excludes provably disjoint signatures too. Unknown
+    // or bivariant supplies remain candidates.
+    properties.iter().all(|wanted| {
+        !hierarchy
+            .declares
+            .get(&face)
+            .is_some_and(|methods| methods.contains(&wanted.name))
+            || interfaces::property(probe.snapshot, owner, &wanted.name)
+                .is_none_or(|found| interfaces::candidate(probe, found, wanted))
+    })
 }
 
 /// Intersect required members, starting with the rarest. Optional-only faces
@@ -666,14 +707,15 @@ fn family(
     {
         return Err("a source member colliding with the reserved field accessor name");
     }
-    let declared = storage(probe, wanted.ty).ok_or("an unrepresentable field contract")?;
+    let declared = property_storage(probe, wanted).ok_or("an unrepresentable field contract")?;
     let mut supplies = Vec::new();
     let mut read_type = None;
     let mut actual_absences = Some(Vec::new());
     for owner in candidates {
         let supply = supply(probe, hierarchy, sources, *owner, wanted)?;
-        let source =
-            interfaces::property(probe.snapshot, *owner, &wanted.name).map(|property| property.ty);
+        let source = interfaces::property(probe.snapshot, *owner, &wanted.name)
+            .filter(|property| !property.optional)
+            .map(|property| property.ty);
         if supplies.is_empty() {
             read_type = source;
         } else if read_type != source {
@@ -682,7 +724,7 @@ fn family(
         join_absences(&mut actual_absences, absence_tags(probe, *owner, wanted));
         supplies.push(supply);
     }
-    let declared_absences = type_absences(probe, wanted.ty);
+    let declared_absences = property_absences(probe, wanted);
     let uniform = supplies.iter().all(|supply| {
         supply.ty == declared
             || interfaces::property(probe.snapshot, supply.owner, &wanted.name).is_some_and(
@@ -752,7 +794,7 @@ fn supply(
             })
             .ok_or("a required field missing from a concrete supplier");
     };
-    let ty = storage(probe, found.ty).ok_or("an unrepresentable concrete field")?;
+    let ty = property_storage(probe, found).ok_or("an unrepresentable concrete field")?;
     let absent = absent_of_result(probe.snapshot, found.ty);
     let getter = accessor(probe, hierarchy, sources, owner, &wanted.name, "get ");
     let setter = accessor(probe, hierarchy, sources, owner, &wanted.name, "set ");
@@ -808,9 +850,14 @@ fn supply(
             probe.snapshot.node_types.get(&name).copied()
         })
         .unwrap_or(found.ty);
-    let write_ty = storage(probe, written).ok_or("an unrepresentable setter input")?;
+    let write_ty = if setter.is_none() {
+        ty.clone()
+    } else {
+        storage(probe, written).ok_or("an unrepresentable setter input")?
+    };
     if writable(wanted) {
-        let declared = storage(probe, wanted.ty).ok_or("an unrepresentable field contract")?;
+        let declared =
+            property_storage(probe, wanted).ok_or("an unrepresentable field contract")?;
         if found.readonly
             || !interfaces::stores(
                 probe.snapshot,
@@ -841,6 +888,16 @@ fn storage(probe: &FuncBuilder<'_>, ty: TypeId) -> Option<HirType> {
         &mut Vec::new(),
         &Substitution::default(),
     )
+}
+
+/// Optionality is beside the schema type. The physical field carries its
+/// undefined value as a tag, including when the non-absent value is a pointer.
+fn property_storage(probe: &FuncBuilder<'_>, property: &PropertyRecord) -> Option<HirType> {
+    if property.optional {
+        Some(HirType::Erased)
+    } else {
+        storage(probe, property.ty)
+    }
 }
 
 fn writable(property: &PropertyRecord) -> bool {
@@ -889,12 +946,20 @@ fn absence_tags(
 ) -> Option<Vec<u32>> {
     interfaces::property(probe.snapshot, owner, &wanted.name).map_or_else(
         || Some(vec![super::super::tags::UNDEFINED]),
-        |property| type_absences(probe, property.ty),
+        |property| property_absences(probe, property),
     )
 }
 
 fn type_absences(probe: &FuncBuilder<'_>, ty: TypeId) -> Option<Vec<u32>> {
     type_absences_at(probe, ty, 0)
+}
+
+fn property_absences(probe: &FuncBuilder<'_>, property: &PropertyRecord) -> Option<Vec<u32>> {
+    let mut absences = type_absences(probe, property.ty);
+    if property.optional {
+        join_absences(&mut absences, Some(vec![super::super::tags::UNDEFINED]));
+    }
+    absences
 }
 
 fn type_absences_at(probe: &FuncBuilder<'_>, ty: TypeId, depth: u32) -> Option<Vec<u32>> {

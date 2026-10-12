@@ -249,7 +249,18 @@ types and absence facts survive constant aliases, including destructuring;
 asserting a narrower interface cannot remove an implementer's null or undefined.
 Pure storage access waits until source specialization has recovered any known
 class. A remaining access whose layouts disagree becomes indexed dispatch;
-known-class and common-prefix loads stay direct.
+known-class and common-prefix loads stay direct. A dominating class test may
+also prove that all remaining suppliers share the receiver's exact layout;
+this evidence keeps the access direct without assuming that a prefix will
+survive later storage specialization.
+
+Pure stored rows reserve table positions by their storage and absence contract,
+then acquire canonical bodies after layouts merge. Owner-qualified reservation
+names must not prevent otherwise identical literal and interface layouts from
+sharing storage. User-code accessors retain their concrete owner identity.
+Unallocated generic closure templates do not become reachable merely because
+another closure uses the same slot: reached allocations, static closure values
+and explicitly published or runtime-called entries determine the live frames.
 
 A narrow stored field needs an initialization proof: an initializer, a parameter
 property, or an unconditional constructor write before the receiver can escape.

@@ -175,6 +175,28 @@ fn declaration_key(family: &Family, writes: bool) -> String {
     format!("{}@interface{}", family.key(writes), family.face.0)
 }
 
+/// Pure stored rows are identical on equal physical layouts. Their reservation
+/// must permit the ordinary structural merge; user-code rows keep their owner.
+pub(super) fn placeholder(
+    hierarchy: &Hierarchy,
+    family: &Family,
+    supply: &Supply,
+    writes: bool,
+    raising: bool,
+) -> String {
+    let entry = entry(hierarchy, family, writes, false);
+    let owner = if matches!(supply.reader, Reader::Stored) && supply.setter.is_none() {
+        format!("storage{:?}", supply.absent)
+    } else {
+        supply.owner.0.to_string()
+    };
+    format!(
+        "{}@{owner}{}",
+        entry.declared,
+        if raising { super::RAISING_SUFFIX } else { "" }
+    )
+}
+
 fn body_key(
     snapshot: &SemanticSnapshot,
     family: &Family,
@@ -280,6 +302,16 @@ fn fill(
     (owner, writes, raising): (usize, bool, bool),
     functions: &mut Vec<Func>,
 ) {
+    // The source owner may have joined an equivalent structural layout. One
+    // body and receiver convention serve all of that layout's stored rows.
+    let mut supply = supply.clone();
+    if matches!(supply.reader, Reader::Stored) && supply.setter.is_none() {
+        supply.owner = *program.layouts[owner]
+            .types
+            .first()
+            .unwrap_or(&supply.owner);
+    }
+    let supply = &supply;
     let key = body_key(context.snapshot, family, supply, writes, raising);
     let entry = entry(context.hierarchy, family, writes, raising);
     if let Some(name) = context.bodies.get(&key) {

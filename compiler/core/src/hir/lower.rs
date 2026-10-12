@@ -36797,23 +36797,34 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn own_layout(&mut self, id: NodeId, argument: NodeId) -> Result<(TypeId, Layout), Diagnostic> {
-        let ty = self
-            .snapshot
-            .node_types
-            .get(&argument)
-            .copied()
-            .map(|ty| self.class_behind(ty))
-            .ok_or_else(|| self.unsupported(id, "a static over a value with no type"))?;
-        let HirType::Managed(ManagedType::Object(type_id)) = self
-            .represent(ty)
-            .ok_or_else(|| self.unrepresentable(id, "the argument of an `Object` static"))?
-        else {
-            return Err(self.unsupported(
-                id,
-                "an `Object` static over something that is not an object here",
-            ));
+        let own = self
+            .node(argument)
+            .symbol
+            .and_then(|symbol| self.bindings.get(&symbol.0).copied())
+            .and_then(|value| self.known_allocation(value));
+        let type_id = if let Some(owner) = own {
+            owner
+        } else {
+            let ty = self
+                .snapshot
+                .node_types
+                .get(&argument)
+                .copied()
+                .map(|ty| self.class_behind(ty))
+                .ok_or_else(|| self.unsupported(id, "a static over a value with no type"))?;
+            let HirType::Managed(ManagedType::Object(type_id)) = self
+                .represent(ty)
+                .ok_or_else(|| self.unrepresentable(id, "the argument of an `Object` static"))?
+            else {
+                return Err(self.unsupported(
+                    id,
+                    "an `Object` static over something that is not an object here",
+                ));
+            };
+            type_id
         };
-        if self.hierarchy.access_families.changes_transport(type_id)
+        if own.is_none()
+            && self.hierarchy.access_families.changes_transport(type_id)
             && !self.hierarchy.access_families.permits_spread(type_id)
         {
             return Err(self.unsupported(
@@ -50053,7 +50064,8 @@ impl<'a> FuncBuilder<'a> {
             ));
         };
         let from_type = from;
-        if self.hierarchy.faces.contains(&from_type)
+        if self.known_allocation(value).is_none()
+            && self.hierarchy.access_families.changes_transport(from_type)
             && !self.hierarchy.access_families.permits_spread(from_type)
         {
             return Err(self.unsupported(property,
@@ -52486,15 +52498,19 @@ impl<'a> FuncBuilder<'a> {
         let mut methods = vec![None; self.hierarchy.table_size()];
         for ((root, member), slot) in &self.hierarchy.slots {
             if let Some((family, writes)) = self.hierarchy.access_families.for_key(*root, member) {
-                if family.supplies.iter().any(|supply| supply.owner == ty) {
+                let supply = family
+                    .supplies
+                    .iter()
+                    .find(|supply| supply.owner == ty)
+                    .or_else(|| self.storage_reservation(ty, fields, family));
+                if let Some(supply) = supply {
                     let raising = member.ends_with(RAISING_SUFFIX);
-                    let ordinary =
-                        access_family_functions::entry(&self.hierarchy, family, writes, false);
-                    methods[*slot as usize] = Some(format!(
-                        "{}@{}{}",
-                        ordinary.declared,
-                        ty.0,
-                        if raising { RAISING_SUFFIX } else { "" }
+                    methods[*slot as usize] = Some(access_family_functions::placeholder(
+                        &self.hierarchy,
+                        family,
+                        supply,
+                        writes,
+                        raising,
                     ));
                 }
                 continue;
@@ -52507,6 +52523,32 @@ impl<'a> FuncBuilder<'a> {
             }
         }
         methods
+    }
+
+    /// An interface may have no allocation of its own. Its compatible storage
+    /// reservation still needs to join a literal's equivalent physical layout;
+    /// only actual suppliers fill that layout with an executable body later.
+    fn storage_reservation<'b>(
+        &self,
+        ty: TypeId,
+        fields: &[Field],
+        family: &'b access_families::Family,
+    ) -> Option<&'b access_families::Supply> {
+        if !self.hierarchy.faces.contains(&ty) {
+            return None;
+        }
+        let property = interfaces::property(self.snapshot, ty, &family.member)?;
+        if property.kind != MemberKind::Field {
+            return None;
+        }
+        let field = fields.iter().find(|field| field.name == family.member)?;
+        let absent = absent_of_result(self.snapshot, property.ty);
+        family.supplies.iter().find(|supply| {
+            matches!(supply.reader, access_families::Reader::Stored)
+                && supply.setter.is_none()
+                && supply.ty == field.ty
+                && supply.absent == absent
+        })
     }
 
     fn layout_of(&mut self, id: NodeId, ty: TypeId) -> Result<Layout, Diagnostic> {

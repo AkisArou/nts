@@ -55,6 +55,25 @@ fn a_transitively_refused_getter_refuses_interface_readers() {
 }
 
 #[test]
+fn a_class_test_can_prove_the_stored_receivers_exact_layout() {
+    let Some(program) = prepared_fixture("accessor-layout-proof") else {
+        eprintln!("SKIP interface_fields: tsgo is not built");
+        return;
+    };
+    let dispatches = |name: &str| {
+        let function = program.funcs.iter().find(|func| func.name == name).unwrap();
+        function.values.iter().any(|op| {
+            matches!(&op.kind,
+            OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
+                if program.interface_access.contains_selector(*slot)
+                    && op.ty != hir::HirType::Void)
+        })
+    };
+    assert!(!dispatches("guarded"));
+    assert!(dispatches("unguarded"));
+}
+
+#[test]
 fn field_dispatch_does_not_turn_prototype_getters_into_own_properties() {
     let Some(program) = prepared_fixture("accessor-spread-boundary") else {
         eprintln!("SKIP interface_fields: tsgo is not built");

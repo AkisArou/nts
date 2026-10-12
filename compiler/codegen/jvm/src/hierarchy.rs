@@ -182,14 +182,14 @@ pub fn declared<'a>(program: &Program, layout: &'a Layout) -> &'a [Field] {
 /// is the class name a `Fieldref` needs.
 #[must_use]
 pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize) -> &'a Layout {
-    if let Some(by) = layout
+    let declared_by = layout
         .fields
         .get(field)
         .and_then(|at| at.declared_by)
-        .and_then(|id| program.layout(id))
-    {
-        return by;
-    }
+        .and_then(|id| program.layout(id));
+    // A record can inherit a source declaration without inheriting its JVM
+    // class. Its fields are then flattened into this class. Source ownership
+    // selects storage only within the ancestry that this backend emits.
     // **No class declares it, which does not mean this one holds it.** The
     // fallback used to be `layout`, and that was right for as long as a field
     // with no `declared_by` was also a field with no base above it -- a tuple's
@@ -214,7 +214,13 @@ pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize
     // sufficient: `declared_by` where a class claims the field, arithmetic
     // where none does.
     let mut owner = layout;
-    while let Some(base) = jvm_base(program, owner).and_then(|id| program.layouts.get(id)) {
+    for _ in 0..program.layouts.len() {
+        if declared_by.is_some_and(|by| std::ptr::eq(by, owner)) {
+            return owner;
+        }
+        let Some(base) = jvm_base(program, owner).and_then(|id| program.layouts.get(id)) else {
+            break;
+        };
         if field < base.fields.len() {
             owner = base;
         } else {
@@ -627,4 +633,58 @@ pub fn implements(program: &Program, layout: &Layout, id: TypeId) -> bool {
         && program
             .layout(id)
             .is_some_and(|target| is_interface(program, target))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nts_core::hir::HirType;
+
+    #[test]
+    fn a_flattened_record_field_belongs_to_its_emitted_class() {
+        let field = |name: &str, owner| Field {
+            name: name.to_owned(),
+            ty: HirType::Float { bits: 64 },
+            written: None,
+            declared_by: Some(TypeId(owner)),
+            readonly: true,
+        };
+        let metadata = Layout {
+            types: vec![TypeId(1)],
+            name: "Metadata".to_owned(),
+            fields: vec![field("status", 1)],
+            methods: Vec::new(),
+            interfaces: Vec::new(),
+            base: None,
+        };
+        let entry = Layout {
+            types: vec![TypeId(2)],
+            name: "Entry".to_owned(),
+            fields: vec![field("status", 1), field("body", 2)],
+            methods: vec![Some("status_helper".to_owned())],
+            interfaces: Vec::new(),
+            base: None,
+        };
+        let mut program = Program {
+            layouts: vec![metadata, entry],
+            ..Program::default()
+        };
+        program.record_parents.insert(TypeId(2), TypeId(1));
+        assert!(jvm_base(&program, &program.layouts[1]).is_none());
+        assert_eq!(
+            declares_field(&program, &program.layouts[1], 0).name,
+            "Entry"
+        );
+        // With a real emitted superclass, the same field is inherited.
+        program.layouts[1].base = Some(TypeId(1));
+        assert_eq!(
+            declares_field(&program, &program.layouts[1], 0).name,
+            "Metadata"
+        );
+        program.layouts[1].fields.push(field("status", 2));
+        assert_eq!(
+            declares_field(&program, &program.layouts[1], 2).name,
+            "Entry"
+        );
+    }
 }
