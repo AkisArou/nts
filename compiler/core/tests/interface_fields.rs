@@ -91,6 +91,55 @@ fn non_prefix_field_views_keep_their_license_and_cannot_become_plain_casts() {
 }
 
 #[test]
+fn a_field_view_outlives_its_replaced_owner_under_reference_counting() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/interface-field-view-lifetime/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    let prepared = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Provider::ReferenceCounting,
+            ..hir::Options::default()
+        },
+    )
+    .expect("the view's alias and ownership remain valid after RC insertion");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let function = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name == "returnView")
+        .expect("the escaping view's producer remains");
+    assert!(
+        function
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::FieldView { .. })),
+        "the ownership witness must exercise a licensed non-prefix view"
+    );
+    assert!(
+        function.values.iter().any(|op| {
+            let hir::HirType::Managed(hir::ManagedType::Object(ty)) = op.ty else {
+                return false;
+            };
+            prepared
+                .program
+                .layout(ty)
+                .is_some_and(|layout| layout.name == "Reordered")
+                && matches!(op.kind, OpKind::ObjectNew { frame: false })
+        }),
+        "an object returned only through its view must escape its allocating frame"
+    );
+}
+
+#[test]
 fn unrelated_optional_defaults_preserve_a_records_literal_storage_identity() {
     let Some(program) = prepared_fixture("accessor-default-record") else {
         eprintln!("SKIP interface_fields: tsgo is not built");

@@ -567,6 +567,7 @@ const fn leaves_fields_alone(kind: &OpKind) -> bool {
             | OpKind::Binary { .. }
             | OpKind::Unary { .. }
             | OpKind::Convert(_)
+            | OpKind::FieldView { .. }
             | OpKind::TagOf { .. }
             | OpKind::InstanceOf { .. }
             | OpKind::Length(_)
