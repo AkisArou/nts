@@ -32,6 +32,7 @@ pub(crate) struct Symbols<'a> {
     pub(crate) instance_of: Option<u32>,
     pub(crate) array_grow: BTreeMap<u32, u32>,
     pub(crate) array_copy: BTreeMap<(u32, crate::array_copy::Helper), u32>,
+    pub(crate) array_lookup: BTreeMap<(u32, crate::array_lookup::Helper), u32>,
     pub(crate) thunks: BTreeMap<(crate::callables::Face, u32, u32), u32>,
     pub(crate) static_closures: BTreeMap<u32, crate::callables::Static>,
     pub(crate) allocations: std::collections::BTreeSet<u32>,
@@ -81,6 +82,7 @@ impl<'a> Symbols<'a> {
             instance_of: None,
             array_grow: BTreeMap::new(),
             array_copy: BTreeMap::new(),
+            array_lookup: BTreeMap::new(),
             thunks: BTreeMap::new(),
             static_closures,
             allocations: crate::callables::allocations(resources, plan)?,
@@ -251,7 +253,7 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         &mut names,
         &mut symbols,
         imported_functions,
-    );
+    )?;
     declare_thunks(
         &thunks,
         &mut functions,
@@ -326,7 +328,7 @@ fn declare_managed_adapters(
     names: &mut NameMap,
     symbols: &mut Symbols<'_>,
     imported_functions: u32,
-) {
+) -> Result<(), EmitError> {
     for helper in &resources.erased {
         let (params, result) = helper.signature();
         let id = imported_functions + functions.len();
@@ -378,6 +380,14 @@ fn declare_managed_adapters(
         symbols,
         imported_functions,
     );
+    declare_array_lookup(
+        resources,
+        types,
+        functions,
+        names,
+        symbols,
+        imported_functions,
+    )
 }
 
 fn declare_array_copy(
@@ -399,6 +409,38 @@ fn declare_array_copy(
             }
         }
     }
+}
+
+fn declare_array_lookup(
+    resources: &requirements::Requirements,
+    types: &mut Types,
+    functions: &mut FunctionSection,
+    names: &mut NameMap,
+    symbols: &mut Symbols<'_>,
+    imported_functions: u32,
+) -> Result<(), EmitError> {
+    for shape in symbols.types.arrays.values() {
+        if let Some(helpers) = resources.lookup_arrays.get(&shape.ty) {
+            for &helper in helpers {
+                let name = format!("array.{helper:?}<{:?}>", shape.element);
+                let (params, result) =
+                    helper
+                        .signature(shape, symbols)
+                        .map_err(|error| EmitError::Invariant {
+                            function: name.clone(),
+                            reason: error.to_string(),
+                        })?;
+                let id = imported_functions + functions.len();
+                functions.function(types.intern(Signature {
+                    params,
+                    result: Some(result),
+                }));
+                symbols.array_lookup.insert((shape.wrapper, helper), id);
+                names.append(id, &name);
+            }
+        }
+    }
+    Ok(())
 }
 
 struct Bodies {
@@ -484,6 +526,7 @@ fn bodies(
         }
     }
     array_copy_bodies(&mut code, symbols)?;
+    array_lookup_bodies(&mut code, symbols)?;
     for thunk in thunks {
         let function =
             crate::callables::thunk_body(thunk, symbols).map_err(|error| EmitError::Invariant {
@@ -512,6 +555,20 @@ fn array_copy_bodies(code: &mut CodeSection, symbols: &Symbols<'_>) -> Result<()
     for &(wrapper, helper) in symbols.array_copy.keys() {
         let shape = &symbols.types.arrays[&wrapper];
         let function = crate::array_copy::body(helper, shape, symbols).map_err(|error| {
+            EmitError::Invariant {
+                function: format!("array.{helper:?}<{:?}>", shape.element),
+                reason: error.to_string(),
+            }
+        })?;
+        code.function(&function);
+    }
+    Ok(())
+}
+
+fn array_lookup_bodies(code: &mut CodeSection, symbols: &Symbols<'_>) -> Result<(), EmitError> {
+    for &(wrapper, helper) in symbols.array_lookup.keys() {
+        let shape = &symbols.types.arrays[&wrapper];
+        let function = crate::array_lookup::body(helper, shape, symbols).map_err(|error| {
             EmitError::Invariant {
                 function: format!("array.{helper:?}<{:?}>", shape.element),
                 reason: error.to_string(),

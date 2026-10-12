@@ -24,6 +24,7 @@ pub(crate) struct Requirements {
     pub(crate) instance_of: bool,
     pub(crate) grow_arrays: rustc_hash::FxHashSet<HirType>,
     pub(crate) copy_arrays: rustc_hash::FxHashMap<HirType, BTreeSet<crate::array_copy::Helper>>,
+    pub(crate) lookup_arrays: rustc_hash::FxHashMap<HirType, BTreeSet<crate::array_lookup::Helper>>,
     pub(crate) closure_calls: BTreeMap<(ClassId, u32), ObjectUse>,
     pub(crate) virtual_calls: BTreeMap<(ClassId, u32), ObjectUse>,
     pub(crate) virtual_declarations: BTreeMap<(ClassId, u32, String), ObjectUse>,
@@ -165,6 +166,25 @@ impl Requirements {
                         if method.helper == crate::array_copy::Helper::Extend {
                             self.grow_arrays.insert(ty);
                         }
+                    }
+                } else if let Some(method) = crate::array_lookup::external(name) {
+                    self.contract(func);
+                    if method.helper == crate::array_lookup::Helper::AtValue {
+                        self.require_erased(erased::Helper::BoxNumber);
+                    }
+                    if method.helper.erased_needle() {
+                        self.require_erased(erased::Helper::Tag);
+                    }
+                    if let Some(array) = args.first() {
+                        let ty = func.value(*array).ty.clone();
+                        if matches!(&ty, HirType::Managed(nts_core::hir::ManagedType::Array(element)) if strings::is_string(element))
+                        {
+                            self.require(strings::Helper::Equal);
+                        }
+                        self.lookup_arrays
+                            .entry(ty)
+                            .or_default()
+                            .insert(method.helper);
                     }
                 }
             }

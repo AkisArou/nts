@@ -1,6 +1,23 @@
 //! Number endpoints shared by string and array slices.
 use wasm_encoder::{BlockType, Function, Instruction as I, ValType};
 
+/// `ToIntegerOrInfinity` keeps infinities and maps NaN to zero.
+pub(crate) fn integer(f: &mut Function, param: u32) {
+    for i in [
+        I::LocalGet(param),
+        I::LocalGet(param),
+        I::F64Eq,
+        I::If(BlockType::Result(ValType::F64)),
+        I::LocalGet(param),
+        I::F64Trunc,
+        I::Else,
+        I::F64Const(0.0.into()),
+        I::End,
+    ] {
+        f.instruction(&i);
+    }
+}
+
 /// Consume a numeric parameter via `ToIntegerOrInfinity`, optionally relative
 /// to the logical length, and clamp to [0, length] before unsigned conversion.
 pub(crate) fn clamp(

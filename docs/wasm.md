@@ -8,9 +8,11 @@ landed as `786f23a48f11` after MainClaude approved the scoped core overlap
 and the independent JVM review. The full green gate ran on source-identical
 `e9fab5a2730c`; the reviewer accepted the rebase that preserved two unrelated
 notes lines. Its core hunks are limited to the provider enum and native
-placement/provision selection. The Wasm driver selects HostGc. M1b is at static
-implementation following review of the scan amendment below. Managed type
-planning is the first step; no M1b corpus or new performance result is claimed.
+placement/provision selection. The Wasm driver selects HostGc. M1b implementation
+is in progress following review of the scan amendment below. Managed storage,
+JS strings, primitive erased values, ordinary arrays/objects, closures/virtual
+calls and explicit raising have bounded execution probes. The full M1b corpus,
+runtime routes and performance remain unmeasured.
 
 ## Current M1a implementation and evidence
 
@@ -720,6 +722,19 @@ The copying increment passed 53 package tests, including 16,183 independent HIR
 comparisons and 2,742 source comparisons. Its 7,429 HIR and 920 source input
 refusals are recorded separately from comparisons. These bounded probes do not
 establish the pending all-example/runtime acceptance or performance results.
+Twelve closed lookup names cover numeric/string/identity searches and `.at()`.
+`indexOf`/`lastIndexOf` use strict numeric equality; `includes` adds the NaN case
+of SameValueZero. Strings compare code units and objects/arrays compare GC
+identity. Erased string needles inspect their semantic tag; a non-string is
+absent from a dense string array. Nullable string slots decline when their
+physical storage cannot distinguish null, undefined and holes. `.at()` uses
+`ToIntegerOrInfinity` before negative-relative indexing. `at_value` reads number
+storage and preserves a missing result as the undefined singleton; typed `.at()`
+reads decline outside their supported range, as do unguarded numeric projections
+of an absent erased result. Probes check 30,488 HIR results plus 10,043 named
+input refusals and 9,874 same-source results plus 448 named input refusals.
+All 56 package tests and strict local clippy pass. These are bounded probes,
+with the full M1b population still pending.
 The remainder of the planned helper appendix is not yet implemented.
 M1 excludes buffer/view/DataView families; they are a separate boundary design.
 

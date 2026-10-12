@@ -68,6 +68,20 @@ fn source_array_helpers_agree_with_node() {
 }
 
 #[test]
+fn source_array_lookup_agrees_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-lookup");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "array-lookup-source",
+        &emitted,
+        "tooling/wasm/check-array-lookup-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert!(output["cases"].as_u64().unwrap() > 5000, "{output}");
+}
+
+#[test]
 fn source_array_copying_agrees_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");
     let emitted = emit_project(&fixture);
