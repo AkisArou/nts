@@ -49,6 +49,9 @@ mod tests {
             functions: rustc_hash::FxHashMap::default(),
             helpers: BTreeMap::new(),
             types: &slots,
+            strings: BTreeMap::new(),
+            literals: rustc_hash::FxHashMap::default(),
+            global_base: 0,
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -470,20 +473,29 @@ impl<'a> Body<'a> {
             OpKind::ConstBool(value) => self.ins(&I::I32Const(i32::from(*value))),
             OpKind::ConstInt(value) => numeric::constant_int(self, *value, &op.ty)?,
             OpKind::ConstFloat(value) => numeric::constant_float(self, *value, &op.ty)?,
-            OpKind::Binary { op, lhs, rhs } => numeric::binary(self, id, *op, *lhs, *rhs)?,
-            OpKind::Unary { op, operand } => numeric::unary(self, id, *op, *operand)?,
-            OpKind::Convert(value) => {
-                self.load(*value)?;
-                let from = self.ty(*value).clone();
-                numeric::convert(self, &from, &op.ty)?;
+            OpKind::ConstString(value) => crate::strings::constant(self, value)?,
+            OpKind::Length(value) if crate::strings::is_string(self.ty(*value)) => {
+                crate::strings::length(self, id, *value)?;
             }
-            OpKind::GlobalGet(global) => self.ins(&I::GlobalGet(*global)),
+            OpKind::StringUnitAt {
+                string,
+                index,
+                checked,
+            } => {
+                crate::strings::unit(self, id, *string, *index, *checked)?;
+            }
+            OpKind::Binary { op, lhs, rhs } => self.binary(id, *op, *lhs, *rhs)?,
+            OpKind::Unary { op, operand } => self.unary(id, *op, *operand)?,
+            OpKind::Convert(value) => self.convert(id, *value)?,
+            OpKind::GlobalGet(global) => {
+                self.ins(&I::GlobalGet(self.symbols.global_base + *global));
+            }
             OpKind::GlobalSet { global, value } => {
                 self.load(*value)?;
-                self.ins(&I::GlobalSet(*global));
+                self.ins(&I::GlobalSet(self.symbols.global_base + *global));
                 return Ok(());
             }
-            OpKind::Call { callee, args, .. } => self.call(callee, args)?,
+            OpKind::Call { callee, args, .. } => self.call(id, callee, args)?,
             OpKind::Return(value) => {
                 if let Some(value) = value {
                     self.load(*value)?;
@@ -514,7 +526,6 @@ impl<'a> Body<'a> {
                 return Err(format!("native ABI operation {:?}", op.kind));
             }
             OpKind::DispatchSlot(_)
-            | OpKind::ConstString(_)
             | OpKind::ConstTemplate { .. }
             | OpKind::Erase { .. }
             | OpKind::TagOf { .. }
@@ -522,7 +533,6 @@ impl<'a> Body<'a> {
             | OpKind::ArrayNew { .. }
             | OpKind::Length(_)
             | OpKind::ArrayGet { .. }
-            | OpKind::StringUnitAt { .. }
             | OpKind::ConstNull
             | OpKind::ConstUndefined
             | OpKind::ObjectNew { .. }
@@ -547,7 +557,44 @@ impl<'a> Body<'a> {
         }
         Ok(())
     }
-    fn call(&mut self, callee: &Callee, args: &[ValueId]) -> Result<(), String> {
+    fn binary(
+        &mut self,
+        id: ValueId,
+        op: nts_core::hir::BinOp,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> Result<(), String> {
+        if crate::strings::is_string(self.ty(lhs)) || crate::strings::is_string(self.ty(rhs)) {
+            crate::strings::binary(self, op, lhs, rhs)
+        } else {
+            numeric::binary(self, id, op, lhs, rhs)
+        }
+    }
+    fn unary(
+        &mut self,
+        id: ValueId,
+        op: nts_core::hir::UnOp,
+        value: ValueId,
+    ) -> Result<(), String> {
+        if crate::strings::is_string(self.ty(value)) {
+            crate::strings::truthy(self, op, value)
+        } else {
+            numeric::unary(self, id, op, value)
+        }
+    }
+    fn convert(&mut self, id: ValueId, value: ValueId) -> Result<(), String> {
+        let from = self.ty(value).clone();
+        let to = self.ty(id).clone();
+        if crate::strings::is_string(&from) && to == nts_core::hir::HirType::Bool {
+            return crate::strings::truthy(self, nts_core::hir::UnOp::Truthy, value);
+        }
+        self.load(value)?;
+        if crate::strings::is_string(&from) && crate::strings::is_string(&to) {
+            return Ok(());
+        }
+        numeric::convert(self, &from, &to)
+    }
+    fn call(&mut self, result: ValueId, callee: &Callee, args: &[ValueId]) -> Result<(), String> {
         match callee {
             Callee::Direct(name) => {
                 let at = self
@@ -561,7 +608,13 @@ impl<'a> Body<'a> {
                 self.ins(&I::Call(*at));
             }
             Callee::External(name) => {
-                return Err(format!("runtime/external helper `{name}` is outside M1a"));
+                if let Some(helper) = crate::strings::external(name) {
+                    crate::strings::runtime(self, result, helper, args)?;
+                } else {
+                    return Err(format!(
+                        "runtime/external helper `{name}` is outside the implemented Wasm helper surface"
+                    ));
+                }
             }
             Callee::Native(function) => return Err(format!("native call {function:?}")),
             Callee::Virtual { declared, .. } => {

@@ -2,9 +2,10 @@
 
 use crate::{
     BoundaryType, EmitError, Emitted, FunctionExport, GlobalExport, InfiniteBound, Manifest,
-    NumberBound, NumberGuard, Parameter, body, gc, helpers::Helper, refuse, types::Physical,
+    NumberBound, NumberGuard, Parameter, body, gc, helpers::Helper, refuse, requirements, strings,
+    types::Physical,
 };
-use nts_core::hir::{BinOp, Func, HirType, OpKind, ParamShape, Program, UnOp};
+use nts_core::hir::{Func, HirType, ParamShape, Program};
 use nts_diagnostics::Diagnostic;
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,6 +19,9 @@ pub(crate) struct Symbols<'a> {
     pub(crate) functions: FxHashMap<&'a str, u32>,
     pub(crate) helpers: BTreeMap<Helper, u32>,
     pub(crate) types: &'a gc::Plan,
+    pub(crate) strings: BTreeMap<strings::Helper, u32>,
+    pub(crate) literals: FxHashMap<&'a str, u32>,
+    pub(crate) global_base: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -76,122 +80,6 @@ fn signature(func: &Func, plan: &gc::Plan) -> Result<Signature, Diagnostic> {
     Ok(Signature { params, result })
 }
 
-fn helper_set(program: &Program) -> BTreeSet<Helper> {
-    let mut result = BTreeSet::new();
-    for func in &program.funcs {
-        if func.abstract_declaration {
-            continue;
-        }
-        for block in nts_codegen_common::block_order(func) {
-            for id in &func.blocks[block.0 as usize].ops {
-                if let Some(helper) = helper_for(func, *id) {
-                    result.insert(helper);
-                }
-            }
-        }
-    }
-    result
-}
-
-fn helper_for(func: &Func, id: nts_core::hir::ValueId) -> Option<Helper> {
-    match func.value(id).kind {
-        OpKind::Unary { op, operand } => match op {
-            UnOp::Round => Some(Helper::Round),
-            UnOp::ToInt32 | UnOp::ToUint32 => {
-                matches!(func.value(operand).ty, HirType::Float { .. }).then_some(Helper::ToInt32)
-            }
-            UnOp::Neg
-            | UnOp::Not
-            | UnOp::Abs
-            | UnOp::Floor
-            | UnOp::Ceil
-            | UnOp::Trunc
-            | UnOp::Sqrt
-            | UnOp::Truthy => None,
-        },
-        OpKind::Binary { op, lhs, rhs } => match op {
-            BinOp::Rem => {
-                matches!(func.value(id).ty, HirType::Float { .. }).then_some(Helper::Remainder)
-            }
-            BinOp::BitAnd
-            | BinOp::BitOr
-            | BinOp::BitXor
-            | BinOp::Shl
-            | BinOp::Shr
-            | BinOp::UShr => (matches!(func.value(lhs).ty, HirType::Float { .. })
-                || matches!(func.value(rhs).ty, HirType::Float { .. }))
-            .then_some(Helper::ToInt32),
-            BinOp::Add
-            | BinOp::Sub
-            | BinOp::Mul
-            | BinOp::Div
-            | BinOp::Lt
-            | BinOp::Le
-            | BinOp::Gt
-            | BinOp::Ge
-            | BinOp::Eq
-            | BinOp::Ne
-            | BinOp::Concat
-            | BinOp::Min
-            | BinOp::Max => None,
-        },
-        OpKind::NativeLoad { .. }
-        | OpKind::NativeStore { .. }
-        | OpKind::NativeLocal { .. }
-        | OpKind::ObjcClass { .. }
-        | OpKind::ObjcSelector { .. }
-        | OpKind::NativeSizeOf(_)
-        | OpKind::NativeMalloc { .. }
-        | OpKind::NativeFree { .. }
-        | OpKind::NativeIndexAddress { .. }
-        | OpKind::NativeFieldAddress { .. }
-        | OpKind::NativeBitLoad { .. }
-        | OpKind::NativeBitStore { .. }
-        | OpKind::NativeCopy { .. }
-        | OpKind::NativeBridge { .. }
-        | OpKind::NativeBlock { .. }
-        | OpKind::DelegateInvoke { .. }
-        | OpKind::Param(_)
-        | OpKind::BlockParam(_)
-        | OpKind::ConstInt(_)
-        | OpKind::ConstFloat(_)
-        | OpKind::DispatchSlot(_)
-        | OpKind::ConstBool(_)
-        | OpKind::ConstString(_)
-        | OpKind::ConstTemplate { .. }
-        | OpKind::Erase { .. }
-        | OpKind::TagOf { .. }
-        | OpKind::Unerase { .. }
-        | OpKind::Convert(_)
-        | OpKind::Call { .. }
-        | OpKind::Return(_)
-        | OpKind::ArrayNew { .. }
-        | OpKind::Length(_)
-        | OpKind::ArrayGet { .. }
-        | OpKind::Retain(_)
-        | OpKind::Release(_)
-        | OpKind::StringUnitAt { .. }
-        | OpKind::GlobalGet(_)
-        | OpKind::GlobalSet { .. }
-        | OpKind::ConstNull
-        | OpKind::ConstUndefined
-        | OpKind::ObjectNew { .. }
-        | OpKind::CellReady { .. }
-        | OpKind::ClosureStatic
-        | OpKind::InstanceOf { .. }
-        | OpKind::FieldGet { .. }
-        | OpKind::SharedFieldGet { .. }
-        | OpKind::OpenFieldGet { .. }
-        | OpKind::OpenFieldSet { .. }
-        | OpKind::FieldSet { .. }
-        | OpKind::Await { .. }
-        | OpKind::Yield { .. }
-        | OpKind::Suspend { .. }
-        | OpKind::PromiseSubscribe { .. }
-        | OpKind::ArraySet { .. } => None,
-    }
-}
-
 pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     preflight(program)?;
     let funcs: Vec<_> = program
@@ -225,19 +113,31 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         .map(|func| signature(func, &plan))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|d| EmitError::Declined(vec![d]))?;
-    let helpers = helper_set(program);
+    let resources = requirements::build(program);
+    let helpers = &resources.numeric;
     let mut types = Types::new(&plan);
     let mut imports = ImportSection::new();
     let mut symbols = Symbols {
         functions: FxHashMap::default(),
         helpers: BTreeMap::new(),
         types: &plan,
+        strings: BTreeMap::new(),
+        literals: FxHashMap::default(),
+        global_base: index(resources.literals.len()),
     };
-    let required_imports = scalar_imports(&helpers, &mut types, &mut imports, &mut symbols)?;
+    let mut required_imports = scalar_imports(helpers, &mut types, &mut imports, &mut symbols)?;
+    let builtins = string_imports(&resources, &mut types, &mut imports, &mut symbols)?;
+    let imported_functions = imports.len();
+    let constants = literal_imports(
+        &resources,
+        &mut imports,
+        &mut symbols,
+        &mut required_imports,
+    );
     let mut functions = FunctionSection::new();
     let mut names = NameMap::new();
     for (i, (func, sig)) in funcs.iter().zip(signatures).enumerate() {
-        let id = imports.len() + index(i);
+        let id = imported_functions + index(i);
         if symbols.functions.insert(&func.name, id).is_some() {
             return Err(EmitError::InvalidWasm(format!(
                 "duplicate function `{}`",
@@ -249,7 +149,7 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
     }
     for helper in helpers.iter().filter(|h| !h.imported()) {
         let (params, result) = helper.signature();
-        let id = imports.len() + functions.len();
+        let id = imported_functions + functions.len();
         functions.function(types.intern(Signature {
             params: params.iter().copied().map(Physical::Scalar).collect(),
             result: Some(Physical::Scalar(result)),
@@ -257,18 +157,60 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         symbols.helpers.insert(*helper, id);
         names.append(id, &format!("nts.{}", helper.name()));
     }
+    declare_string_adapters(
+        &resources,
+        &mut types,
+        &mut functions,
+        &mut names,
+        &mut symbols,
+        imported_functions,
+    );
     let globals = globals(program, &plan)?;
     let mut exports = ExportSection::new();
     let mut manifest = manifest(program, funcs, &symbols, required_imports, &mut exports)?;
+    manifest.builtins = builtins;
+    manifest.constants = constants;
     if plan.requires_gc() {
         manifest.features.push("gc".into());
     }
+    let bodies = bodies(funcs, &resources, &symbols)?;
+    let bytes = encode(
+        &types.section,
+        &imports,
+        &functions,
+        &globals,
+        &exports,
+        &bodies.code,
+        &names,
+    );
+    crate::validate(&bytes)?;
+    Ok(Emitted {
+        bytes,
+        manifest: Manifest {
+            functions: bodies.routes,
+            ..manifest
+        },
+        origins: bodies.origins,
+    })
+}
+
+struct Bodies {
+    code: CodeSection,
+    routes: Vec<crate::FunctionRoute>,
+    origins: Vec<crate::InstructionOrigin>,
+}
+
+fn bodies(
+    funcs: &[&Func],
+    resources: &requirements::Requirements,
+    symbols: &Symbols<'_>,
+) -> Result<Bodies, EmitError> {
     let mut code = CodeSection::new();
     let mut routes = Vec::new();
     let mut origins = Vec::new();
     let mut declines = Vec::new();
     for func in funcs {
-        match body::emit(func, symbols.functions[func.name.as_str()], &symbols) {
+        match body::emit(func, symbols.functions[func.name.as_str()], symbols) {
             Ok((function, route, marks)) => {
                 code.function(&function);
                 routes.push(route);
@@ -281,27 +223,23 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
     if !declines.is_empty() {
         return Err(EmitError::Declined(declines));
     }
-    for helper in &helpers {
+    for helper in &resources.numeric {
         if let Some(function) = helper.body() {
             code.function(&function);
         }
     }
-    let bytes = encode(
-        &types.section,
-        &imports,
-        &functions,
-        &globals,
-        &exports,
-        &code,
-        &names,
-    );
-    crate::validate(&bytes)?;
-    Ok(Emitted {
-        bytes,
-        manifest: Manifest {
-            functions: routes,
-            ..manifest
-        },
+    for helper in resources.strings.iter().filter(|h| !h.builtin()) {
+        let function = helper
+            .body(symbols)
+            .map_err(EmitError::InvalidWasm)?
+            .ok_or_else(|| {
+                EmitError::InvalidWasm(format!("missing string helper body {helper:?}"))
+            })?;
+        code.function(&function);
+    }
+    Ok(Bodies {
+        code,
+        routes,
         origins,
     })
 }
@@ -337,6 +275,88 @@ fn scalar_imports(
         );
     }
     Ok(required_imports)
+}
+
+fn string_imports(
+    resources: &requirements::Requirements,
+    types: &mut Types,
+    imports: &mut ImportSection,
+    symbols: &mut Symbols<'_>,
+) -> Result<Vec<crate::Import>, EmitError> {
+    let mut builtins = Vec::new();
+    for helper in resources.strings.iter().filter(|h| h.builtin()) {
+        let (params, result) = helper.signature();
+        let ty = types.intern(Signature {
+            params: params.clone(),
+            result: Some(result),
+        });
+        let id = imports.len(); // All imports so far are functions.
+        imports.import("wasm:js-string", helper.name(), EntityType::Function(ty));
+        symbols.strings.insert(*helper, id);
+        builtins.push(
+            crate::Import::function("wasm:js-string", helper.name(), &params, Some(result))
+                .map_err(EmitError::InvalidWasm)?,
+        );
+    }
+    Ok(builtins)
+}
+
+fn literal_imports<'a>(
+    resources: &'a requirements::Requirements,
+    imports: &mut ImportSection,
+    symbols: &mut Symbols<'a>,
+    required: &mut Vec<crate::Import>,
+) -> Vec<crate::StringConstant> {
+    resources
+        .literals
+        .iter()
+        .enumerate()
+        .map(|(at, value)| {
+            let symbol = format!("s{at}");
+            imports.import(
+                "nts:constants",
+                &symbol,
+                EntityType::Global(GlobalType {
+                    val_type: strings::STRING.wasm(),
+                    mutable: false,
+                    shared: false,
+                }),
+            );
+            symbols.literals.insert(value.as_str(), index(at));
+            required.push(crate::Import {
+                module: "nts:constants".into(),
+                name: symbol.clone(),
+                ty: crate::ImportType::Global {
+                    ty: crate::ValueType::Externref { nullable: true },
+                    mutable: false,
+                },
+            });
+            crate::StringConstant {
+                symbol,
+                value: value.clone(),
+            }
+        })
+        .collect()
+}
+
+fn declare_string_adapters(
+    resources: &requirements::Requirements,
+    types: &mut Types,
+    functions: &mut FunctionSection,
+    names: &mut NameMap,
+    symbols: &mut Symbols<'_>,
+    imported_functions: u32,
+) {
+    for helper in resources.strings.iter().filter(|h| !h.builtin()) {
+        let (params, result) = helper.signature();
+        let id = imported_functions + functions.len();
+        functions.function(types.intern(Signature {
+            params,
+            result: Some(result),
+        }));
+        symbols.strings.insert(*helper, id);
+        names.append(id, helper.name());
+    }
 }
 
 fn encode(
@@ -496,16 +516,12 @@ fn manifest(
                     .map_err(|why| EmitError::Declined(vec![refuse(func, &func.origin, why)]))?,
             });
         } else if let Some((at, global)) = global_definitions.get(emitted.as_str()) {
-            if global.deferred && !program.global_is_initialized(index(*at)) {
-                return Err(EmitError::Declined(vec![Diagnostic::error(
-                    "NTS5001",
-                    format!(
-                        "wasm declines `{published}`: its module initializer did not initialize the global"
-                    ),
-                    global.origin.location,
-                )]));
-            }
-            section.export(published, ExportKind::Global, index(*at));
+            initialized_global(program, index(*at), global, published)?;
+            section.export(
+                published,
+                ExportKind::Global,
+                symbols.global_base + index(*at),
+            );
             globals.push(GlobalExport {
                 name: published.clone(),
                 symbol: published.clone(),
@@ -551,6 +567,24 @@ fn manifest(
         features: Vec::new(),
         functions: Vec::new(),
     })
+}
+
+fn initialized_global(
+    program: &Program,
+    at: u32,
+    global: &nts_core::hir::Global,
+    published: &str,
+) -> Result<(), EmitError> {
+    if global.deferred && !program.global_is_initialized(at) {
+        return Err(EmitError::Declined(vec![Diagnostic::error(
+            "NTS5001",
+            format!(
+                "wasm declines `{published}`: its module initializer did not initialize the global"
+            ),
+            global.origin.location,
+        )]));
+    }
+    Ok(())
 }
 
 fn surface_decline(program: &Program, name: &str) -> EmitError {

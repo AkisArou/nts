@@ -11,6 +11,8 @@ mod gc;
 mod helpers;
 mod module;
 mod numeric;
+mod requirements;
+mod strings;
 mod types;
 
 #[cfg(test)]
