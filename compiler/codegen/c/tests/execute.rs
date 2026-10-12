@@ -61,6 +61,59 @@ int main(void) {
     }
 }
 
+#[test]
+fn a_field_view_keeps_its_object_after_an_owning_slot_is_replaced() {
+    let harness = r#"
+#include "nts_runtime.h"
+extern NtsString *survivesOwnerRelease(double);
+int main(void) {
+    NtsString *expected = nts_string_from_utf8("kept1/kept3", 11);
+    for (int i = 0; i < 10; i++) {
+        NtsString *actual = survivesOwnerRelease(1);
+        if (!nts_string_eq(actual, expected)) return 1;
+        nts_release(actual);
+    }
+#ifdef NTS_PROVIDER_RC
+    size_t before = nts_live_bytes();
+#endif
+    for (int i = 0; i < 1000; i++) {
+        NtsString *actual = survivesOwnerRelease(1);
+        if (!nts_string_eq(actual, expected)) return 2;
+        nts_release(actual);
+    }
+#ifdef NTS_PROVIDER_RC
+    if (nts_live_bytes() != before) return 3;
+#endif
+    nts_release(expected);
+    return 0;
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let Some(output) = build_and_run_transformed(
+            "interface-field-view-lifetime",
+            harness,
+            provider,
+            Host::None,
+            |program| {
+                assert!(
+                    program
+                        .funcs
+                        .iter()
+                        .flat_map(|func| &func.values)
+                        .any(|op| matches!(op.kind, hir::OpKind::FieldView { .. })),
+                    "the lifetime control must retain a non-prefix view"
+                );
+            },
+        ) else {
+            return;
+        };
+        assert!(
+            output.status.success(),
+            "the field view lost or leaked its object: {output:?}"
+        );
+    }
+}
+
 /// A native closure can violate its declared result kind. The interface
 /// adapter must stop by name before interpreting the uniform return payload.
 #[test]
@@ -226,6 +279,21 @@ fn build_and_run_hosted(
     build_and_run_transformed(example, harness, provider, host_kind, |_| {})
 }
 
+fn fixture_config(example: &str) -> Utf8PathBuf {
+    let fixtures = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
+    let examples = fixtures.join("../../../examples");
+    let directory = if examples.join(example).join("tsconfig.json").exists() {
+        examples
+    } else {
+        fixtures.join("../../core/tests/programs")
+    };
+    directory
+        .join(example)
+        .join("tsconfig.json")
+        .canonicalize_utf8()
+        .expect("example or compiler fixture is checked in")
+}
+
 fn build_and_run_transformed(
     example: &str,
     harness: &str,
@@ -248,13 +316,7 @@ fn build_and_run_transformed(
         return None;
     }
 
-    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../examples")
-        .join(example)
-        .join("tsconfig.json")
-        .canonicalize_utf8()
-        .expect("example fixture is checked in");
-
+    let tsconfig = fixture_config(example);
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
