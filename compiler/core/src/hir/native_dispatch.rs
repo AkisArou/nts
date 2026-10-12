@@ -180,7 +180,11 @@ fn intern_rows(
 
 /// After every pass that shapes functions or layouts. Sorting the readers
 /// makes the plan independent of function, layout and hash iteration order.
-pub(super) fn plan(program: &mut Program) {
+///
+/// Public because the rows are a projection of the layouts, interned by
+/// function name: whatever rewrites the layouts' rows after preparation must
+/// project them again, or `verify` rightly reports the stale copy.
+pub fn plan(program: &mut Program) {
     let mut readers = BTreeSet::from([super::closure_call_slot(program)]);
     for func in &program.funcs {
         for op in func

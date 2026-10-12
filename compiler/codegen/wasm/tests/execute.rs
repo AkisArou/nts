@@ -185,6 +185,9 @@ fn source_raising_slot_contract_survives_body_renaming() {
     for (name, _) in &mut program.public_api {
         rename(name);
     }
+    // The native rows are a projection of the layouts' rows, interned by name;
+    // project the renamed ones, as preparation would have.
+    hir::native_dispatch::plan(&mut program);
     let emitted = nts_codegen_wasm::emit(&program).unwrap();
     let output = common::run_with_node_flags(
         "raising-renamed-source",

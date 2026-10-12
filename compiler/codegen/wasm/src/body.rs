@@ -535,13 +535,6 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::Unary { op, operand } => self.unary(id, *op, *operand)?,
             OpKind::Convert(value) => self.convert(id, *value)?,
             OpKind::GlobalGet(global) => self.global(*global, None, &op.ty)?,
-            // A view is an object alias whose reads need interface field
-            // dispatch, which this backend does not yet have.
-            OpKind::FieldView { .. } => {
-                return Err("interface field accessor dispatch outside M1a"
-                    .to_owned()
-                    .into());
-            }
             OpKind::GlobalSet { global, value } => {
                 return self.global(*global, Some(*value), &op.ty);
             }
@@ -579,6 +572,9 @@ impl<'b, 'p> Body<'b, 'p> {
             | OpKind::Length(_)
             | OpKind::CellReady { .. }
             | OpKind::SharedFieldGet { .. }
+            // A view is an object alias whose reads need interface field
+            // dispatch, which this backend does not yet have.
+            | OpKind::FieldView { .. }
             | OpKind::OpenFieldGet { .. }
             | OpKind::OpenFieldSet { .. }
             | OpKind::Await { .. }
