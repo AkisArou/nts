@@ -54,6 +54,10 @@ pub struct Plan {
     /// copies; the JVM consumes that operation rather than deriving a cast.
     pub native_views: BTreeSet<(TypeId, TypeId)>,
     pub mode: Option<super::InterfaceAccess>,
+    /// What a family selector calls on a receiver whose class has no row: its
+    /// face's own positional storage, or a named stop where the face holds
+    /// no field for the member. See [`Plan::default_for`].
+    defaults: BTreeMap<u32, String>,
     by_field: FxHashMap<(TypeId, u32), usize>,
     by_selector: FxHashMap<u32, usize>,
     selectors: FxHashSet<u32>,
@@ -80,6 +84,40 @@ impl Plan {
             .collect();
         self.native_views.retain(|pair| views.contains(pair));
     }
+    /// The body a dispatch through `slot` calls when the receiver's class has
+    /// no row there.
+    ///
+    /// **Rows are owed to the owners that change where a field is, not to
+    /// every object of the face's shape.** An object reaches a face-typed
+    /// value either laid out as a prefix of the face -- the only conversion
+    /// the compiler admits as a plain cast -- or through a `FieldView` the
+    /// family licensed, whose owner has a row. So a receiver with none holds
+    /// the field where the face does, and the face's own positional access
+    /// answers for it. A row per structural owner instead gave every object
+    /// of the program a full table for each optional-only face it fit: the
+    /// `cluster` addon grew from 676 to 1157 KB.
+    #[must_use]
+    pub fn default_for(&self, slot: u32) -> Option<&str> {
+        self.defaults.get(&slot).map(String::as_str)
+    }
+
+    pub(super) fn note_default(&mut self, slot: u32, body: String) {
+        self.defaults.insert(slot, body);
+    }
+
+    /// Forget the defaults whose bodies reachability removed: no surviving
+    /// call dispatches through their selector.
+    pub(super) fn retain_defaults(&mut self, keep: impl Fn(&str) -> bool) {
+        self.defaults.retain(|_, body| keep(body));
+    }
+
+    /// Every selector with a default, and its body.
+    pub fn defaults(&self) -> impl Iterator<Item = (u32, &str)> {
+        self.defaults
+            .iter()
+            .map(|(slot, body)| (*slot, body.as_str()))
+    }
+
     pub(super) fn note_selector(&mut self, slot: u32) {
         self.selectors.insert(slot);
     }
@@ -206,6 +244,7 @@ impl Plan {
             return Vec::new();
         };
         let mut targets = vec![entry.declared.as_str()];
+        targets.extend(self.default_for(entry.slot));
         targets.extend(program.layouts.iter().filter_map(|layout| {
             layout
                 .methods

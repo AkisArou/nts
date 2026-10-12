@@ -49,12 +49,7 @@ pub fn narrow(program: &mut Program, roots: Roots<'_>) -> usize {
         .into_iter()
         .map(str::to_owned)
         .collect();
-    let dispatched: FxHashSet<&str> = program
-        .layouts
-        .iter()
-        .flat_map(|layout| layout.methods.iter().flatten())
-        .map(String::as_str)
-        .collect();
+    let dispatched: FxHashSet<&str> = program.dispatch_targets().collect();
     let widths: Widths = program
         .funcs
         .iter()

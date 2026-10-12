@@ -233,9 +233,27 @@ instantiation is the rest.
 ## Part 2 — fields: the same tables, as accessors
 
 The native field implementation uses one whole-program family per used field.
-Every flow-reached structural candidate must supply the read and, for a writable face, the
-write. Its table entry names a real function reading the concrete field or
-calling the concrete getter or setter. Shared bodies have the same storage,
+The owners the supplier flow proves reach the face license it: each must supply
+the read and, for a writable face, the write, and each gets a table row. A
+conversion into a union reaches every arm, so a narrowing that hands the object
+to another arm finds its row there too.
+
+**Every other object needs no row, and the selector's default answers for it.**
+An object reaches a face-typed value either laid out as a prefix of the face --
+the only object conversion admitted as a plain cast -- or through a `FieldView`
+the family licensed, whose owner has a row. So a receiver whose class has no
+row holds the field where the face does, and the default is the face's own
+positional read or write; where the face's layout holds no field for the
+member, the default is a named stop. C calls `nts_family_row` and LLVM selects
+the same way: the row if the class has one, the default otherwise -- two null
+tests and no new table. A row for every structural candidate instead gave each
+object of a program a full table for every optional-only face it fit, and the
+`cluster` addon grew from 676 to 1157 KB. Every pass that fixes a
+table-callable function's convention reads one set, `Program::dispatch_targets`:
+the rows and the defaults.
+
+A licensed row names a real function reading the concrete field or calling the
+concrete getter or setter. Shared bodies have the same storage,
 absence contract and ABI; their input facts are valid for every incoming face.
 That contract must survive refusal propagation: an interface reader depends on
 every concrete row, including its raising variant. If a getter's transitive
@@ -276,8 +294,17 @@ property, array and callback contracts. Matching a member name alone creates no
 supplier. Source `any` and `unknown` conservatively retain the layouts that enter
 them; two unrelated optional payloads do not exchange values merely because
 both use erased physical storage. Licensing and row reservations consult this
-same membership fact. A family without a complete proof retains the existing
-positional field path and named layout stop.
+same membership fact. A family whose proven suppliers cannot all supply it
+retains the existing positional field path and named layout stop. A spread
+asks the complete structural set instead: it copies the own properties of
+whatever object is there, and any object of the face's shape can be.
+
+A value of a face that carries views is not laid out as the face. A callee is
+not copied over such a face, since the copy would read the face's offsets on
+the object it holds, and converting the value to another object type requires
+every carried owner to be a prefix of the target or carried by the target's own
+accessors; otherwise the conversion refuses with the sentence main gives at the
+view.
 
 The current native JS bridge copies record results outward and refuses incoming
 object/reference-array parameters and object field setters. Erased inputs accept
@@ -289,6 +316,9 @@ to each exposed face's bound.
 
 A narrow stored field needs an initialization proof: an initializer, a parameter
 property, or an unconditional constructor write before the receiver can escape.
+Escape is an allowlist: before its fields are written, the receiver may appear
+only as the object of a plain field it reads or writes in place, or stored
+whole into one of its own fields; every other appearance publishes it.
 A definite-assignment assertion grants no such proof. Missing optional readonly
 fields can return undefined; incomplete supplies retain named stops. Spread and
 own-property reflection require separate evidence about every concrete own shape

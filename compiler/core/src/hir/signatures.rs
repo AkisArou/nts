@@ -187,10 +187,6 @@ fn pinned(program: &Program, roots: &super::reachable::RootNames) -> FxHashSet<S
     let mut fixed: FxHashSet<String> = roots.clone();
     // Anything a dispatch table names: the implementations of one slot are
     // called through one spelled signature, so they have to agree.
-    for layout in &program.layouts {
-        for method in layout.methods.iter().flatten() {
-            fixed.insert(method.clone());
-        }
-    }
+    fixed.extend(program.dispatch_targets().map(str::to_owned));
     fixed
 }

@@ -330,12 +330,7 @@ fn rewrite(
 /// - Inside, every use of the parameter is an **unerase or a tag read**.
 ///   Anything else is a use that wants the general representation.
 pub fn narrow_parameters(program: &mut Program) -> usize {
-    let dispatched: FxHashSet<&str> = program
-        .layouts
-        .iter()
-        .flat_map(|layout| layout.methods.iter().flatten())
-        .map(String::as_str)
-        .collect();
+    let dispatched: FxHashSet<&str> = program.dispatch_targets().collect();
 
     // What each candidate's callers agree on, by function index and parameter.
     let mut agreed: FxHashMap<(usize, usize), HirType> = FxHashMap::default();
@@ -437,12 +432,7 @@ pub fn narrow_parameters(program: &mut Program) -> usize {
 /// and unwraps, which is the shape where the tag is written and read and never
 /// otherwise looked at.
 pub fn narrow_returns(program: &mut Program) -> usize {
-    let dispatched: FxHashSet<&str> = program
-        .layouts
-        .iter()
-        .flat_map(|layout| layout.methods.iter().flatten())
-        .map(String::as_str)
-        .collect();
+    let dispatched: FxHashSet<&str> = program.dispatch_targets().collect();
 
     // What each candidate returns, where that is one thing.
     let mut agreed: FxHashMap<usize, HirType> = FxHashMap::default();

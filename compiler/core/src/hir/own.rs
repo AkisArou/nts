@@ -193,12 +193,7 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
         .foreign_classes
         .iter()
         .flat_map(super::ForeignClass::entered)
-        .chain(
-            program
-                .layouts
-                .iter()
-                .flat_map(|layout| layout.methods.iter().flatten().map(String::as_str)),
-        )
+        .chain(program.dispatch_targets())
         // A foreign caller holds its input through both return and a throw.
         // A wrapper cannot observe whether a consuming store ran before an
         // uncaught call jumped to its landing pad. Published entries therefore
@@ -2836,6 +2831,7 @@ fn invoked_only_directly<'a>(
         .iter()
         .flat_map(|layout| layout.methods.iter().flatten())
         .map(String::as_str)
+        .chain(program.interface_access.defaults().map(|(_, body)| body))
         .collect();
     let mut called: rustc_hash::FxHashSet<&str> = rustc_hash::FxHashSet::default();
     for func in &program.funcs {

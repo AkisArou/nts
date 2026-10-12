@@ -361,6 +361,21 @@ typedef struct NtsHeader {
   uint32_t length;
 } NtsHeader;
 
+/* The entry an interface field's dispatch calls: the receiver's own row where
+ * its class has one, and the family's default otherwise.
+ *
+ * Rows are owed to the classes that keep the field somewhere else than the
+ * interface does. Any other object reaches an interface-typed value laid out
+ * as a prefix of it, so the default -- the interface's own positional read or
+ * write -- answers for it, and such a class needs no table at all. One null
+ * test on the table and one on the entry, and no branch the compiler cannot
+ * turn into a select. */
+static inline void *nts_family_row(const NtsDescriptor *descriptor, uint32_t column, void *fallback) {
+  void *const *methods = descriptor->methods;
+  void *row = methods ? methods[column] : NULL;
+  return row ? row : fallback;
+}
+
 /* A foreign family whose objects hold closures the program lent them -- a
  * GObject holds each of its signal handlers' -- registered by the host that
  * knows the family (`nts_glib_host.c` for GObject), so this runtime knows no

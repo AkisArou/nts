@@ -59,44 +59,18 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
             .layout(*owner)
             .is_some_and(|layout| layout.name == "Computed")
     }));
-    // Every structural owner has a row, the unrelated getter's too: nothing
-    // proves it never reaches `Value`. But its row is a named stop, never a
-    // call into its getter, so the getter's own refusal cannot reach `Value`'s
-    // readers -- `readValue` above is still compiled.
-    for family in program
-        .interface_access
-        .families
-        .iter()
-        .filter(|family| family.member == "value")
-    {
-        let Some(layout) = program
-            .layouts
+    assert!(
+        !program
+            .interface_access
+            .families
             .iter()
-            .find(|layout| layout.name == "UnrelatedGetter")
-        else {
-            continue;
-        };
-        let row = layout
-            .methods
-            .get(family.getter.slot as usize)
-            .and_then(Option::as_deref)
-            .and_then(|name| program.funcs.iter().find(|func| func.name == name));
-        let row = row.expect("the unrelated getter has a row of its own");
-        assert!(
-            !row.values.iter().any(|op| matches!(
-                &op.kind,
-                OpKind::Call { callee: Callee::Direct(name), .. } if name.contains("UnrelatedGetter")
-            )),
-            "an unrelated exported getter cannot create a dependency for Value reads"
-        );
-        assert!(
-            row.values.iter().any(|op| matches!(
-                &op.kind,
-                OpKind::Call { callee: Callee::External(name), .. } if name == "nts_refused"
-            )),
-            "its row stops by name"
-        );
-    }
+            .filter(|family| family.member == "value")
+            .flat_map(|family| &family.owners)
+            .any(|owner| program
+                .layout(*owner)
+                .is_some_and(|layout| layout.name == "UnrelatedGetter")),
+        "an unrelated exported getter cannot create a dependency for Value reads"
+    );
     let read = program
         .funcs
         .iter()
@@ -1050,4 +1024,60 @@ fn raising_accessor_rows_require_complete_coverage() {
                 if reason.contains("value") && reason.contains("declared accessor ABI"))
             })
     );
+}
+
+/// A class laid out as a prefix of the face gets no row, and the selector's
+/// default -- the face's own positional read -- answers for it.
+///
+/// Rows are owed to the owners that keep the field elsewhere. A row for every
+/// structural owner instead gave each object of a program a full table per
+/// optional-only face it fit, and the `cluster` addon grew by 71%.
+#[test]
+fn a_prefix_class_without_a_row_reads_through_the_default() {
+    let Some(program) = prepared_fixture("accessor-default-row") else {
+        return;
+    };
+    let family = program
+        .interface_access
+        .families
+        .iter()
+        .find(|family| {
+            family.member == "a"
+                && program
+                    .layout(family.face)
+                    .is_some_and(|layout| layout.name == "F3")
+        })
+        .expect("`F3.a` dispatches: `T3` keeps `a` elsewhere");
+    let slot = family.getter.slot;
+    let default = program
+        .interface_access
+        .default_for(slot)
+        .expect("the selector has a default");
+    let body = program
+        .funcs
+        .iter()
+        .find(|func| func.name == default)
+        .expect("the default is compiled");
+    let face = program.layout(family.face).unwrap();
+    let at = face.index_of("a").unwrap();
+    assert!(
+        body.values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::FieldGet { field, .. } if field == at)),
+        "the default reads the face's own position"
+    );
+    for name in ["S3", "D3"] {
+        let layout = program
+            .layouts
+            .iter()
+            .find(|layout| layout.name == name)
+            .unwrap_or_else(|| panic!("{name} is laid out"));
+        assert!(
+            layout
+                .methods
+                .get(slot as usize)
+                .is_none_or(Option::is_none),
+            "{name} is a prefix of F3 and owes no row"
+        );
+    }
 }

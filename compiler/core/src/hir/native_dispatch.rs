@@ -56,6 +56,21 @@ impl NativeDispatch {
 }
 
 impl Program {
+    /// Every function a dispatch can call without naming it: each layout's
+    /// table rows, and the default an interface field's selector calls on a
+    /// class with no row (`interface_access::Plan::default_for`).
+    ///
+    /// One answer for every pass that has to keep such a function's
+    /// convention fixed. Five of them derived it from the rows alone, and a
+    /// default reached through no row had its return narrowed to `i32` under a
+    /// selector declared `f64`.
+    pub fn dispatch_targets(&self) -> impl Iterator<Item = &str> {
+        self.layouts
+            .iter()
+            .flat_map(|layout| layout.methods.iter().flatten().map(String::as_str))
+            .chain(self.interface_access.defaults().map(|(_, body)| body))
+    }
+
     /// Native code, without bodies made unreferenced by table projection.
     /// Logical declarations remain available for signatures and JVM emission.
     /// If a body is wrongly omitted, a surviving reference fails compilation

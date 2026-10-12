@@ -1745,6 +1745,29 @@ fn callee_name(callee: &Callee) -> &str {
     }
 }
 
+/// The function a dispatch through `slot` reaches on `receiver`.
+///
+/// An interface field's selector falls back to its family's default where the
+/// receiver's class has no row: see `nts_family_row`.
+fn dispatched_entry(
+    program: &Program,
+    slot: u32,
+    receiver: &str,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
+    let default = program.interface_access.default_for(slot);
+    let column = native_column(program, slot, origin)?;
+    Ok(default.map_or_else(
+        || format!("{receiver}->header.descriptor->methods[{column}]"),
+        |default| {
+            format!(
+                "nts_family_row({receiver}->header.descriptor, {column}u, (void *){})",
+                c_identifier(default)
+            )
+        },
+    ))
+}
+
 /// A call: static, external, or through the receiver's dispatch table.
 fn call_text(
     func: &Func,
@@ -1833,14 +1856,11 @@ fn call_text(
         // table lives -- one load and one indirect call, which is what dispatch
         // costs when the compiler knows the whole hierarchy.
         let signature = virtual_signature(context.program, target, origin)?;
-        let slot = native_column(context.program, *slot, origin)?;
         let receiver = args
             .first()
             .map_or_else(|| "0".to_owned(), |value| value_name(*value));
-        format!(
-            "(({signature}){receiver}->header.descriptor->methods[{slot}])({})",
-            arguments.join(", ")
-        )
+        let entry = dispatched_entry(context.program, *slot, &receiver, origin)?;
+        format!("(({signature}){entry})({})", arguments.join(", "))
     } else if let Callee::Native(native) = callee {
         native_call_expression(
             native,

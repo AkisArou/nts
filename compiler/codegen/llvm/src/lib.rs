@@ -815,6 +815,7 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
     let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
     let cyclic = program.cyclic_layouts();
     let mut emitted_rows = std::collections::BTreeSet::new();
+    no_methods_row(&mut out, program);
     for (index, layout) in program.layouts.iter().enumerate() {
         let Some(placed) = nts_core::hir::layout::place(&layout.fields) else {
             continue;
@@ -1390,6 +1391,24 @@ fn cell_name_globals(program: &Program) -> String {
         );
     }
     out
+}
+
+/// The row an interface field's dispatch reads through when the receiver's
+/// class has no table: see `family_pointer`. Wide enough for every column a
+/// default stands behind, and absent from a program with none.
+fn no_methods_row(out: &mut String, program: &Program) {
+    if let Some(widest) = program
+        .interface_access
+        .defaults()
+        .filter_map(|(slot, _)| program.native_column(slot))
+        .max()
+    {
+        let _ = writeln!(
+            out,
+            "@nts.no.methods = internal constant [{} x ptr] zeroinitializer",
+            widest + 1
+        );
+    }
 }
 
 /// The class's dispatch table, where the hierarchy has one.
@@ -4524,6 +4543,47 @@ fn method_pointer(out: &str, receiver: &str, slot: u32, before: &mut Vec<String>
     format!("{out}.fn")
 }
 
+/// An interface field's dispatch: the receiver's row, or the family's default
+/// where its class has none -- the same choice `nts_family_row` makes for C.
+///
+/// Two selects and no branch. A class with no table at all has a null table
+/// pointer, so the slot is read from `@nts.no.methods` instead, a row of nulls,
+/// and a null entry chooses the default.
+fn family_pointer(
+    out: &str,
+    receiver: &str,
+    (slot, default): (u32, &str),
+    before: &mut Vec<String>,
+) -> String {
+    before.push(format!(
+        "{out}.desc = load ptr, ptr {receiver}{}",
+        tbaa("ptr")
+    ));
+    before.push(format!(
+        "{out}.tab.at = getelementptr %NtsDescriptor, ptr {out}.desc, i32 0, i32 5"
+    ));
+    before.push(format!(
+        "{out}.tab = load ptr, ptr {out}.tab.at{}",
+        tbaa("ptr")
+    ));
+    before.push(format!("{out}.has = icmp ne ptr {out}.tab, null"));
+    before.push(format!(
+        "{out}.row = select i1 {out}.has, ptr {out}.tab, ptr @nts.no.methods"
+    ));
+    before.push(format!(
+        "{out}.raw.at = getelementptr ptr, ptr {out}.row, i32 {slot}"
+    ));
+    before.push(format!(
+        "{out}.raw = load ptr, ptr {out}.raw.at{}",
+        tbaa("ptr")
+    ));
+    before.push(format!("{out}.none = icmp eq ptr {out}.raw, null"));
+    before.push(format!(
+        "{out}.fn = select i1 {out}.none, ptr {default}, ptr {out}.raw"
+    ));
+    format!("{out}.fn")
+}
+
 /// Every argument to a call, at the type the callee declares.
 ///
 /// Two things happen here that C does silently. An erased argument becomes
@@ -4794,7 +4854,20 @@ fn call(
             // the table lives.
             let callable = match dispatched {
                 None => symbol(&called),
-                Some(slot) => method_pointer(&out, &receiver_name(args), slot, &mut before),
+                Some(slot) => {
+                    let default = match callee {
+                        Callee::Virtual { slot: selector, .. } => {
+                            program.interface_access.default_for(*selector)
+                        }
+                        _ => None,
+                    };
+                    if let Some(default) = default {
+                        let default = symbol(default);
+                        family_pointer(&out, &receiver_name(args), (slot, &default), &mut before)
+                    } else {
+                        method_pointer(&out, &receiver_name(args), slot, &mut before)
+                    }
+                }
             };
             // A runtime helper is called at its declared result (`declared_result`).
             let declared = if into_c {

@@ -640,11 +640,13 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             // A virtual call's declaration supplies its ABI even when no
             // concrete row names that declaration (field-family shells).
             if let OpKind::Call {
-                callee: Callee::Virtual { declared, .. },
+                callee: Callee::Virtual { declared, slot },
                 ..
             } = &op.kind
             {
                 targets.push(declared);
+                // And the body it calls on a class with no row there.
+                targets.extend(program.interface_access.default_for(*slot));
             }
             // A virtual call reaches every class row. Source closure rows
             // additionally need a live frame; dispatch tracks allocations and
@@ -695,6 +697,9 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
         .interface_access
         .default_bodies
         .retain(|name, _| keep.contains(name));
+    program
+        .interface_access
+        .retain_defaults(|name| keep.contains(name));
     program.interface_access.prune_views(&program.funcs);
 
     // A table entry naming a function that is gone. It is unreachable by the

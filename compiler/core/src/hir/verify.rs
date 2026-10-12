@@ -393,6 +393,35 @@ fn check_interface_access(program: &Program, problems: &mut Vec<Invalid>) {
             });
         }
     }
+    // A selector's default answers for every class without a row, so it owes
+    // the declared accessor ABI exactly as a row does.
+    for (slot, body) in program.interface_access.defaults() {
+        let declared = program
+            .interface_access
+            .families
+            .iter()
+            .flat_map(super::interface_access::Family::entries)
+            .find(|entry| entry.slot == slot)
+            .and_then(|entry| functions.get(entry.declared.as_str()));
+        let target = functions.get(body);
+        let fits = target.zip(declared).is_some_and(|(target, declared)| {
+            target.return_type == declared.return_type
+                && target.params.len() == declared.params.len()
+                && target
+                    .params
+                    .iter()
+                    .skip(1)
+                    .zip(declared.params.iter().skip(1))
+                    .all(|(mine, wanted)| mine.ty == wanted.ty)
+        });
+        if target.is_none() || (declared.is_some() && !fits) {
+            problems.push(Invalid::InvalidInterfaceAccess {
+                reason: format!(
+                    "the default `{body}` of selector {slot} is not at its accessor ABI"
+                ),
+            });
+        }
+    }
     let layouts = super::fields::LayoutIndex::build(program);
     for family in &program.interface_access.families {
         for entry in family.entries() {
