@@ -25,6 +25,7 @@ pub(crate) struct Symbols<'a> {
     pub(crate) host: BTreeMap<&'static str, u32>,
     pub(crate) erased_globals: Option<crate::erased::Globals>,
     pub(crate) erased: BTreeMap<crate::erased::Helper, u32>,
+    pub(crate) input_decline: Option<u32>,
 }
 
 impl<'a> Symbols<'a> {
@@ -43,6 +44,7 @@ impl<'a> Symbols<'a> {
                 },
             host: BTreeMap::new(),
             erased: BTreeMap::new(),
+            input_decline: None,
             erased_globals: plan
                 .erased
                 .map(|_| crate::erased::Globals::new(index(resources.literals.len()))),
@@ -340,6 +342,23 @@ fn host_imports(
         symbols.host.insert(service.name, id);
         records.push(
             crate::Import::function("nts:host/v1", service.name, &params, Some(result))
+                .map_err(EmitError::InvalidWasm)?,
+        );
+    }
+    if resources.input_contract {
+        let params = [strings::STRING];
+        let ty = types.intern(Signature {
+            params: params.to_vec(),
+            result: None,
+        });
+        symbols.input_decline = Some(imports.len());
+        imports.import(
+            "nts:host/v1",
+            crate::contract::IMPORT,
+            EntityType::Function(ty),
+        );
+        records.push(
+            crate::Import::function("nts:host/v1", crate::contract::IMPORT, &params, None)
                 .map_err(EmitError::InvalidWasm)?,
         );
     }

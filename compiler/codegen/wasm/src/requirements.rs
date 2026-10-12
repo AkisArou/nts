@@ -11,8 +11,34 @@ pub(crate) struct Requirements {
     pub(crate) strings: BTreeSet<strings::Helper>,
     pub(crate) literals: BTreeSet<String>,
     pub(crate) erased: BTreeSet<erased::Helper>,
+    pub(crate) input_contract: bool,
 }
 impl Requirements {
+    fn unit(&mut self, func: &Func, checked: bool) {
+        self.contract(func);
+        if !checked {
+            self.require(strings::Helper::Length);
+        }
+        self.require(if checked {
+            strings::Helper::CharCodeAt
+        } else {
+            strings::Helper::Unit
+        });
+    }
+    fn conversion(
+        &mut self,
+        func: &Func,
+        result: nts_core::hir::ValueId,
+        value: nts_core::hir::ValueId,
+    ) {
+        if func.value(result).ty == HirType::Bool {
+            if strings::is_string(&func.value(value).ty) {
+                self.require(strings::Helper::Length);
+            } else if func.value(value).ty == HirType::Erased {
+                self.require_erased(erased::Helper::Truthy);
+            }
+        }
+    }
     fn unerase(&mut self, ty: &HirType) {
         if matches!(*ty, HirType::Int { .. } | HirType::Float { .. }) {
             self.erased.insert(erased::Helper::Number);
@@ -21,15 +47,28 @@ impl Requirements {
             self.erased.insert(erased::Helper::Tag);
         }
     }
-    fn call(&mut self, target: &Callee) {
+    fn contract(&mut self, func: &Func) {
+        self.input_contract = true;
+        self.literals.insert(func.name.clone());
+    }
+    fn call(&mut self, func: &Func, target: &Callee) {
         match target {
             Callee::External(name) => {
                 if let Some(helper) = strings::external(name) {
                     self.require(helper);
+                    if !matches!(
+                        helper,
+                        strings::Helper::Equal | strings::Helper::FromCharCode
+                    ) {
+                        self.contract(func);
+                    }
                 } else if let Some(service) = host::external(name) {
                     self.host.insert(service);
                 } else if let Some(helper) = erased_ops::external(name) {
                     self.require_erased(helper);
+                    if matches!(helper, erased::Helper::Number | erased::Helper::Boolean) {
+                        self.contract(func);
+                    }
                 }
             }
             Callee::Direct(_)
@@ -117,6 +156,9 @@ fn helper_for(
         }
         OpKind::Unerase { .. } => {
             result.unerase(&func.value(id).ty);
+            if func.value(id).ty != HirType::Erased {
+                result.contract(func);
+            }
             None
         }
         OpKind::TagOf { .. } => {
@@ -130,30 +172,22 @@ fn helper_for(
         OpKind::Length(value) => {
             if strings::is_string(&func.value(value).ty) {
                 result.require(strings::Helper::Length);
+                result.contract(func);
             }
             None
         }
         OpKind::StringUnitAt { checked, .. } => {
-            result.require(if checked {
-                strings::Helper::CharCodeAt
-            } else {
-                strings::Helper::Unit
-            });
+            result.unit(func, checked);
             None
         }
         OpKind::Call {
             callee: ref target, ..
         } => {
-            result.call(target);
+            result.call(func, target);
             None
         }
         OpKind::Convert(value) => {
-            if strings::is_string(&func.value(value).ty) && func.value(id).ty == HirType::Bool {
-                result.require(strings::Helper::Length);
-            } else if func.value(value).ty == HirType::Erased && func.value(id).ty == HirType::Bool
-            {
-                result.require_erased(erased::Helper::Truthy);
-            }
+            result.conversion(func, id, value);
             None
         }
         OpKind::NativeLoad { .. }
@@ -250,6 +284,9 @@ fn binary(
     if strings::is_string(&func.value(lhs).ty) && strings::is_string(&func.value(rhs).ty) {
         if let Ok(helper) = strings::binary_helper(op) {
             result.require(helper);
+            if !matches!(op, BinOp::Eq | BinOp::Ne) {
+                result.contract(func);
+            }
         }
         return None;
     }

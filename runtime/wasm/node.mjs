@@ -24,6 +24,11 @@ const numberString = Number.prototype.toString;
 primitiveServices.nts_number_to_string = Object.freeze({ params: [f64], result: extern, call: value => apply(numberString, value, []) });
 primitiveServices.nts_parse_float = Object.freeze({ params: [extern], result: f64, call: number.parseFloat });
 primitiveServices.nts_parse_int = Object.freeze({ params: [extern, f64], result: f64, call: number.parseInt });
+// This reports the supported-input contract. Source throws use the instance's
+// raising state, and internal emitter failures never enter this channel.
+primitiveServices.inputDecline = Object.freeze({ params: [extern], result: null,
+  call: name => { throw new WasmInputDecline(name, 'internal typed value contract', 'operation in'); },
+});
 const services = Object.freeze(primitiveServices);
 const builtins = Object.freeze({
   length: { params: [extern], result: i32 },

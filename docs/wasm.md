@@ -311,6 +311,12 @@ following concrete manifest/loader details were approved in the amendment review
   Checked typed indices outside the supported input contract retain a named
   input refusal; source `throw` follows HIR's raising edges. A failed compiled
   call's placeholder result must never reach a public result decoder.
+  The JS adapter's cold `nts:host/v1.inputDecline(externref) -> void`
+  import reports a named `NTS5001` for an invalid typed-storage input before
+  a cast or receiver access can trap. Its argument is the compiled function's
+  name, supplied through the same immutable string-global contract. It does
+  not enter a source catch handler; it marks an execution outside the supported
+  input contract. Source exceptions instead use the explicit raising state.
 - Clarify uncaught compiled-object payloads at the JS boundary before claiming
   exception parity. Scalar/string/absence payloads can preserve their JS value;
   an opaque GC object does not expose source `message`, properties or prototype.

@@ -218,6 +218,7 @@ pub(crate) fn callee(symbols: &Symbols<'_>, helper: Helper) -> Result<u32, Failu
 }
 
 pub(crate) fn length(b: &mut Body<'_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
+    crate::contract::nonnull(b, value)?;
     b.load(value)?;
     call(b, Helper::Length)?;
     numeric::convert(b, &UINT, &b.ty(result).clone())
@@ -231,16 +232,44 @@ pub(crate) fn unit(
     checked: bool,
 ) -> Result<(), Failure> {
     let helper = if checked {
+        // Range checks happen in the adapter, after the receiver contract.
         Helper::CharCodeAt
     } else {
         Helper::Unit
     };
+    crate::contract::nonnull(b, string)?;
+    if !checked {
+        unit_index_contract(b, string, index)?;
+    }
     let index_type = if checked { HirType::NUMBER } else { UINT };
     b.load(string)?;
     b.load(index)?;
     numeric::convert(b, &b.ty(index).clone(), &index_type)?;
     call(b, helper)?;
     numeric::convert(b, &index_type, &b.ty(result).clone())
+}
+
+fn unit_index_contract(b: &mut Body<'_>, string: ValueId, index: ValueId) -> Result<(), Failure> {
+    let ty = b.ty(index).clone();
+    b.load(index)?;
+    numeric::convert(b, &ty, &HirType::NUMBER)?;
+    b.load(index)?;
+    numeric::convert(b, &ty, &HirType::NUMBER)?;
+    b.ins(&I::F64Trunc);
+    b.ins(&I::F64Eq);
+    b.load(index)?;
+    numeric::convert(b, &ty, &HirType::NUMBER)?;
+    b.ins(&I::F64Const(0.0.into()));
+    b.ins(&I::F64Ge);
+    b.ins(&I::I32And);
+    b.load(index)?;
+    numeric::convert(b, &ty, &HirType::NUMBER)?;
+    b.load(string)?;
+    call(b, Helper::Length)?;
+    b.ins(&I::F64ConvertI32U);
+    b.ins(&I::F64Lt);
+    b.ins(&I::I32And);
+    crate::contract::require(b)
 }
 
 pub(crate) fn binary(
@@ -253,6 +282,10 @@ pub(crate) fn binary(
         return Err("string binary operands have differing logical types".into());
     }
     let helper = binary_helper(op)?;
+    if !matches!(op, BinOp::Eq | BinOp::Ne) {
+        crate::contract::nonnull(b, lhs)?;
+        crate::contract::nonnull(b, rhs)?;
+    }
     b.load(lhs)?;
     b.load(rhs)?;
     call(b, helper)?;
@@ -297,6 +330,9 @@ pub(crate) fn runtime(
         return Err(format!("string helper {helper:?} arity mismatch").into());
     }
     for (&arg, expected) in args.iter().zip(params) {
+        if expected == STRING && helper != Helper::Equal {
+            crate::contract::nonnull(b, arg)?;
+        }
         b.load(arg)?;
         match expected {
             STRING => {

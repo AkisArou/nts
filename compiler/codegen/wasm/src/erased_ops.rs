@@ -102,6 +102,22 @@ pub(crate) fn runtime(
             return Err(format!("erased helper {helper:?} expects {logical:?}").into());
         }
     }
+    // Equality helpers guard their own tags before projecting a payload.
+    if matches!(helper, Helper::Number | Helper::Boolean) {
+        b.ins(&I::Drop);
+        let types = b
+            .symbols
+            .types
+            .erased
+            .ok_or_else(|| Failure::Invariant("unplanned erased projection".into()))?;
+        let cases = if helper == Helper::Number {
+            vec![HeapType::I31, HeapType::Concrete(types.number)]
+        } else {
+            vec![HeapType::Concrete(types.boolean)]
+        };
+        erased::projection_guard(b, args[0], &cases)?;
+        b.load(args[0])?;
+    }
     erased::call(b, helper)?;
     let logical = output.logical();
     if matches!(output, Value::Number | Value::Tag) {

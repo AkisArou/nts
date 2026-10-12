@@ -7,6 +7,7 @@
 mod abi;
 mod body;
 mod cfg;
+mod contract;
 mod erased;
 mod erased_ops;
 mod error;

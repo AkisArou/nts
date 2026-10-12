@@ -1,7 +1,8 @@
 //! Erased primitives use GC storage and the shared semantic tag numbers.
 
 use crate::{
-    body::Body, error::Failure, gc::ErasedTypes, module::Symbols, numeric, types::Physical,
+    body::Body, contract, error::Failure, gc::ErasedTypes, module::Symbols, numeric,
+    types::Physical,
 };
 use nts_core::hir::{Absent, HirType, ManagedType, ValueId, tags};
 use wasm_encoder::{
@@ -301,6 +302,9 @@ pub(crate) fn unerase(body: &mut Body<'_>, result: ValueId, value: ValueId) -> R
     match body.ty(result).clone() {
         HirType::Erased => {}
         HirType::Bool => {
+            body.ins(&I::Drop);
+            projection_guard(body, value, &[HeapType::Concrete(boxed.boolean)])?;
+            body.load(value)?;
             body.ins(&I::RefCastNonNull(HeapType::Concrete(boxed.boolean)));
             body.ins(&I::StructGet {
                 struct_type_index: boxed.boolean,
@@ -308,6 +312,13 @@ pub(crate) fn unerase(body: &mut Body<'_>, result: ValueId, value: ValueId) -> R
             });
         }
         ty @ (HirType::Int { .. } | HirType::Float { .. }) => {
+            body.ins(&I::Drop);
+            projection_guard(
+                body,
+                value,
+                &[HeapType::I31, HeapType::Concrete(boxed.number)],
+            )?;
+            body.load(value)?;
             call(body, Helper::Number)?;
             numeric::convert(body, &HirType::NUMBER, &ty)?;
         }
@@ -325,6 +336,7 @@ pub(crate) fn unerase(body: &mut Body<'_>, result: ValueId, value: ValueId) -> R
             body.ins(&I::If(BlockType::Result(ValType::EXTERNREF)));
             body.ins(&I::RefNull(HeapType::EXTERN));
             body.ins(&I::Else);
+            projection_guard(body, value, &[HeapType::Concrete(boxed.string)])?;
             body.load(value)?;
             body.ins(&I::RefCastNonNull(HeapType::Concrete(boxed.string)));
             body.ins(&I::StructGet {
@@ -341,6 +353,21 @@ pub(crate) fn unerase(body: &mut Body<'_>, result: ValueId, value: ValueId) -> R
         }
     }
     Ok(())
+}
+
+pub(crate) fn projection_guard(
+    body: &mut Body<'_>,
+    value: ValueId,
+    cases: &[HeapType],
+) -> Result<(), Failure> {
+    for (at, case) in cases.iter().enumerate() {
+        body.load(value)?;
+        body.ins(&I::RefTestNonNull(*case));
+        if at != 0 {
+            body.ins(&I::I32Or);
+        }
+    }
+    contract::require(body)
 }
 
 pub(crate) fn tag(body: &mut Body<'_>, result: ValueId, value: ValueId) -> Result<(), Failure> {

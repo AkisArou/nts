@@ -142,7 +142,14 @@ fn erased_primitives_and_defined_immutable_singletons_execute_exactly() {
     });
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
     assert_eq!(emitted.manifest.features, ["gc"]);
-    assert!(emitted.manifest.builtins.is_empty() && emitted.manifest.imports.is_empty());
+    assert!(emitted.manifest.builtins.is_empty());
+    assert!(
+        emitted
+            .manifest
+            .imports
+            .iter()
+            .any(|import| import.name == "inputDecline")
+    );
     let report = common::run("erased", &emitted, "tooling/wasm/check-erased.mjs", &[]);
     assert!(report["cases"].as_u64().unwrap() > 100);
 }

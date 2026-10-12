@@ -55,6 +55,7 @@ mod tests {
             host: BTreeMap::new(),
             erased_globals: None,
             erased: BTreeMap::new(),
+            input_decline: None,
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -122,6 +123,7 @@ mod tests {
                 host: BTreeMap::new(),
                 erased_globals: None,
                 erased: BTreeMap::new(),
+                input_decline: None,
             };
             let error = emit(&f, 0, &symbols).unwrap_err();
             assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));

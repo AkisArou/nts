@@ -118,7 +118,14 @@ fn builtin_strings_literals_live_globals_and_js_ranges_execute_exactly() {
     }
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
     assert!(emitted.manifest.features.is_empty());
-    assert_eq!(emitted.manifest.constants.len(), 3);
+    assert!(emitted.manifest.constants.len() >= 3);
+    assert!(
+        emitted
+            .manifest
+            .imports
+            .iter()
+            .any(|import| import.name == "inputDecline")
+    );
     let report = common::run("strings", &emitted, "tooling/wasm/check-strings.mjs", &[]);
     assert!(report["cases"].as_u64().unwrap() > 10_000);
 }
