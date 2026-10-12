@@ -393,10 +393,11 @@ function selfCheck() {
     return "check location normalization hid a changed count or refusal";
   }
   const dir = join(SCRATCH, "self");
-  const probe = (text) => {
+  const probe = (text, compilerOptions) => {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(join(dir, "src"), { recursive: true });
     writeFileSync(join(dir, "src/main.ts"), text);
+    if (compilerOptions) writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions }));
     const d = materialise("self-run", join(dir, "src"), "build");
     const nts = runBuild(d);
     return { nts, node: runNode(d) };
@@ -424,6 +425,20 @@ function selfCheck() {
   // The refused call sits at the top level, so the artefact runs without it:
   // the harness must say so rather than stop at the refusal.
   if (typeof refused.nts.ran !== "string" || !/^exit /.test(refused.nts.ran)) return `refusal arm's artefact was not run: ran=${refused.nts.ran}`;
+  // A fixture's own compilerOptions reach the compiler: one read past the end,
+  // with and without `noUncheckedIndexedAccess`. With it the read answers
+  // `undefined`, as node does; without it the read is typed `number`, and the
+  // compiled program cannot answer `undefined` there. When the copy dropped
+  // the fixture's options, a defect that needs one was recorded as agreeing.
+  const pastTheEnd = 'const xs = [1, 2];\nobserve("past the end", String(xs["ab".length]));\ndone();\n';
+  const unchecked = probe(pastTheEnd, { noUncheckedIndexedAccess: true });
+  if (unchecked.nts.category !== "completed" || unchecked.nts.nts !== unchecked.node || !/past the end=undefined;/.test(unchecked.node)) {
+    return `option arm: nts said ${JSON.stringify(unchecked.nts)}, node said ${unchecked.node}`;
+  }
+  const typed = probe(pastTheEnd);
+  if (typed.nts.category === "completed" && typed.nts.nts === typed.node) {
+    return "a fixture's compilerOptions did not change what was compiled";
+  }
   return null;
 }
 
@@ -457,7 +472,7 @@ if (broken) {
   console.log("  a harness that cannot tell agreement from disagreement cannot hold a record");
   process.exit(2);
 }
-console.log("  self-checks: control agrees with node, refusal arm refused and its artefact run" +
+console.log("  self-checks: control agrees with node, refusal arm refused and its artefact run, a fixture's options reach the compiler" +
   (chosen.some((name) => memoryOptions(name).address) ? "; ASan control clean, use-after-return fault detected" : ""));
 
 let unexpected = 0;
