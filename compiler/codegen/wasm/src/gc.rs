@@ -70,7 +70,6 @@ pub(crate) struct ErasedTypes {
     pub(crate) tagged: u32,
     pub(crate) number: u32,
     pub(crate) boolean: u32,
-    pub(crate) string: u32,
 }
 
 /// The fields every descriptor starts with: semantic identity, runtime kind
@@ -96,7 +95,6 @@ struct ErasedNodes {
     tagged: NodeId,
     number: NodeId,
     boolean: NodeId,
-    string: NodeId,
 }
 
 #[derive(Debug)]
@@ -430,20 +428,12 @@ impl<'a> Builder<'a> {
                 Field::value(PendingSlot::Scalar(Slot::I32), false),
             ]),
         );
-        let string = self.add(
-            "erased string".into(),
-            Some(tagged),
-            true,
-            Shape::Struct(vec![
-                tag,
-                Field::value(PendingSlot::Reference(RefType::EXTERNREF), false),
-            ]),
-        );
+        // A string is not boxed: the JS string itself, internalized into
+        // anyref, is neither an i31 nor a struct.
         self.erased = Some(ErasedNodes {
             tagged,
             number,
             boolean,
-            string,
         });
     }
 
@@ -1097,7 +1087,6 @@ impl<'a> Builder<'a> {
                 tagged: indices[nodes.tagged.0],
                 number: indices[nodes.number.0],
                 boolean: indices[nodes.boolean.0],
-                string: indices[nodes.string.0],
             }),
             slots: self
                 .slots

@@ -161,11 +161,6 @@ fn uncaught(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
     let undefined = m.host_global("undefined");
     let yes = m.host_global("true");
     let no = m.host_global("false");
-    let string = m
-        .types
-        .erased
-        .ok_or_else(|| Failure::Invariant("missing erased string box".into()))?
-        .string;
     let js = m.js_tag();
     clear(f, m)?;
     f.instruction(&I::LocalGet(0));
@@ -206,14 +201,8 @@ fn uncaught(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
     f.instruction(&I::End);
     found(f);
     case(f, erased::STRING);
-    f.instructions(&[
-        I::LocalGet(0),
-        I::RefCastNonNull(HeapType::Concrete(string)),
-        I::StructGet {
-            struct_type_index: string,
-            field_index: 1,
-        },
-    ]);
+    f.instruction(&I::LocalGet(0));
+    erased::string_payload(f);
     found(f);
     case(f, erased::UNDEFINED);
     f.global_get(undefined);

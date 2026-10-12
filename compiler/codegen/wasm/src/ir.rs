@@ -246,6 +246,7 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::RefI31
             | I::I31GetS
             | I::RefTestNonNull(_)
+            | I::RefTestNullable(_)
             | I::RefCastNonNull(_)
             | I::RefCastNullable(_)
             | I::ExternConvertAny

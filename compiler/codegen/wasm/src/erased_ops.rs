@@ -258,8 +258,10 @@ fn equality(m: &mut Builder<'_>, types: ErasedTypes) -> Result<Function, Failure
     f.call(number);
     f.instructions(&[I::F64Eq, I::Return, I::End]);
     when_tag(&mut f, 2, STRING);
-    payload(&mut f, 0, types.string);
-    payload(&mut f, 1, types.string);
+    f.instruction(&I::LocalGet(0));
+    erased::string_payload(&mut f);
+    f.instruction(&I::LocalGet(1));
+    erased::string_payload(&mut f);
     f.call(string_eq);
     f.instructions(&[I::Return, I::End]);
     when_tag(&mut f, 2, BOOLEAN);
@@ -315,7 +317,8 @@ fn typed_equality(
         }
         Helper::EqualString => {
             let equal = strings::callee(m, strings::Helper::Equal)?;
-            payload(&mut f, 0, types.string);
+            f.instruction(&I::LocalGet(0));
+            erased::string_payload(&mut f);
             f.instruction(&I::LocalGet(1));
             f.call(equal);
         }
@@ -367,14 +370,16 @@ fn truthiness(m: &mut Builder<'_>, types: ErasedTypes) -> Result<Function, Failu
         I::End,
     ]);
     when_tag(&mut f, 1, STRING);
-    payload(&mut f, 0, types.string);
+    f.instruction(&I::LocalGet(0));
+    erased::string_payload(&mut f);
     f.instructions(&[
         I::RefIsNull,
         I::If(BlockType::Result(ValType::I32)),
         I::I32Const(0),
         I::Else,
     ]);
-    payload(&mut f, 0, types.string);
+    f.instruction(&I::LocalGet(0));
+    erased::string_payload(&mut f);
     f.call(length);
     f.instructions(&[
         I::I32Eqz,

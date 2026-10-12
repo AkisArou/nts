@@ -326,10 +326,6 @@ fn search(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Func
 }
 fn string_needle(f: &mut Function, helper: Helper, m: &mut Builder<'_>) -> Result<(), Failure> {
     if helper.erased_needle() {
-        let types = m
-            .types
-            .erased
-            .ok_or_else(|| Failure::Invariant("unplanned string needle types".into()))?;
         let tag = erased::callee(m, erased::Helper::Tag)?;
         f.instruction(&I::LocalGet(1));
         f.call(tag);
@@ -339,11 +335,7 @@ fn string_needle(f: &mut Function, helper: Helper, m: &mut Builder<'_>) -> Resul
             I::LocalTee(8),
             I::If(BlockType::Empty),
             I::LocalGet(1),
-            I::RefCastNonNull(HeapType::Concrete(types.string)),
-            I::StructGet {
-                struct_type_index: types.string,
-                field_index: 1,
-            },
+            I::ExternConvertAny,
             I::LocalSet(7),
             I::End,
         ]);

@@ -1,4 +1,9 @@
 //! Erased primitives use GC storage and the shared semantic tag numbers.
+//!
+//! An erased value is an anyref: an i31 or a boxed number, a boolean box, an
+//! absence singleton, a compiled object, or a JS string itself, internalized
+//! with `any.convert_extern`. Erasure internalizes nothing but strings, so an
+//! anyref that is neither an i31 nor a struct is a string.
 
 use crate::{
     body::Body,
@@ -162,7 +167,17 @@ impl Helper {
 }
 
 fn physical_tag(f: &mut Function, types: ErasedTypes, root: Option<crate::gc::RootTypes>) {
+    // A JS string is the one erased value outside `eq` (no i31, no struct),
+    // so it is told apart by one test, first. The test admits null, so a null
+    // reference, which no erased value is, still reaches the cast below and
+    // traps rather than reading as a string.
     f.instructions(&[
+        I::LocalGet(0),
+        I::RefTestNullable(RefType::EQREF.heap_type),
+        I::I32Eqz,
+        I::If(BlockType::Result(ValType::I32)),
+        I::I32Const(STRING),
+        I::Else,
         I::LocalGet(0),
         I::RefTestNonNull(HeapType::I31),
         I::If(BlockType::Result(ValType::I32)),
@@ -198,7 +213,13 @@ fn physical_tag(f: &mut Function, types: ErasedTypes, root: Option<crate::gc::Ro
     if root.is_some() {
         f.instruction(&I::End);
     }
-    f.instruction(&I::End);
+    f.instructions(&[I::End, I::End]);
+}
+
+/// The JS string an erased string holds, from an anyref already known to be
+/// one: its external form.
+pub(crate) fn string_payload(f: &mut ir::Code) {
+    f.instruction(&I::ExternConvertAny);
 }
 fn types(m: &Builder<'_>) -> Result<ErasedTypes, Failure> {
     m.types
@@ -275,7 +296,6 @@ pub(crate) fn erase(
 }
 
 fn erase_string(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Result<(), Failure> {
-    let ty = types(body.m)?.string;
     let tag = match absent {
         Absent::Impossible => None,
         Absent::Null => Some(NULL),
@@ -291,9 +311,8 @@ fn erase_string(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Resu
         get_singleton(body, Singleton::for_tag(tag)?)?;
         body.instruction(&I::Else);
     }
-    body.instruction(&I::I32Const(STRING));
     body.load(value)?;
-    body.instruction(&I::StructNew(ty));
+    body.instruction(&I::AnyConvertExtern);
     if tag.is_some() {
         body.instruction(&I::End);
     }
@@ -368,13 +387,13 @@ pub(crate) fn unerase(
             body.instruction(&I::If(BlockType::Result(ValType::EXTERNREF)));
             body.instruction(&I::RefNull(HeapType::EXTERN));
             body.instruction(&I::Else);
-            projection_guard(body, value, &[HeapType::Concrete(boxed.string)])?;
             body.load(value)?;
-            body.instruction(&I::RefCastNonNull(HeapType::Concrete(boxed.string)));
-            body.instruction(&I::StructGet {
-                struct_type_index: boxed.string,
-                field_index: 1,
-            });
+            call(body, Helper::Tag)?;
+            body.instruction(&I::I32Const(STRING));
+            body.instruction(&I::I32Eq);
+            contract::require(body)?;
+            body.load(value)?;
+            string_payload(&mut body.code);
             body.instruction(&I::End);
         }
         ty @ HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
