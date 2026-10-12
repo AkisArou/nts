@@ -2,14 +2,14 @@
 
 use crate::{
     EmitError, FunctionRoute, InstructionOrigin, cfg,
+    error::Failure,
     helpers::Helper,
     module::Symbols,
-    numeric, refuse,
+    numeric,
     types::{Physical, Slot},
 };
 use nts_codegen_common::{Copy, edge_copies};
 use nts_core::hir::{BlockId, Callee, Func, OpKind, Terminator, ValueId};
-use nts_diagnostics::Diagnostic;
 use std::collections::BTreeMap;
 use wasm_encoder::{BlockType, Function, Instruction as I};
 
@@ -65,6 +65,64 @@ mod tests {
         assert!(error.to_string().contains("out-of-scope"));
         assert!(!error.to_string().contains("NTS5001"));
     }
+
+    #[test]
+    fn missing_planned_bindings_are_internal_errors_through_value_operations() {
+        use nts_core::hir::{HirType, ManagedType, UnOp};
+        let string = HirType::Managed(ManagedType::String);
+        let mut literal = function("brokenLiteral", &[], string.clone());
+        let text = value(
+            &mut literal,
+            OpKind::ConstString("x".into()),
+            string.clone(),
+        );
+        literal
+            .blocks
+            .push(block(&[], &[text], Terminator::Return(Some(text))));
+        let mut numeric = function("brokenNumericHelper", &[], HirType::NUMBER);
+        let number = value(&mut numeric, OpKind::ConstFloat(1.5), HirType::NUMBER);
+        let rounded = value(
+            &mut numeric,
+            OpKind::Unary {
+                op: UnOp::Round,
+                operand: number,
+            },
+            HirType::NUMBER,
+        );
+        numeric.blocks.push(block(
+            &[],
+            &[number, rounded],
+            Terminator::Return(Some(rounded)),
+        ));
+        let mut length = function(
+            "brokenStringHelper",
+            std::slice::from_ref(&string),
+            HirType::NUMBER,
+        );
+        let arg = value(&mut length, OpKind::Param(0), string);
+        let len = value(&mut length, OpKind::Length(arg), HirType::NUMBER);
+        length
+            .blocks
+            .push(block(&[], &[arg, len], Terminator::Return(Some(len))));
+        for f in [literal, numeric, length] {
+            let p = crate::test_common::program(vec![f.clone()]);
+            let slots = crate::gc::Plan::build(&p).unwrap();
+            // Fault injection: no binding was installed for any planned helper
+            // or literal. The failure must survive numeric/string adaptation.
+            let symbols = Symbols {
+                functions: rustc_hash::FxHashMap::default(),
+                helpers: BTreeMap::new(),
+                types: &slots,
+                strings: BTreeMap::new(),
+                literals: rustc_hash::FxHashMap::default(),
+                global_base: 0,
+            };
+            let error = emit(&f, 0, &symbols).unwrap_err();
+            assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));
+            assert!(error.to_string().contains("unplanned"));
+            assert!(!error.to_string().contains("NTS5001"));
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,8 +158,7 @@ pub(crate) fn emit(
         function: func.name.clone(),
         reason,
     })?;
-    let mut body =
-        Body::new(func, index, symbols, &plan).map_err(|d| EmitError::Declined(vec![d]))?;
+    let mut body = Body::new(func, index, symbols, &plan)?;
     if let Some(structure) = &plan.structure {
         body.tree(BlockId(0), structure)?;
     } else {
@@ -134,7 +191,7 @@ impl<'a> Body<'a> {
         index: u32,
         symbols: &'a Symbols<'a>,
         plan: &cfg::Plan,
-    ) -> Result<Self, Diagnostic> {
+    ) -> Result<Self, EmitError> {
         let mut locals = Vec::new();
         let mut next = crate::module::index(func.params.len());
         let mut values = vec![None; func.values.len()];
@@ -148,7 +205,7 @@ impl<'a> Body<'a> {
             let slot = symbols
                 .types
                 .slot(&op.ty)
-                .map_err(|why| refuse(func, &op.origin, why))?;
+                .map_err(|failure| failure.at(&func.name, &op.origin))?;
             if let OpKind::Param(at) = op.kind {
                 values[value.0 as usize] = Some(at);
             } else if let Some(slot) = slot {
@@ -167,7 +224,7 @@ impl<'a> Body<'a> {
                         let slot = symbols
                             .types
                             .value_slot(&func.value(from).ty)
-                            .map_err(|why| refuse(func, &func.value(from).origin, why))?;
+                            .map_err(|failure| failure.at(&func.name, &func.value(from).origin))?;
                         scratch.entry((temp, slot)).or_insert_with(|| {
                             let id = next;
                             next += 1;
@@ -210,10 +267,11 @@ impl<'a> Body<'a> {
     pub(crate) fn ins(&mut self, i: &I<'_>) {
         self.code.instruction(i);
     }
-    pub(crate) fn local(&self, value: ValueId) -> Result<u32, String> {
-        self.values[value.0 as usize].ok_or_else(|| format!("%{} has no value local", value.0))
+    pub(crate) fn local(&self, value: ValueId) -> Result<u32, Failure> {
+        self.values[value.0 as usize]
+            .ok_or_else(|| Failure::Invariant(format!("%{} has no value local", value.0)))
     }
-    pub(crate) fn load(&mut self, value: ValueId) -> Result<(), String> {
+    pub(crate) fn load(&mut self, value: ValueId) -> Result<(), Failure> {
         let local = self.local(value)?;
         self.ins(&I::LocalGet(local));
         Ok(())
@@ -221,21 +279,21 @@ impl<'a> Body<'a> {
     pub(crate) fn ty(&self, value: ValueId) -> &nts_core::hir::HirType {
         &self.func.value(value).ty
     }
-    pub(crate) fn helper(&mut self, helper: Helper) -> Result<(), String> {
+    pub(crate) fn helper(&mut self, helper: Helper) -> Result<(), Failure> {
         let index = self
             .symbols
             .helpers
             .get(&helper)
-            .ok_or_else(|| format!("unplanned scalar helper {helper:?}"))?;
+            .ok_or_else(|| Failure::Invariant(format!("unplanned scalar helper {helper:?}")))?;
         self.ins(&I::Call(*index));
         Ok(())
     }
-    fn depth(&self, label: Label) -> Result<u32, String> {
+    fn depth(&self, label: Label) -> Result<u32, Failure> {
         self.labels
             .iter()
             .rposition(|it| *it == label)
             .map(|at| crate::module::index(self.labels.len() - at - 1))
-            .ok_or_else(|| format!("edge to out-of-scope {label:?}"))
+            .ok_or_else(|| Failure::Invariant(format!("edge to out-of-scope {label:?}")))
     }
     fn open(&mut self, loop_: bool, label: Label) {
         self.ins(&if loop_ {
@@ -249,10 +307,10 @@ impl<'a> Body<'a> {
         self.ins(&I::End);
         self.labels.pop();
     }
-    fn structuring(&self, reason: impl Into<String>) -> EmitError {
+    fn structuring(&self, reason: impl std::fmt::Display) -> EmitError {
         EmitError::Structuring {
             function: self.func.name.clone(),
-            reason: reason.into(),
+            reason: reason.to_string(),
         }
     }
     // Ramsey's doTree/nodeWithin: merge children are wrapped in reverse RPO
@@ -377,7 +435,7 @@ impl<'a> Body<'a> {
                 origin: op.origin.clone(),
             });
             self.op(*id)
-                .map_err(|why| EmitError::Declined(vec![refuse(self.func, &op.origin, why)]))?;
+                .map_err(|failure| failure.at(&self.func.name, &op.origin))?;
         }
         Ok(())
     }
@@ -386,7 +444,7 @@ impl<'a> Body<'a> {
         self.terminator(&self.func.blocks[block.0 as usize].terminator)
             .map_err(|why| self.structuring(why))
     }
-    fn copies(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), String> {
+    fn copies(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), Failure> {
         let mut saved = BTreeMap::new();
         for copy in edge_copies(&self.func.blocks[target.0 as usize].params, args) {
             match copy {
@@ -397,24 +455,19 @@ impl<'a> Body<'a> {
                 Copy::Save { temp, from } => {
                     self.load(from)?;
                     let slot = self.symbols.types.value_slot(self.ty(from))?;
-                    let local = self
-                        .scratch
-                        .get(&(temp, slot))
-                        .copied()
-                        .ok_or_else(|| format!("unplanned edge temporary {temp}: {slot:?}"))?;
+                    let local = self.scratch.get(&(temp, slot)).copied().ok_or_else(|| {
+                        Failure::Invariant(format!("unplanned edge temporary {temp}: {slot:?}"))
+                    })?;
                     saved.insert(temp, slot);
                     self.ins(&I::LocalSet(local));
                 }
                 Copy::Restore { to, temp } => {
-                    let slot = saved
-                        .get(&temp)
-                        .copied()
-                        .ok_or_else(|| format!("edge temporary {temp} restored before saving"))?;
-                    let local = self
-                        .scratch
-                        .get(&(temp, slot))
-                        .copied()
-                        .ok_or_else(|| format!("unplanned edge temporary {temp}: {slot:?}"))?;
+                    let slot = saved.get(&temp).copied().ok_or_else(|| {
+                        Failure::Invariant(format!("edge temporary {temp} restored before saving"))
+                    })?;
+                    let local = self.scratch.get(&(temp, slot)).copied().ok_or_else(|| {
+                        Failure::Invariant(format!("unplanned edge temporary {temp}: {slot:?}"))
+                    })?;
                     self.ins(&I::LocalGet(local));
                     self.ins(&I::LocalSet(self.local(to)?));
                 }
@@ -422,7 +475,7 @@ impl<'a> Body<'a> {
         }
         Ok(())
     }
-    fn edge(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), String> {
+    fn edge(&mut self, target: BlockId, args: &[ValueId]) -> Result<(), Failure> {
         self.copies(target, args)?;
         if let Some(pc) = self.pc {
             self.ins(&I::I32Const(
@@ -437,7 +490,7 @@ impl<'a> Body<'a> {
         self.edges += 1;
         Ok(())
     }
-    fn terminator(&mut self, terminator: &Terminator) -> Result<(), String> {
+    fn terminator(&mut self, terminator: &Terminator) -> Result<(), Failure> {
         match terminator {
             Terminator::Return(value) => {
                 if let Some(v) = value {
@@ -462,11 +515,13 @@ impl<'a> Body<'a> {
                 self.close();
             }
             Terminator::Unreachable => self.ins(&I::Unreachable),
-            Terminator::FellThrough => return Err("a reachable FellThrough terminator".to_owned()),
+            Terminator::FellThrough => {
+                return Err(("a reachable FellThrough terminator".to_owned()).into());
+            }
         }
         Ok(())
     }
-    fn op(&mut self, id: ValueId) -> Result<(), String> {
+    fn op(&mut self, id: ValueId) -> Result<(), Failure> {
         let op = self.func.value(id);
         match &op.kind {
             OpKind::Param(_) | OpKind::BlockParam(_) => return Ok(()),
@@ -505,7 +560,7 @@ impl<'a> Body<'a> {
             }
             OpKind::ConstUndefined if self.symbols.types.slot(&op.ty)?.is_none() => return Ok(()),
             OpKind::Retain(_) | OpKind::Release(_) => {
-                return Err(format!("host-managed provider mismatch: {:?}", op.kind));
+                return Err(format!("host-managed provider mismatch: {:?}", op.kind).into());
             }
             OpKind::NativeLoad { .. }
             | OpKind::NativeStore { .. }
@@ -523,7 +578,7 @@ impl<'a> Body<'a> {
             | OpKind::NativeBridge { .. }
             | OpKind::NativeBlock { .. }
             | OpKind::DelegateInvoke { .. } => {
-                return Err(format!("native ABI operation {:?}", op.kind));
+                return Err(format!("native ABI operation {:?}", op.kind).into());
             }
             OpKind::DispatchSlot(_)
             | OpKind::ConstTemplate { .. }
@@ -549,7 +604,7 @@ impl<'a> Body<'a> {
             | OpKind::Suspend { .. }
             | OpKind::PromiseSubscribe { .. }
             | OpKind::ArraySet { .. } => {
-                return Err(format!("operation outside M1a: {:?}", op.kind));
+                return Err(format!("operation outside M1a: {:?}", op.kind).into());
             }
         }
         if self.symbols.types.slot(&op.ty)?.is_some() {
@@ -563,7 +618,7 @@ impl<'a> Body<'a> {
         op: nts_core::hir::BinOp,
         lhs: ValueId,
         rhs: ValueId,
-    ) -> Result<(), String> {
+    ) -> Result<(), Failure> {
         if crate::strings::is_string(self.ty(lhs)) || crate::strings::is_string(self.ty(rhs)) {
             crate::strings::binary(self, op, lhs, rhs)
         } else {
@@ -575,14 +630,14 @@ impl<'a> Body<'a> {
         id: ValueId,
         op: nts_core::hir::UnOp,
         value: ValueId,
-    ) -> Result<(), String> {
+    ) -> Result<(), Failure> {
         if crate::strings::is_string(self.ty(value)) {
             crate::strings::truthy(self, op, value)
         } else {
             numeric::unary(self, id, op, value)
         }
     }
-    fn convert(&mut self, id: ValueId, value: ValueId) -> Result<(), String> {
+    fn convert(&mut self, id: ValueId, value: ValueId) -> Result<(), Failure> {
         let from = self.ty(value).clone();
         let to = self.ty(id).clone();
         if crate::strings::is_string(&from) && to == nts_core::hir::HirType::Bool {
@@ -594,14 +649,12 @@ impl<'a> Body<'a> {
         }
         numeric::convert(self, &from, &to)
     }
-    fn call(&mut self, result: ValueId, callee: &Callee, args: &[ValueId]) -> Result<(), String> {
+    fn call(&mut self, result: ValueId, callee: &Callee, args: &[ValueId]) -> Result<(), Failure> {
         match callee {
             Callee::Direct(name) => {
-                let at = self
-                    .symbols
-                    .functions
-                    .get(name.as_str())
-                    .ok_or_else(|| format!("unresolved direct callee `{name}`"))?;
+                let at = self.symbols.functions.get(name.as_str()).ok_or_else(|| {
+                    Failure::Invariant(format!("unresolved direct callee `{name}`"))
+                })?;
                 for arg in args {
                     self.load(*arg)?;
                 }
@@ -613,17 +666,17 @@ impl<'a> Body<'a> {
                 } else {
                     return Err(format!(
                         "runtime/external helper `{name}` is outside the implemented Wasm helper surface"
-                    ));
+                    ).into());
                 }
             }
-            Callee::Native(function) => return Err(format!("native call {function:?}")),
+            Callee::Native(function) => return Err(format!("native call {function:?}").into()),
             Callee::Virtual { declared, .. } => {
-                return Err(format!(
-                    "virtual/interface dispatch `{declared}` is outside M1a"
-                ));
+                return Err(
+                    format!("virtual/interface dispatch `{declared}` is outside M1a").into(),
+                );
             }
             Callee::Closure { slot } => {
-                return Err(format!("closure dispatch slot {slot} is outside M1a"));
+                return Err(format!("closure dispatch slot {slot} is outside M1a").into());
             }
         }
         Ok(())

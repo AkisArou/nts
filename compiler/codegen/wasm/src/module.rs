@@ -65,18 +65,18 @@ pub(crate) fn index(i: usize) -> u32 {
     u32::try_from(i).expect("a wasm module index fits u32")
 }
 
-fn signature(func: &Func, plan: &gc::Plan) -> Result<Signature, Diagnostic> {
+fn signature(func: &Func, plan: &gc::Plan) -> Result<Signature, EmitError> {
     let params = func
         .params
         .iter()
         .map(|p| {
             plan.value_slot(&p.ty)
-                .map_err(|why| refuse(func, &p.origin, why))
+                .map_err(|failure| failure.at(&func.name, &p.origin))
         })
         .collect::<Result<Vec<_>, _>>()?;
     let result = plan
         .slot(&func.return_type)
-        .map_err(|why| refuse(func, &func.origin, why))?;
+        .map_err(|failure| failure.at(&func.name, &func.origin))?;
     Ok(Signature { params, result })
 }
 
@@ -111,8 +111,7 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
     let signatures = funcs
         .iter()
         .map(|func| signature(func, &plan))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|d| EmitError::Declined(vec![d]))?;
+        .collect::<Result<Vec<_>, _>>()?;
     let resources = requirements::build(program);
     let helpers = &resources.numeric;
     let mut types = Types::new(&plan);
@@ -231,9 +230,13 @@ fn bodies(
     for helper in resources.strings.iter().filter(|h| !h.builtin()) {
         let function = helper
             .body(symbols)
-            .map_err(EmitError::InvalidWasm)?
-            .ok_or_else(|| {
-                EmitError::InvalidWasm(format!("missing string helper body {helper:?}"))
+            .map_err(|error| EmitError::Invariant {
+                function: helper.name().into(),
+                reason: error.to_string(),
+            })?
+            .ok_or_else(|| EmitError::Invariant {
+                function: helper.name().into(),
+                reason: "missing helper body".into(),
             })?;
         code.function(&function);
     }
@@ -400,14 +403,10 @@ fn globals(program: &Program, plan: &gc::Plan) -> Result<GlobalSection, EmitErro
                 },
                 &initial,
             );
-            Ok::<_, String>(())
+            Ok::<_, crate::error::Failure>(())
         })();
-        if let Err(why) = result {
-            return Err(EmitError::Declined(vec![Diagnostic::error(
-                "NTS5001",
-                format!("wasm declines global `{}`: {why}", global.name),
-                global.origin.location,
-            )]));
+        if let Err(failure) = result {
+            return Err(failure.at(&format!("global {}", global.name), &global.origin));
         }
     }
     Ok(section)

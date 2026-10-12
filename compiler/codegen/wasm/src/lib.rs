@@ -7,6 +7,7 @@
 mod abi;
 mod body;
 mod cfg;
+mod error;
 mod gc;
 mod helpers;
 mod module;
@@ -124,6 +125,11 @@ pub enum EmitError {
     },
     InvalidHir(Vec<Invalid>),
     InvalidWasm(String),
+    /// A prepared physical type or planned binding went missing during emission.
+    Invariant {
+        function: String,
+        reason: String,
+    },
     /// A verified CFG could not be translated. This is a compiler bug, not an
     /// unsupported source shape, and must never select a fallback route.
     Structuring {
@@ -146,6 +152,9 @@ impl std::fmt::Display for EmitError {
             }
             Self::InvalidHir(errors) => write!(f, "invalid prepared HIR: {errors:?}"),
             Self::InvalidWasm(error) => write!(f, "invalid generated wasm: {error}"),
+            Self::Invariant { function, reason } => {
+                write!(f, "internal wasm emitter error in `{function}`: {reason}")
+            }
             Self::Structuring { function, reason } => {
                 write!(
                     f,

@@ -2,6 +2,7 @@
 
 use crate::{
     body::Body,
+    error::Failure,
     helpers::Helper as ScalarHelper,
     module::Symbols,
     numeric,
@@ -103,7 +104,7 @@ impl Helper {
             | Self::FromCharCodeBuiltin => &[],
         }
     }
-    pub(crate) fn body(self, symbols: &Symbols<'_>) -> Result<Option<Function>, String> {
+    pub(crate) fn body(self, symbols: &Symbols<'_>) -> Result<Option<Function>, Failure> {
         match self {
             Self::Length
             | Self::Unit
@@ -115,10 +116,9 @@ impl Helper {
             Self::CharCodeAt | Self::CharAt => indexed(self, symbols).map(Some),
             Self::Substring | Self::Slice => substring(self, symbols).map(Some),
             Self::FromCharCode => {
-                let to_int = symbols
-                    .helpers
-                    .get(&ScalarHelper::ToInt32)
-                    .ok_or("unplanned fromCharCode numeric dependency")?;
+                let to_int = symbols.helpers.get(&ScalarHelper::ToInt32).ok_or_else(|| {
+                    Failure::Invariant("unplanned fromCharCode numeric dependency".into())
+                })?;
                 let mut f = Function::new([]);
                 instructions(
                     &mut f,
@@ -153,7 +153,7 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
     }
 }
 
-pub(crate) fn binary_helper(op: BinOp) -> Result<Helper, String> {
+pub(crate) fn binary_helper(op: BinOp) -> Result<Helper, Failure> {
     match op {
         BinOp::Eq | BinOp::Ne => Ok(Helper::Equal),
         BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => Ok(Helper::Compare),
@@ -170,29 +170,29 @@ pub(crate) fn binary_helper(op: BinOp) -> Result<Helper, String> {
         | BinOp::Shr
         | BinOp::UShr
         | BinOp::Min
-        | BinOp::Max => Err(format!("string binary {op:?}")),
+        | BinOp::Max => Err(format!("string binary {op:?}").into()),
     }
 }
 
-pub(crate) fn call(b: &mut Body<'_>, helper: Helper) -> Result<(), String> {
+pub(crate) fn call(b: &mut Body<'_>, helper: Helper) -> Result<(), Failure> {
     b.ins(&I::Call(callee(b.symbols, helper)?));
     Ok(())
 }
 
-pub(crate) fn constant(b: &mut Body<'_>, text: &str) -> Result<(), String> {
+pub(crate) fn constant(b: &mut Body<'_>, text: &str) -> Result<(), Failure> {
     let global = b
         .symbols
         .literals
         .get(text)
         .copied()
-        .ok_or("unplanned string literal")?;
+        .ok_or_else(|| Failure::Invariant("unplanned string literal".into()))?;
     b.ins(&I::GlobalGet(global));
     Ok(())
 }
 
-pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), String> {
+pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), Failure> {
     if !matches!(op, UnOp::Truthy | UnOp::Not) {
-        return Err(format!("string unary {op:?}"));
+        return Err(format!("string unary {op:?}").into());
     }
     b.load(value)?;
     call(b, Helper::Length)?;
@@ -202,15 +202,15 @@ pub(crate) fn truthy(b: &mut Body<'_>, op: UnOp, value: ValueId) -> Result<(), S
     }
     Ok(())
 }
-fn callee(symbols: &Symbols<'_>, helper: Helper) -> Result<u32, String> {
+fn callee(symbols: &Symbols<'_>, helper: Helper) -> Result<u32, Failure> {
     symbols
         .strings
         .get(&helper)
         .copied()
-        .ok_or_else(|| format!("unplanned string helper {helper:?}"))
+        .ok_or_else(|| Failure::Invariant(format!("unplanned string helper {helper:?}")))
 }
 
-pub(crate) fn length(b: &mut Body<'_>, result: ValueId, value: ValueId) -> Result<(), String> {
+pub(crate) fn length(b: &mut Body<'_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     call(b, Helper::Length)?;
     numeric::convert(b, &UINT, &b.ty(result).clone())
@@ -222,7 +222,7 @@ pub(crate) fn unit(
     string: ValueId,
     index: ValueId,
     checked: bool,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     let helper = if checked {
         Helper::CharCodeAt
     } else {
@@ -241,7 +241,7 @@ pub(crate) fn binary(
     op: BinOp,
     lhs: ValueId,
     rhs: ValueId,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     if !is_string(b.ty(lhs)) || !is_string(b.ty(rhs)) {
         return Err("string binary operands have differing logical types".into());
     }
@@ -259,7 +259,7 @@ pub(crate) fn binary(
                 BinOp::Le => I::I32LeS,
                 BinOp::Gt => I::I32GtS,
                 BinOp::Ge => I::I32GeS,
-                _ => return Err("unplanned string comparison".into()),
+                _ => return Err(Failure::Invariant("unplanned string comparison".into())),
             });
         }
         BinOp::Add
@@ -274,7 +274,7 @@ pub(crate) fn binary(
         | BinOp::Shr
         | BinOp::UShr
         | BinOp::Min
-        | BinOp::Max => return Err(format!("string binary {op:?}")),
+        | BinOp::Max => return Err(format!("string binary {op:?}").into()),
     }
     Ok(())
 }
@@ -284,21 +284,25 @@ pub(crate) fn runtime(
     result: ValueId,
     helper: Helper,
     args: &[ValueId],
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     let (params, output) = helper.signature();
     if args.len() != params.len() {
-        return Err(format!("string helper {helper:?} arity mismatch"));
+        return Err(format!("string helper {helper:?} arity mismatch").into());
     }
     for (&arg, expected) in args.iter().zip(params) {
         b.load(arg)?;
         match expected {
             STRING => {
                 if !is_string(b.ty(arg)) {
-                    return Err(format!("string helper {helper:?} expects a string"));
+                    return Err(format!("string helper {helper:?} expects a string").into());
                 }
             }
             F64 => numeric::convert(b, &b.ty(arg).clone(), &HirType::NUMBER)?,
-            _ => return Err(format!("unplanned runtime string parameter {expected:?}")),
+            _ => {
+                return Err(Failure::Invariant(format!(
+                    "unplanned runtime string parameter {expected:?}"
+                )));
+            }
         }
     }
     call(b, helper)?;
@@ -307,10 +311,7 @@ pub(crate) fn runtime(
         I32 if helper == Helper::Equal && b.ty(result) == &HirType::Bool => {}
         Physical::Reference(_) if is_string(b.ty(result)) => {}
         _ => {
-            return Err(format!(
-                "string helper {helper:?} result {:?}",
-                b.ty(result)
-            ));
+            return Err(format!("string helper {helper:?} result {:?}", b.ty(result)).into());
         }
     }
     Ok(())
@@ -324,7 +325,7 @@ fn instructions(f: &mut Function, code: &[I<'_>]) {
 
 /// `ToIntegerOrInfinity` before testing bounds. NaN becomes zero, fractions
 /// truncate, and infinities/huge indices stay outside the range until checked.
-fn indexed(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, String> {
+fn indexed(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, Failure> {
     let char_at = helper == Helper::CharAt;
     let mut f = Function::new_with_locals_types([ValType::F64]);
     instructions(
@@ -370,10 +371,9 @@ fn indexed(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, String> {
                 I::Call(callee(symbols, Helper::SubstringBuiltin)?),
                 I::Else,
                 I::GlobalGet(
-                    *symbols
-                        .literals
-                        .get("")
-                        .ok_or("unplanned charAt empty string")?,
+                    *symbols.literals.get("").ok_or_else(|| {
+                        Failure::Invariant("unplanned charAt empty string".into())
+                    })?,
                 ),
             ],
         );
@@ -392,7 +392,7 @@ fn indexed(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, String> {
     Ok(f)
 }
 
-fn substring(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, String> {
+fn substring(helper: Helper, symbols: &Symbols<'_>) -> Result<Function, Failure> {
     let slice = helper == Helper::Slice;
     let mut f =
         Function::new_with_locals_types([ValType::I32, ValType::I32, ValType::I32, ValType::F64]);

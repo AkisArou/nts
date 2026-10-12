@@ -1,6 +1,9 @@
 //! Resolve managed storage once, with deterministic dependency-first rec groups.
 
-use crate::types::{self, Physical, Slot};
+use crate::{
+    error::Failure,
+    types::{self, Physical, Slot},
+};
 use nts_core::hir::{HirType, ManagedType, Program};
 use nts_semantic_schema::TypeId;
 use rustc_hash::FxHashMap;
@@ -100,7 +103,7 @@ impl Plan {
             })
     }
 
-    pub(crate) fn slot(&self, ty: &HirType) -> Result<Option<Physical>, String> {
+    pub(crate) fn slot(&self, ty: &HirType) -> Result<Option<Physical>, Failure> {
         if matches!(ty, HirType::Void | HirType::Never) {
             return Ok(None);
         }
@@ -108,12 +111,12 @@ impl Plan {
             .get(ty)
             .copied()
             .map(Some)
-            .ok_or_else(|| format!("unplanned physical type {ty:?}"))
+            .ok_or_else(|| Failure::Invariant(format!("unplanned physical type {ty:?}")))
     }
 
-    pub(crate) fn value_slot(&self, ty: &HirType) -> Result<Physical, String> {
+    pub(crate) fn value_slot(&self, ty: &HirType) -> Result<Physical, Failure> {
         self.slot(ty)?
-            .ok_or_else(|| format!("no value slot for {ty:?}"))
+            .ok_or_else(|| Failure::Invariant(format!("no value slot for {ty:?}")))
     }
 
     pub(crate) fn encode(&self) -> TypeSection {

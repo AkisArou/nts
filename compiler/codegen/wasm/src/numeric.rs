@@ -2,22 +2,23 @@
 
 use crate::{
     body::Body,
+    error::Failure,
     helpers::Helper,
     types::{self, Slot},
 };
 use nts_core::hir::{BinOp, HirType, UnOp, ValueId};
 use wasm_encoder::Instruction as I;
 
-pub(crate) fn constant_int(b: &mut Body<'_>, value: i128, ty: &HirType) -> Result<(), String> {
+pub(crate) fn constant_int(b: &mut Body<'_>, value: i128, ty: &HirType) -> Result<(), Failure> {
     // Unsigned slots share wasm's signed bit-pattern encoding. Check the
     // logical range first, then encode the identical low bits.
     let HirType::Int { bits, signed } = ty else {
-        return Err(format!("integer literal of type {ty:?}"));
+        return Err(format!("integer literal of type {ty:?}").into());
     };
     let limit = 1_i128 << (u32::from(*bits) - u32::from(*signed));
     let minimum = if *signed { -limit } else { 0 };
     if value < minimum || value >= limit {
-        return Err(format!("integer literal {value} outside {ty:?}"));
+        return Err(format!("integer literal {value} outside {ty:?}").into());
     }
     match types::value_slot(ty)? {
         Slot::I32 => {
@@ -31,13 +32,13 @@ pub(crate) fn constant_int(b: &mut Body<'_>, value: i128, ty: &HirType) -> Resul
             b.ins(&I::I64Const(i64::from_ne_bytes(raw.to_ne_bytes())));
         }
         Slot::F32 | Slot::F64 => {
-            return Err(format!("integer literal in a noninteger slot {ty:?}"));
+            return Err(format!("integer literal in a noninteger slot {ty:?}").into());
         }
     }
     Ok(())
 }
 
-pub(crate) fn constant_float(b: &mut Body<'_>, value: f64, ty: &HirType) -> Result<(), String> {
+pub(crate) fn constant_float(b: &mut Body<'_>, value: f64, ty: &HirType) -> Result<(), Failure> {
     match types::value_slot(ty)? {
         Slot::F64 => b.ins(&I::F64Const(value.into())),
         Slot::F32 => {
@@ -47,7 +48,9 @@ pub(crate) fn constant_float(b: &mut Body<'_>, value: f64, ty: &HirType) -> Resu
             )]
             b.ins(&I::F32Const((value as f32).into()));
         }
-        Slot::I32 | Slot::I64 => return Err(format!("floating literal in an integer slot {ty:?}")),
+        Slot::I32 | Slot::I64 => {
+            return Err(format!("floating literal in an integer slot {ty:?}").into());
+        }
     }
     Ok(())
 }
@@ -56,7 +59,7 @@ fn unsigned(ty: &HirType) -> bool {
     matches!(ty, HirType::Int { signed: false, .. })
 }
 
-pub(crate) fn convert(b: &mut Body<'_>, from: &HirType, to: &HirType) -> Result<(), String> {
+pub(crate) fn convert(b: &mut Body<'_>, from: &HirType, to: &HirType) -> Result<(), Failure> {
     let source = types::value_slot(from)?;
     let target = types::value_slot(to)?;
     if matches!(to, HirType::Bool) {
@@ -152,13 +155,13 @@ pub(crate) fn convert(b: &mut Body<'_>, from: &HirType, to: &HirType) -> Result<
         | HirType::NativePointer(_)
         | HirType::Erased
         | HirType::Managed(_) => {
-            return Err(format!("conversion normalization to {to:?}"));
+            return Err(format!("conversion normalization to {to:?}").into());
         }
     }
     Ok(())
 }
 
-fn push_as(b: &mut Body<'_>, value: ValueId, ty: &HirType) -> Result<(), String> {
+fn push_as(b: &mut Body<'_>, value: ValueId, ty: &HirType) -> Result<(), Failure> {
     b.load(value)?;
     let from = b.ty(value).clone();
     convert(b, &from, ty)
@@ -193,7 +196,7 @@ pub(crate) fn unary(
     result: ValueId,
     op: UnOp,
     operand: ValueId,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     let out = b.ty(result).clone();
     let slot = types::value_slot(&out)?;
     match op {
@@ -251,13 +254,13 @@ fn float_unary(
     operand: ValueId,
     out: &HirType,
     opcode: &I<'static>,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     push_as(b, operand, &HirType::Float { bits: 64 })?;
     b.ins(opcode);
     convert(b, &HirType::Float { bits: 64 }, out)
 }
 
-fn absolute(b: &mut Body<'_>, operand: ValueId, out: &HirType) -> Result<(), String> {
+fn absolute(b: &mut Body<'_>, operand: ValueId, out: &HirType) -> Result<(), Failure> {
     let slot = types::value_slot(out)?;
     if matches!(slot, Slot::F32 | Slot::F64) {
         push_as(b, operand, out)?;
@@ -298,7 +301,7 @@ fn absolute(b: &mut Body<'_>, operand: ValueId, out: &HirType) -> Result<(), Str
     Ok(())
 }
 
-fn to_i32(b: &mut Body<'_>, value: ValueId) -> Result<(), String> {
+fn to_i32(b: &mut Body<'_>, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     match types::value_slot(b.ty(value))? {
         Slot::I32 => {}
@@ -318,7 +321,7 @@ pub(crate) fn binary(
     op: BinOp,
     lhs: ValueId,
     rhs: ValueId,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     match op {
         BinOp::BitAnd => bitwise(b, result, &I::I32And, true, lhs, rhs),
         BinOp::BitOr => bitwise(b, result, &I::I32Or, true, lhs, rhs),
@@ -332,7 +335,7 @@ pub(crate) fn binary(
         BinOp::Ge => comparison(b, Comparison::Ge, lhs, rhs),
         BinOp::Eq => comparison(b, Comparison::Eq, lhs, rhs),
         BinOp::Ne => comparison(b, Comparison::Ne, lhs, rhs),
-        BinOp::Concat => Err("string concatenation is outside M1a".to_owned()),
+        BinOp::Concat => Err(("string concatenation is outside M1a".to_owned()).into()),
         BinOp::Add
         | BinOp::Sub
         | BinOp::Mul
@@ -350,7 +353,7 @@ fn bitwise(
     signed: bool,
     lhs: ValueId,
     rhs: ValueId,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     to_i32(b, lhs)?;
     to_i32(b, rhs)?;
     b.ins(opcode);
@@ -368,15 +371,13 @@ enum Comparison {
     Ge,
 }
 
-fn comparison(b: &mut Body<'_>, op: Comparison, lhs: ValueId, rhs: ValueId) -> Result<(), String> {
+fn comparison(b: &mut Body<'_>, op: Comparison, lhs: ValueId, rhs: ValueId) -> Result<(), Failure> {
     if matches!(b.ty(lhs), HirType::Bool) != matches!(b.ty(rhs), HirType::Bool) {
-        return Err(format!("comparison {op:?} between boolean and number"));
+        return Err(format!("comparison {op:?} between boolean and number").into());
     }
     let slot = types::value_slot(b.ty(lhs))?;
     if slot != types::value_slot(b.ty(rhs))? || unsigned(b.ty(lhs)) != unsigned(b.ty(rhs)) {
-        return Err(format!(
-            "comparison {op:?} with differing scalar representations"
-        ));
+        return Err(format!("comparison {op:?} with differing scalar representations").into());
     }
     let signed = !unsigned(b.ty(lhs));
     b.load(lhs)?;
@@ -468,13 +469,13 @@ fn arithmetic(
     op: BinOp,
     lhs: ValueId,
     rhs: ValueId,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     let ty = b.ty(result).clone();
     let slot = types::value_slot(&ty)?;
     if slot != types::value_slot(b.ty(lhs))? || slot != types::value_slot(b.ty(rhs))? {
-        return Err(format!(
-            "{op:?} with operands differing from result representation {ty:?}"
-        ));
+        return Err(
+            format!("{op:?} with operands differing from result representation {ty:?}").into(),
+        );
     }
     if op == BinOp::Rem && matches!(slot, Slot::F32 | Slot::F64) {
         push_as(b, lhs, &HirType::Float { bits: 64 })?;
@@ -484,7 +485,7 @@ fn arithmetic(
     }
     if matches!(op, BinOp::Min | BinOp::Max) && matches!(slot, Slot::I32 | Slot::I64) {
         if unsigned(b.ty(lhs)) != unsigned(b.ty(rhs)) {
-            return Err("integer min/max with mixed signedness".to_owned());
+            return Err(("integer min/max with mixed signedness".to_owned()).into());
         }
         b.load(lhs)?;
         b.load(rhs)?;
@@ -514,7 +515,7 @@ fn arithmetic(
     Ok(())
 }
 
-fn arithmetic_opcode(slot: Slot, op: BinOp, signed: bool) -> Result<I<'static>, String> {
+fn arithmetic_opcode(slot: Slot, op: BinOp, signed: bool) -> Result<I<'static>, Failure> {
     Ok(match (slot, op) {
         (Slot::I32, BinOp::Add) => I::I32Add,
         (Slot::I32, BinOp::Sub) => I::I32Sub,
@@ -563,9 +564,7 @@ fn arithmetic_opcode(slot: Slot, op: BinOp, signed: bool) -> Result<I<'static>, 
         (Slot::F64, BinOp::Min) => I::F64Min,
         (Slot::F64, BinOp::Max) => I::F64Max,
         _ => {
-            return Err(format!(
-                "{op:?} on {slot:?} is not a scalar arithmetic opcode"
-            ));
+            return Err(format!("{op:?} on {slot:?} is not a scalar arithmetic opcode").into());
         }
     })
 }
