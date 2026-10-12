@@ -1,7 +1,8 @@
-"""Emit every discovered example and account for bounded scalar comparisons.
+"""Emit every discovered example and account for bounded scalar/string comparisons.
 
 One frontend at a time. Partial results and compiler/Node logs survive failures.
-This is the M1a bring-up census, not the full hostile-pool M1 differential lane.
+Primitive thrown values are compared too. This remains a bounded bring-up
+census, not the full hostile-pool M1 differential lane.
 """
 
 import argparse
@@ -39,18 +40,20 @@ def main():
             raise SystemExit("unknown project in --only")
     report = {
         "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
         "binary": str(binary), "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "root": str(root), "discovered": len(projects), "complete": False,
-        "population": "bounded numeric/bool sweep; answers and live globals; not full M1 agree",
+        "population": "bounded numeric/bool/string sweep; returns, primitive throws and live globals; not full M1 agree",
         "frontend_jobs": 1, "rows": [],
     }
 
     def save():
-        totals = dict.fromkeys(["emitted", "agree", "declined", "invalid", "wrong", "unmeasured", "timed_out", "cases", "input_declines"], 0)
+        totals = dict.fromkeys(["emitted", "agree", "declined", "invalid", "wrong", "unmeasured", "timed_out", "cases", "thrown_cases", "input_declines"], 0)
         for row in report["rows"]:
             totals[row["outcome"]] += 1
             totals["emitted"] += int(row.get("emitted", False))
             totals["cases"] += row.get("execution", {}).get("cases", 0)
+            totals["thrown_cases"] += row.get("execution", {}).get("thrownCases", 0)
             totals["input_declines"] += row.get("execution", {}).get("inputDeclines", 0)
         report["totals"] = totals
         temporary = output / "report.json.tmp"
@@ -76,7 +79,7 @@ def main():
             row["outcome"] = "timed_out"
         elif code:
             if ("invalid HIR" in text or "invalid prepared HIR" in text
-                    or "invalid generated wasm" in text or "internal wasm structurer error" in text
+                    or "invalid generated wasm" in text or "internal wasm" in text
                     or "panicked" in text):
                 row["outcome"] = "invalid"
             elif "the program does not typecheck" in text and "TS" in text:
@@ -106,7 +109,11 @@ def main():
                 if result_file.is_file():
                     row["execution"] = json.loads(result_file.read_text())
                 execution = row.get("execution", {})
-                if execution.get("failure") and execution.get("phase") == "wasm-load":
+                if execution.get("moduleInitDecline"):
+                    row["outcome"] = "declined"
+                    row["decline_stage"] = "module-initialization"
+                    row["reason"] = execution["moduleInitDecline"]
+                elif execution.get("failure") and execution.get("phase") == "wasm-load":
                     row["outcome"] = "invalid"
                 elif execution.get("wrong"):
                     row["outcome"] = "wrong"
@@ -118,7 +125,7 @@ def main():
                     row["outcome"] = "agree"
                 else:
                     row["outcome"] = "unmeasured"
-                    row["reason"] = "artifact emitted but no scalar case/global compared"
+                    row["reason"] = "artifact emitted but no supported case/global compared"
         report["rows"].append(row)
         save()
         print(f"{index + 1}/{len(projects)} {name}: {row['outcome']}", flush=True)

@@ -1,4 +1,4 @@
-// Bounded M1a scalar census, with every emitted project accounted for.
+// Bounded scalar/string/primitive-throw census, with emitted projects accounted for.
 // This answers-only population does not replace the full M1 agree instrument.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
@@ -20,20 +20,38 @@ registerHooks({
 });
 
 const [artifact, source, resultFile] = process.argv.slice(2);
-const report = { cases: 0, inputDeclines: 0, wrong: [], timeouts: [], missing: [], globals: 0 };
+const report = { cases: 0, thrownCases: 0, inputDeclines: 0, wrong: [], timeouts: [], missing: [], globals: 0 };
 const save = () => writeFileSync(resultFile, JSON.stringify(report, null, 2) + '\n');
 const display = value => Object.is(value, -0) ? '-0' : String(value);
 const call = new Script('fn(...args)');
 function invoke(fn, args) {
-  try { return { value: call.runInNewContext({ fn, args }, { timeout: 1000 }) }; }
-  catch (error) { return { error }; }
+  try { return { kind: 'return', value: call.runInNewContext({ fn, args }, { timeout: 1000 }) }; }
+  catch (value) { return { kind: 'throw', value }; }
 }
 
 try {
   const manifest = JSON.parse(readFileSync(path.join(artifact, 'program.json'), 'utf8'));
-  const { instantiate } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
+  const { instantiate, WasmInputDecline } = await import(pathToFileURL(path.join(artifact, 'node.mjs')));
   report.phase = 'wasm-load'; save();
-  const wasm = await instantiate(readFileSync(path.join(artifact, 'program.wasm')), manifest);
+  let wasm;
+  try {
+    wasm = await instantiate(readFileSync(path.join(artifact, 'program.wasm')), manifest);
+  } catch (value) {
+    if (value instanceof WebAssembly.CompileError || value instanceof WebAssembly.LinkError || value instanceof WebAssembly.RuntimeError) throw value;
+    report.phase = 'module-initialization';
+    if (value instanceof WasmInputDecline) {
+      report.moduleInitDecline = display(value); save(); process.exit(0);
+    }
+    let expected;
+    try { await import(pathToFileURL(path.resolve(source))); expected = { kind: 'return' }; }
+    catch (value) { expected = { kind: 'throw', value }; }
+    if (expected.kind !== 'throw' || !Object.is(value, expected.value)) {
+      report.wrong.push({ name: '<module initialization>', wasmKind: 'throw', wasm: display(value), jsKind: expected.kind, js: display(expected.value) });
+    } else {
+      report.validatedAndLinked = true; report.cases++; report.thrownCases++;
+    }
+    save(); process.exit(report.wrong.length ? 1 : 0);
+  }
   report.validatedAndLinked = true; report.phase = 'node-oracle'; save();
   const js = await import(pathToFileURL(path.resolve(source)));
   // Every public definition may come from a different included source file.
@@ -56,6 +74,7 @@ try {
     return { found: true, value: owners[0][name] };
   }
   const pool = [NaN, -0, 0, 1, -1, 0.5, -0.5, 2, 3, 7, 20];
+  const stringPool = ['', 'a', 'abc', '3', '-1', '0.5', 'hello world', 'a\0b', 'é', '😀', '\ud800', '\udfff', 'a\ud800b'];
   function checkGlobals() {
     for (const global of manifest.globals) {
       const expected = oracle(global.name);
@@ -72,24 +91,32 @@ try {
   for (const entry of manifest.exports) {
     const reference = oracle(entry.name);
     if (!reference.found || typeof reference.value !== 'function') { report.missing.push(entry.name); continue; }
-    const pools = entry.params.map(param => param.ty.kind === 'bool' ? [false, true] : pool);
+    const pools = entry.params.map(param => {
+      switch (param.ty.kind) {
+        case 'bool': return [false, true];
+        case 'string': return stringPool;
+        case 'int': case 'float': return pool;
+        default: throw new Error(`unsupported census parameter type ${param.ty.kind}`);
+      }
+    });
     // Bounded values deliberately avoid huge loop/recursion inputs. Known
     // facts still apply at the loader; record every named input refusal.
     const base = pools.map(values => values.includes(3) ? 3 : values[0]);
     const tuples = pools.length ? pools.flatMap((values, at) => values.map(value => base.with(at, value))) : [[]];
     for (const args of tuples) {
       const actual = invoke(wasm[entry.name], args);
-      if (actual.error?.code === 'NTS5001') { report.inputDeclines++; continue; }
+      if (actual.kind === 'throw' && actual.value instanceof WasmInputDecline) { report.inputDeclines++; continue; }
       const expected = invoke(reference.value, args);
-      if ([actual.error, expected.error].some(error => error?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT')) {
-        report.timeouts.push({ name: entry.name, args: args.map(display), wasm: Boolean(actual.error), js: Boolean(expected.error) });
+      if ([actual, expected].some(outcome => outcome.kind === 'throw' && outcome.value?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT')) {
+        report.timeouts.push({ name: entry.name, args: args.map(display), wasm: actual.kind, js: expected.kind });
         save(); process.exit(2);
       }
-      if (actual.error || expected.error || !Object.is(actual.value, expected.value)) {
+      if (actual.kind !== expected.kind || !Object.is(actual.value, expected.value)) {
         report.wrong.push({ name: entry.name, args: args.map(display),
-          wasm: actual.error ? String(actual.error) : display(actual.value),
-          js: expected.error ? String(expected.error) : display(expected.value) });
+          wasmKind: actual.kind, wasm: display(actual.value),
+          jsKind: expected.kind, js: display(expected.value) });
       }
+      report.thrownCases += Number(expected.kind === 'throw');
       report.cases++;
       checkGlobals();
       save();

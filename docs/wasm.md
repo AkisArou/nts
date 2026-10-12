@@ -14,6 +14,15 @@ JS strings, primitive erased values, ordinary arrays/objects, closures/virtual
 calls and explicit raising have bounded execution probes. The full M1b corpus,
 runtime routes and performance remain unmeasured.
 
+The census instrument now includes bounded primitive-string inputs and compares
+returns and primitive throws as distinct outcomes, including `throw undefined`.
+Matching primitive module-initialization throws count as comparisons; a named
+initialization input refusal stays a decline. Four instrument controls pass,
+including a deliberately incorrect host API returning undefined where Node
+throws it. Real emitted fixtures match 122 raising cases (39 throws) and 198
+array/string cases, with 150 input refusals recorded separately. The complete
+example population has not yet been rerun with this instrument.
+
 ## Current M1a implementation and evidence
 
 `compiler/codegen/wasm` emits a core module directly from prepared HIR. It
