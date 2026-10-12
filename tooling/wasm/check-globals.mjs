@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+const [artifact] = process.argv.slice(2);
+const { instantiate, WasmInputDecline } = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
+const wasm = instantiate();
+let cases = 0;
+const refused = read => assert.throws(read, error => error instanceof WasmInputDecline && /safe-number/.test(error.message));
+assert.equal(wasm.text, 'start'); cases++;
+assert.equal(wasm.flag, false); cases++;
+wasm.setSmall();
+assert.equal(wasm.wideUnsigned, 2 ** 53 - 1); cases++;
+assert.equal(wasm.wideSigned, -5); cases++;
+wasm.setFlags();
+assert.equal(wasm.flag, true); cases++;
+assert.equal(wasm.text, 'x'); cases++;
+// u64::MAX read as signed would be -1: unsigned, it exceeds the safe numbers.
+wasm.setWide();
+refused(() => wasm.wideUnsigned); cases++;
+refused(() => wasm.wideSigned); cases++;
+assert.notEqual(Object.getOwnPropertyDescriptor(wasm, 'wideUnsigned').get, undefined); cases++;
+console.log(JSON.stringify({ cases }));
