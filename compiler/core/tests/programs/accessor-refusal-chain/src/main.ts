@@ -22,3 +22,22 @@ export function caughtReceiver(n: number): number {
   return caughtFace(values[n > 0 ? 0 : 1]!);
 }
 export function provenReceiver(n: number): number { return new Stored().value + n; }
+
+interface DirectFace { readonly direct: number; }
+class DirectStored { direct = 13; }
+class DirectGetter {
+  get direct(): number { return eval("19") as number; }
+}
+function readDirect(value: DirectFace): number { return value.direct; }
+function caughtDirect(value: DirectFace): number {
+  try { return value.direct; } catch { return -3; }
+}
+export function directUnknown(n: number): number {
+  const values: DirectFace[] = [new DirectStored(), new DirectGetter()];
+  return readDirect(values[n > 0 ? 0 : 1]!);
+}
+export function directCaught(n: number): number {
+  const values: DirectFace[] = [new DirectStored(), new DirectGetter()];
+  return caughtDirect(values[n > 0 ? 0 : 1]!);
+}
+export function directProven(n: number): number { return new DirectStored().direct + n; }

@@ -407,9 +407,19 @@ fn fill(
         supply,
         (&name, owner, writes, raising),
     );
-    let function = function
-        .unwrap_or_else(|| refusal(context, program, family, supply, &name, writes, raising));
     program.layouts[owner].methods[entry.slot as usize] = Some(name.clone());
+    context.bodies.insert(key, name.clone());
+    let Some(function) = function else {
+        // Keep the unavailable target until the existing family dependency
+        // cascade has named every virtual reader. An initial lowering failure
+        // has the same contract as one discovered while settling: neither
+        // grants permission to emit a runtime refusal stub for the row.
+        program.uncompiled.push((
+            name,
+            refusal_reason(context, program, family, supply, writes, raising),
+        ));
+        return;
+    };
     if matches!(supply.reader, Reader::Stored) && supply.setter.is_none() {
         program
             .interface_access
@@ -422,58 +432,7 @@ fn fill(
             .default_bodies
             .insert(name.clone(), raising);
     }
-    context.bodies.insert(key, name);
     functions.push(function);
-}
-
-fn refusal(
-    context: &Context<'_>,
-    program: &Program,
-    family: &Family,
-    supply: &Supply,
-    name: &str,
-    writes: bool,
-    raising: bool,
-) -> Func {
-    let snapshot = context.snapshot;
-    let origin = origin(snapshot, family);
-    let params = parameters(family, supply.owner, writes, &origin);
-    let mut builder = FuncBuilder::probe(snapshot);
-    for (at, param) in params.iter().enumerate() {
-        builder.push(
-            OpKind::Param(u32::try_from(at).unwrap_or(u32::MAX)),
-            param.ty.clone(),
-            origin.clone(),
-        );
-    }
-    let message = builder.push(
-        OpKind::ConstString(refusal_reason(
-            context, program, family, supply, writes, raising,
-        )),
-        HirType::Managed(ManagedType::String),
-        origin.clone(),
-    );
-    builder.push(
-        OpKind::Call {
-            callee: Callee::External("nts_refused".to_owned()),
-            args: vec![message],
-            frame: None,
-        },
-        HirType::Void,
-        origin.clone(),
-    );
-    builder.terminate(Terminator::Unreachable);
-    builder.finish(
-        name.to_owned(),
-        params,
-        if writes {
-            HirType::Void
-        } else {
-            family.returns.clone()
-        },
-        origin,
-        false,
-    )
 }
 
 fn user_accessor(supply: &Supply, writes: bool) -> Option<super::access_families::Accessor> {

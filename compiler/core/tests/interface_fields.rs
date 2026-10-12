@@ -561,6 +561,41 @@ fn a_transitively_refused_getter_refuses_interface_readers() {
 }
 
 #[test]
+fn an_initially_refused_getter_uses_the_same_dependency_cascade() {
+    let Some(program) = prepared_fixture("accessor-refusal-chain") else {
+        return;
+    };
+    for caller in [
+        "readDirect",
+        "caughtDirect",
+        "directUnknown",
+        "directCaught",
+    ] {
+        assert!(
+            program.uncompiled.iter().any(|(name, reason)| {
+                name == caller && reason.starts_with("it calls `") && reason.contains("`eval`")
+            }),
+            "{caller} must inherit the initial getter refusal: {:?}",
+            program.uncompiled
+        );
+        assert!(!program.funcs.iter().any(|func| func.name == caller));
+    }
+    assert!(program.funcs.iter().any(|func| func.name == "directProven"));
+    assert!(
+        !program
+            .funcs
+            .iter()
+            .filter(|func| func.name.contains("nts$get$"))
+            .flat_map(|func| &func.values)
+            .any(|op| {
+                matches!(&op.kind, OpKind::Call { callee: Callee::External(name), .. }
+                if name == "nts_refused")
+            }),
+        "an absent getter body must not acquire an emitted refusal stub"
+    );
+}
+
+#[test]
 fn a_class_test_can_prove_the_stored_receivers_exact_layout() {
     let Some(program) = prepared_fixture("accessor-layout-proof") else {
         eprintln!("SKIP interface_fields: tsgo is not built");
