@@ -804,6 +804,16 @@ fn held_by(func: &super::Func, value: super::ValueId) -> Held {
 /// aliasing rule is [`shares_storage`]'s, unchanged -- a store through a
 /// base-typed pointer lands in every layout sharing the prefix, so a read has
 /// to see all of them.
+///
+/// **And an interface field with an accessor family is read wherever each
+/// owner keeps it.** Before `interface_access::materialize` such a read is
+/// still a `FieldGet` at the interface's offset, and an owner laid out
+/// otherwise shares no storage with it there -- so the prefix join alone
+/// answered with one class's closure for an object of another, and the call
+/// ran the wrong body silently
+/// (`tooling/conformance/outcomes/an-optional-callback-read-through-an-interface-array`).
+/// Such a read sees the prefix join and every row's own field; a row that is
+/// not plain storage (a getter, a refusal) is any closure at all.
 #[must_use]
 pub fn closures(program: &Program) -> FieldClosures {
     let layouts = LayoutIndex::build(program);
@@ -827,17 +837,53 @@ pub fn closures(program: &Program) -> FieldClosures {
         }
     }
 
+    let shared = |layout: &super::Layout, field: u32| {
+        let mut held = Held::Absent;
+        for (other, candidate) in program.layouts.iter().enumerate() {
+            if !shares_storage(layout, candidate, field) {
+                continue;
+            }
+            if let Some(seen) = stored.get(&(other, field)) {
+                held = held.join(*seen);
+            }
+        }
+        held
+    };
+    let mut through: FxHashMap<(usize, u32), Held> = FxHashMap::default();
+    for family in &program.interface_access.families {
+        let (Some(face), Some(field)) = (layouts.of_class(family.face), family.field) else {
+            continue;
+        };
+        let mut held = Held::Absent;
+        for owner in &family.owners {
+            // An owner with no layout has no object to arrive.
+            let Some(at) = layouts.of_class(*owner) else {
+                continue;
+            };
+            let layout = &program.layouts[at];
+            let row = layout
+                .methods
+                .get(family.getter.slot as usize)
+                .and_then(Option::as_deref);
+            let access = &program.interface_access;
+            held = held.join(match row {
+                Some(name) if access.default_bodies.contains_key(name) => Held::Absent,
+                Some(name) if access.storage_bodies.contains_key(name) => layout
+                    .index_of(&family.member)
+                    .map_or(Held::Many, |own| shared(layout, own)),
+                _ => Held::Many,
+            });
+        }
+        let entry = through.entry((face, field)).or_insert(Held::Absent);
+        *entry = entry.join(held);
+    }
+
     let mut visible: FieldClosures = FxHashMap::default();
-    for layout in &program.layouts {
+    for (at, layout) in program.layouts.iter().enumerate() {
         for field in 0..u32::try_from(layout.fields.len()).unwrap_or(0) {
-            let mut held = Held::Absent;
-            for (other, candidate) in program.layouts.iter().enumerate() {
-                if !shares_storage(layout, candidate, field) {
-                    continue;
-                }
-                if let Some(seen) = stored.get(&(other, field)) {
-                    held = held.join(*seen);
-                }
+            let mut held = shared(layout, field);
+            if let Some(rows) = through.get(&(at, field)) {
+                held = held.join(*rows);
             }
             if let Held::One(class) = held {
                 for ty in &layout.types {

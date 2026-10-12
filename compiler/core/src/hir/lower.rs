@@ -10037,6 +10037,19 @@ fn copy_retype(
     {
         return None;
     }
+    // **A face that carries views is not the layout of what it holds.** A copy
+    // over it reads the face's own offsets, positionally, for every member the
+    // callee touches -- and a carried owner keeps them elsewhere. `g(f)` with
+    // `f: Face` holding an `S1` viewed as `Face`, and `g(p: Plain)` reading
+    // `p.b`, got `g@0obj1` reading `Face`'s `b` slot on an `S1`, a SIGSEGV
+    // (`examples/a-structural-alias-read-after-an-interface-view`). Without
+    // the copy the call converts `Face` to `Plain`, which
+    // `carried_owners_fit` decides for every carried owner.
+    if let HirType::Managed(ManagedType::Object(have)) = represented
+        && probe.hierarchy.access_families.changes_transport(have)
+    {
+        return None;
+    }
     match represented {
         // Spelled by representation, as an object's is: seven tuple types in
         // web-platform are one `[str]`, and a spelling by type id made seven
@@ -27408,6 +27421,7 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Ok(None);
         };
+        self.carried_owners_fit(id, *source, *face)?;
         let Some(why) = self.not_a_prefix(id, *source, *face) else {
             return Ok(None);
         };
@@ -27423,6 +27437,36 @@ impl<'a> FuncBuilder<'a> {
             source: *source,
             face: *face,
         }))
+    }
+
+    /// A value of a view-carrying face may hold an owner laid out otherwise,
+    /// so the face's own layout does not decide where a second type finds that
+    /// owner's fields. Each carried owner must be a prefix of the target, or be
+    /// carried by the target's own accessors; otherwise this conversion is the
+    /// one main refused at the view, and it refuses with the same sentence.
+    ///
+    /// `const f: Face = new S1(); g(f)` with `g(p: Plain)` and `Plain` laid out
+    /// as `Face` was a no-op cast here, and `g` read `S1`'s `a` where `Plain`
+    /// keeps `b` (`examples/a-structural-alias-read-after-an-interface-view`).
+    fn carried_owners_fit(
+        &mut self,
+        id: NodeId,
+        source: TypeId,
+        to: TypeId,
+    ) -> Result<(), Diagnostic> {
+        if source == to || !self.hierarchy.access_families.changes_transport(source) {
+            return Ok(());
+        }
+        for owner in self.hierarchy.access_families.carried_by(source) {
+            if owner == to || self.hierarchy.access_families.carries(owner, to) {
+                continue;
+            }
+            if let Some(why) = self.not_a_prefix(id, owner, to) {
+                let (owner, to) = (self.type_in_a_message(owner), self.type_in_a_message(to));
+                return Err(self.unsupported(id, &why.spell(&owner, &to)));
+            }
+        }
+        Ok(())
     }
 
     fn not_a_prefix(&mut self, id: NodeId, from: TypeId, to: TypeId) -> Option<NotAPrefix> {
@@ -42887,22 +42931,36 @@ impl<'a> FuncBuilder<'a> {
             Some(_) => vec![ty],
             None => return Err(self.unsupported(rhs, "an `in` on a value with no type")),
         };
+        if let Some(answer) =
+            self.in_over_a_structural_arm(id, (lhs, rhs), &members, &key, brand)?
+        {
+            return Ok(answer);
+        }
 
-        // Every class the value can actually *be*: each arm and everything
-        // below it.
-        //
-        // The first version of this asked the arms alone and was wrong in the
-        // direction that folds to a constant. `const v: Shape | Other = ...`
-        // with `Circle extends Shape`: neither `Shape` nor `Other` declares
-        // `r`, so `"r" in v` folded to `false` -- and at run time `v` is a
-        // `Circle`, which has one. Node says true, nts said false, and the
-        // differential said so on 20 of 29 cases.
-        //
-        // Inheritance is additive, so a subclass declares everything its base
-        // does and possibly more. That makes the `true` direction safe with the
-        // arms alone and the `false` direction unsafe, which is exactly the
-        // asymmetry a "no arm has it" fold walks into.
-        let mut members = members;
+        let members = self.with_subclasses(members);
+        let (declaring, optional) = self.arms_declaring(rhs, &members, &key, brand)?;
+        let origin = self.origin(id);
+        if !optional.is_empty() {
+            return self.in_by_presence(id, rhs, &members, &optional, &key);
+        }
+        self.in_over_the_arms(id, rhs, &members, declaring, &origin)
+    }
+
+    /// Every class the value can actually *be*: each arm and everything
+    /// below it.
+    ///
+    /// The first version of this asked the arms alone and was wrong in the
+    /// direction that folds to a constant. `const v: Shape | Other = ...`
+    /// with `Circle extends Shape`: neither `Shape` nor `Other` declares
+    /// `r`, so `"r" in v` folded to `false` -- and at run time `v` is a
+    /// `Circle`, which has one. Node says true, nts said false, and the
+    /// differential said so on 20 of 29 cases.
+    ///
+    /// Inheritance is additive, so a subclass declares everything its base
+    /// does and possibly more. That makes the `true` direction safe with the
+    /// arms alone and the `false` direction unsafe, which is exactly the
+    /// asymmetry a "no arm has it" fold walks into.
+    fn with_subclasses(&self, mut members: Vec<TypeId>) -> Vec<TypeId> {
         let below: Vec<TypeId> = self
             .hierarchy
             .name
@@ -42915,13 +42973,61 @@ impl<'a> FuncBuilder<'a> {
         members.extend(below);
         members.sort_unstable_by_key(|ty| ty.0);
         members.dedup();
+        members
+    }
 
-        let (declaring, optional) = self.arms_declaring(rhs, &members, &key, brand)?;
-        let origin = self.origin(id);
-        if !optional.is_empty() {
-            return self.in_by_presence(id, rhs, &members, &optional, &key);
+    /// `in` on a receiver with an interface arm, or `None` where every arm is
+    /// a class and the arms and their subclasses answer it.
+    ///
+    /// **An interface arm holds any object of its shape, not only a class
+    /// below it.** `const value: Short = long` keeps a `Long` -- a literal
+    /// laid out with `extra`, or a class nothing declares related -- and
+    /// `"extra" in value` folded to `false` from `Short`'s members, on main
+    /// where the layouts are prefixes and through a field view where they
+    /// are not (`tooling/conformance/outcomes/an-in-test-on-an-interface-holding-a-wider-object`).
+    /// The subclasses `lower_in` adds are a fact about classes; a structural
+    /// arm's candidates are every object of the program, which is the
+    /// `object` answer, read from the object's own layout at run time.
+    ///
+    /// Only the `false` direction needs them. An arm that requires the key
+    /// holds nothing without it, so where every arm does, the answer is the
+    /// constant it always was.
+    fn in_over_a_structural_arm(
+        &mut self,
+        id: NodeId,
+        (lhs, rhs): (NodeId, NodeId),
+        members: &[TypeId],
+        key: &str,
+        brand: bool,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        if members.iter().all(|member| {
+            matches!(
+                self.represent(*member),
+                Some(HirType::Managed(ManagedType::Object(_)))
+            )
+        }) && members.iter().any(|member| {
+            class_symbol(self.snapshot, *member).is_none()
+                && !super::is_closure_type(*member)
+                && !self.is_a_signature(*member)
+        }) {
+            if !brand
+                && members
+                    .iter()
+                    .all(|member| matches!(self.declares(*member, key, brand), Declares::Always))
+            {
+                self.lower_expression(rhs)?;
+                let origin = self.origin(id);
+                return Ok(Some(self.push(
+                    OpKind::ConstBool(true),
+                    HirType::Bool,
+                    origin,
+                )));
+            }
+            return self
+                .lower_in_over_every_class(id, lhs, rhs, key, brand)
+                .map(Some);
         }
-        self.in_over_the_arms(id, rhs, &members, declaring, &origin)
+        Ok(None)
     }
 
     /// Which arms of the receiver's type declare the key, and which single arm

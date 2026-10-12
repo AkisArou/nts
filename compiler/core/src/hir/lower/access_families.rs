@@ -33,6 +33,11 @@ pub(super) enum Reader {
     Stored,
     Getter(Accessor),
     Undefined,
+    /// A structural candidate the supplier bound did not prove reaches the
+    /// face, whose own member does not fit the family's contract. Its row is a
+    /// named runtime refusal, never an empty slot: the bound decides which
+    /// classes license a family, not which classes can arrive at a read.
+    Refused(&'static str),
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +48,10 @@ pub(super) struct Supply {
     pub reader: Reader,
     pub setter: Option<Accessor>,
     pub write_ty: HirType,
+    /// Whether the supplier bound proved this owner reaches the face. Only a
+    /// proven supply licenses the family's contract and its transports; an
+    /// unproven one still receives a complete table row.
+    pub proven: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -357,6 +366,18 @@ impl Families {
     pub(super) fn carries(&self, owner: TypeId, face: TypeId) -> bool {
         self.transports.contains(&(owner, face))
     }
+    /// The owners other than itself that a value of `face` may hold through a
+    /// licensed view, in type order so a refusal naming one is deterministic.
+    pub(super) fn carried_by(&self, face: TypeId) -> Vec<TypeId> {
+        let mut owners: Vec<_> = self
+            .transports
+            .iter()
+            .filter(|(owner, at)| *at == face && *owner != face)
+            .map(|(owner, _)| *owner)
+            .collect();
+        owners.sort_unstable();
+        owners
+    }
     pub(super) fn for_key(&self, face: TypeId, key: &str) -> Option<(&Family, bool)> {
         let (key, _) = super::without_the_raising_suffix(key);
         let (member, writes) = key
@@ -418,15 +439,23 @@ impl Families {
             let Some(properties) = properties(probe, face) else {
                 continue;
             };
-            let candidates: Vec<_> = owners
+            // Every owner whose shape fits can arrive at a read of this face:
+            // structural typing admits it, and the supplier bound is a proof
+            // about the routes it models, not about all of them. The bound
+            // picks the owners that license the family's contract; the
+            // complete set decides positions, spreads and table rows.
+            let structural: Vec<_> = owners
                 .candidates(properties)
                 .into_iter()
-                .filter(|owner| {
-                    candidate_satisfies(probe, hierarchy, &result.flow, face, *owner, properties)
-                })
+                .filter(|owner| fits_the_face(probe, hierarchy, face, *owner, properties))
                 .collect();
-            if !candidates.is_empty()
-                && candidates.iter().all(|owner| {
+            let candidates: Vec<_> = structural
+                .iter()
+                .copied()
+                .filter(|owner| result.flow.permits(*owner, face))
+                .collect();
+            if !structural.is_empty()
+                && structural.iter().all(|owner| {
                     owns_the_same_shape(probe, *owner, face, properties, &sources.literals)
                 })
             {
@@ -438,7 +467,15 @@ impl Families {
                     continue;
                 };
                 match family(probe, hierarchy, &sources, face, wanted, &candidates) {
-                    Ok(family) => {
+                    Ok(mut family) => {
+                        complete_the_rows(
+                            probe,
+                            hierarchy,
+                            &sources,
+                            &mut family,
+                            wanted,
+                            &structural,
+                        );
                         result
                             .by_member
                             .entry(face)
@@ -452,27 +489,7 @@ impl Families {
                 }
             }
         }
-        for family in &result.licensed {
-            if result.declined.keys().any(|(face, _)| *face == family.face) {
-                continue;
-            }
-            result.transports.extend(
-                family
-                    .supplies
-                    .iter()
-                    .filter(|supply| {
-                        // Field licensing cannot authorize transport into an
-                        // incomplete method table. Method-value faces retain
-                        // their independent legacy classification until D.
-                        hierarchy
-                            .declares
-                            .get(&family.face)
-                            .is_none_or(Vec::is_empty)
-                            || hierarchy.descends_from(supply.owner, family.face)
-                    })
-                    .map(|supply| (supply.owner, family.face)),
-            );
-        }
+        result.record_transports(hierarchy);
         for (site, reads) in sites {
             let families: Vec<_> = reads
                 .iter()
@@ -486,6 +503,39 @@ impl Families {
         result
     }
 
+    /// The coercions the licensed families authorize: each proven supply into
+    /// its face, unless some member of that face was declined.
+    fn record_transports(&mut self, hierarchy: &Hierarchy) {
+        let mut transports = Vec::new();
+        for family in &self.licensed {
+            if self.declined.keys().any(|(face, _)| *face == family.face) {
+                continue;
+            }
+            transports.extend(
+                family
+                    .supplies
+                    .iter()
+                    .filter(|supply| {
+                        // Only a proven supply authorizes a transport: an
+                        // unproven owner has no coercion the bound saw, and a
+                        // view is licensed at a coercion.
+                        //
+                        // Field licensing cannot authorize transport into an
+                        // incomplete method table. Method-value faces retain
+                        // their independent legacy classification until D.
+                        supply.proven
+                            && (hierarchy
+                                .declares
+                                .get(&family.face)
+                                .is_none_or(Vec::is_empty)
+                                || hierarchy.descends_from(supply.owner, family.face))
+                    })
+                    .map(|supply| (supply.owner, family.face)),
+            );
+        }
+        self.transports.extend(transports);
+    }
+
     pub(super) fn get(&self, face: TypeId, member: &str) -> Option<&Family> {
         self.by_member
             .get(&face)
@@ -494,33 +544,24 @@ impl Families {
     }
 }
 
-/// Declaration-only layouts reserve rows under the same candidate contract
-/// as concrete owners. A missing optional member does not authorize rows for
+/// Declaration-only layouts reserve rows under the same structural contract
+/// as concrete owners, proven or not: a row is owed to every layout an object
+/// of the face can have. A missing optional member does not authorize rows for
 /// a face whose required members the declaration cannot supply.
 pub(super) fn reserves(probe: &FuncBuilder<'_>, owner: TypeId, face: TypeId) -> bool {
-    properties(probe, face).is_some_and(|properties| {
-        candidate_satisfies(
-            probe,
-            &probe.hierarchy,
-            &probe.hierarchy.access_families.flow,
-            face,
-            owner,
-            properties,
-        )
-    })
+    properties(probe, face)
+        .is_some_and(|properties| fits_the_face(probe, &probe.hierarchy, face, owner, properties))
 }
 
-fn candidate_satisfies(
+/// Whether an owner's members can stand where the face's are read: its shape
+/// alone, independent of whether the supplier bound saw it arrive.
+fn fits_the_face(
     probe: &FuncBuilder<'_>,
     hierarchy: &Hierarchy,
-    flow: &super::access_family_flow::Bound,
     face: TypeId,
     owner: TypeId,
     properties: &[PropertyRecord],
 ) -> bool {
-    if !flow.permits(owner, face) {
-        return false;
-    }
     // Owners::candidates intersects these required names for concrete owners;
     // declaration-only reservations must observe the same membership rule.
     // An optional member cannot satisfy a required one either.
@@ -843,6 +884,95 @@ fn family(
     })
 }
 
+/// Give every structural owner the bound did not prove a row of its own.
+///
+/// The proven supplies licensed the family's contract, so an unproven owner
+/// cannot widen it ([`fits_the_contract`]). One whose member fits reads its
+/// own field like any supply; any other gets a row that refuses by name at run
+/// time. Either way an object arriving by a route the bound does not model
+/// finds its own field or a named stop, never an empty slot or another class's
+/// offset.
+fn complete_the_rows(
+    probe: &FuncBuilder<'_>,
+    hierarchy: &Hierarchy,
+    sources: &Sources,
+    family: &mut Family,
+    wanted: &PropertyRecord,
+    structural: &[TypeId],
+) {
+    let declared = property_storage(probe, wanted);
+    for owner in structural {
+        if family.supplies.iter().any(|supply| supply.owner == *owner) {
+            continue;
+        }
+        let row = match supply(probe, hierarchy, sources, *owner, wanted) {
+            Ok(found) if fits_the_contract(probe, family, declared.as_ref(), &found, wanted) => {
+                Supply {
+                    proven: false,
+                    ..found
+                }
+            }
+            Ok(_) => refused_row(
+                family,
+                *owner,
+                "its member does not fit the family's contract",
+            ),
+            Err(reason) => refused_row(family, *owner, reason),
+        };
+        family.supplies.push(row);
+    }
+}
+
+/// Whether an unproven owner's member keeps every promise the licensed family
+/// already made to source lowering: its storage where reads are positional or
+/// typed, its absences where static answers were chosen from them, its schema
+/// where the read type is reused, and no user code where the family is not
+/// eager. A getter or setter is user code and never fits: it would change the
+/// family's raising and evaluation contract after that was decided.
+fn fits_the_contract(
+    probe: &FuncBuilder<'_>,
+    family: &Family,
+    declared: Option<&HirType>,
+    found: &Supply,
+    wanted: &PropertyRecord,
+) -> bool {
+    let shape = match found.reader {
+        Reader::Stored => {
+            found.setter.is_none()
+                && (declared == Some(&found.ty)
+                    || (family.eager
+                        && family.returns == HirType::Erased
+                        && family.writes.is_none()
+                        && result_crosses(&found.ty)))
+        }
+        Reader::Undefined => family.eager && family.writes.is_none(),
+        Reader::Getter(_) | Reader::Refused(_) => false,
+    };
+    let absences = match (&family.absences, absence_tags(probe, found.owner, wanted)) {
+        (None, _) => true,
+        (Some(allowed), Some(own)) => own.iter().all(|tag| allowed.contains(tag)),
+        (Some(_), None) => false,
+    };
+    let schema = family.read_type.is_none()
+        || family.read_type
+            == interfaces::property(probe.snapshot, found.owner, &wanted.name)
+                .filter(|property| !property.optional)
+                .map(|property| property.ty);
+    shape && absences && schema
+}
+
+fn refused_row(family: &Family, owner: TypeId, reason: &'static str) -> Supply {
+    Supply {
+        owner,
+        ty: family.returns.clone(),
+        absent: Absent::Impossible,
+        reader: Reader::Refused(reason),
+        setter: None,
+        write_ty: family.writes.clone().unwrap_or(HirType::Erased),
+        proven: false,
+    }
+}
+
 fn supply(
     probe: &FuncBuilder<'_>,
     hierarchy: &Hierarchy,
@@ -860,6 +990,7 @@ fn supply(
                 reader: Reader::Undefined,
                 setter: None,
                 write_ty: HirType::Erased,
+                proven: true,
             })
             .ok_or("a required field missing from a concrete supplier");
     };
@@ -947,6 +1078,7 @@ fn supply(
         reader,
         setter,
         write_ty,
+        proven: true,
     })
 }
 

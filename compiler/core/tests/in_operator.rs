@@ -59,32 +59,70 @@ fn constants(func: &hir::Func) -> Vec<bool> {
         .collect()
 }
 
-/// A union where some arms declare the property becomes a class test naming
-/// exactly those arms.
+/// The field names of the layout behind every class each `in` test names, in
+/// the order the tests appear.
+fn tested_layouts(lowered: &hir::lower::Lowered, func: &hir::Func) -> Vec<Vec<Vec<String>>> {
+    func.values
+        .iter()
+        .filter_map(|op| match &op.kind {
+            OpKind::InstanceOf { classes, .. } => Some(
+                classes
+                    .iter()
+                    .filter_map(|class| {
+                        lowered
+                            .program
+                            .layouts
+                            .iter()
+                            .find(|layout| layout.types.contains(class))
+                    })
+                    .map(|layout| layout.fields.iter().map(|f| f.name.clone()).collect())
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A union of interfaces where some arms declare the property becomes a class
+/// test against the object types that declare it, and none that do not.
+///
+/// **Not against the arms alone.** An interface arm holds any object of its
+/// shape -- a class nothing declares related, or a literal laid out wider --
+/// so the arms' own members decide only the `true` direction. Asked of the
+/// arms, `"extra" in value` with `value: Short` holding a wider literal folded
+/// to `false`, 8 of 29 cases against node
+/// (`tooling/conformance/outcomes/an-in-test-on-an-interface-holding-a-wider-object`).
+/// This test once asserted one candidate per test, the arm that declared it;
+/// the honest number is every object type with the key, here the arm and the
+/// literals laid out as it.
 #[test]
-fn a_mixed_union_becomes_a_test_against_the_arms_that_declare_it() {
+fn a_mixed_union_becomes_a_test_against_the_types_that_declare_it() {
     let Some(lowered) = lowered("in-operator") else {
         return;
     };
-    // `Circle | Square`, and only `Circle` has `radius`.
-    let tests = class_tests(func(&lowered, "narrows"));
-    assert_eq!(tests, vec![1], "one test against one arm: {tests:?}");
-
-    // Three arms, and both tests name exactly one — which is not what I
-    // expected and is the better answer. `read` is declared by two of the three
-    // arms, but the second test is reached only after `"duplex" in s` was false,
-    // so TypeScript has already narrowed `s` to `Reader | Writer` and only
-    // `Reader` declares `read`. The set comes from the *narrowed* static type,
-    // so an earlier test makes a later one cheaper.
-    //
-    // This assertion was written as `[1, 2]` from the un-narrowed union and
-    // failed, which is the only reason the narrowing is recorded here at all.
-    let chained = class_tests(func(&lowered, "chained"));
-    assert_eq!(
-        chained,
-        vec![1, 1],
-        "each test names one arm of the union it can still be: {chained:?}",
-    );
+    for (name, keys) in [
+        ("narrows", &["radius"][..]),
+        ("chained", &["duplex", "read"][..]),
+    ] {
+        let tests = tested_layouts(&lowered, func(&lowered, name));
+        assert_eq!(
+            tests.len(),
+            keys.len(),
+            "`{name}` tests once per `in`: {tests:?}"
+        );
+        for (layouts, key) in tests.iter().zip(keys) {
+            assert!(
+                !layouts.is_empty(),
+                "`{name}`'s `{key}` test names a layout"
+            );
+            assert!(
+                layouts
+                    .iter()
+                    .all(|fields| fields.iter().any(|field| field == key)),
+                "`{name}`'s `{key}` test names only layouts holding it: {layouts:?}",
+            );
+        }
+    }
 }
 
 /// The candidate set is each arm *and everything below it*.
@@ -202,8 +240,12 @@ fn in_on_an_optional_property_reads_a_presence_bit() {
             _ => None,
         })
         .collect();
+    // `nts_presence_has_value` where the receiver is an interface, which is
+    // tested over every object type and so as an erased value.
     assert!(
-        calls.contains(&"nts_presence_has"),
+        calls
+            .iter()
+            .any(|name| name.starts_with("nts_presence_has")),
         "the answer comes from the header: {calls:?}",
     );
 

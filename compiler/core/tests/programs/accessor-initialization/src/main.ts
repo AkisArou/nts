@@ -28,5 +28,49 @@ export class PublishingBase {
 export class Derived extends PublishingBase { value = 3; }
 export class QuietBase { tag = 17; }
 export class QuietDerived extends QuietBase { value = 3; }
+export class TaggedEarly {
+  value: number;
+  constructor(n: number) { tag`${this}`; this.value = n; }
+}
+export class ThrowEarly {
+  value: number;
+  constructor(n: number) { if (n < 0) throw this; this.value = n; }
+}
+export class NullishEarly {
+  value: number;
+  constructor(n: number) { holder.last ??= this; this.value = n; }
+}
+export class Showing { show(): void { inspect(this); } }
+export class SuperMethodEarly extends Showing {
+  value: number;
+  constructor(n: number) { super(); super.show(); this.value = n; }
+}
+export class ForOfAlias {
+  value: number;
+  constructor(n: number) { for (const self of [this]) inspect(self); this.value = n; }
+}
+export interface Valued { value: number }
+export class CastEarly {
+  value: number;
+  constructor(n: number) { inspect((this as Valued).value); this.value = n; }
+}
+export class CalledFieldEarly {
+  report: () => void = () => inspect(this);
+  value: number;
+  constructor(n: number) { this.report(); this.value = n; }
+}
+export class OwnReadFirst {
+  tag = 1;
+  value: number;
+  constructor(n: number) { inspect(this.tag); this.value = n; }
+}
+export class SelfStored { self = this; value = 3; }
+export class PrivateReadFirst {
+  #secret = 1;
+  value: number;
+  constructor(n: number) { inspect(this.#secret); this.value = n; }
+}
+const holder: { last?: object } = {};
+function tag(_strings: TemplateStringsArray, ..._values: unknown[]): void {}
 function inspect(_value: unknown): void {}
 function invoke(callback: () => void): void { callback(); }

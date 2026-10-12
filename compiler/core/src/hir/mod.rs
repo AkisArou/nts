@@ -6043,7 +6043,10 @@ fn doomed_values(
     func: &Func,
     present: &rustc_hash::FxHashSet<String>,
     uncallable: &rustc_hash::FxHashMap<TypeId, String>,
-    unwritten: &rustc_hash::FxHashSet<u32>,
+    (unwritten, fields): (
+        &rustc_hash::FxHashSet<u32>,
+        (&interface_access::Plan, &rustc_hash::FxHashMap<u32, String>),
+    ),
     global_names: &[String],
 ) -> rustc_hash::FxHashMap<ValueId, Doom> {
     let read = |global: u32| {
@@ -6078,7 +6081,13 @@ fn doomed_values(
                 HirType::Managed(ManagedType::Object(ty)) => uncallable.get(ty).cloned(),
                 _ => None,
             },
-            _ => None,
+            // And the third, which the scan in `drop_callers_of_refused` knows:
+            // an interface field whose family lost a supplier's body. Without
+            // it the scan found the read every round and this never cut it.
+            _ => fields
+                .0
+                .missing_dependency(func, &op.kind, fields.1)
+                .map(str::to_owned),
         };
         let cause = match op.kind {
             OpKind::GlobalGet(global) if unwritten.contains(&global) => Some(read(global)),
@@ -6314,9 +6323,17 @@ fn excise_from_initializer(
         .iter()
         .map(|global| global.name.clone())
         .collect();
-    let Some(func) = lowered
+    let named: rustc_hash::FxHashSet<&str> = present.iter().map(String::as_str).collect();
+    let unavailable = lowered
         .program
-        .funcs
+        .interface_access
+        .unavailable(&lowered.program, &named);
+    let Program {
+        funcs,
+        interface_access,
+        ..
+    } = &mut lowered.program;
+    let Some(func) = funcs
         .iter_mut()
         .find(|func| func.name == lower::MODULE_INIT)
     else {
@@ -6327,7 +6344,13 @@ fn excise_from_initializer(
     // that reads a doomed value is doomed, to a fixpoint. The call's own
     // *arguments* are not -- they were computed before it and reading them is
     // still fine, so what is left behind is dead rather than wrong.
-    let doomed = doomed_values(func, present, uncallable, unwritten, &global_names);
+    let doomed = doomed_values(
+        func,
+        present,
+        uncallable,
+        (unwritten, (interface_access, &unavailable)),
+        &global_names,
+    );
     if doomed.is_empty() {
         return false;
     }
@@ -6369,40 +6392,14 @@ fn excise_from_initializer(
             origin.location,
         ));
     };
-    for block in &func.blocks {
-        if let Some(&value) = operands_of_terminator(&block.terminator)
-            .iter()
-            .find(|value| doomed.contains_key(value))
-        {
-            blame(func, value, "control flow");
-            return false;
-        }
-        if let Some(&param) = block.params.iter().find(|param| doomed.contains_key(param)) {
-            blame(func, param, "block parameter");
-            return false;
-        }
-        let carried: Vec<&Vec<ValueId>> = match &block.terminator {
-            Terminator::Jump { args, .. } => vec![args],
-            Terminator::Branch {
-                then_args,
-                else_args,
-                ..
-            } => vec![then_args, else_args],
-            Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
-        };
-        if let Some(&value) = carried
-            .iter()
-            .flat_map(|args| args.iter())
-            .find(|value| doomed.contains_key(value))
-        {
-            blame(func, value, "value carried to another block");
-            return false;
-        }
+    if let Some((value, what)) = uncuttable(func, &doomed) {
+        blame(func, value, what);
+        return false;
     }
 
     let cuts = cuts_to_report(func, &doomed);
-    for block in &mut func.blocks {
-        block.ops.retain(|value| !doomed.contains_key(value));
+    if !cut(func, &doomed) {
+        return false;
     }
 
     for (global, cause, origin) in cuts.globals {
@@ -6443,6 +6440,64 @@ fn excise_from_initializer(
 }
 
 /// What to say about a callee that is not in the program, for a cascade to carry.
+/// The doomed value, if any, that decides the initializer's shape rather than
+/// only a value in it: what a terminator reads, a block parameter, or an
+/// argument carried to another block.
+fn uncuttable(
+    func: &Func,
+    doomed: &rustc_hash::FxHashMap<ValueId, Doom>,
+) -> Option<(ValueId, &'static str)> {
+    for block in &func.blocks {
+        if let Some(&value) = operands_of_terminator(&block.terminator)
+            .iter()
+            .find(|value| doomed.contains_key(value))
+        {
+            return Some((value, "control flow"));
+        }
+        if let Some(&param) = block.params.iter().find(|param| doomed.contains_key(param)) {
+            return Some((param, "block parameter"));
+        }
+        let carried: Vec<&Vec<ValueId>> = match &block.terminator {
+            Terminator::Jump { args, .. } => vec![args],
+            Terminator::Branch {
+                then_args,
+                else_args,
+                ..
+            } => vec![then_args, else_args],
+            Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
+        };
+        if let Some(&value) = carried
+            .iter()
+            .flat_map(|args| args.iter())
+            .find(|value| doomed.contains_key(value))
+        {
+            return Some((value, "value carried to another block"));
+        }
+    }
+    None
+}
+
+/// Take every doomed op out of its block, answering whether any was there.
+///
+/// **Progress is what the callers loop on, so it is measured, not assumed.**
+/// `doomed` is seeded from every value the lowering made, including ops an
+/// earlier round already cut, so it is never empty again after the first cut.
+/// Answering "cut" for it while the reason the caller came back for was
+/// something the seeds could not see made `nts hir` spin forever on a module
+/// that read a refused interface field
+/// (`tooling/conformance/outcomes/a-module-reading-an-interface-field-whose-getter-was-refused`).
+/// A round that cuts nothing declines, and the caller drops evaluation whole,
+/// loudly.
+fn cut(func: &mut Func, doomed: &rustc_hash::FxHashMap<ValueId, Doom>) -> bool {
+    let mut removed = false;
+    for block in &mut func.blocks {
+        let held = block.ops.len();
+        block.ops.retain(|value| !doomed.contains_key(value));
+        removed |= block.ops.len() != held;
+    }
+    removed
+}
+
 fn why_a_callee_is_missing(program: &Program, callee: &str) -> String {
     // **Which silence it is**, where `uncompiled` has nothing either. That
     // fallback was one sentence for two situations, and the Assistant lane's
@@ -6570,6 +6625,7 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             }
         }
         if refused.is_empty() {
+            retire_unavailable_fields(lowered, &unavailable_fields);
             return;
         }
         for (caller, callee, origin) in refused {
@@ -6681,6 +6737,31 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
 /// this, because what an array holds depends on what the fields feeding it were
 /// narrowed to.
 /// Operations whose answer is one of their own operands, in every function.
+/// Every reader of an entry that lost a supplier's body is refused or cut by
+/// now, so the entry has nothing left to answer: drop its declared shell from
+/// the program and its row from every table.
+fn retire_unavailable_fields(
+    lowered: &mut lower::Lowered,
+    unavailable: &rustc_hash::FxHashMap<u32, String>,
+) {
+    let slots: rustc_hash::FxHashSet<u32> = unavailable.keys().copied().collect();
+    let shells = lowered.program.interface_access.retire(&slots);
+    if shells.is_empty() {
+        return;
+    }
+    lowered
+        .program
+        .funcs
+        .retain(|func| !shells.contains(&func.name));
+    for layout in &mut lowered.program.layouts {
+        for slot in &slots {
+            if let Some(entry) = layout.methods.get_mut(*slot as usize) {
+                *entry = None;
+            }
+        }
+    }
+}
+
 fn simplify_all(program: &mut Program) -> usize {
     program.funcs.iter_mut().map(simplify::simplify).sum()
 }

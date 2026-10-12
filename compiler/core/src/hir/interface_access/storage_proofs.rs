@@ -61,10 +61,11 @@ impl Proof<'_> {
         }
         let reached = crate::hir::verify::reachable_blocks(func);
         let idom = crate::hir::verify::dominators(func, &reached);
+        let entries = entries(func, &reached);
         sites
             .into_iter()
             .filter_map(|(value, block, object)| {
-                self.same_layout(func, &idom, block, object, value)
+                self.same_layout(func, (&idom, &entries), block, object, value)
                     .then_some(value)
             })
             .collect()
@@ -73,7 +74,7 @@ impl Proof<'_> {
     fn same_layout(
         &self,
         func: &Func,
-        idom: &[Option<BlockId>],
+        (idom, entries): (&[Option<BlockId>], &[usize]),
         block: BlockId,
         object: ValueId,
         value: ValueId,
@@ -105,6 +106,11 @@ impl Proof<'_> {
             if parent == child {
                 break;
             }
+            // **An arm is a target the test's edge is the only way into.** A
+            // dominated target can be the join: `if (f instanceof B) { .. }`
+            // with no `else` branches straight to the block after it, which
+            // the `then` arm reaches too -- so a `B` arrives there, and
+            // narrowing it as the `else` arm removed the owner it was.
             if let Terminator::Branch {
                 cond,
                 then_target,
@@ -113,6 +119,7 @@ impl Proof<'_> {
             } = &func.blocks[parent.0 as usize].terminator
                 && then_target != else_target
                 && (*then_target == child || *else_target == child)
+                && entries[child.0 as usize] == 1
                 && let OpKind::InstanceOf { value, classes } = &func.value(*cond).kind
                 && identity(func, *value) == subject
             {
@@ -153,6 +160,19 @@ impl Proof<'_> {
         }
         (!unknown).then_some(false)
     }
+}
+
+/// How many edges from reachable blocks enter each block.
+fn entries(func: &Func, reached: &FxHashSet<BlockId>) -> Vec<usize> {
+    let mut entries = vec![0; func.blocks.len()];
+    for at in reached {
+        for target in func.blocks[at.0 as usize].terminator.successors() {
+            if let Some(count) = entries.get_mut(target.0 as usize) {
+                *count += 1;
+            }
+        }
+    }
+    entries
 }
 
 fn identity(func: &Func, mut value: ValueId) -> ValueId {
@@ -206,5 +226,39 @@ mod tests {
             }
         }
         assert!(direct_sites(&program)[at].is_disjoint(&reads));
+    }
+
+    /// The block after an `if` with no `else` is a target of the test and is
+    /// dominated by it, and the `then` arm reaches it too -- so a `Long`
+    /// arrives there, and the read must stay dispatched.
+    #[test]
+    fn the_join_after_a_class_test_is_not_one_of_its_arms() {
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
+        let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/programs/accessor-layout-proof/tsconfig.json");
+        let snapshot = TsgoApi::for_compilation(tsgo)
+            .snapshot(&config)
+            .unwrap_or_else(|error| panic!("snapshot failed: {error:?}"));
+        let program = crate::hir::lower::lower(&snapshot).program;
+        let at = program
+            .funcs
+            .iter()
+            .position(|func| func.name == "joined")
+            .unwrap_or_else(|| panic!("joined is lowered"));
+        let func = &program.funcs[at];
+        assert!(
+            func.values
+                .iter()
+                .any(|op| matches!(op.kind, OpKind::InstanceOf { .. })),
+            "the `in` test is a class test at run time"
+        );
+        assert!(
+            direct_sites(&program)[at]
+                .iter()
+                .all(|value| !matches!(func.value(*value).kind, OpKind::FieldGet { .. })),
+            "the read after the join is not direct"
+        );
     }
 }

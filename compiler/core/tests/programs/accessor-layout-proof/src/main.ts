@@ -13,3 +13,12 @@ export function unguarded(n: number): number {
   const values: Short[] = [short, long];
   return values[n > 0 ? 0 : 1]!.value;
 }
+export function joined(n: number): number {
+  const short: Short = {value: n};
+  const long: Long = {padding: 71, value: n + 1, extra: 83};
+  const values: Short[] = [short, long];
+  const value = values[n > 0 ? 0 : 1]!;
+  let bonus = 0;
+  if ("extra" in value) bonus = 1000;
+  return value.value + bonus;
+}

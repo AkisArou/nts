@@ -262,6 +262,12 @@ pub(super) fn placeholder(
         // layouts may merge before its receiver type is fixed, just as stored
         // readers may; keep the two reader roles distinct in the reservation.
         format!("undefined{:?}", supply.absent)
+    } else if let Reader::Refused(reason) = supply.reader {
+        // A refusal reads nothing of its owner either, and an optional-only
+        // face gives one to every object of the program: owner-specific, it
+        // kept equal literal layouts from merging, and a receiver test that
+        // relies on their one descriptor refused its own arguments.
+        format!("refused:{reason}")
     } else {
         supply.owner.0.to_string()
     };
@@ -381,7 +387,7 @@ fn fill(
     // body and receiver convention serve all of that layout's stored rows.
     let mut supply = supply.clone();
     if (matches!(supply.reader, Reader::Stored) && supply.setter.is_none())
-        || matches!(supply.reader, Reader::Undefined)
+        || matches!(supply.reader, Reader::Undefined | Reader::Refused(_))
     {
         supply.owner = *program.layouts[owner]
             .types
@@ -400,13 +406,22 @@ fn fill(
     let ordinary_key = body_key(context.snapshot, family, supply, writes, false);
     let base = context.bodies.get(&ordinary_key).cloned().unwrap_or(base);
     let name = format!("{base}{}", if raising { super::RAISING_SUFFIX } else { "" });
-    let function = body(
-        context,
-        program,
-        family,
-        supply,
-        (&name, owner, writes, raising),
-    );
+    let at = (name.as_str(), owner, writes, raising);
+    let mut function = body(context, program, family, supply, at);
+    // An owner the bound did not prove never licensed the family, so its row
+    // failing to lower cannot refuse every reader: it refuses itself, by name.
+    let refused;
+    let supply = if function.is_none() && !supply.proven {
+        refused = Supply {
+            reader: Reader::Refused("its member has no lowered body"),
+            setter: None,
+            ..supply.clone()
+        };
+        function = body(context, program, family, &refused, at);
+        &refused
+    } else {
+        supply
+    };
     program.layouts[owner].methods[entry.slot as usize] = Some(name.clone());
     context.bodies.insert(key, name.clone());
     let Some(function) = function else {
@@ -517,6 +532,15 @@ fn body(
             origin.clone(),
         );
     }
+    let returns = if writes {
+        HirType::Void
+    } else {
+        family.returns.clone()
+    };
+    if let Reader::Refused(reason) = supply.reader {
+        refuse(context, &mut builder, family, writes, reason, &origin);
+        return Some(builder.finish(name.to_owned(), params, returns, origin, false));
+    }
     let answer = if let Some(accessor) = user_accessor(supply, writes) {
         let target = accessor_name(context, family, accessor, writes, raising)?;
         let target = program.funcs.get(*context.by_name.get(&target)?)?;
@@ -555,11 +579,6 @@ fn body(
     } else {
         stored(&mut builder, program, family, owner, writes, &origin)?
     };
-    let returns = if writes {
-        HirType::Void
-    } else {
-        family.returns.clone()
-    };
     let answer = if writes {
         None
     } else {
@@ -573,6 +592,47 @@ fn body(
     };
     builder.terminate(Terminator::Return(answer));
     Some(builder.finish(name.to_owned(), params, returns, origin, false))
+}
+
+/// The row of an owner the supplier bound did not prove: a named stop at run
+/// time, built the way `interface_fields::guard` builds its own, so an object
+/// that arrives by an unmodeled route stops by name instead of reading another
+/// class's offset or calling through an empty slot.
+fn refuse(
+    context: &Context<'_>,
+    builder: &mut FuncBuilder<'_>,
+    family: &Family,
+    writes: bool,
+    reason: &str,
+    origin: &Origin,
+) {
+    // Not naming the owner: equal layouts share one row, and so one body.
+    let face = context
+        .hierarchy
+        .name
+        .get(&family.face)
+        .map_or("an interface", String::as_str);
+    let message = format!(
+        "`{}` {} through `{face}` on an object that reached `{face}` by a route this \
+         compiler did not prove, and whose member it cannot use there: {reason}",
+        family.member,
+        if writes { "written" } else { "read" },
+    );
+    let what = builder.push(
+        OpKind::ConstString(message),
+        HirType::Managed(ManagedType::String),
+        origin.clone(),
+    );
+    builder.push(
+        OpKind::Call {
+            callee: Callee::External("nts_refused".to_owned()),
+            args: vec![what],
+            frame: None,
+        },
+        HirType::Void,
+        origin.clone(),
+    );
+    builder.terminate(Terminator::Unreachable);
 }
 
 fn stored(

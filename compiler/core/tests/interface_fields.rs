@@ -59,18 +59,44 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
             .layout(*owner)
             .is_some_and(|layout| layout.name == "Computed")
     }));
-    assert!(
-        !program
-            .interface_access
-            .families
+    // Every structural owner has a row, the unrelated getter's too: nothing
+    // proves it never reaches `Value`. But its row is a named stop, never a
+    // call into its getter, so the getter's own refusal cannot reach `Value`'s
+    // readers -- `readValue` above is still compiled.
+    for family in program
+        .interface_access
+        .families
+        .iter()
+        .filter(|family| family.member == "value")
+    {
+        let Some(layout) = program
+            .layouts
             .iter()
-            .filter(|family| family.member == "value")
-            .flat_map(|family| &family.owners)
-            .any(|owner| program
-                .layout(*owner)
-                .is_some_and(|layout| layout.name == "UnrelatedGetter")),
-        "an unrelated exported getter cannot create a dependency for Value reads"
-    );
+            .find(|layout| layout.name == "UnrelatedGetter")
+        else {
+            continue;
+        };
+        let row = layout
+            .methods
+            .get(family.getter.slot as usize)
+            .and_then(Option::as_deref)
+            .and_then(|name| program.funcs.iter().find(|func| func.name == name));
+        let row = row.expect("the unrelated getter has a row of its own");
+        assert!(
+            !row.values.iter().any(|op| matches!(
+                &op.kind,
+                OpKind::Call { callee: Callee::Direct(name), .. } if name.contains("UnrelatedGetter")
+            )),
+            "an unrelated exported getter cannot create a dependency for Value reads"
+        );
+        assert!(
+            row.values.iter().any(|op| matches!(
+                &op.kind,
+                OpKind::Call { callee: Callee::External(name), .. } if name == "nts_refused"
+            )),
+            "its row stops by name"
+        );
+    }
     let read = program
         .funcs
         .iter()

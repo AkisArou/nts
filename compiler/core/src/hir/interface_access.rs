@@ -89,6 +89,27 @@ impl Plan {
         self.selectors.contains(&slot)
     }
 
+    /// The declared shells of the entries that lost a supplier's body, once
+    /// the refusal cascade has refused or cut every reader of them.
+    ///
+    /// Per entry, not per family: a getter whose supplier was refused leaves
+    /// the setter beside it whole, with writers of its own. And returned for
+    /// removal because a cut reader is gone from its blocks and not from its
+    /// function's values, which is what reachability walks -- so a shell an
+    /// excised module statement called stayed live, and the verifier asked
+    /// the lost supplier for its row.
+    pub(super) fn retire(&self, slots: &FxHashSet<u32>) -> Vec<String> {
+        let mut shells = Vec::new();
+        for family in &self.families {
+            for entry in family.entries() {
+                if slots.contains(&entry.slot) {
+                    shells.push(entry.declared.clone());
+                }
+            }
+        }
+        shells
+    }
+
     pub(super) fn push(&mut self, family: Family) {
         if let Some(field) = family.field {
             self.by_field

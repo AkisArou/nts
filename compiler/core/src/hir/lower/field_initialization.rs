@@ -195,60 +195,112 @@ fn contains_receiver(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
         .any(|node| probe.kind_of(node) == Some(syntax::THIS_KEYWORD))
 }
 
+/// Whether evaluating `root` can let anything observe the object before its
+/// fields are written.
+///
+/// **An allowlist, because a list of the ways to leak is never finished.** It
+/// was one -- calls, `new`, `return`, a declaration, an accessor and a plain
+/// `=` -- and a tagged template, `throw this`, `holder ??= this`, a
+/// `super.method()` that runs with the receiver, and every construct added
+/// since each published `this` with no entry naming it. So the receiver is
+/// kept in only where it stays: as the object of a plain field it reads or
+/// writes in place and does not call, or stored whole into one of its own
+/// fields -- itself, or an arrow that captures it, which runs only when
+/// something later calls it, and that call is a publication. Every other
+/// appearance, a `super` that is not the base constructor's call, and an arrow
+/// capturing it anywhere else, is a publication. A nested function or class
+/// has its own receiver and is not this evaluation.
 fn exposes_receiver(probe: &FuncBuilder<'_>, root: NodeId) -> bool {
     let mut pending = vec![root];
     while let Some(at) = pending.pop() {
-        if matches!(
-            probe.kind_of(at),
+        match probe.kind_of(at) {
+            Some(syntax::ARROW_FUNCTION) => {
+                if at != root && !stored_whole(probe, at) && contains_receiver(probe, at) {
+                    return true;
+                }
+                continue;
+            }
             Some(
-                syntax::ARROW_FUNCTION
-                    | syntax::FUNCTION_EXPRESSION
-                    | syntax::FUNCTION_DECLARATION
-                    | syntax::CLASS_DECLARATION
-                    | syntax::CLASS_EXPRESSION
-            )
-        ) {
-            continue;
-        }
-        if exposes_at(probe, at) {
-            return true;
+                syntax::FUNCTION_EXPRESSION
+                | syntax::FUNCTION_DECLARATION
+                | syntax::CLASS_DECLARATION
+                | syntax::CLASS_EXPRESSION,
+            ) => continue,
+            // A field initializer that is the receiver itself stores it whole.
+            Some(syntax::THIS_KEYWORD) if at != root && !stays(probe, at) => return true,
+            Some(syntax::SUPER_KEYWORD) if !constructs_the_base(probe, at) => return true,
+            _ => {}
         }
         pending.extend(children_that_run(probe, at));
     }
     false
 }
 
-fn exposes_at(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
-    if matches!(
-        probe.kind_of(at),
-        Some(
-            syntax::CALL_EXPRESSION
-                | syntax::NEW_EXPRESSION
-                | syntax::RETURN_STATEMENT
-                | syntax::VARIABLE_DECLARATION
-        )
-    ) {
-        return contains_receiver(probe, at);
+/// `this.field`, read or written in place, where `field` is plain storage and
+/// the access is not what a call calls -- a method or a function-valued field
+/// called through the receiver runs with it. Or the receiver stored whole into
+/// its own field.
+fn stays(probe: &FuncBuilder<'_>, receiver: NodeId) -> bool {
+    let Some(access) = probe.node(receiver).parent else {
+        return false;
+    };
+    match probe.member_access(access) {
+        Some((object, name)) if object == receiver => {
+            own_field(probe, receiver, &name) && !called(probe, access)
+        }
+        _ => stored_whole(probe, receiver),
     }
-    if let Some((object, name)) = probe.member_access(at)
-        && probe.kind_of(object) == Some(syntax::THIS_KEYWORD)
-        && let Some(ty) = probe.snapshot.node_types.get(&object)
-        && interfaces::property(probe.snapshot, *ty, &name).is_some_and(|property| {
-            matches!(property.kind, nts_semantic_schema::MemberKind::Accessor(_))
+}
+
+/// Asked of the class behind the receiver: the checker types `this` as the
+/// polymorphic `this` type, a parameter constrained by the class, which has
+/// no properties of its own to answer with.
+fn own_field(probe: &FuncBuilder<'_>, receiver: NodeId, name: &str) -> bool {
+    probe
+        .snapshot
+        .node_types
+        .get(&receiver)
+        .and_then(|ty| interfaces::property(probe.snapshot, probe.class_behind(*ty), name))
+        .is_some_and(|property| property.kind == nts_semantic_schema::MemberKind::Field)
+}
+
+fn called(probe: &FuncBuilder<'_>, access: NodeId) -> bool {
+    probe.node(access).parent.is_some_and(|parent| {
+        matches!(
+            probe.kind_of(parent),
+            Some(
+                syntax::CALL_EXPRESSION
+                    | syntax::NEW_EXPRESSION
+                    | syntax::TAGGED_TEMPLATE_EXPRESSION
+            )
+        ) && probe.children(parent).first() == Some(&access)
+    })
+}
+
+/// The right operand of a plain `=` into one of the receiver's own fields.
+fn stored_whole(probe: &FuncBuilder<'_>, value: NodeId) -> bool {
+    let Some(assignment) = probe.node(value).parent else {
+        return false;
+    };
+    if probe.kind_of(assignment) != Some(syntax::BINARY_EXPRESSION) {
+        return false;
+    }
+    let [left, operator, right] = probe.children(assignment)[..] else {
+        return false;
+    };
+    right == value
+        && probe.kind_of(operator) == Some(syntax::EQUALS_TOKEN)
+        && probe.member_access(left).is_some_and(|(object, name)| {
+            probe.kind_of(object) == Some(syntax::THIS_KEYWORD) && own_field(probe, object, &name)
         })
-    {
-        return true;
-    }
-    if probe.kind_of(at) == Some(syntax::BINARY_EXPRESSION)
-        && let [left, operator, right] = probe.children(at).as_slice()
-        && probe.kind_of(*operator) == Some(syntax::EQUALS_TOKEN)
-        && contains_receiver(probe, *right)
-    {
-        return probe
-            .member_access(*left)
-            .is_none_or(|(object, _)| probe.kind_of(object) != Some(syntax::THIS_KEYWORD));
-    }
-    false
+}
+
+/// `super(...)`: the base constructor, which [`base_exposes`] answers for.
+fn constructs_the_base(probe: &FuncBuilder<'_>, keyword: NodeId) -> bool {
+    probe.node(keyword).parent.is_some_and(|call| {
+        probe.kind_of(call) == Some(syntax::CALL_EXPRESSION)
+            && probe.children(call).first() == Some(&keyword)
+    })
 }
 
 #[cfg(test)]
@@ -281,6 +333,16 @@ mod tests {
             ("EarlyClosure", false),
             ("Derived", false),
             ("QuietDerived", true),
+            ("TaggedEarly", false),
+            ("ThrowEarly", false),
+            ("NullishEarly", false),
+            ("SuperMethodEarly", false),
+            ("ForOfAlias", false),
+            ("CastEarly", false),
+            ("CalledFieldEarly", false),
+            ("OwnReadFirst", true),
+            ("SelfStored", true),
+            ("PrivateReadFirst", true),
         ] {
             let ty = snapshot
                 .types
