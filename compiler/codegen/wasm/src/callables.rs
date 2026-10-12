@@ -69,6 +69,20 @@ fn entry<'p>(
     {
         return Ok((uniform, entry));
     }
+    // A value of a function type is stored as the callable root, which holds
+    // only the uniform entries; a typed entry belongs to a closure's group.
+    if face == Face::Closure
+        && types
+            .uniform
+            .as_ref()
+            .is_some_and(|root| root.base == storage.physical)
+    {
+        return Err(format!(
+            "a typed call to slot {slot} through the function type `{}`: only its uniform entries are callable",
+            storage.name
+        )
+        .into());
+    }
     let root = face.root(storage).ok_or_else(|| {
         format!(
             "{} `{}` has no HIR-proven dispatch contract",
