@@ -107,6 +107,7 @@ pub(crate) struct Plan {
     groups: Vec<Vec<SubType>>,
     count: u32,
     pub(crate) erased: Option<ErasedTypes>,
+    pub(crate) activation: Option<u32>,
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
@@ -127,6 +128,18 @@ impl Plan {
         let callables = crate::callable_plan::Plan::build(program, &resources.closure_calls)?;
         let virtuals = crate::callable_plan::Plan::build(program, &resources.virtual_calls)?;
         let mut builder = Builder::new(program, callables, virtuals);
+        if resources.raising {
+            builder
+                .request(&HirType::Erased)
+                .map_err(crate::EmitError::InvalidWasm)?;
+            let id = builder.add("activation".into(), None, true, Shape::Struct(Vec::new()));
+            builder.nodes[id.0].shape = Shape::Struct(vec![
+                Field::value(PendingSlot::Scalar(Slot::I32), false),
+                Field::value(PendingSlot::Reference(RefType::ANYREF), false),
+                Field::value(PendingSlot::Defined(id, true), false),
+            ]);
+            builder.activation = Some(id);
+        }
         for (ty, use_) in &resources.referenced_objects {
             builder
                 .request(&HirType::Managed(ManagedType::Object(*ty)))
@@ -235,6 +248,7 @@ struct Builder<'a> {
     root: Option<RootNodes>,
     work: Vec<Work>,
     erased: Option<ErasedNodes>,
+    activation: Option<NodeId>,
     callable_plan: crate::callable_plan::Plan,
     callables: BTreeMap<usize, CallableNodes>,
     virtual_plan: crate::callable_plan::Plan,
@@ -257,6 +271,7 @@ impl<'a> Builder<'a> {
             root: None,
             work: Vec::new(),
             erased: None,
+            activation: None,
             callable_plan,
             callables: BTreeMap::new(),
             virtual_plan,
@@ -845,6 +860,7 @@ impl<'a> Builder<'a> {
             .collect();
         let (objects, arrays) = self.metadata(&indices)?;
         Ok(Plan {
+            activation: self.activation.map(|id| indices[id.0]),
             arrays,
             callables: self.resolved_callables(&indices),
             virtuals: Self::resolve_entries(&self.virtuals, &self.virtual_plan, &indices, 0),

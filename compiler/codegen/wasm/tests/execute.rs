@@ -27,7 +27,13 @@ fn prepared_project(fixture: &Path) -> hir::Program {
 }
 
 fn emit_project(fixture: &Path) -> nts_codegen_wasm::Emitted {
-    nts_codegen_wasm::emit(&prepared_project(fixture)).expect("scalar fixture supported")
+    let program = prepared_project(fixture);
+    nts_codegen_wasm::emit(&program).unwrap_or_else(|error| {
+        if let nts_codegen_wasm::EmitError::Invariant { function, .. } = &error {
+            eprintln!("{:?}", program.funcs.iter().find(|f| &f.name == function));
+        }
+        panic!("fixture {}: {error}", fixture.display());
+    })
 }
 
 #[test]
@@ -59,6 +65,72 @@ fn source_array_helpers_agree_with_node() {
         &["--experimental-transform-types"],
     );
     assert_eq!(output["cases"], 710);
+}
+
+#[test]
+fn source_raising_slots_handlers_and_finalizers_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/raising");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "raising-source",
+        &emitted,
+        "tooling/wasm/check-raising-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert!(output["cases"].as_u64().unwrap() > 150);
+    assert!(output["thrownCases"].as_u64().unwrap() > 50);
+}
+
+#[test]
+fn source_raising_slot_contract_survives_body_renaming() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/raising");
+    let mut program = prepared_project(&fixture);
+    let renames: std::collections::BTreeMap<_, _> = program
+        .funcs
+        .iter()
+        .filter(|f| f.name.contains("@raises"))
+        .enumerate()
+        .map(|(at, f)| (f.name.clone(), format!("arbitrary_raised_entry_{at}")))
+        .collect();
+    assert!(!renames.is_empty());
+    let rename = |name: &mut String| {
+        if let Some(replacement) = renames.get(name) {
+            name.clone_from(replacement);
+        }
+    };
+    for f in &mut program.funcs {
+        rename(&mut f.name);
+        for op in &mut f.values {
+            if let hir::OpKind::Call { callee, .. } = &mut op.kind {
+                match callee {
+                    hir::Callee::Direct(name) | hir::Callee::Virtual { declared: name, .. } => {
+                        rename(name);
+                    }
+                    hir::Callee::External(_)
+                    | hir::Callee::Native(_)
+                    | hir::Callee::Closure { .. } => {}
+                }
+            }
+        }
+    }
+    for layout in &mut program.layouts {
+        for name in layout.methods.iter_mut().flatten() {
+            rename(name);
+        }
+    }
+    for (name, _) in &mut program.public_api {
+        rename(name);
+    }
+    let emitted = nts_codegen_wasm::emit(&program).unwrap();
+    let output = common::run_with_node_flags(
+        "raising-renamed-source",
+        &emitted,
+        "tooling/wasm/check-raising-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert!(output["cases"].as_u64().unwrap() > 150);
 }
 
 #[test]

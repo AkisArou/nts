@@ -887,7 +887,7 @@ call's placeholder result is never consumed. No process-global singleton state.
 `nts_uncaught` crosses to the JS host as the actual thrown value; compiler defects
 and named input declines remain distinct from source-language exceptions.
 
-### M1b activation ABI detail proposed for review
+### M1b activation ABI detail (approved)
 
 The pending flag and erased payload live in module globals. A private recursive
 GC activation frame stores a saved flag, payload and previous frame; only nested
@@ -901,9 +901,11 @@ This needs an optional ABI2 `activation` record naming four private function
 exports: `enter() -> void`, `leave() -> void`, `raising() -> i32`, and
 `publish(functionName: externref) -> void`. These are declared and checked against
 the actual module export set, kept out of the source namespace, and use names
-allocated against all existing public/global/init names. Modules without raising
-resources have no record or activation work. This is a pending ABI detail, not
-an implemented exception result or an approved extension yet.
+in the reserved `$nts$activation$` prefix. A source publication using that prefix
+is refused by name, including one which does not otherwise need raising.
+Modules without raising resources have no record or activation work. MainClaude
+approved this detail with nested-entry, host-throw and cold-refusal cleanup
+controls required alongside module-init failure and instance isolation.
 
 `publish` never consumes a failed call's placeholder result. It extracts only
 admitted primitive/string/absence payloads and throws the actual JS value through
@@ -916,6 +918,15 @@ No GC source references or function references cross these private scalar/string
 exports. Acceptance includes repeat calls after throws/refusals, two instances,
 module-init failure, and a controlled nested-entry probe which restores an
 already pending enclosing payload.
+
+The uniform raising result adapters are selected from
+`Program.raising_call_slot` and the layout's actual method entry. When their
+erased return adapts a failed call, the adapter propagates an ignored erased
+placeholder without checking or reading the failed typed value. The pending
+payload stays untouched until the caller's explicit handler consumes it.
+Ordinary result erasure keeps its input checks. A source execution control
+renames every raising body and updates its HIR references to prove this lowering
+uses the declared slot instead of a naming convention.
 
 Native wasm `throw`/`try_table`/exnref are available, as the probes show. Native
 EH is an **M2 priority**, requiring region-aware exception lowering, not an instruction-for-

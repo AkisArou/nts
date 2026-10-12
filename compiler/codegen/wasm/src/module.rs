@@ -24,6 +24,8 @@ pub(crate) struct Symbols<'a> {
     pub(crate) global_base: u32,
     pub(crate) host: BTreeMap<&'static str, u32>,
     pub(crate) erased_globals: Option<crate::erased::Globals>,
+    pub(crate) raising: Option<crate::raising::State>,
+    pub(crate) raising_results: &'a BTreeMap<String, BTreeSet<nts_core::hir::ValueId>>,
     pub(crate) erased: BTreeMap<crate::erased::Helper, u32>,
     pub(crate) input_decline: Option<u32>,
     pub(crate) descriptor_base: u32,
@@ -45,7 +47,10 @@ impl<'a> Symbols<'a> {
         }
         features
     }
-    fn new(plan: &'a gc::Plan, resources: &requirements::Requirements) -> Result<Self, EmitError> {
+    fn new(
+        plan: &'a gc::Plan,
+        resources: &'a requirements::Requirements,
+    ) -> Result<Self, EmitError> {
         let descriptor_base = index(resources.literals.len())
             + if plan.erased.is_some() {
                 crate::erased::SINGLETONS
@@ -54,13 +59,23 @@ impl<'a> Symbols<'a> {
             };
         let static_base = descriptor_base + index(plan.objects.descriptors.len());
         let static_closures = crate::callables::statics(resources, plan, static_base)?;
+        let raising_base = static_base + index(static_closures.len());
         Ok(Self {
             functions: FxHashMap::default(),
             helpers: BTreeMap::new(),
             types: plan,
             strings: BTreeMap::new(),
             literals: FxHashMap::default(),
-            global_base: static_base + index(static_closures.len()),
+            global_base: raising_base
+                + if resources.raising {
+                    crate::raising::GLOBALS
+                } else {
+                    0
+                },
+            raising: resources
+                .raising
+                .then(|| crate::raising::State::new(raising_base)),
+            raising_results: &resources.raising_results,
             descriptor_base,
             instance_of: None,
             array_grow: BTreeMap::new(),
@@ -144,6 +159,16 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
 }
 
 fn preflight(program: &Program) -> Result<(), EmitError> {
+    if let Some((_, name)) = program
+        .public_api
+        .iter()
+        .find(|(_, name)| name.starts_with(crate::raising::PREFIX))
+    {
+        return Err(EmitError::UnsupportedSurface {
+            name: name.clone(),
+            reason: "reserved Wasm activation export prefix".into(),
+        });
+    }
     if let Some((name, _)) = program.public_namespaces.first() {
         return Err(EmitError::UnsupportedSurface {
             name: name.clone(),
@@ -259,6 +284,24 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
     })
 }
 
+fn declare_raising(
+    types: &mut Types,
+    functions: &mut FunctionSection,
+    names: &mut NameMap,
+    symbols: &mut Symbols<'_>,
+    imported_functions: u32,
+) {
+    if let Some(state) = &mut symbols.raising {
+        for helper in crate::raising::Helper::ALL {
+            let (params, result) = helper.signature();
+            let id = imported_functions + functions.len();
+            functions.function(types.intern(Signature { params, result }));
+            state.functions.insert(helper, id);
+            names.append(id, helper.name());
+        }
+    }
+}
+
 fn declare_thunks(
     thunks: &[crate::callables::Thunk],
     functions: &mut FunctionSection,
@@ -324,6 +367,7 @@ fn declare_managed_adapters(
         symbols.array_grow.insert(array.wrapper, id);
         names.append(id, &format!("array.grow<{:?}>", array.element));
     }
+    declare_raising(types, functions, names, symbols, imported_functions);
 }
 
 struct Bodies {
@@ -397,6 +441,16 @@ fn bodies(
                 reason: error.to_string(),
             })?;
         code.function(&function);
+    }
+    if symbols.raising.is_some() {
+        for helper in crate::raising::Helper::ALL {
+            let function =
+                crate::raising::body(helper, symbols).map_err(|error| EmitError::Invariant {
+                    function: helper.name().into(),
+                    reason: error.to_string(),
+                })?;
+            code.function(&function);
+        }
     }
     for thunk in thunks {
         let function =
@@ -492,6 +546,21 @@ fn host_imports(
             crate::Import::function("nts:host/v1", crate::contract::IMPORT, &params, None)
                 .map_err(EmitError::InvalidWasm)?,
         );
+    }
+    if let Some(state) = &mut symbols.raising {
+        for throw in crate::raising::Throw::ALL {
+            let params = throw.params();
+            let ty = types.intern(Signature {
+                params: params.clone(),
+                result: None,
+            });
+            state.imports.insert(throw, imports.len());
+            imports.import("nts:host/v1", throw.name(), EntityType::Function(ty));
+            records.push(
+                crate::Import::function("nts:host/v1", throw.name(), &params, None)
+                    .map_err(EmitError::InvalidWasm)?,
+            );
+        }
     }
     Ok(records)
 }
@@ -616,6 +685,10 @@ fn globals(program: &Program, symbols: &Symbols<'_>) -> Result<GlobalSection, Em
     })?;
     crate::callables::globals(symbols, &mut section).map_err(|error| EmitError::Invariant {
         function: "static closures".into(),
+        reason: error.to_string(),
+    })?;
+    crate::raising::globals(symbols, &mut section).map_err(|error| EmitError::Invariant {
+        function: "activation globals".into(),
         reason: error.to_string(),
     })?;
     for global in &program.globals {
@@ -772,7 +845,33 @@ fn manifest(
             return Err(surface_decline(program, published));
         }
     }
-    let mut init = None;
+    let init = initializer(&definitions, &names, symbols, section)?;
+    let activation =
+        crate::raising::exports(symbols, section).map_err(|error| EmitError::Invariant {
+            function: "activation exports".into(),
+            reason: error.to_string(),
+        })?;
+    Ok(Manifest {
+        abi: 2,
+        host: "js".to_owned(),
+        exports,
+        globals,
+        init,
+        activation,
+        imports,
+        builtins: Vec::new(),
+        constants: Vec::new(),
+        features: Vec::new(),
+        functions: Vec::new(),
+    })
+}
+
+fn initializer(
+    definitions: &FxHashMap<&str, &Func>,
+    names: &BTreeSet<String>,
+    symbols: &Symbols<'_>,
+    section: &mut ExportSection,
+) -> Result<Option<String>, EmitError> {
     if let Some(func) = definitions.get(nts_core::hir::lower::MODULE_INIT) {
         if !func.params.is_empty() || !matches!(func.return_type, HirType::Void) {
             return Err(EmitError::InvalidWasm(
@@ -788,20 +887,10 @@ fn manifest(
             ExportKind::Func,
             symbols.functions[func.name.as_str()],
         );
-        init = Some(symbol);
+        Ok(Some(symbol))
+    } else {
+        Ok(None)
     }
-    Ok(Manifest {
-        abi: 2,
-        host: "js".to_owned(),
-        exports,
-        globals,
-        init,
-        imports,
-        builtins: Vec::new(),
-        constants: Vec::new(),
-        features: Vec::new(),
-        functions: Vec::new(),
-    })
 }
 
 fn initialized_global(

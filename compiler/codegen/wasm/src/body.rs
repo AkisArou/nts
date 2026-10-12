@@ -54,6 +54,8 @@ mod tests {
             global_base: 0,
             host: BTreeMap::new(),
             erased_globals: None,
+            raising: None,
+            raising_results: &BTreeMap::new(),
             erased: BTreeMap::new(),
             input_decline: None,
             descriptor_base: 0,
@@ -128,6 +130,8 @@ mod tests {
                 global_base: 0,
                 host: BTreeMap::new(),
                 erased_globals: None,
+                raising: None,
+                raising_results: &BTreeMap::new(),
                 erased: BTreeMap::new(),
                 input_decline: None,
                 descriptor_base: 0,
@@ -216,6 +220,13 @@ impl<'a> Body<'a> {
         let mut locals = Vec::new();
         let mut next = crate::module::index(func.params.len());
         let mut values = vec![None; func.values.len()];
+        // Prepared wrappers may omit Param pseudo-ops from their block lists.
+        // Parameters already exist at entry; they never need local allocation.
+        for (id, op) in func.values.iter().enumerate() {
+            if let OpKind::Param(at) = op.kind {
+                values[id] = Some(at);
+            }
+        }
         let mut live = std::collections::BTreeSet::new();
         for block in &plan.order {
             let b = &func.blocks[block.0 as usize];
@@ -227,9 +238,9 @@ impl<'a> Body<'a> {
                 .types
                 .slot(&op.ty)
                 .map_err(|failure| failure.at(&func.name, &op.origin))?;
-            if let OpKind::Param(at) = op.kind {
-                values[value.0 as usize] = Some(at);
-            } else if let Some(slot) = slot {
+            if !matches!(op.kind, OpKind::Param(_))
+                && let Some(slot) = slot
+            {
                 values[value.0 as usize] = Some(next);
                 next += 1;
                 locals.push(slot.wasm());
@@ -550,7 +561,7 @@ impl<'a> Body<'a> {
             OpKind::ConstInt(value) => numeric::constant_int(self, *value, &op.ty)?,
             OpKind::ConstFloat(value) => numeric::constant_float(self, *value, &op.ty)?,
             OpKind::ConstString(value) => crate::strings::constant(self, value)?,
-            OpKind::Erase { value, absent } => crate::erased::erase(self, *value, *absent)?,
+            OpKind::Erase { value, absent } => self.erase(id, *value, *absent)?,
             OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
             OpKind::ConstNull => crate::erased::constant(self, id, crate::erased::NULL)?,
@@ -648,6 +659,23 @@ impl<'a> Body<'a> {
         self.ins(&I::Return);
         Ok(())
     }
+    fn erase(
+        &mut self,
+        id: ValueId,
+        value: ValueId,
+        absent: nts_core::hir::Absent,
+    ) -> Result<(), Failure> {
+        if self
+            .symbols
+            .raising_results
+            .get(&self.func.name)
+            .is_some_and(|results| results.contains(&id))
+        {
+            crate::raising::erase_result(self, value, absent)
+        } else {
+            crate::erased::erase(self, value, absent)
+        }
+    }
     fn binary(
         &mut self,
         id: ValueId,
@@ -723,7 +751,9 @@ impl<'a> Body<'a> {
                 self.ins(&I::Call(*at));
             }
             Callee::External(name) => {
-                if let Some(helper) = crate::strings::external(name) {
+                if let Some(helper) = crate::raising::external(name) {
+                    crate::raising::call(self, result, name, helper, args)?;
+                } else if let Some(helper) = crate::strings::external(name) {
                     crate::strings::runtime(self, result, helper, args)?;
                 } else if let Some(service) = crate::host::external(name) {
                     service.call(self, result, args)?;

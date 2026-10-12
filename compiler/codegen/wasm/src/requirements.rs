@@ -18,6 +18,8 @@ pub(crate) struct Requirements {
     pub(crate) literals: BTreeSet<String>,
     pub(crate) erased: BTreeSet<erased::Helper>,
     pub(crate) input_contract: bool,
+    pub(crate) raising: bool,
+    pub(crate) raising_results: BTreeMap<String, BTreeSet<nts_core::hir::ValueId>>,
     pub(crate) referenced_objects: BTreeMap<ClassId, ObjectUse>,
     pub(crate) instance_of: bool,
     pub(crate) grow_arrays: rustc_hash::FxHashSet<HirType>,
@@ -120,7 +122,13 @@ impl Requirements {
     ) {
         match target {
             Callee::External(name) => {
-                if let Some(helper) = strings::external(name) {
+                if crate::raising::external(name).is_some() {
+                    self.raising = true;
+                    self.literals.insert(func.name.clone());
+                    self.require_erased(erased::Helper::Tag);
+                    self.require_erased(erased::Helper::Number);
+                    self.require_erased(erased::Helper::Boolean);
+                } else if let Some(helper) = strings::external(name) {
                     self.require(helper);
                     if !matches!(
                         helper,
@@ -231,6 +239,50 @@ pub(crate) fn build(program: &Program) -> Requirements {
     }
     if result.strings.contains(&strings::Helper::FromCharCode) {
         result.numeric.insert(Helper::ToInt32);
+    }
+    if result.raising
+        && let Some(slot) = program.raising_call_slot
+    {
+        // The declared uniform raising slot is the authority, never a suffix
+        // in a function name. Its erased return adapter must propagate an
+        // ignored placeholder without inspecting a failed call's value.
+        for name in program
+            .layouts
+            .iter()
+            .filter_map(|layout| layout.methods.get(slot as usize).and_then(Option::as_ref))
+        {
+            if let Some(func) = program.funcs.iter().find(|f| &f.name == name) {
+                for block in nts_codegen_common::block_order(func) {
+                    let block = &func.blocks[block.0 as usize];
+                    let returns = block
+                        .ops
+                        .iter()
+                        .filter_map(|id| {
+                            if let OpKind::Return(Some(value)) = func.value(*id).kind {
+                                Some(value)
+                            } else {
+                                None
+                            }
+                        })
+                        .chain(
+                            if let nts_core::hir::Terminator::Return(value) = block.terminator {
+                                value
+                            } else {
+                                None
+                            },
+                        );
+                    for returned in returns {
+                        if matches!(func.value(returned).kind, OpKind::Erase { .. }) {
+                            result
+                                .raising_results
+                                .entry(name.clone())
+                                .or_default()
+                                .insert(returned);
+                        }
+                    }
+                }
+            }
+        }
     }
     result
 }

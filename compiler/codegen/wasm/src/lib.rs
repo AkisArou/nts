@@ -23,6 +23,7 @@ mod module;
 mod numeric;
 mod object_plan;
 mod objects;
+mod raising;
 mod requirements;
 mod strings;
 mod types;
@@ -55,11 +56,22 @@ pub struct Manifest {
     pub exports: Vec<FunctionExport>,
     pub globals: Vec<GlobalExport>,
     pub init: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation: Option<Activation>,
     pub imports: Vec<Import>,
     pub builtins: Vec<Import>,
     pub constants: Vec<StringConstant>,
     pub features: Vec<String>,
     pub functions: Vec<FunctionRoute>,
+}
+
+/// Private scalar/string functions used only by the instance's host wrapper.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Activation {
+    pub enter: String,
+    pub leave: String,
+    pub raising: String,
+    pub publish: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

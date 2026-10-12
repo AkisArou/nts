@@ -29,6 +29,14 @@ primitiveServices.nts_parse_int = Object.freeze({ params: [extern, f64], result:
 primitiveServices.inputDecline = Object.freeze({ params: [extern], result: null,
   call: name => { throw new WasmInputDecline(name, 'internal typed value contract', 'operation in'); },
 });
+primitiveServices.throwNumber = Object.freeze({ params: [f64], result: null, call: value => { throw value; } });
+primitiveServices.throwBoolean = Object.freeze({ params: [i32], result: null, call: value => { throw value !== 0; } });
+primitiveServices.throwString = Object.freeze({ params: [extern], result: null, call: value => { throw value; } });
+primitiveServices.throwUndefined = Object.freeze({ params: [], result: null, call: () => { throw undefined; } });
+primitiveServices.throwNull = Object.freeze({ params: [], result: null, call: () => { throw null; } });
+primitiveServices.uncaughtDecline = Object.freeze({ params: [extern], result: null,
+  call: name => { throw new WasmInputDecline(name, 'uncaught compiled object or function needs an identity bridge', 'throw from'); },
+});
 const services = Object.freeze(primitiveServices);
 const builtins = Object.freeze({
   length: { params: [extern], result: i32 },
@@ -172,23 +180,43 @@ export async function instantiate(bytes, manifest) {
   })) throw new WebAssembly.LinkError('nts wasm module/import manifest mismatch');
   const declared = [...manifest.exports.map(e => [e.name, 'function']), ...manifest.globals.map(g => [g.symbol, 'global'])];
   if (manifest.init !== null) declared.push([manifest.init, 'function']);
+  const activation = manifest.activation;
+  if (activation !== undefined && activation !== null) {
+    const fields = ['enter', 'leave', 'raising', 'publish'];
+    if (typeof activation !== 'object' || Object.keys(activation).length !== fields.length
+      || fields.some(key => activation[key] !== `$nts$activation$${key}`)) throw new WebAssembly.LinkError('invalid nts wasm activation manifest');
+    declared.push(...fields.map(key => [activation[key], 'function']));
+  }
+  if (manifest.exports.some(e => e.name.startsWith('$nts$activation$')) || manifest.globals.some(g => g.name.startsWith('$nts$activation$') || g.symbol.startsWith('$nts$activation$'))) throw new WebAssembly.LinkError('reserved nts wasm activation export');
   const actual = WebAssembly.Module.exports(module);
   if (new Set(declared.map(([name]) => name)).size !== declared.length || actual.length !== declared.length || declared.some(([name, kind]) => !actual.some(e => e.name === name && e.kind === kind))) {
     throw new WebAssembly.LinkError('nts wasm module/export manifest mismatch');
   }
   const instance = await WebAssembly.instantiate(module, ordinary);
+  const enter = activation ? instance.exports[activation.enter] : null;
+  const leave = activation ? instance.exports[activation.leave] : null;
+  const raising = activation ? instance.exports[activation.raising] : null;
+  const publish = activation ? instance.exports[activation.publish] : null;
+  const invoke = (fn, args, name, result) => {
+    if (enter) enter();
+    try {
+      const value = fn(...args);
+      if (raising && raising() !== 0) publish(name);
+      return output(result, value, name);
+    } finally { if (leave) leave(); }
+  };
   const namespace = Object.create(null);
   for (const e of manifest.exports) {
     const fn = instance.exports[e.name];
     Object.defineProperty(namespace, e.name, { enumerable: true, value: (...args) => {
       if (args.length !== e.params.length) throw new WasmInputDecline(e.name, `expected ${e.params.length} arguments`);
-      return output(e.result, fn(...args.map((v, i) => argument(e.params[i], v, e.name))), e.name);
+      return invoke(fn, args.map((v, i) => argument(e.params[i], v, e.name)), e.name, e.result);
     } });
   }
   for (const g of manifest.globals) {
     Object.defineProperty(namespace, g.name, { enumerable: true, get: () => output(g.ty, instance.exports[g.symbol].value, g.name) });
   }
-  if (manifest.init !== null) instance.exports[manifest.init]();
+  if (manifest.init !== null) invoke(instance.exports[manifest.init], [], manifest.init, { kind: 'void' });
   return Object.freeze(namespace);
 }
 
