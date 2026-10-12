@@ -56,6 +56,8 @@ mod tests {
             erased_globals: None,
             erased: BTreeMap::new(),
             input_decline: None,
+            descriptor_base: 0,
+            instance_of: None,
         };
         let mut body = Body::new(&f, 0, &symbols, &plan).unwrap();
         let mut structure = plan.structure.unwrap();
@@ -124,6 +126,8 @@ mod tests {
                 erased_globals: None,
                 erased: BTreeMap::new(),
                 input_decline: None,
+                descriptor_base: 0,
+                instance_of: None,
             };
             let error = emit(&f, 0, &symbols).unwrap_err();
             assert!(matches!(&error, EmitError::Invariant { function, .. } if function == &f.name));
@@ -541,6 +545,16 @@ impl<'a> Body<'a> {
             OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
             OpKind::ConstNull => crate::erased::constant(self, id, crate::erased::NULL)?,
+            OpKind::ObjectNew { frame } => crate::objects::new(self, id, *frame)?,
+            OpKind::FieldGet { object, field } => crate::objects::get(self, id, *object, *field)?,
+            OpKind::FieldSet {
+                object,
+                field,
+                value,
+            } => return crate::objects::set(self, id, *object, *field, *value),
+            OpKind::InstanceOf { value, classes } => {
+                crate::objects::instance(self, *value, classes)?;
+            }
             OpKind::Length(value) if crate::strings::is_string(self.ty(*value)) => {
                 crate::strings::length(self, id, *value)?;
             }
@@ -602,15 +616,11 @@ impl<'a> Body<'a> {
             | OpKind::ArrayNew { .. }
             | OpKind::Length(_)
             | OpKind::ArrayGet { .. }
-            | OpKind::ObjectNew { .. }
             | OpKind::CellReady { .. }
             | OpKind::ClosureStatic
-            | OpKind::InstanceOf { .. }
-            | OpKind::FieldGet { .. }
             | OpKind::SharedFieldGet { .. }
             | OpKind::OpenFieldGet { .. }
             | OpKind::OpenFieldSet { .. }
-            | OpKind::FieldSet { .. }
             | OpKind::Await { .. }
             | OpKind::Yield { .. }
             | OpKind::Suspend { .. }
@@ -638,6 +648,10 @@ impl<'a> Body<'a> {
         } else if crate::strings::is_string(self.ty(lhs)) || crate::strings::is_string(self.ty(rhs))
         {
             crate::strings::binary(self, op, lhs, rhs)
+        } else if crate::objects::is_reference(self.ty(lhs))
+            || crate::objects::is_reference(self.ty(rhs))
+        {
+            crate::objects::binary(self, op, lhs, rhs)
         } else {
             numeric::binary(self, id, op, lhs, rhs)
         }
@@ -652,6 +666,8 @@ impl<'a> Body<'a> {
             crate::erased_ops::truthy(self, op, value)
         } else if crate::strings::is_string(self.ty(value)) {
             crate::strings::truthy(self, op, value)
+        } else if crate::objects::is_reference(self.ty(value)) {
+            crate::objects::truthy(self, op, value)
         } else {
             numeric::unary(self, id, op, value)
         }
@@ -659,6 +675,13 @@ impl<'a> Body<'a> {
     fn convert(&mut self, id: ValueId, value: ValueId) -> Result<(), Failure> {
         let from = self.ty(value).clone();
         let to = self.ty(id).clone();
+        if crate::objects::is_reference(&from) {
+            if to == nts_core::hir::HirType::Bool {
+                return crate::objects::truthy(self, nts_core::hir::UnOp::Truthy, value);
+            }
+            self.load(value)?;
+            return crate::objects::adapt(self, &from, &to);
+        }
         if from == nts_core::hir::HirType::Erased && to == nts_core::hir::HirType::Bool {
             return crate::erased_ops::truthy(self, nts_core::hir::UnOp::Truthy, value);
         }

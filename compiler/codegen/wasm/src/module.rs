@@ -26,22 +26,27 @@ pub(crate) struct Symbols<'a> {
     pub(crate) erased_globals: Option<crate::erased::Globals>,
     pub(crate) erased: BTreeMap<crate::erased::Helper, u32>,
     pub(crate) input_decline: Option<u32>,
+    pub(crate) descriptor_base: u32,
+    pub(crate) instance_of: Option<u32>,
 }
 
 impl<'a> Symbols<'a> {
     fn new(plan: &'a gc::Plan, resources: &requirements::Requirements) -> Self {
+        let descriptor_base = index(resources.literals.len())
+            + if plan.erased.is_some() {
+                crate::erased::SINGLETONS
+            } else {
+                0
+            };
         Self {
             functions: FxHashMap::default(),
             helpers: BTreeMap::new(),
             types: plan,
             strings: BTreeMap::new(),
             literals: FxHashMap::default(),
-            global_base: index(resources.literals.len())
-                + if plan.erased.is_some() {
-                    crate::erased::SINGLETONS
-                } else {
-                    0
-                },
+            global_base: descriptor_base + index(plan.objects.descriptors.len()),
+            descriptor_base,
+            instance_of: None,
             host: BTreeMap::new(),
             erased: BTreeMap::new(),
             input_decline: None,
@@ -135,12 +140,12 @@ fn preflight(program: &Program) -> Result<(), EmitError> {
 }
 
 fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> {
-    let plan = gc::Plan::build(program)?;
+    let resources = requirements::build(program);
+    let plan = gc::Plan::with_resources(program, &resources)?;
     let signatures = funcs
         .iter()
         .map(|func| signature(func, &plan))
         .collect::<Result<Vec<_>, _>>()?;
-    let resources = requirements::build(program);
     let helpers = &resources.numeric;
     let mut types = Types::new(&plan);
     let mut imports = ImportSection::new();
@@ -191,16 +196,14 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         &mut symbols,
         imported_functions,
     );
-    for helper in &resources.erased {
-        let (params, result) = helper.signature();
-        let id = imported_functions + functions.len();
-        functions.function(types.intern(Signature {
-            params,
-            result: Some(result),
-        }));
-        symbols.erased.insert(*helper, id);
-        names.append(id, helper.name());
-    }
+    declare_managed_adapters(
+        &resources,
+        &mut types,
+        &mut functions,
+        &mut names,
+        &mut symbols,
+        imported_functions,
+    );
     let globals = globals(program, &symbols)?;
     let mut exports = ExportSection::new();
     let mut manifest = manifest(program, funcs, &symbols, required_imports, &mut exports)?;
@@ -228,6 +231,38 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         },
         origins: bodies.origins,
     })
+}
+
+fn declare_managed_adapters(
+    resources: &requirements::Requirements,
+    types: &mut Types,
+    functions: &mut FunctionSection,
+    names: &mut NameMap,
+    symbols: &mut Symbols<'_>,
+    imported_functions: u32,
+) {
+    for helper in &resources.erased {
+        let (params, result) = helper.signature();
+        let id = imported_functions + functions.len();
+        functions.function(types.intern(Signature {
+            params,
+            result: Some(result),
+        }));
+        symbols.erased.insert(*helper, id);
+        names.append(id, helper.name());
+    }
+    if resources.instance_of {
+        let id = imported_functions + functions.len();
+        functions.function(types.intern(Signature {
+            params: vec![
+                Physical::Reference(wasm_encoder::RefType::ANYREF),
+                Physical::Scalar(crate::types::Slot::I32),
+            ],
+            result: Some(Physical::Scalar(crate::types::Slot::I32)),
+        }));
+        symbols.instance_of = Some(id);
+        names.append(id, crate::objects::INSTANCE);
+    }
 }
 
 struct Bodies {
@@ -283,6 +318,13 @@ fn bodies(
             reason: error.to_string(),
         })?;
         code.function(&function);
+    }
+    if resources.instance_of {
+        let root = symbols.types.root.ok_or_else(|| EmitError::Invariant {
+            function: crate::objects::INSTANCE.into(),
+            reason: "missing object root".into(),
+        })?;
+        code.function(&crate::objects::instance_body(root));
     }
     Ok(Bodies {
         code,
@@ -476,6 +518,10 @@ fn globals(program: &Program, symbols: &Symbols<'_>) -> Result<GlobalSection, Em
     if let Some(types) = symbols.types.erased {
         crate::erased::globals(types, &mut section);
     }
+    crate::objects::globals(symbols.types, &mut section).map_err(|error| EmitError::Invariant {
+        function: "object descriptors".into(),
+        reason: error.to_string(),
+    })?;
     for global in &program.globals {
         let result = (|| {
             let slot = symbols.types.value_slot(&global.ty)?;

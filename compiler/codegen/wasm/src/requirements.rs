@@ -1,8 +1,14 @@
 //! Demand-driven instruction resources, classified exhaustively from live HIR.
 
 use crate::{erased, erased_ops, helpers::Helper, host, strings};
-use nts_core::hir::{BinOp, Callee, Func, HirType, OpKind, Program, UnOp};
-use std::collections::BTreeSet;
+use nts_core::hir::{Absent, BinOp, Callee, ClassId, Func, HirType, OpKind, Program, UnOp};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Debug)]
+pub(crate) struct ObjectUse {
+    pub(crate) function: String,
+    pub(crate) origin: nts_semantic_schema::Origin,
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Requirements {
@@ -12,6 +18,8 @@ pub(crate) struct Requirements {
     pub(crate) literals: BTreeSet<String>,
     pub(crate) erased: BTreeSet<erased::Helper>,
     pub(crate) input_contract: bool,
+    pub(crate) referenced_objects: BTreeMap<ClassId, ObjectUse>,
+    pub(crate) instance_of: bool,
 }
 impl Requirements {
     fn unit(&mut self, func: &Func, checked: bool) {
@@ -43,8 +51,37 @@ impl Requirements {
         if matches!(*ty, HirType::Int { .. } | HirType::Float { .. }) {
             self.erased.insert(erased::Helper::Number);
         }
-        if strings::is_string(ty) {
+        if matches!(ty, HirType::Managed(_)) {
             self.erased.insert(erased::Helper::Tag);
+        }
+    }
+    fn erase(&mut self, func: &Func, value: nts_core::hir::ValueId, absent: Absent) {
+        match func.value(value).ty {
+            HirType::Int { .. } | HirType::Float { .. } => {
+                self.erased.insert(erased::Helper::BoxNumber);
+            }
+            HirType::Managed(_) if absent == Absent::Impossible => self.contract(func),
+            HirType::Bool
+            | HirType::Erased
+            | HirType::Void
+            | HirType::Never
+            | HirType::Managed(_)
+            | HirType::BigInt
+            | HirType::NativePointer(_) => {}
+        }
+    }
+    fn object_use(&mut self, func: &Func, id: nts_core::hir::ValueId, ty: ClassId) {
+        self.referenced_objects
+            .entry(ty)
+            .or_insert_with(|| ObjectUse {
+                function: func.name.clone(),
+                origin: func.value(id).origin.clone(),
+            });
+    }
+    fn instance(&mut self, func: &Func, id: nts_core::hir::ValueId, classes: &[ClassId]) {
+        self.instance_of = true;
+        for ty in classes {
+            self.object_use(func, id, *ty);
         }
     }
     fn contract(&mut self, func: &Func) {
@@ -145,13 +182,8 @@ fn helper_for(
     match func.value(id).kind {
         OpKind::Unary { op, operand } => unary(func, op, operand, result),
         OpKind::Binary { op, lhs, rhs } => binary(func, id, op, lhs, rhs, result),
-        OpKind::Erase { value, .. } => {
-            if matches!(
-                func.value(value).ty,
-                HirType::Int { .. } | HirType::Float { .. }
-            ) {
-                result.erased.insert(erased::Helper::BoxNumber);
-            }
+        OpKind::Erase { value, absent } => {
+            result.erase(func, value, absent);
             None
         }
         OpKind::Unerase { .. } => {
@@ -163,6 +195,14 @@ fn helper_for(
         }
         OpKind::TagOf { .. } => {
             result.erased.insert(erased::Helper::Tag);
+            None
+        }
+        OpKind::InstanceOf { ref classes, .. } => {
+            result.instance(func, id, classes);
+            None
+        }
+        OpKind::FieldGet { .. } | OpKind::FieldSet { .. } => {
+            result.contract(func);
             None
         }
         OpKind::ConstString(ref text) => {
@@ -225,12 +265,9 @@ fn helper_for(
         | OpKind::ObjectNew { .. }
         | OpKind::CellReady { .. }
         | OpKind::ClosureStatic
-        | OpKind::InstanceOf { .. }
-        | OpKind::FieldGet { .. }
         | OpKind::SharedFieldGet { .. }
         | OpKind::OpenFieldGet { .. }
         | OpKind::OpenFieldSet { .. }
-        | OpKind::FieldSet { .. }
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. }

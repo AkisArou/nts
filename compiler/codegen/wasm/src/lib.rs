@@ -16,6 +16,8 @@ mod helpers;
 mod host;
 mod module;
 mod numeric;
+mod object_plan;
+mod objects;
 mod requirements;
 mod strings;
 mod types;

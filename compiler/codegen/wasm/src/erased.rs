@@ -172,23 +172,7 @@ impl Helper {
                     I::End,
                 ],
             ),
-            Self::Tag => instructions(
-                &mut f,
-                &[
-                    I::LocalGet(0),
-                    I::RefTestNonNull(HeapType::I31),
-                    I::If(BlockType::Result(ValType::I32)),
-                    I::I32Const(NUMBER),
-                    I::Else,
-                    I::LocalGet(0),
-                    I::RefCastNonNull(HeapType::Concrete(types.tagged)),
-                    I::StructGet {
-                        struct_type_index: types.tagged,
-                        field_index: 0,
-                    },
-                    I::End,
-                ],
-            ),
+            Self::Tag => physical_tag(&mut f, types, symbols.types.root),
             Self::BoxBoolean
             | Self::Boolean
             | Self::Truthy
@@ -206,6 +190,55 @@ fn instructions(f: &mut Function, code: &[I<'_>]) {
     for i in code {
         f.instruction(i);
     }
+}
+
+fn physical_tag(f: &mut Function, types: ErasedTypes, root: Option<crate::gc::RootTypes>) {
+    instructions(
+        f,
+        &[
+            I::LocalGet(0),
+            I::RefTestNonNull(HeapType::I31),
+            I::If(BlockType::Result(ValType::I32)),
+            I::I32Const(NUMBER),
+            I::Else,
+        ],
+    );
+    if let Some(root) = root {
+        instructions(
+            f,
+            &[
+                I::LocalGet(0),
+                I::RefTestNonNull(HeapType::Concrete(root.object)),
+                I::If(BlockType::Result(ValType::I32)),
+                I::LocalGet(0),
+                I::RefCastNonNull(HeapType::Concrete(root.object)),
+                I::StructGet {
+                    struct_type_index: root.object,
+                    field_index: 0,
+                },
+                I::StructGet {
+                    struct_type_index: root.descriptor,
+                    field_index: 1,
+                },
+                I::Else,
+            ],
+        );
+    }
+    instructions(
+        f,
+        &[
+            I::LocalGet(0),
+            I::RefCastNonNull(HeapType::Concrete(types.tagged)),
+            I::StructGet {
+                struct_type_index: types.tagged,
+                field_index: 0,
+            },
+        ],
+    );
+    if root.is_some() {
+        f.instruction(&I::End);
+    }
+    f.instruction(&I::End);
 }
 fn types(symbols: &Symbols<'_>) -> Result<ErasedTypes, Failure> {
     symbols
@@ -261,6 +294,9 @@ pub(crate) fn erase(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Resu
             call(body, Helper::BoxNumber)?;
         }
         HirType::Managed(ManagedType::String) => erase_string(body, value, absent)?,
+        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
+            erase_reference(body, value, absent)?;
+        }
         ty @ (HirType::Managed(_)
         | HirType::BigInt
         | HirType::NativePointer(_)
@@ -280,6 +316,9 @@ fn erase_string(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Result<(
         Absent::Null => Some(NULL),
         Absent::Undefined => Some(UNDEFINED),
     };
+    if tag.is_none() {
+        contract::nonnull(body, value)?;
+    }
     if let Some(tag) = tag {
         body.load(value)?;
         body.ins(&I::RefIsNull);
@@ -292,6 +331,30 @@ fn erase_string(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Result<(
     body.ins(&I::StructNew(ty));
     if tag.is_some() {
         body.ins(&I::End);
+    }
+    Ok(())
+}
+
+fn erase_reference(body: &mut Body<'_>, value: ValueId, absent: Absent) -> Result<(), Failure> {
+    match absent {
+        Absent::Impossible => {
+            contract::nonnull(body, value)?;
+            body.load(value)?;
+        }
+        Absent::Null | Absent::Undefined => {
+            body.load(value)?;
+            body.ins(&I::RefIsNull);
+            body.ins(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+            let tag = if absent == Absent::Null {
+                NULL
+            } else {
+                UNDEFINED
+            };
+            body.ins(&I::GlobalGet(values(body.symbols)?.for_tag(tag)?));
+            body.ins(&I::Else);
+            body.load(value)?;
+            body.ins(&I::End);
+        }
     }
     Ok(())
 }
@@ -345,6 +408,10 @@ pub(crate) fn unerase(body: &mut Body<'_>, result: ValueId, value: ValueId) -> R
             });
             body.ins(&I::End);
         }
+        ty @ HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
+            body.ins(&I::Drop);
+            unerase_reference(body, value, &ty)?;
+        }
         ty => {
             return Err(format!(
                 "unerasing {ty:?} is outside the current primitive implementation"
@@ -352,6 +419,31 @@ pub(crate) fn unerase(body: &mut Body<'_>, result: ValueId, value: ValueId) -> R
             .into());
         }
     }
+    Ok(())
+}
+
+fn unerase_reference(body: &mut Body<'_>, value: ValueId, ty: &HirType) -> Result<(), Failure> {
+    let Physical::Reference(reference) = body.symbols.types.value_slot(ty)? else {
+        return Err(Failure::Invariant(
+            "non-reference managed projection".into(),
+        ));
+    };
+    body.load(value)?;
+    call(body, Helper::Tag)?;
+    body.ins(&I::I32Const(NULL));
+    body.ins(&I::I32Eq);
+    body.load(value)?;
+    call(body, Helper::Tag)?;
+    body.ins(&I::I32Const(UNDEFINED));
+    body.ins(&I::I32Eq);
+    body.ins(&I::I32Or);
+    body.ins(&I::If(BlockType::Result(ValType::Ref(reference))));
+    body.ins(&I::RefNull(reference.heap_type));
+    body.ins(&I::Else);
+    projection_guard(body, value, &[reference.heap_type])?;
+    body.load(value)?;
+    body.ins(&I::RefCastNonNull(reference.heap_type));
+    body.ins(&I::End);
     Ok(())
 }
 

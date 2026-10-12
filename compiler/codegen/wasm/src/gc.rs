@@ -63,6 +63,19 @@ pub(crate) struct ErasedTypes {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub(crate) struct RootTypes {
+    pub(crate) ancestry: u32,
+    pub(crate) descriptor: u32,
+    pub(crate) object: u32,
+}
+#[derive(Debug, Clone, Copy)]
+struct RootNodes {
+    ancestry: NodeId,
+    descriptor: NodeId,
+    object: NodeId,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct ErasedNodes {
     tagged: NodeId,
     number: NodeId,
@@ -78,11 +91,26 @@ pub(crate) struct Plan {
     groups: Vec<Vec<SubType>>,
     count: u32,
     pub(crate) erased: Option<ErasedTypes>,
+    pub(crate) root: Option<RootTypes>,
+    pub(crate) objects: crate::object_plan::Plan,
 }
 
 impl Plan {
+    #[cfg(test)]
     pub(crate) fn build(program: &Program) -> Result<Self, crate::EmitError> {
+        Self::with_resources(program, &crate::requirements::build(program))
+    }
+
+    pub(crate) fn with_resources(
+        program: &Program,
+        resources: &crate::requirements::Requirements,
+    ) -> Result<Self, crate::EmitError> {
         let mut builder = Builder::new(program);
+        for (ty, use_) in &resources.referenced_objects {
+            builder
+                .request(&HirType::Managed(ManagedType::Object(*ty)))
+                .map_err(|why| Failure::Unsupported(why).at(&use_.function, &use_.origin))?;
+        }
         for func in program.funcs.iter().filter(|f| !f.abstract_declaration) {
             for param in &func.params {
                 builder.request(&param.ty).map_err(|why| {
@@ -164,7 +192,7 @@ struct Builder<'a> {
     nodes: Vec<Node>,
     objects: FxHashMap<usize, NodeId>,
     arrays: FxHashMap<HirType, NodeId>,
-    root: Option<NodeId>,
+    root: Option<RootNodes>,
     work: Vec<Work>,
     erased: Option<ErasedNodes>,
 }
@@ -196,7 +224,7 @@ impl<'a> Builder<'a> {
 
     fn root(&mut self) -> NodeId {
         if let Some(id) = self.root {
-            return id;
+            return id.object;
         }
         let ancestry = self.add(
             "ancestry".into(),
@@ -224,7 +252,11 @@ impl<'a> Builder<'a> {
                 false,
             )]),
         );
-        self.root = Some(root);
+        self.root = Some(RootNodes {
+            ancestry,
+            descriptor,
+            object: root,
+        });
         root
     }
 
@@ -465,9 +497,8 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
-    fn finish(self) -> Result<Plan, String> {
-        let graph: Vec<Vec<usize>> = self
-            .nodes
+    fn dependencies(&self) -> Vec<Vec<usize>> {
+        self.nodes
             .iter()
             .map(|node| {
                 let mut deps = BTreeSet::new();
@@ -485,7 +516,10 @@ impl<'a> Builder<'a> {
                 }
                 deps.into_iter().collect()
             })
-            .collect();
+            .collect()
+    }
+    fn finish(self) -> Result<Plan, String> {
+        let graph = self.dependencies();
         let components = components(&graph);
         let ordered = self.order_bases(components)?;
         let mut indices = vec![0; self.nodes.len()];
@@ -546,6 +580,19 @@ impl<'a> Builder<'a> {
             })
             .collect();
         Ok(Plan {
+            root: self.root.map(|nodes| RootTypes {
+                ancestry: indices[nodes.ancestry.0],
+                descriptor: indices[nodes.descriptor.0],
+                object: indices[nodes.object.0],
+            }),
+            objects: crate::object_plan::Plan::build(
+                self.program,
+                &self
+                    .objects
+                    .iter()
+                    .map(|(&layout, id)| (layout, indices[id.0]))
+                    .collect(),
+            )?,
             erased: self.erased.map(|nodes| ErasedTypes {
                 tagged: indices[nodes.tagged.0],
                 number: indices[nodes.number.0],
