@@ -70,12 +70,16 @@ pub(crate) fn value_slot(ty: &HirType) -> Result<Slot, String> {
 pub enum BoundaryType {
     Void,
     Bool,
+    String,
     Int { bits: u8, signed: bool },
     Float { bits: u8 },
 }
 
 impl BoundaryType {
     pub(crate) fn from_hir(ty: &HirType) -> Result<Self, String> {
+        if matches!(ty, HirType::Managed(nts_core::hir::ManagedType::String)) {
+            return Ok(Self::String);
+        }
         slot(ty)?;
         match ty {
             HirType::Void | HirType::Never => Ok(Self::Void),

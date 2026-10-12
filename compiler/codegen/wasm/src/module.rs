@@ -233,18 +233,7 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         helpers: BTreeMap::new(),
         types: &plan,
     };
-    let mut required_imports = Vec::new();
-    for helper in helpers.iter().filter(|h| h.imported()) {
-        let (params, result) = helper.signature();
-        let ty = types.intern(Signature {
-            params: params.into_iter().map(Physical::Scalar).collect(),
-            result: Some(Physical::Scalar(result)),
-        });
-        let id = imports.len();
-        imports.import("nts", helper.name(), EntityType::Function(ty));
-        symbols.helpers.insert(*helper, id);
-        required_imports.push(helper.name().to_owned());
-    }
+    let required_imports = scalar_imports(&helpers, &mut types, &mut imports, &mut symbols)?;
     let mut functions = FunctionSection::new();
     let mut names = NameMap::new();
     for (i, (func, sig)) in funcs.iter().zip(signatures).enumerate() {
@@ -262,7 +251,7 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         let (params, result) = helper.signature();
         let id = imports.len() + functions.len();
         functions.function(types.intern(Signature {
-            params: params.into_iter().map(Physical::Scalar).collect(),
+            params: params.iter().copied().map(Physical::Scalar).collect(),
             result: Some(Physical::Scalar(result)),
         }));
         symbols.helpers.insert(*helper, id);
@@ -270,7 +259,10 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
     }
     let globals = globals(program, &plan)?;
     let mut exports = ExportSection::new();
-    let manifest = manifest(program, funcs, &symbols, required_imports, &mut exports)?;
+    let mut manifest = manifest(program, funcs, &symbols, required_imports, &mut exports)?;
+    if plan.requires_gc() {
+        manifest.features.push("gc".into());
+    }
     let mut code = CodeSection::new();
     let mut routes = Vec::new();
     let mut origins = Vec::new();
@@ -312,6 +304,39 @@ fn emit_funcs(program: &Program, funcs: &[&Func]) -> Result<Emitted, EmitError> 
         },
         origins,
     })
+}
+
+fn scalar_imports(
+    helpers: &BTreeSet<Helper>,
+    types: &mut Types,
+    imports: &mut ImportSection,
+    symbols: &mut Symbols<'_>,
+) -> Result<Vec<crate::Import>, EmitError> {
+    let mut required_imports = Vec::new();
+    for helper in helpers.iter().filter(|h| h.imported()) {
+        let (params, result) = helper.signature();
+        let ty = types.intern(Signature {
+            params: params.iter().copied().map(Physical::Scalar).collect(),
+            result: Some(Physical::Scalar(result)),
+        });
+        let id = imports.len();
+        imports.import("nts:host/v1", helper.name(), EntityType::Function(ty));
+        symbols.helpers.insert(*helper, id);
+        required_imports.push(
+            crate::Import::function(
+                "nts:host/v1",
+                helper.name(),
+                &params
+                    .iter()
+                    .copied()
+                    .map(Physical::Scalar)
+                    .collect::<Vec<_>>(),
+                Some(Physical::Scalar(result)),
+            )
+            .map_err(EmitError::InvalidWasm)?,
+        );
+    }
+    Ok(required_imports)
 }
 
 fn encode(
@@ -423,7 +448,7 @@ fn manifest(
     program: &Program,
     funcs: &[&Func],
     symbols: &Symbols<'_>,
-    imports: Vec<String>,
+    imports: Vec<crate::Import>,
     section: &mut ExportSection,
 ) -> Result<Manifest, EmitError> {
     let mut exports = Vec::new();
@@ -515,12 +540,15 @@ fn manifest(
         init = Some(symbol);
     }
     Ok(Manifest {
-        abi: 1,
+        abi: 2,
         host: "js".to_owned(),
         exports,
         globals,
         init,
         imports,
+        builtins: Vec::new(),
+        constants: Vec::new(),
+        features: Vec::new(),
         functions: Vec::new(),
     })
 }

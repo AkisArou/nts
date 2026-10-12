@@ -124,6 +124,10 @@ impl Plan {
         section
     }
 
+    pub(crate) fn requires_gc(&self) -> bool {
+        self.slots.values().copied().any(crate::abi::requires_gc)
+    }
+
     pub(crate) const fn count(&self) -> u32 {
         self.count
     }

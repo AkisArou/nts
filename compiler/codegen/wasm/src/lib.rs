@@ -4,6 +4,7 @@
 //! refuse by name before an artifact is returned. Managed representation and
 //! runtime helper families follow the reviewed plan in `docs/wasm.md`.
 
+mod abi;
 mod body;
 mod cfg;
 mod gc;
@@ -16,6 +17,7 @@ mod types;
 #[path = "../tests/common/hir.rs"]
 mod test_common;
 
+pub use abi::{Import, ImportType, StringConstant, ValueType};
 pub use cfg::Route;
 use nts_core::hir::{Program, verify::Invalid};
 use nts_diagnostics::Diagnostic;
@@ -39,7 +41,10 @@ pub struct Manifest {
     pub exports: Vec<FunctionExport>,
     pub globals: Vec<GlobalExport>,
     pub init: Option<String>,
-    pub imports: Vec<String>,
+    pub imports: Vec<Import>,
+    pub builtins: Vec<Import>,
+    pub constants: Vec<StringConstant>,
+    pub features: Vec<String>,
     pub functions: Vec<FunctionRoute>,
 }
 

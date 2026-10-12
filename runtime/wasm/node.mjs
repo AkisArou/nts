@@ -1,12 +1,60 @@
-// The scalar JS host. Manifest and imports are a compiler ABI, checked before
-// module initialization. Public calls preserve the logical types wasm erases.
+// The JS host checks typed imports before module initialization. Public calls
+// preserve logical scalar types and primitive strings at the boundary.
 export class WasmInputDecline extends TypeError {
   constructor(name, why, context = 'input to') { super(`NTS5001: wasm ${context} ${name}: ${why}`); this.code = 'NTS5001'; }
 }
 
-const services = Object.freeze({ remainder: (left, right) => left % right });
+const f64 = Object.freeze({ kind: 'f64' });
+const services = Object.freeze({ remainder: Object.freeze({
+  params: [f64, f64], result: f64, call: (left, right) => left % right,
+}) });
+const extern = Object.freeze({ kind: 'externref', nullable: true });
+const string = Object.freeze({ kind: 'externref', nullable: false });
+const i32 = Object.freeze({ kind: 'i32' });
+const builtins = Object.freeze({
+  length: { params: [extern], result: i32 },
+  charCodeAt: { params: [extern, i32], result: i32 },
+  equals: { params: [extern, extern], result: i32 },
+  compare: { params: [extern, extern], result: i32 },
+  concat: { params: [extern, extern], result: string },
+  substring: { params: [extern, i32, i32], result: string },
+  fromCharCode: { params: [i32], result: string },
+  fromCodePoint: { params: [i32], result: string },
+});
+function sameType(actual, expected) {
+  return actual !== null && typeof actual === 'object'
+    && Object.keys(actual).length === Object.keys(expected).length
+    && Object.keys(expected).every(key => actual[key] === expected[key]);
+}
+function functionType(record, expected) {
+  return record.kind === 'function' && Array.isArray(record.params)
+    && record.params.length === expected.params.length
+    && record.params.every((ty, at) => sameType(ty, expected.params[at]))
+    && (expected.result === null ? record.result === null : sameType(record.result, expected.result));
+}
+// These known modules prove capabilities independently of the application.
+// Extra compile options may be ignored; a successful compile alone is insufficient.
+const gcProbe = Uint8Array.from([0,97,115,109,1,0,0,0,1,7,2,95,0,96,0,1,127,3,2,1,1,7,9,1,5,112,114,111,98,101,0,0,10,8,1,6,0,251,1,0,209,11]);
+const stringProbe = Uint8Array.from([0,97,115,109,1,0,0,0,1,6,1,96,1,111,1,127,2,25,1,14,119,97,115,109,58,106,115,45,115,116,114,105,110,103,6,108,101,110,103,116,104,0,0,7,9,1,5,112,114,111,98,101,0,0]);
+const capabilities = new Map();
+async function capability(name) {
+  if (!capabilities.has(name)) capabilities.set(name, (async () => {
+    try {
+      const module = await WebAssembly.compile(name === 'gc' ? gcProbe : stringProbe,
+        { builtins: name === 'gc' ? [] : ['js-string'] });
+      if (WebAssembly.Module.imports(module).length !== 0) throw new Error('builtin option ignored');
+      const instance = new WebAssembly.Instance(module);
+      if (name === 'gc' ? instance.exports.probe() !== 0 : instance.exports.probe('\ud800x') !== 2) throw new Error('probe answer');
+    } catch { throw new WasmInputDecline(name, 'host capability execution probe failed', 'requires'); }
+  })());
+  await capabilities.get(name);
+}
 
 function input(type, value, name) {
+  if (type.kind === 'string') {
+    if (typeof value !== 'string') throw new WasmInputDecline(name, 'expected primitive string');
+    return value;
+  }
   if (type.kind === 'bool') {
     if (typeof value !== 'boolean') throw new WasmInputDecline(name, 'expected boolean');
     return Number(value);
@@ -50,6 +98,10 @@ function bound(value) {
 
 function output(type, value, name) {
   if (type.kind === 'void') return undefined;
+  if (type.kind === 'string') {
+    if (typeof value !== 'string') throw new WasmInputDecline(name, 'result is outside primitive-string boundary', 'result from');
+    return value;
+  }
   if (type.kind === 'bool') {
     if (value !== 0 && value !== 1) throw new TypeError(`wasm ${name} returned a noncanonical boolean`);
     return value === 1;
@@ -64,19 +116,45 @@ function output(type, value, name) {
 }
 
 export async function instantiate(bytes, manifest) {
-  if (manifest.abi !== 1 || manifest.host !== 'js') throw new TypeError('unsupported nts wasm host ABI');
-  const module = await WebAssembly.compile(bytes, { builtins: ['js-string'] });
-  const imports = WebAssembly.Module.imports(module);
-  if (imports.length !== manifest.imports.length || imports.some((i, at) => i.module !== 'nts' || i.kind !== 'function' || i.name !== manifest.imports[at] || !Object.hasOwn(services, i.name))) {
-    throw new WebAssembly.LinkError('nts wasm module/import manifest mismatch');
+  if (manifest.abi !== 2 || manifest.host !== 'js') throw new TypeError('unsupported nts wasm host ABI');
+  if (![manifest.imports, manifest.builtins, manifest.constants, manifest.features].every(Array.isArray)) throw new TypeError('invalid nts wasm manifest');
+  const ordinary = Object.create(null), host = Object.create(null), constants = Object.create(null);
+  ordinary['nts:host/v1'] = host; ordinary['nts:constants'] = constants;
+  for (const value of manifest.constants) {
+    if (typeof value.symbol !== 'string' || typeof value.value !== 'string' || Object.hasOwn(constants, value.symbol)) throw new TypeError('invalid string constants');
+    constants[value.symbol] = value.value;
   }
+  const names = new Set();
+  for (const record of manifest.imports) {
+    const key = `${record.module}/${record.name}`;
+    if (names.has(key)) throw new WebAssembly.LinkError('duplicate nts wasm import');
+    names.add(key);
+    if (record.module === 'nts:host/v1' && Object.hasOwn(services, record.name) && functionType(record, services[record.name])) host[record.name] = services[record.name].call;
+    else if (!(record.module === 'nts:constants' && record.kind === 'global' && record.mutable === false && sameType(record.ty, extern) && Object.hasOwn(constants, record.name))) throw new WebAssembly.LinkError('nts wasm host import type mismatch');
+  }
+  if (manifest.constants.length !== manifest.imports.filter(i => i.module === 'nts:constants').length) throw new WebAssembly.LinkError('unused nts wasm string constant');
+  for (const record of manifest.builtins) {
+    const key = `${record.module}/${record.name}`;
+    if (names.has(key) || record.module !== 'wasm:js-string' || !Object.hasOwn(builtins, record.name) || !functionType(record, builtins[record.name])) throw new WebAssembly.LinkError('nts wasm builtin type mismatch');
+    names.add(key);
+  }
+  for (const feature of manifest.features) {
+    if (feature !== 'gc') throw new WasmInputDecline(feature, 'unsupported required capability', 'requires');
+    await capability(feature);
+  }
+  if (manifest.builtins.length) await capability('js-string');
+  const module = await WebAssembly.compile(bytes, { builtins: manifest.builtins.length ? ['js-string'] : [] });
+  const imports = WebAssembly.Module.imports(module);
+  if (imports.length !== manifest.imports.length || imports.some((i, at) => {
+    const record = manifest.imports[at]; return i.module !== record.module || i.name !== record.name || i.kind !== record.kind;
+  })) throw new WebAssembly.LinkError('nts wasm module/import manifest mismatch');
   const declared = [...manifest.exports.map(e => [e.name, 'function']), ...manifest.globals.map(g => [g.symbol, 'global'])];
   if (manifest.init !== null) declared.push([manifest.init, 'function']);
   const actual = WebAssembly.Module.exports(module);
   if (new Set(declared.map(([name]) => name)).size !== declared.length || actual.length !== declared.length || declared.some(([name, kind]) => !actual.some(e => e.name === name && e.kind === kind))) {
     throw new WebAssembly.LinkError('nts wasm module/export manifest mismatch');
   }
-  const instance = await WebAssembly.instantiate(module, { nts: services });
+  const instance = await WebAssembly.instantiate(module, ordinary);
   const namespace = Object.create(null);
   for (const e of manifest.exports) {
     const fn = instance.exports[e.name];
