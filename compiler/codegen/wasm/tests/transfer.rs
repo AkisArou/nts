@@ -11,6 +11,7 @@ use nts_core::hir::{
 const BASE: u32 = 1;
 const DERIVED: u32 = 2;
 const OTHER: u32 = 3;
+const SAME_SHAPE: u32 = 4;
 
 fn object(id: u32) -> HirType {
     HirType::Managed(ManagedType::Object(ClassId(id)))
@@ -36,6 +37,9 @@ fn classes(p: &mut Program) {
         // Unrelated in shape too: the engine treats identically shaped
         // types as one, so a class with `Base`'s exact shape would be `Base`.
         (OTHER, "Other", vec![field("value"), field("other")], None),
+        // `Base`'s exact shape, in no hierarchy of `Base`'s: one Wasm type
+        // to the engine, still unrelated to `transfer`.
+        (SAME_SHAPE, "SameShape", vec![field("value")], None),
     ] {
         p.layouts.push(Layout {
             types: vec![ClassId(id)],
@@ -180,6 +184,55 @@ fn a_downcast_is_one_checked_cast_and_an_upcast_is_free() {
     assert_eq!(casts(&emitted.bytes), 2);
     let report = common::run("transfer", &emitted, "tooling/wasm/check-transfer.mjs", &[]);
     assert_eq!(report["cases"], 4);
+}
+
+/// `readBase(b: Base): f64` reads its argument's field.
+fn read_base() -> Func {
+    let mut f = function("readBase", &[object(BASE)], F64);
+    f.exported = false;
+    let mut ops = vec![];
+    let b = op(&mut f, &mut ops, OpKind::Param(0), object(BASE));
+    let value = op(
+        &mut f,
+        &mut ops,
+        OpKind::FieldGet {
+            object: b,
+            field: 0,
+        },
+        F64,
+    );
+    f.blocks
+        .push(block(&[], &ops, Terminator::Return(Some(value))));
+    f
+}
+
+#[test]
+fn a_class_of_the_same_shape_from_another_hierarchy_is_refused() {
+    let mut confused = function("sameShape", &[F64], F64);
+    let mut ops = vec![];
+    let o = filled(&mut confused, &mut ops, SAME_SHAPE, 1);
+    let read = op(
+        &mut confused,
+        &mut ops,
+        OpKind::Call {
+            callee: Callee::Direct("readBase".into()),
+            args: vec![o],
+            frame: None,
+        },
+        F64,
+    );
+    confused
+        .blocks
+        .push(block(&[], &ops, Terminator::Return(Some(read))));
+    let mut p = fixture(vec![read_base(), confused]);
+    p.public_api.retain(|(name, _)| name != "readBase");
+    let error = nts_codegen_wasm::emit(&p).unwrap_err().to_string();
+    assert!(
+        error.starts_with(
+            "NTS5001: wasm declines `sameShape`: a `SameShape` where a `Base` is wanted"
+        ),
+        "{error}"
+    );
 }
 
 #[test]

@@ -256,7 +256,7 @@ export const RULES = [
     steps: ["tests"],
     arms: [
       { kind: "answers", asks: "do scalar operations and reducible and irreducible CFGs agree with their independent oracles", run: "cargo test -p nts-codegen-wasm --locked -- --test-threads=2   # includes Node execution and the arbitrary-graph oracle" },
-      { kind: "answers", asks: "which examples emit and agree, and which decline by name -- bounded census, not the full M1 differential; in node and in headless Chromium", run: "python3 tooling/wasm/census.py --nts <after> --out <evidence-dir> [--host browser]   # all examples; zero invalid or wrong answers" },
+      { kind: "answers", asks: "which examples emit and agree, and which decline by name -- bounded census, not the full M1 differential; in node and in headless Chromium", run: "python3 tooling/wasm/census.py --nts <after> --out <evidence-dir>/node && python3 tooling/wasm/census.py --nts <after> --out <evidence-dir>/browser --host browser   # all examples, both hosts; zero invalid or wrong answers, identical rows" },
     ],
   },
   {

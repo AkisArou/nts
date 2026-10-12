@@ -54,6 +54,22 @@ fn emit_project(fixture: &Path) -> nts_codegen_wasm::Emitted {
     })
 }
 
+/// Two same-shape classes from unrelated dispatch hierarchies are one Wasm
+/// type to the engine, but their vtables give one slot two meanings: moving
+/// one into the other is refused by name, never run as the wrong method.
+#[test]
+fn a_class_from_an_unrelated_hierarchy_of_one_shape_is_refused() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/unrelated-hierarchies");
+    let error = nts_codegen_wasm::emit(&prepared_project(&fixture))
+        .map(|_| ())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("NTS5001: wasm declines `asP`: a `Q` where a `P` is wanted"),
+        "{error}"
+    );
+}
+
 #[test]
 fn source_typed_holes_decline_instead_of_returning_zero() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-holes");

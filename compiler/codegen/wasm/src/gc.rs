@@ -16,6 +16,16 @@ use wasm_encoder::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct NodeId(usize);
 
+/// What an array's storage is keyed by. An object or array element is keyed
+/// by the storage it maps to, so two element types that are one layout (two
+/// names for one function type, say) share one array type; any other
+/// element by its own type, whose kind and conversions are part of it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum ArrayKey {
+    Storage(NodeId),
+    Element(HirType),
+}
+
 #[derive(Debug, Clone, Copy)]
 enum PendingSlot {
     Scalar(Slot),
@@ -120,10 +130,6 @@ pub(crate) struct Plan {
     groups: Vec<Vec<SubType>>,
     /// Each defined type's declared supertype and kind, by type index.
     supers: Vec<(Option<u32>, Kind)>,
-    /// Each defined type's identity as the engine sees it, by type index:
-    /// two types are one type when their rec groups are structurally
-    /// identical (Wasm's iso-recursive equivalence), whatever their indices.
-    canonical: Vec<u32>,
     count: u32,
     pub(crate) erased: Option<ErasedTypes>,
     pub(crate) root: Option<RootTypes>,
@@ -254,7 +260,7 @@ impl Plan {
         let kind = |at: u32| self.supers.get(at as usize).map(|&(_, kind)| kind);
         match (a, b) {
             (HeapType::Concrete(mut at), HeapType::Concrete(want)) => loop {
-                if at == want || self.same(at, want) {
+                if at == want {
                     return true;
                 }
                 match self.supers.get(at as usize) {
@@ -293,14 +299,6 @@ impl Plan {
         }
     }
 
-    /// Whether the engine sees two defined types as one.
-    fn same(&self, a: u32, b: u32) -> bool {
-        matches!(
-            (self.canonical.get(a as usize), self.canonical.get(b as usize)),
-            (Some(a), Some(b)) if a == b && *a != u32::MAX
-        )
-    }
-
     /// Whether every value of reference type `a` is a value of `b`.
     pub(crate) fn ref_subtype(&self, a: RefType, b: RefType) -> bool {
         (b.nullable || !a.nullable) && self.heap_subtype(a.heap_type, b.heap_type)
@@ -317,7 +315,9 @@ struct Builder<'a> {
     slots: FxHashMap<HirType, PendingSlot>,
     nodes: Vec<Node>,
     objects: FxHashMap<usize, NodeId>,
-    arrays: FxHashMap<HirType, NodeId>,
+    arrays: FxHashMap<ArrayKey, NodeId>,
+    /// Each array node's element type: the first that keyed it.
+    array_elements: FxHashMap<NodeId, HirType>,
     backings: FxHashMap<NodeId, NodeId>,
     root: Option<RootNodes>,
     work: Vec<Work>,
@@ -340,6 +340,7 @@ impl<'a> Builder<'a> {
             nodes: Vec::new(),
             objects: FxHashMap::default(),
             arrays: FxHashMap::default(),
+            array_elements: FxHashMap::default(),
             backings: FxHashMap::default(),
             root: None,
             work: Vec::new(),
@@ -456,7 +457,7 @@ impl<'a> Builder<'a> {
                 PendingSlot::Defined(self.object(*id)?, true)
             }
             HirType::Managed(ManagedType::Array(element)) => {
-                PendingSlot::Defined(self.array(element), true)
+                PendingSlot::Defined(self.array(element)?, true)
             }
             HirType::Erased => {
                 self.erased_types();
@@ -712,9 +713,18 @@ impl<'a> Builder<'a> {
         self.virtuals.insert(root, CallableNodes { base, entries });
         Ok(base)
     }
-    fn array(&mut self, element: &HirType) -> NodeId {
-        if let Some(id) = self.arrays.get(element) {
-            return *id;
+    fn array(&mut self, element: &HirType) -> Result<NodeId, String> {
+        let key = match element {
+            HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
+                match self.request(element)? {
+                    Some(PendingSlot::Defined(node, _)) => ArrayKey::Storage(node),
+                    _ => ArrayKey::Element(element.clone()),
+                }
+            }
+            _ => ArrayKey::Element(element.clone()),
+        };
+        if let Some(id) = self.arrays.get(&key) {
+            return Ok(*id);
         }
         let root = self.root();
         let id = self.add(
@@ -723,9 +733,10 @@ impl<'a> Builder<'a> {
             true,
             Shape::Struct(Vec::new()),
         );
-        self.arrays.insert(element.clone(), id);
+        self.arrays.insert(key, id);
+        self.array_elements.insert(id, element.clone());
         self.work.push(Work::Array(element.clone(), id));
-        id
+        Ok(id)
     }
 
     fn complete_array(&mut self, element: &HirType, id: NodeId) -> Result<(), String> {
@@ -784,9 +795,9 @@ impl<'a> Builder<'a> {
                 .collect(),
         )?;
         let mut arrays = self
-            .arrays
+            .array_elements
             .iter()
-            .map(|(element, id)| {
+            .map(|(id, element)| {
                 (
                     indices[id.0],
                     Array {
@@ -893,7 +904,6 @@ impl<'a> Builder<'a> {
             }
         }
         let supers = self.supers(&ordered, &indices);
-        let canonical = self.canonical(&ordered, &indices);
         let resolve = |slot| -> Physical {
             match slot {
                 PendingSlot::Scalar(slot) => Physical::Scalar(slot),
@@ -978,78 +988,10 @@ impl<'a> Builder<'a> {
                 .collect(),
             groups,
             supers,
-            canonical,
             count,
         })
     }
     /// Each type's declared supertype and kind, in type-index order.
-    /// Each type's canonical identity, in type-index order. A rec group's key
-    /// is its members' structure, naming a type inside the group by its
-    /// offset and one outside it by that type's canonical identity; the
-    /// groups are ordered dependency-first, so every outside identity is
-    /// already known. Equal keys are one group to the engine.
-    fn canonical(&self, ordered: &[Vec<usize>], indices: &[u32]) -> Vec<u32> {
-        let mut place = vec![(0, 0); self.nodes.len()];
-        for (group, members) in ordered.iter().enumerate() {
-            for (offset, &id) in members.iter().enumerate() {
-                place[id] = (group, offset);
-            }
-        }
-        let mut identity = vec![0_u32; self.nodes.len()];
-        let mut groups: FxHashMap<String, usize> = FxHashMap::default();
-        let mut types: FxHashMap<(usize, usize), u32> = FxHashMap::default();
-        for (group, members) in ordered.iter().enumerate() {
-            let name = |id: NodeId| match place[id.0] {
-                (other, offset) if other == group => format!("@{offset}"),
-                _ => format!("#{}", identity[id.0]),
-            };
-            let slot = |slot: &PendingSlot| match slot {
-                PendingSlot::Scalar(scalar) => format!("{scalar:?}"),
-                PendingSlot::Reference(reference) => format!("{reference:?}"),
-                PendingSlot::Defined(id, nullable) => format!("{}{nullable}", name(*id)),
-            };
-            let field =
-                |field: &Field| format!("{}{:?}{}", slot(&field.slot), field.packed, field.mutable);
-            let key = members
-                .iter()
-                .map(|&id| {
-                    let node = &self.nodes[id];
-                    let shape = match &node.shape {
-                        Shape::Struct(fields) => {
-                            format!(
-                                "s({})",
-                                fields.iter().map(field).collect::<Vec<_>>().join(",")
-                            )
-                        }
-                        Shape::Array(element) => format!("a({})", field(element)),
-                        Shape::Function(params, result) => format!(
-                            "f({})->{}",
-                            params.iter().map(slot).collect::<Vec<_>>().join(","),
-                            result.as_ref().map(slot).unwrap_or_default()
-                        ),
-                    };
-                    format!(
-                        "{}<{}>{shape}",
-                        node.final_,
-                        node.base.map(name).unwrap_or_default()
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(";");
-            let next = groups.len();
-            let canonical = *groups.entry(key).or_insert(next);
-            for (offset, &id) in members.iter().enumerate() {
-                let next = u32::try_from(types.len()).unwrap_or(u32::MAX);
-                identity[id] = *types.entry((canonical, offset)).or_insert(next);
-            }
-        }
-        let mut by_index = vec![u32::MAX; indices.len()];
-        for (id, &at) in indices.iter().enumerate() {
-            by_index[at as usize] = identity[id];
-        }
-        by_index
-    }
-
     fn supers(&self, ordered: &[Vec<usize>], indices: &[u32]) -> Vec<(Option<u32>, Kind)> {
         ordered
             .iter()
@@ -1205,42 +1147,42 @@ mod tests {
         module.finish()
     }
 
-    /// Two layouts of one shape are one type to the engine (iso-recursive
-    /// equivalence), and so to the relation `transfer` decides with; a
-    /// different shape is not, and neither is an array of it.
+    /// Layouts are related only through their declared parents: two layouts
+    /// of one shape stay unrelated, although the engine would treat them as
+    /// one type, because their vtables may give one slot two meanings. An
+    /// array is keyed by its element's storage, so arrays of two names for
+    /// one layout are one array type. Whatever the relation admits, the
+    /// validator admits too.
     #[test]
-    fn structurally_identical_types_are_one_type() {
+    fn layouts_relate_by_parentage_and_arrays_by_element_storage() {
+        let array = |id| HirType::Managed(ManagedType::Array(Box::new(object(id))));
         let mut p = typed_program(&[
             object(1),
             object(2),
-            object(3),
-            HirType::Managed(ManagedType::Array(Box::new(object(1)))),
-            HirType::Managed(ManagedType::Array(Box::new(object(2)))),
-            HirType::Managed(ManagedType::Array(Box::new(object(3)))),
+            object(4),
+            array(1),
+            array(2),
+            array(4),
         ]);
-        p.layouts.push(layout(
+        let mut shared = layout(
             1,
             "One",
             vec![field("x", HirType::Float { bits: 64 })],
             None,
-        ));
+        );
+        shared.types.push(TypeId(4));
+        p.layouts.push(shared);
         p.layouts.push(layout(
             2,
             "Same",
             vec![field("x", HirType::Float { bits: 64 })],
             None,
         ));
-        p.layouts
-            .push(layout(3, "Other", vec![field("x", HirType::Bool)], None));
         let plan = Plan::build(&p).unwrap();
         let heap = |ty: HirType| match plan.value_slot(&ty).unwrap() {
             Physical::Reference(reference) => reference.heap_type,
             Physical::Scalar(_) => unreachable!(),
         };
-        let array = |id| HirType::Managed(ManagedType::Array(Box::new(object(id))));
-        assert_ne!(heap(object(1)), heap(object(2)));
-        // The validator is the authority: a function returning its `from`
-        // parameter as `to` validates exactly when the relation says so.
         let validates = |from: HeapType, to: HeapType| {
             let mut types = plan.encode();
             let reference = |heap_type| {
@@ -1261,20 +1203,20 @@ mod tests {
             module.section(&types).section(&functions).section(&code);
             crate::validate(&module.finish()).is_ok()
         };
-        for (from, to, expected) in [
-            (object(1), object(2), true),
-            (object(2), object(1), true),
-            (object(1), object(3), false),
-            (array(1), array(2), true),
-            (array(1), array(3), false),
+        // Two names for one layout: one object type, one array type.
+        assert_eq!(heap(object(1)), heap(object(4)));
+        assert_eq!(heap(array(1)), heap(array(4)));
+        for (from, to, related) in [
+            (object(1), object(2), false),
+            (object(2), object(1), false),
+            (array(1), array(2), false),
+            (array(1), array(4), true),
         ] {
             let (from, to) = (heap(from), heap(to));
-            assert_eq!(plan.heap_subtype(from, to), expected, "{from:?} -> {to:?}");
-            assert_eq!(
-                validates(from, to),
-                expected,
-                "validator: {from:?} -> {to:?}"
-            );
+            assert_eq!(plan.heap_subtype(from, to), related, "{from:?} -> {to:?}");
+            if related {
+                assert!(validates(from, to), "validator: {from:?} -> {to:?}");
+            }
         }
     }
 
