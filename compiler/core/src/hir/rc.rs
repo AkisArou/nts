@@ -1547,6 +1547,115 @@ mod tests {
         );
     }
 
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the two-block lifetime fixture and its release checks belong together"
+    )]
+    fn a_frame_object_stored_in_an_array_survives_a_read_in_another_block() {
+        let cell = HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(1)));
+        let array = HirType::Managed(ManagedType::Array(Box::new(cell.clone())));
+        let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
+        program.layouts = vec![Layout {
+            types: vec![nts_semantic_schema::TypeId(1)],
+            name: "Cell".to_owned(),
+            interfaces: Vec::new(),
+            fields: vec![crate::hir::Field {
+                name: "value".to_owned(),
+                ty: string(),
+                readonly: false,
+                declared_by: None,
+                written: None,
+            }],
+            methods: Vec::new(),
+            base: None,
+        }];
+        let func = &mut program.funcs[0];
+        func.values = vec![
+            op(OpKind::Param(0), number()),
+            call("nts_number_to_string", vec![ValueId(0)], string()),
+            op(OpKind::ObjectNew { frame: true }, cell.clone()),
+            op(
+                OpKind::FieldSet {
+                    object: ValueId(2),
+                    field: 0,
+                    value: ValueId(1),
+                },
+                HirType::Void,
+            ),
+            op(
+                OpKind::ArrayNew {
+                    length: ValueId(0),
+                    zeroed: true,
+                },
+                array,
+            ),
+            op(
+                OpKind::ArraySet {
+                    array: ValueId(4),
+                    index: ValueId(0),
+                    value: ValueId(2),
+                    checked: false,
+                },
+                HirType::Void,
+            ),
+            op(
+                OpKind::ArrayGet {
+                    array: ValueId(4),
+                    index: ValueId(0),
+                    checked: false,
+                },
+                cell,
+            ),
+            call("read", vec![ValueId(6)], number()),
+        ];
+        func.blocks = vec![
+            Block {
+                params: Vec::new(),
+                ops: (0..6).map(ValueId).collect(),
+                terminator: Terminator::Jump {
+                    target: BlockId(1),
+                    args: Vec::new(),
+                },
+            },
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(6), ValueId(7)],
+                terminator: Terminator::Return(Some(ValueId(7))),
+            },
+        ];
+        insert(&mut program);
+        let func = &program.funcs[0];
+        let gives_back_the_cell = |value: &ValueId| {
+            matches!(
+                func.values[value.0 as usize].kind,
+                OpKind::FieldGet {
+                    object: ValueId(2),
+                    ..
+                }
+            )
+        };
+        assert!(
+            !func.blocks[0].ops.iter().any(gives_back_the_cell),
+            "the array still reaches the cell on the next block"
+        );
+        let read = func.blocks[1]
+            .ops
+            .iter()
+            .position(|value| *value == ValueId(7));
+        let releases: Vec<_> = func.blocks[1]
+            .ops
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| gives_back_the_cell(value))
+            .map(|(at, _)| at)
+            .collect();
+        assert!(
+            !releases.is_empty() && read.is_some_and(|read| releases.iter().all(|at| *at > read)),
+            "the cell must give its field back after the array read"
+        );
+    }
+
     /// Where each release landed, as the index among the block's operations
     /// of the original value it follows.
     fn released_after(program: &Program) -> Vec<(ValueId, Option<ValueId>)> {

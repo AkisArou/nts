@@ -1,0 +1,8 @@
+ideal 12
+allocated 7
+because The two frame-local Named objects are stored in a live array and read
+because by a map loop in later blocks. Their strings must survive those reads.
+because The two strings take a reference in the mapped array; the containers,
+because source fields, joined result and expected string give all counts back.
+because The measured work takes two retains and ten releases, with seven heap
+because allocations and no allocation for either Named. Live objects stay flat.

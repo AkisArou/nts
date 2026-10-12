@@ -257,12 +257,18 @@ fn reads(func: &Func, index: usize) -> FxHashSet<ValueId> {
     used
 }
 
-/// Which objects each value is another name for.
+/// Which objects each value can still reach.
 ///
 /// `Erase` and `Unerase` rename rather than copy -- `own::repackages` says so
 /// and borrows on the strength of it -- and a block parameter renames whatever
 /// each edge hands it. Both are followed, to a fixpoint, because a name of a
-/// name is still a name.
+/// name is still a name. Conversions preserve the same reference too.
+///
+/// A field or array slot can also keep an object reachable. A frame object's
+/// immortal header cannot take a count when stored, so its fields must stay
+/// live until the container and references loaded from it stop reaching it.
+/// Following stores here makes that obligation cross block boundaries; the
+/// counting pass's block-local store walk alone cannot keep it live on an edge.
 ///
 /// Two callers, asking opposite questions of the same relation.
 /// [`analyze`] uses it to keep a *frame* object live for as long as anything
@@ -271,11 +277,12 @@ fn reads(func: &Func, index: usize) -> FxHashSet<ValueId> {
 pub(super) fn object_names(func: &Func) -> FxHashMap<ValueId, Vec<ValueId>> {
     let mut named: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
     let note = |named: &mut FxHashMap<ValueId, Vec<ValueId>>, alias: ValueId, of: ValueId| {
-        let roots = if matches!(func.values[of.0 as usize].kind, OpKind::ObjectNew { .. }) {
-            vec![of]
-        } else {
-            named.get(&of).cloned().unwrap_or_default()
-        };
+        let mut roots = named.get(&of).cloned().unwrap_or_default();
+        if matches!(func.values[of.0 as usize].kind, OpKind::ObjectNew { .. })
+            && !roots.contains(&of)
+        {
+            roots.push(of);
+        }
         if roots.is_empty() {
             return false;
         }
@@ -294,10 +301,34 @@ pub(super) fn object_names(func: &Func) -> FxHashMap<ValueId, Vec<ValueId>> {
         let mut changed = false;
         for block in &func.blocks {
             for value in &block.ops {
-                if let OpKind::Erase { value: inner, .. } | OpKind::Unerase { value: inner } =
-                    &func.values[value.0 as usize].kind
-                {
-                    changed |= note(&mut named, *value, *inner);
+                let op = &func.values[value.0 as usize];
+                match &op.kind {
+                    OpKind::Erase { value: inner, .. }
+                    | OpKind::Unerase { value: inner }
+                    | OpKind::Convert(inner) => {
+                        changed |= note(&mut named, *value, *inner);
+                    }
+                    OpKind::FieldSet {
+                        object: container,
+                        value: stored,
+                        ..
+                    }
+                    | OpKind::ArraySet {
+                        array: container,
+                        value: stored,
+                        ..
+                    } => {
+                        changed |= note(&mut named, *container, *stored);
+                    }
+                    OpKind::FieldGet {
+                        object: container, ..
+                    }
+                    | OpKind::ArrayGet {
+                        array: container, ..
+                    } if op.ty.may_hold_a_reference() => {
+                        changed |= note(&mut named, *value, *container);
+                    }
+                    _ => {}
                 }
             }
             let edges: Vec<(BlockId, &Vec<ValueId>)> = match &block.terminator {
