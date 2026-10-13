@@ -2,7 +2,10 @@
 // another interface it satisfies structurally, reads the second interface's fields
 // at the second interface's offsets.** `$$typeof` is at index 0 of `Elem` and index
 // 0 of `Tagged`, and the two are not the same slot, because the layouts are not the
-// same layout. nts answers "not an element"; node answers "element box".
+// same layout. nts answered "not an element"; node answers "element box".
+//
+// **Agrees since 2026-10-13**, with the field-family changes of the React
+// lane's stage-B batch; kept as a guard.
 //
 // It is an unchecked unerase to a laid-out type, which is the family
 // `an-erased-record-read-through-an-interface` records for a **table** arriving
