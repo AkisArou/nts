@@ -539,6 +539,18 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_bigint_overflow",
+        returns: "void",
+        params: &[],
+        attributes: &["noreturn"],
+    },
+    Signature {
+        name: "nts_bigint_pow",
+        returns: "i128",
+        params: &["i128", "i128"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_bigint_shl",
         returns: "i128",
         params: &["i128", "i128"],

@@ -1882,7 +1882,9 @@ test262() {
 # 2026-10-11: captured lexical TDZ reads now throw catchable ReferenceError.
 # A full pinned run adds the captured-const test back as a pass (record 0353);
 # forward var still stops by name and remains outside the ran-set.
-TEST262_LANGUAGE_PASS_FLOOR=6628
+# Checked bigint division/remainder by zero and negative exponents now throw
+# catchable RangeErrors: three recorded fails pass on clean pin 39ccd0eec4fe.
+TEST262_LANGUAGE_PASS_FLOOR=6631
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1353
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>

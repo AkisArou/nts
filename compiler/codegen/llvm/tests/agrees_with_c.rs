@@ -32,6 +32,15 @@ fn tsgo() -> Option<String> {
 
 /// Lower a fixture, render it both ways, build both, run both, compare.
 fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, String)> {
+    both_backends_with(case, source, driver, &[])
+}
+
+fn both_backends_with(
+    case: &str,
+    source: &str,
+    driver: &str,
+    flags: &[&str],
+) -> Option<(String, String)> {
     let tsgo = tsgo()?;
     // Per *case*, not per process: `cargo test` runs these in parallel and one
     // directory keyed on the pid means two tests writing each other's
@@ -95,6 +104,7 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     let build = |args: &[&str], out: &str| -> Result<(), String> {
         let result = std::process::Command::new("clang")
             .args(["-w", "-O1"])
+            .args(flags)
             .args(args)
             .arg("-I")
             .arg(&dir)
@@ -114,12 +124,17 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
     let object = dir.join("program.o");
     let compiled_ir = std::process::Command::new("clang")
         .args(["-x", "ir", "-c", "-w"])
+        .args(flags)
         .arg(&ll)
         .arg("-o")
         .arg(&object)
         .output()
-        .is_ok_and(|out| out.status.success());
-    assert!(compiled_ir, "clang rejected the emitted LLVM IR");
+        .expect("clang should compile the emitted LLVM IR");
+    assert!(
+        compiled_ir.status.success(),
+        "clang rejected the emitted LLVM IR: {}",
+        String::from_utf8_lossy(&compiled_ir.stderr)
+    );
     // The runtime links into *both*, which is the arrangement that ships: one
     // hand-written C library, two code generators calling it. It is also the
     // only place the C-to-LLVM ABI is exercised.
@@ -141,10 +156,157 @@ fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, Stri
         let out = std::process::Command::new(dir.join(name))
             .output()
             .expect("the compiled program should run");
-        assert!(out.status.success(), "{name} exited badly");
+        assert!(
+            out.status.success(),
+            "{name} exited badly: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         String::from_utf8_lossy(&out.stdout).into_owned()
     };
     Some((read("run_llvm"), read("run_c")))
+}
+
+/// Exercise the exact signed boundaries directly, including each abort in its
+/// own child process. UBSan also checks that valid min%-1 and shifts avoid C UB.
+#[test]
+fn bigints_keep_exact_boundaries_and_stop_overflow_by_name() {
+    let source = r"
+export function checkedAdd(a: bigint, b: bigint): bigint { return a + b; }
+export function checkedSub(a: bigint, b: bigint): bigint { return a - b; }
+export function checkedMul(a: bigint, b: bigint): bigint { return a * b; }
+export function checkedNeg(a: bigint, b: bigint): bigint { return -a; }
+export function checkedDiv(a: bigint, b: bigint): bigint { return a / b; }
+export function checkedRem(a: bigint, b: bigint): bigint { return a % b; }
+export function checkedShl(a: bigint, b: bigint): bigint { return a << b; }
+export function checkedShr(a: bigint, b: bigint): bigint { return a >> b; }
+export function checkedPow(a: bigint, b: bigint): bigint { return a ** b; }
+export function checkedBranch(a: bigint, b: bigint): bigint {
+  return b < 0n ? a + b : a - b;
+}
+export function checkedUntaken(a: bigint, b: bigint): bigint {
+  return b < 0n ? a + 1n : a;
+}
+export function checkedUnentered(a: bigint, b: bigint): bigint {
+  let result = a;
+  for (let i = 0n; i < b; i++) result = a + 1n;
+  return result;
+}
+";
+    let driver = r#"
+#include "nts_runtime.h"
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
+typedef __int128 (*Operation)(__int128, __int128);
+extern __int128 checkedAdd(__int128, __int128);
+extern __int128 checkedSub(__int128, __int128);
+extern __int128 checkedMul(__int128, __int128);
+extern __int128 checkedNeg(__int128, __int128);
+extern __int128 checkedDiv(__int128, __int128);
+extern __int128 checkedRem(__int128, __int128);
+extern __int128 checkedShl(__int128, __int128);
+extern __int128 checkedShr(__int128, __int128);
+extern __int128 checkedPow(__int128, __int128);
+extern __int128 checkedBranch(__int128, __int128);
+extern __int128 checkedUntaken(__int128, __int128);
+extern __int128 checkedUnentered(__int128, __int128);
+typedef struct Case { Operation op; __int128 a, b, want; } Case;
+
+static int refuses(Case c) {
+  int channel[2];
+  if (pipe(channel) != 0) return 0;
+  pid_t child = fork();
+  if (child == 0) {
+    close(channel[0]);
+    if (dup2(channel[1], STDERR_FILENO) < 0) _exit(2);
+    close(channel[1]);
+    (void)c.op(c.a, c.b);
+    _exit(3);
+  }
+  close(channel[1]);
+  char said[512] = {0};
+  size_t used = 0;
+  while (used + 1 < sizeof(said)) {
+    ssize_t n = read(channel[0], said + used, sizeof(said) - used - 1);
+    if (n <= 0) break;
+    used += (size_t)n;
+  }
+  close(channel[0]);
+  int status = 0;
+  if (child < 0 || waitpid(child, &status, 0) != child) return 0;
+  return used > 0 && WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT &&
+         strstr(said, "nts: refused at run time: a bigint past 128 bits, which this runtime does not hold\n") != NULL &&
+         strstr(said, "runtime error:") == NULL;
+}
+
+int main(void) {
+  __int128 min = NTS_BIGINT_MIN, max = -(min + 1);
+  __int128 odd = (__int128)9007199254740993ULL;
+  Case valid[] = {
+    {checkedAdd, min, 0, min}, {checkedAdd, max, 0, max},
+    {checkedAdd, min, max, -1}, {checkedSub, min, min, 0},
+    {checkedSub, max, 1, max - 1}, {checkedSub, min, -1, min + 1},
+    {checkedMul, min, 1, min}, {checkedMul, max, 1, max},
+    {checkedMul, min, 0, 0}, {checkedNeg, min + 1, 0, max},
+    {checkedNeg, max, 0, min + 1}, {checkedDiv, min, -2, -(min / 2)},
+    {checkedDiv, min, 1, min}, {checkedRem, min, -1, 0},
+    {checkedRem, min, 1, 0}, {checkedShl, -1, 127, min},
+    {checkedShl, min, 0, min}, {checkedShl, max, 0, max},
+    {checkedShl, 0, 128, 0}, {checkedShl, 0, max, 0},
+    {checkedShl, -1, min, -1}, {checkedShl, 1, min, 0},
+    {checkedShr, -1, -127, min}, {checkedShr, 0, min, 0},
+    {checkedShr, min, 128, -1}, {checkedShr, max, 128, 0},
+    {checkedPow, 0, 0, 1}, {checkedPow, 0, max, 0},
+    {checkedPow, 1, max, 1}, {checkedPow, -1, max, -1},
+    {checkedPow, -1, max - 1, 1}, {checkedPow, min, 1, min},
+    {checkedPow, min, 0, 1}, {checkedPow, -2, 127, min},
+    {checkedPow, 2, 126, (__int128)1 << 126},
+    {checkedPow, odd, 2, odd * odd},
+    {checkedBranch, min + 1, -1, min}, {checkedBranch, max, 1, max - 1},
+    {checkedUntaken, max, 0, max}, {checkedUntaken, max - 1, -1, max},
+    {checkedUnentered, max, 0, max}, {checkedUnentered, max - 1, 1, max},
+  };
+  Case past[] = {
+    {checkedAdd, max, 1, 0}, {checkedAdd, min, -1, 0},
+    {checkedSub, min, 1, 0}, {checkedSub, max, -1, 0},
+    {checkedMul, min, -1, 0}, {checkedMul, max, 2, 0},
+    {checkedMul, (__int128)1 << 100, (__int128)1 << 30, 0},
+    {checkedNeg, min, 0, 0}, {checkedDiv, min, -1, 0},
+    {checkedShl, 1, 127, 0}, {checkedShl, -1, 128, 0},
+    {checkedShl, 1, max, 0}, {checkedShl, min, 1, 0},
+    {checkedShr, 1, -127, 0}, {checkedShr, -1, -128, 0},
+    {checkedShr, 1, min, 0}, {checkedPow, 2, 127, 0},
+    {checkedPow, -2, 128, 0}, {checkedPow, min, 2, 0},
+    {checkedBranch, min, -1, 0},
+  };
+  for (size_t i = 0; i < sizeof(valid) / sizeof(*valid); ++i) {
+    if (valid[i].op(valid[i].a, valid[i].b) != valid[i].want) {
+      fprintf(stderr, "valid bigint boundary %zu failed\n", i);
+      return 1;
+    }
+  }
+  for (size_t i = 0; i < sizeof(past) / sizeof(*past); ++i) {
+    if (!refuses(past[i])) {
+      fprintf(stderr, "bigint overflow boundary %zu failed\n", i);
+      return 2;
+    }
+  }
+  puts("bigint boundaries agree");
+  return 0;
+}
+"#;
+    let Some((llvm, c)) = both_backends_with(
+        "bigint_overflow",
+        source,
+        driver,
+        &["-O3", "-fsanitize=undefined", "-fno-sanitize-recover=all"],
+    ) else {
+        return;
+    };
+    assert_eq!(llvm, "bigint boundaries agree\n");
+    assert_eq!(c, llvm);
 }
 
 /// Arithmetic, comparison and control flow, over the hostile pool.

@@ -5845,6 +5845,33 @@ fn declared_base_class(
     None
 }
 
+/// Operators whose lowering generates a JavaScript throw without a source
+/// `throw` statement. Radix and repeat guards already seed their callers as
+/// unresolved calls; bigint operators have no call node to do that for them.
+/// Overflow refuses the runtime's domain rather than throwing and is excluded.
+fn an_operator_that_can_raise(probe: &FuncBuilder, at: NodeId) -> bool {
+    if probe.kind_of(at) != Some(syntax::BINARY_EXPRESSION)
+        || probe.type_of(at) != Some(HirType::BigInt)
+    {
+        return false;
+    }
+    let children = probe.children(at);
+    let [_, operator, _] = children.as_slice() else {
+        return false;
+    };
+    matches!(
+        probe.kind_of(*operator),
+        Some(
+            syntax::ASTERISK_ASTERISK_TOKEN
+                | syntax::ASTERISK_ASTERISK_EQUALS_TOKEN
+                | syntax::SLASH_TOKEN
+                | syntax::SLASH_EQUALS_TOKEN
+                | syntax::PERCENT_TOKEN
+                | syntax::PERCENT_EQUALS_TOKEN
+        )
+    )
+}
+
 fn walk_one_declaration(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -5939,7 +5966,10 @@ fn walk_one_declaration(
         if names_a_body(kind) {
             continue;
         }
-        if kind == Some(syntax::THROW_STATEMENT) || probe.module.initialization.can_raise_at(at) {
+        if kind == Some(syntax::THROW_STATEMENT)
+            || probe.module.initialization.can_raise_at(at)
+            || an_operator_that_can_raise(probe, at)
+        {
             throws.insert(symbol);
         }
         // **An accessor access is a call to its body**, which this walk did
@@ -58995,7 +59025,7 @@ impl<'a> FuncBuilder<'a> {
             ty = self.plus_from_operands(current, addend).unwrap_or(ty);
         }
         let updated = match compound {
-            Compound::Exponentiate => self.exponentiate(id, ty, current, addend),
+            Compound::Exponentiate => self.exponentiate(id, ty, current, addend)?,
             Compound::Op(op) => {
                 // `s += t` on strings is concatenation, not addition, and the
                 // two lower to nothing alike -- `Add` on two `NtsString *`
@@ -59016,6 +59046,7 @@ impl<'a> FuncBuilder<'a> {
                 if bitwise_operator_of(op) {
                     self.push_bitwise(id, op, current, addend, ty, &origin)?
                 } else {
+                    self.require_bigint_divisor(id, op, current, addend)?;
                     self.push(
                         OpKind::Binary {
                             op,
@@ -74390,14 +74421,98 @@ impl<'a> FuncBuilder<'a> {
         ty: HirType,
         base: ValueId,
         exponent: ValueId,
-    ) -> ValueId {
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
+        if self.values[base.0 as usize].ty == HirType::BigInt
+            && self.values[exponent.0 as usize].ty == HirType::BigInt
+        {
+            // A negative exponent is a JavaScript RangeError, not a runtime
+            // domain refusal. Lower its throw so a local or caller catch can
+            // handle it, just as the radix guard does.
+            let zero = self.push(OpKind::ConstInt(0), HirType::BigInt, origin.clone());
+            let negative = self.push(
+                OpKind::Binary {
+                    op: BinOp::Lt,
+                    lhs: exponent,
+                    rhs: zero,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            // Node v24.20.0/V8's observed text; this is oracle wording rather
+            // than the specification's sentence about negative exponents.
+            self.bigint_range_error_if(id, negative, "undefined must be positive")?;
+            return Ok(self.runtime_call("nts_bigint_pow", vec![base, exponent], ty, origin));
+        }
         if let OpKind::ConstFloat(power) = self.values[exponent.0 as usize].kind
             && let Some(folded) = self.fold_power(base, power, &ty, &origin)
         {
-            return folded;
+            return Ok(folded);
         }
-        self.runtime_call("nts_math_pow", vec![base, exponent], ty, origin)
+        Ok(self.runtime_call("nts_math_pow", vec![base, exponent], ty, origin))
+    }
+
+    /// Lower bigint operator domain errors through the provided-error path,
+    /// so both the local handler and a raising caller can catch them.
+    fn bigint_range_error_if(
+        &mut self,
+        id: NodeId,
+        invalid: ValueId,
+        text: &str,
+    ) -> Result<(), Diagnostic> {
+        let throwing = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: invalid,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+        self.switch_to(throwing);
+        let origin = self.origin(id);
+        let message = self.push(
+            OpKind::ConstString(text.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin,
+        );
+        self.throw_provided_error_text(id, "RangeError", message)?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(carry_on);
+        Ok(())
+    }
+
+    /// A zero bigint divisor throws before the backend's division/remainder.
+    fn require_bigint_divisor(
+        &mut self,
+        id: NodeId,
+        op: BinOp,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> Result<(), Diagnostic> {
+        if matches!(op, BinOp::Div | BinOp::Rem)
+            && self.values[lhs.0 as usize].ty == HirType::BigInt
+            && self.values[rhs.0 as usize].ty == HirType::BigInt
+        {
+            let origin = self.origin(id);
+            let zero = self.push(OpKind::ConstInt(0), HirType::BigInt, origin.clone());
+            let invalid = self.push(
+                OpKind::Binary {
+                    op: BinOp::Eq,
+                    lhs: rhs,
+                    rhs: zero,
+                },
+                HirType::Bool,
+                origin,
+            );
+            self.bigint_range_error_if(id, invalid, "Division by zero")?;
+        }
+        Ok(())
     }
 
     /// `x ** k` for a literal `k`, where the operations spell it exactly.
@@ -80101,7 +80216,7 @@ impl<'a> FuncBuilder<'a> {
             (lhs, rhs)
         };
         if token == syntax::ASTERISK_ASTERISK_TOKEN {
-            return Ok(self.exponentiate(id, ty, lhs, rhs));
+            return self.exponentiate(id, ty, lhs, rhs);
         }
 
         let op = self.binary_op_for(id, *operator, *lhs_node, *rhs_node, token, &ty)?;
@@ -80118,6 +80233,8 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let (lhs, rhs) = self.numeric_operands(id, op, lhs, rhs)?;
+
+        self.require_bigint_divisor(id, op, lhs, rhs)?;
 
         let origin = self.origin(id);
         Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))

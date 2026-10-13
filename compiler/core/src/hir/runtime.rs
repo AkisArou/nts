@@ -295,6 +295,12 @@ static SIGNATURES: &[Declared] = &[
         &[Some(HirType::Float { bits: 64 })],
         Some(HirType::BigInt),
     ),
+    ("nts_bigint_overflow", &[], None),
+    (
+        "nts_bigint_pow",
+        &[Some(HirType::BigInt), Some(HirType::BigInt)],
+        Some(HirType::BigInt),
+    ),
     (
         "nts_bigint_shl",
         &[Some(HirType::BigInt), Some(HirType::BigInt)],

@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 389cef487814ca6c, commit aa3df5fe0b28419b08c7480a14e0527775904eba, harness d6442dbc09f91ad0; machine at start: 23.6 GB available, swap 13.9/20 GB, load 9.6/16.6 (1m/5m), 32 cores; 4 worker(s)
+# compiler 9913e06529d15352, commit 39ccd0eec4fe16602c43eda94b1b232be38011b9, harness d6442dbc09f91ad0; machine at start: 16.3 GB available, swap 5.7/31.5 GB, load 65.8/43.4 (1m/5m), 32 cores; 2 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -2553,7 +2553,7 @@ test/language/expressions/division/S11.5.2_A4_T7.js	pass
 test/language/expressions/division/S11.5.2_A4_T8.js	pass	
 test/language/expressions/division/S11.5.2_A4_T9.js	pass	
 test/language/expressions/division/bigint-arithmetic.js	pass	
-test/language/expressions/division/bigint-complex-infinity.js	fail	nts: uncaught Test262Error: 1n / 0n throws RangeError
+test/language/expressions/division/bigint-complex-infinity.js	pass	
 test/language/expressions/division/line-terminator.js	pass	
 test/language/expressions/division/no-magic-asi.js	pass	
 test/language/expressions/does-not-equals/S11.9.2_A2.4_T1.js	pass	
@@ -3038,7 +3038,7 @@ test/language/expressions/exponentiation/applying-the-exp-operator_A6.js	pass
 test/language/expressions/exponentiation/applying-the-exp-operator_A7.js	pass	
 test/language/expressions/exponentiation/applying-the-exp-operator_A8.js	pass	
 test/language/expressions/exponentiation/applying-the-exp-operator_A9.js	pass	
-test/language/expressions/exponentiation/bigint-negative-exponent-throws.js	fail	nts: uncaught Test262Error: 1n ** -1n throws RangeError
+test/language/expressions/exponentiation/bigint-negative-exponent-throws.js	pass	
 test/language/expressions/exponentiation/bigint-zero-base-zero-exponent.js	pass	
 test/language/expressions/exponentiation/exp-assignment-operator.js	pass	
 test/language/expressions/exponentiation/exp-operator-precedence-update-expression-semantics.js	pass	
@@ -3456,7 +3456,7 @@ test/language/expressions/modulus/S11.5.3_A4_T4.js	pass
 test/language/expressions/modulus/S11.5.3_A4_T5.js	pass	
 test/language/expressions/modulus/S11.5.3_A4_T6.js	pass	
 test/language/expressions/modulus/bigint-arithmetic.js	pass	
-test/language/expressions/modulus/bigint-modulo-zero.js	fail	nts: uncaught Test262Error: 1n % 0n throws RangeError
+test/language/expressions/modulus/bigint-modulo-zero.js	pass	
 test/language/expressions/modulus/line-terminator.js	pass	
 test/language/expressions/multiplication/S11.5.1_A2.4_T1.js	pass	
 test/language/expressions/multiplication/S11.5.1_A4_T1.1.js	pass	

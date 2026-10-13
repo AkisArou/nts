@@ -1131,16 +1131,30 @@ __int128 nts_bigint_as_uintn(double bits, __int128 value) {
  * There is no `>>>` here on purpose: it is a TypeError on a bigint in
  * JavaScript, and the typechecker rejects it before this is reached.
  *
- * The domain is 128 bits, so `1n << 200n` is 0 here where node grows the
- * number instead. That is the same boundary `nts_bigint_as_intn` works within
- * and the same one the lowering refuses literals outside of. */
+ * The signed domain is 128 bits. An upward shift that leaves it stops by name
+ * rather than wrapping; a downward shift still saturates arithmetically. */
+
+_Noreturn void nts_bigint_overflow(void) {
+  static const char text[] =
+      "a bigint past 128 bits, which this runtime does not hold";
+  nts_refused(nts_string_from_utf8(text, sizeof(text) - 1));
+}
 
 /* Left, on the unsigned twin so a negative value's shift is defined. */
 static __int128 nts_bigint_up(__int128 value, unsigned count) {
-  if (count >= 128u) {
+  if (value == 0) {
     return 0;
   }
-  return (__int128)((unsigned __int128)value << count);
+  if (count >= 128u) {
+    nts_bigint_overflow();
+  }
+  __int128 shifted = (__int128)((unsigned __int128)value << count);
+  /* Reversing the shift must recover the operand, including its sign. This
+   * accepts -1 << 127 (the minimum) and rejects 1 << 127 (past the maximum). */
+  if ((shifted >> count) != value) {
+    nts_bigint_overflow();
+  }
+  return shifted;
 }
 
 /* Right, arithmetically: the sign bit is replicated, so a negative value
@@ -1160,15 +1174,37 @@ __int128 nts_bigint_shl(__int128 value, __int128 count) {
     return count <= -128 ? (value < 0 ? (__int128)-1 : (__int128)0)
                          : nts_bigint_down(value, (unsigned)-count);
   }
-  return count >= 128 ? 0 : nts_bigint_up(value, (unsigned)count);
+  return nts_bigint_up(value, count >= 128 ? 128u : (unsigned)count);
 }
 
 __int128 nts_bigint_shr(__int128 value, __int128 count) {
   if (count < 0) {
-    return count <= -128 ? 0 : nts_bigint_up(value, (unsigned)-count);
+    return nts_bigint_up(value, count <= -128 ? 128u : (unsigned)-count);
   }
   return count >= 128 ? (value < 0 ? (__int128)-1 : (__int128)0)
                       : nts_bigint_down(value, (unsigned)count);
+}
+
+__int128 nts_bigint_pow(__int128 base, __int128 exponent) {
+  /* The caller lowers the JavaScript throw. An unchecked foreign call must
+   * not quietly answer 1 for a negative exponent. */
+  if (exponent < 0) {
+    static const char text[] = "a negative bigint exponent reached the runtime";
+    nts_refused(nts_string_from_utf8(text, sizeof(text) - 1));
+  }
+  __int128 result = 1;
+  while (exponent != 0) {
+    if ((exponent & 1) != 0 && __builtin_mul_overflow(result, base, &result)) {
+      nts_bigint_overflow();
+    }
+    exponent >>= 1;
+    /* The last square is unused. In particular min ** 1 fits even though
+     * min squared does not. */
+    if (exponent != 0 && __builtin_mul_overflow(base, base, &base)) {
+      nts_bigint_overflow();
+    }
+  }
+  return result;
 }
 
 /* How each family of the handle block counts its handles, indexed by

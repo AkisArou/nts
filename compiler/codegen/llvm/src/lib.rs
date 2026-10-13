@@ -170,6 +170,12 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     // of an `i32` does not fit one, and the HIR types the result `i64`.
     let _ = writeln!(text, "declare i64 @llvm.abs.i64(i64, i1) nounwind");
     let _ = writeln!(text, "declare i32 @llvm.abs.i32(i32, i1) nounwind");
+    for op in ["sadd", "ssub", "smul"] {
+        let _ = writeln!(
+            text,
+            "declare {{ i128, i1 }} @llvm.{op}.with.overflow.i128(i128, i128) nounwind"
+        );
+    }
     // Rounding toward each infinity and toward zero. `Math.round` is *not*
     // among them -- see `nts_round_fn`, which the runtime offers because
     // JavaScript rounds a half the other way from C.
@@ -2468,6 +2474,7 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_array_new_uninitialized",
     "nts_bigint_shl",
     "nts_bigint_shr",
+    "nts_bigint_overflow",
     "nts_cell_unready",
     "nts_check_fn",
     // A handle read back out of an erased value is checked in raw IR
@@ -5133,10 +5140,10 @@ fn float_literal(number: f64) -> String {
 /// direction nobody wants -- the primary backend giving up an optimization the
 /// reference implementation already takes.
 ///
-/// `bigint` is `__int128`, which is signed, and clang emits `add nsw i128` for
-/// it. Whether *that* is the semantics `bigint` should have is a question for
-/// the middle end, where it would change both backends at once. It is not a
-/// question this file gets to answer on its own.
+/// Bigint arithmetic is checked separately: its exact result must fit signed
+/// 128 bits, and overflow calls the runtime refusal rather than producing
+/// poison or a wrapped value. BigInt remains signed here because `binary`
+/// also uses this predicate to choose signed comparisons.
 fn wraps(ty: &HirType) -> bool {
     !matches!(ty, HirType::Int { signed: true, .. } | HirType::BigInt)
 }
@@ -5181,6 +5188,11 @@ fn arithmetic(
     if matches!(op, BinOp::Shl | BinOp::Shr) && func.values[lhs.0 as usize].ty == HirType::BigInt {
         return Ok(wide_shift(out, op, lhs, rhs, platform));
     }
+    if func.values[lhs.0 as usize].ty == HirType::BigInt
+        && let Some(text) = checked_bigint(out, op, &name(lhs), &name(rhs))
+    {
+        return Ok(text);
+    }
     if matches!(op, BinOp::Min | BinOp::Max) {
         return extremum(func, out, op, lhs, rhs);
     }
@@ -5199,6 +5211,54 @@ fn arithmetic(
         "{out} = {instruction} {ty} {}, {}",
         name(lhs),
         name(rhs)
+    ))
+}
+
+/// Branch to the one runtime owner of the bigint overflow refusal. These
+/// inline labels are also read by `function` when it derives phi predecessors.
+fn bigint_overflow_guard(out: &str, condition: &str) -> String {
+    let label = out.trim_start_matches('%');
+    format!(
+        "br i1 {condition}, label {out}.no, label {out}.ok\n\
+         {label}.no:\n  call void @nts_bigint_overflow()\n  unreachable\n\
+         {label}.ok:"
+    )
+}
+
+/// Signed checked arithmetic, with no runtime call on the ordinary path.
+fn checked_bigint(out: &str, op: BinOp, left: &str, right: &str) -> Option<String> {
+    let intrinsic = match op {
+        BinOp::Add => "sadd",
+        BinOp::Sub => "ssub",
+        BinOp::Mul => "smul",
+        BinOp::Div | BinOp::Rem => {
+            let check = format!(
+                "{out}.min = icmp eq i128 {left}, {}\n  \
+                 {out}.minusone = icmp eq i128 {right}, -1\n  \
+                 {out}.overflow = and i1 {out}.min, {out}.minusone\n  ",
+                i128::MIN
+            );
+            return Some(if op == BinOp::Rem {
+                // min % -1 is exactly zero. Substituting 1 for that divisor
+                // makes the operation defined before computing the result.
+                format!(
+                    "{check}{out}.divisor = select i1 {out}.overflow, i128 1, i128 {right}\n  \
+                     {out} = srem i128 {left}, {out}.divisor"
+                )
+            } else {
+                format!(
+                    "{check}{}\n  {out} = sdiv i128 {left}, {right}",
+                    bigint_overflow_guard(out, &format!("{out}.overflow"))
+                )
+            });
+        }
+        _ => return None,
+    };
+    Some(format!(
+        "{out}.checked = call {{ i128, i1 }} @llvm.{intrinsic}.with.overflow.i128(i128 {left}, i128 {right})\n  \
+         {out} = extractvalue {{ i128, i1 }} {out}.checked, 0\n  \
+         {out}.overflow = extractvalue {{ i128, i1 }} {out}.checked, 1\n  {}",
+        bigint_overflow_guard(out, &format!("{out}.overflow"))
     ))
 }
 
@@ -5713,6 +5773,10 @@ fn unary(
     let float = matches!(func.values[operand.0 as usize].ty, HirType::Float { .. });
     Ok(match op {
         UnOp::Neg if float => format!("{out} = fneg {ty} {}", name(operand)),
+        UnOp::Neg if func.values[operand.0 as usize].ty == HirType::BigInt => {
+            checked_bigint(out, BinOp::Sub, "0", &name(operand))
+                .unwrap_or_else(|| unreachable!("subtraction has a checked bigint form"))
+        }
         // `sub nsw 0, x` on a signed type, which is what clang emits for
         // `-a` -- and it is a real promise rather than a formality, because
         // negating `INT32_MIN` is exactly the case it excludes.

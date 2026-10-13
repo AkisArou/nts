@@ -89,13 +89,23 @@ pub fn eliminate(func: &mut Func) -> usize {
 /// A list of what has effects has to be added to. A list of what does not has
 /// to be *decided* about, which is the difference.
 #[allow(clippy::match_same_arms)]
-/// Runtime functions with no effect but their result.
+/// Runtime functions whose unused result lets the call be removed.
 ///
 /// A list that has to be *argued* into rather than added to: a name here is a
-/// promise that calling it and throwing the answer away is the same as not
-/// calling it. Allocation counts as no effect only because a dead allocation
-/// is unreachable and reclaimed.
-const PURE_RUNTIME_CALLS: &[&str] = &["nts_tag_name"];
+/// promise that discarding its result has no observable JavaScript effect.
+/// Allocation counts as no effect because a dead allocation is unreachable
+/// and reclaimed; an unused bigint needs no storage in this runtime.
+// Removable when unused is a different claim from pure: the bigint helpers
+// may refuse a used value this runtime cannot hold. Do not give them C/LLVM
+// pure, readnone or speculatable attributes, which could move a refusal onto
+// a path that never evaluates the operation. Their real JavaScript throws
+// are lowered as control flow before the call and survive a discarded result.
+const PURE_RUNTIME_CALLS: &[&str] = &[
+    "nts_tag_name",
+    "nts_bigint_shl",
+    "nts_bigint_shr",
+    "nts_bigint_pow",
+];
 
 // Several arms answer `false` and each answers it for its own reason. Merged
 // they would be a list rather than a set of decisions, and the next operation
@@ -148,11 +158,9 @@ fn has_effects(op: &Op, values: &[Op]) -> bool {
         // `OpenFieldSet` is a store and is **not** here, so it falls through to
         // the arm that keeps it, beside `FieldSet`.
         OpKind::OpenFieldGet { .. } => false,
-        // Named runtime functions that compute and do nothing else. A call is
-        // assumed to have effects because it may, and these provably do not:
-        // `nts_tag_name` allocates a string and returns it, so a dead one is a
-        // dead allocation and removing it is the whole point of folding the
-        // comparison that used to read it.
+        // Named runtime calls whose unused result makes them removable.
+        // `nts_tag_name` leaves a dead allocation; bigint helpers need not
+        // hold an unread value. Neither is permission to move the call.
         OpKind::Call {
             callee: super::Callee::External(name),
             ..

@@ -534,6 +534,18 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_bigint_overflow",
+        returns: "void",
+        params: &[],
+        attributes: &["noreturn"],
+    },
+    Signature {
+        name: "nts_bigint_pow",
+        returns: "<2 x i64>",
+        params: &["ptr align 16 dead_on_return", "ptr align 16 dead_on_return"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_bigint_shl",
         returns: "<2 x i64>",
         params: &["ptr align 16 dead_on_return", "ptr align 16 dead_on_return"],

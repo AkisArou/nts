@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "nts: refused at run time: a bigint past 128 bits, which this runtime does not hold",
+  "node": null,
+  "measured_with": "ea48eba9c0ade5ff",
+  "source": "measured"
+}

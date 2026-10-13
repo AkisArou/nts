@@ -968,10 +968,6 @@ NtsBigIntBox *nts_bigint_box(__int128 value);
 /* A checked tag proof must precede this storage read. */
 NTS_READS_ONLY __int128 nts_bigint_unbox(const NtsBigIntBox *box);
 
-/* JavaScript's shifts on a bigint. A negative count reverses the direction and
- * a count past 128 saturates -- both undefined behaviour for C's operators,
- * which is why these are calls. `>>>` is a TypeError on a bigint and so has no
- * counterpart here. */
 /* Ends the program: a name read through a closure before its declaration ran,
  * which is a `ReferenceError` in JavaScript and has nothing to throw here. */
 void nts_cell_unready(const char *name);
@@ -992,8 +988,18 @@ NTS_READS_ONLY double nts_bigint_compare_string(__int128 value,
 
 NtsString *nts_bigint_to_string(__int128 value);
 
+/* A negative count reverses direction. Downward shifts saturate; upward
+ * shifts refuse when the exact result leaves signed 128 bits. `>>>` is a
+ * TypeError on a bigint, so it has no counterpart here. */
 __int128 nts_bigint_shl(__int128 value, __int128 count);
 __int128 nts_bigint_shr(__int128 value, __int128 count);
+
+/* The signed domain; spell its minimum without a signed shift into the sign
+ * bit. Arithmetic checks stay inline, calling the refusal only on overflow. */
+#define NTS_BIGINT_MIN (-((__int128)1 << 126) * 2)
+_Noreturn void nts_bigint_overflow(void);
+/* Lowering raises RangeError before passing a negative exponent. */
+__int128 nts_bigint_pow(__int128 base, __int128 exponent);
 
 /* `replace` and `replaceAll` with a string pattern. The replacement's `$$`,
  * `$&`, `$\`` and `$'` are expanded; anything else after a `$` stays literal.

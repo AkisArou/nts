@@ -4863,9 +4863,15 @@ fn binary_text(
     // masked to five bits and the operands are int32. A `bigint` has neither
     // rule -- the lowering skipped the `ToInt32` pair for it -- but it does not
     // get C's operator either, because a negative count reverses the direction
-    // and a count past the width saturates, and C leaves both undefined. It
-    // gets a second pair of helpers that spell *those* rules on 128 bits.
+    // and C leaves both directions undefined for a count past the width. Its
+    // helpers saturate downward and refuse upward results past signed 128 bits.
     if let Some(text) = shift_text(func, op, bin, lhs, rhs, &wrap, &cast) {
+        return text;
+    }
+
+    if op.ty == HirType::BigInt
+        && let Some(text) = checked_bigint_text(name, bin, lhs, rhs)
+    {
         return text;
     }
 
@@ -4976,6 +4982,35 @@ fn binary_text(
     )
 }
 
+/// Checked signed bigint arithmetic. The builtins expose the carry without
+/// paying for a runtime call unless the exact result leaves the domain.
+fn checked_bigint_text(name: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> Option<String> {
+    let left = value_name(lhs);
+    let right = value_name(rhs);
+    let intrinsic = match bin {
+        BinOp::Add => "add",
+        BinOp::Sub => "sub",
+        BinOp::Mul => "mul",
+        BinOp::Div => {
+            return Some(format!(
+                "if ({left} == NTS_BIGINT_MIN && {right} == -1) nts_bigint_overflow();\n\
+                 {name} = {left} / {right};"
+            ));
+        }
+        // C's % shares division's undefined min/-1 case, but the exact
+        // remainder is representable and must answer zero.
+        BinOp::Rem => {
+            return Some(format!(
+                "{name} = {left} == NTS_BIGINT_MIN && {right} == -1 ? 0 : {left} % {right};"
+            ));
+        }
+        _ => return None,
+    };
+    Some(format!(
+        "if (__builtin_{intrinsic}_overflow({left}, {right}, &{name})) nts_bigint_overflow();"
+    ))
+}
+
 /// A shift, which is a helper call rather than a C operator.
 ///
 /// JavaScript masks the count to five bits, where C leaves a shift by 32 or
@@ -4984,9 +5019,9 @@ fn binary_text(
 ///
 /// A `bigint` has neither rule -- the lowering skipped the `ToInt32` pair for it
 /// -- but it does not get C's operator either, because a negative count
-/// reverses the direction and a count past the width saturates, and C leaves
-/// both undefined. It gets a second pair of helpers that spell *those* rules on
-/// 128 bits.
+/// reverses the direction and C leaves both directions undefined for a count
+/// past the width. Its helpers saturate downward and refuse upward results
+/// past signed 128 bits.
 ///
 /// `None` where the operator is not a shift, which is the caller's signal to
 /// carry on.
@@ -5111,6 +5146,10 @@ fn unary_text(
     };
 
     Ok(match un {
+        UnOp::Neg if *result == HirType::BigInt => format!(
+            "if (__builtin_sub_overflow((__int128)0, {}, &{name})) nts_bigint_overflow();",
+            value_name(operand)
+        ),
         UnOp::Neg => format!("{name} = -{};", widen(operand)?),
         // IEEE-754 requires a correctly rounded square root, so C's is
         // JavaScript's -- on every input, including the negatives where both
