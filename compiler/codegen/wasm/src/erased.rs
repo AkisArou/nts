@@ -13,7 +13,7 @@ use crate::{
     ir::{self, Function},
     module::{Builder, Func, FuncKey, Global, GlobalKey},
     numeric,
-    types::Physical,
+    types::{Physical, Slot},
 };
 use nts_core::hir::{Absent, BinOp, HirType, ManagedType, OpKind, ValueId, tags};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
@@ -253,13 +253,29 @@ fn get_singleton(body: &mut Body<'_, '_>, which: Singleton) -> Result<(), Failur
     Ok(())
 }
 
+/// `undefined` or `null` in a slot of the result's type.
+///
+/// In a scalar slot it is what JavaScript converts it to: a number is NaN for
+/// `undefined` and 0 for `null`, an integer 0, a boolean false. The core puts
+/// one there on a path it has proved no read reaches -- an optional chain's
+/// absent arm after its `??` folded away -- where C writes a zero; the
+/// conversion is the same answer wherever that holds, and node's where not.
 pub(crate) fn constant(body: &mut Body<'_, '_>, result: ValueId, tag: i32) -> Result<(), Failure> {
+    let nan = tag == UNDEFINED;
     match body.types().slot(body.ty(result))? {
         Some(Physical::Reference(_)) if body.ty(result) == &HirType::Erased => {
             get_singleton(body, Singleton::for_tag(tag)?)?;
         }
         Some(Physical::Reference(reference)) => body.instruction(&I::RefNull(reference.heap_type)),
-        _ => return Err(format!("absence constant in {:?}", body.ty(result)).into()),
+        Some(Physical::Scalar(Slot::F64)) => {
+            body.instruction(&I::F64Const(if nan { f64::NAN } else { 0.0 }.into()));
+        }
+        Some(Physical::Scalar(Slot::F32)) => {
+            body.instruction(&I::F32Const(if nan { f32::NAN } else { 0.0 }.into()));
+        }
+        Some(Physical::Scalar(Slot::I32)) => body.instruction(&I::I32Const(0)),
+        Some(Physical::Scalar(Slot::I64)) => body.instruction(&I::I64Const(0)),
+        None => return Err(format!("absence constant in {:?}", body.ty(result)).into()),
     }
     Ok(())
 }

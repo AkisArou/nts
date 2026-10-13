@@ -389,6 +389,23 @@ fn source_class_tokens_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// An optional chain whose absent arm puts undefined in a numeric slot, on a
+/// path the core proved no run takes: it compiles, and every read agrees.
+#[test]
+fn source_absent_scalars_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/absent-scalars");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "absent-scalars",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 51, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// The order promise reactions and resumptions run in: each export's return
 /// is the checkpoint that drains them, and a second export reads the order,
 /// against node's order after a turn.
