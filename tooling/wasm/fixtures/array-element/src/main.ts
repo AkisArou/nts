@@ -27,3 +27,25 @@ export function nullSlot(at: number): number {
   const v = xs[at];
   return v === undefined ? 1 : v === null ? 2 : v.x;
 }
+function openArray(kind: number): unknown {
+  if (kind === 0) return [1.5, -0, NaN];
+  if (kind === 1) return ["a", "", "c"];
+  if (kind === 2) return [true, false];
+  if (kind === 3) return [new Point(7)];
+  if (kind === 4) return [[1], [2, 3]];
+  if (kind === 5) {
+    const xs: unknown[] = ["u", 2, undefined];
+    return xs;
+  }
+  return "not an array";
+}
+// An element of an open array, whose storage the read cannot see: one type
+// test per array storage, as C asks the descriptor.
+export function openAt(kind: number, at: number): string {
+  const value = openArray(kind);
+  if (!Array.isArray(value)) return "none";
+  const v: unknown = value[at];
+  if (v === undefined) return "undefined";
+  if (v === null) return "null";
+  return typeof v === "object" ? "object" : `${typeof v}:${String(v)}`;
+}

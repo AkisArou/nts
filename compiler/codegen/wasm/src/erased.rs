@@ -401,6 +401,15 @@ fn fits_i31(func: &nts_core::hir::Func, id: ValueId) -> bool {
 /// Erases the value on the stack, held in storage of type `ty`. A string or a
 /// reference arrives non-null: what a null one means is the caller's to say.
 pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), Failure> {
+    erase_in(body.m, &mut body.code, ty)
+}
+
+/// [`erase_stack`] into any code: a module helper's as well as a body's.
+pub(crate) fn erase_in(
+    m: &mut Builder<'_>,
+    code: &mut ir::Code,
+    ty: &HirType,
+) -> Result<(), Failure> {
     match ty {
         HirType::Erased
         | HirType::Managed(
@@ -419,21 +428,20 @@ pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), F
             | ManagedType::BoxedBigInt,
         ) => {}
         HirType::Bool => {
-            body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
-            get_singleton(body, Singleton::True)?;
-            body.instruction(&I::Else);
-            get_singleton(body, Singleton::False)?;
-            body.instruction(&I::End);
+            code.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+            code.global_get(singleton(m, Singleton::True)?);
+            code.instruction(&I::Else);
+            code.global_get(singleton(m, Singleton::False)?);
+            code.instruction(&I::End);
         }
         HirType::Int { .. } | HirType::Float { .. } => {
-            numeric::convert(body, ty, &HirType::NUMBER)?;
-            call(body, Helper::BoxNumber)?;
+            numeric::convert_in(code, ty, &HirType::NUMBER)?;
+            code.call(callee(m, Helper::BoxNumber)?);
         }
-        HirType::Managed(ManagedType::String) => body.instruction(&I::AnyConvertExtern),
+        HirType::Managed(ManagedType::String) => code.instruction(&I::AnyConvertExtern),
         // A bigint is boxed with its tag, which goes before it in the box.
         HirType::BigInt => {
-            let boxing = crate::bigints::callee(body.m, crate::bigints::Helper::Box)?;
-            body.call(boxing);
+            code.call(crate::bigints::callee(m, crate::bigints::Helper::Box)?);
         }
         HirType::Void | HirType::Managed(_) | HirType::NativePointer(_) | HirType::Never => {
             return Err(

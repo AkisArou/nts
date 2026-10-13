@@ -15,6 +15,7 @@ for (const at of indices) {
   for (const x of numbers) { same('defaultedAt', x, at); for (const y of numbers) same('numberAt', x, y, at); }
   for (const x of [false, true]) same('booleanAt', x, at);
   for (const x of ['', 'a', '\ud800']) for (const y of numbers) same('unknownAt', x, y, at);
+  for (let kind = 0; kind < 7; kind++) same('openAt', kind, at);
   if (oracle.nullSlot(at) === 2) {
     assert.throws(() => wasm.nullSlot(at), e => e instanceof WasmInputDecline && e.message.includes('nullSlot'));
     named_declines++;

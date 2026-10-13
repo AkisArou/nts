@@ -4,6 +4,7 @@ use crate::{
     body::Body,
     error::Failure,
     helpers::Helper,
+    ir,
     types::{self, Slot},
 };
 use nts_core::hir::{BinOp, HirType, UnOp, ValueId};
@@ -181,10 +182,15 @@ fn unsigned(ty: &HirType) -> bool {
 }
 
 pub(crate) fn convert(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Result<(), Failure> {
+    convert_in(&mut b.code, from, to)
+}
+
+/// [`convert`] into any code: a module helper's as well as a body's.
+pub(crate) fn convert_in(code: &mut ir::Code, from: &HirType, to: &HirType) -> Result<(), Failure> {
     let source = types::value_slot(from)?;
     let target = types::value_slot(to)?;
     if matches!(to, HirType::Bool) {
-        truth_on_stack(b, source);
+        truth_on_stack(code, source);
         return Ok(());
     }
     let op = match (source, target) {
@@ -246,36 +252,36 @@ pub(crate) fn convert(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Res
         }),
     };
     if let Some(op) = op {
-        b.instruction(&op);
+        code.instruction(&op);
     }
-    normalize(b, to)
+    normalize(code, to)
 }
 
 /// A narrow integer kept in an i32 in its canonical form: sign-extended, or
 /// masked to its width.
-fn normalize(b: &mut Body<'_, '_>, to: &HirType) -> Result<(), Failure> {
+fn normalize(code: &mut ir::Code, to: &HirType) -> Result<(), Failure> {
     match to {
         HirType::Int {
             bits: 8,
             signed: true,
-        } => b.instruction(&I::I32Extend8S),
+        } => code.instruction(&I::I32Extend8S),
         HirType::Int {
             bits: 16,
             signed: true,
-        } => b.instruction(&I::I32Extend16S),
+        } => code.instruction(&I::I32Extend16S),
         HirType::Int {
             bits: 8,
             signed: false,
         } => {
-            b.instruction(&I::I32Const(255));
-            b.instruction(&I::I32And);
+            code.instruction(&I::I32Const(255));
+            code.instruction(&I::I32And);
         }
         HirType::Int {
             bits: 16,
             signed: false,
         } => {
-            b.instruction(&I::I32Const(65535));
-            b.instruction(&I::I32And);
+            code.instruction(&I::I32Const(65535));
+            code.instruction(&I::I32And);
         }
         HirType::Bool
         | HirType::Int { bits: 32 | 64, .. }
@@ -300,29 +306,29 @@ fn push_as(b: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> Result<(), Fai
     convert(b, &from, ty)
 }
 
-fn truth_on_stack(b: &mut Body<'_, '_>, slot: Slot) {
+fn truth_on_stack(code: &mut ir::Code, slot: Slot) {
     // abs(x)>0 is false for both zeroes AND NaN; x!=0 would be true for NaN.
     match slot {
         Slot::I32 => {
-            b.instruction(&I::I32Eqz);
-            b.instruction(&I::I32Eqz);
+            code.instruction(&I::I32Eqz);
+            code.instruction(&I::I32Eqz);
         }
         Slot::I64 => {
-            b.instruction(&I::I64Eqz);
-            b.instruction(&I::I32Eqz);
+            code.instruction(&I::I64Eqz);
+            code.instruction(&I::I32Eqz);
         }
         Slot::F32 => {
-            b.instruction(&I::F32Abs);
-            b.instruction(&I::F32Const(0.0_f32.into()));
-            b.instruction(&I::F32Gt);
+            code.instruction(&I::F32Abs);
+            code.instruction(&I::F32Const(0.0_f32.into()));
+            code.instruction(&I::F32Gt);
         }
         Slot::F64 => {
-            b.instruction(&I::F64Abs);
-            b.instruction(&I::F64Const(0.0.into()));
-            b.instruction(&I::F64Gt);
+            code.instruction(&I::F64Abs);
+            code.instruction(&I::F64Const(0.0.into()));
+            code.instruction(&I::F64Gt);
         }
         // A bigint is false only at zero.
-        Slot::V128 => b.instruction(&I::V128AnyTrue),
+        Slot::V128 => code.instruction(&I::V128AnyTrue),
     }
 }
 
@@ -337,7 +343,8 @@ pub(crate) fn unary(
     match op {
         UnOp::Truthy | UnOp::Not => {
             b.load(operand)?;
-            truth_on_stack(b, types::value_slot(b.ty(operand))?);
+            let slot = types::value_slot(b.ty(operand))?;
+            truth_on_stack(&mut b.code, slot);
             if op == UnOp::Not {
                 b.instruction(&I::I32Eqz);
             }

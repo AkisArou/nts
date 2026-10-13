@@ -95,6 +95,9 @@ pub(crate) enum FuncKey {
     ObjectText,
     /// An open value's presence word, or zero.
     PresenceOf,
+    /// An element of an open value, read through whichever array storage it
+    /// has.
+    OpenElement,
 }
 
 /// Every global the module can contain, named by what it means.

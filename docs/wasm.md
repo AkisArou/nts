@@ -195,10 +195,14 @@ builds at one program-wide width.
 
 - **`nts_array_element`**, the erased read that answers `undefined` past the
   end, under `noUncheckedIndexedAccess` and in JS destructuring:
-  - The C runtime asks the descriptor what the slots hold. Every caller erases
-    an array whose storage it knows, so Wasm reads the array the erasure was
-    made from.
-  - An erased operand with no visible array behind it is refused by name.
+  - The C runtime asks the descriptor what the slots hold. Where the call
+    erases an array whose storage it knows, Wasm reads that array, typed.
+  - Any other operand (an `unknown` that `Array.isArray` admitted, an
+    `unknown[]` slot holding an array) goes through one helper,
+    `array.elementOf`: one type test per array storage, then that storage's
+    read, with the same answers past the end and the same null-slot refusal.
+    A value of no array storage refuses by name. array-element pins it
+    (`openAt`, every element storage at every kind of index).
   - A null reference slot is refused by name: one storage holds `null` for
     `(T | null)[]` and `undefined` for a JS array. C answers `undefined`,
     which is wrong for the first
@@ -764,10 +768,9 @@ cooked strings, shared by every call and every copy of the function.
 - **Made writable array storage** (a cast to `string[]`), a template refuses
   at run time with C's message; a null passes. A write into a template
   object refuses by name.
-- Fixture `templates` (102 cases). The census row a-tagged-template (55
-  cases) agrees; a-template-object-keeps-its-identity stops only on an
-  element read of an open array (`nts_array_element` over a value whose
-  storage the read cannot see), which is not template-specific.
+- Fixture `templates` (102 cases). The census rows a-tagged-template (55
+  cases) and, with an open array's element read (1e), a-template-object-
+  keeps-its-identity agree.
 
 ### Measurements at 301fac624 (exploratory; no quiet window)
 

@@ -1,10 +1,18 @@
 //! Closed array helper contracts over the same identity-preserving wrappers.
 
 use crate::{
-    arrays, body::Body, contract, erased, error::Failure, gc, numeric, objects, types::Physical,
+    arrays,
+    body::Body,
+    contract, erased,
+    error::Failure,
+    gc,
+    ir::Function,
+    module::{Builder, FuncKey},
+    numeric, objects, strings,
+    types::Physical,
 };
 use nts_core::hir::{HirType, ManagedType, OpKind, ValueId};
-use wasm_encoder::{BlockType, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 const U32: HirType = HirType::Int {
     bits: 32,
@@ -130,7 +138,10 @@ fn call_inner(
         return Err(format!("array helper {method:?} arity mismatch").into());
     }
     let array = if method == Method::Element {
-        erased_from(b, args[0])?
+        let Some(array) = erased_from(b, args[0]) else {
+            return open_element(b, result, args[0], args[1]);
+        };
+        array
     } else {
         args[0]
     };
@@ -221,15 +232,129 @@ fn put(
 /// The array an erased operand was made from.
 ///
 /// `nts_array_element` takes its array erased, and the C runtime asks the
-/// descriptor what the slots hold. Every caller erases an array whose storage
-/// it knows, and a Wasm array is typed by that storage, so the read goes to
-/// the array the erasure was made from. An erased operand from anywhere else
-/// is refused by name.
-fn erased_from(b: &Body<'_, '_>, erased: ValueId) -> Result<ValueId, Failure> {
+/// descriptor what the slots hold. Where the call erases an array whose
+/// storage it knows, the read goes to that array, typed; any other operand
+/// is read through [`open_element`].
+fn erased_from(b: &Body<'_, '_>, erased: ValueId) -> Option<ValueId> {
     match b.func.value(erased).kind {
-        OpKind::Erase { value, .. } if arrays::is_array(b.ty(value)) => Ok(value),
-        _ => Err("an erased array whose storage this read cannot see".into()),
+        OpKind::Erase { value, .. } if arrays::is_array(b.ty(value)) => Some(value),
+        _ => None,
     }
+}
+
+const NOT_AN_ARRAY: &str = "an element of an open value that is not an array";
+
+/// `nts_array_element` of an open value whose storage the call cannot see,
+/// as C asks the descriptor: one type test per array storage, then that
+/// storage's read, as [`element_value`] reads it. A value of no array storage
+/// refuses by name.
+fn open_element(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    value: ValueId,
+    at: ValueId,
+) -> Result<(), Failure> {
+    if b.ty(at) != &HirType::NUMBER {
+        return Err(Failure::Invariant("nts_array_element index type".into()));
+    }
+    if !matches!(b.types().value_slot(b.ty(value))?, Physical::Reference(_)) {
+        return Err(format!("an element of a {:?}", b.ty(value)).into());
+    }
+    let target = b.m.helper(
+        FuncKey::OpenElement,
+        "array.elementOf",
+        vec![
+            Physical::Reference(RefType::ANYREF),
+            Physical::Scalar(crate::types::Slot::F64),
+            strings::STRING,
+        ],
+        Some(Physical::Reference(RefType::ANYREF)),
+        open_element_body,
+    )?;
+    b.load(value)?;
+    b.load(at)?;
+    strings::constant(b, &b.func.name.clone());
+    b.call(target);
+    output(b, result, &HirType::Erased)
+}
+
+/// Params: value, index, caller's name.
+fn open_element_body(m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let types = m.types;
+    let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
+    let mut f = Function::new([]);
+    for shape in types.arrays.values() {
+        let wrapper = HeapType::Concrete(shape.wrapper);
+        let array = [I::LocalGet(0), I::RefCastNonNull(wrapper)];
+        f.instructions(&[
+            I::LocalGet(0),
+            I::RefTestNonNull(wrapper),
+            I::If(BlockType::Empty),
+        ]);
+        // A whole index from zero below the length; any other reads
+        // `undefined`, as node answers.
+        f.instructions(&[
+            I::LocalGet(1),
+            I::LocalGet(1),
+            I::F64Trunc,
+            I::F64Eq,
+            I::LocalGet(1),
+            I::F64Const(0.0.into()),
+            I::F64Ge,
+            I::I32And,
+            I::LocalGet(1),
+        ]);
+        f.instructions(&array);
+        f.instructions(&[
+            I::StructGet {
+                struct_type_index: shape.wrapper,
+                field_index: gc::ARRAY_LENGTH,
+            },
+            I::F64ConvertI32U,
+            I::F64Lt,
+            I::I32And,
+            I::I32Eqz,
+            I::If(BlockType::Empty),
+        ]);
+        f.global_get(undefined);
+        f.instructions(&[I::Return, I::End]);
+        // A null slot may stand for `undefined` or for `null`.
+        let present = match types.value_slot(&shape.element)? {
+            Physical::Reference(slot) if shape.element != HirType::Erased => Some(RefType {
+                nullable: false,
+                ..slot
+            }),
+            Physical::Reference(_) | Physical::Scalar(_) => None,
+        };
+        if let Some(present) = present {
+            f.instruction(&I::Block(BlockType::Result(ValType::Ref(present))));
+        }
+        f.instructions(&array);
+        f.instructions(&[
+            I::StructGet {
+                struct_type_index: shape.wrapper,
+                field_index: gc::ARRAY_BACKING,
+            },
+            I::LocalGet(1),
+            I::I32TruncSatF64U,
+            arrays::get_instruction(shape)?,
+        ]);
+        if present.is_some() {
+            f.instruction(&I::BrOnNonNull(0));
+            contract::refuse_in(
+                &mut f,
+                m,
+                2,
+                "a null slot, which may stand for undefined or for null",
+            )?;
+            f.instruction(&I::End);
+        }
+        erased::erase_in(m, &mut f, &shape.element)?;
+        f.instructions(&[I::Return, I::End]);
+    }
+    contract::refuse_in(&mut f, m, 2, NOT_AN_ARRAY)?;
+    f.instruction(&I::End);
+    Ok(f)
 }
 /// `nts_array_element`: an element read that answers `undefined` for an index
 /// naming no element, as node does, where a typed read traps.

@@ -156,11 +156,13 @@ fn element_reads_answer_what_node_answers() {
     assert_eq!(output["named_declines"], 2, "{output}");
 }
 
-/// The read goes to the array an erasure was made from. An erased operand
-/// with no array behind it here, such as an `unknown[]` slot that holds one,
-/// is refused by name.
+/// The read goes to the array an erasure was made from where the call can see
+/// it. An erased operand with no array behind it here, such as an `unknown[]`
+/// slot that holds one, is read through whichever array storage it has
+/// (`array.elementOf`), as C asks the descriptor: the module emits and
+/// validates. The array-element fixture's `openAt` checks the answers.
 #[test]
-fn an_erased_operand_with_no_visible_array_is_refused_by_name() {
+fn an_erased_operand_with_no_visible_array_is_read_through_its_storage() {
     let mut b = Build::new("opaque", U32);
     let inner = b.array(F64, &[]);
     let item = b.erase(inner);
@@ -177,16 +179,5 @@ fn an_erased_operand_with_no_visible_array_is_refused_by_name() {
     let read = b.element(slot);
     let tag = b.op(OpKind::TagOf { value: read }, U32);
     let f = b.finish(tag);
-    let nts_codegen_wasm::EmitError::Declined(ds) =
-        nts_codegen_wasm::emit(&program(vec![f])).unwrap_err()
-    else {
-        panic!("expected a named decline")
-    };
-    assert!(
-        ds.iter().any(|d| d.code == "NTS5001"
-            && d.message.contains("opaque")
-            && d.message
-                .contains("an erased array whose storage this read cannot see")),
-        "{ds:?}"
-    );
+    nts_codegen_wasm::emit(&program(vec![f])).expect("an open element read emits");
 }
