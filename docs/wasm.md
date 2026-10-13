@@ -527,6 +527,107 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   version found a core defect:
   outcomes/a-negative-int32-element-read-as-unsigned.
 
+### Values: class tokens, absent scalars, symbols (3f, 3g)
+
+- **A class used as a value** is a token: a static closure of a class with no
+  closure body, one constant global per class, the same object wherever the
+  name is written. Its descriptor's kind is FUNCTION, so `typeof` answers
+  "function". Calling an erased token reaches an unfilled entry, refused by
+  name. Two tokens joined in one conditional are still refused: the join is a
+  function type whose storage neither token's extends.
+- **An open value `===` a typed reference** is the same object or not: every
+  such reference is in `eq`, and nothing else an erased value holds is that
+  object. A typed reference's null cannot say whether it stood for undefined
+  or null, so comparing one is refused by name.
+- **`undefined` or `null` in a scalar slot** (the absent arm of an optional
+  chain whose `??` the core folded over a field it proved present) is what
+  JavaScript converts it to: NaN or 0 for a number, 0 for an integer, false
+  for a boolean. C writes a zero there.
+- **Symbols** (`symbols.rs`):
+  - A symbol is an object-root struct holding its description (a JS string,
+    or null for `Symbol()`), under a SYMBOL-kind descriptor. So `typeof`,
+    `===` and Map keys (the root's identity hash) follow.
+  - `Symbol.for` keeps its registry in the string-keyed table a
+    `Map<string, unknown>` uses, made in an immutable global's initializer.
+  - `Symbol.keyFor` is one lookup by description and an identity check.
+  - String() of an erased symbol prints `Symbol(description)`.
+- **Tests:**
+  - class-tokens (85 cases), absent-scalars (51), symbols (85);
+  - rows: the three class-value rows, four optional-chain rows, and all nine
+    symbol rows.
+
+### bigint (3h)
+
+`bigints.rs` stores a bigint as one `v128`: lane 0 the low 64 bits, lane 1
+the signed high 64, two's complement across both. It is one Wasm value per
+HIR value, with no allocation (`Slot::V128`).
+- **Instructions:**
+  - bitwise ops, equality and truthiness are single instructions;
+  - add and sub carry across the lanes;
+  - mul works on magnitudes, through a 64x64 high-word helper;
+  - div and rem use restoring division.
+- **Fast paths:**
+  - a product of operands within 32 bits is one `i64.mul`;
+  - a divisor below 2^32 divides a 32-bit limb at a time;
+  - a one-word quotient is one `i64.div_s`.
+- **Past 128 bits every backend refuses** by name, "a bigint past 128 bits,
+  which this runtime does not hold": add, sub, neg, mul, a left shift that
+  loses a bit, a number converted, asUintN of a negative, -2^127 / -1.
+  C wrapped silently (`outcomes/a-bigint-past-128-bits-wraps`); MainClaude
+  makes C and LLVM refuse the same way. An intermediate past the width is
+  refused even when the final result would fit (`TOP + v - v`): that is the
+  domain's honest limit.
+- **Converting a bigint to a number** rounds correctly: the top 64 bits with
+  a sticky bit, converted once and scaled by a power of two.
+- **Text and comparison with a string** go through the host's own `BigInt`,
+  node's formatting and parsing exactly.
+- **An erased bigint** is a box `{tag BIGINT, v128}`: `typeof` answers
+  "bigint", `===` compares values, and String() prints it.
+- **Measured, exploratory** (tooling/wasm/bench/bigints), ns per iteration,
+  node beside:
+  - adds 4.1 (20.5);
+  - `x * 48271n % m` 12.7 (11.8);
+  - a 2^100 dividend over a small divisor 28.6 (72.0).
+- **Tests:**
+  - bigints (149 cases, 38 refused, each one a value node keeps past 128
+    bits or a throw);
+  - seven bigint rows.
+
+### Conversions and host services (3i)
+
+- **`nts_value_to_number`** of an open value:
+  - number as itself, boolean 0 or 1, string through `Number`;
+  - null 0 and undefined NaN;
+  - an implicit bigint refused, as C refuses;
+  - an object, a function or a symbol refused by name, where C's NaN would be
+    wrong (`Number([5])` is 5).
+- **The explicit form** also takes a bigint's value.
+- **`Array.isArray`** of an open value tests the program's array wrappers.
+- **Host services**, node's own methods wrapped to C's contracts:
+  - `Number(text)`, `toString(radix)`, `toFixed`;
+  - `toUpperCase`, `toLowerCase`, `repeat`, a relative `at`, `codePointAt`;
+  - searches, tests, trims, padding, `replace` and `replaceAll` with a
+    string pattern, well-formedness, `String.fromCodePoint`, the four URI
+    functions, and a code point's width for for-of over a string. These are
+    one table of plain `String.prototype` methods, plus a function for the
+    ones whose C contract differs: a null pad, NULL for a malformed URI, the
+    empty string for a code point the guard let through.
+  
+  A host exception (a radix the lowering's NaN-blind test let through)
+  becomes the named refusal C gives, never an exception unwinding through
+  compiled frames.
+- **`s[i]`** with an index the lowering did not prove refuses unless `i` is
+  a whole number inside the string, as C's `nts_str_at` does. node answers
+  undefined there, never a character.
+- **`split`** with a string separator (`string_split.rs`):
+  - it counts the pieces once and cuts them once, each search resuming past
+    the last match;
+  - it stores substrings straight into the result's `string[]` backing, so
+    no JS array crosses the boundary.
+- **Tests:**
+  - conversions (119 cases) and string-services (153);
+  - about twenty rows, including strings (744 cases) and iteration (341).
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
@@ -607,6 +708,12 @@ also why the failure's text was missing.
 - **The hostile-pool `agree` lane:** the census is a bounded sweep.
 - **The 29-module runtime route census.**
 - **The browser host**, beyond `--host browser` loading.
+- **A bigint across the public boundary:** the export glue is to split a JS
+  BigInt into two i64s and refuse one past 128 bits by name.
+- **The small-operand bigint product inline at its site:** `x * 48271n % m`
+  is 8% behind node through the helper call.
+- **`nts_value_inspect`, `nts_is_map` and `nts_is_set`:** the last two need
+  a Map told apart from a string-keyed table.
 
 ## Current M1a implementation and evidence
 
