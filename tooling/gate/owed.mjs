@@ -450,13 +450,13 @@ export const RULES = [
     // native half (runtime/chromium/dom) that `target.chromium()` brings to an
     // interop project owe `interop`, and the declarations the blockers
     // fixtures' tsconfigs name owe `blockers` and `integrity`. The rest is
-    // checked by the lane's verify-all (both stage builds, against the V8
+    // checked by tooling/chromium/verify.ts (both backends, against the V8
     // oracle).
     name: "the Chromium lane",
     when: (p) => /^(tooling|runtime)\/chromium\//.test(p),
     settled: true,
     steps: [],
-    arms: [{ kind: "answers", asks: "does the lane still agree with V8 on both backends", run: "the Chromium lane's verify-all: program check, stage builds C and LLVM, smokes against the V8 oracle, compare.ts, standalone rows, app checks" }],
+    arms: [{ kind: "answers", asks: "does the lane still agree with V8 on both backends", run: "node tooling/chromium/verify.ts: the bindings current, both backends staged, built and smoked against the V8 oracle, and every example app built and checked" }],
   },
   {
     name: "the gate's own tests",
