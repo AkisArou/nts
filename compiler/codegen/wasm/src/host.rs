@@ -14,8 +14,16 @@ enum Shape {
     UnaryNumber,
     BinaryNumber,
     NumberString,
+    /// A number formatted with a second number: a radix, or digits.
+    NumberNumberString,
+    /// A string made from a string: a case mapping.
+    StringString,
+    /// A string and a number to a string: `repeat`, a relative `at`.
+    StringNumberString,
     ParseFloat,
-    ParseInt,
+    /// A string and a number to a number: `parseInt` with its radix, and
+    /// `codePointAt`.
+    StringNumberNumber,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -116,8 +124,16 @@ const SERVICES: &[Service] = &[
         shape: Shape::UnaryNumber,
     },
     Service {
+        name: "nts_number_to_fixed",
+        shape: Shape::NumberNumberString,
+    },
+    Service {
         name: "nts_number_to_string",
         shape: Shape::NumberString,
+    },
+    Service {
+        name: "nts_number_to_string_radix",
+        shape: Shape::NumberNumberString,
     },
     Service {
         name: "nts_parse_float",
@@ -125,7 +141,31 @@ const SERVICES: &[Service] = &[
     },
     Service {
         name: "nts_parse_int",
-        shape: Shape::ParseInt,
+        shape: Shape::StringNumberNumber,
+    },
+    Service {
+        name: "nts_str_code_point_at",
+        shape: Shape::StringNumberNumber,
+    },
+    Service {
+        name: "nts_str_relative_at",
+        shape: Shape::StringNumberString,
+    },
+    Service {
+        name: "nts_str_repeat",
+        shape: Shape::StringNumberString,
+    },
+    Service {
+        name: "nts_str_to_lower_case",
+        shape: Shape::StringString,
+    },
+    Service {
+        name: "nts_str_to_number",
+        shape: Shape::ParseFloat,
+    },
+    Service {
+        name: "nts_str_to_upper_case",
+        shape: Shape::StringString,
     },
 ];
 
@@ -140,8 +180,11 @@ impl Service {
             Shape::UnaryNumber => (vec![number], number),
             Shape::BinaryNumber => (vec![number, number], number),
             Shape::NumberString => (vec![number], strings::STRING),
+            Shape::NumberNumberString => (vec![number, number], strings::STRING),
+            Shape::StringString => (vec![strings::STRING], strings::STRING),
+            Shape::StringNumberString => (vec![strings::STRING, number], strings::STRING),
             Shape::ParseFloat => (vec![strings::STRING], number),
-            Shape::ParseInt => (vec![strings::STRING, number], number),
+            Shape::StringNumberNumber => (vec![strings::STRING, number], number),
         }
     }
     /// The host's import of this service.

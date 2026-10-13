@@ -444,6 +444,24 @@ fn source_bigints_agree_with_node() {
     assert_eq!(output["declined"], 38, "{output}");
 }
 
+/// An open value made a number by every primitive kind it can hold, an
+/// open value's `Array.isArray`, and the number and string services the host
+/// answers with node's own methods.
+#[test]
+fn source_conversions_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/conversions");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "conversions",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 119, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// The order promise reactions and resumptions run in: each export's return
 /// is the checkpoint that drains them, and a second export reads the order,
 /// against node's order after a turn.

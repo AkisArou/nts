@@ -800,6 +800,8 @@ impl<'b, 'p> Body<'b, 'p> {
                     crate::symbols::call(self, result, op, args)?;
                 } else if let Some(op) = crate::bigints::external(name) {
                     crate::bigints::call(self, result, op, args)?;
+                } else if let Some(op) = crate::conversions::external(name) {
+                    crate::conversions::call(self, result, op, args)?;
                 } else if let Some(conversion) = crate::numeric::external(name) {
                     crate::numeric::call(self, result, conversion, args)?;
                 } else {

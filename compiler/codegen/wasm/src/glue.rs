@@ -68,6 +68,88 @@ fn function(params: &[ValueType], result: Option<ValueType>) -> ImportType {
     }
 }
 
+/// A number or string method the host applies as node does, wrapped to C's
+/// contract where C's differs from a bare call.
+fn method_import(name: &str, captures: &mut Captures) -> Option<(ImportType, String)> {
+    use ValueType::F64;
+    const STRING: ValueType = ValueType::Externref { nullable: true };
+    Some(match name {
+        // `Number.prototype.toString(radix)` and `toFixed(digits)`, applied as
+        // node applies them; and `Number(text)`, which C's nts_str_to_number
+        // mirrors.
+        "nts_number_to_string_radix" | "nts_number_to_fixed" => {
+            let apply = captures.get("apply", "Reflect.apply");
+            let method = if name == "nts_number_to_fixed" {
+                captures.get("numberToFixed", "Number.prototype.toFixed")
+            } else {
+                captures.get("numberToString", "Number.prototype.toString")
+            };
+            // node throws a RangeError for a radix or digits out of range,
+            // and C refuses there. A host exception must not unwind through
+            // compiled frames, so it becomes the same named refusal.
+            let what = if name == "nts_number_to_fixed" {
+                "Number.prototype.toFixed"
+            } else {
+                "Number.prototype.toString"
+            };
+            (
+                function(&[F64, F64], Some(STRING)),
+                format!(
+                    "(value, argument) => {{ try {{ return {apply}({method}, value, [argument]); }} catch (error) {{ throw new WasmInputDecline('{what}', String(error), 'operation in'); }} }}"
+                ),
+            )
+        }
+        // String methods node applies, each wrapped to C's contract where
+        // C's differs from a bare call: `repeat` counts NaN and negatives as
+        // zero, a relative `at` past either end and `codePointAt` past the
+        // end answer absent (null, and NaN), as C's helpers do.
+        "nts_str_to_upper_case" | "nts_str_to_lower_case" => {
+            let apply = captures.get("apply", "Reflect.apply");
+            let method = if name == "nts_str_to_upper_case" {
+                captures.get("stringToUpperCase", "String.prototype.toUpperCase")
+            } else {
+                captures.get("stringToLowerCase", "String.prototype.toLowerCase")
+            };
+            (
+                function(&[STRING], Some(STRING)),
+                format!("text => {apply}({method}, text, [])"),
+            )
+        }
+        "nts_str_repeat" => {
+            let apply = captures.get("apply", "Reflect.apply");
+            let repeat = captures.get("stringRepeat", "String.prototype.repeat");
+            let floor = captures.get("mathFloor", "Math.floor");
+            (
+                function(&[STRING, F64], Some(STRING)),
+                format!(
+                    "(text, times) => times !== times || times < 0 ? '' : {apply}({repeat}, text, [{floor}(times)])"
+                ),
+            )
+        }
+        "nts_str_relative_at" => {
+            let apply = captures.get("apply", "Reflect.apply");
+            let at = captures.get("stringAt", "String.prototype.at");
+            (
+                function(&[STRING, F64], Some(STRING)),
+                format!("(text, index) => {apply}({at}, text, [index]) ?? null"),
+            )
+        }
+        "nts_str_code_point_at" => {
+            let apply = captures.get("apply", "Reflect.apply");
+            let code_point = captures.get("stringCodePointAt", "String.prototype.codePointAt");
+            (
+                function(&[STRING, F64], Some(F64)),
+                format!("(text, index) => {apply}({code_point}, text, [index]) ?? NaN"),
+            )
+        }
+        "nts_str_to_number" => (
+            function(&[STRING], Some(F64)),
+            captures.get("Number_", "Number").into(),
+        ),
+        _ => return None,
+    })
+}
+
 /// A host import the glue provides: the Wasm type its JS value implements,
 /// and that value. Checked against the module's own import type, because an
 /// engine converts a JS function's arguments and result silently: a wrong
@@ -87,6 +169,9 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
         // `Math` itself is captured; each member is read from it at load.
         let math_ = captures.get("math", "Math");
         return Some((number(arity), format!("{math_}.{math}")));
+    }
+    if let Some(method) = method_import(name, captures) {
+        return Some(method);
     }
     Some(match name {
         "remainder" => (number(2), "(left, right) => left % right".into()),

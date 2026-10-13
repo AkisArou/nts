@@ -21,6 +21,7 @@ mod callables;
 mod cfg;
 mod collections;
 mod contract;
+mod conversions;
 mod dataviews;
 mod demand;
 mod erased;

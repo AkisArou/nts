@@ -576,10 +576,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_index_fn",
         Support::Decline("value/control helper not yet implemented"),
     ),
-    (
-        "nts_is_array",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_is_array", Support::Intrinsic),
     ("nts_is_buffer", Support::Intrinsic),
     (
         "nts_is_class",
@@ -724,19 +721,13 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_nsstring_of",
         Support::Decline("foreign/native ABI or ownership"),
     ),
-    (
-        "nts_number_to_fixed",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_number_to_fixed", Support::HostImport),
     ("nts_number_to_string", Support::HostImport),
     (
         "nts_number_to_string_into",
         Support::Decline("native frame-storage helper"),
     ),
-    (
-        "nts_number_to_string_radix",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_number_to_string_radix", Support::HostImport),
     (
         "nts_objc_adopt",
         Support::Decline("foreign/native ABI or ownership"),
@@ -935,10 +926,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_str_char_code_at_fn", Support::WasmHelper),
     ("nts_str_char_code_at_int", Support::WasmHelper),
     ("nts_str_char_code_at_int_fn", Support::WasmHelper),
-    (
-        "nts_str_code_point_at",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_str_code_point_at", Support::HostImport),
     (
         "nts_str_ends_with",
         Support::Decline("string helper not yet implemented"),
@@ -979,14 +967,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_str_raw",
         Support::Decline("string helper not yet implemented"),
     ),
-    (
-        "nts_str_relative_at",
-        Support::Decline("string helper not yet implemented"),
-    ),
-    (
-        "nts_str_repeat",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_str_relative_at", Support::HostImport),
+    ("nts_str_repeat", Support::HostImport),
     (
         "nts_str_replace",
         Support::Decline("string helper not yet implemented"),
@@ -1021,18 +1003,9 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_str_substring_into_fn",
         Support::Decline("native frame-storage helper"),
     ),
-    (
-        "nts_str_to_lower_case",
-        Support::Decline("string helper not yet implemented"),
-    ),
-    (
-        "nts_str_to_number",
-        Support::Decline("string helper not yet implemented"),
-    ),
-    (
-        "nts_str_to_upper_case",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_str_to_lower_case", Support::HostImport),
+    ("nts_str_to_number", Support::HostImport),
+    ("nts_str_to_upper_case", Support::HostImport),
     (
         "nts_str_to_well_formed",
         Support::Decline("string helper not yet implemented"),
@@ -1253,14 +1226,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ),
     ("nts_value_strict_eq", Support::WasmHelper),
     ("nts_value_tag", Support::WasmHelper),
-    (
-        "nts_value_to_number",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
-    (
-        "nts_value_to_number_explicit",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_value_to_number", Support::WasmHelper),
+    ("nts_value_to_number_explicit", Support::WasmHelper),
     ("nts_value_to_string", Support::WasmHelper),
     ("nts_value_truthy", Support::WasmHelper),
     ("nts_value_truthy_fn", Support::WasmHelper),

@@ -83,6 +83,8 @@ pub(crate) enum FuncKey {
     BigInt(crate::bigints::Helper),
     /// The host's bigint text and string comparison.
     BigIntHost(&'static str),
+    /// An open value made a number; `true` for the explicit `Number(value)`.
+    ToNumber(bool),
 }
 
 /// Every global the module can contain, named by what it means.
