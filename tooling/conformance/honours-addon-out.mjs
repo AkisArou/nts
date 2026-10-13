@@ -71,7 +71,8 @@ for (const file of files) {
   source.split("\n").forEach((line, i) => {
     if (!line.includes("target/node")) return;
     if (isProse(line)) return;
-    // `target/node-test-tmp` is a different directory with a shared prefix.
+    // `target/node-…` is a different directory with a shared prefix, as
+    // `target/node-test-tmp` was, where node's tests once wrote.
     if (/target\/node[-A-Za-z]/.test(line)) return;
     if (line.includes("NTS_ADDON_OUT")) return;
     bad.push([i + 1, line.trim()]);

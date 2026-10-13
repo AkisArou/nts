@@ -27,10 +27,11 @@
 //   node run.mjs --module path [--addon target/node/path.node] [--only f.js]
 //                              [--verbose] [--json]
 
-import { readdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
 import process from "node:process";
+import { leftBy, removeTestTmpDir, sweepOrphaned, testTmpDir, testTmpId, testTmpRoot } from "./tmpdir.mjs";
 
 const HERE = dirname(new URL(import.meta.url).pathname);
 const ROOT = resolvePath(HERE, "../..");
@@ -409,6 +410,14 @@ try {
   process.stderr.write(`note: could not reap orphans: ${error.message}\n`);
 }
 
+// **Each test's scratch directory is this runner's to remove** (`tmpdir.mjs` says
+// why). Swept here for runners that never reached their own cleanup.
+const tmpRoot = testTmpRoot();
+mkdirSync(tmpRoot, { recursive: true });
+sweepOrphaned(tmpRoot);
+const keepTemp = process.env.NTS_KEEP_TEMP !== undefined;
+let testOrdinal = 0;
+
 const needsPtyPath = join(moduleDir, "needs-pty");
 const needsPty = new Set(
   existsSync(needsPtyPath)
@@ -498,6 +507,7 @@ for (const test of publishesNothing ? [] : tests) {
     rows.push({ name, kind: "skip", why: "needs a pseudo-terminal and script(1) is not installed" });
     continue;
   }
+  const tmpId = testTmpId(process.pid, testOrdinal++);
   try {
     const argv = [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"];
     // `script -qec <command> /dev/null`: quiet, no timing file, run the command under
@@ -532,6 +542,8 @@ for (const test of publishesNothing ? [] : tests) {
           NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "",
           NTS_CONFORMANCE_EMPTY_EXPORTS: emptyExports ? "1" : "",
           NTS_CONFORMANCE_ADDON_MUTATE: mutateSilent ? "silent" : mutateAddon ? "1" : "",
+          NODE_TEST_DIR: tmpRoot,
+          NTS_TEST_TMPDIR_ID: tmpId,
         },
       },
     );
@@ -612,8 +624,19 @@ for (const test of publishesNothing ? [] : tests) {
       ? "timed out"
       : ((e.stderr || e.message || "").split("\n").find((l) => l.trim()) ?? "child died");
     result = { kind: "fail", why: why.trim().slice(0, 120) };
+  } finally {
+    if (!keepTemp) removeTestTmpDir(testTmpDir(tmpRoot, tmpId));
   }
   rows.push({ name, ...result });
+}
+// **A leak says so.** 89,224 directories built up because nothing counted them, so
+// this runner counts its own after its last test. A note, not a verdict: what the
+// tests say of the module does not depend on it.
+const left = leftBy(tmpRoot, process.pid);
+if (keepTemp) {
+  process.stderr.write(`kept ${left.length} test directories under ${tmpRoot} (NTS_KEEP_TEMP)\n`);
+} else if (left.length > 0) {
+  process.stderr.write(`LEAKED ${left.length} test directories under ${tmpRoot}: ${left.slice(0, 3).join(" ")}\n`);
 }
 
 const tally = { pass: 0, fail: 0, skip: 0, "n/a": 0 };

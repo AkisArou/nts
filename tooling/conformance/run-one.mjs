@@ -17,7 +17,7 @@ import assert from "node:assert";
 import process from "node:process";
 import { getSystemErrorMap, getSystemErrorMessage, getSystemErrorName } from "node:util";
 import { makeCommon, checkPending, peekPending, Skip } from "./common.mjs";
-import tmpdir from "./tmpdir.mjs";
+import tmpdir, { bind as bindTmpdir } from "./tmpdir.mjs";
 import fixtures from "./fixtures.mjs";
 import * as hijackstdio from "./hijackstdio.mjs";
 
@@ -63,6 +63,7 @@ if (
 // runner. Nothing said so. It showed as a test's tmpdir gone after a hand run, which only
 // node's helper removes.
 const file = realpathSync(fileArgument);
+bindTmpdir();
 const RESULT_PREFIX = "NTS_CONFORMANCE_RESULT ";
 const nestedConformanceChild = process.env.NTS_CONFORMANCE_NESTED_CHILD === "1";
 
