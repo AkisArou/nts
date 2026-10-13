@@ -30,6 +30,8 @@ pub(crate) enum Helper {
     ValueText,
     /// `typeof`, spelled from a tag.
     TagName,
+    /// One line to the console's stdout or stderr, through the host.
+    ConsoleWrite,
 }
 
 #[cfg(test)]
@@ -37,7 +39,7 @@ impl Helper {
     /// Whether the call is code at its site rather than a module helper, which
     /// the support catalog's routing test checks against its rows.
     pub(crate) const fn inline(self) -> bool {
-        !matches!(self, Self::ValueText | Self::TagName)
+        !matches!(self, Self::ValueText | Self::TagName | Self::ConsoleWrite)
     }
 }
 
@@ -48,6 +50,7 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
         "nts_bool_to_string" => Some(Helper::BoolText),
         "nts_value_to_string" => Some(Helper::ValueText),
         "nts_tag_name" => Some(Helper::TagName),
+        "nts_console_write" => Some(Helper::ConsoleWrite),
         _ => None,
     }
 }
@@ -58,6 +61,9 @@ pub(crate) fn call(
     helper: Helper,
     args: &[ValueId],
 ) -> Result<(), Failure> {
+    if helper == Helper::ConsoleWrite {
+        return console_write(b, args);
+    }
     let &[arg] = args else {
         return Err(format!("value helper {helper:?} arity mismatch").into());
     };
@@ -69,6 +75,9 @@ pub(crate) fn call(
             bits: 32,
             signed: false,
         },
+        Helper::ConsoleWrite => {
+            return Err(Failure::Invariant("console write past its arm".into()));
+        }
     };
     if b.ty(arg) != &wanted {
         return Err(format!("value helper {helper:?} expects {wanted:?}").into());
@@ -91,6 +100,9 @@ pub(crate) fn call(
             b.instruction(&I::Else);
             b.global_get(no);
             b.instruction(&I::End);
+        }
+        Helper::ConsoleWrite => {
+            return Err(Failure::Invariant("console write past its arm".into()));
         }
         Helper::ValueText | Helper::TagName => {
             let text = if helper == Helper::ValueText {
@@ -253,4 +265,31 @@ fn tag_name(m: &mut Builder<'_>) -> Result<Func, Failure> {
             Ok(f)
         },
     )
+}
+
+/// `console.log` and `console.error` of one line: the host writes it, as node
+/// does, with its own newline.
+fn console_write(b: &mut Body<'_, '_>, args: &[ValueId]) -> Result<(), Failure> {
+    let &[line, to_stderr] = args else {
+        return Err("console write arity mismatch".into());
+    };
+    if !strings::is_string(b.ty(line)) || b.ty(to_stderr) != &HirType::Bool {
+        return Err("console write of a non-string line".into());
+    }
+    let write = b.m.import(
+        FuncKey::ConsoleWrite,
+        "nts:host/v1",
+        "nts_console_write",
+        vec![
+            strings::STRING,
+            crate::types::Physical::Scalar(crate::types::Slot::I32),
+        ],
+        None,
+        false,
+    );
+    contract::nonnull(b, line, "writing a null line")?;
+    b.load(line)?;
+    b.load(to_stderr)?;
+    b.call(write);
+    Ok(())
 }

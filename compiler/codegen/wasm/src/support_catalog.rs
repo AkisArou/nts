@@ -272,10 +272,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_checkpoint_after_callbacks",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_clear_timeout",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_clear_timeout", Support::WasmHelper),
     (
         "nts_closure_lend",
         Support::Decline("foreign/native ABI or ownership"),
@@ -418,10 +415,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_concat_into",
         Support::Decline("native frame-storage helper"),
     ),
-    (
-        "nts_console_write",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_console_write", Support::WasmHelper),
     (
         "nts_counted_allocations",
         Support::Decline("native memory/provider contract"),
@@ -578,10 +572,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_encode_uri",
         Support::Decline("string helper not yet implemented"),
     ),
-    (
-        "nts_enqueue_job",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_enqueue_job", Support::WasmHelper),
     (
         "nts_enqueue_microtask",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
@@ -735,10 +726,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_is_owner_thread",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_is_promise",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
+    ("nts_is_promise", Support::Intrinsic),
     (
         "nts_is_safe_integer",
         Support::Decline("numeric helper not yet implemented"),
@@ -961,62 +949,29 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_presence_set_fn",
         Support::Decline("optional-field presence representation"),
     ),
-    (
-        "nts_promise_adopt",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_adopt", Support::WasmHelper),
     (
         "nts_promise_all",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_promise_claim",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_fulfill_number",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_claim", Support::Intrinsic),
+    ("nts_promise_fulfill_number", Support::WasmHelper),
     (
         "nts_promise_fulfill_pointer",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_promise_fulfill_reference",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_fulfill_tagged",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_fulfill_value",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_fulfill_void",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_is_rejected",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_fulfill_reference", Support::WasmHelper),
+    ("nts_promise_fulfill_tagged", Support::WasmHelper),
+    ("nts_promise_fulfill_value", Support::WasmHelper),
+    ("nts_promise_fulfill_void", Support::WasmHelper),
+    ("nts_promise_is_rejected", Support::Intrinsic),
     (
         "nts_promise_join",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_promise_new",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_number",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_pair",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_new", Support::Intrinsic),
+    ("nts_promise_number", Support::Intrinsic),
+    ("nts_promise_pair", Support::Intrinsic),
     (
         "nts_promise_pointer",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
@@ -1025,46 +980,22 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_promise_race",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_promise_reason",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_reference",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_reject",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_reason", Support::Intrinsic),
+    ("nts_promise_reference", Support::Intrinsic),
+    ("nts_promise_reject", Support::WasmHelper),
     (
         "nts_promise_reject_error",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_promise_reject_value",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_reject_with",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_resolve_value",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
-    (
-        "nts_promise_state",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_reject_value", Support::WasmHelper),
+    ("nts_promise_reject_with", Support::WasmHelper),
+    ("nts_promise_resolve_value", Support::WasmHelper),
+    ("nts_promise_state", Support::Intrinsic),
     (
         "nts_promise_subscribe",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_promise_value",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_value", Support::Intrinsic),
     ("nts_raise", Support::WasmHelper),
     ("nts_raise_take", Support::WasmHelper),
     ("nts_raising", Support::WasmHelper),
@@ -1091,10 +1022,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ),
     ("nts_set_add", Support::WasmHelper),
     ("nts_set_new", Support::Intrinsic),
-    (
-        "nts_set_timeout",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_set_timeout", Support::WasmHelper),
     (
         "nts_shl",
         Support::Decline("numeric helper not yet implemented"),

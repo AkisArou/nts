@@ -268,7 +268,7 @@ pub(crate) fn erase(
     match body.ty(value).clone() {
         HirType::Void => get_singleton(body, Singleton::Undefined)?,
         HirType::Managed(ManagedType::String) => erase_string(body, value, absent)?,
-        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
+        ref ty if crate::objects::is_reference(ty) => {
             erase_reference(body, value, absent)?;
         }
         ty => {
@@ -385,7 +385,8 @@ pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), F
             | ManagedType::Array(_)
             | ManagedType::Map(..)
             | ManagedType::Table(..)
-            | ManagedType::Set(_),
+            | ManagedType::Set(_)
+            | ManagedType::Promise(_),
         ) => {}
         HirType::Bool => {
             body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
@@ -543,7 +544,8 @@ pub(crate) fn unerase_to(
             | ManagedType::Array(_)
             | ManagedType::Map(..)
             | ManagedType::Table(..)
-            | ManagedType::Set(_),
+            | ManagedType::Set(_)
+            | ManagedType::Promise(_),
         ) => {
             body.instruction(&I::Drop);
             unerase_reference(body, value, &ty)?;

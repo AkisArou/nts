@@ -309,6 +309,30 @@ pub(crate) fn dispatch(
     Ok(Some(group.base))
 }
 
+/// A closure's no-argument call entry through `slot`, for a task that calls
+/// it: the group's base type, the entry's field and function type, and whether
+/// it answers something the task drops.
+pub(crate) fn closure_entry(
+    m: &Builder<'_>,
+    class: ClassId,
+    slot: u32,
+) -> Result<(u32, u32, u32, bool), Failure> {
+    let types = m.types;
+    let storage = types
+        .objects
+        .object(&HirType::Managed(ManagedType::Object(class)))?;
+    let (group, entry) = entry(types, storage, slot, Face::Closure)?;
+    if !entry.params.is_empty() {
+        return Err(format!(
+            "a task calling `{}` through slot {slot}, which takes arguments",
+            storage.name
+        )
+        .into());
+    }
+    let answers = types.slot(&entry.result)?.is_some();
+    Ok((group.base, entry.field, entry.signature, answers))
+}
+
 pub(crate) fn call(
     b: &mut Body<'_, '_>,
     result: ValueId,

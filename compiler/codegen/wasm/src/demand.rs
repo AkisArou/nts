@@ -22,6 +22,9 @@ pub(crate) struct Demand {
     /// Whether any body records a raise (`nts_raise`): only then can a raise
     /// be pending when a host entry returns.
     pub(crate) raises: bool,
+    /// Whether any body queues a task without a promise of its own: a job or
+    /// a timer, which need the task types and the checkpoint.
+    pub(crate) tasks: bool,
     /// Per raising-slot function, its erased returns: their adapter must pass
     /// a failed call's placeholder through without reading it.
     pub(crate) raising_results: BTreeMap<String, BTreeSet<ValueId>>,
@@ -74,6 +77,12 @@ fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
             }
         }
         OpKind::Call { callee, args, .. } => call(demand, program, func, id, callee, args),
+        // A reaction closure is called, with nothing, when its promise settles.
+        OpKind::PromiseSubscribe { reaction, slot, .. } => {
+            if let HirType::Managed(ManagedType::Object(ty)) = func.value(*reaction).ty {
+                record(&mut demand.closure_calls, (ty, *slot), func, id);
+            }
+        }
         OpKind::NativeLoad { .. }
         | OpKind::NativeStore { .. }
         | OpKind::NativeLocal { .. }
@@ -127,7 +136,6 @@ fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. }
-        | OpKind::PromiseSubscribe { .. }
         | OpKind::ArraySet { .. } => {}
     }
 }
@@ -145,6 +153,16 @@ fn call(
             if let Some(source) = crate::raising::external(name) {
                 demand.raising = true;
                 demand.raises |= matches!(source, crate::raising::Source::Raise);
+            }
+            // A job or a timer is a closure called, with nothing, from the
+            // queue or the host.
+            if matches!(name.as_str(), "nts_enqueue_job" | "nts_set_timeout")
+                && let [closure, slot, ..] = args
+                && let OpKind::DispatchSlot(slot) = func.value(*slot).kind
+                && let HirType::Managed(ManagedType::Object(ty)) = func.value(*closure).ty
+            {
+                demand.tasks = true;
+                record(&mut demand.closure_calls, (ty, slot), func, id);
             }
         }
         Callee::Closure { slot } | Callee::Virtual { slot, .. } => {

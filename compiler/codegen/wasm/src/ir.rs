@@ -105,6 +105,22 @@ impl std::ops::DerefMut for Function {
 /// memory or segment. Anything else, including a variant a newer wasm-encoder
 /// adds, is refused at assembly until it is reviewed and either admitted here
 /// or given a symbol.
+/// The exception-handling instructions admitted beside [`admitted`]: a
+/// `try_table` whose catches all catch everything, which names no tag, and
+/// `throw_ref`, which rethrows what one caught.
+pub(crate) fn admitted_exceptions(i: &I<'_>) -> bool {
+    match i {
+        I::TryTable(_, catches) => catches.iter().all(|catch| {
+            matches!(
+                catch,
+                wasm_encoder::Catch::All { .. } | wasm_encoder::Catch::AllRef { .. }
+            )
+        }),
+        I::ThrowRef => true,
+        _ => false,
+    }
+}
+
 #[allow(
     clippy::too_many_lines,
     reason = "one reviewed list of admitted instructions"

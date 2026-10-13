@@ -57,7 +57,7 @@ pub(crate) enum Slot {
     Payload,
 }
 
-fn state(m: &mut Builder<'_>, slot: Slot) -> Result<Global, Failure> {
+pub(crate) fn state(m: &mut Builder<'_>, slot: Slot) -> Result<Global, Failure> {
     m.global(GlobalKey::Raising(slot), |m| {
         let mut init = ir::Code::default();
         let ty = match slot {
@@ -82,7 +82,7 @@ fn state(m: &mut Builder<'_>, slot: Slot) -> Result<Global, Failure> {
     })
 }
 
-fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failure> {
+pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failure> {
     let (params, result) = helper.signature();
     m.helper(
         FuncKey::Raising(helper),

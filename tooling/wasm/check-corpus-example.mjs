@@ -1,4 +1,5 @@
-// Bounded scalar/string/primitive-throw census, with emitted projects accounted for.
+// Bounded scalar/string/primitive-throw census, with emitted projects accounted for;
+// an async export's promise is awaited on both sides and its settlement compared.
 // This answers-only population does not replace the full M1 agree instrument.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
@@ -28,16 +29,29 @@ function invoke(fn, args) {
   try { return { kind: 'return', value: call.runInNewContext({ fn, args }, { timeout: 1000 }) }; }
   catch (value) { return { kind: 'throw', value }; }
 }
+// An async export answers a promise on both sides: its outcome is what it
+// settles with, or `pending` if it has not settled within the bound.
+async function settle(outcome) {
+  if (outcome.kind !== 'return' || !(outcome.value instanceof Promise)) return outcome;
+  const timer = new Promise(resolve => {
+    const handle = setTimeout(() => resolve({ kind: 'pending' }), 2000);
+    handle?.unref?.();
+  });
+  return Promise.race([
+    outcome.value.then(value => ({ kind: 'fulfil', value }), value => ({ kind: 'reject', value })),
+    timer,
+  ]);
+}
 
 try {
   const manifest = JSON.parse(readFileSync(path.join(artifact, 'program.wasm.json'), 'utf8'));
   report.phase = 'wasm-load'; save();
-  let wasm, WasmInputDecline;
+  let wasm, WasmInputDecline, instances;
   try {
     // Importing the generated module instantiates it and runs the module
     // initializer, as importing the source module does in node.
     await import(pathToFileURL(path.join(artifact, 'program.mjs')));
-    const instances = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
+    instances = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
     WasmInputDecline = instances.WasmInputDecline;
     wasm = instances.instantiate();
   } catch (value) {
@@ -93,6 +107,10 @@ try {
       report.globals++;
     }
   }
+  // The instance the cases run on is made here, after every import, so its
+  // timers start beside the oracle's: between now and a case only microtasks
+  // run, so neither side's timers fire before the other's.
+  wasm = instances.instantiate();
   checkGlobals();
   for (const entry of manifest.exports) {
     const reference = oracle(entry.name);
@@ -110,9 +128,9 @@ try {
     const base = pools.map(values => values.includes(3) ? 3 : values[0]);
     const tuples = pools.length ? pools.flatMap((values, at) => values.map(value => base.with(at, value))) : [[]];
     for (const args of tuples) {
-      const actual = invoke(wasm[entry.name], args);
-      if (actual.kind === 'throw' && actual.value instanceof WasmInputDecline) { report.inputDeclines++; continue; }
-      const expected = invoke(reference.value, args);
+      const actual = await settle(invoke(wasm[entry.name], args));
+      if (['throw', 'reject'].includes(actual.kind) && actual.value instanceof WasmInputDecline) { report.inputDeclines++; continue; }
+      const expected = await settle(invoke(reference.value, args));
       if ([actual, expected].some(outcome => outcome.kind === 'throw' && outcome.value?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT')) {
         report.timeouts.push({ name: entry.name, args: args.map(display), wasm: actual.kind, js: expected.kind });
         save(); process.exit(2);
@@ -122,14 +140,16 @@ try {
           wasmKind: actual.kind, wasm: display(actual.value),
           jsKind: expected.kind, js: display(expected.value) });
       }
-      report.thrownCases += Number(expected.kind === 'throw');
+      report.thrownCases += Number(expected.kind === 'throw' || expected.kind === 'reject');
       report.cases++;
       checkGlobals();
       save();
     }
   }
   save();
-  process.exitCode = report.wrong.length || report.missing.length ? 1 : 0;
+  // Answers only: a timer a case left pending (on either side) does not hold
+  // the process past its last case.
+  process.exit(report.wrong.length || report.missing.length ? 1 : 0);
 } catch (error) {
   report.failure = String(error); save(); process.exitCode = 3;
 }

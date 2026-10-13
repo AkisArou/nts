@@ -298,10 +298,20 @@ pub(crate) fn binary(
     }
     Ok(())
 }
+/// Whether a value is a reference to an object root's descendant: an object,
+/// an array, a collection or a promise. It compares by identity, is truthy when
+/// present, and erases as itself.
 pub(crate) fn is_reference(ty: &HirType) -> bool {
     matches!(
         ty,
-        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_))
+        HirType::Managed(
+            ManagedType::Object(_)
+                | ManagedType::Array(_)
+                | ManagedType::Map(..)
+                | ManagedType::Table(..)
+                | ManagedType::Set(_)
+                | ManagedType::Promise(_)
+        )
     )
 }
 pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(), Failure> {

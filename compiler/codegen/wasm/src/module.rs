@@ -64,6 +64,18 @@ pub(crate) enum FuncKey {
     CollectionKeys(u32, u32),
     Key(crate::collections::KeyHelper),
     IdentityHash,
+    Promise(crate::promises::Helper),
+    Task(crate::promises::Thunk),
+    /// A host entry: the checkpoint around an export.
+    Entry(Func),
+    /// The host's `promiseSettled` import.
+    PromiseSettled,
+    /// The host's console.
+    ConsoleWrite,
+    Timer(crate::timers::Helper),
+    TimerHost(&'static str),
+    /// A reader the promise boundary exports, by what it reads.
+    PromiseBoundary(u32),
 }
 
 /// Every global the module can contain, named by what it means.
@@ -78,6 +90,8 @@ pub(crate) enum GlobalKey {
     Program(u32),
     /// The last identity hash given out.
     IdentityCounter,
+    Promise(crate::promises::State),
+    Timer(crate::timers::State),
 }
 
 #[derive(Debug)]
@@ -417,6 +431,11 @@ impl<'p> Builder<'p> {
         Ok((self.program_func(name)?, declaration))
     }
 
+    /// A function's type index.
+    pub(crate) fn func_type(&self, func: Func) -> u32 {
+        self.funcs[func.0 as usize].ty
+    }
+
     pub(crate) fn program_func(&self, name: &str) -> Result<Func, Failure> {
         self.func_keys
             .get(&FuncKey::Program(name.to_owned()))
@@ -509,6 +528,11 @@ impl<'p> Builder<'p> {
         });
         self.tags.push(("js", "tag", ty));
         Tag(index(self.tags.len() - 1))
+    }
+
+    /// Whether something is exported under `name` already.
+    pub(crate) fn exports_name(&self, name: &str) -> bool {
+        self.exports.iter().any(|(exported, _)| exported == name)
     }
 
     pub(crate) fn export_func(&mut self, name: &str, func: Func) {
@@ -720,6 +744,8 @@ fn manifest(
             let id = m
                 .program_func(emitted)
                 .map_err(|failure| failure.at(&func.name, &func.origin))?;
+            let id = crate::promises::entry(m, id, func)
+                .map_err(|failure| failure.at(&func.name, &func.origin))?;
             m.export_func(published, id);
             let params = func
                 .params
@@ -735,13 +761,21 @@ fn manifest(
             });
         } else if let Some((at, global)) = global_definitions.get(emitted.as_str()) {
             initialized_global(program, index(*at), global, published)?;
-            let ty = BoundaryType::from_hir(&global.ty).map_err(|why| {
-                EmitError::Declined(vec![Diagnostic::error(
-                    "NTS5001",
-                    format!("wasm declines public global `{published}`: {why}"),
-                    global.origin.location,
-                )])
-            })?;
+            let ty = BoundaryType::from_hir(&global.ty)
+                .and_then(|ty| {
+                    if ty == BoundaryType::Promise {
+                        Err("a promise global at the public boundary".to_owned())
+                    } else {
+                        Ok(ty)
+                    }
+                })
+                .map_err(|why| {
+                    EmitError::Declined(vec![Diagnostic::error(
+                        "NTS5001",
+                        format!("wasm declines public global `{published}`: {why}"),
+                        global.origin.location,
+                    )])
+                })?;
             let id = program_global(m, index(*at)).map_err(|failure| {
                 failure.at(&format!("global {}", global.name), &global.origin)
             })?;
@@ -755,6 +789,14 @@ fn manifest(
         } else {
             return Err(surface_decline(program, published));
         }
+    }
+    if exports
+        .iter()
+        .any(|export| export.result == BoundaryType::Promise)
+    {
+        crate::promises::boundary(m).map_err(|failure| {
+            EmitError::InvalidWasm(format!("the promise boundary: {failure:?}"))
+        })?;
     }
     let init = initializer(&definitions, &names, m)?;
     Ok(Manifest {
@@ -803,6 +845,8 @@ fn initializer(
     let id = m
         .program_func(&func.name)
         .map_err(|failure| failure.at(&func.name, &func.origin))?;
+    let id = crate::promises::entry(m, id, func)
+        .map_err(|failure| failure.at(&func.name, &func.origin))?;
     m.export_func(&symbol, id);
     Ok(Some(symbol))
 }
@@ -839,6 +883,12 @@ fn surface_decline(program: &Program, name: &str) -> EmitError {
 
 fn parameter(p: &nts_core::hir::Param) -> Result<Parameter, String> {
     let ty = BoundaryType::from_hir(&p.ty)?;
+    if ty == BoundaryType::Promise {
+        return Err(format!(
+            "a promise parameter `{}` at the public boundary",
+            p.name
+        ));
+    }
     let facts = p.known;
     let guard = if matches!(ty, BoundaryType::Int { .. } | BoundaryType::Float { .. })
         && facts != nts_core::hir::facts::Facts::TOP
@@ -917,7 +967,7 @@ impl Indices {
 
     fn resolve(&self, inst: &ir::Inst) -> Result<I<'static>, Failure> {
         Ok(match inst {
-            ir::Inst::Op(i) if !ir::admitted(i) => {
+            ir::Inst::Op(i) if !ir::admitted(i) && !ir::admitted_exceptions(i) => {
                 return Err(Failure::Invariant(format!(
                     "raw instruction {i:?} is not admitted: it names a function, global or tag \
                      outside the module symbols, or has not been reviewed"

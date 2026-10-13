@@ -115,6 +115,22 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
             "name => { throw new WasmInputDecline(name, 'uncaught compiled object or function needs an identity bridge', 'throw from'); }".into(),
         ),
         "toNumber" => (function(&[F64], Some(STRING)), "value => value".into()),
+        "promiseSettled" => (function(&[ValueType::I32], None), "promiseSettled".into()),
+        // Supplied per instance by `create`, which knows the instance a timer
+        // fires into; typed here so the check below still holds them.
+        "setTimer" => (
+            function(&[ValueType::I32, F64, ValueType::I32], None),
+            "undefined".into(),
+        ),
+        "clearTimer" => (function(&[ValueType::I32], None), "undefined".into()),
+        "nts_console_write" => {
+            let log = captures.get("consoleLog", "console.log.bind(console)");
+            let error = captures.get("consoleError", "console.error.bind(console)");
+            (
+                function(&[STRING, ValueType::I32], None),
+                format!("(line, toStderr) => (toStderr ? {error} : {log})(line)"),
+            )
+        }
         // An import value of `undefined` reads as a missing import, so it
         // travels inside a Global object.
         "undefined" => (
@@ -245,7 +261,7 @@ fn parameter(
                 arg.clone()
             }
         }
-        BoundaryType::Void | BoundaryType::Float { .. } => {
+        BoundaryType::Void | BoundaryType::Float { .. } | BoundaryType::Promise => {
             return Err(format!(
                 "public parameter {at} of `{}` has no JS boundary type",
                 export.name
@@ -310,6 +326,7 @@ fn deliver(ty: &BoundaryType, value: &str, name: &str, captures: &mut Captures) 
         }
         BoundaryType::Int { signed: false, .. } => format!("return {value} >>> 0;"),
         BoundaryType::Int { .. } | BoundaryType::Float { .. } => format!("return {value};"),
+        BoundaryType::Promise => format!("return toPromise(x, {value}, {name});"),
     }
 }
 
@@ -431,6 +448,13 @@ pub fn glue(manifest: &Manifest, host: Host) -> Result<Glue, String> {
          function decline(name, why) { throw new WasmInputDecline(name, why); }\n\
          function declineResult(name, why) { throw new WasmInputDecline(name, why, 'result from'); }\n",
     );
+    if manifest
+        .exports
+        .iter()
+        .any(|export| export.result == BoundaryType::Promise)
+    {
+        out.push_str(PROMISES);
+    }
     let options = "{ builtins: ['js-string'], importedStringConstants: \"'\" }";
     let _ = writeln!(
         out,
@@ -449,10 +473,26 @@ pub fn glue(manifest: &Manifest, host: Host) -> Result<Glue, String> {
         let _ = writeln!(out, "  {}: {{ {} }},", quote(module), values.join(", "));
     }
     out.push_str("};\n");
-    let _ = writeln!(
-        out,
-        "function create() {{\n  const x = {exports}(new {instance_}(module, imports));"
-    );
+    let timers = manifest
+        .imports
+        .iter()
+        .any(|import| import.module == "nts:host/v1" && import.name == "setTimer");
+    if timers {
+        // The host's timers call back into the instance that set them, so
+        // each instance gets its own pair, closing over itself.
+        let set_timeout = captures_line("setTimeout_", "setTimeout");
+        let set_interval = captures_line("setInterval_", "setInterval");
+        let clear_timeout = captures_line("clearTimeout_", "clearTimeout");
+        let _ = writeln!(
+            out,
+            "{set_timeout}{set_interval}{clear_timeout}function create() {{\n  let self;\n  const timers = new Map();\n  const host = {{ ...imports['nts:host/v1'],\n    setTimer(id, ms, repeating) {{ const fire = () => {{ if (!repeating) timers.delete(id); self['$nts.timer.fire'](id, repeating); }}; timers.set(id, repeating ? setInterval_(fire, ms) : setTimeout_(fire, ms)); }},\n    clearTimer(id) {{ const handle = timers.get(id); if (handle !== undefined) {{ timers.delete(id); clearTimeout_(handle); }} }} }};\n  const x = {exports}(new {instance_}(module, {{ ...imports, 'nts:host/v1': host }}));\n  self = x;"
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "function create() {{\n  const x = {exports}(new {instance_}(module, imports));"
+        );
+    }
     if let Some(init) = &manifest.init {
         let _ = writeln!(out, "  x[{}]();", quote(init));
     }
@@ -465,6 +505,53 @@ pub fn glue(manifest: &Manifest, host: Host) -> Result<Glue, String> {
         instance: out,
     })
 }
+
+/// A captured global the timer pair uses, declared before `create`.
+fn captures_line(local: &str, source: &str) -> String {
+    format!("const {local} = {source};\n")
+}
+
+/// The promise boundary: an export's promise becomes a JS promise settled as
+/// the program's is. One the export's own checkpoint settled resolves at once;
+/// a pending one is watched, and the program's task that sees it settle calls
+/// `promiseSettled`. A settlement is converted by its tag; a compiled object
+/// or function is refused by name, since it needs an identity bridge.
+const PROMISES: &str = "\
+const settling = new Map();
+let settlingNext = 0;
+function erasedToJs(x, value, name) {
+  switch (x['$nts.erased.tag'](value)) {
+    case 0: return undefined;
+    case 7: return null;
+    case 1: return x['$nts.erased.boolean'](value) === 1;
+    case 2: return x['$nts.erased.number'](value);
+    case 3: return x['$nts.erased.string'](value);
+    default: declineResult(name, 'a promise settled with a compiled object or function, which needs an identity bridge');
+  }
+}
+function settledPromise(x, p, name, state) {
+  try {
+    const value = erasedToJs(x, x['$nts.promise.settlement'](p), name);
+    return state === 1 ? Promise.resolve(value) : Promise.reject(value);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+function toPromise(x, p, name) {
+  const state = x['$nts.promise.state'](p);
+  if (state !== 0) return settledPromise(x, p, name, state);
+  return new Promise((resolve, reject) => {
+    const id = settlingNext++;
+    settling.set(id, { x, p, name, resolve, reject });
+    x['$nts.promise.watch'](p, id);
+  });
+}
+function promiseSettled(id) {
+  const entry = settling.get(id);
+  settling.delete(id);
+  settledPromise(entry.x, entry.p, entry.name, entry.x['$nts.promise.state'](entry.p)).then(entry.resolve, entry.reject);
+}
+";
 
 /// `program.mjs`: named ES exports of one instance, made on import. A global
 /// another function can reassign is a live binding, refreshed after every

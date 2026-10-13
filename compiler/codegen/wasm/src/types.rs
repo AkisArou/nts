@@ -71,14 +71,25 @@ pub enum BoundaryType {
     Void,
     Bool,
     String,
-    Int { bits: u8, signed: bool },
-    Float { bits: u8 },
+    Int {
+        bits: u8,
+        signed: bool,
+    },
+    Float {
+        bits: u8,
+    },
+    /// A promise an export answers: a JS promise settled as the program's is,
+    /// with its settlement converted to JS. Never a parameter or a global.
+    Promise,
 }
 
 impl BoundaryType {
     pub(crate) fn from_hir(ty: &HirType) -> Result<Self, String> {
         if matches!(ty, HirType::Managed(nts_core::hir::ManagedType::String)) {
             return Ok(Self::String);
+        }
+        if matches!(ty, HirType::Managed(nts_core::hir::ManagedType::Promise(_))) {
+            return Ok(Self::Promise);
         }
         slot(ty)?;
         match ty {

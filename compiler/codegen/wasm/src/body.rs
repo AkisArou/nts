@@ -571,17 +571,17 @@ impl<'b, 'p> Body<'b, 'p> {
             | OpKind::DelegateInvoke { .. } => {
                 return Err(format!("native ABI operation {:?}", op.kind).into());
             }
-            OpKind::DispatchSlot(_)
-            | OpKind::ConstTemplate { .. }
+            OpKind::DispatchSlot(_) | OpKind::Suspend { .. } | OpKind::PromiseSubscribe { .. } => {
+                crate::promises::operation(self, &op.kind)?;
+            }
+            OpKind::ConstTemplate { .. }
             | OpKind::Length(_)
             | OpKind::CellReady { .. }
             | OpKind::SharedFieldGet { .. }
             | OpKind::OpenFieldGet { .. }
             | OpKind::OpenFieldSet { .. }
             | OpKind::Await { .. }
-            | OpKind::Yield { .. }
-            | OpKind::Suspend { .. }
-            | OpKind::PromiseSubscribe { .. } => {
+            | OpKind::Yield { .. } => {
                 return Err(format!("operation outside M1a: {:?}", op.kind).into());
             }
         }
@@ -776,6 +776,10 @@ impl<'b, 'p> Body<'b, 'p> {
                     crate::values::call(self, result, helper, args)?;
                 } else if let Some(op) = crate::collections::external(name) {
                     crate::collections::call(self, result, op, args)?;
+                } else if let Some(op) = crate::promises::external(name) {
+                    crate::promises::call(self, result, op, args)?;
+                } else if let Some(op) = crate::timers::external(name) {
+                    crate::timers::call(self, result, op, args)?;
                 } else {
                     return Err(match crate::helper_support(name) {
                         Some(crate::Support::Decline(reason)) => format!("runtime/external helper `{name}`: {reason}").into(),

@@ -30,7 +30,7 @@ mod tests {
     use super::{Support, catalog, helper_support};
     use crate::{
         array_copy, array_join, array_lookup, array_methods, array_sort, collections, erased_ops,
-        host, raising, strings, values,
+        host, promises, raising, strings, timers, values,
     };
     use std::collections::BTreeSet;
 
@@ -41,6 +41,14 @@ mod tests {
             Some(Support::Intrinsic)
         } else if let Some(helper) = strings::external(name) {
             Some(if helper.builtin() {
+                Support::Intrinsic
+            } else {
+                Support::WasmHelper
+            })
+        } else if timers::external(name).is_some() {
+            Some(Support::WasmHelper)
+        } else if let Some(op) = promises::external(name) {
+            Some(if op.inline() {
                 Support::Intrinsic
             } else {
                 Support::WasmHelper

@@ -350,6 +350,57 @@ fn source_object_keys_agree_with_node() {
     assert_eq!(output["cases"], 48, "{output}");
 }
 
+/// The order promise reactions and resumptions run in: each export's return
+/// is the checkpoint that drains them, and a second export reads the order,
+/// against node's order after a turn.
+#[test]
+fn source_promise_order_agrees_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/promise-order");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "promise-order",
+        &emitted,
+        "tooling/wasm/check-promise-order.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 32, "{output}");
+}
+
+/// A promise an export answers is a JS promise: settled at once, or watched
+/// until a later export's checkpoint settles it; a compiled Error as a reason
+/// is refused by name.
+#[test]
+fn source_promise_boundary_agrees_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/promise-boundary");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "promise-boundary",
+        &emitted,
+        "tooling/wasm/check-promise-boundary.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 14, "{output}");
+}
+
+/// Timers fire through the host inside the checkpoint: a timer callback's
+/// microtasks run before the next timer's, an interval clears itself, and a
+/// cleared timer never fires.
+#[test]
+fn source_timer_order_agrees_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/timer-order");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "timer-order",
+        &emitted,
+        "tooling/wasm/check-timer-order.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 9, "{output}");
+}
+
 /// `String(v)` of every erased tag and of a boolean; an object is refused by
 /// name, since nothing here records how it prints.
 #[test]

@@ -101,6 +101,61 @@ struct ErasedNodes {
     boolean: NodeId,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PromiseNodes {
+    promise: NodeId,
+    run: NodeId,
+    task: NodeId,
+    tasks: NodeId,
+    adoption: NodeId,
+    promises: NodeId,
+}
+
+/// A promise and the tasks its settlement queues, as the C runtime's
+/// `NtsPromise` and `NtsTask`: see `promises.rs`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PromiseTypes {
+    pub(crate) promise: u32,
+    /// `(anyref) -> ()`: every task's `run`, so a queue calls any of them.
+    pub(crate) run: u32,
+    /// `{ run, state }`.
+    pub(crate) task: u32,
+    /// A growable array of tasks: a reaction list or a queue.
+    pub(crate) tasks: u32,
+    /// `{ outer, inner }`, the state of an adoption's two tasks.
+    pub(crate) adoption: u32,
+    /// The rejected promises nothing listened to yet.
+    pub(crate) promises: u32,
+    pub(crate) descriptor: u32,
+    /// The first field after the object root's.
+    pub(crate) base: u32,
+}
+
+impl PromiseTypes {
+    /// 0 pending, 1 fulfilled, 2 rejected.
+    pub(crate) const fn state(self) -> u32 {
+        self.base
+    }
+    /// The settlement, erased: the value or the reason.
+    pub(crate) const fn value(self) -> u32 {
+        self.base + 1
+    }
+    /// Which pair of resolving functions may resolve it now.
+    pub(crate) const fn resolutions(self) -> u32 {
+        self.base + 2
+    }
+    /// Whether anything subscribed, which an unhandled rejection asks.
+    pub(crate) const fn handled(self) -> u32 {
+        self.base + 3
+    }
+    pub(crate) const fn reactions(self) -> u32 {
+        self.base + 4
+    }
+    pub(crate) const fn count(self) -> u32 {
+        self.base + 5
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Array {
     pub(crate) ty: HirType,
@@ -224,6 +279,7 @@ pub(crate) struct Plan {
     supers: Vec<(Option<u32>, Kind)>,
     count: u32,
     pub(crate) erased: Option<ErasedTypes>,
+    pub(crate) promise: Option<PromiseTypes>,
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
@@ -290,6 +346,10 @@ impl Plan {
             builder
                 .row_signature(slot, declared)
                 .map_err(|why| Failure::Unsupported(why).at(&use_.function, &use_.origin))?;
+        }
+        // A job or a timer is a task, run at a checkpoint.
+        if resources.tasks {
+            builder.promise_types();
         }
         // A raise carries an erased payload.
         if resources.raising {
@@ -488,6 +548,7 @@ struct Builder<'a> {
     root: Option<RootNodes>,
     work: Vec<Work>,
     erased: Option<ErasedNodes>,
+    promise: Option<PromiseNodes>,
     callable_plan: crate::callable_plan::Plan,
     callables: BTreeMap<usize, CallableNodes>,
     virtual_plan: crate::callable_plan::Plan,
@@ -527,6 +588,7 @@ impl<'a> Builder<'a> {
             root: None,
             work: Vec::new(),
             erased: None,
+            promise: None,
             callable_plan,
             callables: BTreeMap::new(),
             virtual_plan,
@@ -687,6 +749,80 @@ impl<'a> Builder<'a> {
         root
     }
 
+    /// The promise, task and queue types, planned once.
+    fn promise_types(&mut self) -> PromiseNodes {
+        if let Some(nodes) = self.promise {
+            return nodes;
+        }
+        self.erased_types();
+        let root = self.root();
+        let anyref = PendingSlot::Reference(RefType::ANYREF);
+        let run = self.add(
+            "task.run".into(),
+            None,
+            true,
+            Shape::Function(vec![anyref], None),
+        );
+        let task = self.add(
+            "task".into(),
+            None,
+            true,
+            Shape::Struct(vec![
+                Field::value(PendingSlot::Defined(run, false), false),
+                Field::value(anyref, false),
+            ]),
+        );
+        let tasks = self.add(
+            "tasks".into(),
+            None,
+            true,
+            Shape::Array(Field::value(PendingSlot::Defined(task, true), true)),
+        );
+        let Shape::Struct(mut fields) = self.nodes[root.0].shape.clone() else {
+            unreachable!("the object root is a struct")
+        };
+        let promise = self.add(
+            "promise".into(),
+            Some(root),
+            true,
+            Shape::Struct(Vec::new()),
+        );
+        fields.extend([
+            Field::value(PendingSlot::Scalar(Slot::I32), true),
+            Field::value(anyref, true),
+            Field::value(PendingSlot::Scalar(Slot::I32), true),
+            Field::value(PendingSlot::Scalar(Slot::I32), true),
+            Field::value(PendingSlot::Defined(tasks, true), true),
+            Field::value(PendingSlot::Scalar(Slot::I32), true),
+        ]);
+        self.nodes[promise.0].shape = Shape::Struct(fields);
+        let adoption = self.add(
+            "adoption".into(),
+            None,
+            true,
+            Shape::Struct(vec![
+                Field::value(PendingSlot::Defined(promise, false), false),
+                Field::value(PendingSlot::Defined(promise, false), false),
+            ]),
+        );
+        let promises = self.add(
+            "promises".into(),
+            None,
+            true,
+            Shape::Array(Field::value(PendingSlot::Defined(promise, true), true)),
+        );
+        let nodes = PromiseNodes {
+            promise,
+            run,
+            task,
+            tasks,
+            adoption,
+            promises,
+        };
+        self.promise = Some(nodes);
+        nodes
+    }
+
     fn erased_types(&mut self) {
         if self.erased.is_some() {
             return;
@@ -765,7 +901,7 @@ impl<'a> Builder<'a> {
                 return Err("tagged-template storage outside M1b".into());
             }
             HirType::Managed(ManagedType::Promise(_)) => {
-                return Err("promise/scheduler storage outside M1b".into());
+                PendingSlot::Defined(self.promise_types().promise, true)
             }
             HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
                 PendingSlot::Defined(self.collection(key, Some(value))?, true)
@@ -1654,7 +1790,24 @@ impl<'a> Builder<'a> {
         }
         let supers = self.supers(&ordered, &indices);
         let groups = self.encode(&ordered, &indices);
-        let (objects, arrays, collections) = self.metadata(&indices)?;
+        let (mut objects, arrays, collections) = self.metadata(&indices)?;
+        let promise_descriptor =
+            u32::try_from(objects.descriptors.len()).map_err(|_| "too many descriptors")?;
+        if self.promise.is_some() {
+            let identity = objects
+                .descriptors
+                .iter()
+                .map(|d| d.identity)
+                .max()
+                .map_or(Some(0), |id| id.checked_add(1))
+                .ok_or_else(|| "too many semantic identities".to_owned())?;
+            objects.descriptors.push(crate::object_plan::Descriptor {
+                identity,
+                kind: nts_core::hir::tags::OBJECT,
+                ancestry: Vec::new(),
+                class: None,
+            });
+        }
         Ok(Plan {
             arrays,
             collections,
@@ -1678,6 +1831,16 @@ impl<'a> Builder<'a> {
                 tagged: indices[nodes.tagged.0],
                 number: indices[nodes.number.0],
                 boolean: indices[nodes.boolean.0],
+            }),
+            promise: self.promise.map(|nodes| PromiseTypes {
+                promise: indices[nodes.promise.0],
+                run: indices[nodes.run.0],
+                task: indices[nodes.task.0],
+                tasks: indices[nodes.tasks.0],
+                adoption: indices[nodes.adoption.0],
+                promises: indices[nodes.promises.0],
+                descriptor: promise_descriptor,
+                base: ROOT_FIELDS,
             }),
             slots: self
                 .slots
