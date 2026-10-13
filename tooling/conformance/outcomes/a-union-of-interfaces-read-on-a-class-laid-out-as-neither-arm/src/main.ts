@@ -20,6 +20,11 @@
 // what differs is the index and not the union, the erasure or the class.
 // `Round` and `Block`, each laid out as its arm, agree as well.
 //
+// Fixed in the lowering: a union's structural arm holds the owners the source
+// flow proves reach it, `Both` among them, and the read asks its agreement of
+// all of them; where one disagrees it tests each at its own index. The record
+// now pins the agreement.
+//
 // The JVM does not answer wrong. Its read is a chain of class tests over the
 // arms' classes, `Both` is neither, and the chain ends in
 // `NtsRuntime.unreachable`, which `nts check` scores as declined (probe
