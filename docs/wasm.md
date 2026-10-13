@@ -223,6 +223,33 @@ builds at one program-wide width.
   agree. When a declared parent separates their storage, `transfer` refuses
   the move by name (`fixtures/storage-of-other-parents`).
 
+### Interfaces (2a)
+
+Stage B's facts decide everything here, not shapes.
+- **Calls through an interface read the receiver's row.**
+  - When a program calls through an interface, the root descriptor holds
+    `rows`, an array of funcref with one entry per native column read that way.
+  - A call casts the column's entry to the column's function type and
+    `call_ref`s it. The entry is a thunk that casts the receiver to its class.
+  - A column is typed by its entries' convention, and a call adapts to it.
+  - A missing row or entry is refused by name.
+  - Calls inside one class hierarchy keep their typed vtable.
+- **An interface with no fields is the object root.**
+- **An interface with fields is storage** that every layout in
+  `interface_access::Plan::prefix_receivers` extends, so a positional read
+  through it is valid.
+  - A receiver without a declared base takes the longest interface holding it
+    as its parent, and interfaces holding one layout chain below each other.
+  - A base shorter than the interface would need two parents, and is refused
+    by name.
+  - A check after planning proves every planned receiver extends its
+    interface.
+- **Not yet:** field families under `InterfaceAccess::Materialize`, with
+  defaults and `FieldView`s; values of an interface with non-prefix owners
+  (`other_receivers`) typed as the root. That is step 4 of the slice-2 plan.
+- **Calls, exploratory, ns per call:** row 2.00/2.05, typed vtable 1.75/1.83,
+  node 0.53/1.17 (one class / four), from `tooling/wasm/bench/interface`.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
