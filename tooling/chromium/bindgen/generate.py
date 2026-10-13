@@ -113,6 +113,9 @@ SCALARS = {
 # members check.
 STRINGS = {"DOMString", "CSSOMString", "USVString"}
 BYTE_STRING = "ByteString"
+# The element name of a sequence of strings: `DOMStringSequence`, whatever
+# string type its IDL names (no interface is called DOMString).
+TEXT_SEQUENCE = "DOMString"
 
 # Words a parameter cannot be named in TypeScript or C++, and the one the
 # error slot takes.
@@ -668,9 +671,16 @@ class Generator:
             interface = self.bound_interface(idl_type)
             return Result(f"{self.handle_tag(interface.identifier)}*", interface.identifier + or_null, "node")
         # `sequence<MutationRecord>`, `FrozenArray<Element>`: a TSequence handle
-        # over the vector Blink answered (nts_dom::NtsSequence).
+        # over the vector Blink answered (nts_dom::NtsSequence); of strings
+        # (`getAttributeNames()`, `navigator.languages`), a DOMStringSequence
+        # (nts_dom::NtsTextSequence), whose items are lent as views.
         if (unwrapped.is_sequence or unwrapped.is_frozen_array) and not nullable:
             element = unwrapped.element_type.unwrap(nullable=True, typedef=True)
+            if element.keyword_typename in STRINGS or element.keyword_typename == BYTE_STRING:
+                if element.does_include_nullable_type:
+                    raise Skip(f"result type {idl_type.syntactic_form}")
+                self.sequences.add(TEXT_SEQUENCE)
+                return Result(f"NtsDom{TEXT_SEQUENCE}Sequence*", f"{TEXT_SEQUENCE}Sequence", "sequence")
             if not element.is_interface or element.does_include_nullable_type:
                 raise Skip(f"result type {idl_type.syntactic_form}")
             identifier = self.bound_interface(element).identifier
@@ -930,6 +940,12 @@ class Generator:
         try:
             self.check_member(attribute)
             result = self.result(attribute.idl_type)
+            # lib.dom types it as an array, and the compiler reads a sequence
+            # attribute as that array without copying it: bound, it would be
+            # wrong code where today it is a refusal. A method's result is copied.
+            if result.ts == f"{TEXT_SEQUENCE}Sequence":
+                raise Skip("an attribute answering a sequence of strings, which lib.dom reads as an array "
+                           "(blockers/lib-dom-a-sequence-attribute-read-as-its-array)")
             context = base.make_copy(attribute=attribute, attribute_get=True)
             getter = self.bind(interface, attribute, f"nts_dom_{interface.identifier}_get_{identifier}", [],
                                result, context)
@@ -1542,7 +1558,7 @@ class Generator:
         elif kind == "node":
             lines.append(f"  return HandleOf<{function.result.c[:-1]}>({expression});")
         elif kind == "sequence":
-            lines.append(f"  return reinterpret_cast<{function.result.c}>(nts_dom::Sequence({expression}));")
+            lines.append(f"  return nts_dom::SequenceHandle<{function.result.c[:-1]}>(nts_dom::Sequence({expression}));")
         elif kind == "string":
             nullable = "true" if function.result.nullable else "false"
             lines.append(f"  return context.Lend(nts_dom::AsString({expression}), {nullable});")
@@ -1559,17 +1575,21 @@ class Generator:
 
     def sequence_functions(self):
         """Each TSequence's `length` and `item(index)`, typed for its
-        elements, over one adapter class."""
+        elements, over the adapter class of its kind: DOM objects
+        (nts_dom::NtsSequence) or strings (nts_dom::NtsTextSequence)."""
         functions = []
         for identifier in sorted(self.sequences):
             handle = f"NtsDom{identifier}Sequence"
+            text = identifier == TEXT_SEQUENCE
+            sequence = f"nts_dom::SequenceOf<nts_dom::{'NtsTextSequence' if text else 'NtsSequence'}>(self)"
             length = Function(None, f"nts_dom_{identifier}Sequence_get_length", [],
                               Result("double", 'Float64', "scalar"),
-                              "reinterpret_cast<nts_dom::NtsSequence*>(self)->length()", False, False)
+                              f"{sequence}->length()", False, False)
             item = Function(None, f"nts_dom_{identifier}Sequence_item",
                             [Param("index", "double index", 'index: Float64', "index", False)],
+                            Result("const NtsStringView*", "StringView | null", "string", True) if text else
                             Result(f"{self.handle_tag(identifier)}*", f"{identifier} | null", "node"),
-                            "reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index)", False, False)
+                            f"{sequence}->item(index)", False, False)
             for function in (length, item):
                 function.receiver = False
                 function.sequence_of = identifier
@@ -1589,7 +1609,7 @@ class Generator:
                 f"    /** @ntsGet _get_length */",
                 f'    readonly length: Float64;',
                 f"    /** @ntsSymbol nts_dom_{name}_item */",
-                f'    item(this: {name}, index: Float64): {identifier} | null;',
+                f'    item(this: {name}, index: Float64): {"StringView" if identifier == TEXT_SEQUENCE else identifier} | null;',
                 "  }",
             ]
         return lines

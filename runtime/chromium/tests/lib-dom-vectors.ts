@@ -303,6 +303,22 @@ export function libDomTranscript(): string {
     log("uuid", (v4 ? "v4" : "not v4: " + first) + "|" + (first === second ? "repeated" : "distinct"));
   }
 
+  // Sequences of strings a method answers, read as lib.dom's arrays: a new
+  // array at each call, as WebIDL makes page script's. Attribute names in
+  // order, and a query's repeated parameter -- decoded past Latin-1, to
+  // 16-bit units and a surrogate pair -- and one it lacks.
+  {
+    const element = document.createElement("div");
+    element.setAttribute("id", "a");
+    element.setAttribute("data-b", "2");
+    element.setAttribute("aria-label", "\u00fc\u20ac");
+    const names = element.getAttributeNames();
+    log("attributeNames", names.join(",") + "|" + (names === element.getAttributeNames() ? "same" : "fresh"));
+    const params = new URL("https://example.com/?q=1&q=%E2%82%AC&q=%F0%9F%98%80&r=").searchParams;
+    const found = params.getAll("q");
+    log("getAll", found.length + ":" + found.join(",") + ":" + found[2].length + "|" + params.getAll("none").length);
+  }
+
   root.remove();
   return lines.join("\n");
 }

@@ -102,6 +102,15 @@ declare module "nts:dom" {
     /** @ntsSymbol nts_dom_DOMQuadSequence_item */
     item(this: DOMQuadSequence, index: Float64): DOMQuad | null;
   }
+  export type DOMStringSequence = HostClass<"NtsDomDOMStringSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & DOMStringSequenceMethods;
+  export interface DOMStringSequenceMethods {
+    /** @ntsSymbol nts_dom_DOMStringSequence_get_length */
+    _get_length(this: DOMStringSequence): Float64;
+    /** @ntsGet _get_length */
+    readonly length: Float64;
+    /** @ntsSymbol nts_dom_DOMStringSequence_item */
+    item(this: DOMStringSequence, index: Float64): StringView | null;
+  }
   export type ElementSequence = HostClass<"NtsDomElementSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & ElementSequenceMethods;
   export interface ElementSequenceMethods {
     /** @ntsSymbol nts_dom_ElementSequence_get_length */
@@ -1802,6 +1811,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Element_getAttributeNS
      */
     getAttributeNS(this: Element, namespaceURI: StringView | null, localName: StringView): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Element_getAttributeNames
+     */
+    getAttributeNames(this: Element): DOMStringSequence;
     /**
      * @ntsSymbol nts_dom_Element_getAttributeNode
      */
@@ -24985,6 +24998,10 @@ declare module "nts:dom" {
      */
     get(this: URLSearchParams, name: StringView): StringView | null;
     /**
+     * @ntsSymbol nts_dom_URLSearchParams_getAll
+     */
+    getAll(this: URLSearchParams, name: StringView): DOMStringSequence;
+    /**
      * @ntsSymbol nts_dom_URLSearchParams_has_2
      */
     has(this: URLSearchParams, name: StringView, value: StringView): boolean;
@@ -30639,6 +30656,10 @@ declare module "nts:dom" {
      */
     getAttribute(this: ProcessingInstruction, name: StringView): StringView | null;
     /**
+     * @ntsSymbol nts_dom_ProcessingInstruction_getAttributeNames
+     */
+    getAttributeNames(this: ProcessingInstruction): DOMStringSequence;
+    /**
      * @ntsSymbol nts_dom_ProcessingInstruction_hasAttribute
      */
     hasAttribute(this: ProcessingInstruction, name: StringView): boolean;
@@ -31893,6 +31914,10 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     get(this: Headers, key: StringView, error?: Ptr<DOMException | null>): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_Headers_getSetCookie
+     */
+    getSetCookie(this: Headers): DOMStringSequence;
     /**
      * @ntsSymbol nts_dom_Headers_has
      * @ntsThrows error nts_dom_exception_take_message

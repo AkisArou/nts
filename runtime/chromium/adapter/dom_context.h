@@ -12,6 +12,7 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <ranges>
 #include <string_view>
 #include <utility>
 
@@ -43,6 +44,7 @@
 #include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/bindings/transform_view.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_counted_set.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -160,11 +162,30 @@ inline blink::String CopyView(NtsStringView view) {
   return CopyLatin1(static_cast<const uint8_t *>(view.units), view.length);
 }
 
-// A `sequence<T>` a member answered, as the program holds it: the vector
-// Blink answered, read by index (dom_idl.cc's `TSequence` accessors). Its
-// handle is its address; the program roots it like a node
-// (nts_dom_sequence_retain) when it keeps one off the stack.
-class NtsSequence final : public blink::GarbageCollected<NtsSequence> {
+// A `sequence<T>` a member answered, as the program holds it: what Blink
+// answered, read by index (dom_idl.cc's `TSequence` accessors). Its handle is
+// its address; the program roots it like a node (nts_dom_sequence_retain)
+// when it keeps one off the stack, whatever its items are.
+class HeldSequence : public blink::GarbageCollected<HeldSequence> {
+public:
+  virtual ~HeldSequence();
+  virtual void Trace(blink::Visitor *visitor) const;
+
+protected:
+  // WebIDL's `unsigned long index`: ToUint32, then nothing past the end.
+  static std::optional<blink::wtf_size_t> At(double index, blink::wtf_size_t size) {
+    double whole = std::isfinite(index) ? std::trunc(index) : 0;
+    whole = std::fmod(whole, 4294967296.0);
+    if (whole < 0)
+      whole += 4294967296.0;
+    if (whole >= size)
+      return std::nullopt;
+    return static_cast<blink::wtf_size_t>(whole);
+  }
+};
+
+// Of DOM objects: `composedPath()`, an observer's records.
+class NtsSequence final : public HeldSequence {
 public:
   template <class T>
   explicit NtsSequence(const blink::HeapVector<blink::Member<T>> &items) {
@@ -173,27 +194,68 @@ public:
       items_.push_back(item.Get());
   }
   double length() const { return items_.size(); }
-  // WebIDL's `unsigned long index`: ToUint32, then null past the end.
+  ~NtsSequence() override;
   blink::ScriptWrappable *item(double index) const {
-    double whole = std::isfinite(index) ? std::trunc(index) : 0;
-    whole = std::fmod(whole, 4294967296.0);
-    if (whole < 0)
-      whole += 4294967296.0;
-    return whole < items_.size() ? items_[static_cast<blink::wtf_size_t>(whole)].Get()
-                                 : nullptr;
+    const auto at = At(index, items_.size());
+    return at ? items_[*at].Get() : nullptr;
   }
-  void Trace(blink::Visitor *visitor) const { visitor->Trace(items_); }
+  void Trace(blink::Visitor *visitor) const override;
 
 private:
   blink::HeapVector<blink::Member<blink::ScriptWrappable>> items_;
 };
+
+// Of strings (`sequence<DOMString>`, and USVString's and ByteString's):
+// `getAttributeNames()`, `navigator.languages`. An item is lent to the
+// program as a view (NtsDomContext::Lend), which it copies.
+class NtsTextSequence final : public HeldSequence {
+public:
+  // Any range of strings Blink answers: a vector, or a view it transforms as
+  // it is read (`getAttributeNames()`'s AttributeNamesView), copied once.
+  template <class Range> explicit NtsTextSequence(const Range &items) {
+    if constexpr (std::ranges::sized_range<const Range>)
+      items_.reserve(static_cast<blink::wtf_size_t>(std::ranges::size(items)));
+    for (const auto &item : items)
+      items_.push_back(blink::String(item));
+  }
+  ~NtsTextSequence() override;
+  double length() const { return items_.size(); }
+  blink::String item(double index) const {
+    const auto at = At(index, items_.size());
+    return at ? items_[*at] : blink::String();
+  }
+
+private:
+  blink::Vector<blink::String> items_;
+};
+
+// A sequence's handle is its HeldSequence's address, whichever kind it is:
+// made from one, and read back as the kind its accessors know it to be.
+template <class Handle> Handle *SequenceHandle(HeldSequence *sequence) {
+  return reinterpret_cast<Handle *>(sequence);
+}
+template <class Kind> Kind *SequenceOf(const void *handle) {
+  return static_cast<Kind *>(reinterpret_cast<HeldSequence *>(const_cast<void *>(handle)));
+}
+
 template <class T>
 NtsSequence *Sequence(const blink::HeapVector<blink::Member<T>> &items) {
   return blink::MakeGarbageCollected<NtsSequence>(items);
 }
-// A FrozenArray<T> member (ResizeObserverEntry's box sizes): its vector.
+inline NtsTextSequence *Sequence(const blink::Vector<blink::String> &items) {
+  return blink::MakeGarbageCollected<NtsTextSequence>(items);
+}
+inline NtsTextSequence *Sequence(const blink::Vector<blink::AtomicString> &items) {
+  return blink::MakeGarbageCollected<NtsTextSequence>(items);
+}
+template <class Range, class Transform>
+NtsTextSequence *Sequence(const blink::bindings::TransformedView<Range, Transform> &view) {
+  return blink::MakeGarbageCollected<NtsTextSequence>(view);
+}
+// A FrozenArray<T> member (ResizeObserverEntry's box sizes,
+// `navigator.languages`): its vector.
 template <class IDLType>
-NtsSequence *Sequence(const blink::FrozenArray<IDLType> &array) {
+auto *Sequence(const blink::FrozenArray<IDLType> &array) {
   return Sequence(array.AsVector());
 }
 

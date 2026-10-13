@@ -1,15 +1,15 @@
 {
   "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 2319,
-    "skipped": 204,
+    "bound": 2322,
+    "skipped": 201,
     "absent: constant": 59,
     "absent: stringifier": 3,
     "absent: iterable": 20,
     "absent: other": 4
   },
   "skippedBy": {
-    "result type": 64,
+    "result type": 59,
     "defined in": 56,
     "parameter type": 15,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 12,
@@ -21,6 +21,7 @@
     "variadic any...": 2,
     "[RuntimeEnabled=ExtendedTextMetrics] overridable": 2,
     "[RuntimeEnabled=LegacyAbstractRange] overridable": 2,
+    "an attribute": 2,
     "[RuntimeEnabled=RemotePlayback] overridable": 2,
     "[RuntimeEnabled=AudioOutputDevices] overridable": 2,
     "[RuntimeEnabled=AOMAriaRelationshipPropertiesAriaOwns] overridable": 1,
@@ -198,6 +199,7 @@
         "getAnimations",
         "getAttribute",
         "getAttributeNS",
+        "getAttributeNames",
         "getAttributeNode",
         "getAttributeNodeNS",
         "getBoundingClientRect",
@@ -273,8 +275,7 @@
         "ariaOwnsElements": "[RuntimeEnabled=AOMAriaRelationshipPropertiesAriaOwns] overridable",
         "computedStyleMap": "interface StylePropertyMapReadOnly is not bound",
         "currentCSSZoom": "[RuntimeEnabled=StandardizedBrowserZoom] overridable",
-        "customElementRegistry": "interface CustomElementRegistry is not bound",
-        "getAttributeNames": "result type sequence<DOMString>"
+        "customElementRegistry": "interface CustomElementRegistry is not bound"
       },
       "absent": {}
     },
@@ -2282,15 +2283,14 @@
         "append",
         "delete",
         "get",
+        "getAll",
         "has",
         "set",
         "size",
         "sort",
         "toString"
       ],
-      "skipped": {
-        "getAll": "result type sequence<USVString>"
-      },
+      "skipped": {},
       "absent": {
         "iterable": [
           "entries",
@@ -2685,7 +2685,7 @@
         "getGamepads": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "gpu": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "javaEnabled": "defined in Blink's modules component, on an interface the allowlist does not take from there",
-        "languages": "result type FrozenArray<DOMString>",
+        "languages": "an attribute answering a sequence of strings, which lib.dom reads as an array (blockers/lib-dom-a-sequence-attribute-read-as-its-array)",
         "locks": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "login": "[RuntimeEnabled=FedCm] overridable",
         "mediaCapabilities": "defined in Blink's modules component, on an interface the allowlist does not take from there",
@@ -2965,7 +2965,7 @@
         "setDragImage"
       ],
       "skipped": {
-        "types": "result type FrozenArray<DOMString>"
+        "types": "an attribute answering a sequence of strings, which lib.dom reads as an array (blockers/lib-dom-a-sequence-attribute-read-as-its-array)"
       },
       "absent": {}
     },
@@ -3644,12 +3644,11 @@
         "append",
         "delete",
         "get",
+        "getSetCookie",
         "has",
         "set"
       ],
-      "skipped": {
-        "getSetCookie": "result type sequence<ByteString>"
-      },
+      "skipped": {},
       "absent": {
         "iterable": [
           "entries",

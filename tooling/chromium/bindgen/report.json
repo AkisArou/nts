@@ -1,5 +1,5 @@
 {
-  "bound": 5296,
+  "bound": 5300,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -260,11 +260,6 @@
       "interface": "Element",
       "member": "convertQuadFromNode/2",
       "why": "dictionary DOMQuadInit has no member a C struct can carry"
-    },
-    {
-      "interface": "Element",
-      "member": "getAttributeNames/0",
-      "why": "result type sequence<DOMString>"
     },
     {
       "interface": "BoxQuadOptions",
@@ -2282,11 +2277,6 @@
       "why": "parameter type optional (sequence<sequence<USVString>> or record<USVString, USVString> or USVString)"
     },
     {
-      "interface": "URLSearchParams",
-      "member": "getAll/1",
-      "why": "result type sequence<USVString>"
-    },
-    {
       "interface": "MutationObserver",
       "member": "constructor/1",
       "why": "parameter type MutationCallback"
@@ -2824,7 +2814,7 @@
     {
       "interface": "Navigator",
       "member": "get languages",
-      "why": "result type FrozenArray<DOMString>"
+      "why": "an attribute answering a sequence of strings, which lib.dom reads as an array (blockers/lib-dom-a-sequence-attribute-read-as-its-array)"
     },
     {
       "interface": "Navigator",
@@ -3144,7 +3134,7 @@
     {
       "interface": "DataTransfer",
       "member": "get types",
-      "why": "result type FrozenArray<DOMString>"
+      "why": "an attribute answering a sequence of strings, which lib.dom reads as an array (blockers/lib-dom-a-sequence-attribute-read-as-its-array)"
     },
     {
       "interface": "DataTransferItem",
@@ -3510,11 +3500,6 @@
       "interface": "DOMImplementation",
       "member": "createDocument/3",
       "why": "interface XMLDocument is not bound"
-    },
-    {
-      "interface": "ProcessingInstruction",
-      "member": "getAttributeNames/0",
-      "why": "result type sequence<DOMString>"
     },
     {
       "interface": "DocumentType",
@@ -3905,11 +3890,6 @@
       "interface": "Headers",
       "member": "constructor/1",
       "why": "parameter type optional HeadersInit"
-    },
-    {
-      "interface": "Headers",
-      "member": "getSetCookie/0",
-      "why": "result type sequence<ByteString>"
     },
     {
       "interface": "Crypto",

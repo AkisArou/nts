@@ -8418,13 +8418,13 @@ NtsDomAnimationSequence* nts_dom_Element_getAnimations_1(NtsDomElement* self, Nt
   auto* receiver = ObjectOf<blink::Element>(self);
   blink::DummyExceptionStateForTesting conversion;
   auto* options_converted = NtsDomToGetAnimationsOptions(context, options, conversion);
-  return reinterpret_cast<NtsDomAnimationSequence*>(nts_dom::Sequence(receiver->getAnimations(options_converted)));
+  return nts_dom::SequenceHandle<NtsDomAnimationSequence>(nts_dom::Sequence(receiver->getAnimations(options_converted)));
 }
 
 NtsDomAnimationSequence* nts_dom_Element_getAnimations_0(NtsDomElement* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Element>(self);
-  return reinterpret_cast<NtsDomAnimationSequence*>(nts_dom::Sequence(receiver->getAnimations(blink::GetAnimationsOptions::Create(context.v8_isolate.get()))));
+  return nts_dom::SequenceHandle<NtsDomAnimationSequence>(nts_dom::Sequence(receiver->getAnimations(blink::GetAnimationsOptions::Create(context.v8_isolate.get()))));
 }
 
 const NtsStringView* nts_dom_Element_getAttribute(NtsDomElement* self, const NtsBorrowedString* name) {
@@ -8437,6 +8437,12 @@ const NtsStringView* nts_dom_Element_getAttributeNS(NtsDomElement* self, const N
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Element>(self);
   return context.Lend(nts_dom::AsString(receiver->getAttributeNS(NtsText(context, namespaceURI), NtsText(context, localName))), true);
+}
+
+NtsDomDOMStringSequence* nts_dom_Element_getAttributeNames(NtsDomElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Element>(self);
+  return nts_dom::SequenceHandle<NtsDomDOMStringSequence>(nts_dom::Sequence(receiver->getAttributeNamesForBindings()));
 }
 
 NtsDomAttr* nts_dom_Element_getAttributeNode(NtsDomElement* self, const NtsBorrowedString* name) {
@@ -8463,14 +8469,14 @@ NtsDomDOMQuadSequence* nts_dom_Element_getBoxQuads_1(NtsDomElement* self, NtsDom
   auto* receiver = ObjectOf<blink::Element>(self);
   auto* options_converted = NtsDomToBoxQuadOptions(context, options, exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return reinterpret_cast<NtsDomDOMQuadSequence*>(nts_dom::Sequence(receiver->getBoxQuads(options_converted, exception_state)));
+  return nts_dom::SequenceHandle<NtsDomDOMQuadSequence>(nts_dom::Sequence(receiver->getBoxQuads(options_converted, exception_state)));
 }
 
 NtsDomDOMQuadSequence* nts_dom_Element_getBoxQuads_0(NtsDomElement* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Element>(self);
-  return reinterpret_cast<NtsDomDOMQuadSequence*>(nts_dom::Sequence(receiver->getBoxQuads(blink::BoxQuadOptions::Create(context.v8_isolate.get()), exception_state)));
+  return nts_dom::SequenceHandle<NtsDomDOMQuadSequence>(nts_dom::Sequence(receiver->getBoxQuads(blink::BoxQuadOptions::Create(context.v8_isolate.get()), exception_state)));
 }
 
 NtsDomDOMRectList* nts_dom_Element_getClientRects(NtsDomElement* self) {
@@ -9952,14 +9958,14 @@ NtsDomDOMQuadSequence* nts_dom_Text_getBoxQuads_1(NtsDomText* self, NtsDomBoxQua
   auto* receiver = ObjectOf<blink::Text>(self);
   auto* options_converted = NtsDomToBoxQuadOptions(context, options, exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return reinterpret_cast<NtsDomDOMQuadSequence*>(nts_dom::Sequence(receiver->getBoxQuads(options_converted, exception_state)));
+  return nts_dom::SequenceHandle<NtsDomDOMQuadSequence>(nts_dom::Sequence(receiver->getBoxQuads(options_converted, exception_state)));
 }
 
 NtsDomDOMQuadSequence* nts_dom_Text_getBoxQuads_0(NtsDomText* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Text>(self);
-  return reinterpret_cast<NtsDomDOMQuadSequence*>(nts_dom::Sequence(receiver->getBoxQuads(blink::BoxQuadOptions::Create(context.v8_isolate.get()), exception_state)));
+  return nts_dom::SequenceHandle<NtsDomDOMQuadSequence>(nts_dom::Sequence(receiver->getBoxQuads(blink::BoxQuadOptions::Create(context.v8_isolate.get()), exception_state)));
 }
 
 NtsDomText* nts_dom_Text_splitText(NtsDomText* self, double offset, NtsDomException** error) {
@@ -14771,7 +14777,7 @@ NtsDomElementSequence* nts_dom_Document_elementsFromPoint(NtsDomDocument* self, 
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   const auto y_converted = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return reinterpret_cast<NtsDomElementSequence*>(nts_dom::Sequence(receiver->elementsFromPoint(x_converted, y_converted)));
+  return nts_dom::SequenceHandle<NtsDomElementSequence>(nts_dom::Sequence(receiver->elementsFromPoint(x_converted, y_converted)));
 }
 
 bool nts_dom_Document_execCommand_3(NtsDomDocument* self, const NtsBorrowedString* commandId, bool showUI, const NtsBorrowedString* value, NtsDomException** error) {
@@ -14816,7 +14822,7 @@ void nts_dom_Document_exitPointerLock(NtsDomDocument* self) {
 NtsDomAnimationSequence* nts_dom_Document_getAnimations(NtsDomDocument* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Document>(self);
-  return reinterpret_cast<NtsDomAnimationSequence*>(nts_dom::Sequence(receiver->getAnimations()));
+  return nts_dom::SequenceHandle<NtsDomAnimationSequence>(nts_dom::Sequence(receiver->getAnimations()));
 }
 
 NtsDomDOMQuadSequence* nts_dom_Document_getBoxQuads_1(NtsDomDocument* self, NtsDomBoxQuadOptions options, NtsDomException** error) {
@@ -14825,14 +14831,14 @@ NtsDomDOMQuadSequence* nts_dom_Document_getBoxQuads_1(NtsDomDocument* self, NtsD
   auto* receiver = ObjectOf<blink::Document>(self);
   auto* options_converted = NtsDomToBoxQuadOptions(context, options, exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return reinterpret_cast<NtsDomDOMQuadSequence*>(nts_dom::Sequence(receiver->getBoxQuads(options_converted, exception_state)));
+  return nts_dom::SequenceHandle<NtsDomDOMQuadSequence>(nts_dom::Sequence(receiver->getBoxQuads(options_converted, exception_state)));
 }
 
 NtsDomDOMQuadSequence* nts_dom_Document_getBoxQuads_0(NtsDomDocument* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
-  return reinterpret_cast<NtsDomDOMQuadSequence*>(nts_dom::Sequence(receiver->getBoxQuads(blink::BoxQuadOptions::Create(context.v8_isolate.get()), exception_state)));
+  return nts_dom::SequenceHandle<NtsDomDOMQuadSequence>(nts_dom::Sequence(receiver->getBoxQuads(blink::BoxQuadOptions::Create(context.v8_isolate.get()), exception_state)));
 }
 
 NtsDomElement* nts_dom_Document_getElementById(NtsDomDocument* self, const NtsBorrowedString* elementId) {
@@ -21076,7 +21082,7 @@ NtsDomEventTargetSequence* nts_dom_Event_composedPath(NtsDomEvent* self) {
   auto* receiver = ObjectOf<blink::Event>(self);
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
-  return reinterpret_cast<NtsDomEventTargetSequence*>(nts_dom::Sequence(receiver->composedPath(script_state)));
+  return nts_dom::SequenceHandle<NtsDomEventTargetSequence>(nts_dom::Sequence(receiver->composedPath(script_state)));
 }
 
 void nts_dom_Event_initEvent_3(NtsDomEvent* self, const NtsBorrowedString* type, bool bubbles, bool cancelable) {
@@ -31903,7 +31909,7 @@ bool nts_dom_InputEvent_get_isTrusted(NtsDomInputEvent* self) {
 NtsDomStaticRangeSequence* nts_dom_InputEvent_getTargetRanges(NtsDomInputEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::InputEvent>(self);
-  return reinterpret_cast<NtsDomStaticRangeSequence*>(nts_dom::Sequence(receiver->getTargetRanges()));
+  return nts_dom::SequenceHandle<NtsDomStaticRangeSequence>(nts_dom::Sequence(receiver->getTargetRanges()));
 }
 
 NtsDomPointerEvent* nts_dom_as_PointerEvent(NtsDomEvent* event) {
@@ -32010,13 +32016,13 @@ bool nts_dom_PointerEvent_get_isTrusted(NtsDomPointerEvent* self) {
 NtsDomPointerEventSequence* nts_dom_PointerEvent_getCoalescedEvents(NtsDomPointerEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::PointerEvent>(self);
-  return reinterpret_cast<NtsDomPointerEventSequence*>(nts_dom::Sequence(receiver->getCoalescedEvents()));
+  return nts_dom::SequenceHandle<NtsDomPointerEventSequence>(nts_dom::Sequence(receiver->getCoalescedEvents()));
 }
 
 NtsDomPointerEventSequence* nts_dom_PointerEvent_getPredictedEvents(NtsDomPointerEvent* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::PointerEvent>(self);
-  return reinterpret_cast<NtsDomPointerEventSequence*>(nts_dom::Sequence(receiver->getPredictedEvents()));
+  return nts_dom::SequenceHandle<NtsDomPointerEventSequence>(nts_dom::Sequence(receiver->getPredictedEvents()));
 }
 
 NtsDomWheelEvent* nts_dom_as_WheelEvent(NtsDomEvent* event) {
@@ -36855,25 +36861,25 @@ void nts_dom_Performance_clearResourceTimings(NtsDomPerformance* self) {
 NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntries(NtsDomPerformance* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Performance>(self);
-  return reinterpret_cast<NtsDomPerformanceEntrySequence*>(nts_dom::Sequence(receiver->getEntries()));
+  return nts_dom::SequenceHandle<NtsDomPerformanceEntrySequence>(nts_dom::Sequence(receiver->getEntries()));
 }
 
 NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByName_2(NtsDomPerformance* self, const NtsBorrowedString* name, const NtsBorrowedString* entryType) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Performance>(self);
-  return reinterpret_cast<NtsDomPerformanceEntrySequence*>(nts_dom::Sequence(receiver->getEntriesByName(NtsText(context, name), NtsText(context, entryType))));
+  return nts_dom::SequenceHandle<NtsDomPerformanceEntrySequence>(nts_dom::Sequence(receiver->getEntriesByName(NtsText(context, name), NtsText(context, entryType))));
 }
 
 NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByName_1(NtsDomPerformance* self, const NtsBorrowedString* name) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Performance>(self);
-  return reinterpret_cast<NtsDomPerformanceEntrySequence*>(nts_dom::Sequence(receiver->getEntriesByName(NtsText(context, name))));
+  return nts_dom::SequenceHandle<NtsDomPerformanceEntrySequence>(nts_dom::Sequence(receiver->getEntriesByName(NtsText(context, name))));
 }
 
 NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByType(NtsDomPerformance* self, const NtsBorrowedString* entryType) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Performance>(self);
-  return reinterpret_cast<NtsDomPerformanceEntrySequence*>(nts_dom::Sequence(receiver->getEntriesByType(NtsText(context, entryType))));
+  return nts_dom::SequenceHandle<NtsDomPerformanceEntrySequence>(nts_dom::Sequence(receiver->getEntriesByType(NtsText(context, entryType))));
 }
 
 NtsDomPerformanceMark* nts_dom_Performance_mark_2(NtsDomPerformance* self, const NtsBorrowedString* markName, NtsDomPerformanceMarkOptions markOptions, NtsDomException** error) {
@@ -37571,6 +37577,12 @@ const NtsStringView* nts_dom_URLSearchParams_get(NtsDomURLSearchParams* self, co
   return context.Lend(nts_dom::AsString(receiver->get(NtsText(context, name, /*scalar_values=*/true))), true);
 }
 
+NtsDomDOMStringSequence* nts_dom_URLSearchParams_getAll(NtsDomURLSearchParams* self, const NtsBorrowedString* name) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::URLSearchParams>(self);
+  return nts_dom::SequenceHandle<NtsDomDOMStringSequence>(nts_dom::Sequence(receiver->getAll(NtsText(context, name, /*scalar_values=*/true))));
+}
+
 bool nts_dom_URLSearchParams_has_2(NtsDomURLSearchParams* self, const NtsBorrowedString* name, const NtsBorrowedString* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::URLSearchParams>(self);
@@ -37626,7 +37638,7 @@ void nts_dom_MutationObserver_observe_1(NtsDomMutationObserver* self, NtsDomNode
 NtsDomMutationRecordSequence* nts_dom_MutationObserver_takeRecords(NtsDomMutationObserver* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::MutationObserver>(self);
-  return reinterpret_cast<NtsDomMutationRecordSequence*>(nts_dom::Sequence(receiver->takeRecords()));
+  return nts_dom::SequenceHandle<NtsDomMutationRecordSequence>(nts_dom::Sequence(receiver->takeRecords()));
 }
 
 const NtsStringView* nts_dom_MutationRecord_get_type(NtsDomMutationRecord* self) {
@@ -37725,19 +37737,19 @@ NtsDomDOMRectReadOnly* nts_dom_ResizeObserverEntry_get_contentRect(NtsDomResizeO
 NtsDomResizeObserverSizeSequence* nts_dom_ResizeObserverEntry_get_contentBoxSize(NtsDomResizeObserverEntry* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::ResizeObserverEntry>(self);
-  return reinterpret_cast<NtsDomResizeObserverSizeSequence*>(nts_dom::Sequence(receiver->contentBoxSize()));
+  return nts_dom::SequenceHandle<NtsDomResizeObserverSizeSequence>(nts_dom::Sequence(receiver->contentBoxSize()));
 }
 
 NtsDomResizeObserverSizeSequence* nts_dom_ResizeObserverEntry_get_borderBoxSize(NtsDomResizeObserverEntry* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::ResizeObserverEntry>(self);
-  return reinterpret_cast<NtsDomResizeObserverSizeSequence*>(nts_dom::Sequence(receiver->borderBoxSize()));
+  return nts_dom::SequenceHandle<NtsDomResizeObserverSizeSequence>(nts_dom::Sequence(receiver->borderBoxSize()));
 }
 
 NtsDomResizeObserverSizeSequence* nts_dom_ResizeObserverEntry_get_devicePixelContentBoxSize(NtsDomResizeObserverEntry* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::ResizeObserverEntry>(self);
-  return reinterpret_cast<NtsDomResizeObserverSizeSequence*>(nts_dom::Sequence(receiver->devicePixelContentBoxSize()));
+  return nts_dom::SequenceHandle<NtsDomResizeObserverSizeSequence>(nts_dom::Sequence(receiver->devicePixelContentBoxSize()));
 }
 
 double nts_dom_ResizeObserverSize_get_inlineSize(NtsDomResizeObserverSize* self) {
@@ -37800,7 +37812,7 @@ NtsDomIntersectionObserverEntrySequence* nts_dom_IntersectionObserver_takeRecord
   nts_dom::AssertEntered();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
-  return reinterpret_cast<NtsDomIntersectionObserverEntrySequence*>(nts_dom::Sequence(receiver->takeRecords(exception_state)));
+  return nts_dom::SequenceHandle<NtsDomIntersectionObserverEntrySequence>(nts_dom::Sequence(receiver->takeRecords(exception_state)));
 }
 
 void nts_dom_IntersectionObserver_unobserve(NtsDomIntersectionObserver* self, NtsDomElement* target, NtsDomException** error) {
@@ -39050,13 +39062,13 @@ NtsDomElementSequence* nts_dom_ShadowRoot_elementsFromPoint(NtsDomShadowRoot* se
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   const auto y_converted = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), y), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return reinterpret_cast<NtsDomElementSequence*>(nts_dom::Sequence(receiver->elementsFromPoint(x_converted, y_converted)));
+  return nts_dom::SequenceHandle<NtsDomElementSequence>(nts_dom::Sequence(receiver->elementsFromPoint(x_converted, y_converted)));
 }
 
 NtsDomAnimationSequence* nts_dom_ShadowRoot_getAnimations(NtsDomShadowRoot* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::ShadowRoot>(self);
-  return reinterpret_cast<NtsDomAnimationSequence*>(nts_dom::Sequence(receiver->getAnimations()));
+  return nts_dom::SequenceHandle<NtsDomAnimationSequence>(nts_dom::Sequence(receiver->getAnimations()));
 }
 
 const NtsStringView* nts_dom_ShadowRoot_getHTML_1(NtsDomShadowRoot* self, NtsDomGetHTMLOptions options, NtsDomException** error) {
@@ -39250,13 +39262,13 @@ NtsDomElementSequence* nts_dom_HTMLSlotElement_assignedElements_1(NtsDomHTMLSlot
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
   blink::DummyExceptionStateForTesting conversion;
   auto* options_converted = NtsDomToAssignedNodesOptions(context, options, conversion);
-  return reinterpret_cast<NtsDomElementSequence*>(nts_dom::Sequence(receiver->AssignedElementsForBinding(options_converted)));
+  return nts_dom::SequenceHandle<NtsDomElementSequence>(nts_dom::Sequence(receiver->AssignedElementsForBinding(options_converted)));
 }
 
 NtsDomElementSequence* nts_dom_HTMLSlotElement_assignedElements_0(NtsDomHTMLSlotElement* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  return reinterpret_cast<NtsDomElementSequence*>(nts_dom::Sequence(receiver->AssignedElementsForBinding(blink::AssignedNodesOptions::Create(context.v8_isolate.get()))));
+  return nts_dom::SequenceHandle<NtsDomElementSequence>(nts_dom::Sequence(receiver->AssignedElementsForBinding(blink::AssignedNodesOptions::Create(context.v8_isolate.get()))));
 }
 
 NtsDomNodeSequence* nts_dom_HTMLSlotElement_assignedNodes_1(NtsDomHTMLSlotElement* self, NtsDomAssignedNodesOptions options) {
@@ -39264,13 +39276,13 @@ NtsDomNodeSequence* nts_dom_HTMLSlotElement_assignedNodes_1(NtsDomHTMLSlotElemen
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
   blink::DummyExceptionStateForTesting conversion;
   auto* options_converted = NtsDomToAssignedNodesOptions(context, options, conversion);
-  return reinterpret_cast<NtsDomNodeSequence*>(nts_dom::Sequence(receiver->AssignedNodesForBinding(options_converted)));
+  return nts_dom::SequenceHandle<NtsDomNodeSequence>(nts_dom::Sequence(receiver->AssignedNodesForBinding(options_converted)));
 }
 
 NtsDomNodeSequence* nts_dom_HTMLSlotElement_assignedNodes_0(NtsDomHTMLSlotElement* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::HTMLSlotElement>(self);
-  return reinterpret_cast<NtsDomNodeSequence*>(nts_dom::Sequence(receiver->AssignedNodesForBinding(blink::AssignedNodesOptions::Create(context.v8_isolate.get()))));
+  return nts_dom::SequenceHandle<NtsDomNodeSequence>(nts_dom::Sequence(receiver->AssignedNodesForBinding(blink::AssignedNodesOptions::Create(context.v8_isolate.get()))));
 }
 
 bool nts_dom_ValidityState_get_valueMissing(NtsDomValidityState* self) {
@@ -39783,7 +39795,7 @@ void nts_dom_Selection_extend_1(NtsDomSelection* self, NtsDomNode* node, NtsDomE
 NtsDomStaticRangeSequence* nts_dom_Selection_getComposedRanges_0(NtsDomSelection* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::DomSelection>(self);
-  return reinterpret_cast<NtsDomStaticRangeSequence*>(nts_dom::Sequence(receiver->getComposedRanges(blink::GetComposedRangesOptions::Create(context.v8_isolate.get()))));
+  return nts_dom::SequenceHandle<NtsDomStaticRangeSequence>(nts_dom::Sequence(receiver->getComposedRanges(blink::GetComposedRangesOptions::Create(context.v8_isolate.get()))));
 }
 
 NtsDomRange* nts_dom_Selection_getRangeAt(NtsDomSelection* self, double index, NtsDomException** error) {
@@ -43266,6 +43278,12 @@ const NtsStringView* nts_dom_ProcessingInstruction_getAttribute(NtsDomProcessing
   return context.Lend(nts_dom::AsString(receiver->getAttribute(NtsText(context, name))), true);
 }
 
+NtsDomDOMStringSequence* nts_dom_ProcessingInstruction_getAttributeNames(NtsDomProcessingInstruction* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::ProcessingInstruction>(self);
+  return nts_dom::SequenceHandle<NtsDomDOMStringSequence>(nts_dom::Sequence(receiver->getAttributeNames()));
+}
+
 bool nts_dom_ProcessingInstruction_hasAttribute(NtsDomProcessingInstruction* self, const NtsBorrowedString* name) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::ProcessingInstruction>(self);
@@ -44698,6 +44716,12 @@ const NtsStringView* nts_dom_Headers_get(NtsDomHeaders* self, const NtsBorrowedS
   return context.Lend(nts_dom::AsString(receiver->get(key_converted, exception_state)), true);
 }
 
+NtsDomDOMStringSequence* nts_dom_Headers_getSetCookie(NtsDomHeaders* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Headers>(self);
+  return nts_dom::SequenceHandle<NtsDomDOMStringSequence>(nts_dom::Sequence(receiver->getSetCookie()));
+}
+
 bool nts_dom_Headers_has(NtsDomHeaders* self, const NtsBorrowedString* key, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -45677,122 +45701,132 @@ void nts_dom_ParentNode_replaceChildren_0(NtsDomParentNode* self, NtsDomExceptio
 
 double nts_dom_AnimationSequence_get_length(NtsDomAnimationSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomAnimation* nts_dom_AnimationSequence_item(NtsDomAnimationSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomAnimation>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomAnimation>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_DOMQuadSequence_get_length(NtsDomDOMQuadSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomDOMQuad* nts_dom_DOMQuadSequence_item(NtsDomDOMQuadSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomDOMQuad>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomDOMQuad>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
+}
+
+double nts_dom_DOMStringSequence_get_length(NtsDomDOMStringSequence* self) {
+  nts_dom::AssertEntered();
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsTextSequence>(self)->length());
+}
+
+const NtsStringView* nts_dom_DOMStringSequence_item(NtsDomDOMStringSequence* self, double index) {
+  NtsDomContext& context = nts_dom::Current();
+  return context.Lend(nts_dom::AsString(nts_dom::SequenceOf<nts_dom::NtsTextSequence>(self)->item(index)), true);
 }
 
 double nts_dom_ElementSequence_get_length(NtsDomElementSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomElement* nts_dom_ElementSequence_item(NtsDomElementSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomElement>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomElement>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_EventTargetSequence_get_length(NtsDomEventTargetSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomEventTarget* nts_dom_EventTargetSequence_item(NtsDomEventTargetSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomEventTarget>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomEventTarget>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_IntersectionObserverEntrySequence_get_length(NtsDomIntersectionObserverEntrySequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomIntersectionObserverEntry* nts_dom_IntersectionObserverEntrySequence_item(NtsDomIntersectionObserverEntrySequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomIntersectionObserverEntry>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomIntersectionObserverEntry>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_MutationRecordSequence_get_length(NtsDomMutationRecordSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomMutationRecord* nts_dom_MutationRecordSequence_item(NtsDomMutationRecordSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomMutationRecord>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomMutationRecord>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_NodeSequence_get_length(NtsDomNodeSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomNode* nts_dom_NodeSequence_item(NtsDomNodeSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomNode>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomNode>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_PerformanceEntrySequence_get_length(NtsDomPerformanceEntrySequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomPerformanceEntry* nts_dom_PerformanceEntrySequence_item(NtsDomPerformanceEntrySequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomPerformanceEntry>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomPerformanceEntry>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_PointerEventSequence_get_length(NtsDomPointerEventSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomPointerEvent* nts_dom_PointerEventSequence_item(NtsDomPointerEventSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomPointerEvent>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomPointerEvent>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_ResizeObserverEntrySequence_get_length(NtsDomResizeObserverEntrySequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomResizeObserverEntry* nts_dom_ResizeObserverEntrySequence_item(NtsDomResizeObserverEntrySequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomResizeObserverEntry>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomResizeObserverEntry>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_ResizeObserverSizeSequence_get_length(NtsDomResizeObserverSizeSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomResizeObserverSize* nts_dom_ResizeObserverSizeSequence_item(NtsDomResizeObserverSizeSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomResizeObserverSize>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomResizeObserverSize>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 
 double nts_dom_StaticRangeSequence_get_length(NtsDomStaticRangeSequence* self) {
   nts_dom::AssertEntered();
-  return static_cast<double>(reinterpret_cast<nts_dom::NtsSequence*>(self)->length());
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->length());
 }
 
 NtsDomStaticRange* nts_dom_StaticRangeSequence_item(NtsDomStaticRangeSequence* self, double index) {
   nts_dom::AssertEntered();
-  return HandleOf<NtsDomStaticRange>(reinterpret_cast<nts_dom::NtsSequence*>(self)->item(index));
+  return HandleOf<NtsDomStaticRange>(nts_dom::SequenceOf<nts_dom::NtsSequence>(self)->item(index));
 }
 }  // extern "C"
 }  // namespace blink

@@ -55,11 +55,20 @@ Roots &HeldObjects() {
   return *roots;
 }
 
+HeldSequence::~HeldSequence() = default;
+void HeldSequence::Trace(blink::Visitor *) const {}
+NtsSequence::~NtsSequence() = default;
+void NtsSequence::Trace(blink::Visitor *visitor) const {
+  visitor->Trace(items_);
+  HeldSequence::Trace(visitor);
+}
+NtsTextSequence::~NtsTextSequence() = default;
+
 // Sequences the program keeps off the stack, as Roots for objects.
 class SequenceRoots final : public blink::GarbageCollected<SequenceRoots> {
 public:
   void Trace(blink::Visitor *visitor) const { visitor->Trace(counts); }
-  blink::HeapHashCountedSet<blink::Member<nts_dom::NtsSequence>> counts;
+  blink::HeapHashCountedSet<blink::Member<nts_dom::HeldSequence>> counts;
 };
 SequenceRoots &HeldSequences() {
   DEFINE_STATIC_LOCAL(blink::Persistent<SequenceRoots>, roots,
@@ -1587,12 +1596,12 @@ void nts_blink_dom_end_checkpoint(NtsDomContext *context,
 // generated (dom_idl.cc). Each runs inside an entry, whose context it finds
 // itself, as the generated ones do.
 void *nts_dom_sequence_retain(void *sequence) {
-  nts_dom::HeldSequences().counts.insert(static_cast<nts_dom::NtsSequence *>(sequence));
+  nts_dom::HeldSequences().counts.insert(static_cast<nts_dom::HeldSequence *>(sequence));
   return sequence;
 }
 void nts_dom_sequence_release(void *sequence) {
   auto &counts = nts_dom::HeldSequences().counts;
-  const auto found = counts.find(static_cast<nts_dom::NtsSequence *>(sequence));
+  const auto found = counts.find(static_cast<nts_dom::HeldSequence *>(sequence));
   CHECK(found != counts.end());
   counts.erase(found);
 }
