@@ -6,8 +6,8 @@
 // long?`: null for an input type with no selection), `animation.
 // overallProgress` (`double?`) -- so a text editor cannot read its caret.
 // A string or a handle answers null as NULL; a number needs its presence
-// carried beside it, e.g. a by-value `{ bool present; double value; }`,
-// which the SysV ABI returns in two registers. Request 16 in
+// carried beside it: `bool f(args..., double *out)`, agreed with the
+// compiler lane, one shape on every ABI. Request 16 in
 // runtime/chromium/contracts/compiler-requests.md. Found 2026-10-13 by the
 // Chromium lane.
 //

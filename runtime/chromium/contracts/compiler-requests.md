@@ -489,10 +489,15 @@ fixture `tooling/conformance/blockers/a-foreign-function-answering-a-nullable-nu
 A foreign function's scalar result has a C type, and `null` has no value of
 it to spare, so `Float64 | null` is refused ("a type with no native ABI").
 A string or a handle answers null as NULL; a number needs its presence
-carried beside it. Proposed contract: a `<scalar> | null` result is a
-by-value struct, `{ bool present; <scalar> value; }` -- the SysV x86-64 ABI
-returns `{ bool, double }` in rax and xmm0, so no memory round trip -- that
-the converter turns into the program's `number | null`. The Chromium lane
+carried beside it. Agreed contract (with the compiler lane, 2026-10-13): a
+`<scalar> | null` result is `bool f(args..., <scalar> *out)` -- presence in
+the return register, the value through the pointer, written only when
+present -- which the lowering reads as `present ? value : null`. A by-value
+`{ bool, <scalar> }` was proposed first; it is returned in registers on SysV
+x86-64 but through a hidden pointer on Windows x64 and by other rules on
+AArch64, which the LLVM backend would have to classify by hand, while the
+out-pointer is one shape on every ABI, and the Wasm and JVM lanes can mirror
+it. The Chromium lane
 then binds IDL `T?` results of numeric `T` through it, and checks them
 against page script in the differential vectors (an `<input type=text>`'s
 selection, and a `type=checkbox`'s, which is null).
