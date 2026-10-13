@@ -211,7 +211,7 @@ fn put(
     b.instruction(&I::I32Add);
     b.instruction(&I::StructSet {
         struct_type_index: shape.wrapper,
-        field_index: 1,
+        field_index: crate::gc::ARRAY_LENGTH,
     });
     length(b, shape, array)?;
     output(b, result, &U32)
@@ -347,7 +347,7 @@ fn take(
     last(b, shape, array)?;
     b.instruction(&I::StructSet {
         struct_type_index: shape.wrapper,
-        field_index: 1,
+        field_index: crate::gc::ARRAY_LENGTH,
     });
     if family != Family::Number {
         b.instruction(&I::Else);
@@ -407,7 +407,7 @@ fn truncate(
     arrays::index(b, count)?;
     b.instruction(&I::StructSet {
         struct_type_index: shape.wrapper,
-        field_index: 1,
+        field_index: crate::gc::ARRAY_LENGTH,
     });
     Ok(())
 }

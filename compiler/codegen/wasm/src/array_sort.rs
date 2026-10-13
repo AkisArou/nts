@@ -103,13 +103,13 @@ fn body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
     ]);
     let backing = I::StructGet {
         struct_type_index: shape.wrapper,
-        field_index: 2,
+        field_index: crate::gc::ARRAY_BACKING,
     };
     f.instructions(&[
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 1,
+            field_index: crate::gc::ARRAY_LENGTH,
         },
         I::LocalTee(LENGTH),
         I::I32Const(2),
@@ -178,7 +178,7 @@ fn body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
 fn copy_back(f: &mut Function, shape: &gc::Array) {
     let backing = I::StructGet {
         struct_type_index: shape.wrapper,
-        field_index: 2,
+        field_index: crate::gc::ARRAY_BACKING,
     };
     f.instructions(&[
         I::LocalGet(FROM),

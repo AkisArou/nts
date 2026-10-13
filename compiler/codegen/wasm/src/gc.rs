@@ -251,6 +251,13 @@ pub(crate) struct Convention {
     pub(crate) result: HirType,
 }
 
+/// How many fields the object root has: every object, array and collection
+/// struct starts with them, so a field after the root is numbered from here.
+pub(crate) const ROOT_FIELDS: u32 = 1;
+/// An array wrapper's fields after the root: its length, then its backing.
+pub(crate) const ARRAY_LENGTH: u32 = ROOT_FIELDS;
+pub(crate) const ARRAY_BACKING: u32 = ROOT_FIELDS + 1;
+
 /// Where a descriptor's field holding its row sits, after identity, kind and
 /// ancestry.
 pub(crate) const ROWS_FIELD: u32 = 3;
@@ -1465,7 +1472,7 @@ impl<'a> Builder<'a> {
                     .map_err(|_| "too many callable slots")
             })?;
             for ty in &layout.types {
-                objects.attach_callable(*ty, root, 1 + uniform + typed)?;
+                objects.attach_callable(*ty, root, ROOT_FIELDS + uniform + typed)?;
             }
         }
         for (&at, &root) in &self.virtual_plan.members {
@@ -1547,7 +1554,12 @@ impl<'a> Builder<'a> {
         indices: &[u32],
     ) -> BTreeMap<usize, crate::callable_plan::Resolved> {
         let uniform = u32::try_from(self.callable_plan.uniform.len()).unwrap_or(u32::MAX);
-        Self::resolve_entries(&self.callables, &self.callable_plan, indices, 1 + uniform)
+        Self::resolve_entries(
+            &self.callables,
+            &self.callable_plan,
+            indices,
+            ROOT_FIELDS + uniform,
+        )
     }
 
     /// Each dispatch hierarchy's vtable entries, after the descriptor header.
@@ -1577,7 +1589,7 @@ impl<'a> Builder<'a> {
                     slot,
                     crate::callable_plan::ResolvedEntry {
                         slot,
-                        field: 1 + crate::module::index(at),
+                        field: ROOT_FIELDS + crate::module::index(at),
                         signature: indices[nodes.entries[&slot].0],
                         params: vec![HirType::Erased; width],
                         result: HirType::Erased,

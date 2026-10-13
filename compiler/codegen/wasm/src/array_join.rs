@@ -116,7 +116,7 @@ fn body(join: Join, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, 
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 1,
+            field_index: crate::gc::ARRAY_LENGTH,
         },
         I::LocalSet(2),
     ]);
@@ -145,7 +145,7 @@ fn body(join: Join, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, 
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 2,
+            field_index: crate::gc::ARRAY_BACKING,
         },
         I::LocalGet(3),
         crate::arrays::get_instruction(shape)?,

@@ -107,7 +107,7 @@ pub(crate) fn logical_length(b: &mut Body<'_, '_>, array: ValueId, ty: u32) -> R
     b.load(array)?;
     b.instruction(&I::StructGet {
         struct_type_index: ty,
-        field_index: 1,
+        field_index: crate::gc::ARRAY_LENGTH,
     });
     Ok(())
 }
@@ -184,7 +184,7 @@ pub(crate) fn backing(b: &mut Body<'_, '_>, array: ValueId, ty: u32) -> Result<(
     b.load(array)?;
     b.instruction(&I::StructGet {
         struct_type_index: ty,
-        field_index: 2,
+        field_index: crate::gc::ARRAY_BACKING,
     });
     Ok(())
 }
@@ -304,7 +304,7 @@ fn append_slot(b: &mut Body<'_, '_>, array: ValueId, at: ValueId, ty: u32) -> Re
     b.instruction(&I::I32Add);
     b.instruction(&I::StructSet {
         struct_type_index: ty,
-        field_index: 1,
+        field_index: crate::gc::ARRAY_LENGTH,
     });
     b.instruction(&I::End);
     Ok(())
@@ -338,7 +338,7 @@ fn grow_body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 2,
+            field_index: crate::gc::ARRAY_BACKING,
         },
         I::ArrayLen,
         I::LocalTee(2),
@@ -383,13 +383,13 @@ fn grow_body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 2,
+            field_index: crate::gc::ARRAY_BACKING,
         },
         I::I32Const(0),
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 1,
+            field_index: crate::gc::ARRAY_LENGTH,
         },
         I::ArrayCopy {
             array_type_index_dst: shape.backing,
@@ -400,7 +400,7 @@ fn grow_body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure
         I::RefAsNonNull,
         I::StructSet {
             struct_type_index: shape.wrapper,
-            field_index: 2,
+            field_index: crate::gc::ARRAY_BACKING,
         },
         I::End,
     ]);

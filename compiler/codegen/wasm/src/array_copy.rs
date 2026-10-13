@@ -163,7 +163,7 @@ fn length(f: &mut Function, shape: &gc::Array, input: u32, local: u32) {
         I::LocalGet(input),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 1,
+            field_index: crate::gc::ARRAY_LENGTH,
         },
         I::LocalSet(local),
     ]);
@@ -173,7 +173,7 @@ fn backing(f: &mut Function, shape: &gc::Array, input: u32) {
         I::LocalGet(input),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 2,
+            field_index: crate::gc::ARRAY_BACKING,
         },
     ]);
 }
@@ -286,7 +286,7 @@ fn body(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Functi
                 I::LocalGet(4),
                 I::StructSet {
                     struct_type_index: shape.wrapper,
-                    field_index: 1,
+                    field_index: crate::gc::ARRAY_LENGTH,
                 },
             ]);
         }
@@ -357,7 +357,7 @@ fn splice(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Result<()
         I::I32Sub,
         I::StructSet {
             struct_type_index: shape.wrapper,
-            field_index: 1,
+            field_index: crate::gc::ARRAY_LENGTH,
         },
     ]);
     wrap(f, shape, m, 5, 7)

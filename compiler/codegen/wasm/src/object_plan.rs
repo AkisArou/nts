@@ -124,7 +124,7 @@ impl Plan {
                     descriptor,
                     fields: Arc::clone(&fields[&at]),
                     name: layout.name.clone(),
-                    field_base: 1,
+                    field_base: crate::gc::ROOT_FIELDS,
                     callable: None,
                     virtual_: None,
                     identity: identities[&key],

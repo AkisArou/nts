@@ -187,7 +187,7 @@ fn length(f: &mut Function, shape: &gc::Array) {
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 1,
+            field_index: crate::gc::ARRAY_LENGTH,
         },
         I::LocalSet(3),
     ]);
@@ -197,7 +197,7 @@ fn get(f: &mut Function, shape: &gc::Array, index: &[I<'static>]) -> Result<(), 
         I::LocalGet(0),
         I::StructGet {
             struct_type_index: shape.wrapper,
-            field_index: 2,
+            field_index: crate::gc::ARRAY_BACKING,
         },
     ]);
     f.instructions(index);
