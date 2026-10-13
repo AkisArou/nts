@@ -2017,11 +2017,12 @@ fn mutating(program: &Program) -> (rustc_hash::FxHashSet<String>, rustc_hash::Fx
                 // which is the whole of what a borrow needs to survive it. The
                 // comment above `mutating` named this as the coarse case and
                 // said where the fact should live; `hir::runtime` carries it
-                // now, checked against the header.
+                // now, checked against the header. So does one whose only
+                // effect is retaining what it returns (`stores_nothing`).
                 OpKind::Call {
                     callee: super::Callee::External(name),
                     ..
-                } => !super::runtime::reads_only(name),
+                } => !super::runtime::stores_nothing(name),
                 OpKind::Call { .. } => true,
                 _ => false,
             });

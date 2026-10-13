@@ -1920,7 +1920,7 @@ pub fn into_form(target: &str) -> String {
 /// borrow it had no way to invalidate.
 pub const READS_ONLY: &[&str] = &[
     "nts_array_at",
-    "nts_array_at_ref",
+    // Not `nts_array_at_ref`: it retains the element it returns.
     "nts_array_at_value",
     "nts_array_includes",
     "nts_array_includes_ref",
@@ -2006,6 +2006,22 @@ pub const READS_ONLY: &[&str] = &[
 #[must_use]
 pub fn reads_only(name: &str) -> bool {
     READS_ONLY.contains(&name)
+}
+
+/// Helpers that store nothing yet are not [`READS_ONLY`]: their one effect is
+/// to retain the reference they return, which is how the runtime hands back a
+/// managed one. A retain invalidates no borrow, so a borrow survives a call to
+/// one of these as it survives a reads-only one; but the caller owns the
+/// result, which is counting to do, so a function calling one is not inert.
+/// `nts_array_at_ref` was on `READS_ONLY` until 2026-10-14, and that second half
+/// is the leak it caused: `return xs.find(...)` never released what it found.
+pub const RETAINS_ONLY_ITS_RESULT: &[&str] = &["nts_array_at_ref"];
+
+/// Whether a borrow survives a call to `name`: it stores nothing a borrow
+/// depends on ([`READS_ONLY`] or [`RETAINS_ONLY_ITS_RESULT`]).
+#[must_use]
+pub fn stores_nothing(name: &str) -> bool {
+    reads_only(name) || RETAINS_ONLY_ITS_RESULT.contains(&name)
 }
 
 #[cfg(test)]

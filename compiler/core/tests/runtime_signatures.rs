@@ -261,6 +261,36 @@ fn the_table_still_matches_the_header() {
     );
 }
 
+/// `runtime::RETAINS_ONLY_ITS_RESULT` names helpers that are **not**
+/// `NTS_READS_ONLY` and return a pointer: what retains its result can be
+/// neither `pure` (two calls fold into one retain) nor inert (the caller owns
+/// what it is handed), which is the leak `nts_array_at_ref` caused while it was
+/// marked. A name here that the header marks belongs on `READS_ONLY` instead,
+/// and a name the header does not declare is a list that has drifted.
+#[test]
+fn a_helper_that_retains_its_result_is_not_marked_read_only() {
+    let header =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/c/nts_runtime.h");
+    let Ok(text) = std::fs::read_to_string(header) else {
+        return;
+    };
+    for name in runtime::RETAINS_ONLY_ITS_RESULT {
+        let declaration = text
+            .lines()
+            .map(str::trim_start)
+            .find(|line| line.contains(&format!(" *{name}(")) || line.contains(&format!("*{name}(")))
+            .unwrap_or_else(|| panic!("`{name}` is on RETAINS_ONLY_ITS_RESULT and the header declares no pointer-returning `{name}`"));
+        assert!(
+            !declaration.starts_with("NTS_READS_ONLY"),
+            "`{name}` retains what it returns and the header marks it `NTS_READS_ONLY`"
+        );
+        assert!(
+            !runtime::READS_ONLY.contains(name),
+            "`{name}` is on both READS_ONLY and RETAINS_ONLY_ITS_RESULT"
+        );
+    }
+}
+
 /// `runtime::READS_ONLY` names exactly the helpers the header marks.
 ///
 /// Two lists again, and the failure this prevents is the quiet one: a helper

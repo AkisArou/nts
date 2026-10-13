@@ -120,7 +120,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         name: "nts_array_at_ref",
         returns: "ptr",
         params: &["ptr", "double"],
-        attributes: &["nounwind", "willreturn", "memory(read)"],
+        attributes: &[],
     },
     Signature {
         name: "nts_array_at_value",

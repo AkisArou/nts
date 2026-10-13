@@ -2808,7 +2808,13 @@ double nts_array_push_ref(NtsArray *a, void *value);
 void *nts_array_pop_ref(NtsArray *a);
 void *nts_array_shift_ref(NtsArray *a);
 double nts_array_unshift_ref(NtsArray *a, void *value);
-NTS_READS_ONLY void *nts_array_at_ref(const NtsArray *a, double at);
+/* The element, RETAINED -- the caller owns what it is handed -- and so not
+ * `NTS_READS_ONLY`, for both reasons `nts_view_buffer` gives. Marked so
+ * until 2026-10-14, the ownership pass took a function whose only call was
+ * this one for one with nothing to count: the element it returned was never
+ * released and was retained again to be returned, one object leaked per call
+ * of `return xs.find(...)` (the Chromium lane's board app). */
+void *nts_array_at_ref(const NtsArray *a, double at);
 NTS_READS_ONLY double nts_array_index_of_ref(const NtsArray *a,
                                              const void *needle);
 NTS_READS_ONLY bool nts_array_includes_ref(const NtsArray *a,
