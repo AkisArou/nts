@@ -291,9 +291,28 @@ function status(fields: Record<string, unknown>): void {
 /** How a gate of one commit ended: green, or why not. */
 type Gated = { ok: true; run: string; note: string } | { ok: false; run: string; state: "red" | "unrun"; message: string };
 
+/**
+ * The gate's debug build gains the artifacts of every compiler version gated,
+ * and cargo never deletes one: 69 GB on 2026-10-14, with the disk at 99%.
+ * Nothing but a landing uses it and this one holds the lock, so past
+ * DEBUG_TARGET_MAX_GB it is started over. Its cold build is minutes of the
+ * `tests` step, beside an `interop` step that takes the whole gate.
+ */
+const DEBUG_TARGET_MAX_GB = 40;
+function trimGateTarget(): void {
+  const debug = join(GATE_TARGET, "debug");
+  if (!existsSync(debug)) return;
+  const kb = Number(execFileSync("du", ["-xsk", debug], { encoding: "utf8" }).split("\t")[0]);
+  if (kb > DEBUG_TARGET_MAX_GB * 1024 * 1024) {
+    say(`the gate's debug build is ${Math.round(kb / 1048576)} GB, over ${DEBUG_TARGET_MAX_GB}: starting it over`);
+    rmSync(debug, { recursive: true, force: true });
+  }
+}
+
 /** Gate `landing`, which is `base` plus the train, in the shared gate tree. */
 function gate(root: string, base: string, landing: string, members: string[]): Gated {
   const short = landing.slice(0, 12);
+  trimGateTarget();
   // The gate tree is this landing's while the lock is held: check it out at
   // the commit being landed, and ask its rules what the range owes.
   const setup = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], {
