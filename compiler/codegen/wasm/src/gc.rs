@@ -179,7 +179,7 @@ impl Plan {
         let mut builder = Builder::new(program, callables, virtuals);
         builder.rows = !resources.row_calls.is_empty();
         builder
-            .plan_face_chains()
+            .plan_prefix_parents()
             .map_err(|reason| crate::EmitError::UnsupportedSurface {
                 name: "managed type graph".into(),
                 reason,
@@ -374,10 +374,9 @@ struct Builder<'a> {
     /// Each row column's function type and convention, shared by every slot
     /// that reads the column.
     column_rows: BTreeMap<u32, (NodeId, Convention)>,
-    /// Each interface layout's interface parent, forced by the layouts that
-    /// hold both as prefixes: from the interface's layout to the parent's
-    /// layout and type.
-    face_chain: FxHashMap<usize, (usize, TypeId)>,
+    /// Each layout's Wasm parent where interfaces hold it as a prefix: from
+    /// the layout to the parent's layout and the type to plan it by.
+    prefix_parents: FxHashMap<usize, (usize, TypeId)>,
 }
 
 impl<'a> Builder<'a> {
@@ -405,7 +404,7 @@ impl<'a> Builder<'a> {
             rows: false,
             row_signatures: BTreeMap::new(),
             row_conventions: BTreeMap::new(),
-            face_chain: FxHashMap::default(),
+            prefix_parents: FxHashMap::default(),
             funcs: program.funcs.iter().map(|f| (f.name.as_str(), f)).collect(),
             column_rows: BTreeMap::new(),
         }
@@ -603,7 +602,23 @@ impl<'a> Builder<'a> {
             }
             HirType::Managed(ManagedType::String) => PendingSlot::Reference(RefType::EXTERNREF),
             HirType::Managed(ManagedType::Object(id)) => {
-                PendingSlot::Defined(self.object(*id)?, true)
+                let storage = self.object(*id)?;
+                // An interface that owners other than its prefix receivers
+                // reach holds objects whose storage does not extend its own,
+                // so its values are the root; reads through it dispatch, and
+                // its positional reads cast to its storage.
+                let reached_otherwise = crate::demand::is_face(self.program, *id)
+                    && self
+                        .program
+                        .interface_access
+                        .other_receivers(*id)
+                        .is_some_and(|others| !others.is_empty());
+                let node = if reached_otherwise {
+                    self.root()
+                } else {
+                    storage
+                };
+                PendingSlot::Defined(node, true)
             }
             HirType::Managed(ManagedType::Array(element)) => {
                 PendingSlot::Defined(self.array(element)?, true)
@@ -820,10 +835,12 @@ impl<'a> Builder<'a> {
                 })?,
             );
         }
-        let base = match (self.face_parent(at)?, self.face_chain.get(&at).copied()) {
-            (Some(parent), _) => parent,
-            (None, Some((_, parent))) => self.object(parent)?,
-            (None, None) => base,
+        // Where interfaces hold this layout as a prefix, its parent is the
+        // next shorter prefix; the declared base keeps its place otherwise.
+        let declared = layout.base.and_then(|ty| self.layout_of(ty));
+        let base = match self.prefix_parents.get(&at).copied() {
+            Some((parent, ty)) if Some(parent) != declared => self.object(ty)?,
+            _ => base,
         };
         self.nodes[id.0].base = Some(base);
         self.nodes[id.0].shape = Shape::Struct(fields);
@@ -864,51 +881,24 @@ impl<'a> Builder<'a> {
         Ok(faces)
     }
 
-    /// The interface parent each interface layout must have. A layout's
-    /// prefixes are ordered by length, so the interfaces holding one layout
-    /// form one chain, and each interface in it sits directly below the next
-    /// shorter one. That is a fact of the two storages, which a positional
-    /// read needs to validate, not a semantic relation. Two holding layouts
-    /// that disagree about an interface's parent are refused by name.
-    fn plan_face_chains(&mut self) -> Result<(), String> {
-        for at in 0..self.program.layouts.len() {
-            let faces = self.faces_holding(at)?;
-            for pair in faces.windows(2) {
-                let ((longer, _), (shorter, shorter_ty)) = (pair[0], pair[1]);
-                if self.program.layouts[longer].fields.len()
-                    == self.program.layouts[shorter].fields.len()
-                {
-                    continue; // refused, with names, where the layout is planned
-                }
-                match self.face_chain.insert(longer, (shorter, shorter_ty)) {
-                    Some((known, _)) if known != shorter => {
-                        return Err(format!(
-                            "interface storage `{}` is held below both `{}` and `{}`",
-                            self.program.layouts[longer].name,
-                            self.program.layouts[known].name,
-                            self.program.layouts[shorter].name
-                        ));
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok(())
+    fn layout_of(&self, ty: TypeId) -> Option<usize> {
+        self.program
+            .layouts
+            .iter()
+            .position(|l| l.types.contains(&ty))
     }
 
-    /// The supertype a layout takes from the interfaces it is held as a prefix
-    /// of: the longest, where the layout declares no base. A declared base at
-    /// least as long keeps its place, and the chain check below proves the
-    /// interface is above it. A base shorter than the interface would need the
-    /// layout to have two parents, which is refused by name, as are two
-    /// interfaces of one length with two storages.
-    fn face_parent(&mut self, at: usize) -> Result<Option<NodeId>, String> {
-        let faces = self.faces_holding(at)?;
-        let Some(&(longest, face)) = faces.first() else {
-            return Ok(None);
-        };
+    /// Each layout's Wasm parent where interfaces hold it as a prefix. A
+    /// layout's declared ancestors and the interfaces holding it are all
+    /// prefixes of it, so they are ordered by length, and each sits directly
+    /// below the next shorter one: a fact of the storages, which a positional
+    /// read through an interface needs to validate, not a semantic relation.
+    /// At one length a class sits below an interface, and a subclass below its
+    /// base. Refused by name: two interfaces of one length and two storages,
+    /// two holders that disagree about a parent, and an interface below a
+    /// class whose descriptor is its own vtable type.
+    fn plan_prefix_parents(&mut self) -> Result<(), String> {
         let layouts = &self.program.layouts;
-        // A layout may be shared, so a refusal names the interface itself.
         let named = |face: TypeId| {
             self.program
                 .interface_identities
@@ -916,32 +906,73 @@ impl<'a> Builder<'a> {
                 .find(|identity| identity.types.contains(&face))
                 .map_or_else(|| format!("{face:?}"), |identity| identity.name.clone())
         };
-        for pair in faces.windows(2) {
-            if layouts[pair[0].0].fields.len() == layouts[pair[1].0].fields.len() {
-                return Err(format!(
-                    "`{}` is held as a prefix of interfaces `{}` and `{}`, of one length and two storages",
-                    layouts[at].name,
-                    named(pair[0].1),
-                    named(pair[1].1)
-                ));
+        let mut parents: FxHashMap<usize, (usize, TypeId)> = FxHashMap::default();
+        for at in 0..layouts.len() {
+            let faces = self.faces_holding(at)?;
+            if faces.is_empty() {
+                continue;
+            }
+            for pair in faces.windows(2) {
+                if layouts[pair[0].0].fields.len() == layouts[pair[1].0].fields.len() {
+                    return Err(format!(
+                        "`{}` is held as a prefix of interfaces `{}` and `{}`, of one length and two storages",
+                        layouts[at].name,
+                        named(pair[0].1),
+                        named(pair[1].1)
+                    ));
+                }
+            }
+            // The layout and its declared ancestors, deepest first.
+            let mut classes = Vec::new();
+            let mut current = Some((at, layouts[at].types.first().copied()));
+            while let Some((here, Some(ty))) = current {
+                classes.push((here, ty));
+                current = layouts[here]
+                    .base
+                    .map(|base| (self.layout_of(base).unwrap_or(usize::MAX), Some(base)))
+                    .filter(|(base_at, _)| *base_at != usize::MAX);
+            }
+            // Merged by length, longest first; at one length, classes first.
+            let mut chain: Vec<(usize, TypeId, bool)> = Vec::new();
+            let (mut c, mut f) = (classes.iter().peekable(), faces.iter().peekable());
+            loop {
+                let take_class = match (c.peek(), f.peek()) {
+                    (Some(&&(class, _)), Some(&&(face, _))) => {
+                        layouts[class].fields.len() >= layouts[face].fields.len()
+                    }
+                    (Some(_), None) => true,
+                    (None, Some(_)) => false,
+                    (None, None) => break,
+                };
+                if take_class {
+                    let &(class, ty) = c.next().ok_or("chain ended early")?;
+                    chain.push((class, ty, false));
+                } else {
+                    let &(face, ty) = f.next().ok_or("chain ended early")?;
+                    chain.push((face, ty, true));
+                }
+            }
+            for pair in chain.windows(2) {
+                let ((child, _, child_face), (parent, parent_ty, parent_face)) = (pair[0], pair[1]);
+                if child_face && !parent_face && self.virtual_plan.members.contains_key(&parent) {
+                    return Err(format!(
+                        "interface storage `{}` would sit below class `{}`, whose descriptor is its own vtable",
+                        layouts[child].name, layouts[parent].name
+                    ));
+                }
+                match parents.insert(child, (parent, parent_ty)) {
+                    Some((known, _)) if known != parent => {
+                        return Err(format!(
+                            "`{}` would sit below both `{}` and `{}`",
+                            layouts[child].name, layouts[known].name, layouts[parent].name
+                        ));
+                    }
+                    _ => {}
+                }
             }
         }
-        if let Some(base) = layouts[at].base {
-            let base_at = layouts
-                .iter()
-                .position(|l| l.types.contains(&base))
-                .ok_or_else(|| format!("base type {base:?} has no layout"))?;
-            if layouts[base_at].fields.len() < layouts[longest].fields.len() {
-                return Err(format!(
-                    "class `{}` extends `{}`, which is shorter than interface `{}` it is held as a prefix of",
-                    layouts[at].name,
-                    layouts[base_at].name,
-                    named(face)
-                ));
-            }
-            return Ok(None);
-        }
-        self.object(face).map(Some)
+        self.prefix_parents = parents;
+        Ok(())
     }
 
     /// Every planned layout an interface holds as a prefix extends the

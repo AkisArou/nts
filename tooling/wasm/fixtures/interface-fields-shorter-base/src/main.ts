@@ -1,8 +1,8 @@
 // A class whose base holds fewer fields than an interface it is held as a
-// prefix of: `Derived` would need `Point`'s storage between itself and
-// `Base`'s, and `Pixel`, held by `Point` too, has no `Base` above it. Wasm
-// gives a struct one parent, so this is refused by name, not given one by
-// guess. interface-fields is the control, with a base that holds both fields.
+// prefix of: `Point`'s storage sits between `Derived` and `Base`, a chain
+// forced by their lengths and agreed by every holder, so it compiles and
+// agrees with node. interface-below-a-vtable is the same chain where `Base`
+// has virtual methods, which is refused.
 interface Point {
   x: number;
   y: number;

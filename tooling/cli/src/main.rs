@@ -2577,7 +2577,13 @@ fn hir_preparation() -> Result<(
                 selected_provider() == hir::Provider::ReferenceCounting,
             )
             .map_err(anyhow::Error::msg)?,
-            hir::InterfaceAccess::PreserveFieldAccess,
+            // Wasm dispatches interface field families by row; the JVM keeps
+            // positional field access until it implements them.
+            if backend == nts_codegen_common::Backend::Wasm {
+                hir::InterfaceAccess::Materialize
+            } else {
+                hir::InterfaceAccess::PreserveFieldAccess
+            },
         ),
     };
     Ok((backend, provider, interface_access))

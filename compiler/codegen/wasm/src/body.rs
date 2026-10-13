@@ -534,6 +534,7 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::Binary { op, lhs, rhs } => self.binary(id, *op, *lhs, *rhs)?,
             OpKind::Unary { op, operand } => self.unary(id, *op, *operand)?,
             OpKind::Convert(value) => self.convert(id, *value)?,
+            OpKind::FieldView { value, .. } => self.field_view(id, *value)?,
             OpKind::GlobalGet(global) => self.global(*global, None, &op.ty)?,
             OpKind::GlobalSet { global, value } => {
                 return self.global(*global, Some(*value), &op.ty);
@@ -572,9 +573,6 @@ impl<'b, 'p> Body<'b, 'p> {
             | OpKind::Length(_)
             | OpKind::CellReady { .. }
             | OpKind::SharedFieldGet { .. }
-            // A view is an object alias whose reads need interface field
-            // dispatch, which this backend does not yet have.
-            | OpKind::FieldView { .. }
             | OpKind::OpenFieldGet { .. }
             | OpKind::OpenFieldSet { .. }
             | OpKind::Await { .. }
@@ -688,6 +686,19 @@ impl<'b, 'p> Body<'b, 'p> {
             numeric::unary(self, id, op, value)
         }
     }
+    /// A view is the object itself: under Materialize every read through the
+    /// interface dispatches, and the view's owner has a row. Under preserved
+    /// field access a read would be positional, so a view is refused there.
+    fn field_view(&mut self, id: ValueId, value: ValueId) -> Result<(), Failure> {
+        if self.m.program.interface_access.mode != Some(nts_core::hir::InterfaceAccess::Materialize)
+        {
+            return Err("a field view, whose reads need interface dispatch (Materialize)".into());
+        }
+        self.load(value)?;
+        let (found, wanted) = (self.ty(value).clone(), self.ty(id).clone());
+        self.transfer(&found, &wanted)
+    }
+
     fn convert(&mut self, id: ValueId, value: ValueId) -> Result<(), Failure> {
         let from = self.ty(value).clone();
         let to = self.ty(id).clone();

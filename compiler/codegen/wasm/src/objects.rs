@@ -149,13 +149,30 @@ pub(crate) fn get(
     let storage = object(b, receiver)?;
     let field = field(storage, at)?;
     contract::nonnull(b, receiver, "reading a field of null")?;
-    b.load(receiver)?;
+    load_storage(b, receiver, storage.physical)?;
     b.instruction(&get_instruction(
         &field.ty,
         storage.physical,
         field_index(storage, at)?,
     )?);
     adapt(b, &field.ty, &b.ty(result).clone())
+}
+/// The receiver, as its storage: an interface whose values are the root (other
+/// owners reach it) is cast to the interface's storage, which every receiver
+/// a positional access reaches extends.
+fn load_storage(b: &mut Body<'_, '_>, receiver: ValueId, physical: u32) -> Result<(), Failure> {
+    b.load(receiver)?;
+    let held = match b.types().value_slot(b.ty(receiver))? {
+        Physical::Reference(RefType {
+            heap_type: HeapType::Concrete(held),
+            ..
+        }) => Some(held),
+        Physical::Reference(_) | Physical::Scalar(_) => None,
+    };
+    if held != Some(physical) {
+        b.instruction(&I::RefCastNonNull(HeapType::Concrete(physical)));
+    }
+    Ok(())
 }
 pub(crate) fn set(
     b: &mut Body<'_, '_>,
@@ -170,7 +187,7 @@ pub(crate) fn set(
     let storage = object(b, receiver)?;
     let field = field(storage, at)?;
     contract::nonnull(b, receiver, "writing a field of null")?;
-    b.load(receiver)?;
+    load_storage(b, receiver, storage.physical)?;
     b.load(value)?;
     adapt(b, &b.ty(value).clone(), &field.ty)?;
     b.instruction(&I::StructSet {

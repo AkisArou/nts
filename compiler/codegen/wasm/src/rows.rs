@@ -169,6 +169,18 @@ pub(crate) fn call(
         return Err(format!("interface call `{declared}` argument count mismatch").into());
     }
     contract::nonnull(b, receiver, "calling a method of null")?;
+    let program = b.m.program;
+    if let Some(default) = program.interface_access.default_for(slot) {
+        return with_default(
+            b,
+            result,
+            receiver,
+            params,
+            &convention,
+            (rows, column, signature),
+            default,
+        );
+    }
     b.load(receiver)?;
     for (&arg, ty) in params.iter().zip(&convention.params) {
         b.load(arg)?;
@@ -211,6 +223,79 @@ pub(crate) fn call(
     b.instruction(&I::RefCastNonNull(HeapType::Concrete(signature)));
     b.instruction(&I::CallRef(signature));
     if b.types().slot(&convention.result)?.is_some() {
+        objects::adapt(b, &convention.result, &b.ty(result).clone())?;
+    }
+    Ok(())
+}
+
+/// A call through a family selector, which has a default: the row's entry
+/// where the receiver's class has one, the default otherwise. The default is
+/// the interface's own positional read or write, right for every receiver
+/// without a row, which the core proves is a prefix of the interface.
+fn with_default(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    receiver: ValueId,
+    params: &[ValueId],
+    convention: &gc::Convention,
+    (rows, column, signature): (u32, u32, u32),
+    default: &str,
+) -> Result<(), Failure> {
+    let root = b
+        .types()
+        .root
+        .ok_or_else(|| Failure::Invariant("unplanned object root".into()))?;
+    let output = b
+        .types()
+        .slot(&convention.result)?
+        .map(crate::types::Physical::wasm);
+    let shell =
+        b.m.hir_func(default)
+            .ok_or_else(|| Failure::Invariant(format!("unresolved default `{default}`")))?;
+    let default_params: Vec<HirType> = shell.params.iter().skip(1).map(|p| p.ty.clone()).collect();
+    let default_result = shell.return_type.clone();
+    if default_params.len() != params.len() || default_result != convention.result {
+        return Err(format!(
+            "the default `{default}` takes or answers other types than its column"
+        )
+        .into());
+    }
+    let target = b.m.program_func(default)?;
+    b.instruction(&I::Block(
+        output.map_or(BlockType::Empty, BlockType::Result),
+    ));
+    b.instruction(&I::Block(BlockType::Empty));
+    // The entry, or a branch to the default that drops what was pushed.
+    b.load(receiver)?;
+    for (&arg, ty) in params.iter().zip(&convention.params) {
+        b.load(arg)?;
+        objects::adapt(b, &b.ty(arg).clone(), ty)?;
+    }
+    b.load(receiver)?;
+    b.instruction(&I::StructGet {
+        struct_type_index: root.object,
+        field_index: 0,
+    });
+    b.instruction(&I::StructGet {
+        struct_type_index: root.descriptor,
+        field_index: gc::ROWS_FIELD,
+    });
+    b.instruction(&I::BrOnNull(0));
+    b.instruction(&I::I32Const(column.cast_signed()));
+    b.instruction(&I::ArrayGet(rows));
+    b.instruction(&I::BrOnNull(0));
+    b.instruction(&I::RefCastNonNull(HeapType::Concrete(signature)));
+    b.instruction(&I::CallRef(signature));
+    b.instruction(&I::Br(1));
+    b.instruction(&I::End);
+    b.load(receiver)?;
+    for (&arg, ty) in params.iter().zip(&default_params) {
+        b.load(arg)?;
+        objects::adapt(b, &b.ty(arg).clone(), ty)?;
+    }
+    b.call(target);
+    b.instruction(&I::End);
+    if output.is_some() {
         objects::adapt(b, &convention.result, &b.ty(result).clone())?;
     }
     Ok(())

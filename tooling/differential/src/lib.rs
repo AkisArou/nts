@@ -417,8 +417,8 @@ pub fn check(
     // allocator that expects it to. Hence [`counting`], asked here and at the
     // runtime's defines, and nowhere else.
     let interface_access = match backend {
-        Backend::C | Backend::Llvm => hir::InterfaceAccess::Materialize,
-        Backend::Jvm | Backend::Wasm => hir::InterfaceAccess::PreserveFieldAccess,
+        Backend::C | Backend::Llvm | Backend::Wasm => hir::InterfaceAccess::Materialize,
+        Backend::Jvm => hir::InterfaceAccess::PreserveFieldAccess,
     };
     let options = hir::Options {
         provider,

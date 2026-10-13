@@ -123,6 +123,7 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::Br(_)
             | I::BrIf(_)
             | I::BrOnNonNull(_)
+            | I::BrOnNull(_)
             | I::BrTable(..)
             | I::Return
             | I::Drop

@@ -19,7 +19,7 @@ fn prepared_project(fixture: &Path) -> hir::Program {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::HostGc,
-            ..hir::Options::new(hir::InterfaceAccess::PreserveFieldAccess)
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     )
     .expect("prepared HIR verifies");
@@ -272,22 +272,65 @@ fn source_interface_fields_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
-/// A base shorter than an interface its subclass is held as a prefix of
-/// would need two parents for one struct: refused by name, the interface
-/// named, never resolved by guess. interface-fields is the control.
+/// A base shorter than an interface its subclass is held as a prefix of: the
+/// interface's storage sits between them, which agrees with node; with a base
+/// whose descriptor is its own vtable type, it is refused by name.
 #[test]
-fn a_base_shorter_than_its_interface_is_refused_by_name() {
+fn an_interface_between_a_class_and_its_base() {
     let fixture = common::repository().join("tooling/wasm/fixtures/interface-fields-shorter-base");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "interface-fields-shorter-base",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 17, "{output}");
+    let fixture = common::repository().join("tooling/wasm/fixtures/interface-below-a-vtable");
     let error = nts_codegen_wasm::emit(&prepared_project(&fixture))
         .map(|_| ())
         .unwrap_err()
         .to_string();
     assert!(
-        error.contains(
-            "class `Derived` extends `Base`, which is shorter than interface `Point` it is held as a prefix of"
-        ),
+        error.contains("would sit below class `Base`, whose descriptor is its own vtable"),
         "{error}"
     );
+}
+
+/// Reads and writes through an interface reached by a prefix receiver and by
+/// an owner of another field order: the owner's row answers, the prefix
+/// receiver takes the default, and the owner's view is the object itself.
+#[test]
+fn source_interface_views_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/interface-views");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "interface-views",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 51, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
+/// An owner of another field order whose storage is the same Wasm type as the
+/// interface's: the engine canonicalizes them into one type, so only the
+/// receiver's descriptor, never a type test, may decide how to read it.
+#[test]
+fn a_same_shape_owner_of_another_order_reads_by_its_row() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/interface-same-shape-owner");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "interface-same-shape-owner",
+        &emitted,
+        "tooling/wasm/check-interface-same-shape-owner.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 65, "{output}");
 }
 
 #[test]
