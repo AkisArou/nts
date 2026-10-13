@@ -73,3 +73,16 @@ export function erased(v: number): string {
   const zero = open(big(v) * 0n);
   return `${value === open(big(v) << 70n)}|${typeof value}|${String(value)}|${zero ? 1 : 0}|${value ? 1 : 0}|${value === open(1)}`;
 }
+
+// The one-word paths at the site: operands either side of 2^31 for a
+// product, a product that overflows a word, and the quotients a word holds
+// only in part (-2^63 / -1), with negative divisors.
+export function wordEdges(v: number): string {
+  const k = BigInt(v | 0);
+  const edge = 2147483647n + (k & 1n);
+  const low = -2147483648n - (k & 1n);
+  const wide = (1n << 40n) + k;
+  const min = -9223372036854775808n;
+  const d = k === 0n ? 3n : k;
+  return `${edge * edge}|${low * low}|${edge * low}|${low * -1n}|${wide * wide}|${wide * -wide}|${(min + (k & 1n)) / -1n}|${min % -1n}|${min / d}|${min % d}|${(-7n - k) / 2n}|${(-7n - k) % 2n}|${(7n + k) % -3n}|${(k * 1000003n) % 65537n}`;
+}
