@@ -295,6 +295,25 @@ tell them apart.
   408 groups, is unchanged too: node 118.2 against 118.5 ms, Chromium 174
   against 175 ms at the minimum, and emit 0.47 s either way.
 
+### Run-time refusals and value text (3a)
+
+`values.rs` holds the helpers a lowering leaves for run time.
+- **`nts_refused` and `nts_assertion_failed` end a path** the compiler could
+  decide only when a value arrived: a construct this compiler refuses, or an
+  input outside an asserted representation. Both report through the host's
+  named input refusal (`WasmInputDecline`), naming the function and the
+  lowering's reason, and never answer.
+- **`nts_bool_to_string`** selects between two literals at the call.
+- **`nts_value_to_string`** is `String(v)` of an erased value, by its tag:
+  `undefined`, `null`, `true` and `false` by name, a number by
+  `Number.prototype.toString`, a string as itself. An object or a function
+  prints as its type says it does (C's descriptor `to_string`). Nothing here
+  records that yet, so it is refused by name rather than answered
+  `"[object Object]"`.
+- **`nts_tag_name`** is `typeof` spelled from a tag, through one `br_table`:
+  `null` and a native handle answer `"object"`, and a tag that names no value
+  is refused by name.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
