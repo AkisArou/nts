@@ -78,13 +78,14 @@ def main():
         done = {row["name"] for row in report["rows"]}
 
     def save():
-        totals = dict.fromkeys(["emitted", "agree", "declined", "invalid", "wrong", "unmeasured", "timed_out", "cases", "thrown_cases", "input_declines"], 0)
+        totals = dict.fromkeys(["emitted", "agree", "declined", "invalid", "wrong", "unmeasured", "timed_out", "cases", "thrown_cases", "input_declines", "refused"], 0)
         for row in report["rows"]:
             totals[row["outcome"]] += 1
             totals["emitted"] += int(row.get("emitted", False))
             totals["cases"] += row.get("execution", {}).get("cases", 0)
             totals["thrown_cases"] += row.get("execution", {}).get("thrownCases", 0)
             totals["input_declines"] += row.get("execution", {}).get("inputDeclines", 0)
+            totals["refused"] += sum(row.get("execution", {}).get("refused", {}).values())
         report["totals"] = totals
         temporary = output / "report.json.tmp"
         temporary.write_text(json.dumps(report, indent=2) + "\n")

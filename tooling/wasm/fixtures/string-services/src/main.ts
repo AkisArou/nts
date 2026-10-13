@@ -59,3 +59,21 @@ export function splits(v: number): string {
   const units = ("😀" + n).split("");
   return `${parts.length}:${parts.join("|")}|${"aaaa".split("aa").length}|${"".split("").length}|${"".split(",").length}|${"ab".split("abc").length}|${units.length}:${units[0].charCodeAt(0)}|${s.split(s).length}`;
 }
+
+// Past the longest string the host holds: node throws a RangeError, and the
+// host's exception becomes a named refusal rather than unwinding through
+// compiled frames.
+export function tooLong(v: number): string {
+  const times = 2 ** 28 + ((v | 0) & 1);
+  return `${"ab".repeat(times).length}|${"7".padStart(2 ** 30 + ((v | 0) & 1)).length}`;
+}
+
+// `s[i]` where the lowering did not prove the index: inside the string it is
+// a character, and at 1.7, NaN, -1 or the length, where node answers
+// undefined, it is refused by name, as C refuses.
+export function indexed(v: number): string {
+  const s = "héllo";
+  const at = (v | 0) & 3;
+  const i = at === 0 ? v : at === 1 ? 1.7 : at === 2 ? -1 : s.length;
+  return `${s[i]}`;
+}

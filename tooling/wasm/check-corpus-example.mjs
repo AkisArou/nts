@@ -21,7 +21,11 @@ registerHooks({
 });
 
 const [artifact, source, resultFile] = process.argv.slice(2);
-const report = { cases: 0, thrownCases: 0, inputDeclines: 0, wrong: [], timeouts: [], missing: [], globals: 0 };
+// A refusal is asked of node too: where node throws as well it is an input
+// decline, and where node answers it is `refused`, tallied by its reason, so a
+// refusal standing in for an answer is visible rather than counted as a throw.
+const report = { cases: 0, thrownCases: 0, inputDeclines: 0, refused: {}, wrong: [], timeouts: [], missing: [], globals: 0 };
+const reasonOf = error => String(error.message).replace(/^NTS5001: wasm (?:operation in|input to|result from|throw from) [^:]*: /, '');
 const save = () => writeFileSync(resultFile, JSON.stringify(report, null, 2) + '\n');
 const display = value => Object.is(value, -0) ? '-0' : String(value);
 const call = new Script('fn(...args)');
@@ -129,7 +133,16 @@ try {
     const tuples = pools.length ? pools.flatMap((values, at) => values.map(value => base.with(at, value))) : [[]];
     for (const args of tuples) {
       const actual = await settle(invoke(wasm[entry.name], args));
-      if (['throw', 'reject'].includes(actual.kind) && actual.value instanceof WasmInputDecline) { report.inputDeclines++; continue; }
+      if (['throw', 'reject'].includes(actual.kind) && actual.value instanceof WasmInputDecline) {
+        const answered = await settle(invoke(reference.value, args));
+        if (['throw', 'reject'].includes(answered.kind)) report.inputDeclines++;
+        else {
+          const why = reasonOf(actual.value);
+          report.refused[why] = (report.refused[why] ?? 0) + 1;
+        }
+        save();
+        continue;
+      }
       const expected = await settle(invoke(reference.value, args));
       if ([actual, expected].some(outcome => outcome.kind === 'throw' && outcome.value?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT')) {
         report.timeouts.push({ name: entry.name, args: args.map(display), wasm: actual.kind, js: expected.kind });

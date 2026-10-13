@@ -66,18 +66,7 @@ pub(crate) fn call(
     }
     match op {
         Op::IsArray => {
-            // Every array's storage is one of the program's array wrappers.
-            let wrappers: Vec<u32> = b.types().arrays.keys().copied().collect();
-            if wrappers.is_empty() {
-                b.instruction(&I::I32Const(0));
-            }
-            for (at, wrapper) in wrappers.into_iter().enumerate() {
-                b.load(value)?;
-                b.instruction(&I::RefTestNonNull(HeapType::Concrete(wrapper)));
-                if at > 0 {
-                    b.instruction(&I::I32Or);
-                }
-            }
+            is_array(b, value)?;
             numeric::convert(b, &HirType::Bool, &b.ty(result).clone())
         }
         Op::ToNumber | Op::ToNumberExplicit => {
@@ -88,6 +77,83 @@ pub(crate) fn call(
             numeric::convert(b, &HirType::NUMBER, &b.ty(result).clone())
         }
     }
+}
+
+/// `Array.isArray` of an open value. An array's storage is one of the
+/// program's array wrappers; a heterogeneous tuple is laid out as a struct and
+/// the language calls it an Array too, so an object whose identity is a
+/// tuple's answers `true` as well, as C's `NTS_KIND_TUPLE` does.
+fn is_array(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
+    let wrappers: Vec<u32> = b.types().arrays.keys().copied().collect();
+    let objects = &b.types().objects;
+    let mut tuples = std::collections::BTreeSet::new();
+    for descriptor in &objects.descriptors {
+        if let Some(class) = descriptor.class
+            && nts_core::hir::is_tuple_layout_name(
+                &objects
+                    .object(&HirType::Managed(nts_core::hir::ManagedType::Object(class)))?
+                    .name,
+            )
+        {
+            tuples.insert(descriptor.identity);
+        }
+    }
+    b.instruction(&I::I32Const(0));
+    for wrapper in wrappers {
+        b.load(value)?;
+        b.instructions(&[I::RefTestNonNull(HeapType::Concrete(wrapper)), I::I32Or]);
+    }
+    if tuples.is_empty() {
+        return Ok(());
+    }
+    let tuple = tuple_test(b.m, tuples)?;
+    b.load(value)?;
+    b.call(tuple);
+    b.instruction(&I::I32Or);
+    Ok(())
+}
+
+/// `(value) -> i32`: whether an open value is an object whose identity is
+/// one of `tuples`.
+fn tuple_test(
+    m: &mut Builder<'_>,
+    tuples: std::collections::BTreeSet<u32>,
+) -> Result<Func, Failure> {
+    let root = m
+        .types
+        .root
+        .ok_or_else(|| Failure::Invariant("a tuple with no object root".into()))?;
+    m.helper(
+        FuncKey::IsTuple,
+        "value.isTuple",
+        vec![Physical::Reference(RefType::ANYREF)],
+        Some(Physical::Scalar(Slot::I32)),
+        move |_| {
+            // Params: value. Locals: its identity.
+            let mut f = Function::new([ValType::I32]);
+            f.instructions(&[
+                I::LocalGet(0),
+                I::RefTestNonNull(HeapType::Concrete(root.object)),
+                I::I32Eqz,
+                I::If(BlockType::Empty),
+                I::I32Const(0),
+                I::Return,
+                I::End,
+            ]);
+            crate::objects::push_identity(&mut f, root, 0);
+            f.instructions(&[I::LocalSet(1), I::I32Const(0)]);
+            for identity in tuples {
+                f.instructions(&[
+                    I::LocalGet(1),
+                    I::I32Const(identity.cast_signed()),
+                    I::I32Eq,
+                    I::I32Or,
+                ]);
+            }
+            f.instruction(&I::End);
+            Ok(f)
+        },
+    )
 }
 
 fn callee(m: &mut Builder<'_>, explicit: bool) -> Result<Func, Failure> {

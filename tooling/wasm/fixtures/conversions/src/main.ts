@@ -72,3 +72,17 @@ export function numberTests(v: number): string {
   }
   return text;
 }
+
+// A heterogeneous tuple is laid out as a struct, and the language calls it an
+// Array: isArray of it through an open slot is true. Beside it, an object of
+// the same field types, which is not.
+export function openTuple(v: number): string {
+  const pair: [number, string] = [v, "a"];
+  const record = { first: v, second: "a" };
+  const opens: unknown[] = [pair, record, [v, v]];
+  let text = "";
+  for (const open of opens) {
+    text += Array.isArray(open) ? "1" : "0";
+  }
+  return text;
+}

@@ -316,6 +316,25 @@ fn wrapped_string_import(name: &str, captures: &mut Captures) -> Option<(ImportT
     })
 }
 
+/// A host method service as a named refusal: whatever the host's method
+/// throws (node's `RangeError: Invalid string length` for `"ab".repeat(2 **
+/// 28)`, say) becomes the refusal C gives, never an exception unwinding
+/// through compiled frames. The service is made once; the wrapper names each
+/// parameter, so a call allocates nothing.
+fn guarded(name: &str, ty: &ImportType, service: &str) -> String {
+    let ImportType::Function { params, .. } = ty else {
+        return service.to_owned();
+    };
+    let list = (0..params.len())
+        .map(|at| format!("a{at}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let what = name.strip_prefix("nts_").unwrap_or(name);
+    format!(
+        "(service => ({list}) => {{ try {{ return service({list}); }} catch (error) {{ if (error instanceof WasmInputDecline) throw error; throw new WasmInputDecline('{what}', String(error), 'operation in'); }} }})({service})"
+    )
+}
+
 /// A host import the glue provides: the Wasm type its JS value implements,
 /// and that value. Checked against the module's own import type, because an
 /// engine converts a JS function's arguments and result silently: a wrong
@@ -336,11 +355,11 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
         let math_ = captures.get("math", "Math");
         return Some((number(arity), format!("{math_}.{math}")));
     }
-    if let Some(method) = method_import(name, captures) {
-        return Some(method);
-    }
-    if let Some(method) = string_import(name, captures) {
-        return Some(method);
+    if let Some((ty, method)) =
+        method_import(name, captures).or_else(|| string_import(name, captures))
+    {
+        let guarded = guarded(name, &ty, &method);
+        return Some((ty, guarded));
     }
     Some(match name {
         "remainder" => (number(2), "(left, right) => left % right".into()),

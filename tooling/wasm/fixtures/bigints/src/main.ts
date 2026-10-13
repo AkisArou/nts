@@ -86,3 +86,49 @@ export function wordEdges(v: number): string {
   const d = k === 0n ? 3n : k;
   return `${edge * edge}|${low * low}|${edge * low}|${low * -1n}|${wide * wide}|${wide * -wide}|${(min + (k & 1n)) / -1n}|${min % -1n}|${min / d}|${min % d}|${(-7n - k) / 2n}|${(-7n - k) % 2n}|${(7n + k) % -3n}|${(k * 1000003n) % 65537n}`;
 }
+
+// Comparisons, whose helper reads the high words signed and the low words
+// unsigned: across signs, across the word boundary, and equal high words.
+function ordered(at: number, v: number): bigint {
+  switch (at & 7) {
+    case 0: return -(2n ** 100n);
+    case 1: return -(2n ** 64n);
+    case 2: return -1n;
+    case 3: return 0n;
+    case 4: return 2n ** 63n;
+    case 5: return 2n ** 64n;
+    case 6: return 2n ** 100n;
+    default: return BigInt(v | 0);
+  }
+}
+export function compared(v: number): string {
+  const x = ordered(v | 0, v);
+  let text = "";
+  for (let at = 0; at < 8; at++) {
+    const y = ordered(at, v);
+    text += `${x < y ? 1 : 0}${x <= y ? 1 : 0}${x > y ? 1 : 0}${x >= y ? 1 : 0}`;
+  }
+  return text;
+}
+
+// The edges of the width: -2^127 % -1 is 0, -2^63 / -1 fits, and asIntN at
+// widths 0, 1 and 128.
+export function widthEdges(v: number): string {
+  const x = BigInt(v | 0) * 12345678901234567n;
+  return `${BOTTOM % -1n}|${-(2n ** 63n) / -1n}|${BigInt.asIntN(0, x)}|${BigInt.asIntN(1, x)}|${BigInt.asIntN(128, x)}|${BigInt.asUintN(1, x)}`;
+}
+
+// Each refusal on its own: past the width where node answers, and node's
+// throws (division by zero, a number that is not an integer).
+export function bottomOverMinusOne(v: number): string {
+  return `${(BOTTOM + BigInt((v | 0) & 0)) / -1n}`;
+}
+export function bottomNegated(v: number): string {
+  return `${-(BOTTOM + BigInt((v | 0) & 0))}`;
+}
+export function dividedByZero(v: number): string {
+  return `${BigInt(v | 0) / BigInt((v | 0) & 0)}`;
+}
+export function infinityToBigint(v: number): string {
+  return `${BigInt(v / 0 + 0 * v)}`;
+}

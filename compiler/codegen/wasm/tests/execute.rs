@@ -117,6 +117,7 @@ fn same_shape_classes_without_parents_share_storage_and_agree() {
     );
     assert_eq!(output["cases"], 34, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 #[test]
@@ -254,6 +255,7 @@ fn source_interface_calls_through_rows_agree_with_node() {
     );
     assert_eq!(output["cases"], 102, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// An interface with fields is storage that every layout the core names as
@@ -272,6 +274,7 @@ fn source_interface_fields_agree_with_node() {
     );
     assert_eq!(output["cases"], 85, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// A base shorter than an interface its subclass is held as a prefix of: the
@@ -289,6 +292,8 @@ fn an_interface_between_a_class_and_its_base() {
         &["--experimental-transform-types"],
     );
     assert_eq!(output["cases"], 17, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
     let fixture = common::repository().join("tooling/wasm/fixtures/interface-below-a-vtable");
     let error = nts_codegen_wasm::emit(&prepared_project(&fixture))
         .map(|_| ())
@@ -316,6 +321,7 @@ fn source_interface_views_agree_with_node() {
     );
     assert_eq!(output["cases"], 51, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// The table under a Map, a Set and a record: growth across rehashes,
@@ -369,6 +375,7 @@ fn source_buffer_views_agree_with_node() {
     );
     assert_eq!(output["cases"], 340, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// A class used as a value is one immutable token per class: the same object
@@ -387,6 +394,7 @@ fn source_class_tokens_agree_with_node() {
     );
     assert_eq!(output["cases"], 85, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// An optional chain whose absent arm puts undefined in a numeric slot, on a
@@ -404,6 +412,7 @@ fn source_absent_scalars_agree_with_node() {
     );
     assert_eq!(output["cases"], 51, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// Symbols: identity by address, descriptions and their absence, the
@@ -422,6 +431,7 @@ fn source_symbols_agree_with_node() {
     );
     assert_eq!(output["cases"], 85, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// A bigint in 128 bits: arithmetic and its signs, the edges at -2^127 and
@@ -440,8 +450,13 @@ fn source_bigints_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 166, "{output}");
-    assert_eq!(output["declined"], 38, "{output}");
+    assert_eq!(output["cases"], 200, "{output}");
+    assert_eq!(output["declined"], 39, "{output}");
+    assert_eq!(
+        output["refused"],
+        serde_json::json!({"a bigint past 128 bits, which this runtime does not hold": 67}),
+        "{output}"
+    );
 }
 
 /// An open value made a number by every primitive kind it can hold, an
@@ -458,8 +473,9 @@ fn source_conversions_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 136, "{output}");
+    assert_eq!(output["cases"], 153, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// An override declaring fewer parameters than its slot: through the base
@@ -478,6 +494,7 @@ fn source_narrower_overrides_agree_with_node() {
     );
     assert_eq!(output["cases"], 51, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// A function's name and a value's text read off its identity: declarations,
@@ -496,6 +513,7 @@ fn source_function_text_agrees_with_node() {
     );
     assert_eq!(output["cases"], 51, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// A member read through a slot several layouts reach, shared or at each
@@ -514,6 +532,7 @@ fn source_open_members_agree_with_node() {
     );
     assert_eq!(output["cases"], 102, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
 /// The string methods the host applies with node's own `String.prototype`,
@@ -529,8 +548,13 @@ fn source_string_services_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 153, "{output}");
-    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["cases"], 155, "{output}");
+    assert_eq!(output["declined"], 17, "{output}");
+    assert_eq!(
+        output["refused"],
+        serde_json::json!({"a string index outside the string, or not a whole number": 15}),
+        "{output}"
+    );
 }
 
 /// The order promise reactions and resumptions run in: each export's return
@@ -731,7 +755,8 @@ fn existing_loops_and_bitwise_examples_agree_with_node() {
             &[&fixture.join("src/main.ts")],
         );
         assert_eq!(output["cases"], expected, "{output}");
-        assert_eq!(output["declined"], 0);
+        assert_eq!(output["declined"], 0, "{output}");
+        assert_eq!(output["refused"], serde_json::json!({}), "{output}");
         println!("{name}: {output}");
     }
 }

@@ -241,10 +241,28 @@ pub(crate) fn convert(b: &mut Body<'_, '_>, value: ValueId, to: &HirType) -> Res
             b.instruction(&I::V128AnyTrue);
             Ok(())
         }
-        (HirType::BigInt, HirType::Float { .. } | HirType::Int { .. }) => {
+        (HirType::BigInt, HirType::Float { .. }) => {
             b.load(value)?;
             call_helper(b, Helper::ToNumber)?;
             numeric::convert(b, &HirType::NUMBER, to)
+        }
+        // Truncated mod 2^bits, as C's cast from `__int128`: the low word,
+        // never a trip through a double.
+        (HirType::BigInt, HirType::Int { bits, signed }) => {
+            b.load(value)?;
+            b.instruction(&I::I64x2ExtractLane(0));
+            if *bits == 64 {
+                return Ok(());
+            }
+            b.instruction(&I::I32WrapI64);
+            numeric::convert(
+                b,
+                &HirType::Int {
+                    bits: 32,
+                    signed: *signed,
+                },
+                to,
+            )
         }
         (HirType::Float { .. }, HirType::BigInt) => {
             b.load(value)?;
@@ -1254,7 +1272,20 @@ fn from_number(m: &mut Builder<'_>) -> Result<Function, Failure> {
     let two_64 = 18_446_744_073_709_551_616.0_f64;
     let two_127 = 170_141_183_460_469_231_731_687_303_715_884_105_728.0_f64;
     let mut f = Function::new([ValType::I64, ValType::I64]);
-    f.instructions(&[I::LocalGet(0), I::LocalGet(0), I::F64Trunc, I::F64Ne]);
+    // Not finite (NaN and the infinities make `x - x` NaN), or a fraction:
+    // node's "not an integer" for both.
+    f.instructions(&[
+        I::LocalGet(0),
+        I::LocalGet(0),
+        I::F64Sub,
+        I::F64Const(0.0.into()),
+        I::F64Ne,
+        I::LocalGet(0),
+        I::LocalGet(0),
+        I::F64Trunc,
+        I::F64Ne,
+        I::I32Or,
+    ]);
     refuse_if(&mut f, m, 1, NOT_INTEGRAL)?;
     f.instructions(&[
         I::LocalGet(0),

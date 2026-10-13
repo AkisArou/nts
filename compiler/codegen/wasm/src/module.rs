@@ -85,6 +85,8 @@ pub(crate) enum FuncKey {
     BigIntHost(&'static str),
     /// An open value made a number; `true` for the explicit `Number(value)`.
     ToNumber(bool),
+    /// Whether an open value is a heterogeneous tuple.
+    IsTuple,
     /// `split` into an array of strings, by the array's wrapper.
     StringSplit(u32),
     /// A function value's name, read off its identity.
