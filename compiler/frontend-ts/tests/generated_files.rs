@@ -66,6 +66,10 @@ impl Generated for OnePerRound {
         "one-per-round".to_owned()
     }
 
+    fn import_prefixes(&self) -> Option<&[&str]> {
+        Some(&["gen:"])
+    }
+
     fn files(
         &mut self,
         tsconfig: &Utf8Path,
@@ -158,19 +162,26 @@ fn the_project_keeps_its_own_files_however_its_config_names_them() {
 }
 
 #[derive(Debug)]
-struct NoFiles;
+struct NoFiles {
+    complaints: Arc<Mutex<Option<Vec<Complaint>>>>,
+}
 
 impl Generated for NoFiles {
     fn identity(&self) -> String {
         "no-files".to_owned()
     }
 
+    fn import_prefixes(&self) -> Option<&[&str]> {
+        Some(&["gi:", "c:"])
+    }
+
     fn files(
         &mut self,
         _tsconfig: &Utf8Path,
         _roots: &[String],
-        _complaints: &[Complaint],
+        complaints: &[Complaint],
     ) -> Result<Option<Vec<Utf8PathBuf>>, String> {
+        *self.complaints.lock().unwrap() = Some(complaints.to_vec());
         Ok(None)
     }
 }
@@ -193,14 +204,19 @@ export class Box {
     [first] = 1;
 }
 export function answer(box: Box): number { return box[first] + box[second]; }
+export const ordinary = 'gi:cairo';
+// import type { Context } from "gi:cairo";
 "#,
     )
     .unwrap();
     let control = TsgoApi::for_compilation(tsgo.clone())
         .snapshot(&config)
         .unwrap();
-    let subject = TsgoApi::for_compilation(tsgo)
-        .with_generated(Box::new(NoFiles))
+    let complaints = Arc::new(Mutex::new(None));
+    let subject = TsgoApi::for_compilation(tsgo.clone())
+        .with_generated(Box::new(NoFiles {
+            complaints: Arc::clone(&complaints),
+        }))
         .snapshot(&config)
         .unwrap();
     assert_eq!(
@@ -208,4 +224,73 @@ export function answer(box: Box): number { return box[first] + box[second]; }
         serde_json::to_value(control).unwrap(),
         "an inactive generator must leave the complete snapshot unchanged"
     );
+    assert!(complaints.lock().unwrap().is_none());
+
+    // The control differs by one real import. Only it may ask for complaints.
+    let file = config.parent().unwrap().join("src/main.ts");
+    let text = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(
+        &file,
+        format!("import type {{ Context }} from \"gi:cairo\";\n{text}"),
+    )
+    .unwrap();
+    TsgoApi::for_compilation(tsgo)
+        .with_generated(Box::new(NoFiles {
+            complaints: Arc::clone(&complaints),
+        }))
+        .snapshot(&config)
+        .unwrap();
+    assert!(
+        complaints
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .iter()
+            .any(|d| { d.code == 2307 && d.text.contains("gi:cairo") }),
+        "the one-import control must reach the generator"
+    );
+}
+
+/// The preflight follows the parser's module list, across syntax forms and
+/// imported sources outside the config's roots. Escapes are already cooked.
+#[test]
+fn generator_imports_are_found_in_every_module_form() {
+    let Some(tsgo) = tsgo() else {
+        eprintln!("skipping: NTS_TSGO not set");
+        return;
+    };
+    let config = project("module-forms", "files");
+    let root = config.parent().unwrap();
+    std::fs::create_dir_all(root.join("vendor")).unwrap();
+    // This source is reached through an import, not listed in tsconfig.files.
+    std::fs::write(
+        root.join("src/main.ts"),
+        "import '../vendor/imports';\nexport const answer = 1;\n",
+    )
+    .unwrap();
+    for form in [
+        "import { Context } from 'gi:cairo';",
+        "import 'gi:cairo';",
+        "import type { Context } from 'gi:cairo';",
+        "export { Context } from 'gi:cairo';",
+        "export * from 'gi:cairo';",
+        "export type Context = import('gi:cairo').Context;",
+        "export const loading = import('gi:cairo');",
+        r"import type { Context } from 'gi:\u0063airo';",
+        "import type { Context } from 'c:cairo';",
+    ] {
+        std::fs::write(root.join("vendor/imports.ts"), form).unwrap();
+        let complaints = Arc::new(Mutex::new(None));
+        TsgoApi::new(tsgo.clone())
+            .with_generated(Box::new(NoFiles {
+                complaints: Arc::clone(&complaints),
+            }))
+            .snapshot(&config)
+            .unwrap();
+        assert!(
+            complaints.lock().unwrap().is_some(),
+            "the generator must be called for {form}"
+        );
+    }
 }

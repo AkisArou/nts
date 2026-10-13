@@ -27,6 +27,14 @@ pub trait Generated: std::fmt::Debug {
     /// snapshot cache, as a source transform's identity does.
     fn identity(&self) -> String;
 
+    /// Module prefixes this generator answers for. `None` means any program;
+    /// `Some` asks for checker complaints only if a parsed module specifier
+    /// starts with one of these prefixes. An inactive generator must not
+    /// check the program before capture: that renumbers unique-symbol names.
+    fn import_prefixes(&self) -> Option<&[&str]> {
+        None
+    }
+
     /// The files to open the project at `tsconfig` with, besides its own
     /// (`roots`), given what the checker said of the program opened last --
     /// the project's own, the first time. `None` opens the project as it is,

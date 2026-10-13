@@ -76,6 +76,8 @@ const DATA_TYPE_EXTENDED: u32 = 2 << 30;
 /// Why an encoded source file could not be decoded.
 #[derive(Debug, thiserror::Error)]
 pub enum AstError {
+    #[error("invalid encoded import list: {0}")]
+    InvalidImports(&'static str),
     #[error("encoded source file is {len} bytes, too short for a {HEADER_SIZE}-byte header")]
     TooShort { len: usize },
 
@@ -172,6 +174,82 @@ pub fn decode(payload: &[u8], file: SourceId) -> Result<EncodedSourceFile, AstEr
         content_hash: header.content_hash,
         nodes,
     })
+}
+
+/// The checker's parsed module specifiers, including re-exports, import types
+/// and literal import calls. `SourceFile`'s structured `imports` list is the
+/// authority; string values come from the encoder's cooked string table.
+/// Reading it neither queries types nor changes the decoded semantic nodes.
+pub fn module_specifiers(payload: &[u8]) -> Result<Vec<String>, AstError> {
+    let header = Header::parse(payload)?;
+    let nodes = &payload[header.nodes_at..];
+    let extended = &payload[header.extended_at..header.structured_at];
+    let structured = &payload[header.structured_at..header.nodes_at];
+    let invalid = || AstError::InvalidImports("missing source file metadata");
+    if u32_at(nodes, NODE_SIZE) != Some(u32::from(nts_semantic_schema::syntax::SOURCE_FILE)) {
+        return Err(invalid());
+    }
+    let data = u32_at(nodes, NODE_SIZE + 20).ok_or_else(invalid)?;
+    let imports =
+        u32_at(extended, (data & DATA_STRING_INDEX_MASK) as usize + 32).ok_or_else(invalid)?;
+    if imports == u32::MAX {
+        return Ok(Vec::new());
+    }
+    let mut indices = structured.get(imports as usize..).ok_or_else(invalid)?;
+    let count = msgpack_number(&mut indices, true)?;
+    if count as usize > indices.len() {
+        return Err(AstError::InvalidImports("truncated node index array"));
+    }
+    let strings = StringTable {
+        offsets: &payload[header.string_offsets_at..header.string_data_at],
+        data: &payload[header.string_data_at..],
+        utf16: Vec::new(), // get() reads string-table offsets, not source spans.
+    };
+    let mut modules = Vec::new();
+    for _ in 0..count {
+        let node = msgpack_number(&mut indices, false)?;
+        let at = (node as usize)
+            .checked_mul(NODE_SIZE)
+            .and_then(|at| at.checked_add(20))
+            .ok_or(AstError::InvalidImports("node index overflows"))?;
+        let data = u32_at(nodes, at).ok_or(AstError::InvalidImports("missing module specifier"))?;
+        let index = match data & DATA_TYPE_MASK {
+            DATA_TYPE_STRING => data & DATA_STRING_INDEX_MASK,
+            DATA_TYPE_EXTENDED => u32_at(extended, (data & DATA_STRING_INDEX_MASK) as usize)
+                .ok_or(AstError::InvalidImports("missing module text"))?,
+            _ => return Err(AstError::InvalidImports("module specifier has no text")),
+        };
+        modules.push(strings.get(index, node)?);
+    }
+    Ok(modules)
+}
+
+/// The two msgpack shapes used by SourceFile.imports: an array header, then
+/// unsigned node indices. Reject all other shapes, as the pinned encoder does.
+fn msgpack_number(bytes: &mut &[u8], array: bool) -> Result<u32, AstError> {
+    let (&marker, rest) = bytes
+        .split_first()
+        .ok_or(AstError::InvalidImports("truncated msgpack value"))?;
+    *bytes = rest;
+    match (array, marker) {
+        (true, 0x90..=0x9f) => return Ok(u32::from(marker & 0x0f)),
+        (false, 0x00..=0x7f) => return Ok(u32::from(marker)),
+        _ => {}
+    }
+    let width = match (array, marker) {
+        (false, 0xcc) => 1,
+        (true, 0xdc) | (false, 0xcd) => 2,
+        (true, 0xdd) | (false, 0xce) => 4,
+        _ => return Err(AstError::InvalidImports("unexpected msgpack marker")),
+    };
+    let digits = bytes
+        .get(..width)
+        .ok_or(AstError::InvalidImports("truncated msgpack integer"))?;
+    let value = digits
+        .iter()
+        .fold(0, |value, digit| (value << 8) | u32::from(*digit));
+    *bytes = &bytes[width..];
+    Ok(value)
 }
 
 /// The 44-byte header: a protocol version, a content hash, and section offsets.

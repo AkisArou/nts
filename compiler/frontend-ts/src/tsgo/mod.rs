@@ -184,6 +184,9 @@ pub struct Client {
     /// Text tsgo reads in place of a file's, by the path tsgo names it with;
     /// `None` unless spawned with [`Client::spawn_with_overlays`].
     overlays: Option<FxHashMap<String, String>>,
+    /// AST payloads read by the generator's import preflight, consumed once
+    /// by capture. A different snapshot or project can never reuse them.
+    prefetched_files: FxHashMap<(u64, String, Utf8PathBuf), Vec<u8>>,
 }
 
 impl Client {
@@ -234,6 +237,7 @@ impl Client {
             stdout: BufReader::new(stdout),
             round_trips: 0,
             overlays: overlays.then(FxHashMap::default),
+            prefetched_files: FxHashMap::default(),
         })
     }
 
@@ -373,6 +377,7 @@ impl Client {
         &mut self,
         changed: &[String],
     ) -> Result<UpdateSnapshotResponse, TsgoError> {
+        self.prefetched_files.clear();
         self.request(
             proto::method::UPDATE_SNAPSHOT,
             &UpdateSnapshotParams {
@@ -450,6 +455,12 @@ impl Client {
         project: &ProjectHandle,
         file: &Utf8Path,
     ) -> Result<Vec<u8>, TsgoError> {
+        if let Some(bytes) =
+            self.prefetched_files
+                .remove(&(snapshot.0, project.0.clone(), file.to_owned()))
+        {
+            return Ok(bytes);
+        }
         self.request_raw(
             proto::method::GET_SOURCE_FILE,
             &GetSourceFileParams {
@@ -1722,6 +1733,7 @@ fn open_adding(
     roots: &[String],
     files: &[Utf8PathBuf],
 ) -> Result<UpdateSnapshotResponse, TsgoError> {
+    client.prefetched_files.clear();
     let tsconfig = absolute(tsconfig);
     let config = tsconfig
         .parent()
@@ -1775,6 +1787,11 @@ fn open_generated(
     project: UpdateSnapshotResponse,
 ) -> Result<UpdateSnapshotResponse, TsgoError> {
     const ROUNDS: usize = 4;
+    if let Some(prefixes) = generated.import_prefixes()
+        && !imports_match(client, &project, prefixes)?
+    {
+        return Ok(project);
+    }
     // What the checker says of the project's own files as they are, before
     // anything is generated: a generator fills in what is missing, and a
     // module the project already has -- an installed platform package -- is
@@ -1819,6 +1836,39 @@ fn open_generated(
         current = Some(files);
     }
     Ok(opened)
+}
+
+/// Read the parsed program's imports without asking the checker anything.
+/// Include imported sources outside the root list, and retain each payload
+/// for capture only while it still belongs to this snapshot and project.
+fn imports_match(
+    client: &mut Client,
+    opened: &UpdateSnapshotResponse,
+    prefixes: &[&str],
+) -> Result<bool, TsgoError> {
+    if prefixes.is_empty() {
+        return Ok(false);
+    }
+    for project in &opened.projects {
+        for path in compiled_files(client, opened.snapshot, &project.id)? {
+            let bytes = client.source_file(opened.snapshot, &project.id, &path)?;
+            let matches = !bytes.is_empty()
+                && ast::module_specifiers(&bytes)
+                    .map_err(|source| TsgoError::Ast {
+                        file: path.to_string(),
+                        source,
+                    })?
+                    .iter()
+                    .any(|module| prefixes.iter().any(|prefix| module.starts_with(prefix)));
+            client
+                .prefetched_files
+                .insert((opened.snapshot.0, project.id.0.clone(), path), bytes);
+            if matches {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
 }
 
 /// Checker codes that are ECMAScript early errors, reported for a plain-JS file

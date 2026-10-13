@@ -233,6 +233,10 @@ impl GirBindings {
 }
 
 impl Generated for GirBindings {
+    fn import_prefixes(&self) -> Option<&[&str]> {
+        Some(&["gi:", "c:"])
+    }
+
     /// What keys the snapshot cache: the binder's source and every GIR file
     /// this machine would bind from. A constant let a build after a GIR
     /// update read the cached snapshot -- which names the store entry of the
