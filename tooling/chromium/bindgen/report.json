@@ -43,26 +43,6 @@
     },
     {
       "interface": "Element",
-      "member": "get onbeforecopy",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onbeforecut",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onbeforepaste",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onsearch",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
       "member": "get containerTiming",
       "why": "[RuntimeEnabled=ContainerTiming] overridable"
     },
@@ -105,26 +85,6 @@
       "interface": "Element",
       "member": "get customElementRegistry",
       "why": "interface CustomElementRegistry is not bound"
-    },
-    {
-      "interface": "Element",
-      "member": "get onfullscreenchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onfullscreenerror",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onwebkitfullscreenchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Element",
-      "member": "get onwebkitfullscreenerror",
-      "why": "result type EventHandler"
     },
     {
       "interface": "Element",
@@ -533,23 +493,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onreadystatechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
       "member": "get all",
       "why": "interface HTMLAllCollection is not bound"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerlockchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerlockerror",
-      "why": "result type EventHandler"
     },
     {
       "interface": "Document",
@@ -573,73 +518,8 @@
     },
     {
       "interface": "Document",
-      "member": "get onautofill",
-      "why": "[RuntimeEnabled=AutofillEvent] overridable"
-    },
-    {
-      "interface": "Document",
       "member": "set onautofill",
       "why": "[RuntimeEnabled=AutofillEvent] overridable"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforecopy",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforecut",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforepaste",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onfreeze",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onprerenderingchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onresume",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onsearch",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onvisibilitychange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onfullscreenchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onfullscreenerror",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkitfullscreenchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkitfullscreenerror",
-      "why": "result type EventHandler"
     },
     {
       "interface": "Document",
@@ -668,16 +548,6 @@
     },
     {
       "interface": "Document",
-      "member": "get onabort",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforefilter",
-      "why": "[RuntimeEnabled=FilteringPrimitives] none"
-    },
-    {
-      "interface": "Document",
       "member": "get onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
@@ -685,66 +555,6 @@
       "interface": "Document",
       "member": "set onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforeinput",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforematch",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforetoggle",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onblur",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncanplay",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncanplaythrough",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onclose",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncommand",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncomplete",
-      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "Document",
@@ -758,86 +568,6 @@
     },
     {
       "interface": "Document",
-      "member": "get oncontentvisibilityautostatechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncontextlost",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncontextmenu",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncontextrestored",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncuechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondblclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondrag",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondragend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondragenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondragleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondragover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondragstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondrop",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ondurationchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onemptied",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onended",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
       "member": "get onerror",
       "why": "result type OnErrorEventHandler"
     },
@@ -848,117 +578,12 @@
     },
     {
       "interface": "Document",
-      "member": "get onfocus",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onformdata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oninput",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oninvalid",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onkeydown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onkeypress",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onkeyup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onload",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onloadeddata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onloadedmetadata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onloadstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmousedown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmouseenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmouseleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmousemove",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmouseout",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmouseover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmouseup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onmousewheel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onoverscrollcancel",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "Document",
       "member": "get onoverscrollcancel",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Document",
       "member": "set onoverscrollcancel",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "Document",
-      "member": "get onoverscrollchanging",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
@@ -978,17 +603,7 @@
     },
     {
       "interface": "Document",
-      "member": "get onoverscrollend",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "Document",
       "member": "set onoverscrollend",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "Document",
-      "member": "get onoverscrollstart",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
@@ -1003,222 +618,12 @@
     },
     {
       "interface": "Document",
-      "member": "get onpause",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onplay",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onplaying",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onprogress",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onratechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onreset",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onresize",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onscroll",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onscrollend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onsecuritypolicyviolation",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onseeked",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onseeking",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onselect",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onslotchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onscrollsnapchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onscrollsnapchanging",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onstalled",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onsubmit",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onsuspend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontimeupdate",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontoggle",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onvolumechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwaiting",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkitanimationend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkitanimationiteration",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkitanimationstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwebkittransitionend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onwheel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onauxclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ongotpointercapture",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onlostpointercapture",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerdown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointermove",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerrawupdate",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointercancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerout",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpointerleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontouchcancel",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "Document",
       "member": "get ontouchcancel",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Document",
       "member": "set ontouchcancel",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontouchend",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
@@ -1238,17 +643,7 @@
     },
     {
       "interface": "Document",
-      "member": "get ontouchmove",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "Document",
       "member": "set ontouchmove",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontouchstart",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
@@ -1263,61 +658,6 @@
     },
     {
       "interface": "Document",
-      "member": "get onselectstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onselectionchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onanimationcancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onanimationend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onanimationiteration",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onanimationstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontransitionrun",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontransitionstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontransitionend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get ontransitioncancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onbeforexrselect",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Document",
       "member": "get onbeforexrselect",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -1325,21 +665,6 @@
       "interface": "Document",
       "member": "set onbeforexrselect",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncopy",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get oncut",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Document",
-      "member": "get onpaste",
-      "why": "result type EventHandler"
     },
     {
       "interface": "Document",
@@ -1583,16 +908,6 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onabort",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onbeforefilter",
-      "why": "[RuntimeEnabled=FilteringPrimitives] none"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
@@ -1600,66 +915,6 @@
       "interface": "HTMLElement",
       "member": "set onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onbeforeinput",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onbeforematch",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onbeforetoggle",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onblur",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncanplay",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncanplaythrough",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onclose",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncommand",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncomplete",
-      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "HTMLElement",
@@ -1673,86 +928,6 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get oncontentvisibilityautostatechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncontextlost",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncontextmenu",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncontextrestored",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncuechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondblclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondrag",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondragend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondragenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondragleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondragover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondragstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondrop",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ondurationchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onemptied",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onended",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onerror",
       "why": "result type OnErrorEventHandler"
     },
@@ -1763,117 +938,12 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onfocus",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onformdata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oninput",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oninvalid",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onkeydown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onkeypress",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onkeyup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onload",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onloadeddata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onloadedmetadata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onloadstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmousedown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmouseenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmouseleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmousemove",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmouseout",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmouseover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmouseup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onmousewheel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onoverscrollcancel",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onoverscrollcancel",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "HTMLElement",
       "member": "set onoverscrollcancel",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onoverscrollchanging",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
@@ -1893,17 +963,7 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onoverscrollend",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "set onoverscrollend",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onoverscrollstart",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
@@ -1918,222 +978,12 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onpause",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onplay",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onplaying",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onprogress",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onratechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onreset",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onresize",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onscroll",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onscrollend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onsecuritypolicyviolation",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onseeked",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onseeking",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onselect",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onslotchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onscrollsnapchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onscrollsnapchanging",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onstalled",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onsubmit",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onsuspend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontimeupdate",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontoggle",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onvolumechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwaiting",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwebkitanimationend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwebkitanimationiteration",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwebkitanimationstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwebkittransitionend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onwheel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onauxclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ongotpointercapture",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onlostpointercapture",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerdown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointermove",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerrawupdate",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointercancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerout",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpointerleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontouchcancel",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get ontouchcancel",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "HTMLElement",
       "member": "set ontouchcancel",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontouchend",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
@@ -2153,17 +1003,7 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get ontouchmove",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "set ontouchmove",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontouchstart",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
@@ -2178,61 +1018,6 @@
     },
     {
       "interface": "HTMLElement",
-      "member": "get onselectstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onselectionchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onanimationcancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onanimationend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onanimationiteration",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onanimationstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontransitionrun",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontransitionstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontransitionend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get ontransitioncancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onbeforexrselect",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "HTMLElement",
       "member": "get onbeforexrselect",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -2240,21 +1025,6 @@
       "interface": "HTMLElement",
       "member": "set onbeforexrselect",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncopy",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get oncut",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "HTMLElement",
-      "member": "get onpaste",
-      "why": "result type EventHandler"
     },
     {
       "interface": "HTMLElement",
@@ -2538,17 +1308,7 @@
     },
     {
       "interface": "HTMLImageElement",
-      "member": "get onuareplacestart",
-      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
-    },
-    {
-      "interface": "HTMLImageElement",
       "member": "set onuareplacestart",
-      "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
-    },
-    {
-      "interface": "HTMLImageElement",
-      "member": "get onuareplaceend",
       "why": "[RuntimeEnabled=UAImageReplacementAPI] overridable"
     },
     {
@@ -2574,11 +1334,6 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "set layoutSubtree",
-      "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
-    },
-    {
-      "interface": "HTMLCanvasElement",
-      "member": "get onpaint",
       "why": "[RuntimeEnabled=CanvasDrawElement] overridable"
     },
     {
@@ -2878,11 +1633,6 @@
     },
     {
       "interface": "Window",
-      "member": "get onorientationchange",
-      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
-    },
-    {
-      "interface": "Window",
       "member": "set onorientationchange",
       "why": "[RuntimeEnabled=OrientationEvent] per-platform"
     },
@@ -2890,16 +1640,6 @@
       "interface": "Window",
       "member": "get orientation",
       "why": "[RuntimeEnabled=OrientationEvent] per-platform"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpageswap",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpagereveal",
-      "why": "result type EventHandler"
     },
     {
       "interface": "Window",
@@ -2933,11 +1673,6 @@
     },
     {
       "interface": "Window",
-      "member": "get onsearch",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
       "member": "get fence",
       "why": "[RuntimeEnabled=FencedFrames] overridable"
     },
@@ -2958,17 +1693,7 @@
     },
     {
       "interface": "Window",
-      "member": "get onappinstalled",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
       "member": "set onappinstalled",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforeinstallprompt",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
@@ -2993,11 +1718,6 @@
     },
     {
       "interface": "Window",
-      "member": "get ondevicemotion",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
       "member": "set ondevicemotion",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -3008,17 +1728,7 @@
     },
     {
       "interface": "Window",
-      "member": "get ondeviceorientation",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
       "member": "set ondeviceorientation",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondeviceorientationabsolute",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
@@ -3058,16 +1768,6 @@
     },
     {
       "interface": "Window",
-      "member": "get onabort",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforefilter",
-      "why": "[RuntimeEnabled=FilteringPrimitives] none"
-    },
-    {
-      "interface": "Window",
       "member": "get onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
     },
@@ -3075,66 +1775,6 @@
       "interface": "Window",
       "member": "set onbeforefilter",
       "why": "[RuntimeEnabled=FilteringPrimitives] none"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforeinput",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforematch",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforetoggle",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onblur",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncanplay",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncanplaythrough",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onclose",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncommand",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncomplete",
-      "why": "[RuntimeEnabled=LoginElement] overridable"
     },
     {
       "interface": "Window",
@@ -3148,86 +1788,6 @@
     },
     {
       "interface": "Window",
-      "member": "get oncontentvisibilityautostatechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncontextlost",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncontextmenu",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncontextrestored",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oncuechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondblclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondrag",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondragend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondragenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondragleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondragover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondragstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondrop",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ondurationchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onemptied",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onended",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
       "member": "get onerror",
       "why": "result type OnErrorEventHandler"
     },
@@ -3238,117 +1798,12 @@
     },
     {
       "interface": "Window",
-      "member": "get onfocus",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onformdata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oninput",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get oninvalid",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onkeydown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onkeypress",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onkeyup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onload",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onloadeddata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onloadedmetadata",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onloadstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmousedown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmouseenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmouseleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmousemove",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmouseout",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmouseover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmouseup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmousewheel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onoverscrollcancel",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "Window",
       "member": "get onoverscrollcancel",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
       "interface": "Window",
       "member": "set onoverscrollcancel",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "Window",
-      "member": "get onoverscrollchanging",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
@@ -3368,17 +1823,7 @@
     },
     {
       "interface": "Window",
-      "member": "get onoverscrollend",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "Window",
       "member": "set onoverscrollend",
-      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
-    },
-    {
-      "interface": "Window",
-      "member": "get onoverscrollstart",
       "why": "[RuntimeEnabled=OverscrollGestures] experimental"
     },
     {
@@ -3393,222 +1838,12 @@
     },
     {
       "interface": "Window",
-      "member": "get onpause",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onplay",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onplaying",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onprogress",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onratechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onreset",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onresize",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onscroll",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onscrollend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onsecuritypolicyviolation",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onseeked",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onseeking",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onselect",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onslotchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onscrollsnapchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onscrollsnapchanging",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onstalled",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onsubmit",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onsuspend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontimeupdate",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontoggle",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onvolumechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwaiting",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwebkitanimationend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwebkitanimationiteration",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwebkitanimationstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwebkittransitionend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onwheel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onauxclick",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ongotpointercapture",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onlostpointercapture",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerdown",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointermove",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerrawupdate",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerup",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointercancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerover",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerout",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerenter",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpointerleave",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontouchcancel",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "Window",
       "member": "get ontouchcancel",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
       "interface": "Window",
       "member": "set ontouchcancel",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontouchend",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
@@ -3628,17 +1863,7 @@
     },
     {
       "interface": "Window",
-      "member": "get ontouchmove",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "Window",
       "member": "set ontouchmove",
-      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontouchstart",
       "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
     },
     {
@@ -3653,61 +1878,6 @@
     },
     {
       "interface": "Window",
-      "member": "get onselectstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onselectionchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onanimationcancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onanimationend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onanimationiteration",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onanimationstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontransitionrun",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontransitionstart",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontransitionend",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontransitioncancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforexrselect",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
       "member": "get onbeforexrselect",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -3715,16 +1885,6 @@
       "interface": "Window",
       "member": "set onbeforexrselect",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
-      "member": "get onafterprint",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onbeforeprint",
-      "why": "result type EventHandler"
     },
     {
       "interface": "Window",
@@ -3738,31 +1898,6 @@
     },
     {
       "interface": "Window",
-      "member": "get onhashchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onlanguagechange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmessage",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmessageerror",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onmove",
-      "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
-    },
-    {
-      "interface": "Window",
       "member": "get onmove",
       "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
     },
@@ -3773,46 +1908,6 @@
     },
     {
       "interface": "Window",
-      "member": "get onoffline",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ononline",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpagehide",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpageshow",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onpopstate",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onrejectionhandled",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onstorage",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ontimezonechange",
-      "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
-    },
-    {
-      "interface": "Window",
       "member": "get ontimezonechange",
       "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
     },
@@ -3820,21 +1915,6 @@
       "interface": "Window",
       "member": "set ontimezonechange",
       "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
-    },
-    {
-      "interface": "Window",
-      "member": "get onunhandledrejection",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get onunload",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Window",
-      "member": "get ongamepadconnected",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
       "interface": "Window",
@@ -3853,18 +1933,8 @@
     },
     {
       "interface": "Window",
-      "member": "get ongamepaddisconnected",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
       "member": "set ongamepaddisconnected",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Window",
-      "member": "get ongamepadrawinputchanged",
-      "why": "[RuntimeEnabled=GamepadRawInputChangeEvent] overridable"
     },
     {
       "interface": "Window",
@@ -4073,11 +2143,6 @@
     },
     {
       "interface": "Performance",
-      "member": "get onresourcetimingbufferfull",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Performance",
       "member": "get timing",
       "why": "interface PerformanceTiming is not bound"
     },
@@ -4143,11 +2208,6 @@
     },
     {
       "interface": "MediaQueryList",
-      "member": "get onchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "MediaQueryList",
       "member": "addListener/1",
       "why": "parameter type EventListener?"
     },
@@ -4188,11 +2248,6 @@
     },
     {
       "interface": "Screen",
-      "member": "get onchange",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Screen",
       "member": "get orientation",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -4205,11 +2260,6 @@
       "interface": "AbortSignal",
       "member": "get reason",
       "why": "result type any"
-    },
-    {
-      "interface": "AbortSignal",
-      "member": "get onabort",
-      "why": "result type EventHandler"
     },
     {
       "interface": "AbortSignal",
@@ -4490,11 +2540,6 @@
       "interface": "TextMetrics",
       "member": "getTextClusters/1",
       "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
-    },
-    {
-      "interface": "ShadowRoot",
-      "member": "get onslotchange",
-      "why": "result type EventHandler"
     },
     {
       "interface": "ShadowRoot",
@@ -5233,17 +3278,7 @@
     },
     {
       "interface": "HTMLMediaElement",
-      "member": "get onencrypted",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "HTMLMediaElement",
       "member": "set onencrypted",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "HTMLMediaElement",
-      "member": "get onwaitingforkey",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
@@ -5313,17 +3348,7 @@
     },
     {
       "interface": "HTMLVideoElement",
-      "member": "get onenterpictureinpicture",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "HTMLVideoElement",
       "member": "set onenterpictureinpicture",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "HTMLVideoElement",
-      "member": "get onleavepictureinpicture",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
     {
@@ -5727,21 +3752,6 @@
       "why": "parameter type (TimelineRangeOffset or DOMString)"
     },
     {
-      "interface": "Animation",
-      "member": "get onfinish",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Animation",
-      "member": "get oncancel",
-      "why": "result type EventHandler"
-    },
-    {
-      "interface": "Animation",
-      "member": "get onremove",
-      "why": "result type EventHandler"
-    },
-    {
       "interface": "AnimationEffect",
       "member": "getComputedTiming/0",
       "why": "result type ComputedEffectTiming"
@@ -5910,11 +3920,6 @@
       "interface": "Crypto",
       "member": "getRandomValues/1",
       "why": "result type ArrayBufferView"
-    },
-    {
-      "interface": "Clipboard",
-      "member": "get onclipboardchange",
-      "why": "result type EventHandler"
     },
     {
       "interface": "Clipboard",

@@ -13,8 +13,10 @@ own, and its mixins' (`interface Element extends ..., ChildNode, ParentNode`)
             by kind: a constant, an iterable's or a stringifier's member, a
             CSS property (Blink's named-property interceptor), or other
 
-Reads lib.dom.d.ts from the bundled TypeScript the compiler's frontend uses,
-dom-idl.d.ts and report.json; writes report-libdom.json beside this file.
+Reads lib.dom.d.ts from the bundled TypeScript the compiler's frontend uses.
+generate.py writes the result, report-libdom.json beside this file, with
+every generation, from the declarations and skips it has just made, so
+`generate.py --check` holds it current. This prints its summary:
 
   python3 tooling/chromium/bindgen/libdom.py
 """
@@ -30,9 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 # typescript-go is a submodule: the shared checkout's copy (checkout.py).
 LIB_DOM = os.path.join(TYPESCRIPT_GO, "internal", "bundled", "libs", "lib.dom.d.ts")
-DOM_IDL = os.path.join(ROOT, "runtime", "chromium", "dom", "types", "dom-idl.d.ts")
-REPORT = os.path.join(HERE, "report.json")
-ALLOWLIST = os.path.join(HERE, "allowlist.json")
+REPORT = os.path.join(HERE, "report-libdom.json")
 
 MEMBER = re.compile(r"^\s{4}(?:readonly\s+)?(?:get\s+|set\s+)?([A-Za-z_$][\w$]*)\??\s*[(<:]", re.M)
 
@@ -83,14 +83,17 @@ def absence(interface, member):
     return "other"
 
 
-def main():
+def coverage(declarations, skips, allowlist):
+    """report-libdom.json: each lib.dom.d.ts member of each allowlisted
+    interface, bound by `declarations` (dom-idl.d.ts's text), skipped with
+    the generator's `skips` (report.json's), or absent."""
     lib = interfaces(open(LIB_DOM).read())
-    bound = bound_members(open(DOM_IDL).read())
+    bound = bound_members(declarations)
     skipped = collections.defaultdict(dict)
-    for item in json.load(open(REPORT))["skipped"]:
+    for item in skips:
         member = item["member"].split()[-1].split("/")[0]
         skipped[item["interface"]].setdefault(member, item["why"])
-    allowed = json.load(open(ALLOWLIST))["interfaces"]
+    allowed = allowlist["interfaces"]
     rows = {}
     totals = collections.Counter()
     for name in allowed:
@@ -130,14 +133,17 @@ def main():
         for kind, names in row["absent"].items():
             totals["absent: " + kind] += len(names)
     reasons = collections.Counter(" ".join(why.split()[:2]) for row in rows.values() for why in row["skipped"].values())
-    out = {"libDom": os.path.relpath(LIB_DOM, ROOT), "totals": dict(totals), "skippedBy": dict(reasons.most_common()),
-           "interfaces": rows}
-    with open(os.path.join(HERE, "report-libdom.json"), "w") as file:
-        file.write(json.dumps(out, indent=2) + "\n")
+    return {"libDom": os.path.relpath(LIB_DOM, ROOT), "totals": dict(totals), "skippedBy": dict(reasons.most_common()),
+            "interfaces": rows}
+
+
+def main():
+    report = json.load(open(REPORT))
+    totals = report["totals"]
     print(f"lib.dom members of bound interfaces: {sum(totals.values())}")
     for key, count in sorted(totals.items()):
         print(f"  {key}: {count}")
-    for reason, count in reasons.most_common(8):
+    for reason, count in list(report["skippedBy"].items())[:8]:
         print(f"  skipped: {count:4} {reason}")
 
 

@@ -19,6 +19,8 @@ Emits, for the allowlisted interfaces:
 
 and `bindgen/report.json`: every member skipped, with why. A member whose
 types this generator does not map is skipped and listed, never guessed.
+`bindgen/report-libdom.json` measures the same against lib.dom.d.ts
+(libdom.py).
 
 The surface is the one `nts bind-gir` gives GTK, GJS's: an interface is a
 `HostClass` handle intersected with its methods, by IDL inheritance; an
@@ -854,6 +856,9 @@ class Generator:
     def attribute(self, interface, attribute):
         host = getattr(interface, "host", interface)
         base = CodeGenContext(interface=host, class_name="V8" + host.identifier)
+        if attribute.idl_type.syntactic_form == "EventHandler":
+            self.event_handler(interface, attribute, base)
+            return
         identifier = attribute.identifier
         getter = setter = None
         try:
@@ -864,9 +869,6 @@ class Generator:
                                result, context)
         except Skip as why:
             self.skip(interface, "get " + identifier, str(why))
-        if attribute.idl_type.syntactic_form == "EventHandler":
-            self.event_handler(interface, attribute, base)
-            return
         arms = self.primitive_arms(attribute.idl_type) if not attribute.is_readonly else None
         if arms:
             self.arm_setters(interface, attribute, base, arms)
@@ -1761,13 +1763,16 @@ declare module "nts:dom" {{
 
 {self.overlay()}
 """
+        import libdom
         report = {"bound": len(self.functions), "skipped": self.skipped}
+        lib_dom = libdom.coverage(declarations, self.skipped, self.allowlist)
         return {
             os.path.join(LANE, "dom", "abi", "dom_idl.h"): header,
             os.path.join(LANE, "adapter", "dom_idl.cc"): adapter,
             os.path.join(LANE, "dom", "types", "dom-idl.d.ts"): declarations,
             os.path.join(LANE, "dom", "types", "lib-dom-bindings.d.ts"): overlay,
             os.path.join(os.path.dirname(__file__), "report.json"): json.dumps(report, indent=2) + "\n",
+            os.path.join(os.path.dirname(__file__), "report-libdom.json"): json.dumps(lib_dom, indent=2) + "\n",
         }
 
 

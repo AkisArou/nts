@@ -79,20 +79,26 @@ Each fact below was measured on the compiler at 6c08170ef.
   a name lib.dom lacks (`ntsSetAttribute`) binds.
 - **Globals do not.** A tagged `declare var document` is read as a C global
   variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
-- **Coverage, by `tooling/chromium/bindgen/libdom.py`** (2026-10-06, 45
-  interfaces, 2083 functions):
-  - lib.dom.d.ts declares 1548 members on the bound interfaces.
-  - 1169 are bound, the 532 CSS properties among them. Blink serves those
+- **Coverage, measured by every generation** (`report-libdom.json`, which
+  generate.py writes through `libdom.py` and `--check` holds current;
+  2026-10-13, 153 interfaces, 5296 functions):
+  - lib.dom.d.ts declares 2609 members on the bound interfaces.
+  - 2319 are bound, the CSS properties among them. Blink serves those
     through a named-property interceptor rather than its IDL, so they are
     generated from lib.dom's own list (`css_properties` in generate.py).
-  - 340 are in Blink's IDL but skipped, and `report.json` says why. The
-    largest groups: 221 result types (dictionaries, sequences, promises,
-    enums), 23 that need a ScriptState, and 16 runtime-enabled members.
+  - 204 are in Blink's IDL but skipped, and `report.json` says why. The
+    largest groups: 56 defined in Blink's modules component on an interface
+    the allowlist does not take from there, 64 result types (`any`, frozen
+    arrays, promises, sequences, `object`), 15 parameter types, and 12
+    touch-event members Blink enables per platform.
   - The rest are not attributes or operations of that interface in Blink's
-    IDL: 29 constants, 8 iterable members and 2 stringifiers. lib.dom
-    types the constants as literals, so a read could lower to the literal.
-  - Not bound on purpose: the event-handler attributes (`onclick`), whose
-    return value can cancel the event. That needs its own design.
+    IDL: 59 constants, 20 iterable members, 3 stringifiers and 4 others.
+    lib.dom types the constants as literals, so a read could lower to the
+    literal.
+  - The event-handler attributes (`onclick`) are bound both ways: written
+    with a closure, whose `false` cancels the event, and read back as the
+    closure written. `onerror` and `onbeforeunload` take other callback
+    types, and are skipped.
 - **Names line up.** lib.dom.d.ts and Blink's IDL are both WebIDL, so the
   members match name for name.
 
@@ -207,8 +213,8 @@ generated, and checked against page script by the differential vectors.
 
 Not bound, by reason:
 
-- The getters of `onclick` and `hidden`. One would answer the program's own
-  closure, and the other's Blink side builds a V8 value directly.
+- `HTMLElement`'s `hidden` getter, whose Blink side builds a V8 value
+  directly.
 - More than three variadic arguments.
 - Members that need a ScriptState, or a runtime-enabled feature
   (`report.json`).
@@ -228,8 +234,8 @@ never replaces page script's.
 - `is<X>` checks through `GetWrapperTypeInfo()`, for every interface.
 - `addEventListener`/`removeEventListener` with closure identity, beside
   `listen`.
-- Measure lib.dom coverage on every generation (`libdom.py`), and bind the
-  categories it shows:
+- Measure lib.dom coverage on every generation (`report-libdom.json`), and
+  bind the categories it shows:
   - CSS properties: done, as CSSOM's setProperty with the dashed name,
     which is exact. A `CSSPropertyID` per property would skip one name
     lookup, but would have to replicate what setProperty checks.

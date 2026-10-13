@@ -1,66 +1,62 @@
 {
-  "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
+  "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 1309,
-    "skipped": 492,
-    "absent: constant": 29,
-    "absent: stringifier": 4,
-    "absent: iterable": 12,
-    "absent: other": 3
+    "bound": 2319,
+    "skipped": 204,
+    "absent: constant": 59,
+    "absent: stringifier": 3,
+    "absent: iterable": 20,
+    "absent: other": 4
   },
   "skippedBy": {
-    "result type": 362,
-    "[RuntimeEnabled]": 27,
-    "defined in": 20,
-    "parameter type": 11,
-    "interface Attr": 7,
-    "interface BarProp": 6,
-    "interface ValidityState": 4,
-    "interface CustomElementRegistry": 3,
-    "interface HTMLSlotElement": 2,
-    "interface ShadowRoot": 2,
+    "result type": 64,
+    "defined in": 56,
+    "parameter type": 15,
+    "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 12,
+    "interface CustomElementRegistry": 4,
+    "interface ReadableStream": 3,
     "interface ViewTransition": 2,
-    "interface Range": 2,
-    "interface Selection": 2,
-    "interface HTMLTableCaptionElement": 2,
-    "interface Navigator": 2,
+    "interface StylePropertyMap": 2,
+    "[RuntimeEnabled=OrientationEvent] per-platform": 2,
     "variadic any...": 2,
-    "interface Animation": 1,
-    "interface NamedNodeMap": 1,
+    "[RuntimeEnabled=ExtendedTextMetrics] overridable": 2,
+    "[RuntimeEnabled=LegacyAbstractRange] overridable": 2,
+    "[RuntimeEnabled=RemotePlayback] overridable": 2,
+    "[RuntimeEnabled=AudioOutputDevices] overridable": 2,
+    "[RuntimeEnabled=AOMAriaRelationshipPropertiesAriaOwns] overridable": 1,
     "interface StylePropertyMapReadOnly": 1,
-    "interface DOMRectList": 1,
+    "[RuntimeEnabled=StandardizedBrowserZoom] overridable": 1,
     "interface HTMLAllCollection": 1,
-    "interface CaretPosition": 1,
-    "interface CDATASection": 1,
     "interface XPathExpression": 1,
-    "interface NodeIterator": 1,
-    "interface ProcessingInstruction": 1,
-    "interface TreeWalker": 1,
-    "interface DocumentType": 1,
     "interface XPathResult": 1,
     "interface FontFaceSet": 1,
-    "interface HTMLHeadElement": 1,
-    "interface DOMImplementation": 1,
+    "[RuntimeEnabled=TextFragmentIdentifiers] overridable": 1,
     "interface SVGSVGElement": 1,
-    "interface StyleSheetList": 1,
-    "interface DocumentTimeline": 1,
+    "[RuntimeEnabled=AccessKeyLabel] experimental": 1,
     "interface ElementInternals": 1,
-    "interface StylePropertyMap": 1,
-    "interface FileList": 1,
-    "interface CSSRule": 1,
+    "[RuntimeEnabled=MediaCapture] per-platform": 1,
     "interface HTMLFormControlsCollection": 1,
     "interface HTMLOptionsCollection": 1,
-    "interface DataTransfer": 1,
     "interface External": 1,
     "interface Navigation": 1,
+    "[RuntimeEnabled=OriginIsolationHeader] overridable": 1,
     "interface Scheduler": 1,
     "interface VisualViewport": 1,
     "interface EventCounts": 1,
-    "interface PerformanceMark": 1,
-    "interface PerformanceMeasure": 1,
     "interface PerformanceNavigation": 1,
     "interface PerformanceTiming": 1,
-    "interface DOMStringList": 1
+    "interface DOMStringList": 1,
+    "interface DOMMatrix": 1,
+    "interface Geolocation": 1,
+    "[RuntimeEnabled=FedCm] overridable": 1,
+    "[RuntimeEnabled=NavigatorContentUtils] per-platform": 1,
+    "interface UserActivation": 1,
+    "interface MediaList": 1,
+    "interface TextTrack": 1,
+    "interface TextTrackList": 1,
+    "interface XMLDocument": 1,
+    "[RuntimeEnabled=CSSAnimationIterationComposite] experimental": 1,
+    "interface SubtleCrypto": 1
   },
   "interfaces": {
     "EventTarget": {
@@ -139,6 +135,7 @@
         "ariaChecked",
         "ariaColCount",
         "ariaColIndex",
+        "ariaColIndexText",
         "ariaColSpan",
         "ariaCurrent",
         "ariaDescription",
@@ -164,6 +161,7 @@
         "ariaRoleDescription",
         "ariaRowCount",
         "ariaRowIndex",
+        "ariaRowIndexText",
         "ariaRowSpan",
         "ariaSelected",
         "ariaSetSize",
@@ -172,6 +170,9 @@
         "ariaValueMin",
         "ariaValueNow",
         "ariaValueText",
+        "assignedSlot",
+        "attachShadow",
+        "attributes",
         "before",
         "checkVisibility",
         "childElementCount",
@@ -184,9 +185,13 @@
         "clientWidth",
         "closest",
         "firstElementChild",
+        "getAnimations",
         "getAttribute",
         "getAttributeNS",
+        "getAttributeNode",
+        "getAttributeNodeNS",
         "getBoundingClientRect",
+        "getClientRects",
         "getElementsByClassName",
         "getElementsByTagName",
         "getElementsByTagNameNS",
@@ -206,6 +211,8 @@
         "moveBefore",
         "namespaceURI",
         "nextElementSibling",
+        "onfullscreenchange",
+        "onfullscreenerror",
         "outerHTML",
         "ownerDocument",
         "part",
@@ -218,17 +225,27 @@
         "remove",
         "removeAttribute",
         "removeAttributeNS",
+        "removeAttributeNode",
         "replaceChildren",
         "replaceWith",
+        "requestFullscreen",
+        "requestPointerLock",
         "role",
+        "scroll",
+        "scrollBy",
         "scrollHeight",
+        "scrollIntoView",
         "scrollLeft",
+        "scrollTo",
         "scrollTop",
         "scrollWidth",
         "setAttribute",
         "setAttributeNS",
+        "setAttributeNode",
+        "setAttributeNodeNS",
         "setHTMLUnsafe",
         "setPointerCapture",
+        "shadowRoot",
         "slot",
         "tagName",
         "textContent",
@@ -236,39 +253,18 @@
         "webkitMatchesSelector"
       ],
       "skipped": {
-        "animate": "interface Animation is not bound",
-        "ariaColIndexText": "[RuntimeEnabled]",
+        "animate": "parameter type object?",
         "ariaControlsElements": "result type FrozenArray<Element>?",
         "ariaDescribedByElements": "result type FrozenArray<Element>?",
         "ariaDetailsElements": "result type FrozenArray<Element>?",
         "ariaErrorMessageElements": "result type FrozenArray<Element>?",
         "ariaFlowToElements": "result type FrozenArray<Element>?",
         "ariaLabelledByElements": "result type FrozenArray<Element>?",
-        "ariaOwnsElements": "[RuntimeEnabled]",
-        "ariaRowIndexText": "[RuntimeEnabled]",
-        "assignedSlot": "interface HTMLSlotElement is not bound",
-        "attachShadow": "interface ShadowRoot is not bound",
-        "attributes": "interface NamedNodeMap is not bound",
+        "ariaOwnsElements": "[RuntimeEnabled=AOMAriaRelationshipPropertiesAriaOwns] overridable",
         "computedStyleMap": "interface StylePropertyMapReadOnly is not bound",
-        "currentCSSZoom": "[RuntimeEnabled]",
+        "currentCSSZoom": "[RuntimeEnabled=StandardizedBrowserZoom] overridable",
         "customElementRegistry": "interface CustomElementRegistry is not bound",
-        "getAnimations": "result type sequence<Animation>",
-        "getAttributeNames": "result type sequence<DOMString>",
-        "getAttributeNode": "interface Attr is not bound",
-        "getAttributeNodeNS": "interface Attr is not bound",
-        "getClientRects": "interface DOMRectList is not bound",
-        "onfullscreenchange": "result type EventHandler",
-        "onfullscreenerror": "result type EventHandler",
-        "removeAttributeNode": "interface Attr is not bound",
-        "requestFullscreen": "result type Promise<undefined>",
-        "requestPointerLock": "result type Promise<undefined>",
-        "scroll": "result type Promise<ScrollResult>",
-        "scrollBy": "result type Promise<ScrollResult>",
-        "scrollIntoView": "result type Promise<ScrollResult>",
-        "scrollTo": "result type Promise<ScrollResult>",
-        "setAttributeNode": "interface Attr is not bound",
-        "setAttributeNodeNS": "interface Attr is not bound",
-        "shadowRoot": "interface ShadowRoot is not bound"
+        "getAttributeNames": "result type sequence<DOMString>"
       },
       "absent": {}
     },
@@ -295,12 +291,11 @@
     },
     "Text": {
       "bound": [
+        "assignedSlot",
         "splitText",
         "wholeText"
       ],
-      "skipped": {
-        "assignedSlot": "interface HTMLSlotElement is not bound"
-      },
+      "skipped": {},
       "absent": {}
     },
     "Document": {
@@ -315,6 +310,8 @@
         "bgColor",
         "body",
         "captureEvents",
+        "caretPositionFromPoint",
+        "caretRangeFromPoint",
         "characterSet",
         "charset",
         "childElementCount",
@@ -324,22 +321,32 @@
         "compatMode",
         "contentType",
         "cookie",
+        "createAttribute",
+        "createAttributeNS",
+        "createCDATASection",
         "createComment",
         "createDocumentFragment",
         "createElement",
         "createElementNS",
         "createEvent",
         "createNSResolver",
+        "createNodeIterator",
+        "createProcessingInstruction",
+        "createRange",
         "createTextNode",
+        "createTreeWalker",
         "defaultView",
         "designMode",
         "dir",
+        "doctype",
         "documentElement",
         "documentURI",
         "domain",
         "elementFromPoint",
+        "elementsFromPoint",
         "embeds",
         "execCommand",
+        "exitFullscreen",
         "exitPointerLock",
         "fgColor",
         "firstElementChild",
@@ -347,14 +354,18 @@
         "fullscreen",
         "fullscreenElement",
         "fullscreenEnabled",
+        "getAnimations",
         "getElementById",
         "getElementsByClassName",
         "getElementsByName",
         "getElementsByTagName",
         "getElementsByTagNameNS",
+        "getSelection",
         "hasFocus",
+        "head",
         "hidden",
         "images",
+        "implementation",
         "importNode",
         "inputEncoding",
         "lastElementChild",
@@ -363,6 +374,108 @@
         "links",
         "location",
         "moveBefore",
+        "onabort",
+        "onanimationcancel",
+        "onanimationend",
+        "onanimationiteration",
+        "onanimationstart",
+        "onauxclick",
+        "onbeforeinput",
+        "onbeforematch",
+        "onbeforetoggle",
+        "onblur",
+        "oncancel",
+        "oncanplay",
+        "oncanplaythrough",
+        "onchange",
+        "onclick",
+        "onclose",
+        "oncommand",
+        "oncontextlost",
+        "oncontextmenu",
+        "oncontextrestored",
+        "oncopy",
+        "oncuechange",
+        "oncut",
+        "ondblclick",
+        "ondrag",
+        "ondragend",
+        "ondragenter",
+        "ondragleave",
+        "ondragover",
+        "ondragstart",
+        "ondrop",
+        "ondurationchange",
+        "onemptied",
+        "onended",
+        "onfocus",
+        "onformdata",
+        "onfullscreenchange",
+        "onfullscreenerror",
+        "ongotpointercapture",
+        "oninput",
+        "oninvalid",
+        "onkeydown",
+        "onkeypress",
+        "onkeyup",
+        "onload",
+        "onloadeddata",
+        "onloadedmetadata",
+        "onloadstart",
+        "onlostpointercapture",
+        "onmousedown",
+        "onmouseenter",
+        "onmouseleave",
+        "onmousemove",
+        "onmouseout",
+        "onmouseover",
+        "onmouseup",
+        "onpaste",
+        "onpause",
+        "onplay",
+        "onplaying",
+        "onpointercancel",
+        "onpointerdown",
+        "onpointerenter",
+        "onpointerleave",
+        "onpointerlockchange",
+        "onpointerlockerror",
+        "onpointermove",
+        "onpointerout",
+        "onpointerover",
+        "onpointerrawupdate",
+        "onpointerup",
+        "onprogress",
+        "onratechange",
+        "onreadystatechange",
+        "onreset",
+        "onresize",
+        "onscroll",
+        "onscrollend",
+        "onsecuritypolicyviolation",
+        "onseeked",
+        "onseeking",
+        "onselect",
+        "onselectionchange",
+        "onselectstart",
+        "onslotchange",
+        "onstalled",
+        "onsubmit",
+        "onsuspend",
+        "ontimeupdate",
+        "ontoggle",
+        "ontransitioncancel",
+        "ontransitionend",
+        "ontransitionrun",
+        "ontransitionstart",
+        "onvisibilitychange",
+        "onvolumechange",
+        "onwaiting",
+        "onwebkitanimationend",
+        "onwebkitanimationiteration",
+        "onwebkitanimationstart",
+        "onwebkittransitionend",
+        "onwheel",
         "open",
         "ownerDocument",
         "pictureInPictureElement",
@@ -376,13 +489,17 @@
         "queryCommandValue",
         "querySelector",
         "querySelectorAll",
+        "readyState",
         "referrer",
         "releaseEvents",
         "replaceChildren",
         "scripts",
         "scrollingElement",
+        "styleSheets",
         "textContent",
+        "timeline",
         "title",
+        "visibilityState",
         "vlinkColor",
         "write",
         "writeln"
@@ -391,145 +508,23 @@
         "activeViewTransition": "interface ViewTransition is not bound",
         "adoptedStyleSheets": "result type ObservableArray<CSSStyleSheet>",
         "all": "interface HTMLAllCollection is not bound",
-        "caretPositionFromPoint": "interface CaretPosition is not bound",
-        "caretRangeFromPoint": "interface Range is not bound",
-        "createAttribute": "interface Attr is not bound",
-        "createAttributeNS": "interface Attr is not bound",
-        "createCDATASection": "interface CDATASection is not bound",
         "createExpression": "interface XPathExpression is not bound",
-        "createNodeIterator": "interface NodeIterator is not bound",
-        "createProcessingInstruction": "interface ProcessingInstruction is not bound",
-        "createRange": "interface Range is not bound",
-        "createTreeWalker": "interface TreeWalker is not bound",
         "currentScript": "result type HTMLOrSVGScriptElement?",
         "customElementRegistry": "interface CustomElementRegistry is not bound",
-        "doctype": "interface DocumentType is not bound",
-        "elementsFromPoint": "result type sequence<Element>",
         "evaluate": "interface XPathResult is not bound",
-        "exitFullscreen": "result type Promise<undefined>",
-        "exitPictureInPicture": "defined in Blink's modules component; the adapter links core",
+        "exitPictureInPicture": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "fonts": "interface FontFaceSet is not bound",
-        "fragmentDirective": "[RuntimeEnabled]",
-        "getAnimations": "result type sequence<Animation>",
-        "getSelection": "interface Selection is not bound",
-        "hasStorageAccess": "defined in Blink's modules component; the adapter links core",
-        "head": "interface HTMLHeadElement is not bound",
-        "implementation": "interface DOMImplementation is not bound",
-        "onabort": "result type EventHandler",
-        "onanimationcancel": "result type EventHandler",
-        "onanimationend": "result type EventHandler",
-        "onanimationiteration": "result type EventHandler",
-        "onanimationstart": "result type EventHandler",
-        "onauxclick": "result type EventHandler",
-        "onbeforeinput": "result type EventHandler",
-        "onbeforematch": "result type EventHandler",
-        "onbeforetoggle": "result type EventHandler",
-        "onblur": "result type EventHandler",
-        "oncancel": "result type EventHandler",
-        "oncanplay": "result type EventHandler",
-        "oncanplaythrough": "result type EventHandler",
-        "onchange": "result type EventHandler",
-        "onclick": "result type EventHandler",
-        "onclose": "result type EventHandler",
-        "oncommand": "result type EventHandler",
-        "oncontextlost": "result type EventHandler",
-        "oncontextmenu": "result type EventHandler",
-        "oncontextrestored": "result type EventHandler",
-        "oncopy": "result type EventHandler",
-        "oncuechange": "result type EventHandler",
-        "oncut": "result type EventHandler",
-        "ondblclick": "result type EventHandler",
-        "ondrag": "result type EventHandler",
-        "ondragend": "result type EventHandler",
-        "ondragenter": "result type EventHandler",
-        "ondragleave": "result type EventHandler",
-        "ondragover": "result type EventHandler",
-        "ondragstart": "result type EventHandler",
-        "ondrop": "result type EventHandler",
-        "ondurationchange": "result type EventHandler",
-        "onemptied": "result type EventHandler",
-        "onended": "result type EventHandler",
+        "fragmentDirective": "[RuntimeEnabled=TextFragmentIdentifiers] overridable",
+        "hasStorageAccess": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "onerror": "result type OnErrorEventHandler",
-        "onfocus": "result type EventHandler",
-        "onformdata": "result type EventHandler",
-        "onfullscreenchange": "result type EventHandler",
-        "onfullscreenerror": "result type EventHandler",
-        "ongotpointercapture": "result type EventHandler",
-        "oninput": "result type EventHandler",
-        "oninvalid": "result type EventHandler",
-        "onkeydown": "result type EventHandler",
-        "onkeypress": "result type EventHandler",
-        "onkeyup": "result type EventHandler",
-        "onload": "result type EventHandler",
-        "onloadeddata": "result type EventHandler",
-        "onloadedmetadata": "result type EventHandler",
-        "onloadstart": "result type EventHandler",
-        "onlostpointercapture": "result type EventHandler",
-        "onmousedown": "result type EventHandler",
-        "onmouseenter": "result type EventHandler",
-        "onmouseleave": "result type EventHandler",
-        "onmousemove": "result type EventHandler",
-        "onmouseout": "result type EventHandler",
-        "onmouseover": "result type EventHandler",
-        "onmouseup": "result type EventHandler",
-        "onpaste": "result type EventHandler",
-        "onpause": "result type EventHandler",
-        "onplay": "result type EventHandler",
-        "onplaying": "result type EventHandler",
-        "onpointercancel": "result type EventHandler",
-        "onpointerdown": "result type EventHandler",
-        "onpointerenter": "result type EventHandler",
-        "onpointerleave": "result type EventHandler",
-        "onpointerlockchange": "result type EventHandler",
-        "onpointerlockerror": "result type EventHandler",
-        "onpointermove": "result type EventHandler",
-        "onpointerout": "result type EventHandler",
-        "onpointerover": "result type EventHandler",
-        "onpointerrawupdate": "result type EventHandler",
-        "onpointerup": "result type EventHandler",
-        "onprogress": "result type EventHandler",
-        "onratechange": "result type EventHandler",
-        "onreadystatechange": "result type EventHandler",
-        "onreset": "result type EventHandler",
-        "onresize": "result type EventHandler",
-        "onscroll": "result type EventHandler",
-        "onscrollend": "result type EventHandler",
-        "onsecuritypolicyviolation": "result type EventHandler",
-        "onseeked": "result type EventHandler",
-        "onseeking": "result type EventHandler",
-        "onselect": "result type EventHandler",
-        "onselectionchange": "result type EventHandler",
-        "onselectstart": "result type EventHandler",
-        "onslotchange": "result type EventHandler",
-        "onstalled": "result type EventHandler",
-        "onsubmit": "result type EventHandler",
-        "onsuspend": "result type EventHandler",
-        "ontimeupdate": "result type EventHandler",
-        "ontoggle": "result type EventHandler",
-        "ontouchcancel": "[RuntimeEnabled]",
-        "ontouchend": "[RuntimeEnabled]",
-        "ontouchmove": "[RuntimeEnabled]",
-        "ontouchstart": "[RuntimeEnabled]",
-        "ontransitioncancel": "result type EventHandler",
-        "ontransitionend": "result type EventHandler",
-        "ontransitionrun": "result type EventHandler",
-        "ontransitionstart": "result type EventHandler",
-        "onvisibilitychange": "result type EventHandler",
-        "onvolumechange": "result type EventHandler",
-        "onwaiting": "result type EventHandler",
-        "onwebkitanimationend": "result type EventHandler",
-        "onwebkitanimationiteration": "result type EventHandler",
-        "onwebkitanimationstart": "result type EventHandler",
-        "onwebkittransitionend": "result type EventHandler",
-        "onwheel": "result type EventHandler",
-        "pictureInPictureEnabled": "defined in Blink's modules component; the adapter links core",
-        "readyState": "result type DocumentReadyState",
-        "requestStorageAccess": "defined in Blink's modules component; the adapter links core",
+        "ontouchcancel": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchend": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchmove": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchstart": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "pictureInPictureEnabled": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "requestStorageAccess": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "rootElement": "interface SVGSVGElement is not bound",
-        "startViewTransition": "interface ViewTransition is not bound",
-        "styleSheets": "interface StyleSheetList is not bound",
-        "timeline": "interface DocumentTimeline is not bound",
-        "visibilityState": "result type VisibilityState"
+        "startViewTransition": "interface ViewTransition is not bound"
       },
       "absent": {}
     },
@@ -556,6 +551,7 @@
       "bound": [
         "accessKey",
         "autocapitalize",
+        "autocorrect",
         "autofocus",
         "blur",
         "click",
@@ -565,7 +561,6 @@
         "draggable",
         "enterKeyHint",
         "focus",
-        "hidden",
         "hidePopover",
         "inert",
         "innerText",
@@ -578,6 +573,102 @@
         "offsetParent",
         "offsetTop",
         "offsetWidth",
+        "onabort",
+        "onanimationcancel",
+        "onanimationend",
+        "onanimationiteration",
+        "onanimationstart",
+        "onauxclick",
+        "onbeforeinput",
+        "onbeforematch",
+        "onbeforetoggle",
+        "onblur",
+        "oncancel",
+        "oncanplay",
+        "oncanplaythrough",
+        "onchange",
+        "onclick",
+        "onclose",
+        "oncommand",
+        "oncontextlost",
+        "oncontextmenu",
+        "oncontextrestored",
+        "oncopy",
+        "oncuechange",
+        "oncut",
+        "ondblclick",
+        "ondrag",
+        "ondragend",
+        "ondragenter",
+        "ondragleave",
+        "ondragover",
+        "ondragstart",
+        "ondrop",
+        "ondurationchange",
+        "onemptied",
+        "onended",
+        "onfocus",
+        "onformdata",
+        "ongotpointercapture",
+        "oninput",
+        "oninvalid",
+        "onkeydown",
+        "onkeypress",
+        "onkeyup",
+        "onload",
+        "onloadeddata",
+        "onloadedmetadata",
+        "onloadstart",
+        "onlostpointercapture",
+        "onmousedown",
+        "onmouseenter",
+        "onmouseleave",
+        "onmousemove",
+        "onmouseout",
+        "onmouseover",
+        "onmouseup",
+        "onpaste",
+        "onpause",
+        "onplay",
+        "onplaying",
+        "onpointercancel",
+        "onpointerdown",
+        "onpointerenter",
+        "onpointerleave",
+        "onpointermove",
+        "onpointerout",
+        "onpointerover",
+        "onpointerrawupdate",
+        "onpointerup",
+        "onprogress",
+        "onratechange",
+        "onreset",
+        "onresize",
+        "onscroll",
+        "onscrollend",
+        "onsecuritypolicyviolation",
+        "onseeked",
+        "onseeking",
+        "onselect",
+        "onselectionchange",
+        "onselectstart",
+        "onslotchange",
+        "onstalled",
+        "onsubmit",
+        "onsuspend",
+        "ontimeupdate",
+        "ontoggle",
+        "ontransitioncancel",
+        "ontransitionend",
+        "ontransitionrun",
+        "ontransitionstart",
+        "onvolumechange",
+        "onwaiting",
+        "onwebkitanimationend",
+        "onwebkitanimationiteration",
+        "onwebkitanimationstart",
+        "onwebkittransitionend",
+        "onwheel",
         "outerText",
         "popover",
         "showPopover",
@@ -590,111 +681,15 @@
         "writingSuggestions"
       ],
       "skipped": {
-        "accessKeyLabel": "[RuntimeEnabled]",
+        "accessKeyLabel": "[RuntimeEnabled=AccessKeyLabel] experimental",
         "attachInternals": "interface ElementInternals is not bound",
         "attributeStyleMap": "interface StylePropertyMap is not bound",
-        "autocorrect": "[RuntimeEnabled]",
-        "onabort": "result type EventHandler",
-        "onanimationcancel": "result type EventHandler",
-        "onanimationend": "result type EventHandler",
-        "onanimationiteration": "result type EventHandler",
-        "onanimationstart": "result type EventHandler",
-        "onauxclick": "result type EventHandler",
-        "onbeforeinput": "result type EventHandler",
-        "onbeforematch": "result type EventHandler",
-        "onbeforetoggle": "result type EventHandler",
-        "onblur": "result type EventHandler",
-        "oncancel": "result type EventHandler",
-        "oncanplay": "result type EventHandler",
-        "oncanplaythrough": "result type EventHandler",
-        "onchange": "result type EventHandler",
-        "onclick": "result type EventHandler",
-        "onclose": "result type EventHandler",
-        "oncommand": "result type EventHandler",
-        "oncontextlost": "result type EventHandler",
-        "oncontextmenu": "result type EventHandler",
-        "oncontextrestored": "result type EventHandler",
-        "oncopy": "result type EventHandler",
-        "oncuechange": "result type EventHandler",
-        "oncut": "result type EventHandler",
-        "ondblclick": "result type EventHandler",
-        "ondrag": "result type EventHandler",
-        "ondragend": "result type EventHandler",
-        "ondragenter": "result type EventHandler",
-        "ondragleave": "result type EventHandler",
-        "ondragover": "result type EventHandler",
-        "ondragstart": "result type EventHandler",
-        "ondrop": "result type EventHandler",
-        "ondurationchange": "result type EventHandler",
-        "onemptied": "result type EventHandler",
-        "onended": "result type EventHandler",
+        "hidden": "result type (boolean or unrestricted double or DOMString)?",
         "onerror": "result type OnErrorEventHandler",
-        "onfocus": "result type EventHandler",
-        "onformdata": "result type EventHandler",
-        "ongotpointercapture": "result type EventHandler",
-        "oninput": "result type EventHandler",
-        "oninvalid": "result type EventHandler",
-        "onkeydown": "result type EventHandler",
-        "onkeypress": "result type EventHandler",
-        "onkeyup": "result type EventHandler",
-        "onload": "result type EventHandler",
-        "onloadeddata": "result type EventHandler",
-        "onloadedmetadata": "result type EventHandler",
-        "onloadstart": "result type EventHandler",
-        "onlostpointercapture": "result type EventHandler",
-        "onmousedown": "result type EventHandler",
-        "onmouseenter": "result type EventHandler",
-        "onmouseleave": "result type EventHandler",
-        "onmousemove": "result type EventHandler",
-        "onmouseout": "result type EventHandler",
-        "onmouseover": "result type EventHandler",
-        "onmouseup": "result type EventHandler",
-        "onpaste": "result type EventHandler",
-        "onpause": "result type EventHandler",
-        "onplay": "result type EventHandler",
-        "onplaying": "result type EventHandler",
-        "onpointercancel": "result type EventHandler",
-        "onpointerdown": "result type EventHandler",
-        "onpointerenter": "result type EventHandler",
-        "onpointerleave": "result type EventHandler",
-        "onpointermove": "result type EventHandler",
-        "onpointerout": "result type EventHandler",
-        "onpointerover": "result type EventHandler",
-        "onpointerrawupdate": "result type EventHandler",
-        "onpointerup": "result type EventHandler",
-        "onprogress": "result type EventHandler",
-        "onratechange": "result type EventHandler",
-        "onreset": "result type EventHandler",
-        "onresize": "result type EventHandler",
-        "onscroll": "result type EventHandler",
-        "onscrollend": "result type EventHandler",
-        "onsecuritypolicyviolation": "result type EventHandler",
-        "onseeked": "result type EventHandler",
-        "onseeking": "result type EventHandler",
-        "onselect": "result type EventHandler",
-        "onselectionchange": "result type EventHandler",
-        "onselectstart": "result type EventHandler",
-        "onslotchange": "result type EventHandler",
-        "onstalled": "result type EventHandler",
-        "onsubmit": "result type EventHandler",
-        "onsuspend": "result type EventHandler",
-        "ontimeupdate": "result type EventHandler",
-        "ontoggle": "result type EventHandler",
-        "ontouchcancel": "[RuntimeEnabled]",
-        "ontouchend": "[RuntimeEnabled]",
-        "ontouchmove": "[RuntimeEnabled]",
-        "ontouchstart": "[RuntimeEnabled]",
-        "ontransitioncancel": "result type EventHandler",
-        "ontransitionend": "result type EventHandler",
-        "ontransitionrun": "result type EventHandler",
-        "ontransitionstart": "result type EventHandler",
-        "onvolumechange": "result type EventHandler",
-        "onwaiting": "result type EventHandler",
-        "onwebkitanimationend": "result type EventHandler",
-        "onwebkitanimationiteration": "result type EventHandler",
-        "onwebkitanimationstart": "result type EventHandler",
-        "onwebkittransitionend": "result type EventHandler",
-        "onwheel": "result type EventHandler"
+        "ontouchcancel": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchend": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchmove": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchstart": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
       },
       "absent": {}
     },
@@ -710,6 +705,7 @@
         "defaultValue",
         "dirName",
         "disabled",
+        "files",
         "form",
         "formAction",
         "formEnctype",
@@ -747,6 +743,7 @@
         "type",
         "useMap",
         "validationMessage",
+        "validity",
         "value",
         "valueAsNumber",
         "webkitdirectory",
@@ -754,13 +751,11 @@
         "willValidate"
       ],
       "skipped": {
-        "capture": "[RuntimeEnabled]",
-        "files": "interface FileList is not bound",
+        "capture": "[RuntimeEnabled=MediaCapture] per-platform",
         "selectionEnd": "result type unsigned long?",
         "selectionStart": "result type unsigned long?",
-        "validity": "interface ValidityState is not bound",
         "valueAsDate": "result type object?",
-        "webkitEntries": "defined in Blink's modules component; the adapter links core"
+        "webkitEntries": "defined in Blink's modules component, on an interface the allowlist does not take from there"
       },
       "absent": {}
     },
@@ -784,12 +779,11 @@
         "setCustomValidity",
         "type",
         "validationMessage",
+        "validity",
         "value",
         "willValidate"
       ],
-      "skipped": {
-        "validity": "interface ValidityState is not bound"
-      },
+      "skipped": {},
       "absent": {}
     },
     "HTMLAnchorElement": {
@@ -833,6 +827,7 @@
         "cancelBubble",
         "cancelable",
         "composed",
+        "composedPath",
         "currentTarget",
         "defaultPrevented",
         "eventPhase",
@@ -847,9 +842,7 @@
         "timeStamp",
         "type"
       ],
-      "skipped": {
-        "composedPath": "result type sequence<EventTarget>"
-      },
+      "skipped": {},
       "absent": {
         "constant": [
           "AT_TARGET",
@@ -1278,6 +1271,7 @@
         "pageBreakBefore",
         "pageBreakInside",
         "paintOrder",
+        "parentRule",
         "perspective",
         "perspectiveOrigin",
         "placeContent",
@@ -1492,9 +1486,7 @@
         "zIndex",
         "zoom"
       ],
-      "skipped": {
-        "parentRule": "interface CSSRule is not bound"
-      },
+      "skipped": {},
       "absent": {}
     },
     "Comment": {
@@ -1633,6 +1625,7 @@
     },
     "HTMLSelectElement": {
       "bound": [
+        "add",
         "autocomplete",
         "checkValidity",
         "disabled",
@@ -1653,13 +1646,12 @@
         "size",
         "type",
         "validationMessage",
+        "validity",
         "value",
         "willValidate"
       ],
       "skipped": {
-        "add": "parameter type (HTMLOptionElement or HTMLOptGroupElement)",
-        "options": "interface HTMLOptionsCollection is not bound",
-        "validity": "interface ValidityState is not bound"
+        "options": "interface HTMLOptionsCollection is not bound"
       },
       "absent": {}
     },
@@ -1705,13 +1697,12 @@
         "textLength",
         "type",
         "validationMessage",
+        "validity",
         "value",
         "willValidate",
         "wrap"
       ],
-      "skipped": {
-        "validity": "interface ValidityState is not bound"
-      },
+      "skipped": {},
       "absent": {}
     },
     "HTMLImageElement": {
@@ -1722,6 +1713,7 @@
         "complete",
         "crossOrigin",
         "currentSrc",
+        "decode",
         "decoding",
         "fetchPriority",
         "height",
@@ -1743,9 +1735,7 @@
         "x",
         "y"
       ],
-      "skipped": {
-        "decode": "result type Promise<undefined>"
-      },
+      "skipped": {},
       "absent": {}
     },
     "HTMLCanvasElement": {
@@ -1755,10 +1745,10 @@
         "width"
       ],
       "skipped": {
-        "captureStream": "defined in Blink's modules component; the adapter links core",
-        "getContext": "defined in Blink's modules component; the adapter links core",
+        "captureStream": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "getContext": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "toBlob": "parameter type BlobCallback",
-        "transferControlToOffscreen": "defined in Blink's modules component; the adapter links core"
+        "transferControlToOffscreen": "defined in Blink's modules component, on an interface the allowlist does not take from there"
       },
       "absent": {}
     },
@@ -1767,8 +1757,10 @@
         "align",
         "bgColor",
         "border",
+        "caption",
         "cellPadding",
         "cellSpacing",
+        "createCaption",
         "createTBody",
         "createTFoot",
         "createTHead",
@@ -1786,10 +1778,7 @@
         "tHead",
         "width"
       ],
-      "skipped": {
-        "caption": "interface HTMLTableCaptionElement is not bound",
-        "createCaption": "interface HTMLTableCaptionElement is not bound"
-      },
+      "skipped": {},
       "absent": {}
     },
     "HTMLTableSectionElement": {
@@ -1864,19 +1853,20 @@
     "InputEvent": {
       "bound": [
         "data",
+        "dataTransfer",
+        "getTargetRanges",
         "inputType",
         "isComposing"
       ],
-      "skipped": {
-        "dataTransfer": "interface DataTransfer is not bound",
-        "getTargetRanges": "result type sequence<StaticRange>"
-      },
+      "skipped": {},
       "absent": {}
     },
     "PointerEvent": {
       "bound": [
         "altitudeAngle",
         "azimuthAngle",
+        "getCoalescedEvents",
+        "getPredictedEvents",
         "height",
         "isPrimary",
         "persistentDeviceId",
@@ -1889,10 +1879,7 @@
         "twist",
         "width"
       ],
-      "skipped": {
-        "getCoalescedEvents": "result type sequence<PointerEvent>",
-        "getPredictedEvents": "result type sequence<PointerEvent>"
-      },
+      "skipped": {},
       "absent": {}
     },
     "WheelEvent": {
@@ -1936,26 +1923,144 @@
         "captureEvents",
         "clearInterval",
         "clearTimeout",
+        "clientInformation",
         "close",
         "closed",
         "confirm",
         "crossOriginIsolated",
+        "crypto",
         "devicePixelRatio",
         "document",
+        "fetch",
         "focus",
         "frameElement",
         "frames",
         "getComputedStyle",
+        "getSelection",
         "history",
         "innerHeight",
         "innerWidth",
         "isSecureContext",
         "length",
+        "localStorage",
         "location",
+        "locationbar",
         "matchMedia",
+        "menubar",
         "moveBy",
         "moveTo",
         "name",
+        "navigator",
+        "onabort",
+        "onafterprint",
+        "onanimationcancel",
+        "onanimationend",
+        "onanimationiteration",
+        "onanimationstart",
+        "onauxclick",
+        "onbeforeinput",
+        "onbeforematch",
+        "onbeforeprint",
+        "onbeforetoggle",
+        "onblur",
+        "oncancel",
+        "oncanplay",
+        "oncanplaythrough",
+        "onchange",
+        "onclick",
+        "onclose",
+        "oncommand",
+        "oncontextlost",
+        "oncontextmenu",
+        "oncontextrestored",
+        "oncuechange",
+        "ondblclick",
+        "ondrag",
+        "ondragend",
+        "ondragenter",
+        "ondragleave",
+        "ondragover",
+        "ondragstart",
+        "ondrop",
+        "ondurationchange",
+        "onemptied",
+        "onended",
+        "onfocus",
+        "onformdata",
+        "ongotpointercapture",
+        "onhashchange",
+        "oninput",
+        "oninvalid",
+        "onkeydown",
+        "onkeypress",
+        "onkeyup",
+        "onlanguagechange",
+        "onload",
+        "onloadeddata",
+        "onloadedmetadata",
+        "onloadstart",
+        "onlostpointercapture",
+        "onmessage",
+        "onmessageerror",
+        "onmousedown",
+        "onmouseenter",
+        "onmouseleave",
+        "onmousemove",
+        "onmouseout",
+        "onmouseover",
+        "onmouseup",
+        "onoffline",
+        "ononline",
+        "onpagehide",
+        "onpagereveal",
+        "onpageshow",
+        "onpageswap",
+        "onpause",
+        "onplay",
+        "onplaying",
+        "onpointercancel",
+        "onpointerdown",
+        "onpointerenter",
+        "onpointerleave",
+        "onpointermove",
+        "onpointerout",
+        "onpointerover",
+        "onpointerrawupdate",
+        "onpointerup",
+        "onpopstate",
+        "onprogress",
+        "onratechange",
+        "onrejectionhandled",
+        "onreset",
+        "onresize",
+        "onscroll",
+        "onscrollend",
+        "onsecuritypolicyviolation",
+        "onseeked",
+        "onseeking",
+        "onselect",
+        "onselectionchange",
+        "onselectstart",
+        "onslotchange",
+        "onstalled",
+        "onstorage",
+        "onsubmit",
+        "onsuspend",
+        "ontimeupdate",
+        "ontoggle",
+        "ontransitioncancel",
+        "ontransitionend",
+        "ontransitionrun",
+        "ontransitionstart",
+        "onunhandledrejection",
+        "onunload",
+        "onvolumechange",
+        "onwaiting",
+        "onwebkitanimationend",
+        "onwebkitanimationiteration",
+        "onwebkitanimationstart",
+        "onwebkittransitionend",
+        "onwheel",
         "open",
         "origin",
         "outerHeight",
@@ -1964,6 +2069,7 @@
         "pageYOffset",
         "parent",
         "performance",
+        "personalbar",
         "print",
         "prompt",
         "releaseEvents",
@@ -1974,174 +2080,55 @@
         "screenTop",
         "screenX",
         "screenY",
+        "scroll",
+        "scrollBy",
+        "scrollTo",
         "scrollX",
         "scrollY",
+        "scrollbars",
         "self",
+        "sessionStorage",
         "status",
+        "statusbar",
         "stop",
+        "toolbar",
         "top",
         "window"
       ],
       "skipped": {
-        "caches": "defined in Blink's modules component; the adapter links core",
-        "clientInformation": "interface Navigator is not bound",
-        "cookieStore": "defined in Blink's modules component; the adapter links core",
-        "createImageBitmap": "defined in Blink's modules component; the adapter links core",
-        "crypto": "defined in Blink's modules component; the adapter links core",
+        "caches": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "cookieStore": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "createImageBitmap": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "customElements": "interface CustomElementRegistry is not bound",
         "event": "result type any",
         "external": "interface External is not bound",
-        "fetch": "result type Promise<Response>",
-        "getSelection": "interface Selection is not bound",
-        "indexedDB": "defined in Blink's modules component; the adapter links core",
-        "localStorage": "defined in Blink's modules component; the adapter links core",
-        "locationbar": "interface BarProp is not bound",
-        "menubar": "interface BarProp is not bound",
+        "indexedDB": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "navigation": "interface Navigation is not bound",
-        "navigator": "interface Navigator is not bound",
-        "onabort": "result type EventHandler",
-        "onafterprint": "result type EventHandler",
-        "onanimationcancel": "result type EventHandler",
-        "onanimationend": "result type EventHandler",
-        "onanimationiteration": "result type EventHandler",
-        "onanimationstart": "result type EventHandler",
-        "onauxclick": "result type EventHandler",
-        "onbeforeinput": "result type EventHandler",
-        "onbeforematch": "result type EventHandler",
-        "onbeforeprint": "result type EventHandler",
-        "onbeforetoggle": "result type EventHandler",
         "onbeforeunload": "result type OnBeforeUnloadEventHandler",
-        "onblur": "result type EventHandler",
-        "oncancel": "result type EventHandler",
-        "oncanplay": "result type EventHandler",
-        "oncanplaythrough": "result type EventHandler",
-        "onchange": "result type EventHandler",
-        "onclick": "result type EventHandler",
-        "onclose": "result type EventHandler",
-        "oncommand": "result type EventHandler",
-        "oncontextlost": "result type EventHandler",
-        "oncontextmenu": "result type EventHandler",
-        "oncontextrestored": "result type EventHandler",
-        "oncuechange": "result type EventHandler",
-        "ondblclick": "result type EventHandler",
-        "ondevicemotion": "defined in Blink's modules component; the adapter links core",
-        "ondeviceorientation": "defined in Blink's modules component; the adapter links core",
-        "ondeviceorientationabsolute": "defined in Blink's modules component; the adapter links core",
-        "ondrag": "result type EventHandler",
-        "ondragend": "result type EventHandler",
-        "ondragenter": "result type EventHandler",
-        "ondragleave": "result type EventHandler",
-        "ondragover": "result type EventHandler",
-        "ondragstart": "result type EventHandler",
-        "ondrop": "result type EventHandler",
-        "ondurationchange": "result type EventHandler",
-        "onemptied": "result type EventHandler",
-        "onended": "result type EventHandler",
+        "ondevicemotion": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "ondeviceorientation": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "ondeviceorientationabsolute": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "onerror": "result type OnErrorEventHandler",
-        "onfocus": "result type EventHandler",
-        "onformdata": "result type EventHandler",
-        "ongamepadconnected": "[RuntimeEnabled]",
-        "ongamepaddisconnected": "[RuntimeEnabled]",
-        "ongotpointercapture": "result type EventHandler",
-        "onhashchange": "result type EventHandler",
-        "oninput": "result type EventHandler",
-        "oninvalid": "result type EventHandler",
-        "onkeydown": "result type EventHandler",
-        "onkeypress": "result type EventHandler",
-        "onkeyup": "result type EventHandler",
-        "onlanguagechange": "result type EventHandler",
-        "onload": "result type EventHandler",
-        "onloadeddata": "result type EventHandler",
-        "onloadedmetadata": "result type EventHandler",
-        "onloadstart": "result type EventHandler",
-        "onlostpointercapture": "result type EventHandler",
-        "onmessage": "result type EventHandler",
-        "onmessageerror": "result type EventHandler",
-        "onmousedown": "result type EventHandler",
-        "onmouseenter": "result type EventHandler",
-        "onmouseleave": "result type EventHandler",
-        "onmousemove": "result type EventHandler",
-        "onmouseout": "result type EventHandler",
-        "onmouseover": "result type EventHandler",
-        "onmouseup": "result type EventHandler",
-        "onoffline": "result type EventHandler",
-        "ononline": "result type EventHandler",
-        "onorientationchange": "[RuntimeEnabled]",
-        "onpagehide": "result type EventHandler",
-        "onpagereveal": "result type EventHandler",
-        "onpageshow": "result type EventHandler",
-        "onpageswap": "[RuntimeEnabled]",
-        "onpause": "result type EventHandler",
-        "onplay": "result type EventHandler",
-        "onplaying": "result type EventHandler",
-        "onpointercancel": "result type EventHandler",
-        "onpointerdown": "result type EventHandler",
-        "onpointerenter": "result type EventHandler",
-        "onpointerleave": "result type EventHandler",
-        "onpointermove": "result type EventHandler",
-        "onpointerout": "result type EventHandler",
-        "onpointerover": "result type EventHandler",
-        "onpointerrawupdate": "result type EventHandler",
-        "onpointerup": "result type EventHandler",
-        "onpopstate": "result type EventHandler",
-        "onprogress": "result type EventHandler",
-        "onratechange": "result type EventHandler",
-        "onrejectionhandled": "result type EventHandler",
-        "onreset": "result type EventHandler",
-        "onresize": "result type EventHandler",
-        "onscroll": "result type EventHandler",
-        "onscrollend": "result type EventHandler",
-        "onsecuritypolicyviolation": "result type EventHandler",
-        "onseeked": "result type EventHandler",
-        "onseeking": "result type EventHandler",
-        "onselect": "result type EventHandler",
-        "onselectionchange": "result type EventHandler",
-        "onselectstart": "result type EventHandler",
-        "onslotchange": "result type EventHandler",
-        "onstalled": "result type EventHandler",
-        "onstorage": "result type EventHandler",
-        "onsubmit": "result type EventHandler",
-        "onsuspend": "result type EventHandler",
-        "ontimeupdate": "result type EventHandler",
-        "ontoggle": "result type EventHandler",
-        "ontouchcancel": "[RuntimeEnabled]",
-        "ontouchend": "[RuntimeEnabled]",
-        "ontouchmove": "[RuntimeEnabled]",
-        "ontouchstart": "[RuntimeEnabled]",
-        "ontransitioncancel": "result type EventHandler",
-        "ontransitionend": "result type EventHandler",
-        "ontransitionrun": "result type EventHandler",
-        "ontransitionstart": "result type EventHandler",
-        "onunhandledrejection": "result type EventHandler",
-        "onunload": "result type EventHandler",
-        "onvolumechange": "result type EventHandler",
-        "onwaiting": "result type EventHandler",
-        "onwebkitanimationend": "result type EventHandler",
-        "onwebkitanimationiteration": "result type EventHandler",
-        "onwebkitanimationstart": "result type EventHandler",
-        "onwebkittransitionend": "result type EventHandler",
-        "onwheel": "result type EventHandler",
+        "ongamepadconnected": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "ongamepaddisconnected": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "onorientationchange": "[RuntimeEnabled=OrientationEvent] per-platform",
+        "ontouchcancel": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchend": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchmove": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchstart": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
         "opener": "result type any",
-        "orientation": "[RuntimeEnabled]",
-        "originAgentCluster": "[RuntimeEnabled]",
-        "personalbar": "interface BarProp is not bound",
+        "orientation": "[RuntimeEnabled=OrientationEvent] per-platform",
+        "originAgentCluster": "[RuntimeEnabled=OriginIsolationHeader] overridable",
         "postMessage": "parameter type any",
         "queueMicrotask": "parameter type VoidFunction",
         "reportError": "parameter type any",
         "requestAnimationFrame": "parameter type FrameRequestCallback",
         "requestIdleCallback": "parameter type IdleRequestCallback",
         "scheduler": "interface Scheduler is not bound",
-        "scroll": "result type Promise<ScrollResult>",
-        "scrollBy": "result type Promise<ScrollResult>",
-        "scrollTo": "result type Promise<ScrollResult>",
-        "scrollbars": "interface BarProp is not bound",
-        "sessionStorage": "defined in Blink's modules component; the adapter links core",
         "setInterval": "variadic any...",
         "setTimeout": "variadic any...",
-        "speechSynthesis": "defined in Blink's modules component; the adapter links core",
-        "statusbar": "interface BarProp is not bound",
+        "speechSynthesis": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "structuredClone": "result type any",
-        "toolbar": "interface BarProp is not bound",
         "visualViewport": "interface VisualViewport is not bound"
       },
       "absent": {
@@ -2157,20 +2144,20 @@
         "clearMarks",
         "clearMeasures",
         "clearResourceTimings",
+        "getEntries",
+        "getEntriesByName",
+        "getEntriesByType",
+        "interactionCount",
+        "mark",
+        "measure",
         "now",
+        "onresourcetimingbufferfull",
         "setResourceTimingBufferSize",
         "timeOrigin"
       ],
       "skipped": {
         "eventCounts": "interface EventCounts is not bound",
-        "getEntries": "result type PerformanceEntryList",
-        "getEntriesByName": "result type PerformanceEntryList",
-        "getEntriesByType": "result type PerformanceEntryList",
-        "interactionCount": "[RuntimeEnabled]",
-        "mark": "interface PerformanceMark is not bound",
-        "measure": "interface PerformanceMeasure is not bound",
         "navigation": "interface PerformanceNavigation is not bound",
-        "onresourcetimingbufferfull": "result type EventHandler",
         "timing": "interface PerformanceTiming is not bound",
         "toJSON": "result type object"
       },
@@ -2179,11 +2166,11 @@
     "MediaQueryList": {
       "bound": [
         "matches",
-        "media"
+        "media",
+        "onchange"
       ],
       "skipped": {
         "addListener": "parameter type EventListener?",
-        "onchange": "result type EventHandler",
         "removeListener": "parameter type EventListener?"
       },
       "absent": {}
@@ -2214,12 +2201,12 @@
         "back",
         "forward",
         "go",
-        "length"
+        "length",
+        "scrollRestoration"
       ],
       "skipped": {
         "pushState": "parameter type any",
         "replaceState": "parameter type any",
-        "scrollRestoration": "result type ScrollRestoration",
         "state": "result type any"
       },
       "absent": {}
@@ -2234,7 +2221,7 @@
         "width"
       ],
       "skipped": {
-        "orientation": "defined in Blink's modules component; the adapter links core"
+        "orientation": "defined in Blink's modules component, on an interface the allowlist does not take from there"
       },
       "absent": {}
     },
@@ -2249,10 +2236,10 @@
     "AbortSignal": {
       "bound": [
         "aborted",
+        "onabort",
         "throwIfAborted"
       ],
       "skipped": {
-        "onabort": "result type EventHandler",
         "reason": "result type any"
       },
       "absent": {}
@@ -2288,7 +2275,8 @@
         "has",
         "set",
         "size",
-        "sort"
+        "sort",
+        "toString"
       ],
       "skipped": {
         "getAll": "result type sequence<USVString>"
@@ -2299,11 +2287,1395 @@
           "forEach",
           "keys",
           "values"
-        ],
-        "stringifier": [
-          "toString"
         ]
       }
+    },
+    "MutationObserver": {
+      "bound": [
+        "disconnect",
+        "observe",
+        "takeRecords"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "MutationRecord": {
+      "bound": [
+        "addedNodes",
+        "attributeName",
+        "attributeNamespace",
+        "nextSibling",
+        "oldValue",
+        "previousSibling",
+        "removedNodes",
+        "target",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ResizeObserver": {
+      "bound": [
+        "disconnect",
+        "observe",
+        "unobserve"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ResizeObserverEntry": {
+      "bound": [
+        "borderBoxSize",
+        "contentBoxSize",
+        "contentRect",
+        "devicePixelContentBoxSize",
+        "target"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ResizeObserverSize": {
+      "bound": [
+        "blockSize",
+        "inlineSize"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "IntersectionObserver": {
+      "bound": [
+        "disconnect",
+        "observe",
+        "root",
+        "rootMargin",
+        "scrollMargin",
+        "takeRecords",
+        "unobserve"
+      ],
+      "skipped": {
+        "thresholds": "result type FrozenArray<double>"
+      },
+      "absent": {}
+    },
+    "IntersectionObserverEntry": {
+      "bound": [
+        "boundingClientRect",
+        "intersectionRatio",
+        "intersectionRect",
+        "isIntersecting",
+        "rootBounds",
+        "target",
+        "time"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "CanvasRenderingContext2D": {
+      "bound": [
+        "arc",
+        "arcTo",
+        "beginPath",
+        "bezierCurveTo",
+        "canvas",
+        "clearRect",
+        "clip",
+        "closePath",
+        "createConicGradient",
+        "createImageData",
+        "createLinearGradient",
+        "createPattern",
+        "createRadialGradient",
+        "direction",
+        "drawFocusIfNeeded",
+        "drawImage",
+        "ellipse",
+        "fill",
+        "fillRect",
+        "fillText",
+        "filter",
+        "font",
+        "fontKerning",
+        "fontStretch",
+        "fontVariantCaps",
+        "getImageData",
+        "globalAlpha",
+        "globalCompositeOperation",
+        "imageSmoothingEnabled",
+        "imageSmoothingQuality",
+        "isContextLost",
+        "isPointInPath",
+        "isPointInStroke",
+        "letterSpacing",
+        "lineCap",
+        "lineDashOffset",
+        "lineJoin",
+        "lineTo",
+        "lineWidth",
+        "measureText",
+        "miterLimit",
+        "moveTo",
+        "putImageData",
+        "quadraticCurveTo",
+        "rect",
+        "reset",
+        "resetTransform",
+        "restore",
+        "rotate",
+        "roundRect",
+        "save",
+        "scale",
+        "setTransform",
+        "shadowBlur",
+        "shadowColor",
+        "shadowOffsetX",
+        "shadowOffsetY",
+        "stroke",
+        "strokeRect",
+        "strokeText",
+        "textAlign",
+        "textBaseline",
+        "textRendering",
+        "transform",
+        "translate",
+        "wordSpacing"
+      ],
+      "skipped": {
+        "fillStyle": "result type any",
+        "getContextAttributes": "result type CanvasRenderingContext2DSettings",
+        "getLineDash": "result type sequence<unrestricted double>",
+        "getTransform": "interface DOMMatrix is not bound",
+        "setLineDash": "parameter type sequence<unrestricted double>",
+        "strokeStyle": "result type any"
+      },
+      "absent": {}
+    },
+    "CanvasGradient": {
+      "bound": [
+        "addColorStop"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Path2D": {
+      "bound": [
+        "addPath",
+        "arc",
+        "arcTo",
+        "bezierCurveTo",
+        "closePath",
+        "ellipse",
+        "lineTo",
+        "moveTo",
+        "quadraticCurveTo",
+        "rect",
+        "roundRect"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "TextMetrics": {
+      "bound": [
+        "actualBoundingBoxAscent",
+        "actualBoundingBoxDescent",
+        "actualBoundingBoxLeft",
+        "actualBoundingBoxRight",
+        "alphabeticBaseline",
+        "fontBoundingBoxAscent",
+        "fontBoundingBoxDescent",
+        "hangingBaseline",
+        "ideographicBaseline",
+        "width"
+      ],
+      "skipped": {
+        "emHeightAscent": "[RuntimeEnabled=ExtendedTextMetrics] overridable",
+        "emHeightDescent": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
+      },
+      "absent": {}
+    },
+    "ShadowRoot": {
+      "bound": [
+        "activeElement",
+        "clonable",
+        "delegatesFocus",
+        "elementFromPoint",
+        "elementsFromPoint",
+        "fullscreenElement",
+        "getAnimations",
+        "getHTML",
+        "host",
+        "innerHTML",
+        "mode",
+        "onslotchange",
+        "pictureInPictureElement",
+        "pointerLockElement",
+        "serializable",
+        "setHTMLUnsafe",
+        "slotAssignment",
+        "styleSheets"
+      ],
+      "skipped": {
+        "adoptedStyleSheets": "result type ObservableArray<CSSStyleSheet>",
+        "customElementRegistry": "interface CustomElementRegistry is not bound"
+      },
+      "absent": {}
+    },
+    "HTMLSlotElement": {
+      "bound": [
+        "assign",
+        "assignedElements",
+        "assignedNodes",
+        "name"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ValidityState": {
+      "bound": [
+        "badInput",
+        "customError",
+        "patternMismatch",
+        "rangeOverflow",
+        "rangeUnderflow",
+        "stepMismatch",
+        "tooLong",
+        "tooShort",
+        "typeMismatch",
+        "valid",
+        "valueMissing"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Attr": {
+      "bound": [
+        "localName",
+        "name",
+        "namespaceURI",
+        "ownerDocument",
+        "ownerElement",
+        "prefix",
+        "specified",
+        "textContent",
+        "value"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Range": {
+      "bound": [
+        "cloneContents",
+        "cloneRange",
+        "collapse",
+        "commonAncestorContainer",
+        "compareBoundaryPoints",
+        "comparePoint",
+        "createContextualFragment",
+        "deleteContents",
+        "detach",
+        "extractContents",
+        "getBoundingClientRect",
+        "getClientRects",
+        "insertNode",
+        "intersectsNode",
+        "isPointInRange",
+        "selectNode",
+        "selectNodeContents",
+        "setEnd",
+        "setEndAfter",
+        "setEndBefore",
+        "setStart",
+        "setStartAfter",
+        "setStartBefore",
+        "surroundContents",
+        "toString"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "END_TO_END",
+          "END_TO_START",
+          "START_TO_END",
+          "START_TO_START"
+        ]
+      }
+    },
+    "AbstractRange": {
+      "bound": [
+        "collapsed",
+        "endOffset",
+        "startOffset"
+      ],
+      "skipped": {
+        "endContainer": "[RuntimeEnabled=LegacyAbstractRange] overridable",
+        "startContainer": "[RuntimeEnabled=LegacyAbstractRange] overridable"
+      },
+      "absent": {}
+    },
+    "StaticRange": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "Selection": {
+      "bound": [
+        "addRange",
+        "anchorNode",
+        "anchorOffset",
+        "collapse",
+        "collapseToEnd",
+        "collapseToStart",
+        "containsNode",
+        "deleteFromDocument",
+        "direction",
+        "empty",
+        "extend",
+        "focusNode",
+        "focusOffset",
+        "getComposedRanges",
+        "getRangeAt",
+        "isCollapsed",
+        "modify",
+        "rangeCount",
+        "removeAllRanges",
+        "removeRange",
+        "selectAllChildren",
+        "setBaseAndExtent",
+        "setPosition",
+        "toString",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Navigator": {
+      "bound": [
+        "appCodeName",
+        "appName",
+        "appVersion",
+        "clipboard",
+        "cookieEnabled",
+        "hardwareConcurrency",
+        "language",
+        "maxTouchPoints",
+        "onLine",
+        "platform",
+        "product",
+        "productSub",
+        "userAgent",
+        "vendor",
+        "vendorSub",
+        "webdriver"
+      ],
+      "skipped": {
+        "canShare": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "clearAppBadge": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "credentials": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "doNotTrack": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "geolocation": "interface Geolocation is not bound",
+        "getGamepads": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "gpu": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "javaEnabled": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "languages": "result type FrozenArray<DOMString>",
+        "locks": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "login": "[RuntimeEnabled=FedCm] overridable",
+        "mediaCapabilities": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "mediaDevices": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "mediaSession": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "mimeTypes": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "pdfViewerEnabled": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "permissions": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "plugins": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "registerProtocolHandler": "[RuntimeEnabled=NavigatorContentUtils] per-platform",
+        "requestMIDIAccess": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "requestMediaKeySystemAccess": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "sendBeacon": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "serviceWorker": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "setAppBadge": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "share": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "storage": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "userActivation": "interface UserActivation is not bound",
+        "vibrate": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "wakeLock": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+      },
+      "absent": {}
+    },
+    "HTMLTableCaptionElement": {
+      "bound": [
+        "align"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "StyleSheetList": {
+      "bound": [
+        "item",
+        "length"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "StyleSheet": {
+      "bound": [
+        "disabled",
+        "href",
+        "ownerNode",
+        "parentStyleSheet",
+        "title",
+        "type"
+      ],
+      "skipped": {
+        "media": "interface MediaList is not bound"
+      },
+      "absent": {}
+    },
+    "CSSStyleSheet": {
+      "bound": [
+        "addRule",
+        "cssRules",
+        "deleteRule",
+        "insertRule",
+        "ownerRule",
+        "removeRule",
+        "replace",
+        "replaceSync",
+        "rules"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "CSSRuleList": {
+      "bound": [
+        "item",
+        "length"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "CSSRule": {
+      "bound": [
+        "cssText",
+        "parentRule",
+        "parentStyleSheet",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "CHARSET_RULE",
+          "COUNTER_STYLE_RULE",
+          "FONT_FACE_RULE",
+          "FONT_FEATURE_VALUES_RULE",
+          "IMPORT_RULE",
+          "KEYFRAMES_RULE",
+          "KEYFRAME_RULE",
+          "MARGIN_RULE",
+          "MEDIA_RULE",
+          "NAMESPACE_RULE",
+          "PAGE_RULE",
+          "STYLE_RULE",
+          "SUPPORTS_RULE"
+        ]
+      }
+    },
+    "CSSStyleRule": {
+      "bound": [
+        "cssRules",
+        "deleteRule",
+        "insertRule",
+        "selectorText",
+        "style"
+      ],
+      "skipped": {
+        "styleMap": "interface StylePropertyMap is not bound"
+      },
+      "absent": {}
+    },
+    "DOMPointReadOnly": {
+      "bound": [
+        "matrixTransform",
+        "w",
+        "x",
+        "y",
+        "z"
+      ],
+      "skipped": {
+        "toJSON": "result type object"
+      },
+      "absent": {}
+    },
+    "DOMPoint": {
+      "bound": [
+        "w",
+        "x",
+        "y",
+        "z"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "DOMQuad": {
+      "bound": [
+        "getBounds",
+        "p1",
+        "p2",
+        "p3",
+        "p4"
+      ],
+      "skipped": {
+        "toJSON": "result type object"
+      },
+      "absent": {}
+    },
+    "DOMRectList": {
+      "bound": [
+        "item",
+        "length"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "NamedNodeMap": {
+      "bound": [
+        "getNamedItem",
+        "getNamedItemNS",
+        "item",
+        "length",
+        "removeNamedItem",
+        "removeNamedItemNS",
+        "setNamedItem",
+        "setNamedItemNS"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLFieldSetElement": {
+      "bound": [
+        "checkValidity",
+        "disabled",
+        "elements",
+        "form",
+        "name",
+        "reportValidity",
+        "setCustomValidity",
+        "type",
+        "validationMessage",
+        "validity",
+        "willValidate"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLProgressElement": {
+      "bound": [
+        "labels",
+        "max",
+        "position",
+        "value"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLMeterElement": {
+      "bound": [
+        "high",
+        "labels",
+        "low",
+        "max",
+        "min",
+        "optimum",
+        "value"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLDialogElement": {
+      "bound": [
+        "close",
+        "closedBy",
+        "open",
+        "requestClose",
+        "returnValue",
+        "show",
+        "showModal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLDetailsElement": {
+      "bound": [
+        "name",
+        "open"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLDataListElement": {
+      "bound": [
+        "options"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLOutputElement": {
+      "bound": [
+        "checkValidity",
+        "defaultValue",
+        "form",
+        "htmlFor",
+        "labels",
+        "name",
+        "reportValidity",
+        "setCustomValidity",
+        "type",
+        "validationMessage",
+        "validity",
+        "value",
+        "willValidate"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLLegendElement": {
+      "bound": [
+        "align",
+        "form"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "DataTransfer": {
+      "bound": [
+        "clearData",
+        "dropEffect",
+        "effectAllowed",
+        "files",
+        "getData",
+        "items",
+        "setData",
+        "setDragImage"
+      ],
+      "skipped": {
+        "types": "result type FrozenArray<DOMString>"
+      },
+      "absent": {}
+    },
+    "DataTransferItem": {
+      "bound": [
+        "getAsFile",
+        "kind",
+        "type"
+      ],
+      "skipped": {
+        "getAsString": "parameter type FunctionStringCallback?",
+        "webkitGetAsEntry": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+      },
+      "absent": {}
+    },
+    "DataTransferItemList": {
+      "bound": [
+        "add",
+        "clear",
+        "length",
+        "remove"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "DragEvent": {
+      "bound": [
+        "dataTransfer"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "CompositionEvent": {
+      "bound": [
+        "data",
+        "initCompositionEvent"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "TouchEvent": {
+      "bound": [
+        "altKey",
+        "changedTouches",
+        "ctrlKey",
+        "metaKey",
+        "shiftKey",
+        "targetTouches",
+        "touches"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Touch": {
+      "bound": [
+        "clientX",
+        "clientY",
+        "force",
+        "identifier",
+        "pageX",
+        "pageY",
+        "radiusX",
+        "radiusY",
+        "rotationAngle",
+        "screenX",
+        "screenY",
+        "target"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "TouchList": {
+      "bound": [
+        "item",
+        "length"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ClipboardEvent": {
+      "bound": [
+        "clipboardData"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "AnimationEvent": {
+      "bound": [
+        "animationName",
+        "elapsedTime",
+        "pseudoElement"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "TransitionEvent": {
+      "bound": [
+        "elapsedTime",
+        "propertyName",
+        "pseudoElement"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SubmitEvent": {
+      "bound": [
+        "submitter"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HashChangeEvent": {
+      "bound": [
+        "newURL",
+        "oldURL"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "PageTransitionEvent": {
+      "bound": [
+        "persisted"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ProgressEvent": {
+      "bound": [
+        "lengthComputable",
+        "loaded",
+        "target",
+        "total"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ErrorEvent": {
+      "bound": [
+        "colno",
+        "filename",
+        "lineno",
+        "message"
+      ],
+      "skipped": {
+        "error": "result type any"
+      },
+      "absent": {}
+    },
+    "FormData": {
+      "bound": [
+        "append",
+        "delete",
+        "has",
+        "set"
+      ],
+      "skipped": {
+        "get": "result type FormDataEntryValue?",
+        "getAll": "result type sequence<FormDataEntryValue>"
+      },
+      "absent": {
+        "iterable": [
+          "entries",
+          "forEach",
+          "keys",
+          "values"
+        ]
+      }
+    },
+    "HTMLMediaElement": {
+      "bound": [
+        "autoplay",
+        "buffered",
+        "canPlayType",
+        "controls",
+        "crossOrigin",
+        "currentSrc",
+        "currentTime",
+        "defaultMuted",
+        "defaultPlaybackRate",
+        "duration",
+        "ended",
+        "error",
+        "load",
+        "loop",
+        "muted",
+        "networkState",
+        "pause",
+        "paused",
+        "play",
+        "playbackRate",
+        "played",
+        "preload",
+        "preservesPitch",
+        "readyState",
+        "seekable",
+        "seeking",
+        "src",
+        "volume"
+      ],
+      "skipped": {
+        "addTextTrack": "interface TextTrack is not bound",
+        "disableRemotePlayback": "[RuntimeEnabled=RemotePlayback] overridable",
+        "mediaKeys": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "onencrypted": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "onwaitingforkey": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "remote": "[RuntimeEnabled=RemotePlayback] overridable",
+        "setMediaKeys": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "setSinkId": "[RuntimeEnabled=AudioOutputDevices] overridable",
+        "sinkId": "[RuntimeEnabled=AudioOutputDevices] overridable",
+        "srcObject": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "textTracks": "interface TextTrackList is not bound"
+      },
+      "absent": {
+        "constant": [
+          "HAVE_CURRENT_DATA",
+          "HAVE_ENOUGH_DATA",
+          "HAVE_FUTURE_DATA",
+          "HAVE_METADATA",
+          "HAVE_NOTHING",
+          "NETWORK_EMPTY",
+          "NETWORK_IDLE",
+          "NETWORK_LOADING",
+          "NETWORK_NO_SOURCE"
+        ],
+        "other": [
+          "fastSeek"
+        ]
+      }
+    },
+    "HTMLVideoElement": {
+      "bound": [
+        "height",
+        "playsInline",
+        "poster",
+        "videoHeight",
+        "videoWidth",
+        "width"
+      ],
+      "skipped": {
+        "cancelVideoFrameCallback": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "disablePictureInPicture": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "getVideoPlaybackQuality": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "onenterpictureinpicture": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "onleavepictureinpicture": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "requestPictureInPicture": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "requestVideoFrameCallback": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+      },
+      "absent": {}
+    },
+    "HTMLAudioElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "TimeRanges": {
+      "bound": [
+        "end",
+        "length",
+        "start"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "MediaError": {
+      "bound": [
+        "code",
+        "message"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "MEDIA_ERR_ABORTED",
+          "MEDIA_ERR_DECODE",
+          "MEDIA_ERR_NETWORK",
+          "MEDIA_ERR_SRC_NOT_SUPPORTED"
+        ]
+      }
+    },
+    "HTMLIFrameElement": {
+      "bound": [
+        "align",
+        "allow",
+        "allowFullscreen",
+        "contentDocument",
+        "contentWindow",
+        "frameBorder",
+        "getSVGDocument",
+        "height",
+        "loading",
+        "longDesc",
+        "marginHeight",
+        "marginWidth",
+        "name",
+        "referrerPolicy",
+        "sandbox",
+        "scrolling",
+        "src",
+        "srcdoc",
+        "width"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLLinkElement": {
+      "bound": [
+        "as",
+        "blocking",
+        "charset",
+        "crossOrigin",
+        "disabled",
+        "fetchPriority",
+        "href",
+        "hreflang",
+        "imageSizes",
+        "imageSrcset",
+        "integrity",
+        "media",
+        "referrerPolicy",
+        "rel",
+        "relList",
+        "rev",
+        "sheet",
+        "sizes",
+        "target",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLStyleElement": {
+      "bound": [
+        "blocking",
+        "disabled",
+        "media",
+        "sheet",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLScriptElement": {
+      "bound": [
+        "async",
+        "blocking",
+        "charset",
+        "crossOrigin",
+        "defer",
+        "event",
+        "fetchPriority",
+        "htmlFor",
+        "integrity",
+        "noModule",
+        "referrerPolicy",
+        "src",
+        "text",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "DOMParser": {
+      "bound": [
+        "parseFromString"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "XMLSerializer": {
+      "bound": [
+        "serializeToString"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "TreeWalker": {
+      "bound": [
+        "currentNode",
+        "firstChild",
+        "lastChild",
+        "nextNode",
+        "nextSibling",
+        "parentNode",
+        "previousNode",
+        "previousSibling",
+        "root",
+        "whatToShow"
+      ],
+      "skipped": {
+        "filter": "result type NodeFilter?"
+      },
+      "absent": {}
+    },
+    "NodeIterator": {
+      "bound": [
+        "detach",
+        "nextNode",
+        "pointerBeforeReferenceNode",
+        "previousNode",
+        "referenceNode",
+        "root",
+        "whatToShow"
+      ],
+      "skipped": {
+        "filter": "result type NodeFilter?"
+      },
+      "absent": {}
+    },
+    "DOMImplementation": {
+      "bound": [
+        "createDocumentType",
+        "createHTMLDocument",
+        "hasFeature"
+      ],
+      "skipped": {
+        "createDocument": "interface XMLDocument is not bound"
+      },
+      "absent": {}
+    },
+    "CDATASection": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "ProcessingInstruction": {
+      "bound": [
+        "sheet",
+        "target"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "DocumentType": {
+      "bound": [
+        "after",
+        "before",
+        "name",
+        "ownerDocument",
+        "publicId",
+        "remove",
+        "replaceWith",
+        "systemId",
+        "textContent"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "IdleDeadline": {
+      "bound": [
+        "didTimeout",
+        "timeRemaining"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Blob": {
+      "bound": [
+        "size",
+        "slice",
+        "text",
+        "type"
+      ],
+      "skipped": {
+        "arrayBuffer": "result type Promise<ArrayBuffer>",
+        "bytes": "result type Promise<Uint8Array>",
+        "stream": "interface ReadableStream is not bound"
+      },
+      "absent": {}
+    },
+    "File": {
+      "bound": [
+        "lastModified",
+        "name",
+        "webkitRelativePath"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "FileList": {
+      "bound": [
+        "item",
+        "length"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ImageData": {
+      "bound": [
+        "colorSpace",
+        "height",
+        "width"
+      ],
+      "skipped": {
+        "data": "result type ImageDataArray"
+      },
+      "absent": {}
+    },
+    "HTMLHeadElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "PerformanceEntry": {
+      "bound": [
+        "duration",
+        "entryType",
+        "name",
+        "startTime"
+      ],
+      "skipped": {
+        "toJSON": "result type object"
+      },
+      "absent": {}
+    },
+    "PerformanceMark": {
+      "bound": [],
+      "skipped": {
+        "detail": "result type any"
+      },
+      "absent": {}
+    },
+    "PerformanceMeasure": {
+      "bound": [],
+      "skipped": {
+        "detail": "result type any"
+      },
+      "absent": {}
+    },
+    "BarProp": {
+      "bound": [
+        "visible"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Animation": {
+      "bound": [
+        "cancel",
+        "commitStyles",
+        "effect",
+        "finish",
+        "finished",
+        "id",
+        "oncancel",
+        "onfinish",
+        "onremove",
+        "pause",
+        "pending",
+        "persist",
+        "play",
+        "playState",
+        "playbackRate",
+        "ready",
+        "replaceState",
+        "reverse",
+        "timeline",
+        "updatePlaybackRate"
+      ],
+      "skipped": {
+        "currentTime": "result type CSSNumberish?",
+        "overallProgress": "result type double?",
+        "startTime": "result type CSSNumberish?"
+      },
+      "absent": {}
+    },
+    "AnimationEffect": {
+      "bound": [
+        "updateTiming"
+      ],
+      "skipped": {
+        "getComputedTiming": "result type ComputedEffectTiming",
+        "getTiming": "result type EffectTiming"
+      },
+      "absent": {}
+    },
+    "KeyframeEffect": {
+      "bound": [
+        "composite",
+        "pseudoElement",
+        "target"
+      ],
+      "skipped": {
+        "getKeyframes": "result type sequence<object>",
+        "iterationComposite": "[RuntimeEnabled=CSSAnimationIterationComposite] experimental",
+        "setKeyframes": "parameter type object?"
+      },
+      "absent": {}
+    },
+    "AnimationTimeline": {
+      "bound": [],
+      "skipped": {
+        "currentTime": "result type CSSNumberish?",
+        "duration": "result type CSSNumberish?"
+      },
+      "absent": {}
+    },
+    "DocumentTimeline": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "CaretPosition": {
+      "bound": [
+        "getClientRect",
+        "offset",
+        "offsetNode"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Storage": {
+      "bound": [
+        "clear",
+        "getItem",
+        "key",
+        "length",
+        "removeItem",
+        "setItem"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "Response": {
+      "bound": [
+        "blob",
+        "bodyUsed",
+        "clone",
+        "formData",
+        "headers",
+        "ok",
+        "redirected",
+        "status",
+        "statusText",
+        "text",
+        "type",
+        "url"
+      ],
+      "skipped": {
+        "arrayBuffer": "result type Promise<ArrayBuffer>",
+        "body": "interface ReadableStream is not bound",
+        "bytes": "result type Promise<Uint8Array>",
+        "json": "result type Promise<any>"
+      },
+      "absent": {}
+    },
+    "Request": {
+      "bound": [
+        "blob",
+        "bodyUsed",
+        "cache",
+        "clone",
+        "credentials",
+        "destination",
+        "formData",
+        "headers",
+        "integrity",
+        "keepalive",
+        "method",
+        "mode",
+        "redirect",
+        "referrer",
+        "referrerPolicy",
+        "signal",
+        "text",
+        "url"
+      ],
+      "skipped": {
+        "arrayBuffer": "result type Promise<ArrayBuffer>",
+        "body": "interface ReadableStream is not bound",
+        "bytes": "result type Promise<Uint8Array>",
+        "json": "result type Promise<any>"
+      },
+      "absent": {}
+    },
+    "Headers": {
+      "bound": [
+        "append",
+        "delete",
+        "get",
+        "has",
+        "set"
+      ],
+      "skipped": {
+        "getSetCookie": "result type sequence<ByteString>"
+      },
+      "absent": {
+        "iterable": [
+          "entries",
+          "forEach",
+          "keys",
+          "values"
+        ]
+      }
+    },
+    "Crypto": {
+      "bound": [
+        "randomUUID"
+      ],
+      "skipped": {
+        "getRandomValues": "result type ArrayBufferView",
+        "subtle": "interface SubtleCrypto is not bound"
+      },
+      "absent": {}
+    },
+    "Clipboard": {
+      "bound": [
+        "readText",
+        "writeText"
+      ],
+      "skipped": {
+        "read": "result type Promise<sequence<ClipboardItem>>",
+        "write": "parameter type sequence<ClipboardItem>"
+      },
+      "absent": {}
+    },
+    "CanvasPattern": {
+      "bound": [
+        "setTransform"
+      ],
+      "skipped": {},
+      "absent": {}
     }
   }
 }
