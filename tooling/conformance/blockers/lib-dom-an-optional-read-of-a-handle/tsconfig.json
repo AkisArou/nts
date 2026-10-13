@@ -1,0 +1,11 @@
+{
+  "//": "lib.dom.d.ts is the point, so this extends the fixtures' config (DOM included), not the blockers' ESNext base; the overlay and nts:dom are what the Chromium target will inject.",
+  "extends": "../../../../tsconfig.fixtures.json",
+  "files": [
+    "src/main.ts",
+    "../../../../runtime/chromium/dom/types/dom-idl.d.ts",
+    "../../../../runtime/chromium/dom/types/dom-abi.d.ts",
+    "../../../../runtime/chromium/dom/types/lib-dom-bindings.d.ts",
+    "../../../../runtime/native/libc.d.ts"
+  ]
+}
