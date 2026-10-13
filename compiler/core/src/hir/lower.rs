@@ -57517,6 +57517,41 @@ impl<'a> FuncBuilder<'a> {
         self.narrowed(id, read)
     }
 
+    /// The layouts a value of a union can have: each arm, and for an arm that
+    /// is a structural type, every object type of the program whose shape fits
+    /// it.
+    ///
+    /// **An interface arm is not the layout of what it holds.** A conversion
+    /// into a union erases, so nothing asked an object for a prefix of any arm:
+    /// `class Both { side; kind; radius }` fits `Circle | Square` and holds
+    /// `kind` at index 1 where both arms hold it at 0, and the read shared
+    /// across the arms answered `side`
+    /// (`tooling/conformance/outcomes/a-union-of-interfaces-read-on-a-class-laid-out-as-neither-arm`).
+    /// The arms come first, in their order: the shared index is read off the
+    /// first.
+    fn union_holders(&self, members: &[TypeId]) -> Vec<TypeId> {
+        let mut holders = members.to_vec();
+        for member in members {
+            let structural = class_symbol(self.snapshot, *member).is_none()
+                && !super::is_closure_type(*member)
+                && !self.is_a_signature(*member)
+                && matches!(
+                    self.snapshot.types.get(member.0 as usize).map(|r| &r.kind),
+                    Some(TypeKind::Object { .. })
+                );
+            if structural {
+                holders.extend(
+                    self.hierarchy
+                        .access_families
+                        .structural_owners(self, *member),
+                );
+            }
+        }
+        let mut seen = rustc_hash::FxHashSet::default();
+        holders.retain(|holder| seen.insert(*holder));
+        holders
+    }
+
     /// A member every arm of a union places identically: the arms, its index,
     /// and what it reads as.
     ///
@@ -57553,6 +57588,7 @@ impl<'a> FuncBuilder<'a> {
         if members.len() < 2 {
             return None;
         }
+        let members = self.union_holders(&members);
 
         let mut arms = Vec::with_capacity(members.len());
         for member in &members {
@@ -57621,6 +57657,7 @@ impl<'a> FuncBuilder<'a> {
         if members.len() < 2 {
             return None;
         }
+        let members = self.union_holders(&members);
         let mut arms = Vec::with_capacity(members.len());
         let mut read: Option<HirType> = None;
         for member in &members {

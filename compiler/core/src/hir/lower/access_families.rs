@@ -329,6 +329,7 @@ pub(super) struct Families {
     transport_faces: FxHashSet<TypeId>,
     spread_safe: FxHashSet<TypeId>,
     flow: super::access_family_flow::Bound,
+    owners: Owners,
 }
 
 impl Families {
@@ -353,6 +354,19 @@ impl Families {
             .into_iter()
             .flatten()
             .filter_map(|index| self.licensed.get(*index))
+    }
+    /// Every object type of the program whose shape fits `face` -- what a
+    /// value of a structural type can hold once it has been erased into a
+    /// union, where no conversion asked for a prefix.
+    pub(super) fn structural_owners(&self, probe: &FuncBuilder<'_>, face: TypeId) -> Vec<TypeId> {
+        let Some(wanted) = properties(probe, face) else {
+            return Vec::new();
+        };
+        self.owners
+            .candidates(wanted)
+            .into_iter()
+            .filter(|owner| fits_the_face(probe, &probe.hierarchy, face, *owner, wanted))
+            .collect()
     }
     pub(super) fn carries(&self, owner: TypeId, face: TypeId) -> bool {
         self.transports.contains(&(owner, face))
@@ -395,12 +409,20 @@ impl Families {
     pub(super) fn collect(probe: &mut FuncBuilder<'_>, hierarchy: &Hierarchy) -> Self {
         let sites = super::access_family_sites::collect(probe, hierarchy);
         let used = used_members(&sites);
+        // Every program's objects, whether or not it reads a field through an
+        // interface: a union of interfaces is read without one, and its arms
+        // can hold any of them (`Self::structural_owners`).
+        let literals = literal_owners(probe);
+        let owners = Owners::collect(probe, hierarchy, &literals);
         if used.is_empty() {
-            return Self::default();
+            return Self {
+                owners,
+                ..Self::default()
+            };
         }
         let sources = Sources {
             ready: field_initialization::Ready::collect(probe),
-            literals: literal_owners(probe),
+            literals,
             symbols: probe
                 .snapshot
                 .symbols
@@ -415,7 +437,6 @@ impl Families {
                 })
                 .collect(),
         };
-        let owners = Owners::collect(probe, hierarchy, &sources.literals);
         let flow = super::access_family_flow::Bound::collect(
             probe,
             &owners.all,
@@ -481,6 +502,7 @@ impl Families {
             }
         }
         result.transport_faces = result.changed_transport_faces();
+        result.owners = owners;
         result
     }
 
@@ -580,6 +602,7 @@ fn fits_the_face(
 
 /// Intersect required members, starting with the rarest. Optional-only faces
 /// still admit every owner; their missing properties need undefined readers.
+#[derive(Debug, Clone, Default)]
 struct Owners {
     all: Vec<TypeId>,
     by_member: FxHashMap<String, FxHashSet<TypeId>>,
