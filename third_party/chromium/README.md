@@ -12,6 +12,20 @@ Git submodule pin. depot_tools is a derived, ignored checkout here, with
 automatic source updates disabled by the wrapper. Bump the source pin,
 version, and lock together, and rerun the baseline before carrying patches.
 
+## One checkout, shared by every tree
+
+`src/` is tens of gigabytes, so there is one: the shared checkout's
+(`~/Projects/nts`). In a lane's own worktree (docs/workflow.md) the submodule
+is an empty directory, and a symlink in its place breaks `git status` there.
+The lane's tools find the shared copy from git's common directory, from the
+checkout itself or any worktree
+([`tooling/chromium/checkout.ts`](../../tooling/chromium/checkout.ts),
+[`bindgen/checkout.py`](../../tooling/chromium/bindgen/checkout.py)), with
+depot_tools beside it; `NTS_CHROMIUM_SRC` names another `src/`. What a commit
+carries -- `.gclient`, `upstream.lock.json` -- is read from the tree's own copy,
+and what a tree builds is staged into the one `src/`, so two trees build there
+one at a time.
+
 ## Initial host
 
 The first profile is Linux x86-64, a debug component build with assertions

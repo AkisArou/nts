@@ -9,6 +9,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
+import { chromiumSource } from "./checkout.ts";
 
 export interface Toolchain {
   clang: string;
@@ -17,7 +18,7 @@ export interface Toolchain {
 }
 
 export function chromiumToolchain(root: string): Toolchain {
-  const source = resolve(root, "third_party/chromium/src");
+  const source = chromiumSource(root);
   return {
     clang: resolve(source, "third_party/llvm-build/Release+Asserts/bin/clang"),
     archiver: resolve(source, "third_party/llvm-build/Release+Asserts/bin/llvm-ar"),

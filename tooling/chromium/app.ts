@@ -34,6 +34,7 @@ import { basename, relative, resolve } from "node:path";
 import { archiveProgram, chromiumToolchain } from "./archive.ts";
 import { openPage } from "./browser.ts";
 import { buildProfile } from "./profiles.ts";
+import { chromiumSource } from "./checkout.ts";
 
 const root = resolve(import.meta.dirname, "../..");
 const lane = resolve(root, "runtime/chromium");
@@ -50,7 +51,7 @@ const option = (name: string, fallback: string): string => {
 };
 const backend = option("--backend", "c");
 if (backend !== "c" && backend !== "llvm") throw new Error(usage);
-const profile = buildProfile(["--profile", option("--profile", "perf")]);
+const profile = buildProfile(root, ["--profile", option("--profile", "perf")]);
 
 const app = resolve(directory);
 const page = resolve(app, "index.html");
@@ -65,7 +66,7 @@ const name = basename(app);
 const appUrl = "nts-app://app/index.html";
 const appArgs = [`--nts-app-dir=${app}`];
 const work = resolve(root, "target/chromium/apps", name);
-const source = resolve(root, "third_party/chromium/src");
+const source = chromiumSource(root);
 const shell = resolve(source, profile.directory, "nts_app_shell");
 
 if (command === "build") build();

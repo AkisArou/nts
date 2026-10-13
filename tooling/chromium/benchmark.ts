@@ -11,6 +11,7 @@ import { stripTypeScriptTypes } from "node:module";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { activeChromiumBuild } from "./profiles.ts";
+import { chromiumSource, chromiumState } from "./checkout.ts";
 
 interface Sample { payload: string; path: string; round: number; length: number; iterations: number; elapsedNs: number; nsPerOperation: number; ntsAllocations?: number; ntsRetains?: number; ntsReleases?: number; ntsLiveObjects?: number }
 interface EntrySample { entry: string; round: number; length: number; operationsPerEntry: number; entries: number; elapsedNs: number; nsPerEntry: number; ntsAllocations: number }
@@ -33,7 +34,8 @@ interface TodoMeasurements { samples: TodoSample[]; status: number; dom: string;
 type Mode = "native" | "v8";
 interface LaunchResult { result: Measurements; executable: string; fixture: string; args: string[]; rendererPid: number; rendererStatus: string; loadBefore: string; loadAfter: string }
 const root = resolve(import.meta.dirname, "../..");
-const executable = resolve(process.argv[2] ?? "third_party/chromium/src/out/NtsBaseline/nts_shell");
+const source = chromiumSource(root);
+const executable = resolve(process.argv[2] ?? resolve(source, "out/NtsBaseline/nts_shell"));
 const output = resolve(process.argv[3] ?? "target/chromium/binding-benchmark");
 const backend = process.argv[4];
 assert(backend === "c" || backend === "llvm", "Usage: benchmark.ts <nts_shell> <output> <c|llvm> [--allow-debug] [--cpu N] [--runs N] [--workload binding|rows|kernels|todo] [--todo-source nts-dom|lib-dom] [--collection idle|checkpoint] [--trace-gc] [--trace] [--profile-renderer]");
@@ -96,12 +98,12 @@ const argsText = await readFile(resolve(dirname(executable), "args.gn"), "utf8")
 const debugEngine = /is_debug\s*=\s*true/.test(argsText);
 assert(allowDebug || !debugEngine, "Debug engine timings are diagnostic only; pass --allow-debug explicitly or use the optimized profile");
 assert(argsText.includes(`nts_probe_backend = "${backend}"`));
-const source = resolve(root, "third_party/chromium/src");
 assert.equal(activeChromiumBuild(root), undefined, "Finish the active build before benchmarking");
 assert.equal(execFileSync("git", ["-C", source, "diff", "HEAD", "--binary"], {encoding:"utf8"}), "");
 const hash = (bytes: Uint8Array | string): string => createHash("sha256").update(bytes).digest("hex");
-const evidenceDirectory = dirname(executable).endsWith("/NtsPerf") ? "target/chromium/perf" : "target/chromium";
-const buildRecord = JSON.parse(await readFile(resolve(root, evidenceDirectory, "build-result.json"), "utf8")) as {
+// The build record, with the shared checkout (checkout.ts).
+const evidenceDirectory = dirname(executable).endsWith("/NtsPerf") ? resolve(chromiumState(root), "perf") : chromiumState(root);
+const buildRecord = JSON.parse(await readFile(resolve(evidenceDirectory, "build-result.json"), "utf8")) as {
   state: string; target: string; gnArgsSha256: string; executableSha256: string; nativeManifestSha256: string; v8ControlExecutableSha256: string;
 };
 assert.equal(buildRecord.state, "passed", "Require a completed successful build");

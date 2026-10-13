@@ -48,15 +48,18 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from checkout import CHROMIUM_SRC  # noqa: E402
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-SRC = os.path.join(ROOT, "third_party", "chromium", "src")
+# Chromium's source, in the shared checkout (checkout.py).
+SRC = CHROMIUM_SRC
 SCRIPTS = os.path.join(SRC, "third_party", "blink", "renderer", "bindings", "scripts")
 LANE = os.path.join(ROOT, "runtime", "chromium")
 DATABASE = os.path.join(SRC, "out", "NtsPerf", "gen", "third_party", "blink", "renderer", "bindings",
                         "web_idl_database.pickle")
 ALLOWLIST = os.path.join(os.path.dirname(__file__), "allowlist.json")
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPTS)
 sys.path.insert(0, os.path.join(SRC, "third_party", "pyjson5", "src"))
 

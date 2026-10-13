@@ -5,11 +5,12 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { archiveProgram, chromiumToolchain, hostFlags } from "../../../../tooling/chromium/archive.ts";
+import { chromiumSource } from "../../../../tooling/chromium/checkout.ts";
 
 const root = resolve(import.meta.dirname, "../../../..");
 const fixture = import.meta.dirname;
 const lane = resolve(fixture, "../..");
-const source = resolve(root, "third_party/chromium/src");
+const source = chromiumSource(root);
 // NTS_CHROMIUM_NATIVE_OUT keeps an experimental compiler's archives away from
 // the ones probe.ts stages into Chromium.
 const output = resolve(root, process.env.NTS_CHROMIUM_NATIVE_OUT ?? "target/chromium/native-bootstrap");

@@ -24,9 +24,12 @@ import json
 import os
 import re
 
+from checkout import TYPESCRIPT_GO
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-LIB_DOM = os.path.join(ROOT, "third_party", "typescript-go", "internal", "bundled", "libs", "lib.dom.d.ts")
+# typescript-go is a submodule: the shared checkout's copy (checkout.py).
+LIB_DOM = os.path.join(TYPESCRIPT_GO, "internal", "bundled", "libs", "lib.dom.d.ts")
 DOM_IDL = os.path.join(ROOT, "runtime", "chromium", "dom", "types", "dom-idl.d.ts")
 REPORT = os.path.join(HERE, "report.json")
 ALLOWLIST = os.path.join(HERE, "allowlist.json")

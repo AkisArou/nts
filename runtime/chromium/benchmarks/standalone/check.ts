@@ -17,10 +17,11 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
+import { chromiumSource } from "../../../../tooling/chromium/checkout.ts";
 
 const root = resolve(import.meta.dirname, "../../../..");
 const here = import.meta.dirname;
-const source = resolve(root, "third_party/chromium/src");
+const source = chromiumSource(root);
 const clang = resolve(source, "third_party/llvm-build/Release+Asserts/bin/clang");
 const sysroot = resolve(source, "build/linux/debian_bullseye_amd64-sysroot");
 // Run embedder/program/check.ts with the same NTS_CHROMIUM_NATIVE_OUT to compare

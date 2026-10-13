@@ -10,13 +10,17 @@ import { mkdir, readFile, readdir, readlink, writeFile } from "node:fs/promises"
 import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { openPage } from "./browser.ts";
+import { chromiumSource, chromiumState } from "./checkout.ts";
 
 interface Layout { title: string; count: string; x: number; y: number; width: number; background: string }
 const errorCode = (error: unknown): string => error instanceof Error && "code" in error ? String(error.code) : "unknown";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const executable = resolve(process.argv[2] ?? `${root}/third_party/chromium/src/out/NtsBaseline/content_shell`);
-const output = resolve(process.argv[3] ?? `${root}/target/chromium/baseline-smoke`);
+const chromiumTree = chromiumSource(root);
+const executable = resolve(process.argv[2] ?? resolve(chromiumTree, "out/NtsBaseline/content_shell"));
+// Run without an output, it is the baseline smoke: a record of the shared
+// checkout, which probe.ts reads (checkout.ts).
+const output = resolve(process.argv[3] ?? resolve(chromiumState(root), "baseline-smoke"));
 const domOracle = process.argv[4] === "v8";
 const probeBackend = domOracle ? undefined : process.argv[4];
 if (probeBackend !== undefined && probeBackend !== "c" && probeBackend !== "llvm") {
@@ -62,19 +66,18 @@ const mixedObserver = `(() => {
     jobs.setAttribute('data-jobs', ''); observer.takeRecords(); window.mixedTrace=[];
   };
 })()`;
-const chromiumSource = resolve(root, "third_party/chromium/src");
-const chromiumRevision = execFileSync("git", ["-C", chromiumSource, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-const sourceDiff = execFileSync("git", ["-C", chromiumSource, "diff", "HEAD", "--binary"], { encoding: "utf8" });
+const chromiumRevision = execFileSync("git", ["-C", chromiumTree, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const sourceDiff = execFileSync("git", ["-C", chromiumTree, "diff", "HEAD", "--binary"], { encoding: "utf8" });
 assert.equal(sourceDiff, "", "The baseline/public-client experiment requires unmodified tracked Chromium source");
 assert.equal(basename(executable), probeBackend ? "nts_shell" : "content_shell");
 const gnArgs = await readFile(resolve(dirname(executable), "args.gn"), "utf8");
 if (probeBackend) assert(gnArgs.includes(`nts_probe_backend = "${probeBackend}"`), "GN backend must match the requested native probe");
 await mkdir(output, { recursive: true });
 const targetLabel = probeBackend ? "//nts:nts_shell" : "//content/shell:content_shell";
-const runtimeDeps = execFileSync(resolve(chromiumSource, "buildtools/linux64/gn"),
-  ["desc", relative(chromiumSource, dirname(executable)), targetLabel, "runtime_deps"], { cwd: chromiumSource, encoding: "utf8" });
+const runtimeDeps = execFileSync(resolve(chromiumTree, "buildtools/linux64/gn"),
+  ["desc", relative(chromiumTree, dirname(executable)), targetLabel, "runtime_deps"], { cwd: chromiumTree, encoding: "utf8" });
 await writeFile(`${output}/runtime-deps.txt`, runtimeDeps);
-const nativeManifestSha256 = probeBackend ? createHash("sha256").update(await readFile(resolve(chromiumSource, "nts/manifest.json"))).digest("hex") : undefined;
+const nativeManifestSha256 = probeBackend ? createHash("sha256").update(await readFile(resolve(chromiumTree, "nts/manifest.json"))).digest("hex") : undefined;
 const launchLog = createWriteStream(`${output}/launch.log`);
 const started = performance.now();
 const args: string[] = [];

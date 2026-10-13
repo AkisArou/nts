@@ -6,20 +6,23 @@ import { sha256File } from "./hash.ts";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statfsSync, writeFileSync } from "node:fs";
 import { delimiter, relative, resolve } from "node:path";
 import { activeChromiumBuild, buildProfile } from "./profiles.ts";
+import { chromiumState, chromiumVendor } from "./checkout.ts";
 
 const root = resolve(import.meta.dirname, "../..");
-const vendor = resolve(root, "third_party/chromium");
+// The gclient root: the shared checkout's (checkout.ts); the lock is the tree's.
+const vendor = chromiumVendor(root);
 const source = resolve(vendor, "src");
 const depot = resolve(vendor, "depot_tools");
-const profile = buildProfile(process.argv.slice(3));
+const profile = buildProfile(root, process.argv.slice(3));
 const buildDir = resolve(source, profile.directory);
-const evidence = resolve(root, profile.evidence);
-const writerPidFile = resolve(root, "target/chromium/build.pid");
+const evidence = profile.evidence;
+const state = chromiumState(root);
+const writerPidFile = resolve(state, "build.pid");
 const hash = sha256File;
 
 interface Pin { url: string; revision: string; version?: string }
 interface Lock { chromium: Pin; depot_tools: Pin }
-const settings = (): Lock => JSON.parse(readFileSync(resolve(vendor, "upstream.lock.json"), "utf8"));
+const settings = (): Lock => JSON.parse(readFileSync(resolve(root, "third_party/chromium/upstream.lock.json"), "utf8"));
 const revision = (path: string): string => execFileSync("git", ["-C", path, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const freeGiB = (): number => {
   const stats = statfsSync(vendor);
@@ -92,8 +95,8 @@ function bootstrap(): void {
 
 function sync(jobs: number): void {
   requirePins();
-  const manifest = resolve(root, "target/chromium/sync.json");
-  mkdirSync(resolve(root, "target/chromium"), { recursive: true });
+  const manifest = resolve(state, "sync.json");
+  mkdirSync(state, { recursive: true });
   run([resolve(depot, "gclient"), "sync", "--nohooks", "--shallow", "--no-history", "--jobs", String(jobs),
     "--revision", `src@${settings().chromium.revision}`, "--output-json", manifest], vendor, environment());
 }
@@ -134,7 +137,7 @@ function build(jobs: number): void {
   if (active && active !== process.pid) throw new Error(`Build ${active} is already running`);
   if (!existsSync(resolve(buildDir, "build.ninja"))) throw new Error("Missing generated build; run gen first");
   mkdirSync(evidence, { recursive: true });
-  mkdirSync(resolve(root, "target/chromium"), { recursive: true });
+  mkdirSync(state, { recursive: true });
   writeFileSync(writerPidFile, `${process.pid}\n`);
   const startedAt = new Date().toISOString();
   const target = selectedTarget();
@@ -169,7 +172,7 @@ function backgroundBuild(jobs: number): void {
   child.on("error", (error) => { console.error(error); process.exitCode = 1; });
   child.unref();
   closeSync(log);
-  mkdirSync(resolve(root, "target/chromium"), { recursive: true });
+  mkdirSync(state, { recursive: true });
   writeFileSync(pidFile, `${child.pid}\n`);
   console.log(`Build ${child.pid} started; log: ${profile.evidence}/build.log; completion: ${profile.evidence}/build-result.json`);
 }

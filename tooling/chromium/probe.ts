@@ -6,10 +6,11 @@ import { sha256File } from "./hash.ts";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, resolve } from "node:path";
 import { activeChromiumBuild, buildProfile } from "./profiles.ts";
+import { chromiumSource, chromiumState, chromiumVendor } from "./checkout.ts";
 
 const root = resolve(import.meta.dirname, "../..");
-const source = resolve(root, "third_party/chromium/src");
-const depot = resolve(root, "third_party/chromium/depot_tools");
+const source = chromiumSource(root);
+const depot = resolve(chromiumVendor(root), "depot_tools");
 const output = resolve(root, "target/chromium");
 const lane = resolve(root, "runtime/chromium");
 const fixture = resolve(lane, "embedder/program");
@@ -25,7 +26,7 @@ for (let i = 3; i < process.argv.length; i += 2) {
   if ((name !== "--profile" && name !== "--app") || value === undefined || options.has(name)) throw new Error(usage);
   options.set(name, value);
 }
-const selectedProfile = buildProfile(options.has("--profile") ? ["--profile", options.get("--profile")!] : []);
+const selectedProfile = buildProfile(root, options.has("--profile") ? ["--profile", options.get("--profile")!] : []);
 const appArchive = options.get("--app");
 const activeBuild = activeChromiumBuild(root);
 if (activeBuild) throw new Error(`Build ${activeBuild} is running; finish it before staging the probe`);
@@ -34,7 +35,7 @@ const hash = sha256File;
 const revision = (dir: string): string => execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const lock = JSON.parse(readFileSync(resolve(root, "third_party/chromium/upstream.lock.json"), "utf8")) as { chromium: { revision: string }; depot_tools: { revision: string } };
 if (revision(source) !== lock.chromium.revision || revision(depot) !== lock.depot_tools.revision) throw new Error("Checkout differs from source/tool lock");
-const baseline = JSON.parse(readFileSync(resolve(output, "baseline-smoke/result.json"), "utf8")) as { chromiumRevision: string; probeBackend?: string; sourceDiffSha256: string };
+const baseline = JSON.parse(readFileSync(resolve(chromiumState(root), "baseline-smoke/result.json"), "utf8")) as { chromiumRevision: string; probeBackend?: string; sourceDiffSha256: string };
 const emptyHash = createHash("sha256").update("").digest("hex");
 if (baseline.chromiumRevision !== lock.chromium.revision || baseline.probeBackend || baseline.sourceDiffSha256 !== emptyHash) {
   throw new Error("Record a successful unmodified baseline smoke at this pin first");

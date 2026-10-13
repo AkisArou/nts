@@ -5,12 +5,13 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { chromiumSource } from "../../../tooling/chromium/checkout.ts";
 
 const root = resolve(import.meta.dirname, "../../..");
 const fixture = import.meta.dirname;
 const output = resolve(root, "target/chromium/contracts");
 const nts = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
-const source = resolve(root, "third_party/chromium/src");
+const source = chromiumSource(root);
 const clang = resolve(source, "third_party/llvm-build/Release+Asserts/bin/clang");
 const sysroot = resolve(source, "build/linux/debian_bullseye_amd64-sysroot");
 const hash = (path: string): string => createHash("sha256").update(readFileSync(path)).digest("hex");
