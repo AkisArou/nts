@@ -348,7 +348,7 @@ pub(crate) fn size(b: &mut Body<'_, '_>, result: ValueId, subject: ValueId) -> R
 
 /// After a descriptor: an empty collection, with no entries and an index of
 /// one empty slot, which the first insertion grows.
-fn empty(c: &Collection) -> Vec<I<'static>> {
+pub(crate) fn empty(c: &Collection) -> Vec<I<'static>> {
     let mut code = vec![
         objects::UNHASHED,
         I::I32Const(0),
@@ -477,7 +477,7 @@ fn value_operand(b: &mut Body<'_, '_>, c: &Collection, value: ValueId) -> Result
     }
 }
 
-fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Result<Func, Failure> {
+pub(crate) fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Result<Func, Failure> {
     let map = map_physical(c);
     let key = key_physical(c.key);
     let value = value_physical(c);

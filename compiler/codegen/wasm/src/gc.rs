@@ -186,6 +186,15 @@ pub(crate) struct BufferTypes {
     pub(crate) dataview_descriptor: u32,
 }
 
+/// A symbol, as the C runtime's `NtsSymbol`: an object-root struct holding
+/// its description, under a descriptor whose kind is `SYMBOL`. See
+/// `symbols.rs`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SymbolTypes {
+    pub(crate) symbol: u32,
+    pub(crate) descriptor: u32,
+}
+
 #[derive(Debug)]
 pub(crate) struct Array {
     pub(crate) ty: HirType,
@@ -225,7 +234,9 @@ pub(crate) fn collection_key(key: &HirType) -> Result<KeyKind, String> {
         HirType::Managed(ManagedType::String) => Ok(KeyKind::String),
         HirType::Float { bits: 64 } => Ok(KeyKind::Number),
         HirType::Erased => Ok(KeyKind::Erased),
-        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => Ok(KeyKind::Reference),
+        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_) | ManagedType::Symbol) => {
+            Ok(KeyKind::Reference)
+        }
         _ => Err(format!("a map or set key of type {key:?}")),
     }
 }
@@ -300,9 +311,13 @@ enum Kind {
 }
 
 /// `count` descriptors for a runtime type that is not a class, under one new
-/// identity no class has: an object to `typeof`, whose kind its struct type
-/// answers. The first one's index.
-fn builtins(objects: &mut crate::object_plan::Plan, count: usize) -> Result<u32, String> {
+/// identity no class has, of `kind` to `typeof` (an object, or a symbol). The
+/// first one's index.
+fn builtins(
+    objects: &mut crate::object_plan::Plan,
+    count: usize,
+    kind: u32,
+) -> Result<u32, String> {
     let first = u32::try_from(objects.descriptors.len()).map_err(|_| "too many descriptors")?;
     if count > 0 {
         let identity = objects
@@ -315,7 +330,7 @@ fn builtins(objects: &mut crate::object_plan::Plan, count: usize) -> Result<u32,
         for _ in 0..count {
             objects.descriptors.push(crate::object_plan::Descriptor {
                 identity,
-                kind: nts_core::hir::tags::OBJECT,
+                kind,
                 ancestry: Vec::new(),
                 class: None,
             });
@@ -336,6 +351,7 @@ pub(crate) struct Plan {
     pub(crate) erased: Option<ErasedTypes>,
     pub(crate) promise: Option<PromiseTypes>,
     pub(crate) buffers: Option<BufferTypes>,
+    pub(crate) symbol: Option<SymbolTypes>,
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
@@ -404,8 +420,15 @@ impl Plan {
                 .map_err(|why| Failure::Unsupported(why).at(&use_.function, &use_.origin))?;
         }
         // A job or a timer is a task, run at a checkpoint.
-        if resources.tasks {
+        if resources.services.tasks {
             builder.promise_types();
+        }
+        // `Symbol.for` keeps its registry in a string-keyed table.
+        if resources.services.symbol_registry {
+            builder
+                .request(&crate::symbols::registry_type())
+                .map_err(crate::EmitError::InvalidWasm)?;
+            builder.symbol_type();
         }
         // A raise carries an erased payload.
         if resources.raising {
@@ -606,6 +629,7 @@ struct Builder<'a> {
     erased: Option<ErasedNodes>,
     promise: Option<PromiseNodes>,
     buffers: Option<BufferNodes>,
+    symbol: Option<NodeId>,
     callable_plan: crate::callable_plan::Plan,
     callables: BTreeMap<usize, CallableNodes>,
     virtual_plan: crate::callable_plan::Plan,
@@ -647,6 +671,7 @@ impl<'a> Builder<'a> {
             erased: None,
             promise: None,
             buffers: None,
+            symbol: None,
             callable_plan,
             callables: BTreeMap::new(),
             virtual_plan,
@@ -935,6 +960,25 @@ impl<'a> Builder<'a> {
         nodes
     }
 
+    /// The symbol type: the object root, then the description, a JS string or
+    /// null.
+    fn symbol_type(&mut self) -> NodeId {
+        if let Some(id) = self.symbol {
+            return id;
+        }
+        let root = self.root();
+        let Shape::Struct(mut fields) = self.nodes[root.0].shape.clone() else {
+            unreachable!("the object root is a struct")
+        };
+        fields.push(Field::value(
+            PendingSlot::Reference(RefType::EXTERNREF),
+            false,
+        ));
+        let id = self.add("symbol".into(), Some(root), true, Shape::Struct(fields));
+        self.symbol = Some(id);
+        id
+    }
+
     fn erased_types(&mut self) {
         if self.erased.is_some() {
             return;
@@ -1039,9 +1083,7 @@ impl<'a> Builder<'a> {
             HirType::Managed(ManagedType::DataView) => {
                 PendingSlot::Defined(self.buffer_types().dataview, true)
             }
-            HirType::Managed(ManagedType::Symbol) => {
-                return Err("symbol storage outside M1b".into());
-            }
+            HirType::Managed(ManagedType::Symbol) => PendingSlot::Defined(self.symbol_type(), true),
             HirType::NativePointer(_) => return Err("native pointer storage outside wasm".into()),
             HirType::Void | HirType::Never => return Ok(None),
         };
@@ -1912,8 +1954,19 @@ impl<'a> Builder<'a> {
         let supers = self.supers(&ordered, &indices);
         let groups = self.encode(&ordered, &indices);
         let (mut objects, arrays, collections) = self.metadata(&indices)?;
-        let promise_descriptor = builtins(&mut objects, usize::from(self.promise.is_some()))?;
-        let buffer_descriptor = builtins(&mut objects, 3 * usize::from(self.buffers.is_some()))?;
+        let object = nts_core::hir::tags::OBJECT;
+        let promise_descriptor =
+            builtins(&mut objects, usize::from(self.promise.is_some()), object)?;
+        let buffer_descriptor = builtins(
+            &mut objects,
+            3 * usize::from(self.buffers.is_some()),
+            object,
+        )?;
+        let symbol_descriptor = builtins(
+            &mut objects,
+            usize::from(self.symbol.is_some()),
+            nts_core::hir::tags::SYMBOL,
+        )?;
         Ok(Plan {
             arrays,
             collections,
@@ -1947,6 +2000,10 @@ impl<'a> Builder<'a> {
                 promises: indices[nodes.promises.0],
                 descriptor: promise_descriptor,
                 base: ROOT_FIELDS,
+            }),
+            symbol: self.symbol.map(|node| SymbolTypes {
+                symbol: indices[node.0],
+                descriptor: symbol_descriptor,
             }),
             buffers: self.buffers.map(|nodes| BufferTypes {
                 bytes: indices[nodes.bytes.0],

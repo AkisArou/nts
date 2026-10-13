@@ -1166,26 +1166,11 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_strings_to_hstrings",
         Support::Decline("foreign/native ABI or ownership"),
     ),
-    (
-        "nts_symbol_description",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_symbol_for",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_symbol_key_for",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_symbol_new",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_symbol_to_string",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
+    ("nts_symbol_description", Support::Intrinsic),
+    ("nts_symbol_for", Support::WasmHelper),
+    ("nts_symbol_key_for", Support::WasmHelper),
+    ("nts_symbol_new", Support::Intrinsic),
+    ("nts_symbol_to_string", Support::WasmHelper),
     ("nts_table_new", Support::Intrinsic),
     ("nts_tag_name", Support::WasmHelper),
     (

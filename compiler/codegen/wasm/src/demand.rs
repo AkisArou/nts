@@ -14,6 +14,17 @@ pub(crate) struct ObjectUse {
     pub(crate) origin: nts_semantic_schema::Origin,
 }
 
+/// Runtime services a program's calls need planned up front.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct Services {
+    /// A body queues a task without a promise of its own: a job or a timer,
+    /// which need the task types and the checkpoint.
+    pub(crate) tasks: bool,
+    /// A body calls `Symbol.for` or `Symbol.keyFor`, whose registry is a
+    /// string-keyed table.
+    pub(crate) symbol_registry: bool,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Demand {
     /// Whether any body uses the explicit raising convention, which needs the
@@ -22,9 +33,8 @@ pub(crate) struct Demand {
     /// Whether any body records a raise (`nts_raise`): only then can a raise
     /// be pending when a host entry returns.
     pub(crate) raises: bool,
-    /// Whether any body queues a task without a promise of its own: a job or
-    /// a timer, which need the task types and the checkpoint.
-    pub(crate) tasks: bool,
+    /// The runtime services calls need planned before any body is emitted.
+    pub(crate) services: Services,
     /// Per raising-slot function, its erased returns: their adapter must pass
     /// a failed call's placeholder through without reading it.
     pub(crate) raising_results: BTreeMap<String, BTreeSet<ValueId>>,
@@ -154,6 +164,8 @@ fn call(
                 demand.raising = true;
                 demand.raises |= matches!(source, crate::raising::Source::Raise);
             }
+            demand.services.symbol_registry |=
+                matches!(name.as_str(), "nts_symbol_for" | "nts_symbol_key_for");
             // A job or a timer is a closure called, with nothing, from the
             // queue or the host.
             if matches!(name.as_str(), "nts_enqueue_job" | "nts_set_timeout")
@@ -161,7 +173,7 @@ fn call(
                 && let OpKind::DispatchSlot(slot) = func.value(*slot).kind
                 && let HirType::Managed(ManagedType::Object(ty)) = func.value(*closure).ty
             {
-                demand.tasks = true;
+                demand.services.tasks = true;
                 record(&mut demand.closure_calls, (ty, slot), func, id);
             }
         }

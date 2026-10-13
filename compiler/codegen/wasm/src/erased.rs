@@ -23,6 +23,7 @@ pub(crate) const BOOLEAN: i32 = tags::BOOLEAN.cast_signed();
 pub(crate) const NUMBER: i32 = tags::NUMBER.cast_signed();
 pub(crate) const STRING: i32 = tags::STRING.cast_signed();
 pub(crate) const NULL: i32 = tags::NULL.cast_signed();
+pub(crate) const SYMBOL: i32 = tags::SYMBOL.cast_signed();
 pub(crate) const OBJECT: i32 = tags::OBJECT.cast_signed();
 pub(crate) const FUNCTION: i32 = tags::FUNCTION.cast_signed();
 
@@ -410,7 +411,8 @@ pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), F
             | ManagedType::Buffer
             | ManagedType::View(_)
             | ManagedType::AnyView
-            | ManagedType::DataView,
+            | ManagedType::DataView
+            | ManagedType::Symbol,
         ) => {}
         HirType::Bool => {
             body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
@@ -573,7 +575,8 @@ pub(crate) fn unerase_to(
             | ManagedType::Buffer
             | ManagedType::View(_)
             | ManagedType::AnyView
-            | ManagedType::DataView,
+            | ManagedType::DataView
+            | ManagedType::Symbol,
         ) => {
             body.instruction(&I::Drop);
             unerase_reference(body, value, &ty)?;

@@ -186,6 +186,11 @@ fn value_text(m: &mut Builder<'_>) -> Result<Func, Failure> {
             f.call(number);
             f.call(number_text);
             f.instructions(&[I::Br(1), I::End]);
+            if m.types.symbol.is_some() {
+                arm(&mut f, erased::SYMBOL);
+                crate::symbols::erased_text(m, &mut f, 0)?;
+                f.instructions(&[I::Br(1), I::End]);
+            }
             contract::refuse_in(
                 &mut f,
                 m,

@@ -406,6 +406,24 @@ fn source_absent_scalars_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// Symbols: identity by address, descriptions and their absence, the
+/// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
+/// text, and symbols as Map keys.
+#[test]
+fn source_symbols_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/symbols");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "symbols",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 85, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// The order promise reactions and resumptions run in: each export's return
 /// is the checkpoint that drains them, and a second export reads the order,
 /// against node's order after a turn.

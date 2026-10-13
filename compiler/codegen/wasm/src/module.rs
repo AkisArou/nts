@@ -79,6 +79,7 @@ pub(crate) enum FuncKey {
     Buffer(crate::buffers::Helper),
     BufferMethod(crate::buffer_methods::Helper),
     DataView(crate::dataviews::Helper),
+    Symbol(crate::symbols::Helper),
 }
 
 /// Every global the module can contain, named by what it means.
@@ -95,6 +96,8 @@ pub(crate) enum GlobalKey {
     IdentityCounter,
     Promise(crate::promises::State),
     Timer(crate::timers::State),
+    /// `Symbol.for`'s registry.
+    SymbolRegistry,
 }
 
 #[derive(Debug)]

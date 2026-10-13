@@ -786,6 +786,8 @@ impl<'b, 'p> Body<'b, 'p> {
                     crate::buffer_methods::call(self, result, op, args)?;
                 } else if let Some(op) = crate::dataviews::external(name) {
                     crate::dataviews::call(self, result, op, args)?;
+                } else if let Some(op) = crate::symbols::external(name) {
+                    crate::symbols::call(self, result, op, args)?;
                 } else if let Some(conversion) = crate::numeric::external(name) {
                     crate::numeric::call(self, result, conversion, args)?;
                 } else {

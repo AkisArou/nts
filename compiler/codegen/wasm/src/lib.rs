@@ -40,6 +40,7 @@ mod raising;
 mod rows;
 mod strings;
 mod support;
+mod symbols;
 mod timers;
 mod transfer;
 mod types;
