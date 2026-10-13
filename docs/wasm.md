@@ -314,6 +314,53 @@ tell them apart.
   `null` and a native handle answer `"object"`, and a tag that names no value
   is refused by name.
 
+### Collections (3b)
+
+A Map, a Set and a string-keyed record are one structure, `collections.rs`,
+as the C runtime's `NtsMap`: an insertion-ordered table.
+- **Why native, not a JS Map.** Measured first (wasm-evidence/collections): a
+  JS Map behind imports never beat node (45 ns against node's 25 per
+  operation), and it has no positional cursor for `nts_map_next`. A WasmGC
+  table beat node for short keys (17.6 ns).
+- **It is an object** with a descriptor, so `typeof` answers "object". Its
+  fields after the root's are:
+  - the live count (`size`, which `Length` reads);
+  - the entries written, holes included;
+  - the keys, each entry's hash (zero marks a hole), and the probe index
+    (0 empty, -1 deleted, else entry + 1);
+  - for a Map or a record, the values.
+- **Entries stay where they are written.** A delete leaves a hole, and growth
+  copies entries in place and rebuilds the index from their hashes. A walk's
+  cursor, one entry number, stays valid: an entry appended during a walk is
+  visited, one deleted ahead is not, and a key deleted and set again moves to
+  the end. `clear` keeps the entries written for the same reason.
+  a-collection-mutated-while-it-is-walked pins it on every backend.
+- **Keys compare by `SameValueZero`.** A number key is stored with -0 as +0,
+  every NaN hashes alike, and two NaNs are equal; erased keys compare by tag.
+  map-keys-compare-by-same-value-zero pins it.
+- **Storage is typed by the static collection type.** String keys are
+  externref, number keys f64, erased keys anyref. Number and boolean values
+  are typed; any other value is erased, because a null reference slot cannot
+  say which absence it held. The core passes keys and values erased (C's
+  `NtsValue`). A call reads the typed value directly when the operand is an
+  `erase` of one; any other operand converts dynamically, so a lowering change
+  can only make a call slower, never wrong.
+- **`Object.keys` of a record** lists array-index keys first, ascending, then
+  the rest in insertion order, which is JavaScript's own-property order.
+- **Refused by name:**
+  - an object as a key, which needs an identity hash Wasm objects do not have
+    yet (its own slice);
+  - a key the storage cannot hold;
+  - `Date`.
+- **Measured, exploratory, ns per iteration** (tooling/wasm/bench/collections):
+  - Map counting (get, then set): 27.5 against node's 13.5;
+  - a Set of numbers: 17.8 against 16.5;
+  - record reads: 13.6 against 5.1.
+
+  A string key is hashed on every lookup, where V8 caches a string's hash,
+  and `get`'s erased result is boxed and unboxed. Both are follow-ups: a
+  bounded hash for long keys, and a typed `get` where the consumer unerases.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
