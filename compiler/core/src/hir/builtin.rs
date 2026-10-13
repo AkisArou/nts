@@ -316,7 +316,8 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
 /// `[0, 255]` where the others wrap, and giving it the wrapping conversion
 /// would be silently wrong for exactly the inputs anyone would notice.
 /// `BigInt64Array` and `BigUint64Array` are absent because `bigint` is.
-pub(super) fn typed_array_element(name: &str) -> Option<HirType> {
+#[must_use]
+pub fn typed_array_element(name: &str) -> Option<HirType> {
     let int = |bits, signed| HirType::Int { bits, signed };
     Some(match name {
         "Int8Array" => int(8, true),
@@ -338,7 +339,10 @@ pub(super) fn typed_array_element(name: &str) -> Option<HirType> {
 /// differ on both. `set` between two views converts *values*, so the runtime
 /// stores the kind rather than inferring it from a width.
 ///
-/// The numbers are `NTS_ELEMENT_*` in `nts_runtime.h`. `Uint8ClampedArray` is
+/// The numbers are `NTS_ELEMENT_*` in `nts_runtime.h`, and this is the one
+/// place that numbers them: a backend that needs the kind (Wasm guarding an
+/// erased value read back as a typed array) asks here rather than keeping a
+/// table of its own. `Uint8ClampedArray` is
 /// absent from [`typed_array_element`] -- clamping is a different store, and
 /// giving it the wrapping conversion would be silently wrong -- so its kind is
 /// unreachable from here until the name is accepted.
@@ -355,7 +359,7 @@ pub(super) fn typed_array_element(name: &str) -> Option<HirType> {
 /// clamping and wrapping disagree on exactly the inputs typed-array code is
 /// written for, so the slot is reserved rather than aliased onto `u8`.
 #[must_use]
-pub(super) fn element_kind(element: &HirType) -> Option<u32> {
+pub fn element_kind(element: &HirType) -> Option<u32> {
     Some(match element {
         HirType::Int {
             bits: 8,
