@@ -175,7 +175,15 @@ impl<'p, 's> Graph<'p, 's> {
             };
             // Scalar payload conversion cannot transport an object identity.
             // Erased storage can: its tag still says which layout it holds.
-            if identity_type(&target_kind.kind) {
+            //
+            // **And so can `object`**, which the checker gives a value after
+            // `typeof value === "object" && value !== null`. Without it the
+            // narrowing was a wall: a `Context` passed as `unknown` reached
+            // `unknown`, the narrowed `value` read nothing from it, and
+            // `value as Named` licensed no family -- `Named`'s slot was read
+            // straight off a `Context`, a `string` taken for an erased value
+            // (`tooling/conformance/outcomes/a-string-field-read-through-a-cast-of-unknown`).
+            if identity_type(&target_kind.kind) || self.probe.is_the_object_type(target) {
                 let (from, to) = (Self::index(source), Self::index(target));
                 if from != to {
                     self.edges[from].insert(to);
