@@ -156,3 +156,56 @@ fn the_project_keeps_its_own_files_however_its_config_names_them() {
         assert!(errors.is_empty(), "{names}: checks clean, said {errors:?}");
     }
 }
+
+#[derive(Debug)]
+struct NoFiles;
+
+impl Generated for NoFiles {
+    fn identity(&self) -> String {
+        "no-files".to_owned()
+    }
+
+    fn files(
+        &mut self,
+        _tsconfig: &Utf8Path,
+        _roots: &[String],
+        _complaints: &[Complaint],
+    ) -> Result<Option<Vec<Utf8PathBuf>>, String> {
+        Ok(None)
+    }
+}
+
+/// Asking for diagnostics before capture allocates the checker's unique-symbol
+/// names in a different order. A generator that does nothing must not do that.
+#[test]
+fn an_inactive_generator_preserves_the_snapshot() {
+    let Some(tsgo) = tsgo() else {
+        eprintln!("skipping: NTS_TSGO not set");
+        return;
+    };
+    let config = project("inactive", "files");
+    std::fs::write(
+        config.parent().unwrap().join("src/main.ts"),
+        r#"const first = Symbol("first");
+const second = Symbol("second");
+export class Box {
+    [second] = 2;
+    [first] = 1;
+}
+export function answer(box: Box): number { return box[first] + box[second]; }
+"#,
+    )
+    .unwrap();
+    let control = TsgoApi::for_compilation(tsgo.clone())
+        .snapshot(&config)
+        .unwrap();
+    let subject = TsgoApi::for_compilation(tsgo)
+        .with_generated(Box::new(NoFiles))
+        .snapshot(&config)
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(subject).unwrap(),
+        serde_json::to_value(control).unwrap(),
+        "an inactive generator must leave the complete snapshot unchanged"
+    );
+}
