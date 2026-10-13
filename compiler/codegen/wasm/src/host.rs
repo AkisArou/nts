@@ -20,6 +20,18 @@ enum Shape {
     StringString,
     /// A string and a number to a string: `repeat`, a relative `at`.
     StringNumberString,
+    /// A string searched for a string: a position.
+    StringStringNumber,
+    /// The same from a position.
+    StringStringNumberNumber,
+    /// A string tested with a string.
+    StringStringBool,
+    /// A string tested.
+    StringBool,
+    /// A string padded to a length with a string.
+    StringNumberStringString,
+    /// A string with a pattern replaced.
+    StringStringStringString,
     ParseFloat,
     /// A string and a number to a number: `parseInt` with its radix, and
     /// `codePointAt`.
@@ -167,6 +179,82 @@ const SERVICES: &[Service] = &[
         name: "nts_str_to_upper_case",
         shape: Shape::StringString,
     },
+    Service {
+        name: "nts_decode_uri",
+        shape: Shape::StringNumberString,
+    },
+    Service {
+        name: "nts_encode_uri",
+        shape: Shape::StringNumberString,
+    },
+    Service {
+        name: "nts_str_ends_with",
+        shape: Shape::StringStringBool,
+    },
+    Service {
+        name: "nts_str_includes",
+        shape: Shape::StringStringBool,
+    },
+    Service {
+        name: "nts_str_index_of",
+        shape: Shape::StringStringNumber,
+    },
+    Service {
+        name: "nts_str_index_of_from",
+        shape: Shape::StringStringNumberNumber,
+    },
+    Service {
+        name: "nts_str_is_well_formed",
+        shape: Shape::StringBool,
+    },
+    Service {
+        name: "nts_str_last_index_of",
+        shape: Shape::StringStringNumber,
+    },
+    Service {
+        name: "nts_str_pad_end",
+        shape: Shape::StringNumberStringString,
+    },
+    Service {
+        name: "nts_str_pad_start",
+        shape: Shape::StringNumberStringString,
+    },
+    Service {
+        name: "nts_str_point_width",
+        shape: Shape::StringNumberNumber,
+    },
+    Service {
+        name: "nts_str_replace",
+        shape: Shape::StringStringStringString,
+    },
+    Service {
+        name: "nts_str_replace_all",
+        shape: Shape::StringStringStringString,
+    },
+    Service {
+        name: "nts_str_starts_with",
+        shape: Shape::StringStringBool,
+    },
+    Service {
+        name: "nts_str_to_well_formed",
+        shape: Shape::StringString,
+    },
+    Service {
+        name: "nts_str_trim",
+        shape: Shape::StringString,
+    },
+    Service {
+        name: "nts_str_trim_end",
+        shape: Shape::StringString,
+    },
+    Service {
+        name: "nts_str_trim_start",
+        shape: Shape::StringString,
+    },
+    Service {
+        name: "nts_string_from_code_point",
+        shape: Shape::NumberString,
+    },
 ];
 
 pub(crate) fn external(name: &str) -> Option<&'static Service> {
@@ -176,6 +264,7 @@ pub(crate) fn external(name: &str) -> Option<&'static Service> {
 impl Service {
     pub(crate) fn signature(self) -> (Vec<Physical>, Physical) {
         let number = Physical::Scalar(Slot::F64);
+        let boolean = Physical::Scalar(Slot::I32);
         match self.shape {
             Shape::UnaryNumber => (vec![number], number),
             Shape::BinaryNumber => (vec![number, number], number),
@@ -183,6 +272,20 @@ impl Service {
             Shape::NumberNumberString => (vec![number, number], strings::STRING),
             Shape::StringString => (vec![strings::STRING], strings::STRING),
             Shape::StringNumberString => (vec![strings::STRING, number], strings::STRING),
+            Shape::StringStringNumber => (vec![strings::STRING, strings::STRING], number),
+            Shape::StringStringNumberNumber => {
+                (vec![strings::STRING, strings::STRING, number], number)
+            }
+            Shape::StringStringBool => (vec![strings::STRING, strings::STRING], boolean),
+            Shape::StringBool => (vec![strings::STRING], boolean),
+            Shape::StringNumberStringString => (
+                vec![strings::STRING, number, strings::STRING],
+                strings::STRING,
+            ),
+            Shape::StringStringStringString => (
+                vec![strings::STRING, strings::STRING, strings::STRING],
+                strings::STRING,
+            ),
             Shape::ParseFloat => (vec![strings::STRING], number),
             Shape::StringNumberNumber => (vec![strings::STRING, number], number),
         }
@@ -228,6 +331,9 @@ impl Service {
         match output {
             Physical::Scalar(Slot::F64) => {
                 numeric::convert(body, &HirType::NUMBER, &body.ty(result).clone())
+            }
+            Physical::Scalar(Slot::I32) => {
+                numeric::convert(body, &HirType::Bool, &body.ty(result).clone())
             }
             strings::STRING if strings::is_string(body.ty(result)) => Ok(()),
             _ => Err(format!(

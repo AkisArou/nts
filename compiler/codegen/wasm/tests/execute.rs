@@ -462,6 +462,23 @@ fn source_conversions_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// The string methods the host applies with node's own `String.prototype`,
+/// each wrapped to C's contract where a bare call differs.
+#[test]
+fn source_string_services_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/string-services");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "string-services",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 136, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// The order promise reactions and resumptions run in: each export's return
 /// is the checkpoint that drains them, and a second export reads the order,
 /// against node's order after a turn.

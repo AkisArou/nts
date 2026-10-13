@@ -150,6 +150,172 @@ fn method_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Str
     })
 }
 
+const NULLABLE_STRING: ValueType = ValueType::Externref { nullable: true };
+
+/// String methods applied as they are: (import, capture, the method's
+/// source, parameters, result).
+const STRING_METHODS: &[(&str, &str, &str, &[ValueType], ValueType)] = &[
+    (
+        "nts_str_index_of",
+        "string_indexOf",
+        "String.prototype.indexOf",
+        &[NULLABLE_STRING, NULLABLE_STRING],
+        ValueType::F64,
+    ),
+    (
+        "nts_str_index_of_from",
+        "string_indexOf",
+        "String.prototype.indexOf",
+        &[NULLABLE_STRING, NULLABLE_STRING, ValueType::F64],
+        ValueType::F64,
+    ),
+    (
+        "nts_str_last_index_of",
+        "string_lastIndexOf",
+        "String.prototype.lastIndexOf",
+        &[NULLABLE_STRING, NULLABLE_STRING],
+        ValueType::F64,
+    ),
+    (
+        "nts_str_includes",
+        "string_includes",
+        "String.prototype.includes",
+        &[NULLABLE_STRING, NULLABLE_STRING],
+        ValueType::I32,
+    ),
+    (
+        "nts_str_starts_with",
+        "string_startsWith",
+        "String.prototype.startsWith",
+        &[NULLABLE_STRING, NULLABLE_STRING],
+        ValueType::I32,
+    ),
+    (
+        "nts_str_ends_with",
+        "string_endsWith",
+        "String.prototype.endsWith",
+        &[NULLABLE_STRING, NULLABLE_STRING],
+        ValueType::I32,
+    ),
+    (
+        "nts_str_trim",
+        "string_trim",
+        "String.prototype.trim",
+        &[NULLABLE_STRING],
+        NULLABLE_STRING,
+    ),
+    (
+        "nts_str_trim_start",
+        "string_trimStart",
+        "String.prototype.trimStart",
+        &[NULLABLE_STRING],
+        NULLABLE_STRING,
+    ),
+    (
+        "nts_str_trim_end",
+        "string_trimEnd",
+        "String.prototype.trimEnd",
+        &[NULLABLE_STRING],
+        NULLABLE_STRING,
+    ),
+    (
+        "nts_str_is_well_formed",
+        "string_isWellFormed",
+        "String.prototype.isWellFormed",
+        &[NULLABLE_STRING],
+        ValueType::I32,
+    ),
+    (
+        "nts_str_to_well_formed",
+        "string_toWellFormed",
+        "String.prototype.toWellFormed",
+        &[NULLABLE_STRING],
+        NULLABLE_STRING,
+    ),
+    (
+        "nts_str_replace",
+        "string_replace",
+        "String.prototype.replace",
+        &[NULLABLE_STRING, NULLABLE_STRING, NULLABLE_STRING],
+        NULLABLE_STRING,
+    ),
+    (
+        "nts_str_replace_all",
+        "string_replaceAll",
+        "String.prototype.replaceAll",
+        &[NULLABLE_STRING, NULLABLE_STRING, NULLABLE_STRING],
+        NULLABLE_STRING,
+    ),
+];
+
+/// A `String.prototype` method the host applies to the receiver, as node
+/// does, wrapped to C's contract where it differs from a bare call: a null
+/// pad is the default one, a malformed URI answers null (C's NULL, which the
+/// lowering raises as a `URIError`), a code point the guard let through is
+/// the empty string, and a point's width is C's.
+fn string_import(name: &str, captures: &mut Captures) -> Option<(ImportType, String)> {
+    if let Some((_, local, source, params, result)) =
+        STRING_METHODS.iter().find(|entry| entry.0 == name)
+    {
+        let apply = captures.get("apply", "Reflect.apply");
+        let method = captures.get(local, source);
+        let names = ["receiver", "a", "b"];
+        return Some((
+            function(params, Some(result.clone())),
+            format!(
+                "({}) => {apply}({method}, receiver, [{}])",
+                names[..params.len()].join(", "),
+                names[1..params.len()].join(", ")
+            ),
+        ));
+    }
+    wrapped_string_import(name, captures)
+}
+
+/// The string methods wrapped to C's contract: padding, URIs, a code point,
+/// and a point's width.
+fn wrapped_string_import(name: &str, captures: &mut Captures) -> Option<(ImportType, String)> {
+    use ValueType::F64;
+    const STRING: ValueType = ValueType::Externref { nullable: true };
+    Some(match name {
+        "nts_str_pad_start" | "nts_str_pad_end" => {
+            let apply = captures.get("apply", "Reflect.apply");
+            let method = if name == "nts_str_pad_start" {
+                captures.get("string_padStart", "String.prototype.padStart")
+            } else {
+                captures.get("string_padEnd", "String.prototype.padEnd")
+            };
+            (
+                function(&[STRING, F64, STRING], Some(STRING)),
+                format!("(text, length, pad) => {apply}({method}, text, [length, pad ?? undefined])"),
+            )
+        }
+        "nts_decode_uri" | "nts_encode_uri" => {
+            let (whole, component) = if name == "nts_decode_uri" {
+                (captures.get("decodeURI_", "decodeURI"), captures.get("decodeURIComponent_", "decodeURIComponent"))
+            } else {
+                (captures.get("encodeURI_", "encodeURI"), captures.get("encodeURIComponent_", "encodeURIComponent"))
+            };
+            (
+                function(&[STRING, F64], Some(STRING)),
+                format!("(text, part) => {{ try {{ return part ? {component}(text) : {whole}(text); }} catch {{ return null; }} }}"),
+            )
+        }
+        "nts_string_from_code_point" => {
+            let from = captures.get("fromCodePoint", "String.fromCodePoint");
+            (
+                function(&[F64], Some(STRING)),
+                format!("point => point >= 0 && point <= 0x10FFFF && point === Math.trunc(point) ? {from}(point) : ''"),
+            )
+        }
+        "nts_str_point_width" => (
+            function(&[STRING, F64], Some(F64)),
+            "(text, at) => { if (!(at >= 0) || at + 1 >= text.length) return 1; const high = text.charCodeAt(at), low = text.charCodeAt(at + 1); return high >= 0xD800 && high <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF ? 2 : 1; }".into(),
+        ),
+        _ => return None,
+    })
+}
+
 /// A host import the glue provides: the Wasm type its JS value implements,
 /// and that value. Checked against the module's own import type, because an
 /// engine converts a JS function's arguments and result silently: a wrong
@@ -171,6 +337,9 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
         return Some((number(arity), format!("{math_}.{math}")));
     }
     if let Some(method) = method_import(name, captures) {
+        return Some(method);
+    }
+    if let Some(method) = string_import(name, captures) {
         return Some(method);
     }
     Some(match name {
