@@ -62231,12 +62231,21 @@ impl<'a> FuncBuilder<'a> {
         // provided `RangeError` is a *class*, and the runtime has no
         // way to construct one. That asymmetry is what
         // `throw_provided_error_text` exists for.
+        //
+        // The specification bounds `ToIntegerOrInfinity(radix)`, not the
+        // number, and the two comparisons below are that bound exactly, with
+        // no truncation emitted (`guard_repeat_count` makes the same move):
+        // the integer is below 2 precisely when `!(radix >= 2)` -- which a
+        // `NaN` satisfies, as `ToIntegerOrInfinity(NaN)` is 0 -- and above
+        // 36 precisely when `radix >= 37`. Comparing the number itself let a
+        // `NaN` through to the runtime's `(int)` and threw for `36.5`, which
+        // node reads as base 36. The Wasm lane found both.
         let throwing = self.new_block();
         let carry_on = self.new_block();
         let two = self.push(OpKind::ConstFloat(2.0), HirType::NUMBER, origin.clone());
-        let below = self.push(
+        let at_least_two = self.push(
             OpKind::Binary {
-                op: BinOp::Lt,
+                op: BinOp::Ge,
                 lhs: radix,
                 rhs: two,
             },
@@ -62245,20 +62254,20 @@ impl<'a> FuncBuilder<'a> {
         );
         let checking = self.new_block();
         self.terminate(Terminator::Branch {
-            cond: below,
-            then_target: throwing,
+            cond: at_least_two,
+            then_target: checking,
             then_args: Vec::new(),
-            else_target: checking,
+            else_target: throwing,
             else_args: Vec::new(),
         });
 
         self.switch_to(checking);
-        let thirty_six = self.push(OpKind::ConstFloat(36.0), HirType::NUMBER, origin.clone());
+        let thirty_seven = self.push(OpKind::ConstFloat(37.0), HirType::NUMBER, origin.clone());
         let above = self.push(
             OpKind::Binary {
-                op: BinOp::Gt,
+                op: BinOp::Ge,
                 lhs: radix,
-                rhs: thirty_six,
+                rhs: thirty_seven,
             },
             HirType::Bool,
             origin.clone(),

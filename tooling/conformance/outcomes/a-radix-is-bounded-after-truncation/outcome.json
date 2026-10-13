@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: the control, base 16=ff;the control, base 2=101;36.5 is base 36=zz;37 is past it=RangeError;1.9 truncates below 2=RangeError;NaN is 0=RangeError;Infinity is past it=RangeError;10.5 is base 10=0.1;2.9 is base 2=101;",
+  "node": "exit 1; nts: uncaught Observed: the control, base 16=ff;the control, base 2=101;36.5 is base 36=zz;37 is past it=RangeError;1.9 truncates below 2=RangeError;NaN is 0=RangeError;Infinity is past it=RangeError;10.5 is base 10=0.1;2.9 is base 2=101;",
+  "measured_with": "7b2f7c16204aec1e",
+  "source": "measured"
+}

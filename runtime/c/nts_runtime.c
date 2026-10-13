@@ -4845,10 +4845,14 @@ NtsString *nts_number_to_fixed(double x, double digits) {
 }
 
 NtsString *nts_number_to_string_radix(double x, double radix) {
-  if (radix == 10.0)
+  /* The lowering has bounded ToIntegerOrInfinity(radix) to 2..36, so the
+     truncation is the radix, for the base-10 shortcut and for every digit
+     below: 10.5 is base 10, which is ToString(x), and 36.5 is base 36. */
+  int base = (int)radix;
+  radix = (double)base;
+  if (base == 10)
     return nts_number_to_string(x);
 
-  int base = (int)radix;
   if (x != x)
     return nts_string_from_utf8("NaN", 3);
   if (x == 0.0)
