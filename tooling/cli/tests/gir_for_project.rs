@@ -1,7 +1,7 @@
 //! Config-less commands use the Linux host's GIR bindings, just as configured
 //! projects do. Each run starts without linked bindings or a snapshot cache.
-//! Side-effect imports are not covered: they produce TS2882, which the GIR
-//! resolver does not recognise, while named imports produce TS2307.
+//! Side-effect imports are not covered here: they report TS2882 rather than
+//! the named import's TS2307.
 
 #![cfg(target_os = "linux")]
 
