@@ -211,6 +211,22 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::I64Xor
             | I::I64Shl
             | I::I64ShrU
+            | I::I64ShrS
+            | I::I64Clz
+            // A bigint is one v128 (bigints.rs): its lanes, and the
+            // whole-vector operations its bits need.
+            | I::V128Const(_)
+            | I::V128And
+            | I::V128Or
+            | I::V128Xor
+            | I::V128AnyTrue
+            | I::V128Bitselect
+            | I::I64x2Splat
+            | I::I64x2ExtractLane(_)
+            | I::I64x2ReplaceLane(_)
+            | I::I64x2Eq
+            | I::I64x2AllTrue
+            | I::I64x2ShrS
             | I::F32Abs
             | I::F32Neg
             | I::F32Add

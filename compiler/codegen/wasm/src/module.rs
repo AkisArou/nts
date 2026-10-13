@@ -80,6 +80,9 @@ pub(crate) enum FuncKey {
     BufferMethod(crate::buffer_methods::Helper),
     DataView(crate::dataviews::Helper),
     Symbol(crate::symbols::Helper),
+    BigInt(crate::bigints::Helper),
+    /// The host's bigint text and string comparison.
+    BigIntHost(&'static str),
 }
 
 /// Every global the module can contain, named by what it means.
@@ -702,10 +705,23 @@ fn initial(value: f64, ty: &HirType) -> Result<I<'static>, Failure> {
                 Ok(I::I64Const(i64::from_ne_bytes(raw.to_ne_bytes())))
             }
         }
+        // A bigint's initial value is an integral number within 128 bits.
+        HirType::BigInt => {
+            if !value.is_finite()
+                || value.fract() != 0.0
+                || !(-(2_f64.powi(127))..2_f64.powi(127)).contains(&value)
+            {
+                return Err(format!("initial bigint value {value}").into());
+            }
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "integral and within 128 bits, checked above"
+            )]
+            Ok(I::V128Const(value as i128))
+        }
         HirType::Void
         | HirType::Never
         | HirType::NativePointer(_)
-        | HirType::BigInt
         | HirType::Erased
         | HirType::Managed(_)
         | HirType::Float { .. } => Err(format!("initial value of type {ty:?}").into()),

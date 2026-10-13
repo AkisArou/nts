@@ -364,6 +364,13 @@ fn equality(m: &mut Builder<'_>, types: ErasedTypes) -> Result<Function, Failure
     payload(&mut f, 0, types.boolean);
     payload(&mut f, 1, types.boolean);
     f.instructions(&[I::I32Eq, I::Return, I::End]);
+    // Two bigints are equal by value, not by box.
+    if let Some(bigint) = types.bigint {
+        when_tag(&mut f, 2, erased::BIGINT);
+        payload(&mut f, 0, bigint);
+        payload(&mut f, 1, bigint);
+        f.instructions(&[I::I64x2Eq, I::I64x2AllTrue, I::Return, I::End]);
+    }
     // The remaining admitted tags are the two unique absence singletons.
     // Object/function identity will use this same reference comparison.
     f.instructions(&[
@@ -451,6 +458,12 @@ fn truthiness(m: &mut Builder<'_>, types: ErasedTypes) -> Result<Function, Failu
     when_tag(&mut f, 1, BOOLEAN);
     payload(&mut f, 0, types.boolean);
     f.instructions(&[I::Return, I::End]);
+    // A bigint is false only at zero.
+    if let Some(bigint) = types.bigint {
+        when_tag(&mut f, 1, erased::BIGINT);
+        payload(&mut f, 0, bigint);
+        f.instructions(&[I::V128AnyTrue, I::Return, I::End]);
+    }
     when_tag(&mut f, 1, NUMBER);
     f.instruction(&I::LocalGet(0));
     f.call(number);

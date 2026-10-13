@@ -70,6 +70,8 @@ pub(crate) struct ErasedTypes {
     pub(crate) tagged: u32,
     pub(crate) number: u32,
     pub(crate) boolean: u32,
+    /// `{ tag, v128 }`: an erased bigint, when the program boxes one.
+    pub(crate) bigint: Option<u32>,
 }
 
 /// The fields every descriptor starts with: semantic identity, runtime kind
@@ -99,6 +101,7 @@ struct ErasedNodes {
     tagged: NodeId,
     number: NodeId,
     boolean: NodeId,
+    bigint: Option<NodeId>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -979,6 +982,32 @@ impl<'a> Builder<'a> {
         id
     }
 
+    /// An erased bigint's box: the erased tag, then the value, as the number
+    /// box holds a double. Its tag is `BIGINT`, so `typeof` answers "bigint".
+    fn bigint_box(&mut self) -> NodeId {
+        self.erased_types();
+        let Some(nodes) = self.erased else {
+            unreachable!("erased types planned above")
+        };
+        if let Some(id) = nodes.bigint {
+            return id;
+        }
+        let tag = Field::value(PendingSlot::Scalar(Slot::I32), false);
+        let id = self.add(
+            "erased bigint".into(),
+            Some(nodes.tagged),
+            true,
+            Shape::Struct(vec![
+                tag,
+                Field::value(PendingSlot::Scalar(Slot::V128), false),
+            ]),
+        );
+        if let Some(erased) = self.erased.as_mut() {
+            erased.bigint = Some(id);
+        }
+        id
+    }
+
     fn erased_types(&mut self) {
         if self.erased.is_some() {
             return;
@@ -1009,6 +1038,7 @@ impl<'a> Builder<'a> {
             tagged,
             number,
             boolean,
+            bigint: None,
         });
     }
 
@@ -1050,8 +1080,9 @@ impl<'a> Builder<'a> {
                 self.erased_types();
                 PendingSlot::Reference(RefType::ANYREF)
             }
-            HirType::Managed(ManagedType::BoxedBigInt) | HirType::BigInt => {
-                return Err("bigint storage outside M1b".into());
+            HirType::BigInt => PendingSlot::Scalar(Slot::V128),
+            HirType::Managed(ManagedType::BoxedBigInt) => {
+                PendingSlot::Defined(self.bigint_box(), true)
             }
             HirType::Managed(ManagedType::Template) => {
                 return Err("tagged-template storage outside M1b".into());
@@ -1101,13 +1132,13 @@ impl<'a> Builder<'a> {
             HirType::Bool
             | HirType::Int { bits: 32 | 64, .. }
             | HirType::Float { bits: 32 | 64 }
+            | HirType::BigInt
             | HirType::Erased
             | HirType::Managed(_) => None,
             HirType::Void
             | HirType::Never
             | HirType::Int { .. }
             | HirType::Float { .. }
-            | HirType::BigInt
             | HirType::NativePointer(_) => {
                 return Err(format!("field storage outside M1b: {ty:?}"));
             }
@@ -1990,6 +2021,7 @@ impl<'a> Builder<'a> {
                 tagged: indices[nodes.tagged.0],
                 number: indices[nodes.number.0],
                 boolean: indices[nodes.boolean.0],
+                bigint: nodes.bigint.map(|node| indices[node.0]),
             }),
             promise: self.promise.map(|nodes| PromiseTypes {
                 promise: indices[nodes.promise.0],

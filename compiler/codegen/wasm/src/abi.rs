@@ -21,6 +21,8 @@ impl ValueType {
             Physical::Scalar(Slot::I64) => Ok(Self::I64),
             Physical::Scalar(Slot::F32) => Ok(Self::F32),
             Physical::Scalar(Slot::F64) => Ok(Self::F64),
+            // A v128 cannot cross into JS: the glue would split a bigint.
+            Physical::Scalar(Slot::V128) => Err("a bigint at the JS boundary".into()),
             Physical::Reference(reference)
                 if reference.heap_type == RefType::EXTERNREF.heap_type =>
             {

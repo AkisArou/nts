@@ -24,6 +24,7 @@ pub(crate) const NUMBER: i32 = tags::NUMBER.cast_signed();
 pub(crate) const STRING: i32 = tags::STRING.cast_signed();
 pub(crate) const NULL: i32 = tags::NULL.cast_signed();
 pub(crate) const SYMBOL: i32 = tags::SYMBOL.cast_signed();
+pub(crate) const BIGINT: i32 = tags::BIGINT.cast_signed();
 pub(crate) const OBJECT: i32 = tags::OBJECT.cast_signed();
 pub(crate) const FUNCTION: i32 = tags::FUNCTION.cast_signed();
 
@@ -276,6 +277,7 @@ pub(crate) fn constant(body: &mut Body<'_, '_>, result: ValueId, tag: i32) -> Re
         }
         Some(Physical::Scalar(Slot::I32)) => body.instruction(&I::I32Const(0)),
         Some(Physical::Scalar(Slot::I64)) => body.instruction(&I::I64Const(0)),
+        Some(Physical::Scalar(Slot::V128)) => body.instruction(&I::V128Const(0)),
         None => return Err(format!("absence constant in {:?}", body.ty(result)).into()),
     }
     Ok(())
@@ -412,7 +414,8 @@ pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), F
             | ManagedType::View(_)
             | ManagedType::AnyView
             | ManagedType::DataView
-            | ManagedType::Symbol,
+            | ManagedType::Symbol
+            | ManagedType::BoxedBigInt,
         ) => {}
         HirType::Bool => {
             body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
@@ -576,7 +579,8 @@ pub(crate) fn unerase_to(
             | ManagedType::View(_)
             | ManagedType::AnyView
             | ManagedType::DataView
-            | ManagedType::Symbol,
+            | ManagedType::Symbol
+            | ManagedType::BoxedBigInt,
         ) => {
             body.instruction(&I::Drop);
             unerase_reference(body, value, &ty)?;

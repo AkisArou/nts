@@ -12,6 +12,7 @@ mod array_lookup;
 mod array_methods;
 mod array_sort;
 mod arrays;
+mod bigints;
 mod body;
 mod buffer_methods;
 mod buffers;
@@ -237,7 +238,8 @@ pub(crate) fn validate_named(bytes: &[u8], bodies: &[String]) -> Result<(), Emit
         | F::BULK_MEMORY
         | F::GC
         | F::GC_TYPES
-        | F::EXCEPTIONS;
+        | F::EXCEPTIONS
+        | F::SIMD;
     let Err(error) = wasmparser::Validator::new_with_features(features).validate_all(bytes) else {
         return Ok(());
     };

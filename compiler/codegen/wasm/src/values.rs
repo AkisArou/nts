@@ -191,6 +191,11 @@ fn value_text(m: &mut Builder<'_>) -> Result<Func, Failure> {
                 crate::symbols::erased_text(m, &mut f, 0)?;
                 f.instructions(&[I::Br(1), I::End]);
             }
+            if m.types.erased.is_some_and(|erased| erased.bigint.is_some()) {
+                arm(&mut f, erased::BIGINT);
+                crate::bigints::erased_text(m, &mut f, 0)?;
+                f.instructions(&[I::Br(1), I::End]);
+            }
             contract::refuse_in(
                 &mut f,
                 m,

@@ -496,6 +496,9 @@ impl<'b, 'p> Body<'b, 'p> {
         match &op.kind {
             OpKind::Param(_) | OpKind::BlockParam(_) => return Ok(()),
             OpKind::ConstBool(value) => self.instruction(&I::I32Const(i32::from(*value))),
+            OpKind::ConstInt(value) if crate::bigints::is_bigint(&op.ty) => {
+                crate::bigints::constant(self, *value);
+            }
             OpKind::ConstInt(value) => numeric::constant_int(self, *value, &op.ty)?,
             OpKind::ConstFloat(value) => numeric::constant_float(self, *value, &op.ty)?,
             OpKind::ConstString(value) => crate::strings::constant(self, value),
@@ -658,7 +661,9 @@ impl<'b, 'p> Body<'b, 'p> {
         lhs: ValueId,
         rhs: ValueId,
     ) -> Result<(), Failure> {
-        if self.ty(lhs) == &nts_core::hir::HirType::Erased
+        if crate::bigints::is_bigint(self.ty(lhs)) || crate::bigints::is_bigint(self.ty(rhs)) {
+            crate::bigints::binary(self, op, lhs, rhs)
+        } else if self.ty(lhs) == &nts_core::hir::HirType::Erased
             || self.ty(rhs) == &nts_core::hir::HirType::Erased
         {
             crate::erased_ops::binary(self, id, op, lhs, rhs)
@@ -679,7 +684,9 @@ impl<'b, 'p> Body<'b, 'p> {
         op: nts_core::hir::UnOp,
         value: ValueId,
     ) -> Result<(), Failure> {
-        if self.ty(value) == &nts_core::hir::HirType::Erased {
+        if crate::bigints::is_bigint(self.ty(value)) {
+            crate::bigints::unary(self, op, value)
+        } else if self.ty(value) == &nts_core::hir::HirType::Erased {
             crate::erased_ops::truthy(self, op, value)
         } else if crate::strings::is_string(self.ty(value)) {
             crate::strings::truthy(self, op, value)
@@ -705,6 +712,9 @@ impl<'b, 'p> Body<'b, 'p> {
     fn convert(&mut self, id: ValueId, value: ValueId) -> Result<(), Failure> {
         let from = self.ty(value).clone();
         let to = self.ty(id).clone();
+        if crate::bigints::is_bigint(&from) || crate::bigints::is_bigint(&to) {
+            return crate::bigints::convert(self, value, &to);
+        }
         if crate::objects::is_reference(&from) {
             if to == nts_core::hir::HirType::Bool {
                 return crate::objects::truthy(self, nts_core::hir::UnOp::Truthy, value);
@@ -788,6 +798,8 @@ impl<'b, 'p> Body<'b, 'p> {
                     crate::dataviews::call(self, result, op, args)?;
                 } else if let Some(op) = crate::symbols::external(name) {
                     crate::symbols::call(self, result, op, args)?;
+                } else if let Some(op) = crate::bigints::external(name) {
+                    crate::bigints::call(self, result, op, args)?;
                 } else if let Some(conversion) = crate::numeric::external(name) {
                     crate::numeric::call(self, result, conversion, args)?;
                 } else {

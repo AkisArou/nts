@@ -127,42 +127,15 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("array helper not yet implemented"),
     ),
     ("nts_assertion_failed", Support::Intrinsic),
-    (
-        "nts_bigint_as_intn",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_as_uintn",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_box",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_compare_string",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_from_number",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_shl",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_shr",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_to_string",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_unbox",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
+    ("nts_bigint_as_intn", Support::WasmHelper),
+    ("nts_bigint_as_uintn", Support::WasmHelper),
+    ("nts_bigint_box", Support::Intrinsic),
+    ("nts_bigint_compare_string", Support::WasmHelper),
+    ("nts_bigint_from_number", Support::WasmHelper),
+    ("nts_bigint_shl", Support::WasmHelper),
+    ("nts_bigint_shr", Support::WasmHelper),
+    ("nts_bigint_to_string", Support::WasmHelper),
+    ("nts_bigint_unbox", Support::Intrinsic),
     (
         "nts_block_carry",
         Support::Decline("foreign/native ABI or ownership"),

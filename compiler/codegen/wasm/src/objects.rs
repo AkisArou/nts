@@ -163,6 +163,7 @@ pub(crate) fn push_default(
         Physical::Scalar(Slot::I64) => f.instruction(&I::I64Const(0)),
         Physical::Scalar(Slot::F32) => f.instruction(&I::F32Const(0.0.into())),
         Physical::Scalar(Slot::F64) => f.instruction(&I::F64Const(0.0.into())),
+        Physical::Scalar(Slot::V128) => f.instruction(&I::V128Const(0)),
         Physical::Reference(_) if ty == &HirType::Erased => {
             let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
             f.global_get(undefined);
@@ -200,6 +201,7 @@ fn get_instruction(ty: &HirType, physical: u32, field: u32) -> Result<I<'static>
         HirType::Bool
         | HirType::Int { bits: 32 | 64, .. }
         | HirType::Float { bits: 32 | 64 }
+        | HirType::BigInt
         | HirType::Erased
         | HirType::Managed(_) => I::StructGet {
             struct_type_index: physical,
@@ -209,7 +211,6 @@ fn get_instruction(ty: &HirType, physical: u32, field: u32) -> Result<I<'static>
         | HirType::Never
         | HirType::Int { .. }
         | HirType::Float { .. }
-        | HirType::BigInt
         | HirType::NativePointer(_) => return Err(format!("field read from {ty:?}").into()),
     })
 }

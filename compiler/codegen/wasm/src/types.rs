@@ -10,6 +10,8 @@ pub(crate) enum Slot {
     I64,
     F32,
     F64,
+    /// A bigint: 128 bits in one value, lane 0 the low 64 (see `bigints.rs`).
+    V128,
 }
 
 impl Slot {
@@ -19,6 +21,7 @@ impl Slot {
             Self::I64 => ValType::I64,
             Self::F32 => ValType::F32,
             Self::F64 => ValType::F64,
+            Self::V128 => ValType::V128,
         }
     }
 }
@@ -49,9 +52,9 @@ pub(crate) fn slot(ty: &HirType) -> Result<Option<Slot>, String> {
         HirType::Int { bits: 64, .. } => Ok(Some(Slot::I64)),
         HirType::Float { bits: 32 } => Ok(Some(Slot::F32)),
         HirType::Float { bits: 64 } => Ok(Some(Slot::F64)),
+        HirType::BigInt => Ok(Some(Slot::V128)),
         HirType::Int { .. }
         | HirType::Float { .. }
-        | HirType::BigInt
         | HirType::NativePointer(_)
         | HirType::Erased
         | HirType::Managed(_) => Err(format!(

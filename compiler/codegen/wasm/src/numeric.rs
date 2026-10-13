@@ -113,6 +113,9 @@ pub(crate) fn constant_int(b: &mut Body<'_, '_>, value: i128, ty: &HirType) -> R
         Slot::F32 | Slot::F64 => {
             return Err(format!("integer literal in a noninteger slot {ty:?}").into());
         }
+        Slot::V128 => {
+            return Err(Failure::Invariant("a bigint routed to number code".into()));
+        }
     }
     Ok(())
 }
@@ -134,6 +137,9 @@ pub(crate) fn constant_float(
         Slot::I32 | Slot::I64 => {
             return Err(format!("floating literal in an integer slot {ty:?}").into());
         }
+        Slot::V128 => {
+            return Err(Failure::Invariant("a bigint routed to number code".into()));
+        }
     }
     Ok(())
 }
@@ -153,7 +159,11 @@ pub(crate) fn convert(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Res
         (Slot::I32, Slot::I32)
         | (Slot::I64, Slot::I64)
         | (Slot::F32, Slot::F32)
-        | (Slot::F64, Slot::F64) => None,
+        | (Slot::F64, Slot::F64)
+        | (Slot::V128, Slot::V128) => None,
+        (Slot::V128, _) | (_, Slot::V128) => {
+            return Err(Failure::Invariant("a bigint routed to number code".into()));
+        }
         (Slot::I32, Slot::I64) => Some(if unsigned(from) {
             I::I64ExtendI32U
         } else {
@@ -206,6 +216,12 @@ pub(crate) fn convert(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Res
     if let Some(op) = op {
         b.instruction(&op);
     }
+    normalize(b, to)
+}
+
+/// A narrow integer kept in an i32 in its canonical form: sign-extended, or
+/// masked to its width.
+fn normalize(b: &mut Body<'_, '_>, to: &HirType) -> Result<(), Failure> {
     match to {
         HirType::Int {
             bits: 8,
@@ -229,12 +245,14 @@ pub(crate) fn convert(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Res
             b.instruction(&I::I32Const(65535));
             b.instruction(&I::I32And);
         }
-        HirType::Bool | HirType::Int { bits: 32 | 64, .. } | HirType::Float { bits: 32 | 64 } => {}
+        HirType::Bool
+        | HirType::Int { bits: 32 | 64, .. }
+        | HirType::Float { bits: 32 | 64 }
+        | HirType::BigInt => {}
         HirType::Int { .. }
         | HirType::Float { .. }
         | HirType::Void
         | HirType::Never
-        | HirType::BigInt
         | HirType::NativePointer(_)
         | HirType::Erased
         | HirType::Managed(_) => {
@@ -271,6 +289,8 @@ fn truth_on_stack(b: &mut Body<'_, '_>, slot: Slot) {
             b.instruction(&I::F64Const(0.0.into()));
             b.instruction(&I::F64Gt);
         }
+        // A bigint is false only at zero.
+        Slot::V128 => b.instruction(&I::V128AnyTrue),
     }
 }
 
@@ -316,6 +336,9 @@ pub(crate) fn unary(
             Slot::F64 => {
                 push_as(b, operand, &out)?;
                 b.instruction(&I::F64Neg);
+            }
+            Slot::V128 => {
+                return Err(Failure::Invariant("a bigint routed to number code".into()));
             }
         },
         UnOp::Abs => absolute(b, operand, &out)?,
@@ -394,6 +417,9 @@ fn to_i32(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
             b.helper(Helper::ToInt32)?;
         }
         Slot::F64 => b.helper(Helper::ToInt32)?,
+        Slot::V128 => {
+            return Err(Failure::Invariant("a bigint routed to number code".into()));
+        }
     }
     Ok(())
 }
@@ -470,12 +496,12 @@ fn comparison(
     let signed = !unsigned(b.ty(lhs));
     b.load(lhs)?;
     b.load(rhs)?;
-    b.instruction(&compare_opcode(slot, op, signed));
+    b.instruction(&compare_opcode(slot, op, signed)?);
     Ok(())
 }
 
-fn compare_opcode(slot: Slot, op: Comparison, signed: bool) -> I<'static> {
-    match (slot, op) {
+fn compare_opcode(slot: Slot, op: Comparison, signed: bool) -> Result<I<'static>, Failure> {
+    Ok(match (slot, op) {
         (Slot::I32, Comparison::Eq) => I::I32Eq,
         (Slot::I32, Comparison::Ne) => I::I32Ne,
         (Slot::I32, Comparison::Lt) => {
@@ -548,7 +574,10 @@ fn compare_opcode(slot: Slot, op: Comparison, signed: bool) -> I<'static> {
         (Slot::F64, Comparison::Le) => I::F64Le,
         (Slot::F64, Comparison::Gt) => I::F64Gt,
         (Slot::F64, Comparison::Ge) => I::F64Ge,
-    }
+        (Slot::V128, _) => {
+            return Err(Failure::Invariant("a bigint routed to number code".into()));
+        }
+    })
 }
 
 fn arithmetic(
@@ -587,7 +616,7 @@ fn arithmetic(
                 Comparison::Ge
             },
             !unsigned(b.ty(lhs)),
-        ));
+        )?);
         b.instruction(&I::Select);
         return Ok(());
     }

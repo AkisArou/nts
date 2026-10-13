@@ -15,7 +15,8 @@ rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 wasm-encoder.workspace = true
-wasmparser.workspace = true
+# A bigint is one v128 (bigints.rs), so the validator reads SIMD.
+wasmparser = { workspace = true, features = ["simd"] }
 
 [dev-dependencies]
 camino.workspace = true

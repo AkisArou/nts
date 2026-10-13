@@ -424,6 +424,26 @@ fn source_symbols_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// A bigint in 128 bits: arithmetic and its signs, the edges at -2^127 and
+/// 2^127 - 1, shifts by negative and huge counts, conversion both ways,
+/// asIntN/asUintN and an erased bigint. Where node's answer passes 128 bits
+/// (or node throws), Wasm refuses by name: 38 cases, every one checked to be
+/// past the width or a throw, and none a different number.
+#[test]
+fn source_bigints_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/bigints");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "bigints",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 149, "{output}");
+    assert_eq!(output["declined"], 38, "{output}");
+}
+
 /// The order promise reactions and resumptions run in: each export's return
 /// is the checkpoint that drains them, and a second export reads the order,
 /// against node's order after a turn.

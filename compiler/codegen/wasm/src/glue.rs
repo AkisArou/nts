@@ -115,6 +115,16 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
             "name => { throw new WasmInputDecline(name, 'uncaught compiled object or function needs an identity bridge', 'throw from'); }".into(),
         ),
         "toNumber" => (function(&[F64], Some(STRING)), "value => value".into()),
+        // A bigint crosses as its two 64-bit lanes, which JS receives as
+        // BigInts; the host's own BigInt formats and parses, as node does.
+        "bigintText" => (
+            function(&[ValueType::I64, ValueType::I64], Some(STRING)),
+            "(low, high) => String((high << 64n) | BigInt.asUintN(64, low))".into(),
+        ),
+        "bigintCompareString" => (
+            function(&[ValueType::I64, ValueType::I64, STRING], Some(F64)),
+            "(low, high, text) => { let other; try { other = BigInt(text); } catch { return NaN; } const value = (high << 64n) | BigInt.asUintN(64, low); return value < other ? -1 : value > other ? 1 : 0; }".into(),
+        ),
         "promiseSettled" => (function(&[ValueType::I32], None), "promiseSettled".into()),
         // Supplied per instance by `create`, which knows the instance a timer
         // fires into; typed here so the check below still holds them.
