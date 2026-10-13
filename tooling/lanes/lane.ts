@@ -1,17 +1,21 @@
 // What is going on: every worktree, which lane it belongs to, how far it is
-// from main, and what is gating.
+// from main, and what is gating -- and a lane's own tree, made or moved to a
+// new topic.
 //
-//   node tooling/lanes/lane.ts status          a table
-//   node tooling/lanes/lane.ts status --json   the same, for an agent
+//   node tooling/lanes/lane.ts status                 a table
+//   node tooling/lanes/lane.ts status --json          the same, for an agent
+//   node tooling/lanes/lane.ts start <lane> <topic>   ~/Projects/nts-lanes/<lane>, on
+//                                                     branch <prefix><topic> from main
 //
 // A tree's lane is read from its branch prefix (`tooling/lanes/lanes.json`), so
 // a tree on a branch no lane claims, or detached, is listed as such: those are
 // the ones to ask about.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 type Lane = { session: string; branch: string; owns: string[] };
 type Row = {
@@ -100,9 +104,46 @@ function status(json: boolean): void {
   for (const line of [head, ...cells]) console.log(line.map((c, i) => (i === line.length - 1 ? c : c.padEnd(width[i]))).join("  "));
 }
 
+/**
+ * A lane's tree at `~/Projects/nts-lanes/<lane>`, on a new topic branch from
+ * main, with its inputs linked (`inputs.sh lane`).
+ *
+ * A tree that exists must be clean first: `refs/stash` is one stack shared by
+ * every worktree, so a stash made here is popped by whichever lane pops next.
+ * Commit unfinished work as `WIP:` instead, which `land` refuses to land.
+ */
+function start(name: string | undefined, topic: string | undefined): void {
+  const lane = name ? lanes[name] : undefined;
+  if (!name || !lane || !topic) {
+    throw new Error(`usage: lane.ts start <lane> <topic>; lanes: ${Object.keys(lanes).join(" ")}`);
+  }
+  if (!/^[a-z0-9][a-z0-9._-]*$/.test(topic)) throw new Error(`a topic is lower-case words joined by - (${topic})`);
+  const tree = join(homedir(), "Projects/nts-lanes", name);
+  const branch = `${lane.branch}${topic}`;
+  const exists = (ref: string) => spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${ref}`], { cwd: root }).status === 0;
+  if (!existsSync(tree)) {
+    mkdirSync(dirname(tree), { recursive: true });
+    const args = exists(branch) ? ["worktree", "add", tree, branch] : ["worktree", "add", "-b", branch, tree, "main"];
+    execFileSync("git", args, { cwd: root, stdio: "inherit" });
+  } else {
+    const dirty = spawnSync("git", ["status", "--porcelain"], { cwd: tree, encoding: "utf8" });
+    if (dirty.status !== 0 || dirty.stdout.trim()) {
+      throw new Error(`${tree} has uncommitted work: commit it (\`WIP:\` is fine), then start again`);
+    }
+    execFileSync("git", exists(branch) ? ["switch", branch] : ["switch", "-c", branch, "main"], { cwd: tree, stdio: "inherit" });
+  }
+  execFileSync("sh", [fileURLToPath(new URL("./inputs.sh", import.meta.url)), "lane", root, tree], { stdio: "inherit" });
+  console.log(`${name}: ${tree.replace(homedir(), "~")} on ${branch}`);
+  console.log("  work, build and commit there; its target/ is its own. Land with:");
+  console.log("  node tooling/lanes/land.ts HEAD   (from the tree, in the background)");
+}
+
 const [command, ...rest] = process.argv.slice(2);
-if (command === "status") status(rest.includes("--json"));
-else {
-  console.error("usage: node tooling/lanes/lane.ts status [--json]");
+try {
+  if (command === "status") status(rest.includes("--json"));
+  else if (command === "start") start(rest[0], rest[1]);
+  else throw new Error("usage: node tooling/lanes/lane.ts status [--json] | start <lane> <topic>");
+} catch (e) {
+  console.error(`lane: ${(e as Error).message}`);
   process.exitCode = 2;
 }
