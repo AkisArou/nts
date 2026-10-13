@@ -41,7 +41,7 @@ fixture is what argued with it.
 What it already had right is kept: `products` as a **record**, so the key is the
 product's identity and uniqueness is by construction; builders returning **plain
 data**, which is what lets a resolved config be hashed; and `Target` composed
-rather than selected from presets, which is RFC §6's argument.
+rather than selected from presets.
 
 What changed, and every item came from writing a config against it:
 

@@ -921,14 +921,14 @@ Reject a browser/WASI fork of the backend: host choices are data at composition.
 
 ## Repository map and preparation contract
 
-The RFC's MIR/provider split describes the intended architecture. The executable
-pipeline today is snapshot → HIR preparation → backend, with no separate
-memory-lowering stage. Wasm should plug into the executable pipeline,
-without claiming a MIR layer or a host-GC provider already exists.
+The executable pipeline is snapshot → HIR preparation → backend, with no MIR
+layer and no separate memory-lowering stage: the memory provider is chosen at
+preparation (`hir::Provider`, which is `HostGc` for wasm). Wasm plugs into that
+pipeline.
 
 | Read surface | What wasm must take from it |
 | --- | --- |
-| `README.md`; `docs/RFC.md` §§6–8 | Build dimensions are independent; TypeScript stays behind the semantic snapshot; closures and suspension frames are objects |
+| `README.md`; `tooling/config/src/index.ts`; `compiler/semantic-schema/src/lib.rs`; `hir/suspend.rs` | Build dimensions are independent; TypeScript stays behind the semantic snapshot; closures and suspension frames are objects |
 | `compiler/core/src/hir/mod.rs` | Backend input is `Prepared.program`; 56 `OpKind` variants, five terminators, typed values, layouts, semantic class/interface identities and callable slots |
 | `hir/verify.rs` | Checks value references, dominance, edge arity/types, parameters/returns, operand legality, call signatures, stores/layouts, numeric coercions, erasures, native storage/dispatch and subscriptions; no proof of CFG reducibility or wasm physical typing |
 | `hir/runtime.rs`; `hir/signatures.rs`; `core/tests/runtime_signatures.rs` | Helper-boundary scalar conversions and interprocedural specialization belong in the core; signedness matters even where wasm types share a bit width |

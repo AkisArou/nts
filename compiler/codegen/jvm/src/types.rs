@@ -493,7 +493,7 @@ pub const NAME: &str = "nts$name";
 ///
 /// `runtime/c` puts them in the header's spare flag bits -- 26 of them above
 /// `NTS_COLOR_MASK`, free because the word already exists. **There is no header
-/// here.** RFC 13 puts these objects in the platform collector's heap, so an
+/// here.** These objects live in the platform collector's heap, so an
 /// object is a plain JVM instance with no word of ours to borrow, and the bits
 /// need a field of their own.
 ///
@@ -553,8 +553,8 @@ pub const VIEW: &str = "nts/rt/NtsDataView";
 /// The marker a generated tuple class carries, so `Array.isArray` can answer.
 ///
 /// `runtime/c` reads `NTS_KIND_TUPLE` off the descriptor. There is no
-/// descriptor here -- RFC §13 puts these objects in the platform collector's
-/// heap -- so the nominal fact goes where `instanceof` can read it, which on
+/// descriptor here -- these objects live in the platform collector's heap --
+/// so the nominal fact goes where `instanceof` can read it, which on
 /// this platform is an interface.
 pub const TUPLE: &str = "nts/rt/NtsTuple";
 

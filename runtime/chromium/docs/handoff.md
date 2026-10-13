@@ -11,7 +11,7 @@ benchmarks. Continue only when assigned by the user. This is an investigation
 of the initial [electron-like RFC](../../../docs/electron-like.md), not a final
 implementation specification. Read [architecture and costs](costs.md),
 [DOM and scheduling](dom-and-microtasks.md), and [bring-up](bringup.md) for the
-evidence behind the current design. Older `docs/RFC` material is not authoritative.
+evidence behind the current design.
 
 ## User constraints and coordination
 

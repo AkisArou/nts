@@ -1,6 +1,6 @@
 // A cycle is exactly what reference counting cannot reclaim: every object in
 // one is held by another object in the same one, so no count ever reaches zero
-// and the last release never happens. RFC 9.2 names this as the price.
+// and the last release never happens. That is the price of counting.
 //
 // It takes one line to build. `this.next = this` is a complete cycle, made
 // inside a constructor, with no second object and no null to thread through --

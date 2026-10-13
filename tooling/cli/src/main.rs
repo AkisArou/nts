@@ -2,8 +2,8 @@
 //!
 //! Commands are added as the capability behind them becomes real. A command that
 //! prints a plausible result for something the compiler cannot yet do is worse
-//! than no command: RFC §4.1 requires that unsupported reachable behavior be
-//! diagnosed precisely, and that promise starts here.
+//! than no command: unsupported reachable behavior has to be diagnosed
+//! precisely, and that promise starts here.
 
 mod apple_surface;
 mod bind;
@@ -1912,7 +1912,7 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
         }
     }
 
-    // RFC §4.1: a program that does not typecheck is not a program to compile.
+    // A program that does not typecheck is not a program to compile.
     // Reporting the snapshot and exiting zero would let a backend emit code for
     // it, which is the one outcome nothing downstream can detect.
     if snapshot.has_errors() {
@@ -2345,7 +2345,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
 
 /// Lower a project to HIR and print it.
 ///
-/// A readable dump rather than a debug format: RFC §4.1 asks that every stage be
+/// A readable dump rather than a debug format: every stage should be
 /// inspectable, and the point of this layer is that its decisions are visible.
 /// Every module, what it imports, and what its file has at top level.
 ///
@@ -3403,7 +3403,7 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
 ///
 /// Both are a *choice* rather than part of the runtime: an embedder with its
 /// own loop supplies its own host and links none of this, and a library product
-/// has no loop at all (RFC §26.1).
+/// has no loop at all.
 fn write_standalone(
     program: &hir::Program,
     out: &Utf8Path,
@@ -7149,11 +7149,11 @@ fn output_root(rest: &[String], tsconfig: &Utf8Path) -> Utf8PathBuf {
 
 /// Where compiled objects are kept between builds.
 ///
-/// **On unless turned off**, which is the opposite of how this started. `§34`
-/// reserved `build.cache` and nothing read it, so a config declaring nothing got
-/// no cache -- and the common project paid 0.96s per build to recompile a
-/// runtime that had not changed. A build tool whose caching is opt-in is one
-/// whose default is the slow one.
+/// **On unless turned off**, which is the opposite of how this started. The
+/// config reserved `build.cache` and nothing read it, so a config declaring
+/// nothing got no cache -- and the common project paid 0.96s per build to
+/// recompile a runtime that had not changed. A build tool whose caching is
+/// opt-in is one whose default is the slow one.
 ///
 /// `local: false` turns it off, which is what a build that must not reuse
 /// anything needs.
@@ -8427,8 +8427,7 @@ fn foreign_tables(snapshot: &nts_semantic_schema::SemanticSnapshot) -> hir::runt
 /// the two reads drifted would print the wrong advice about the quiet failure it
 /// was written to prevent.
 fn selected_provider() -> hir::Provider {
-    // NoGC stays the default: it is what RFC 9.1 says it is, and choosing a
-    // provider silently is exactly what that section forbids.
+    // NoGC stays the default; reference counting is selected only by `--rc`.
     if std::env::args().any(|arg| arg == "--rc") {
         hir::Provider::ReferenceCounting
     } else {

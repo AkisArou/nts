@@ -10,9 +10,9 @@
 //! [`Origin`], and the offset-to-origin map is produced by the same call that
 //! produces the bytes.
 //!
-//! `LineNumberTable`, the `SourceDebugExtension` SMAP stratum, and the debug
-//! sidecar are all projections of that map rather than things built separately
-//! and hoped to agree.
+//! `LineNumberTable` is a projection of that map rather than a thing built
+//! separately and hoped to agree, and an SMAP stratum or a debug sidecar
+//! would be too; neither is written yet.
 //!
 //! # Errors are recorded, not returned
 //!

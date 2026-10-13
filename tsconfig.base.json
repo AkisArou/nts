@@ -17,8 +17,8 @@
     "verbatimModuleSyntax": true,
 
     // No syntax that needs a runtime transform. Enums and parameter properties
-    // would each need a lowering the compiler does not owe anyone, and RFC §4.1
-    // says unsupported reachable behavior is diagnosed rather than emitted.
+    // would each need a lowering the compiler does not owe anyone, and
+    // unsupported reachable behavior is diagnosed rather than emitted.
     "erasableSyntaxOnly": true,
 
     "strict": true,

@@ -1,5 +1,5 @@
 /**
- * Compilation targets, composed rather than selected from presets (RFC §6).
+ * Compilation targets, composed rather than selected from presets.
  *
  * **`id` is the load-bearing field.** It names the platform type surface a
  * program typechecks against (`@nts/platform-android-29`), it is part of the
@@ -33,7 +33,7 @@
 /// <reference types="node" />
 import { fileURLToPath } from "node:url";
 
-/** Backends the compiler can lower to (RFC §6.2). */
+/** Backends a target can name. */
 export type Backend = "c" | "llvm" | "jvm";
 
 /**
@@ -79,7 +79,7 @@ export type TargetId =
   | "linux-gnu"
   | "windows";
 
-/** A resolved compilation target (RFC §6.1). */
+/** A resolved compilation target. */
 export interface Target {
   /** Stable name of the type surface: the prelude package, the cache key. */
   readonly id: TargetId;

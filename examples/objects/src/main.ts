@@ -46,7 +46,7 @@ export function scaledBy(v: number): number {
 
 // A reference field is a pointer. Under NoGC nothing is ever freed, so it costs
 // neither a write barrier nor a trace -- but *which* fields are references is
-// recorded on the layout as a pointer bitmap (RFC 8.3), because that is a fact
+// recorded on the layout (`Layout::reference_fields`), because that is a fact
 // about the layout and the collector that comes later cannot be told it after
 // the fact.
 interface Person {

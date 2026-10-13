@@ -54,8 +54,7 @@ fn jsx_elements_carry_their_element_type() {
         return;
     };
     // This is what a renderer needs: the type at a JSX element, reached through
-    // the ordinary node-type path rather than a JSX-specific one. RFC §30's
-    // React work depends on it and gets it for free.
+    // the ordinary node-type path rather than a JSX-specific one.
     let typed_jsx = snapshot
         .nodes
         .iter()

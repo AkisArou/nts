@@ -7,10 +7,9 @@
 //! thing too: `path:line:column`, resolved through a source transform's map,
 //! for every tool that prints a diagnostic.
 //!
-//! RFC §20.4 requires that a source file be identified by a normalized
-//! workspace URI and a content digest rather than by an absolute machine path,
-//! so that builds are reproducible and release artifacts never carry a
-//! developer's home directory.
+//! A source file is identified by a normalized workspace URI and a content
+//! digest rather than by an absolute machine path, so that builds are
+//! reproducible and release artifacts never carry a developer's home directory.
 
 pub mod place;
 
@@ -34,7 +33,7 @@ pub struct SourceId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Digest(pub [u8; 16]);
 
-/// A source file's stable identity, per RFC §20.4.
+/// A source file's stable identity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceFile {
     /// Normalized, machine-independent URI: `nts-workspace:///src/App.tsx`.
@@ -134,7 +133,7 @@ pub enum Severity {
 
 /// A compiler diagnostic.
 ///
-/// RFC §4.1: unsupported reachable behavior must be diagnosed *precisely*.
+/// Unsupported reachable behavior must be diagnosed *precisely*.
 /// A diagnostic without a location is a bug, which is why [`Diagnostic::primary`]
 /// is not optional.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

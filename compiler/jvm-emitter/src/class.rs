@@ -10,12 +10,13 @@
 //! # Line numbers are synthetic, and that is the design rather than a shortcut
 //!
 //! A `LineNumberTable` maps a bytecode offset to a line "in the source file",
-//! and there is no Java source file here. RFC §21.3 answers this with
-//! `SourceDebugExtension`: the class declares a synthetic line space of its
-//! own, and an SMAP maps those lines back to TypeScript files and lines. So the
-//! table written here numbers *distinct origins*, one line each, and
+//! and there is no Java source file here. The class file format answers this
+//! with `SourceDebugExtension`: the class declares a synthetic line space of
+//! its own, and an SMAP maps those lines back to TypeScript files and lines. So
+//! the table written here numbers *distinct origins*, one line each, and
 //! [`Class::lines`] hands the origins back in that order for whoever builds the
-//! SMAP and the debug sidecar. Nothing here needs to read a source file.
+//! SMAP. Nothing writes a `SourceDebugExtension` yet. Nothing here needs to
+//! read a source file.
 
 use nts_semantic_schema::Origin;
 

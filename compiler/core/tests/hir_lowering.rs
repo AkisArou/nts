@@ -125,8 +125,8 @@ fn every_operation_carries_an_origin() {
     let Some(lowered) = lowered("arith") else {
         return;
     };
-    // RFC decision 20. Not conditional and not debug-only: once a lowering has
-    // run without it the mapping back to source is gone for good.
+    // Not conditional and not debug-only: once a lowering has run without it
+    // the mapping back to source is gone for good.
     for f in &lowered.program.funcs {
         for op in &f.values {
             let span = op.origin.location.span;
@@ -335,7 +335,7 @@ fn an_unimplemented_math_member_is_refused_rather_than_guessed() {
     };
     // Emitting a call to a C function that happens to share a name would be
     // assuming libm agrees about the semantics — and for `round` and `min` it
-    // demonstrably does not. RFC 4.1: refuse rather than approximate.
+    // demonstrably does not. Refuse rather than approximate.
     assert!(!program.is_complete());
     assert!(program.diagnostics[0].code.starts_with("NTS"));
 }

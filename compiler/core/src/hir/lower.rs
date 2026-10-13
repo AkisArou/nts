@@ -2,13 +2,8 @@
 //!
 //! # Scope
 //!
-//! The first slice: functions, parameters, literals, binary arithmetic, and
-//! `return`. Enough to carry a program end to end through a backend, which is
-//! what makes the next design decisions answerable by a consumer rather than
-//! guessed at.
-//!
-//! Anything outside it is refused rather than approximated. RFC §4.1 requires
-//! that unsupported *reachable* behavior produce a precise diagnostic, and a
+//! Anything this lowering does not handle is refused rather than approximated.
+//! Unsupported *reachable* behavior has to produce a precise diagnostic, and a
 //! lowering that silently emits nothing for a statement it did not understand
 //! produces a program that runs and is wrong.
 
@@ -8147,10 +8142,10 @@ fn declared_literal(probe: &FuncBuilder, name: NodeId) -> Option<f64> {
 
 /// Collect what a module declares outside any function.
 ///
-/// Scalars only. A managed global is a *root* -- reachable without being on any
-/// stack -- so a collector has to be told about it, and RFC §10.2 puts root
-/// registration in the memory provider rather than in a backend. Until that
-/// exists, refusing is better than a global nothing traces.
+/// A global may hold a managed value. Nothing registers it as a root, because
+/// no native provider traces: under reference counting the global owns a count
+/// on what it holds, and a store into it releases the value it replaces
+/// (`rc::load_slot`).
 ///
 /// An initializer that is not a constant is *deferred* rather than refused: it
 /// runs in `module#init`, in source order. The paragraph here used to say it was
@@ -42037,20 +42032,6 @@ impl<'a> FuncBuilder<'a> {
         });
     }
 
-    /// `throw new Error("...")`.
-    ///
-    /// # A throw is a termination, for now
-    ///
-    /// There is no `try`/`catch`, so every throw in a compiled program is
-    /// uncaught by construction -- and an uncaught throw *is* a termination.
-    /// So this reports the message and stops, which is what the program means
-    /// and what node does with the same code. RFC §17 has the real thing;
-    /// when handlers arrive this becomes the last resort rather than the only
-    /// one, and no program that compiles today changes behaviour.
-    ///
-    /// What it will not do is guess at a value it cannot print. `throw x` where
-    /// `x` is an object would need the object's `message`, which means knowing
-    /// it has one.
     /// A value as an erased one, which for an already-erased value is itself.
     ///
     /// **`Erase` of an `Erased` is the identity**, and saying so once is the

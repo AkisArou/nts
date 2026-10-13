@@ -1,8 +1,8 @@
 /**
- * Types and builders for `nts.config.ts`, per RFC §34.
+ * Types and builders for `nts.config.ts`.
  *
  * A build is composed from independent dimensions rather than selected from a
- * list of presets (RFC §6). Three of them are kept apart throughout, because
+ * list of presets. Three of them are kept apart throughout, because
  * collapsing any two produces a config that cannot say something real:
  * **artifact kind**, **target**, and **backend**. `Backend` has three variants,
  * so iOS is not a backend -- it is LLVM plus a triple plus a host.

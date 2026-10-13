@@ -228,7 +228,7 @@ fn source_paths_are_remapped_to_a_workspace_uri() {
         return;
     };
     let source = &snapshot.sources[0];
-    // RFC §20.4: no absolute machine path may reach an artifact.
+    // No absolute machine path may reach an artifact.
     assert_eq!(source.uri, "nts-workspace:///src/main.ts");
     assert!(
         !source.uri.contains("/home/"),

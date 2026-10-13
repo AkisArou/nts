@@ -9,8 +9,8 @@ package nts.rt;
  * it an Array anyway.
  *
  * <p>`runtime/c` answers this from the descriptor's kind, `NTS_KIND_TUPLE`.
- * There is no descriptor on this lane: RFC §13 puts these objects in the
- * platform collector's heap, so nothing carries a kind at run time and the
+ * There is no descriptor on this lane: these objects live in the platform
+ * collector's heap, so nothing carries a kind at run time and the
  * question has to be asked of the *class*. A marker interface is the JVM's way
  * of putting a nominal fact where `instanceof` can read it.
  *

@@ -513,18 +513,15 @@ make this lane better than the alternatives rather than equal to them.
 
 ## What the existing architecture already reserves
 
-`docs/RFC.md` names this future explicitly:
-
-> Blink, UIKit, AppKit, GObject, WinRT, and Android objects remain owned by
-> [their runtimes]
-
-with a table giving GObject/GTK "GObject reference counting" as its memory
-policy, and a directory sketch containing `gobject/`. So the shape — a foreign
-runtime owning its own objects, with its own reference discipline, reachable
-through a handle this compiler does not trace — is already the intended design.
+Foreign objects stay owned by their own runtimes, each with its own reference
+discipline, and are reached through a handle this compiler does not trace.
+Where a family has a counting pair, the program counts its handles with that
+pair — `g_object_ref_sink`/`g_object_unref` for GObject,
+`objc_retain`/`objc_release` for Objective-C — and a plain C handle is counted
+by nothing (`Family::counting` in `compiler/core/src/hir/native.rs`).
 
 That matters because it means the handle refusal above is not a missing feature
-in a vacuum. It is the first step of a design already written down.
+in a vacuum. It is the first step of that design.
 
 ## What the JVM lane built that transfers
 
@@ -898,10 +895,9 @@ the two agree by construction.
 - The Android lane works because dex and `adb` run on Linux with the device
   optional (`on-device: SKIP: no device`). There is no equivalent for Apple.
 
-GTK is C, on this machine, with a real library to test against, and
-`docs/RFC.md` already reserves it. Objective-C also needs `objc_msgSend`, a
-variadic call whose signature depends on the selector — which is the RFC's
-hardest open question, met on the first day rather than the hundredth.
+GTK is C, on this machine, with a real library to test against. Objective-C
+also needs `objc_msgSend`, a variadic call whose signature depends on the
+selector — a hard question to meet on the first day rather than the hundredth.
 
 ## Should `Ptr`, `Ref` and the rest be exposed to TypeScript?
 
@@ -1004,11 +1000,10 @@ declaration order nor runtime-table lookup order may choose its ABI.
 ## The questions that were open, and what investigating them found
 
 **Does an opaque handle participate in reference counting?** No, and it must
-not. `docs/RFC.md` already commits to this — GObject, UIKit, AppKit and WinRT
-objects "remain owned by" their runtimes, each with its own reference
-discipline. So a handle is a word this compiler never traces, and the
-obligation is expressed in the *type* (`Owned` vs `Ref`) rather than in the
-collector. That also settles why `ResourceFlow` has to be a checker and not a
+not. GObject, UIKit, AppKit and WinRT objects remain owned by their runtimes,
+each with its own reference discipline. So a handle is a word this compiler
+never traces, and the obligation is expressed in the *type* (`Owned` vs `Ref`)
+rather than in the collector. That also settles why `ResourceFlow` has to be a checker and not a
 runtime mechanism: there is no runtime that could do it.
 
 **What does a C callback look like?** Measured: today a TypeScript function

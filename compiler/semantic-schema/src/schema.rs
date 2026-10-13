@@ -26,9 +26,10 @@ use crate::origin::Origin;
 
 /// Bump on **any** change to the types in this module.
 ///
-/// RFC §7.1: the snapshot is versioned. `nts-build` folds this into every
-/// action-cache key, so a stale snapshot cannot be silently reused across a
-/// schema change.
+/// The snapshot is versioned. The frontend's snapshot cache stores this beside
+/// every entry and serves an entry only when it matches
+/// (`frontend-ts/src/cache.rs`), so a stale snapshot cannot be silently reused
+/// across a schema change.
 ///
 /// **An additive field is a change too.** One marked `#[serde(default)]`
 /// does not fail on a snapshot written before it existed: it reads as
@@ -175,7 +176,7 @@ pub struct SemanticSnapshot {
 ///
 /// These map close to directly onto emission: `static`, `abstract` and `final`
 /// (from `readonly`) are JVM access flags on `method_info` and `field_info`, and
-/// `async` decides whether a function lowers to a state machine at all (RFC §12).
+/// `async` decides whether a function lowers to a state machine at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, Serialize, Deserialize)]
 pub struct DeclarationModifiers(pub u16);
 
@@ -410,7 +411,7 @@ pub struct TypeRecord {
 
 /// The closed set of type shapes the compiler understands.
 ///
-/// RFC §4.1: reachable behavior either lowers statically or produces a precise
+/// Reachable behavior either lowers statically or produces a precise
 /// diagnostic. [`TypeKind::Unsupported`] is how the second case is represented —
 /// it carries the checker's own rendering so the diagnostic can quote it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

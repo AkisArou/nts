@@ -4,8 +4,8 @@ How `async`/`await`, promises, timers and the event loop are divided between
 the compiler, the runtime and the host — and what has to be built, in what
 order.
 
-RFC §12 and §26 say what the division *is*. This says how it is expressed in
-code, and why the seam is where it is.
+This says what the division is, how it is expressed in code, and why the seam
+is where it is.
 
 ---
 
@@ -25,13 +25,13 @@ Promise resolution ordering is specified and observable — FIFO reactions, ahea
 of any macrotask, a fixed number of ticks per `await`. Handing that to a
 platform primitive with different ordering (`CompletableFuture`,
 `dispatch_async`, a GLib idle source) changes what programs print. So the JVM
-backend gets a *NativeTS* JVM promise (RFC §13), not a host one, and the same
-reasoning forbids every other delegation of the second row.
+backend gets a *NativeTS* JVM promise (`nts.rt.NtsPromise`), not a host one,
+and the same reasoning forbids every other delegation of the second row.
 
 There is exactly one exception, and it is an exception for the same reason:
 a Blink renderer already owns a microtask queue, so running ours beside it
 interleaves two individually-correct orderings into a wrong one. There we adopt
-Blink's queue rather than run our own. RFC §26.6.
+Blink's queue rather than run our own.
 
 ---
 
@@ -57,8 +57,8 @@ typedef struct NtsHost {
     void (*cancel_delayed)(void *host, NtsTimerId id);
 
     /* The only operation callable from a thread the runtime does not own.
-     * Every foreign completion goes through this before it may touch the heap
-     * (RFC §17.4). */
+     * Every foreign completion goes through this before it may touch the heap:
+     * resolving a promise is a heap mutation. */
     void (*post_from_any_thread)(void *host, NtsTask task);
 
     /* For assertions. Cheap enough to leave on in checked builds. */
@@ -89,7 +89,7 @@ route back into the heap is `post_from_any_thread`.
   contract would be inventing a guarantee that the reference implementation
   does not make.
 - **A way to run the loop.** The host's own `main` owns that. A library product
-  has no loop at all (RFC §26.1) and the embedder drives.
+  has no loop at all and the embedder drives.
 
 ---
 
@@ -176,9 +176,8 @@ late and in the wrong order, and no test *of the host* would fail.
 A queued task holds a managed object — an async frame, a promise reaction, a
 timer callback. While it is queued it is reachable only from the queue, so:
 
-- Every queue in the runtime is part of the root set (RFC §17.1's root
-  registry). Under RC, enqueue retains and dequeue releases; under a tracing
-  provider the queues are scanned.
+- A queued task owns a reference to its state, so a queue keeps what it holds
+  alive, and running the task or dropping it gives the reference back.
 - A task handed to the *host* is held by the host, across a boundary the
   collector cannot see. So the contract is: **every posted task is eventually
   either run or cancelled, and both paths return it to the runtime.** A host
@@ -193,26 +192,25 @@ is the case to check when Chromium arrives.
 
 ## 5. Async frames
 
-Per RFC §12, an `async` function compiles to a state machine plus a managed
-frame:
+An `async` function compiles to a state machine plus a managed frame, a
+synthetic class named `<function>#frame` (`hir::suspend`):
 
 ```text
-NtsAsyncFrame
+<function>#frame
 ├── descriptor        (so the collector traces the reference fields)
 ├── state             (which suspension point to resume at)
-├── live locals       (only those live across a suspension)
-├── awaited promise
 ├── result promise
-├── parent async site (RFC §22, async stack traces)
-└── exception state
+├── awaited promise
+├── parameters
+└── live locals       (only those live across a suspension)
 ```
 
 `await p` stores the state and the live locals, subscribes the frame to `p`,
 and returns. Resolution enqueues "resume this frame" as a microtask; it does
 not resume inline, because inline resumption is a different observable order.
 
-The frame being a managed object with a descriptor is the whole reason §12
-prefers this over stackful fibers: there are no roots hidden on a suspended
+The frame being a managed object with a descriptor is the whole reason to
+prefer this over stackful fibers: there are no roots hidden on a suspended
 native stack, and the collector needs no special case.
 
 ### One optimization that is not available
@@ -265,8 +263,8 @@ Two behaviours worth stating because they look like details and are not:
   specification says and programs rely on it.
 
 Fulfilling and rejecting assert the owner thread. That assertion is the one
-that catches a capability adapter resolving straight from its completion thread
-(RFC §17.4), which is a data race that usually appears to work.
+that catches a capability adapter resolving straight from its completion
+thread, which is a data race that usually appears to work.
 
 ---
 
@@ -495,8 +493,8 @@ A C struct of function pointers, installed on the runtime at startup.
 
 - It is what makes the deterministic test host possible at all (§6). That is
   the strongest reason, ahead of any portability argument.
-- It crosses the C ABI, so it serves embedders, shared libraries, and RFC
-  §17.3's eventual host-provided runtime.
+- It crosses the C ABI, so it serves embedders and shared libraries, and would
+  serve a runtime the host itself provides.
 - Chromium becomes a null check rather than a fork.
 - The cost is one indirect call per *task*, not per element, and under LTO with
   a single statically-linked host it is devirtualized anyway.

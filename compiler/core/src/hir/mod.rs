@@ -18,7 +18,7 @@
 //! # Three things happen in lowering
 //!
 //! - **Nodes become operations.** The tree flattens into typed instructions in
-//!   one order, and an `Origin` rides on every one (RFC decision 20).
+//!   one order, and an `Origin` rides on every one.
 //! - **Types become representations.** See above.
 //! - **Symbols become values.** Two identifiers carrying the same symbol become
 //!   one [`ValueId`]. Binding identity is what makes that possible, which is why
@@ -188,8 +188,8 @@ pub enum HirType {
     Erased,
     /// A garbage-collected reference.
     ///
-    /// The distinction that decides whether a store needs a write barrier and
-    /// whether the value must be rooted across a safepoint (RFC §10, §11). An
+    /// The distinction that decides whether a value is counted: under
+    /// reference counting a store retains it and its last use releases it. An
     /// exact scalar needs neither and can live in a register.
     Managed(ManagedType),
 }
@@ -204,9 +204,9 @@ pub enum ManagedType {
     BoxedBigInt,
     /// An object whose layout comes from the snapshot's type record.
     ///
-    /// Carries the schema's id rather than a resolved layout: the descriptor
-    /// (RFC §8.1) is built during memory lowering, and duplicating it here would
-    /// mean two answers to one question.
+    /// Carries the schema's id rather than a resolved layout: `Program::layout`
+    /// answers which layout the id has, and duplicating it here would mean two
+    /// answers to one question.
     Object(TypeId),
     Array(Box<HirType>),
     /// The immutable cooked strings of one tagged-template source site.
@@ -873,8 +873,8 @@ pub struct Op {
     pub kind: OpKind,
     /// The type of the value this defines. [`HirType::Void`] when it defines none.
     pub ty: HirType,
-    /// Where this came from. Not optional — RFC decision 20, and the one property
-    /// that cannot be recovered once a lowering has run without it.
+    /// Where this came from. Not optional: it is the one property that cannot be
+    /// recovered once a lowering has run without it.
     pub origin: Origin,
 }
 
@@ -1274,9 +1274,9 @@ pub enum OpKind {
     },
     /// The element count of a variable-length managed object.
     ///
-    /// One operation for arrays and strings, because they share a header
-    /// (RFC 8.2) and it is the same field. For a string it counts UTF-16 code
-    /// units, which is what `String.prototype.length` means.
+    /// One operation for arrays and strings, because they share a header and
+    /// it is the same field. For a string it counts UTF-16 code units, which is
+    /// what `String.prototype.length` means.
     Length(ValueId),
     /// `array[index]`.
     ArrayGet {
@@ -1291,9 +1291,11 @@ pub enum OpKind {
     },
     /// Claim a reference. Produces nothing.
     ///
-    /// Abstract on purpose (RFC §7.2): HIR must not encode reference counting as
-    /// the *meaning* of a managed reference. Under `NoGC` these are not emitted at
-    /// all; under a tracing collector they would not be either.
+    /// Explicit rather than implied by a managed type, because whether anything
+    /// counts is the provider's decision: `hir::rc` inserts these only under
+    /// reference counting, and `HostGc` preparation removes every one that
+    /// counts a managed reference. A few are emitted whatever the provider, such
+    /// as the pair that keeps a suspended `async` frame alive (`hir::suspend`).
     Retain(ValueId),
     /// Give up a reference. Produces nothing.
     Release(ValueId),
@@ -2023,8 +2025,8 @@ pub struct InterfaceIdentity {
 ///
 /// The compiler's answer to "where is this field", decided once and consumed by
 /// every backend — so a C struct and a JVM `field_info` table cannot disagree
-/// about the order. RFC §8.1's descriptor is built from this; the descriptor is
-/// what the *provider* reads at run time, and this is what the compiler decided.
+/// about the order. The C backend's object descriptor is built from this; the
+/// descriptor is what the runtime reads, and this is what the compiler decided.
 #[derive(Debug, Clone)]
 pub struct Layout {
     /// Every schema type that has this layout.
@@ -2157,9 +2159,11 @@ impl Layout {
 
     /// Which fields hold references, by name, in layout order.
     ///
-    /// RFC §8.3's reference map. The backend turns each name into a byte offset
-    /// with `offsetof`, because the runtime cannot: it does not know the field
-    /// types, so a field *index* tells it nothing about where the field is.
+    /// The descriptor's reference map, which the runtime walks to release an
+    /// object's fields and to trace a cycle. The backend turns each name into a
+    /// byte offset with `offsetof`, because the runtime cannot: it does not know
+    /// the field types, so a field *index* tells it nothing about where the
+    /// field is.
     ///
     /// A list rather than the bitmap this used to be. A bitmap over indices
     /// needed the backend to reconstruct the same order to interpret it, and it
@@ -3260,10 +3264,10 @@ pub struct Program {
 /// than storage that is read and never written, and what makes `const TAU = 6.28`
 /// cost nothing at all.
 ///
-/// Scalars only, for now. A managed global is a *root*: reachable without being
-/// on any stack, so a collector has to be told about it, and RFC §10.2 puts root
-/// registration in the memory provider rather than in a backend. Refusing until
-/// that exists beats a global nothing traces.
+/// It may hold a managed value. Nothing registers it as a root, because no
+/// native provider traces: under reference counting the global owns a count on
+/// what it holds, and a store into it releases the value it replaces
+/// (`rc::load_slot`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Global {
     pub name: String,
@@ -4907,21 +4911,21 @@ impl Unprepared {
 
 /// Which memory discipline the emitted code follows.
 ///
-/// RFC §9 and the amendment to §10.2: this is a property of the *provider*, not
-/// of the backend, and it decides what the compiler emits — not only what the
-/// runtime does with it.
+/// It decides what the compiler emits, not only what the runtime does with it:
+/// reference counting's retains and releases are HIR operations, inserted
+/// during preparation (`provide`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Provider {
-    /// RFC §9.1. Allocate and never free. No retains, no releases, no barriers.
-    /// For bring-up, allocation testing and bounded-lifetime tools; never a
-    /// silent default for an application.
+    /// Allocate and never free: `hir::rc` inserts no retains or releases, and
+    /// nothing collects. What `nts` builds unless `--rc` is passed; meant for
+    /// bring-up, allocation testing and bounded-lifetime tools.
     #[default]
     NoGc,
     /// A managed host owns the heap (JVM or `WasmGC`). Logical layouts and
     /// semantic analyses remain; native frame placement, counting and
     /// `GObject` floating-reference sinks do not run.
     HostGc,
-    /// RFC §9.2. Reference counting, with the cycle collector behind it: an
+    /// Reference counting, with the cycle collector behind it: an
     /// object that could be in a cycle goes to a candidate buffer at a count of
     /// zero rather than being freed there, and collection runs once ten
     /// thousand roots have accumulated.

@@ -1949,8 +1949,8 @@ fn resolve_types(
 
 /// Rewrite an absolute path into a machine-independent workspace URI.
 ///
-/// RFC §20.4: absolute machine paths are remapped so builds are reproducible and
-/// a release artifact never carries a developer's home directory.
+/// Absolute machine paths are remapped so builds are reproducible and a release
+/// artifact never carries a developer's home directory.
 fn workspace_uri(root: &Utf8Path, path: &Utf8Path) -> String {
     let relative = path.strip_prefix(root).unwrap_or(path);
     format!("nts-workspace:///{relative}")

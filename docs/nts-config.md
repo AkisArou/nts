@@ -6,12 +6,13 @@ prelude question answered only for Java. That framing was too small, and the
 correction came with three specific arguments that are now the spine of this
 document -- that a monorepo package should not need a config file at all, that a
 shipped type surface is an ordinary npm dependency rather than something we
-generate, and that `products` in RFC §34 already has the vocabulary for the
-artifact matrix.
+generate, and that `products`, as the original architecture proposal spelled
+its configuration, already has the vocabulary for the artifact matrix. That
+proposal has since been removed from the tree; it is in git history.
 
 **Measured** sections were run against this tree on 2026-09-15 and say what
-against. **Proposed** sections are design. The RFC's configuration is itself
-marked *Proposed* and is day-one text that no engineering has revised.
+against. **Proposed** sections are design. The proposal's configuration was
+itself marked *Proposed*, day-one text that no engineering had revised.
 
 ---
 
@@ -28,7 +29,7 @@ config that cannot express something real.
 
 **Backend is not target.** `Backend` in `codegen/common` has exactly three
 variants -- C, Llvm, Jvm -- so iOS and macOS are not backends; they are LLVM
-plus a triple plus a host. RFC §34 already has this right (`target.ios({ backend:
+plus a triple plus a host. `tooling/config` has this right (`target.ios({ backend:
 "llvm" })`), and it is worth stating because "the iOS backend" is an easy and
 wrong thing to say.
 
@@ -230,8 +231,8 @@ yours. Here the caching design stands:
 
     key = hash(resolved config slice, input identity, binder version)
 
-Declaration per package, generation per key, cache shared -- RFC §34 already
-reserves `build.cache.directory: ".nts/cache"`. Two measured constraints from
+Declaration per package, generation per key, cache shared -- `tooling/config`
+already reserves `build.cache.directory`. Two measured constraints from
 the JVM binder carry over to any generator: it is **deterministic** (byte
 identical across runs, verified), and the `.d.ts` and its binding table are
 **one atomic artefact**, because the table is keyed by byte offsets into the text
@@ -409,8 +410,8 @@ frameworks; their engine (`bind-objc --name`) stays, for layers 2 and 3.
 
 ## 4. Proposed: products, and the app/library asymmetry
 
-RFC §34's vocabulary is the right one and this document adopts it rather than
-inventing a flatter shape:
+The original architecture proposal's vocabulary is the right one and this
+document adopts it rather than inventing a flatter shape:
 
 ```ts
 export default defineConfig({
@@ -425,7 +426,8 @@ export default defineConfig({
 
 **An app is one product per target.** Android and iOS differ in runtime family,
 memory strategy, host services and UI -- they are not one build with a flag, and
-§34 models them as separate products sharing an entry. That is correct.
+the proposal's example above models them as separate products sharing an
+entry. That is correct.
 
 **A library is one product with many targets**, and this asymmetry matters:
 
@@ -624,7 +626,8 @@ differ in a way "we bind C and class files" hides:
 
 ## 6e. Audit: every field, against what exists
 
-`tooling/config` was written 2026-08-26 from RFC §6 and §34 and never revised.
+`tooling/config` was written 2026-08-26 from the original architecture
+proposal's build-composition and configuration sections and never revised.
 Pointing 19 real configs at it produced 52 type errors, and reading each one
 produced this. **47 exported names became 26.**
 
@@ -891,8 +894,8 @@ four targets, two backends, and no per-platform constructor says that.
 
 ### What the audit is really about
 
-None of this is a criticism of the RFC. It is day-one text and says so. What it
-shows is a failure mode specific to a *typed* proposal: `ProductKind` reads as
+None of this is a criticism of that proposal. It was day-one text and said so.
+What it shows is a failure mode specific to a *typed* proposal: `ProductKind` reads as
 "these are the ten things we build", `memory.mmtk({ plan, minHeap, maxHeap })`
 reads as a tuned collector, and `host.android({ ui: "android-views" })` reads as
 a configured host. Prose that claimed those things would be obviously

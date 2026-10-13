@@ -447,7 +447,7 @@ The common environment contract is:
 
 The environment seam therefore enforces an existing performance premise rather
 than adding a new one: `nts_retain` and the diagnostic hot paths already use plain,
-non-atomic increments on the RFC 17.1 assumption that one runtime owns its heap. The
+non-atomic increments on the assumption that one runtime owns its heap. The
 environment and owner-lane invariants make that assumption mechanically true.
 
 This extends an existing `NtsTask` ownership rule rather than inventing an unrelated

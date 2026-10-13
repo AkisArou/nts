@@ -17,10 +17,11 @@
 //! # Therefore: a worklist, not a sweep
 //!
 //! [`Decomposer::run`] takes a **seed set** and walks the transitive closure from
-//! it, memoizing. Today the caller seeds it with everything, because reachability
-//! does not exist yet. When it does (RFC §7), the seeds become the types actually
-//! reached from a product's entry points or exports, and the cost falls out of
-//! this pass without its shape changing.
+//! it, memoizing. The caller seeds it with the types
+//! `nts_semantic_schema::reachability::for_frontend` reaches from every export
+//! and every module's top-level statements, not with every type the checker
+//! mentioned, so the cost follows what the program reaches without this pass
+//! changing shape.
 //!
 //! The [`Budget`] is the interim protection: a bound on how much traffic one
 //! decomposition may spend, reported rather than silently enforced, so a build
@@ -440,7 +441,7 @@ impl<'a> Decomposer<'a> {
                 // graph in transitively — measured at 5,773 types from a 180-node
                 // file. A type declared outside the compiled files is not this
                 // compiler's to lower; it stays a placeholder carrying its flags,
-                // the same way a foreign platform object does (RFC §14).
+                // the same way a foreign platform object does.
                 continue;
             }
 

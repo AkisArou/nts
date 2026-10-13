@@ -5299,7 +5299,7 @@ The hand-written reference barely moves -- 27 to 25, 33 to 33, 21 to 21, 14 to
 A tenfold asymmetry, and the method *count* is identical either way -- 1143 in
 both -- so this costs `dexes.sh`'s floor nothing and is purely about size. The
 reason is a deliberate property of this backend: it emits `LineNumberTable` and `LocalVariableTable` per
-instruction for the provenance chain RFC 20 asks for, and debug-mode `d8` keeps
+instruction so that every instruction keeps its provenance, and debug-mode `d8` keeps
 all of it live. `javac`'s output carries far less, so the same flag costs the
 two sides very differently.
 
@@ -6150,7 +6150,7 @@ object leaves the frame. `subclass-field` went 0 allocations to 17 with every
 answer identical -- 195 of 195 examples agreeing, `rc` agreeing, all three
 backends agreeing. **Only the allocation count moved.**
 
-That bug cannot exist on this lane. RFC 13 puts these objects in the platform
+That bug cannot exist on this lane. These objects live in the platform
 collector, there is no retain, no release and no frame placement, so a
 reference forward here is a free `getfield` removed. Which raises the obvious
 question -- is a per-provider rule worth asking for -- and the answer is no:

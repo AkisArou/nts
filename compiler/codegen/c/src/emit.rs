@@ -6,12 +6,12 @@
 //! `nts-codegen-common`, so nothing here chooses anything a JVM emitter would
 //! have to choose again. What is left is spelling.
 //!
-//! # Scalars only, for now
+//! # Refused, not approximated
 //!
-//! A managed reference needs a runtime — an allocator, a header, a collector —
-//! and none of that exists yet. Rather than emit a plausible `char *` and pretend,
-//! a function touching a managed type is refused. RFC §4.1 again: the failure has
-//! to be visible.
+//! A function this backend cannot spell is refused with a diagnostic and named
+//! in `Emitted::refused`, and every body that calls it directly is dropped with
+//! it (`drop_orphaned_bodies`). Rather than emit plausible C and pretend, the
+//! failure has to be visible.
 
 pub use nts_codegen_common::symbols::{c_global, c_identifier, c_member};
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
@@ -59,8 +59,8 @@ pub const RUNTIME_SOURCE: &str = include_str!("../../../../runtime/c/nts_runtime
 ///
 /// Separate from the runtime because it is a *choice*: an embedder with its
 /// own loop supplies its own host and links none of this, and a library
-/// product has no loop at all (RFC §26.1). Written beside the program only
-/// when one is asked for.
+/// product has no loop at all. Written beside the program only when one is
+/// asked for.
 pub const UV_HOST_HEADER_NAME: &str = "nts_uv_host.h";
 pub const UV_HOST_HEADER: &str = include_str!("../../../../runtime/c/nts_uv_host.h");
 pub const UV_HOST_SOURCE_NAME: &str = "nts_uv_host.c";
@@ -3113,7 +3113,7 @@ fn emit_object_types(
         let name = object_type_name(layout);
         writer.line(origin, format!("struct {name} {{"));
         // The header first, so every managed object starts the same way and a
-        // provider can read the descriptor without knowing the type (RFC 8.2).
+        // provider can read the descriptor without knowing the type.
         writer.line(origin, "    NtsHeader header;");
         for (at, field) in layout.fields.iter().enumerate() {
             // A field whose C type cannot be computed used to be *dropped
@@ -3392,11 +3392,11 @@ fn emit_object_descriptors(
             continue;
         }
         let name = object_type_name(layout);
-        // RFC 8.3: where this object's references are, as byte offsets. Written
-        // with `offsetof` so the compiler that laid the struct out is the one
-        // that says where its fields are -- padding, alignment and field order
-        // are its business, and duplicating its arithmetic here would be a
-        // second source of truth that agrees until it does not.
+        // The reference map: where this object's references are, as byte
+        // offsets. Written with `offsetof` so the compiler that laid the struct
+        // out is the one that says where its fields are -- padding, alignment
+        // and field order are its business, and duplicating its arithmetic here
+        // would be a second source of truth that agrees until it does not.
         //
         // Nothing reads this under NoGC, where a reference field is a pointer
         // and costs nothing. It is emitted anyway, because it is a fact about

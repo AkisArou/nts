@@ -125,9 +125,8 @@ export interface Config {
  * Declare a project's build composition.
  *
  * Returns the config unchanged. It exists for the types: the compiler reads this
- * file's *value*, and whether the composition can actually be built is decided
- * at build planning, where the target and provider matrices are known (RFC
- * §27.3).
+ * file's *value* (`build/src/config.rs` evaluates it with node), and whether the
+ * composition can actually be built is decided when `nts` builds it.
  *
  * **Evaluated by node.** An earlier draft argued for a statically evaluable
  * config on the grounds that a cache key cannot be the output of arbitrary code.

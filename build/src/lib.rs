@@ -2,7 +2,7 @@
 //!
 //! A native build is not one compiler invocation. It is a deterministic DAG of
 //! IR, objects, archives, generated sources, metadata, resources, platform
-//! compilation, linking, and packaging (RFC §6).
+//! compilation, linking, and packaging.
 //!
 //! Lowering produces typed artifact nodes; it does not write files as a side
 //! effect. The planner validates the whole graph before the executor runs any

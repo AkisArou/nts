@@ -23,11 +23,11 @@
 //! on the IR crate. It was written in `nts-core` and re-exported from there, so
 //! nothing that used it has to change.
 //!
-//! # This is not the RFC §7 reachability
+//! # This is not `hir::reachable`
 //!
-//! RFC §7 places reachability in the HIR analysis block, over *operations*, for
-//! dead-code elimination during lowering. This is coarser and earlier: it works
-//! on declarations and needs no IR, because the question it answers — what should
+//! `nts_core::hir::reachable` drops the HIR functions nothing can call, over
+//! the lowered call graph. This is coarser and earlier: it works on
+//! declarations and needs no IR, because the question it answers — what should
 //! the frontend bother resolving — has to be answered before there is an IR.
 //! The two are complementary; this one does not replace it.
 
@@ -65,9 +65,9 @@ impl Reachability {
 
 /// Walk outward from every exported declaration.
 ///
-/// The right roots for a library product: RFC §27.1 makes a shared library's
-/// exports its public surface, so anything not reachable from them cannot be
-/// called from outside and need not be resolved.
+/// The right roots for a library product: a shared library's exports are its
+/// public surface, so anything not reachable from them cannot be called from
+/// outside and need not be resolved.
 #[must_use]
 pub fn from_exports(snapshot: &SemanticSnapshot) -> Reachability {
     let roots = snapshot

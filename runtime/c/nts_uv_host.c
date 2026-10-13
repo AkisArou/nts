@@ -350,7 +350,7 @@ static void nts_uv_post_from_any_thread(void *state, NtsTask task) {
   /* The one operation with no owner assertion: being callable from a
    * completion thread is its entire purpose. Everything a foreign thread can
    * reach goes through here, which is what keeps heap mutation on one
-   * thread (RFC 17.4). */
+   * thread. */
   uv_mutex_lock(&nts_uv_foreign_lock);
   nts_uv_queue_push(&nts_uv_foreign, task);
   uv_mutex_unlock(&nts_uv_foreign_lock);

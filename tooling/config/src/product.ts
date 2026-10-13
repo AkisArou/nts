@@ -13,8 +13,9 @@
  *
  * ## What was removed, and why
  *
- * Four things came from RFC §6 and §34 and were carried without being checked
- * against anything that exists.
+ * Four things came from the original architecture proposal (since removed; it
+ * is in git history) and were carried without being checked against anything
+ * that exists.
  *
  * - **`runtime.family`** was `"native" | "jvm"` and is decided entirely by the
  *   target's backend. Two derivations of one fact, and the config's was the one
@@ -29,8 +30,8 @@
  *   notion of a profile.
  * - **`debug: DebugProfile`** named five debug levels. Nothing emits them.
  *
- * None of this is a judgement about the RFC; it is day-one text, and these are
- * the parts that had not met an implementation yet.
+ * None of this is a judgement about that proposal; it was day-one text, and
+ * these are the parts that had not met an implementation yet.
  */
 import type { Arch, NativeBackend, Os, Target } from "./target.ts";
 import { target as t } from "./target.ts";

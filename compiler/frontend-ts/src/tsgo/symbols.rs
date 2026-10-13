@@ -427,7 +427,8 @@ pub(super) fn intern_declared(
 ///
 /// A module's own symbol is named by its path, so `/home/someone/proj/src/main`
 /// would otherwise land in the snapshot and from there in every artifact derived
-/// from it. RFC §20.4 forbids that for sources; a symbol name is no different.
+/// from it. A source's path is remapped for the same reason (`workspace_uri`);
+/// a symbol name is no different.
 fn normalize_name(name: &str, root: &camino::Utf8Path) -> String {
     // **The private-name counter first, because it is not reproducible.** A
     // private member is interned as `__#21@#encoding`: the number is there

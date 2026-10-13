@@ -2,14 +2,16 @@
 //!
 //! # Provenance is structural, not remembered
 //!
-//! RFC decision 20 requires source provenance to survive into the emitted
-//! artifact, and RFC §21.1 wants `#line` directives and a sidecar debug map. A
+//! Source provenance has to survive into the emitted artifact, so that a line
+//! of generated code can be traced back to the TypeScript it came from. A
 //! writer that takes text and separately offers a "record an origin" call gets
 //! that right exactly as often as somebody remembers to call it.
 //!
 //! Here the only way to emit is [`CodeWriter::line`], which requires an
 //! [`Origin`]. The text and the line-to-origin map are produced by the same call,
-//! so they cannot disagree and neither can be forgotten.
+//! so they cannot disagree and neither can be forgotten. Nothing reads the map
+//! outside this file's tests yet, so no `#line` directive or debug sidecar is
+//! built from it.
 
 use nts_semantic_schema::Origin;
 
@@ -87,8 +89,8 @@ impl CodeWriter {
 
     /// Where each emitted line came from, indexed from zero.
     ///
-    /// A `#line` directive or a `.ntsdbg` entry is built from this without the
-    /// emitter having had to maintain it.
+    /// What a `#line` directive or a debug sidecar would be built from, without
+    /// the emitter having had to maintain it. Neither is built yet.
     #[must_use]
     pub fn origins(&self) -> &[Origin] {
         &self.origins

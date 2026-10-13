@@ -7,7 +7,7 @@ package nts.rt;
  * <p>{@code runtime/c} keeps these bits in the object header's spare flags, so
  * {@code nts_presence_has_value} there is a tag test and a read at a fixed
  * offset -- it needs no class, because every object has the same header.
- * <b>There is no header here.</b> RFC 13 puts these objects in the platform
+ * <b>There is no header here.</b> These objects live in the platform
  * collector's heap, so the bits are an {@code int} field on the hierarchy root
  * and the field's owner differs per hierarchy.
  *

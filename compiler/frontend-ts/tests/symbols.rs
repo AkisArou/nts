@@ -96,8 +96,8 @@ fn every_symbol_knows_where_it_is_declared() {
 #[test]
 fn no_symbol_name_leaks_a_machine_path() {
     let Some(snapshot) = snapshot() else { return };
-    // A module's own symbol is named by its path. RFC §20.4 forbids an absolute
-    // machine path reaching an artifact, and a symbol name is an artifact.
+    // A module's own symbol is named by its path. No absolute machine path may
+    // reach an artifact, and a symbol name is an artifact.
     for symbol in &snapshot.symbols {
         assert!(
             !symbol.name.contains("/home/"),

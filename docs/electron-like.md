@@ -58,9 +58,9 @@ native-to-Blink hypothesis.
 
 ## What the repository already has
 
-The code and current lane documents, rather than `docs/RFC.md`, are the basis
-of this assessment. Some crate comments describe future architecture; the
-call paths are more authoritative.
+The code and current lane documents are the basis of this assessment. Some
+crate comments describe future architecture; the call paths are more
+authoritative.
 
 | Area | Observed starting point | Consequence for this RFC |
 | --- | --- | --- |

@@ -1813,8 +1813,8 @@ fn jvm_case(
     // frees, so a run calibrated to a hundred milliseconds of work would
     // measure page faults rather than code. This lane has a tracing collector
     // underneath it and needs no such declaration -- and must not receive one,
-    // because a `Retain` reaching a host-collected object is RFC 13's second
-    // GC inside ART, which this backend refuses by name.
+    // because a `Retain` reaching a host-collected object would be a second
+    // collector inside the platform's, which this backend refuses by name.
     //
     // Inheriting it meant six cases -- `map-and-set`, `pipeline`,
     // `case-convert`, `node-utf8`, `array-mutations`, `array-predicates` --
@@ -2308,9 +2308,9 @@ fn prepared_program(
         bail!("{tsconfig} does not typecheck");
     }
 
-    // A benchmark is an *executable* whose entry point is `work`, and RFC §6.8
-    // says an executable's exports are not roots: nothing outside the program
-    // can call them, because there is no outside.
+    // A benchmark is an *executable* whose entry point is `work`, and an
+    // executable's exports are not roots: nothing outside the program can call
+    // them, because there is no outside.
     //
     // The default is the library answer, which is right when the product is
     // unknown and wrong here in a way that matters. A class exported so that

@@ -29,7 +29,7 @@
 
 #include "nts_string_view.h"
 
-/* RFC 8.1: every managed object references an immutable descriptor, which
+/* Every managed object references an immutable descriptor, which
  * describes the shape rather than the contents -- so there is one per element
  * type, not one per object. */
 /* Which shape the descriptor describes. A variable-length object reads `size`
@@ -191,7 +191,7 @@ typedef struct NtsForeignSlot {
 typedef struct NtsDescriptor {
   uint32_t kind;
   uint32_t size;
-  /* RFC 8.3, the reference map. For an object, how many fields hold
+  /* The reference map. For an object, how many fields hold
    * references and where they are: `offsets` has `references` byte offsets
    * into the object, generated with `offsetof` so that the compiler that laid
    * the struct out is the one that says where its fields are.
@@ -220,7 +220,7 @@ typedef struct NtsDescriptor {
    * cyclic because unknown has to mean yes. */
   uint32_t cyclic;
   const uint32_t *offsets;
-  /* RFC 8.1 says a descriptor describes the shape rather than the contents,
+  /* A descriptor describes the shape rather than the contents,
    * and a class's method table is part of its shape.
    *
    * Null for every class in a hierarchy where nothing is overridden, which is
@@ -346,7 +346,7 @@ typedef struct NtsDescriptor {
  * this is distinct from a numeric slot whose conversion rounds to double. */
 #define NTS_ARRAY_BIGINT 8u
 
-/* RFC 8.2. One header for every variable-length managed object: an array and a
+/* One header for every variable-length managed object: an array and a
  * string differ by descriptor, not by shape, so `length` is the same field at
  * the same offset for both.
  *
@@ -575,7 +575,7 @@ typedef struct NtsSymbol {
 
 /* An array is a header, a capacity, and a pointer to its elements.
  *
- * RFC 8.2 said an array and a string differ by descriptor rather than by shape,
+ * The first design said an array and a string differ by descriptor, not shape,
  * with the elements inline after the header. That is right for a string and
  * wrong for an array, and the difference is `push`: an array grows, and growing
  * something whose elements are inline means moving it, which invalidates every
@@ -1103,7 +1103,7 @@ extern const NtsDescriptor nts_desc_ref_acyclic;
 extern const NtsDescriptor nts_desc_string1;
 extern const NtsDescriptor nts_desc_string2;
 
-/* Colors for the cycle collector (RFC 9.2), in `flags`. A release that does not
+/* Colors for the cycle collector, in `flags`. A release that does not
  * reach zero *might* have removed the last reference from outside a cycle, so
  * the object becomes a candidate; the collector later works out which
  * candidates really are garbage by removing internal references and seeing what
@@ -1253,9 +1253,9 @@ uint64_t nts_collection_epoch(void);
  * generated program must agree about it -- so it is a define rather than
  * something either side decides for itself.
  *
- *   (default)          RFC 9.1 NoGC: a bump allocator, and nothing is freed.
- *   NTS_PROVIDER_RC    RFC 9.2: each object is its own allocation, and the last
- *                      release gives it back.
+ *   (default)          NoGC: a bump allocator, and nothing is freed.
+ *   NTS_PROVIDER_RC    counting: each object is its own allocation, and the
+ * last release gives it back.
  *
  * NoGC is not slower for being simpler: a bump allocator is a pointer add, and
  * that is the point of it for allocation testing and microbenchmarks. RC pays
@@ -3542,7 +3542,7 @@ static inline double nts_max(double a, double b) {
  * the answer is known. */
 #define NTS_REFUSED "nts: refused: "
 
-/* --- Tasks, the host seam, and the checkpoint (RFC 12.1, 26; docs/async.md) -
+/* --- Tasks, the host seam, and the checkpoint (docs/async.md) ---------------
  *
  * The runtime owns language behavior; the host owns execution environment
  * behavior. Promise ordering is specified and observable, so it stays here. The
@@ -3590,7 +3590,7 @@ typedef struct NtsHost {
 
   /* The only operation callable from a thread the runtime does not own.
    * Every foreign completion goes through it before touching the heap:
-   * resolving a promise is a heap mutation (RFC 17.4). */
+   * resolving a promise is a heap mutation. */
   void (*post_from_any_thread)(void *state, NtsTask task);
 
   /* For assertions, and cheap enough to leave on. */
@@ -3598,7 +3598,7 @@ typedef struct NtsHost {
 
   /* Optional, and null for every host but a Blink renderer. Supplying it
    * means the host owns checkpointing: our queues and our drain are both
-   * disabled, so there is one queue and one ordering (RFC 26.6). */
+   * disabled, so there is one queue and one ordering. */
   void (*enqueue_microtask)(void *state, NtsTask task);
 
   /* Optional: run one event-loop turn, blocking for registered work if
@@ -3630,7 +3630,7 @@ typedef struct NtsHost {
  * this header.
  *
  * A managed reference never crosses between two of these, which is why
- * `nts_retain` can be a plain increment (RFC 17.1). */
+ * `nts_retain` can be a plain increment. */
 typedef struct NtsEnvironment NtsEnvironment;
 
 /* What `enter` saves so `leave` can put it back. */
@@ -3801,7 +3801,7 @@ void nts_host_checkpoint_end(void);
  * loop, and for a test asserting quiescence. */
 bool nts_has_pending_work(void);
 
-/* --- Promises (RFC 12; docs/async.md 5a) -----------------------------------
+/* --- Promises (docs/async.md 5a) -------------------------------------------
  *
  * The runtime never learns what a promise's value *is*, for the same reason it
  * never learns a closure's signature: whoever reads it was compiled knowing.

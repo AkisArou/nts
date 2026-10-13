@@ -1327,9 +1327,9 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   backend_examples 393 "through the LLVM backend" exact 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
-# No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
-# collector's heap, so this lane emits no retains and there would be nothing for
-# a counting run to count. A function that reaches one is refused by name rather
+# No `jvm-rc` sibling: TypeScript objects live in the platform collector's
+# heap, so this lane emits no retains and there would be nothing for a counting
+# run to count. A function that reaches one is refused by name rather
 # than emitted with them dropped -- a build whose lifetimes came from somewhere
 # unexplained is worse than one that stops.
 #

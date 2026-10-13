@@ -2,14 +2,12 @@
 //!
 //! # What it is for
 //!
-//! RFC §6.2 lists three backends and §37 puts the JVM in phase 2. §21.3 asks
-//! for generated *class files* carrying `SourceFile`, `LineNumberTable` and a
-//! `SourceDebugExtension` SMAP; §35 reserves this directory and
-//! `compiler/jvm-emitter` beside it. Java source appears in the RFC exactly
-//! once, under `abi/generated/java`, and it is binding code rather than a
-//! rendering of the program -- which is right, because `codegen/common` hands
-//! every backend a flat list of blocks with jumps between them, C and JVM
-//! bytecode both have `goto`, and Java does not.
+//! TypeScript compiled for the JVM, with the platform collector owning every
+//! object. It writes *class files*, through `compiler/jvm-emitter`, and
+//! not Java source: `codegen/common` hands every backend a flat list of blocks
+//! with jumps between them, C and JVM bytecode both have `goto`, and Java does
+//! not. Each class carries a `SourceFile` and a `LineNumberTable` built from the
+//! origin of every instruction.
 //!
 //! # What it does not decide
 //!
@@ -21,24 +19,22 @@
 //!
 //! What *is* decided here, and is not in the other two:
 //!
-//! - **The JVM object model.** RFC §13: TypeScript objects are ordinary JVM
-//!   references and the platform collector owns them. So no descriptors, no
-//!   header, no retains -- and a function carrying `Retain` or `Release` is
-//!   refused rather than emitted with them dropped, because a build that
-//!   silently ignored them would have its lifetimes come from somewhere
-//!   unexplained.
+//! - **The JVM object model.** TypeScript objects are ordinary JVM references
+//!   and the platform collector owns them. So no descriptors, no header, no
+//!   retains -- and a function carrying `Retain` or `Release` is refused rather
+//!   than emitted with them dropped, because a build that silently ignored them
+//!   would have its lifetimes come from somewhere unexplained.
 //! - **Where Java is not JavaScript.** `Math.min`, `max`, `floor`, `ceil`,
 //!   `abs` and `sqrt` agree with the language exactly, including on `NaN` and
 //!   the sign of zero, so they are called directly -- C's `fmin`/`fmax` do not
 //!   and the native runtime has to provide its own. `d2i`, `Math.round` and
 //!   `Double.toString` do *not* agree, and each has a helper in `runtime/jvm`.
 //!
-//! # This slice
+//! # Refused, not approximated
 //!
-//! Scalars: numbers, integers and booleans, arithmetic, comparison, calls
-//! between lowered functions, globals and control flow. Anything managed or
-//! erased is refused **by name**. A backend that emits something for every
-//! input is a backend nobody can trust the output of.
+//! What this backend cannot spell is refused **by name**, and the refusal
+//! names the construct. A backend that emits something for every input is a
+//! backend nobody can trust the output of.
 
 pub mod body;
 mod builder;

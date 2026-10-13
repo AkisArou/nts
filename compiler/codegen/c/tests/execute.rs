@@ -1098,7 +1098,7 @@ int main(void) {{
 fn objects_hold_references_and_arrays_hold_objects() {
     // A reference field is a pointer. Under NoGC nothing is ever freed, so it
     // costs neither a write barrier nor a trace -- but *which* fields are
-    // references is recorded on the layout as a pointer bitmap (RFC 8.3),
+    // references is recorded on the layout (`Layout::reference_fields`),
     // because that is a fact about the layout and a collector cannot be told it
     // after the fact.
     //
@@ -1275,8 +1275,8 @@ int main(void) {{
 
 #[test]
 fn without_reference_counting_the_same_program_leaks() {
-    // The control. Not a complaint about NoGC -- RFC 9.1 says it allocates and
-    // never frees, and this is what that means when a program runs for a while.
+    // The control. Not a complaint about NoGC -- it allocates and never frees
+    // by design, and this is what that means when a program runs for a while.
     // It is here so the test above is measuring something.
     //
     // It has to be a call whose object cannot be anywhere but the heap, and
@@ -1395,7 +1395,7 @@ int main(void) {{
 fn cycles_are_collected_and_acyclic_objects_are_never_considered() {
     // A cycle is what reference counting on its own cannot reclaim: every
     // object in one is held by another object in the same one, so no count
-    // reaches zero. RFC 9.2 names this as the price of 9.2, and this is the
+    // reaches zero. That is the price of reference counting, and this is the
     // part that pays it.
     //
     // `acyclic` is here for the other half. A type whose references cannot lead

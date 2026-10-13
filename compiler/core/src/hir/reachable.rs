@@ -2,16 +2,16 @@
 //!
 //! # The roots depend on the product
 //!
-//! RFC §6.8 lists `executable` and `shared-library` as different products, and
-//! they have different public surfaces — so "what can be called from outside"
-//! is a different question for each, and using one answer for both is either
+//! An executable and a shared library are different products, and they have
+//! different public surfaces — so "what can be called from outside" is a
+//! different question for each, and using one answer for both is either
 //! unsound or wasteful.
 //!
 //! - An **executable** has no outside. Nothing but its entry point can be
 //!   called, and a module's `export` means only "visible to another module of
 //!   this program". Exports are *not* roots.
 //! - A **library** can have any of its exports called by a caller this
-//!   compilation cannot see. Every export is a root (RFC §27.1).
+//!   compilation cannot see. Every export is a root.
 //! - A library with a **declared surface** narrows that. This is what the
 //!   `exports: [...]` list in `nts.config.ts` is for: naming fewer than the
 //!   source exports shrinks the ABI *and* the binary, which is the only reason
@@ -89,7 +89,7 @@ pub enum Roots<'a> {
     /// Derived from the program rather than carried as names, because
     /// `public_api` is an output of lowering and roots are an input to it.
     EntrySurface,
-    /// A library with a declared surface (RFC §27.1). Names that are not
+    /// A library with a declared surface. Names that are not
     /// actually exported are reported rather than ignored: a manifest that
     /// names a function the source does not export is a mistake in the
     /// manifest, and silently exporting nothing is the worst way to find out.

@@ -2,10 +2,10 @@
 //!
 //! # Why this crate exists
 //!
-//! RFC §7.1 forbids any TypeScript compiler object from escaping the frontend.
-//! In the proof of concept that rule was a discipline, because the compiler was
-//! itself written in TypeScript and could reach a `ts.Type` at any point. Here it
-//! is structural: the checker runs in another process, in another language, and
+//! No TypeScript compiler object may escape the frontend. In the proof of
+//! concept that rule was a discipline, because the compiler was itself written
+//! in TypeScript and could reach a `ts.Type` at any point. Here it is
+//! structural: the checker runs in another process, in another language, and
 //! the only thing that crosses is [`SemanticSnapshot`].
 //!
 //! # This crate has no I/O
@@ -16,10 +16,10 @@
 //!
 //! # Provenance is not optional
 //!
-//! Every node carries an [`Origin`] from v1 of this schema. RFC decision 20
-//! requires source provenance on every HIR and MIR operation, and provenance is
-//! the one property that cannot be retrofitted — once a lowering has run without
-//! it, the mapping back to source is gone.
+//! Every node carries an [`Origin`] from v1 of this schema, and every HIR
+//! operation carries one in turn. Provenance is the one property that cannot be
+//! retrofitted — once a lowering has run without it, the mapping back to source
+//! is gone.
 
 pub mod binding;
 pub mod origin;

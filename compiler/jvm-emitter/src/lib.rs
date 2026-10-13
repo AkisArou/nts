@@ -22,9 +22,9 @@
 //! # The two things it insists on
 //!
 //! - **Every instruction carries an [`Origin`](nts_semantic_schema::Origin).**
-//!   There is no way to emit one without. RFC decision 20 requires provenance
-//!   to survive into the artifact, and a builder that merely *offers* a way to
-//!   record it gets it as often as somebody remembers.
+//!   There is no way to emit one without. Provenance has to survive into the
+//!   artifact -- the `LineNumberTable` is built from it -- and a builder that
+//!   merely *offers* a way to record it gets it as often as somebody remembers.
 //! - **The operand stack is empty at every block boundary.** [`code::Code::bind`]
 //!   refuses otherwise. The whole `StackMapTable` design rests on it, so it is
 //!   checked where it is established rather than trusted and discovered wrong

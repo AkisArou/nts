@@ -4,8 +4,8 @@
 //!
 //! An `async` function that contains an `await` cannot be a C function. It has
 //! to be able to stop in the middle, hand control back to the event loop, and
-//! *resume* later — in a different call, with its locals intact. RFC §12 says
-//! how: a state machine plus a managed frame, rather than a stackful fiber.
+//! *resume* later — in a different call, with its locals intact. It becomes a
+//! state machine plus a managed frame, rather than a stackful fiber.
 //!
 //! ```text
 //! async function f(n) { return await g(n); }
@@ -32,9 +32,9 @@
 //! It is a synthetic class, exactly as a closure is. That is not a shortcut: a
 //! frame *is* captured state, which is what an object is — so it inherits the
 //! layout, the descriptor, the precise tracing, the escape analysis and the
-//! reference counting rather than needing a second mechanism for each. RFC §12's
-//! argument for frames over fibers is precisely this: nothing is hidden on a
-//! native stack that a collector would have to learn to scan.
+//! reference counting rather than needing a second mechanism for each. That is
+//! the argument for frames over fibers: nothing is hidden on a native stack
+//! that a collector would have to learn to scan.
 //!
 //! # Why it is a pass rather than part of lowering
 //!

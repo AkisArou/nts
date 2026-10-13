@@ -110,8 +110,9 @@ impl DocumentIdentifier {
 pub struct InitializeResponse {
     /// Whether the server's filesystem distinguishes `Foo.ts` from `foo.ts`.
     ///
-    /// Feeds path normalization: RFC §20.4 requires a stable workspace URI, and
-    /// on a case-insensitive host two spellings name one file.
+    /// Nothing reads it yet. Path normalization would have to: a source's
+    /// workspace URI has to be stable, and on a case-insensitive host two
+    /// spellings name one file.
     pub use_case_sensitive_file_names: bool,
     pub current_directory: String,
 }

@@ -5,8 +5,8 @@
 //! Reference counting. A managed value has to be released when nothing will
 //! read it again, and "nothing will read it again" is exactly what liveness
 //! answers. Getting it wrong in one direction leaks; in the other it frees
-//! memory something still holds, which is the failure RFC §9.2 names as the
-//! risk of reference counting done by a compiler.
+//! memory something still holds, which is the risk of reference counting done
+//! by a compiler.
 //!
 //! # The algorithm
 //!

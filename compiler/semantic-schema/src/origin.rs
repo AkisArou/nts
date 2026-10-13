@@ -1,8 +1,8 @@
-//! Source provenance, per RFC §20.3.
+//! Source provenance.
 //!
-//! An [`Origin`] travels with a construct from the snapshot, through HIR and
-//! MIR, into the backend, and out into the `.ntsdbg` debug map. RFC decision 20
-//! states that every HIR and MIR operation carries one.
+//! An [`Origin`] travels with a construct from the snapshot, through HIR, and
+//! into the backend: a diagnostic points with it, and the JVM backend's
+//! `LineNumberTable` is built from it. Every HIR operation carries one.
 //!
 //! The reason this is defined here rather than in `nts-core` is ordering: the
 //! frontend is the first thing that can observe a source position, so the type
@@ -72,12 +72,12 @@ impl Origin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ScopeId(pub u32);
 
-/// Why the compiler synthesized a construct, per RFC §20.3.
+/// Why the compiler synthesized a construct.
 ///
 /// This list is closed on purpose. A new lowering that synthesizes operations
-/// adds a variant here, which forces the debug map, the stack-trace filter, and
-/// the devtools frame view to acknowledge it rather than silently showing a
-/// frame with no explanation.
+/// adds a variant here, so that whatever later filters generated frames out of
+/// a stack trace or a debugger has to acknowledge it rather than silently
+/// showing a frame with no explanation. Nothing outside this file reads it yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GeneratedReason {
     ClosureLowering,

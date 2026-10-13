@@ -80,7 +80,7 @@
 #include "nts_grisu.h"
 
 /* One environment: everything a runtime owns that a second runtime must not
- * see (RFC 17.1).
+ * see.
  *
  * Until now these were forty-seven file-scope statics, and that was not merely
  * untidy -- it was the reason `nts_retain` could be non-atomic. "A runtime owns
@@ -553,9 +553,9 @@ NtsBigIntBox *nts_bigint_box(__int128 value) {
 
 __int128 nts_bigint_unbox(const NtsBigIntBox *box) { return box->value; }
 
-/* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
- * bring-up, allocation testing and bounded-lifetime tools. It must never be
- * selected silently for a general application. */
+/* The NoGC provider: a bump allocator that never frees. For compiler bring-up,
+ * allocation testing and bounded-lifetime tools, and what `nts` builds unless
+ * it is passed `--rc`. */
 size_t nts_live_bytes(void) { return NTS_TOTAL(bytes_held); }
 
 #ifdef NTS_PROVIDER_RC
@@ -580,8 +580,8 @@ size_t nts_live_bytes(void) { return NTS_TOTAL(bytes_held); }
  * one call does not matter.
  *
  * This is what a nursery buys a tracing collector, arrived at from the other
- * direction: RFC 9.2's counting already knows what 9.3's collector would have
- * to discover. */
+ * direction: counting already knows what a tracing collector would have to
+ * discover. */
 /* Declared only where it is used. Every use is behind `NTS_RECYCLES`, and a
  * declaration that is not makes an AddressSanitizer build -- the one case that
  * turns recycling off -- fail on `-Wunused-variable`, which the tests build
@@ -862,10 +862,10 @@ NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
   return object;
 }
 
-/* Reference counting (RFC 9.2). The count lives in the header's
+/* Reference counting. The count lives in the header's
  * provider-reserved word, which is unused under NoGC and is this under RC.
  *
- * Not atomic. A runtime owns its heap (RFC 17.1) and a managed reference does
+ * Not atomic. A runtime owns its heap and a managed reference does
  * not cross between runtimes, so the count is only ever touched by one thread.
  * Making it atomic would cost every retain a locked instruction to defend
  * against sharing the design does not permit. */
@@ -1337,7 +1337,7 @@ static void nts_destroy(NtsHeader *object) {
   nts_env->draining = false;
 }
 
-/* --- The cycle collector (RFC 9.2) -----------------------------------------
+/* --- The cycle collector ---------------------------------------------------
  *
  * Reference counting reclaims everything the moment it becomes garbage, except
  * a cycle: every object in one is held by another object in the same one, so no
@@ -8978,7 +8978,7 @@ double nts_str_point_width(const NtsString *s, double at) {
   return paired ? 2.0 : 1.0;
 }
 
-/* --- Tasks, the host seam, and the checkpoint (RFC 12.1) -------------------
+/* --- Tasks, the host seam, and the checkpoint ------------------------------
  *
  * See docs/async.md. The short version: the runtime owns the two queues and
  * the checkpoint because their ordering is observable, and the host owns the
@@ -9037,7 +9037,7 @@ static bool nts_queue_shift(NtsQueue *queue, NtsTask *out) {
 
 void nts_enqueue_microtask(NtsTask task) {
   /* A host that owns checkpointing owns the queue with it, so there is one
-   * ordering rather than two interleaved (RFC 26.6). */
+   * ordering rather than two interleaved. */
   if (nts_env->host_installed && nts_env->host.enqueue_microtask) {
     nts_env->host.enqueue_microtask(nts_env->host.state, task);
     return;
@@ -9395,7 +9395,7 @@ void nts_post_from_any_thread(NtsTask task) {
   nts_env->host.post_from_any_thread(nts_env->host.state, task);
 }
 
-/* --- Promises (RFC 12) -----------------------------------------------------
+/* --- Promises --------------------------------------------------------------
  *
  * Ordering is the whole substance here: reactions run in subscription order,
  * on the microtask queue, and never inline. Everything else is bookkeeping.
@@ -9469,7 +9469,7 @@ static void nts_promise_require_owner(const char *what) {
      * OkHttp, URLSession, WinHTTP and libuv's file pool all complete on a
      * thread the runtime does not own, and settling a promise is a heap
      * mutation -- so this is a data race that would usually appear to work.
-     * RFC 17.4 requires the completion to come home first. */
+     * The completion has to come home to the owner thread first. */
     fprintf(stderr, "nts: %s from a thread that does not own the runtime\n",
             what);
     abort();

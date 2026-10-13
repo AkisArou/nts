@@ -19,8 +19,8 @@
 //!
 //! Retains and releases therefore pair up locally, and a mistake in one place
 //! cannot be balanced by a mistake in another. Many of the pairs cancel; that is
-//! what an optimizer is for, and correctness first is what RFC §9.2 asks of a
-//! first implementation.
+//! what an optimizer is for, and a first implementation has to be correct
+//! before it is clever.
 //!
 //! # Releases go on edges, not at the end of blocks
 //!

@@ -8,9 +8,9 @@ An independent compiler and application platform that compiles ordinary TypeScri
 > Most of the language is not supported yet, and unsupported constructs are
 > refused with a diagnostic rather than miscompiled.
 >
-> [`docs/RFC.md`](docs/RFC.md) is the architecture this is built toward. It is a
-> blueprint, not a specification: where measurement has disagreed with it, the
-> RFC has been amended and the change recorded.
+> How it works today is below; decisions and their reasons are in
+> [`docs/records/`](docs/records), and [`docs/README.md`](docs/README.md) indexes
+> the rest.
 
 ---
 
@@ -238,7 +238,8 @@ Most of these are constant expressions, which means what runs on the native side
 
 ## What it compiles to
 
-TypeScript in, real platform artifacts out:
+TypeScript in, real platform artifacts out. Each of these is a lane being built;
+how far each one is lives in its notebook under `docs/`:
 
 - Native executables, static libraries, and shared libraries
 - JVM class files and Android DEX
@@ -248,7 +249,8 @@ TypeScript in, real platform artifacts out:
 - GTK applications and libraries
 - Embeddable React surfaces and a cross-platform native UI SDK
 - Chromium-hosted applications that call Blink directly
-- Node-compatible and explicit dynamic-JavaScript profiles (later phases)
+- WebAssembly (WasmGC) modules with their JavaScript glue
+- Node.js native addons (N-API)
 
 Applications and libraries are peer products. Producing a shared library that another program links against is as natural as producing an app.
 
@@ -256,133 +258,38 @@ Applications and libraries are peer products. Producing a shared library that an
 
 - **TypeScript is the semantic authority.** The frontend uses real TypeScript type information — overload resolution, narrowing, inference — not a lookalike parser.
 - **No engine smuggled in.** A build never silently introduces a JavaScript interpreter or JIT to cover a gap.
-- **Whole-program, ahead of time.** All reachable supported behavior is compiled. Unsupported reachable behavior is diagnosed precisely instead of failing at runtime.
-- **Debugging survives the pipeline.** Source-level stack traces, breakpoints, and variable inspection are preserved through optimization, inlining, and packaging.
-- **Inspectable at every stage.** Snapshot, HIR, MIR, and generated backend code are all readable artifacts.
+- **Whole-program, ahead of time.** All reachable supported behavior is compiled. Unsupported reachable behavior is refused with a diagnostic instead of failing at runtime.
+- **Inspectable at every stage.** The checker's answers (`nts frontend`, `nts types`), HIR before and after preparation (`nts hir`, `nts hir --prepared`), and every backend's output (`nts emit-c`, `emit-llvm`, `emit-jvm`, `emit-wasm`) are readable.
 
-See [§4 Goals](docs/RFC.md#4-goals) and [§5 Non-Goals](docs/RFC.md#5-non-goals-for-initial-releases).
-
-## Compiler pipeline
+## How it works
 
 ```text
 TypeScript / TSX
       ▼
-TypeScript semantic adapter  →  SemanticSnapshot vN   (versioned, serializable)
+tsgo (the Go TypeScript compiler), asked over its API   →  semantic snapshot
       ▼
-NativeTS HIR     reachability · type specialization · effects · ownership
-      │          escape & closure analysis · async lowering · host validation
+HIR lowering        typed SSA; every operation carries its source origin
       ▼
-NativeTS MIR     managed refs · allocations · roots · safepoints · barriers
-      │          weak ops · native handles · callbacks · source origins
+HIR preparation     specialization · simplification · escape and ownership
+      │             analysis · reference counting where selected · verification
       ▼
-Memory-provider lowering        RC   |   MMTk   |   JVM
-      ▼
-C / LLVM / JVM backend
+C (→ clang) · LLVM IR · JVM class files (→ DEX) · WasmGC · N-API addons
 ```
 
-The TypeScript compiler API is quarantined: no `ts.Node`, `ts.Type`, `ts.Symbol`, `ts.Program`, or `ts.TypeChecker` may escape `compiler/frontend-ts`. Everything downstream consumes the versioned semantic snapshot instead. ([§7](docs/RFC.md#7-compiler-pipeline))
+Only `compiler/frontend-ts` talks to the TypeScript compiler; everything after it
+reads the versioned semantic snapshot (`compiler/semantic-schema`). Backends emit
+what preparation decided and decide nothing a sibling backend would decide
+differently.
 
-## Memory management is a build dimension
+**Memory is chosen per build, not per backend.** `hir::Provider` has three:
 
-This is the load-bearing idea. MIR does **not** encode reference counting as the meaning of a managed reference. It carries abstract operations — `managed.alloc`, `managed.store`, `managed.root.enter`, `managed.safepoint`, `managed.weak.create`, `managed.pin` — and a _provider_ lowers them into retain/release, into MMTk allocation and barriers, or into ordinary JVM field stores. Fast paths are specialized at code generation time; no virtual call happens on every field store in optimized builds.
+- `NoGc` allocates and never frees, for bring-up and bounded tools.
+- `HostGc` leaves the heap to a managed host: the JVM or ART collector, or WasmGC.
+- `ReferenceCounting` counts, with a cycle collector behind it.
 
-Four native providers: `native-rc-cycle`, `native-mmtk`, `native-nogc`, `host-jvm`.
-
-| Backend / host                   | Initial memory provider    |
-| -------------------------------- | -------------------------- |
-| Native C/LLVM applications       | RC plus cycle collection   |
-| Native static/shared libraries   | RC plus cycle collection   |
-| Compiler bring-up and tiny tests | NoGC                       |
-| Native Linux experimental lane   | MMTk                       |
-| JVM / Android                    | JVM or ART collector       |
-| Blink objects                    | Oilpan                     |
-| Objective-C / Swift objects      | ARC / native ownership     |
-| Android platform objects         | ART                        |
-| GObject / GTK objects            | GObject reference counting |
-| WinRT / COM objects              | COM / WinRT ownership      |
-| QuickJS or Hermes realm          | Engine-owned heap          |
-
-- **Reference counting plus cycle collection ships first.** Cross-platform, non-moving, no precise stack maps required, straightforward C ABI and FFI borrowing, one heap per runtime instance. ([§9.2](docs/RFC.md#9-native-memory-providers))
-- **MMTk is an early experiment, not the default.** It is integrated from the beginning as a _falsifier_ — a moving collector is the best test for missing roots and illegal raw pointers — but it must clear fifteen explicit gates, including supported Apple ARM64 and Windows builds and a resolution of its one-instance-per-process limitation, before it can become a default anywhere. ([§3](docs/RFC.md#3-mmtk-assessment))
-- **The JVM keeps its own collector.** There is no second GC inside ART. TypeScript objects on the JVM backend are ordinary JVM references, visible to the platform collector. ([§13](docs/RFC.md#13-jvm-memory-model))
-- **Foreign heaps stay foreign.** Blink/Oilpan, ARC, GObject, and WinRT objects are reached through generation-checked handles, never raw managed pointers, and neither collector scans the other's graph. ([§14](docs/RFC.md#14-foreign-heaps-and-cross-heap-ownership))
-
-## Build composition
-
-A build is assembled from independent dimensions rather than picked from a fixed list of presets:
-
-```text
-BuildRequest
-├── target             CPU, OS, ABI, pointer width, toolchain
-├── backend            C | LLVM | JVM
-├── runtimeFamily      native | jvm
-├── memoryProvider     native-rc-cycle | native-mmtk | native-nogc | host-jvm
-├── hostEnvironment    libuv | android | ios-uikit | appkit | winui | gtk | chromium
-├── profiles[]         ecmascript, web-core, fetch, react, native-ui, dom, …
-├── capabilities[]     scheduler, timers, frame-clock, filesystem, clipboard, …
-├── frameworks[]
-├── renderers[]
-├── product            executable | shared-library | application | framework | …
-├── debugProfile       none | line-tables | development | full-private-symbols
-└── developmentStrategy
-```
-
-Invalid combinations fail at build planning. A shared library that requests a bundled private runtime cannot select a provider that needs a process-global heap. ([§6](docs/RFC.md#6-build-composition-model), [§27.3](docs/RFC.md#27-products-and-shared-libraries))
-
-## Key decisions
-
-Drawn from the twenty-six durable decisions in [§39](docs/RFC.md#39-final-decisions):
-
-1. Memory management is a build-composed provider, not a fixed runtime property.
-2. Managed references stay abstract in HIR and MIR until provider lowering.
-3. Reference counting plus cycle collection is the first native shipping provider.
-4. MMTk is integrated early as an experimental provider — and is not the initial universal default.
-5. MMTk never owns JVM/ART objects or Blink/Oilpan objects.
-6. Native C and LLVM backends initially use explicit shadow root frames; LLVM statepoints may arrive later behind a pinned adapter.
-7. Moving-GC tests are mandatory even while the shipping collector is non-moving.
-8. Public ABIs never expose raw managed pointers.
-9. Independent runtime instances never share ordinary managed references.
-10. Arbitrary bidirectional cross-heap ownership is forbidden; bridges declare ownership explicitly.
-11. Native resources require explicit lifecycle management — finalizers are a fallback, not the mechanism.
-12. Source maps are one export of a larger debug-provenance system; every HIR and MIR operation carries source provenance.
-13. HMR generations retain their own code, GC descriptors, and debug maps.
-14. Broad Node.js compatibility is a deliberately later product phase.
-
-## Debugging
-
-ECMA-426 source maps cannot describe native instruction addresses, inlined frames, DEX rewriting, async continuation parents, or GC safepoints. So source maps become _one exported view_ of a richer canonical model — the **NTS Debug Map** (`.ntsdbg`), a provenance graph running from original source span all the way to linked address or DEX offset. ([§20](docs/RFC.md#20-debug-provenance-and-source-maps))
-
-| Platform    | Debug artifact                  |
-| ----------- | ------------------------------- |
-| Linux       | DWARF, optional separate file   |
-| macOS / iOS | DWARF plus dSYM                 |
-| Windows     | CodeView plus PDB               |
-| Android NDK | ELF/DWARF native symbol package |
-| JVM         | line tables, SMAP, R8 mapping   |
-
-Android release symbolication composes R8 retrace with the NTS Debug Map, so an obfuscated DEX frame resolves back to a TypeScript line. Physical stacks stop at an `await`, so the runtime also maintains a logical async chain:
-
-```text
-at loadProfile (src/profile.ts:42)
-awaited at initializeApp (src/app.ts:18)
-scheduled by Android lifecycle onCreate
-entered through MainActivity.onCreate
-```
-
-Crash artifacts are a first-class contract — build ID, module generation table, native minidump or JVM stack, GC state, recent HMR history — processed by `nts symbolicate`, `nts symbols upload`, and `nts symbols verify`. Release builds keep symbols in a separate private artifact and normalize source paths so developer home directories never ship. ([§21](docs/RFC.md#21-backend-debug-lowering)–[§25](docs/RFC.md#25-debug-information-privacy))
-
-## Development loop
-
-The target is a Vite-quality loop for a natively compiled language:
-
-- One-command launch, with a persistent compiler daemon and semantic diff deciding what actually needs rebuilding.
-- React refresh that preserves component state.
-- Native hot replacement via `.so` / `.dylib` / `.dll` loaded as new module generations behind stable export slots; Android patches through incremental D8 into a generation class loader.
-- A compile error leaves the last known good generation running behind an overlay instead of killing the process.
-- Breakpoints are keyed by `SourceId + source span`, not native addresses, so they rebind automatically after a refresh.
-- Devtools show heap size, pause times, retaining paths, pending finalizers — and which objects are keeping an old HMR generation alive.
-
-Escalation is explicit and ordered: refresh-compatible → module-replaceable → React remount → realm restart → process restart → native rebuild. ([§32](docs/RFC.md#32-development-and-hot-reload))
+Native builds select counting with `--rc`. Before any count is emitted, escape
+analysis places objects that never leave a call in its frame, and counts the
+compiler can prove unnecessary are elided.
 
 ## Configuration
 
@@ -424,102 +331,34 @@ export default defineConfig({
 });
 ```
 
-[§34](docs/RFC.md#34-configuration-example) shows one config holding every
-product, which reads well for a single project and does not survive a monorepo —
-`apps/android` and `apps/ios` are separately buildable, and a root listing both
-makes every app's build depend on every other app's config parsing.
-
-**The sketch that stood here named six fields that no longer exist**:
-`runtime.memory`, `runtime.family`, `runtimeLinkage`, `exports`, `profiles` and
-`modules`. Each was removed rather than given a better default, because none had
-met an implementation — the memory provider is a `--rc` flag and of the two
-providers that exist only one is shippable, so it is a build mode; `exports` was
-a second statement of what the entry module already exports, and narrowing the
-root set to the entry's own surface removed the question it answered. A config
-that cannot express a choice has no business exporting a builder for one.
-
-## Non-goals for initial releases
-
-Deliberately out of scope at the start, so the core can be correct first:
-
-- The full Node.js API surface, or compiling arbitrary npm packages
-- Unrestricted prototype mutation and reflection
-- Making MMTk mandatory, or using one universal collector on every backend
-- Sharing raw managed pointers across library boundaries
-- Discovering cycles automatically across independent platform heaps
-- Making finalizers the primary native-resource cleanup mechanism
-- Guaranteeing native-code injection on physical iOS devices
-- Perfect variable inspection in optimized builds in the first release
-
-## Roadmap
-
-| Phase | Focus                                                                          |
-| ----- | ------------------------------------------------------------------------------ |
-| 0     | Freeze prior work; define semantic snapshot, HIR, MIR, debug provenance, ABI   |
-| 1     | Rust compiler core, C and LLVM backends, NoGC and RC-cycle providers           |
-| 1′    | Parallel MMTk falsifier lane — Linux x86-64 only, no product depends on it     |
-| 2     | JVM lowering, Android Looper host, ART object model, DEX mapping, AAR product  |
-| 3     | Portable Web foundation — events, streams, fetch and WebSocket semantics       |
-| 4     | Module system — schemas, codegen, autolinking, first platform modules          |
-| 5     | React and Android native UI — shared TypeScript renderer, embeddable surfaces  |
-| 6     | Development system — daemon, semantic diff, patching, refresh, devtools        |
-| 7     | Apple, Windows, and GTK hosts; PDB and dSYM pipelines; framework products      |
-| 8     | MMTk qualification — Apple/Windows evaluation, moving plans, adoption decision |
-| 9     | Desktop modules and Chromium — Mojo proxies, direct Blink, React DOM           |
-| 10    | Optional Node compatibility as an explicit, versioned profile                  |
-
-The recommended first vertical slice is narrow and complete: semantic snapshot → HIR/MIR → RC-cycle provider → C and LLVM → a native shared library with shadow roots, debug provenance, and desktop hot replacement. ([§40](docs/RFC.md#40-recommended-first-vertical-slice))
-
 ## Repository layout
 
-**Planned, not yet present** — the RFC's proposed structure ([§35](docs/RFC.md#35-updated-repository-structure)):
-
 ```text
-compiler/       frontend, semantic schema, HIR/MIR, memory & debug lowering, codegen
-memory/         provider contract, descriptors, RC-cycle, MMTk, JVM, foreign heaps
-debug/          provenance graph, .ntsdbg, DWARF/PDB/dSYM, SMAP, symbolication, crash
-abi/            runtime, embedding, library, module, and capability ABIs + generated bindings
-build/          build model, graph, cache, executor, linker, packager, toolchains
-runtime/        native and JVM runtimes — values, promises, async frames, handles, shutdown
-libraries/      portable TypeScript: ecmascript, web, node (later)
-capabilities/   host capability contracts, schema, codegen, testkit
-hosts/          libuv, android, apple, windows, gtk, chromium
-frameworks/     react boundary, shared native UI renderer
-renderers/      react-native-ui, react-dom, react-test, react-terminal
-modules/        module core, SDK, desktop modules, templates
-products/       executables, libraries, applications, frameworks, SDKs
-dev/            daemon, semantic diff, HMR runtime, overlay, inspector, devtools
-tooling/        cli, config, lsp, debug adapter, IDE and build-system integrations
-third_party/    pinned vendored dependencies
-tests/          language, memory, debug, differential, lifecycle, performance suites
-docs/           architecture, RFCs, decisions, migration
+compiler/       frontend-ts (tsgo), semantic-schema, core (HIR), codegen/{c,llvm,jvm,wasm,napi,common},
+                jvm-emitter (class files), diagnostics
+runtime/        c, jvm, node, ecmascript, web-platform, native, chromium, react, gtk, objc, winrt
+tooling/        cli (the `nts` binary), gate, conformance, census, bench, differential, suite, deps,
+                config, and per-platform scripts
+build/          the build model behind `nts build`
+examples/       programs the gate compiles and compares with node; native interop projects
+benches/        benchmark cases with C++ and Java references
+docs/           designs, lane notebooks, ideas, and the decision records
+third_party/    typescript-go, test262, node, chromium and other pinned dependencies
 ```
 
-## Reading the RFC
+## Working on nts
 
-[`docs/RFC.md`](docs/RFC.md) is the specification — forty sections. Entry points:
-
-- **Orientation** — [§1 Executive Summary](docs/RFC.md#1-executive-summary), [§2 Context](docs/RFC.md#2-context), [§39 Final Decisions](docs/RFC.md#39-final-decisions)
-- **Memory and GC** — [§3 MMTk Assessment](docs/RFC.md#3-mmtk-assessment), then [§8](docs/RFC.md#8-native-managed-object-model)–[§19](docs/RFC.md#19-heap-and-gc-observability)
-- **Debugging** — [§20](docs/RFC.md#20-debug-provenance-and-source-maps)–[§25](docs/RFC.md#25-debug-information-privacy)
-- **Runtime, hosts, products** — [§26](docs/RFC.md#26-runtime-hosts-and-capabilities), [§27](docs/RFC.md#27-products-and-shared-libraries)
-- **Libraries and Node** — [§28](docs/RFC.md#28-portable-libraries), [§29](docs/RFC.md#29-node-compatibility-is-deliberately-later)
-- **React, renderers, modules** — [§30](docs/RFC.md#30-react-and-renderers), [§31](docs/RFC.md#31-native-typescript-module-system)
-- **Dev loop, HMR, testing** — [§32](docs/RFC.md#32-development-and-hot-reload), [§36](docs/RFC.md#36-testing-strategy)
-- **Plan and risks** — [§37](docs/RFC.md#37-phased-plan), [§38](docs/RFC.md#38-risks-and-open-questions), [§40](docs/RFC.md#40-recommended-first-vertical-slice)
+- [`AGENTS.md`](AGENTS.md): the rules every contributor, human or agent, follows.
+- [`docs/README.md`](docs/README.md): what each document is and whether it is current.
+- `tooling/gate/`: nothing lands on `main` without passing the gate steps its change owes.
+- [`docs/records/`](docs/records): one file per decision, with the evidence for it.
 
 ## Prior work and references
 
-The architecture builds on earlier ScriptC-based research, which already demonstrated C and LLVM native compilation, a substantial native IR and ABI model, native handles and thread admission, JVM lowering with Android runtime integration, and direct Blink calls from compiled native code. Its reference-counted runtime with a cycle collector is a useful bootstrap reference for the RC provider — but this RFC replaces ScriptC as a permanently moving foundation rather than continuing to track it.
+The architecture builds on earlier ScriptC-based research, which already demonstrated C and LLVM native compilation, a substantial native IR and ABI model, native handles and thread admission, JVM lowering with Android runtime integration, and direct Blink calls from compiled native code. Its reference-counted runtime with a cycle collector is a useful bootstrap reference for the RC provider — but nts replaces ScriptC as its foundation rather than continuing to track it.
 
 - [jvm-www](https://github.com/AkisArou/jvm-www) — the JVM ownership work the Android design draws on
-- [MMTk](https://www.mmtk.io/) — the collector toolkit assessed in [§3](docs/RFC.md#3-mmtk-assessment)
-- [Oxc](https://oxc.rs/) — used for source-oriented tooling only. The boundary rule, verbatim from [§33](docs/RFC.md#33-tooling-and-oxc):
-  > Oxc accelerates source-oriented tooling. TypeScript supplies semantic authority. Native TypeScript owns compilation semantics.
-
-## Contributing
-
-At this stage the useful contribution is review of the RFC itself — particularly the open questions in [§38](docs/RFC.md#38-risks-and-open-questions): reference-counting cost in renderer-heavy workloads, MMTk maturity on required platforms, multi-instance heaps, cross-heap cycles, optimized-build debugging fidelity, and HMR memory growth.
+- [Oxc](https://oxc.rs/) — used for source-oriented tooling only. Oxc accelerates source-oriented tooling; TypeScript supplies semantic authority; Native TypeScript owns compilation semantics.
 
 ## License
 

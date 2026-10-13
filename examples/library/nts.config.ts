@@ -5,8 +5,7 @@ export default defineConfig({
   workspace: { root: "." },
 
   products: {
-    // The first vertical slice (RFC §40): a native shared library, no UI, no
-    // platform toolchain.
+    // A native shared library: no UI, no platform toolchain.
     //
     // `library.native` rather than a flat `library({ kind, target })`: the
     // backend and the `.pc` file come from the constructor, and the fields that

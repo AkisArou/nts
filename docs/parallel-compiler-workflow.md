@@ -1,8 +1,8 @@
 # Parallel compiler development and validation
 
 This describes Main's working process as of 2026-10-05. The implementation and
-measured evidence determine completion; the RFC and older planning documents
-are historical context. See [compiler-delivery-plan.md](compiler-delivery-plan.md)
+measured evidence determine completion; older planning documents are
+historical context. See [compiler-delivery-plan.md](compiler-delivery-plan.md)
 for feature contracts and dated checkpoints. A private integration checkpoint
 can contain unfinished work and is not a main-branch acceptance claim.
 
