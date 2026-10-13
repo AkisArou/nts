@@ -479,3 +479,20 @@ the message. What would match page script: the converter naming the class
 (or at least the `name`) of what is thrown -- `TypeError`, `RangeError`, or
 an `Error` whose `name` is the DOMException's -- so `e.name` and
 `e instanceof TypeError` read as they do in page script.
+
+## 16. A foreign function answering a nullable number
+
+**Requested 2026-10-13. Low priority. Blocks: `input.selectionStart` and
+`selectionEnd` (`unsigned long?`), `animation.overallProgress` (`double?`);
+fixture `tooling/conformance/blockers/a-foreign-function-answering-a-nullable-number`.**
+
+A foreign function's scalar result has a C type, and `null` has no value of
+it to spare, so `Float64 | null` is refused ("a type with no native ABI").
+A string or a handle answers null as NULL; a number needs its presence
+carried beside it. Proposed contract: a `<scalar> | null` result is a
+by-value struct, `{ bool present; <scalar> value; }` -- the SysV x86-64 ABI
+returns `{ bool, double }` in rax and xmm0, so no memory round trip -- that
+the converter turns into the program's `number | null`. The Chromium lane
+then binds IDL `T?` results of numeric `T` through it, and checks them
+against page script in the differential vectors (an `<input type=text>`'s
+selection, and a `type=checkbox`'s, which is null).
