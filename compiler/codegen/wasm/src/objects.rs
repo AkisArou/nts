@@ -11,7 +11,7 @@ use crate::{
     object_plan::Object,
     types::{Physical, Slot},
 };
-use nts_core::hir::{BinOp, ClassId, HirType, ManagedType, UnOp, ValueId};
+use nts_core::hir::{BinOp, ClassId, HirType, ManagedType, OpKind, UnOp, ValueId};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 pub(crate) const INSTANCE: &str = "object.instanceOf";
@@ -270,6 +270,114 @@ pub(crate) fn set(
     });
     Ok(())
 }
+/// What a value matching no arm of an open read is refused as. The
+/// core's contract is that the arms over-approximate what arrives, so this is
+/// a program the checker should have rejected.
+const NO_ARM: &str = "a member reached through a slot whose value is none of the layouts it names";
+
+/// One layout an open slot's value can have, and that layout's index for the
+/// member.
+struct Arm<'p> {
+    storage: &'p Object,
+    at: u32,
+}
+
+/// The arms' storage, each layout once: several class types share one
+/// layout, and a test already taken would never match again.
+fn arms<'p>(
+    b: &Body<'_, 'p>,
+    value: ValueId,
+    arms: impl Iterator<Item = (ClassId, u32)>,
+) -> Result<Vec<Arm<'p>>, Failure> {
+    if !matches!(b.types().value_slot(b.ty(value))?, Physical::Reference(_)) {
+        return Err(format!("a member of a {:?} through an open slot", b.ty(value)).into());
+    }
+    let objects = &b.types().objects;
+    let mut seen = std::collections::BTreeSet::new();
+    let mut found = Vec::new();
+    for (ty, at) in arms {
+        let storage = objects.object(&HirType::Managed(ManagedType::Object(ty)))?;
+        if seen.insert(storage.physical) {
+            field(storage, at)?;
+            found.push(Arm { storage, at });
+        }
+    }
+    if found.is_empty() {
+        return Err(Failure::Invariant(
+            "an open member access with no arm".into(),
+        ));
+    }
+    Ok(found)
+}
+
+/// Test `value` against one arm's storage and, inside the arm, push it cast
+/// to that storage. Types share one rec group, so the test is nominal: a
+/// same-shape layout of another class does not pass it, and a subclass's
+/// does, whose inherited members keep their base's indices.
+fn enter(b: &mut Body<'_, '_>, value: ValueId, arm: &Arm<'_>) -> Result<(), Failure> {
+    let storage = HeapType::Concrete(arm.storage.physical);
+    b.load(value)?;
+    b.instructions(&[I::RefTestNonNull(storage), I::If(BlockType::Empty)]);
+    b.load(value)?;
+    b.instruction(&I::RefCastNonNull(storage));
+    Ok(())
+}
+
+/// A member through a slot several layouts reach: `SharedFieldGet` and
+/// `OpenFieldGet` read it. `OpenFieldSet`, which no lowering produces yet,
+/// has nothing to test it against and is refused by name until one does.
+pub(crate) fn open_member(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    kind: &OpKind,
+) -> Result<(), Failure> {
+    match kind {
+        OpKind::SharedFieldGet { value, arms, field } => {
+            arm_get(b, result, *value, arms.iter().map(|ty| (*ty, *field)))
+        }
+        OpKind::OpenFieldGet { object, arms } => arm_get(
+            b,
+            result,
+            *object,
+            arms.iter().map(|arm| (arm.ty, arm.field)),
+        ),
+        OpKind::OpenFieldSet { .. } => {
+            Err("a member stored through an open slot, which no lowering produces yet".into())
+        }
+        other => Err(Failure::Invariant(format!("open member access {other:?}"))),
+    }
+}
+
+/// A member read through a slot several layouts reach, one test per arm in
+/// the core's order and that arm's own index, as the JVM reads it. The C
+/// pointer read has no Wasm counterpart: a struct read names its type, so
+/// even arms that agree about the index are told apart first.
+fn arm_get(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    value: ValueId,
+    members: impl Iterator<Item = (ClassId, u32)>,
+) -> Result<(), Failure> {
+    let arms = arms(b, value, members)?;
+    let wanted = b.ty(result).clone();
+    let out = b.types().value_slot(&wanted)?.wasm();
+    b.instruction(&I::Block(BlockType::Result(out)));
+    for arm in &arms {
+        let member = field(arm.storage, arm.at)?;
+        enter(b, value, arm)?;
+        b.instruction(&get_instruction(
+            &member.ty,
+            arm.storage.physical,
+            field_index(arm.storage, arm.at)?,
+        )?);
+        adapt(b, &member.ty, &wanted)?;
+        b.instructions(&[I::Br(1), I::End]);
+    }
+    contract::refuse(b, NO_ARM)?;
+    b.instruction(&I::End);
+    Ok(())
+}
+
 /// A field, element or call-slot move, or a `Convert`: a scalar converts;
 /// a reference transfers.
 pub(crate) fn adapt(b: &mut Body<'_, '_>, from: &HirType, to: &HirType) -> Result<(), Failure> {

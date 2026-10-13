@@ -86,6 +86,17 @@ fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
                 record(&mut demand.referenced_objects, *ty, func, id);
             }
         }
+        // Each arm is a layout the read tests against, allocated or not.
+        OpKind::SharedFieldGet { arms, .. } => {
+            for ty in arms {
+                record(&mut demand.referenced_objects, *ty, func, id);
+            }
+        }
+        OpKind::OpenFieldGet { arms, .. } => {
+            for arm in arms {
+                record(&mut demand.referenced_objects, arm.ty, func, id);
+            }
+        }
         OpKind::Call { callee, args, .. } => call(demand, program, func, id, callee, args),
         // A reaction closure is called, with nothing, when its promise settles.
         OpKind::PromiseSubscribe { reaction, slot, .. } => {
@@ -138,9 +149,7 @@ fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
         | OpKind::CellReady { .. }
         | OpKind::ClosureStatic
         | OpKind::FieldGet { .. }
-        | OpKind::SharedFieldGet { .. }
         | OpKind::FieldView { .. }
-        | OpKind::OpenFieldGet { .. }
         | OpKind::OpenFieldSet { .. }
         | OpKind::FieldSet { .. }
         | OpKind::Await { .. }

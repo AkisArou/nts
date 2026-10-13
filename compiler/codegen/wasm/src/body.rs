@@ -514,6 +514,9 @@ impl<'b, 'p> Body<'b, 'p> {
                 field,
                 value,
             } => return crate::objects::set(self, id, *object, *field, *value),
+            kind @ (OpKind::SharedFieldGet { .. }
+            | OpKind::OpenFieldGet { .. }
+            | OpKind::OpenFieldSet { .. }) => crate::objects::open_member(self, id, kind)?,
             OpKind::InstanceOf { value, classes } => {
                 crate::objects::instance(self, *value, classes)?;
             }
@@ -580,9 +583,6 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::ConstTemplate { .. }
             | OpKind::Length(_)
             | OpKind::CellReady { .. }
-            | OpKind::SharedFieldGet { .. }
-            | OpKind::OpenFieldGet { .. }
-            | OpKind::OpenFieldSet { .. }
             | OpKind::Await { .. }
             | OpKind::Yield { .. } => {
                 return Err(format!("operation outside M1a: {:?}", op.kind).into());

@@ -462,6 +462,24 @@ fn source_conversions_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// A member read through a slot several layouts reach, shared or at each
+/// arm's own index: same-shape layouts, a subclass at its base's arm, and an
+/// arm never allocated.
+#[test]
+fn source_open_members_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/open-members");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "open-members",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 102, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// The string methods the host applies with node's own `String.prototype`,
 /// each wrapped to C's contract where a bare call differs.
 #[test]

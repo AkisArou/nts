@@ -628,6 +628,31 @@ HIR value, with no allocation (`Slot::V128`).
   - conversions (119 cases) and string-services (153);
   - about twenty rows, including strings (744 cases) and iteration (341).
 
+### Members through an open slot (3j)
+
+The core's `SharedFieldGet` (the arms agree where the member is) and
+`OpenFieldGet` (each arm has its own index) read a member through a slot
+several layouts reach. Wasm reads both the way the JVM does:
+- **Per arm**, in the core's order: test the value against the arm's storage,
+  cast it, and `struct.get` that arm's index.
+- **The test is nominal**, because every type shares one rec group. A
+  same-shape layout of another class fails it; a subclass passes at its
+  base's arm, where its inherited members keep the base's indices.
+- **No shortcut for agreeing arms.** The C pointer read has no counterpart: a
+  struct read names its type, so even arms that agree are told apart first.
+- **Every arm is planned**, allocated or not, as an `instanceof` class is.
+- **A value no arm matches** is refused by name. The core's contract makes
+  that a program the checker should have rejected.
+- **`OpenFieldSet` stays refused by name.** No lowering produces it yet, so
+  there is nothing to test it against.
+- **Tests:**
+  - the open-members fixture (102 cases): agreeing classes with a narrowed
+    field, disagreeing indices, two layouts of one shape with fields swapped,
+    a subclass at its base's arm, three arms in a loop, and an arm never
+    allocated. Reading every arm at the first arm's index fails it at run
+    time.
+  - four census rows.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
