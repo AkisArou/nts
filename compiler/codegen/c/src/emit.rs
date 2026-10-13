@@ -3658,18 +3658,24 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
 /// depends on the program.
 fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'static str]) {
     for element in descriptors {
+        // For an array, `erased` is a fact about every element rather than a
+        // table of offsets -- exactly as `references` is. An array of erased
+        // values whose descriptor said `0` would never be walked, so a string
+        // held in one would be released while something still pointed at it.
+        //
+        // And `cyclic` with it. An erased element can be any object, the array
+        // itself included (`xs.push(xs)` on an `unknown[]`), and a cycle among
+        // containers alone passes through no layout for `cyclic_layouts` to
+        // find (`Cycles::array`). The collector walks the elements already;
+        // a `cyclic` of 0 only kept it from ever starting at one, so every
+        // such cycle leaked under counting.
+        let erased = u32::from(**element == *"NtsValue");
         writer.line(
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0, {}, 0u, 0, nts_array_to_string, NULL }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL }};",
                 descriptor_name(element),
-                // For an array, `erased` is a fact about every element rather
-                // than a table of offsets -- exactly as `references` is. An
-                // array of erased values whose descriptor said `0` would never
-                // be walked, so a string held in one would be released while
-                // something still pointed at it.
-                u32::from(**element == *"NtsValue"),
                 array_element_kind(element),
             ),
         );

@@ -997,11 +997,15 @@ fn array_descriptors(out: &mut String, program: &Program) {
             // than a table of offsets, exactly as `references` is. One that
             // said zero would never be walked, and a string held in it
             // would be released while something still pointed at it.
+            //
+            // And `cyclic` with it: an erased element can be any object, the
+            // array itself included, and the C backend's `emit_descriptors`
+            // says why a cycle among containers needs the array to say so.
             let erased = u32::from(**element == HirType::Erased);
             let _ = writeln!(
                 *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
-                 i32 0, i32 0, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
+                 i32 0, i32 {erased}, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
                  ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null }}",
                 shape.size,
                 nts_codegen_common::counting::array_element(element)

@@ -12,13 +12,17 @@ const NtsDescriptor nts_node_desc_double = {
 
 /* Matches what the emitter writes for the same shape, field for field:
  *
- *     static const NtsDescriptor nts_desc_NtsValue =
- *         { NTS_KIND_ARRAY, sizeof(NtsValue), 0, 0, 0, 0, "NtsValue[]", 1, 0 };
+ *     static const NtsDescriptor nts_desc_NtsValue = {
+ *         NTS_KIND_ARRAY, sizeof(NtsValue), 0, 1, 0, 0, "NtsValue[]", 1, 0,
+ *         ...};
  *
  * Copied from a program that builds one rather than reasoned out, because the
- * two have to agree exactly and only one of them is generated. */
+ * two have to agree exactly and only one of them is generated. `cyclic` is 1
+ * because an erased element can be any object, this array included: one a
+ * caller pushes into itself is collected only if the collector may start at
+ * it (the emitter's `emit_descriptors` says why). */
 const NtsDescriptor nts_node_desc_value = {
-    NTS_KIND_ARRAY, sizeof(NtsValue), 0, 0, 0, 0, "NtsValue[]", 1, 0,
+    NTS_KIND_ARRAY, sizeof(NtsValue), 0, 1, 0, 0, "NtsValue[]", 1, 0,
     NTS_ARRAY_VALUE};
 
 /* A loaded addon can be shared by Node workers. Result-plus-status calls are
