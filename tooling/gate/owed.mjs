@@ -459,6 +459,25 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "does the lane still agree with V8 on both backends", run: "node tooling/chromium/verify.ts: the bindings current, both backends staged, built and smoked against the V8 oracle, and every example app built and checked" }],
   },
   {
+    // The node lane's harness: the runner node's own tests go through, its
+    // stand-ins for their `test/common`, and the instruments over what the
+    // modules publish. These are the lane's `tooling/` paths in
+    // tooling/lanes/lanes.json, so a file the lane takes on is settled with
+    // the rest. No gate step runs them. One that does still owes that step
+    // through the step map (build.sh owes `addons`). A gate step that starts
+    // reading one must enter that map too, or this rule hides it. What the
+    // harness says is checked where it runs: the compiled axis against its
+    // floor, and the web platform's own suite.
+    name: "the node lane's harness",
+    when: (p) => nodeHarness(p),
+    settled: true,
+    steps: [],
+    arms: [
+      { kind: "answers", asks: "what node's own tests say of each compiled module", run: "node tooling/conformance/compiled-axis-floor.mjs   # lane-local, ~16 min" },
+      { if: "it touches the web platform's harness", kind: "answers", asks: "does every web platform test file still run and pass", run: "sh tooling/conformance/web-platform/check.sh" },
+    ],
+  },
+  {
     name: "the gate's own tests",
     when: (p) => /^tooling\/gate\/([^/]+\.test\.mjs|owed\.mjs)$/.test(p),
     steps: ["tooling"],
@@ -486,6 +505,13 @@ export const RULES = [
     arms: [],
   },
 ];
+
+/** The node lane's `tooling/` paths in tooling/lanes/lanes.json: a file, or a directory and what is under it. */
+function nodeHarness(path) {
+  const owns = once("nodeHarness", () =>
+    (JSON.parse(readFileSync(join(TREE, "tooling/lanes/lanes.json"), "utf8")).lanes.node?.owns ?? []).filter((p) => p.startsWith("tooling/")));
+  return owns.some((p) => path === p || path.startsWith(p.endsWith("/") ? p : `${p}/`));
+}
 
 /** Every change, whatever it touched: the gate's first two steps. */
 const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt"], arms: [] };
@@ -894,13 +920,17 @@ export function owed(changes) {
     let gave = 0;
     let settled = false;
     let unplaced = null; // why the path owes the full gate, when it does
+    let unrun = false; // an instrument no step's scripts were found to run
     for (const rule of rulesFor(path, added)) {
       add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full });
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
-      if (rule.placedBy === "stepInputs" && covering(stepInputs(), path).size === 0) unplaced = "an instrument no step's scripts were found to run";
+      if (rule.placedBy === "stepInputs" && covering(stepInputs(), path).size === 0) unrun = true;
     }
+    // A settled rule is the claim that no gate step reaches the path, which is
+    // the question an unplaced instrument leaves open.
+    if (unrun && !settled) unplaced = "an instrument no step's scripts were found to run";
 
     // The crate graph.
     const roots = new Set();

@@ -87,6 +87,27 @@ test("the Chromium lane's own files owe only what every change owes", () => {
   }
 });
 
+test("the node lane's harness owes only what every change owes", () => {
+  // Its `tooling/` paths in tooling/lanes/lanes.json, which no gate step runs.
+  const always = [...stepsFor("tooling/gate/times.tsv")].sort();
+  for (const p of [
+    "tooling/conformance/run.mjs", "tooling/conformance/run-one.mjs", "tooling/conformance/tmpdir.mjs",
+    "tooling/conformance/common.mjs", "tooling/conformance/check.sh", "tooling/conformance/unclaimed-reviewed",
+  ]) {
+    assert.deepEqual([...stepsFor(p)].sort(), always, p);
+  }
+});
+
+test("a node harness file a gate step runs still owes that step", () => {
+  // `addons` runs build-floor.sh, which runs build.sh.
+  owes("tooling/conformance/build.sh", ["addons"]);
+});
+
+test("an instrument outside the node lane that no step runs still owes the full gate", () => {
+  // The node rule settles the lane's own paths, not tooling/conformance.
+  assert.equal(stepsFor("tooling/conformance/not-the-node-lanes.mjs").length, allSteps().length);
+});
+
 test("what a target brings owes the corpora built for it", () => {
   // examples/interop/chromium-surface reaches Chromium's DOM through
   // `target.chromium()` in its nts.config.ts; its tsconfig names neither half.
