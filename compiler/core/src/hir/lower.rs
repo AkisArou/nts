@@ -16030,15 +16030,32 @@ fn collect_native_modules(
 }
 
 fn collect_class_identities(program: &mut Program, snapshot: &SemanticSnapshot) {
+    // **A provided error class is a class.** `TypeError` has no declaring
+    // symbol -- the library declares an interface and a variable -- so it had
+    // no identity, and a backend that tests identity nominally (Wasm) refused
+    // every `instanceof TypeError`, the largest family of its declines. The
+    // hierarchy already knows which types are which provided error, the
+    // library's and the synthetic alike (`provided_error_identities`); a
+    // declared class of the same name is asked about first and stays itself.
+    let provided = provided_error_identities(snapshot);
     for layout in &program.layouts {
         let mut here: Vec<super::ClassIdentity> = Vec::new();
         for ty in &layout.types {
-            let Some(symbol) = class_symbol(snapshot, *ty) else {
-                continue;
+            let identity = match (class_symbol(snapshot, *ty), provided.get(ty)) {
+                (Some(symbol), _) => class_identity(snapshot, symbol, *ty),
+                (None, Some(index)) => super::ClassIdentity {
+                    symbol: super::provided_error_symbol(*index),
+                    name: super::PROVIDED_ERROR_NAMES[*index].to_owned(),
+                    types: vec![*ty],
+                },
+                (None, None) => continue,
             };
-            match here.iter_mut().find(|class| class.symbol == symbol) {
+            match here
+                .iter_mut()
+                .find(|class| class.symbol == identity.symbol)
+            {
                 Some(known) => known.types.push(*ty),
-                None => here.push(class_identity(snapshot, symbol, *ty)),
+                None => here.push(identity),
             }
         }
         program.classes.extend(here);

@@ -164,3 +164,25 @@ fn a_class_value_allocates_nothing() {
         .count();
     assert_eq!(allocated, 0, "a token is emitted, never allocated");
 }
+
+/// A provided error class is a class: it has an identity, so a backend that
+/// tests identity nominally can answer `instanceof TypeError` as it does for a
+/// declared class. `TypeError` has no declaring symbol -- the library declares
+/// an interface and a variable -- so before this it had none, and the Wasm lane
+/// refused every such `instanceof`. Two of them are two identities.
+#[test]
+fn a_provided_error_class_has_an_identity_of_its_own() {
+    let Some(lowered) = lowered("a-closure-calling-an-imported-function-that-throws") else {
+        return;
+    };
+    let named = |name: &str| {
+        lowered
+            .program
+            .classes
+            .iter()
+            .find(|class| class.name == name)
+            .unwrap_or_else(|| panic!("`{name}` has an identity"))
+    };
+    let (type_error, range_error) = (named("TypeError"), named("RangeError"));
+    assert_ne!(type_error.symbol, range_error.symbol);
+}

@@ -2527,6 +2527,17 @@ pub const PROVIDED_ERRORS: u32 = CONSTRUCTOR_TOKENS - 16;
 /// existed, so this is a slice.
 pub const PROVIDED_ERROR_NAMES: &[&str] = builtin::ERRORS;
 
+/// The symbol the `n`th provided class's identity carries.
+///
+/// A provided error class has no declaring symbol -- `TypeError` is an interface
+/// and a variable in the library, not a class -- so its [`ClassIdentity`] is
+/// keyed from a band above any index a snapshot's symbol table reaches. Only
+/// compared and spelled, never used to index the snapshot.
+#[must_use]
+pub fn provided_error_symbol(index: usize) -> u32 {
+    u32::MAX - 16 + u32::try_from(index).unwrap_or(0)
+}
+
 /// The synthetic type of the `n`th class this compiler provides.
 #[must_use]
 pub fn provided_error_type(index: usize) -> TypeId {
