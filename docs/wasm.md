@@ -238,15 +238,30 @@ Stage B's facts decide everything here, not shapes.
 - **An interface with fields is storage** that every layout in
   `interface_access::Plan::prefix_receivers` extends, so a positional read
   through it is valid.
-  - A receiver without a declared base takes the longest interface holding it
-    as its parent, and interfaces holding one layout chain below each other.
-  - A base shorter than the interface would need two parents, and is refused
-    by name.
+  - **Parents are forced (2b).** For each layout an interface holds, its
+    declared ancestors and the interfaces holding it are all prefixes of it,
+    so they are ordered by length, and each sits below the next shorter: an
+    interface can sit between a class and a shorter base.
+  - At one length a class sits below an interface, and a subclass below its
+    base.
+  - Refused by name: two interfaces of one length with two storages, two
+    holders that disagree about a parent, and an interface below a class whose
+    descriptor is its own vtable type.
   - A check after planning proves every planned receiver extends its
     interface.
-- **Not yet:** field families under `InterfaceAccess::Materialize`, with
-  defaults and `FieldView`s; values of an interface with non-prefix owners
-  (`other_receivers`) typed as the root. That is step 4 of the slice-2 plan.
+- **Field families (2b).** Wasm prepares with
+  `InterfaceAccess::Materialize`, as C and LLVM do.
+  - A field read or write through an interface that an owner of another field
+    order reaches is a family call: that owner's row answers, and a receiver
+    without a row (a prefix receiver) calls the family default, the
+    interface's own positional access.
+  - An interface with no such owner (`other_receivers` empty) keeps
+    positional reads on `(ref $Interface)` with no cast. One with such owners
+    holds root-typed values, and its positional access casts to its storage.
+  - A `FieldView` is the object itself, under Materialize only.
+- **Reads, exploratory, ns per iteration (two reads):** positional 1.43 against
+  node 2.18; family-dispatched 6.16 against node 2.17
+  (`tooling/wasm/bench/interface-fields`).
 - **Calls, exploratory, ns per call:** row 2.00/2.05, typed vtable 1.75/1.83,
   node 0.53/1.17 (one class / four), from `tooling/wasm/bench/interface`.
 
