@@ -15,7 +15,7 @@
 //! verifier rejects. A refusal that over-refuses is safe; one that under-refuses
 //! is a broken artifact, and only the field made the difference visible.
 
-use nts_core::hir::{Field, Layout, Program};
+use nts_core::hir::{Field, HirType, Layout, ManagedType, Program};
 use nts_semantic_schema::TypeId;
 
 /// The layout this one's class extends on the JVM: its `Layout.base`, or --
@@ -498,6 +498,62 @@ pub fn claimed_without_extending(program: &Program, layout: &Layout) -> bool {
     })
 }
 
+/// A face of fields that a class holds by shape and does not extend.
+///
+/// **The same cast as [`claimed_without_extending`], reached without an
+/// edge.** `Layout.interfaces` is written only for faces that declare methods,
+/// so a face of fields alone -- `interface Circle { kind: number; radius:
+/// number }` -- is named by nothing, and a class that fits it by shape arrives
+/// unannounced: an erased `Both` narrowed to `Circle` by `"radius" in s`
+/// compiled to `checkcast nts/gen/Circle` and threw `ClassCastException`
+/// (`outcomes/an-interface-arm-read-after-in-on-a-class-of-another-layout`).
+/// The accessor families record who holds such a face -- the owners whose rows
+/// native dispatch fills -- and this backend preserves the field access, so an
+/// owner that does not extend the face is a value the cast cannot take.
+///
+/// **A family lists who could, not who arrives**, so this is not a refusal.
+/// `examples/in-operator` narrows `Reader | Writer | Duplex` with `"duplex" in
+/// s` before it reads `s.read`: `Duplex` fits `Reader` and owns a row in its
+/// family, and no `Duplex` ever reaches that read. Refusing every unerase to
+/// `Reader` declined a function that agreed on all 377 cases, so the caller
+/// tests the value at run time instead and refuses only the one that arrives.
+#[must_use]
+pub fn held_without_extending(program: &Program, layout: &Layout) -> bool {
+    if is_interface(program, layout) {
+        return false;
+    }
+    program
+        .interface_access
+        .families
+        .iter()
+        .filter(|family| layout.types.contains(&family.face))
+        .flat_map(|family| &family.owners)
+        .filter_map(|owner| program.layout(*owner))
+        .any(|owner| {
+            !ancestry(program, owner)
+                .iter()
+                .any(|at| std::ptr::eq(*at, layout))
+        })
+}
+
+/// The face an unerase to `ty` tests its value against before the cast, if
+/// any: an object type [`held_without_extending`].
+///
+/// **One answer for the two places that ask.** `ops::test_held_cast` writes
+/// the test, and `body::puts_label` has to know the test puts a label inside
+/// its block, or a slot the cast reloads after that label is `Top` at its
+/// frame -- "Type top (current frame, locals[1])" at `undestroy`'s second
+/// load of `_readableState`, in eight modules.
+#[must_use]
+pub fn held_cast<'p>(program: &'p Program, ty: &HirType) -> Option<&'p Layout> {
+    let HirType::Managed(ManagedType::Object(id)) = ty else {
+        return None;
+    };
+    program
+        .layout(*id)
+        .filter(|layout| held_without_extending(program, layout))
+}
+
 /// The interfaces this layout declares, as binary class names.
 ///
 /// In `Layout.interfaces` order, which the IR sorts, so one input gives one
@@ -647,7 +703,6 @@ pub fn implements(program: &Program, layout: &Layout, id: TypeId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nts_core::hir::HirType;
 
     #[test]
     fn a_flattened_record_field_belongs_to_its_emitted_class() {

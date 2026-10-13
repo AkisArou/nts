@@ -3006,6 +3006,61 @@ impl Emitter<'_> {
         ))
     }
 
+    /// The test a cast to a face of fields takes when a class holds the face
+    /// by shape without extending it -- see
+    /// [`crate::hierarchy::held_without_extending`], which says why this is
+    /// asked of the value rather than refused like the cast above.
+    ///
+    /// Null, or an instance of the face's class, goes on to the `checkcast`.
+    /// Anything else is the class that would have thrown `ClassCastException`,
+    /// and is refused by name instead. The operand stack is empty at the label,
+    /// as at every label here, so the value is loaded again for each question
+    /// -- and once more by the cast after it, which is why `body::puts_label`
+    /// counts this op and its operand crosses the label.
+    fn test_held_cast(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        ty: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let Some(target) = crate::hierarchy::held_cast(self.program, ty) else {
+            return Ok(());
+        };
+        let Some(descriptor) = types::descriptor(self.shape, ty) else {
+            return Ok(());
+        };
+        let erased = self.arrives_erased(value);
+        let fits = code.label();
+        self.load(code, pool, value)?;
+        if erased {
+            code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+        }
+        code.branch_present(origin, false, fits);
+        self.load(code, pool, value)?;
+        if erased {
+            code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+        }
+        code.instance_of(origin, pool, &descriptor);
+        code.branch_zero(origin, Compare::Ne, fits);
+        code.const_string(
+            origin,
+            pool,
+            &format!(
+                "reading a value back as `{}` from a class that fits it by shape without \
+                 extending it -- `{}` carries state, so this backend emits it as a class, and \
+                 the cast would throw",
+                target.name, target.name
+            ),
+        );
+        code.invoke_static(origin, pool, RUNTIME, "refused", "(Ljava/lang/String;)V");
+        code.const_null(origin);
+        code.athrow(origin);
+        code.bind(fits);
+        Ok(())
+    }
+
     fn assignable(&self, from: ValueId, to: ValueId) -> Result<(), Diagnostic> {
         // A block parameter that merges closures of differing classes is
         // declared as the interface all of them implement, and JVMS 4.10.1.2
@@ -3499,18 +3554,26 @@ impl Emitter<'_> {
                 Ok(Placed::OnStack)
             }
             OpKind::Unerase { value } if self.unboxed.contains(value) => {
+                // Refused before the test is written, so a body this declines
+                // leaves nothing behind: the test's message reached the
+                // constant pool before the refusal discarded the code, and five
+                // modules' `Program` carried a string no instruction loaded.
+                self.refuse_impossible_cast(ty)?;
+                self.test_held_cast(code, pool, *value, ty, origin)?;
                 // The reference is already the value; the narrowing the middle
                 // end proved still has to be spelled for the verifier.
                 self.load(code, pool, *value)?;
                 self.writable_array(code, pool, ty, origin);
                 values_array(code, pool, ty, origin);
-                self.refuse_impossible_cast(ty)?;
                 if let Some(want) = types::descriptor(self.shape, ty) {
                     code.check_cast(origin, pool, &want);
                 }
                 Ok(Placed::OnStack)
             }
             OpKind::Unerase { value } => {
+                // Before the test, as in the arm above.
+                self.refuse_impossible_cast(ty)?;
+                self.test_held_cast(code, pool, *value, ty, origin)?;
                 self.load(code, pool, *value)?;
                 match ty {
                     HirType::Bool => code.invoke_static(
@@ -3541,7 +3604,6 @@ impl Emitter<'_> {
                         let descriptor = types::descriptor(self.shape, ty).ok_or_else(|| {
                             refuse(self.func, "unerasing to an unrepresentable reference")
                         })?;
-                        self.refuse_impossible_cast(ty)?;
                         // The verifier needs the narrowing spelled: the field is
                         // `Object`.
                         code.check_cast(origin, pool, &descriptor);

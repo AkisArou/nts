@@ -1,8 +1,8 @@
 {
   "run": "check",
   "category": "aborted",
-  "nts": "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Both cannot be cast to class nts.gen.Circle (nts.gen.Both and nts.gen.Circle are in unnamed module of loader 'app')",
+  "nts": "nts: refused at run time: reading a value back as `Circle` from a class that fits it by shape without extending it -- `Circle` carries state, so this backend emits it as a class, and the cast would throw",
   "node": null,
-  "measured_with": "231b21662f70ccf2",
+  "measured_with": "cdb80a1b94846a7e",
   "source": "measured"
 }

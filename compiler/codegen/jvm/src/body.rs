@@ -103,7 +103,7 @@ fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), 
 /// `colors: 80` became a bool, and written one op after, was `top` at the
 /// label's frame -- "Bad local variable type ... locals[242] is top" -- and the
 /// module did not load.
-fn puts_label(func: &Func, value: ValueId) -> bool {
+fn puts_label(program: &Program, func: &Func, value: ValueId) -> bool {
     match &func.values[value.0 as usize].kind {
         OpKind::Binary { op, .. } => comparison(*op).is_some(),
         OpKind::Unary {
@@ -159,6 +159,15 @@ fn puts_label(func: &Func, value: ValueId) -> bool {
         OpKind::SharedFieldGet { .. }
         | OpKind::OpenFieldGet { .. }
         | OpKind::OpenFieldSet { .. } => true,
+        // A cast to a face some class holds without extending is tested first
+        // (`ops::test_held_cast`), and the test joins at a label before the
+        // cast. `undestroy` read `_readableState` into a slot one op before
+        // the unerase and the cast reloaded it after the label, where this
+        // walk had left it `Top`: "Type top (current frame, locals[1])", and
+        // eight runtime modules did not verify.
+        OpKind::Unerase { .. } => {
+            crate::hierarchy::held_cast(program, &func.values[value.0 as usize].ty).is_some()
+        }
         // FieldView is a reference identity with no labels or scratch slot;
         // its emitter stops at the transfer before any downstream assignment.
         _ => false,
@@ -180,7 +189,7 @@ fn puts_label(func: &Func, value: ValueId) -> bool {
 /// is `Top` only if every read of it is in its own block with no label
 /// in between. Fusion is ignored -- a fused comparison emits no label,
 /// so counting it costs a slot its `Top` and never soundness.
-fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
+fn crossing_values(program: &Program, func: &Func) -> rustc_hash::FxHashSet<ValueId> {
     let mut defined_at: Vec<Option<(usize, usize)>> = vec![None; func.values.len()];
     for (block_at, block) in func.blocks.iter().enumerate() {
         for (index, value) in block.ops.iter().enumerate() {
@@ -226,6 +235,15 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
                     &func.values[value.0 as usize].kind,
                 ));
             }
+            // **The tested unerase reads its operand on both sides of its own
+            // label** -- twice for the test, once for the cast after `fits` --
+            // and is written only after it, so the operand crosses and the
+            // result, like a comparison's, does not.
+            if let OpKind::Unerase { value: operand } = func.values[value.0 as usize].kind
+                && puts_label(program, func, value)
+            {
+                crosses.insert(operand);
+            }
         }
         // A branch that carries block arguments emits a label of its own --
         // the true arm gets one so its copies have somewhere to live -- and
@@ -257,7 +275,7 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
             .ops
             .iter()
             .enumerate()
-            .filter(|&(_, &value)| puts_label(func, value))
+            .filter(|&(_, &value)| puts_label(program, func, value))
             .map(|(index, _)| index)
             .collect();
         let reads = block
@@ -445,7 +463,7 @@ impl<'a> Emitter<'a> {
 
         let order = block_order(func);
 
-        let crosses = crossing_values(func);
+        let crosses = crossing_values(program, func);
         let mut slots = vec![None; func.values.len()];
         let mut locals = Vec::new();
         let mut next = 0u32;
@@ -638,7 +656,7 @@ impl<'a> Emitter<'a> {
                 if Some(value) == fused {
                     return false;
                 }
-                puts_label(self.func, value)
+                puts_label(self.program, self.func, value)
             })
         })
     }
@@ -848,16 +866,23 @@ mod tests {
                 HirType::Void,
             ),
         ];
+        let func = one_block(values, Terminator::Return(None));
+        crossing_values(&Program::default(), &func).contains(&ValueId(0))
+    }
+
+    /// A function of one block holding every value, in order.
+    fn one_block(values: Vec<Op>, terminator: Terminator) -> Func {
         let origin = values[0].origin.clone();
-        let func = Func {
+        let count = u32::try_from(values.len()).unwrap_or(u32::MAX);
+        Func {
             name: "f".to_owned(),
             params: Vec::new(),
             return_type: HirType::Void,
             values,
             blocks: vec![Block {
                 params: Vec::new(),
-                ops: (0..4).map(ValueId).collect(),
-                terminator: Terminator::Return(None),
+                ops: (0..count).map(ValueId).collect(),
+                terminator,
             }],
             origin,
             exported: true,
@@ -868,8 +893,7 @@ mod tests {
             obligations: Vec::new(),
             written_return: None,
             written_return_elements: Vec::new(),
-        };
-        crossing_values(&func).contains(&ValueId(0))
+        }
     }
 
     /// `runtime/node/url`'s `module$init`: "Bad local variable type ...
@@ -881,5 +905,75 @@ mod tests {
     fn a_number_converted_to_a_bool_puts_a_label_between_a_definition_and_its_read() {
         assert!(object_crosses(OpKind::Convert(ValueId(1))));
         assert!(!object_crosses(OpKind::ConstBool(true)));
+    }
+
+    /// `undestroy`, in eight runtime modules: "Type top (current frame,
+    /// locals[1])". `s = new; c = unerase s : Circle; return c` in one block,
+    /// where `Both` holds `Circle` by shape without extending it, so the
+    /// unerase is tested before its cast and the cast reloads `s` after the
+    /// test's label. The control is the same program with no owner in
+    /// `Circle`'s family: no test, no label, and `s` may stay `Top`.
+    #[test]
+    fn a_tested_unerase_reads_its_operand_after_its_own_label() {
+        use nts_core::hir::interface_access::{Entry, Family};
+        use nts_core::hir::{Field, Layout};
+        use nts_semantic_schema::TypeId;
+        let crosses = |owners: Vec<TypeId>| {
+            let number = |name: &str| Field {
+                name: name.to_owned(),
+                ty: HirType::Float { bits: 64 },
+                written: None,
+                declared_by: None,
+                readonly: false,
+            };
+            let layout = |id, name: &str, fields: &[&str]| Layout {
+                types: vec![TypeId(id)],
+                name: name.to_owned(),
+                fields: fields.iter().map(|field| number(field)).collect(),
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            };
+            let mut program = Program {
+                layouts: vec![
+                    layout(0, "Circle", &["kind", "radius"]),
+                    layout(1, "Both", &["kind", "side", "radius"]),
+                ],
+                ..Program::default()
+            };
+            program.interface_access.families.push(Family {
+                face: TypeId(0),
+                member: "radius".to_owned(),
+                field: Some(1),
+                getter: Entry {
+                    slot: 0,
+                    declared: "Circle".to_owned(),
+                },
+                setter: None,
+                raising: Vec::new(),
+                owners,
+                pending: false,
+                stored_dispatch: false,
+            });
+            let func = one_block(
+                vec![
+                    op(
+                        OpKind::ObjectNew { frame: false },
+                        HirType::Managed(ManagedType::Object(TypeId(1))),
+                    ),
+                    op(
+                        OpKind::Unerase { value: ValueId(0) },
+                        HirType::Managed(ManagedType::Object(TypeId(0))),
+                    ),
+                ],
+                Terminator::Return(Some(ValueId(1))),
+            );
+            let crossing = crossing_values(&program, &func);
+            // Written after the label, like a comparison's result.
+            assert!(!crossing.contains(&ValueId(1)));
+            crossing.contains(&ValueId(0))
+        };
+        assert!(crosses(vec![TypeId(1)]));
+        assert!(!crosses(Vec::new()));
     }
 }
