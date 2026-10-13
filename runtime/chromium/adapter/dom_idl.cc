@@ -349,6 +349,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_media_list.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_media_query_list.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_media_query_list_event.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_media_query_list_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_memory_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_message_channel.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_message_event.h"
@@ -732,6 +733,7 @@
 #include "third_party/blink/renderer/core/css/cssom/caret_position.h"
 #include "third_party/blink/renderer/core/css/cssom/element_computed_style_map.h"
 #include "third_party/blink/renderer/core/css/media_query_list.h"
+#include "third_party/blink/renderer/core/css/media_query_list_event.h"
 #include "third_party/blink/renderer/core/css/style_sheet.h"
 #include "third_party/blink/renderer/core/css/style_sheet_list.h"
 #include "third_party/blink/renderer/core/dom/abort_controller.h"
@@ -5639,6 +5641,16 @@ blink::PerformanceMarkOptions* NtsDomToPerformanceMarkOptions(NtsDomContext& con
   auto* to = blink::PerformanceMarkOptions::Create(isolate);
   blink::DummyExceptionStateForTesting conversion;
   if (from.startTime != 0) to->setStartTime(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.startTime), conversion));
+  return to;
+}
+blink::MediaQueryListEventInit* NtsDomToMediaQueryListEventInit(NtsDomContext& context, const NtsDomMediaQueryListEventInit& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::MediaQueryListEventInit::Create(isolate);
+  if (from.bubbles) to->setBubbles(true);
+  if (from.cancelable) to->setCancelable(true);
+  if (from.composed) to->setComposed(true);
+  if (from.matches) to->setMatches(true);
+  if (from.media) to->setMedia(NtsText(context, from.media));
   return to;
 }
 blink::MutationObserverInit* NtsDomToMutationObserverInit(NtsDomContext& context, const NtsDomMutationObserverInit& from, blink::ExceptionState& exception_state) {
@@ -30248,6 +30260,36 @@ NtsDomHTMLOptionElement* nts_dom_as_HTMLOptionElement(NtsDomNode* node) {
   return HandleOf<NtsDomHTMLOptionElement>(nts_dom_is(node, NTS_DOM_HTMLOptionElement) ? WrappableOf(node) : nullptr);
 }
 
+NtsDomHTMLOptionElement* nts_dom_new_Option_4(const NtsBorrowedString* data, const NtsBorrowedString* value, bool defaultSelected, bool selected, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomHTMLOptionElement>(HTMLOptionElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), NtsText(context, data), NtsText(context, value), defaultSelected, selected, exception_state));
+}
+
+NtsDomHTMLOptionElement* nts_dom_new_Option_3(const NtsBorrowedString* data, const NtsBorrowedString* value, bool defaultSelected, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomHTMLOptionElement>(HTMLOptionElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), NtsText(context, data), NtsText(context, value), defaultSelected, false, exception_state));
+}
+
+NtsDomHTMLOptionElement* nts_dom_new_Option_2(const NtsBorrowedString* data, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomHTMLOptionElement>(HTMLOptionElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), NtsText(context, data), NtsText(context, value), false, false, exception_state));
+}
+
+NtsDomHTMLOptionElement* nts_dom_new_Option_1(const NtsBorrowedString* data, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomHTMLOptionElement>(HTMLOptionElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), NtsText(context, data), exception_state));
+}
+
+NtsDomHTMLOptionElement* nts_dom_new_Option_0(NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomHTMLOptionElement>(HTMLOptionElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), blink::AtomicString(""), exception_state));
+}
+
 bool nts_dom_HTMLOptionElement_get_disabled(NtsDomHTMLOptionElement* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::HTMLOptionElement>(self);
@@ -30692,6 +30734,26 @@ void nts_dom_HTMLTextAreaElement_setSelectionRange_2(NtsDomHTMLTextAreaElement* 
 NtsDomHTMLImageElement* nts_dom_as_HTMLImageElement(NtsDomNode* node) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomHTMLImageElement>(nts_dom_is(node, NTS_DOM_HTMLImageElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomHTMLImageElement* nts_dom_new_Image_2(double width, double height) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  const auto width_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), width), conversion);
+  const auto height_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), height), conversion);
+  return HandleOf<NtsDomHTMLImageElement>(HTMLImageElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), width_converted, height_converted));
+}
+
+NtsDomHTMLImageElement* nts_dom_new_Image_1(double width) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  const auto width_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), width), conversion);
+  return HandleOf<NtsDomHTMLImageElement>(HTMLImageElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), width_converted));
+}
+
+NtsDomHTMLImageElement* nts_dom_new_Image_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomHTMLImageElement>(HTMLImageElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext())));
 }
 
 const NtsStringView* nts_dom_HTMLImageElement_get_alt(NtsDomHTMLImageElement* self) {
@@ -36976,6 +37038,41 @@ void nts_dom_MediaQueryList_set_onchange_null(NtsDomMediaQueryList* self) {
   context.Replaced(previous);
 }
 
+NtsDomMediaQueryListEvent* nts_dom_as_MediaQueryListEvent(NtsDomEvent* event) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomMediaQueryListEvent>(nts_dom_is(event, NTS_DOM_MediaQueryListEvent) ? WrappableOf(event) : nullptr);
+}
+
+NtsDomMediaQueryListEvent* nts_dom_new_MediaQueryListEvent_2(const NtsBorrowedString* type, NtsDomMediaQueryListEventInit eventInitDict) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* eventInitDict_converted = NtsDomToMediaQueryListEventInit(context, eventInitDict, conversion);
+  return HandleOf<NtsDomMediaQueryListEvent>(MediaQueryListEvent::Create(NtsText(context, type), eventInitDict_converted));
+}
+
+NtsDomMediaQueryListEvent* nts_dom_new_MediaQueryListEvent_1(const NtsBorrowedString* type) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomMediaQueryListEvent>(MediaQueryListEvent::Create(NtsText(context, type), blink::MediaQueryListEventInit::Create(context.v8_isolate.get())));
+}
+
+const NtsStringView* nts_dom_MediaQueryListEvent_get_media(NtsDomMediaQueryListEvent* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::MediaQueryListEvent>(self);
+  return context.Lend(nts_dom::AsString(receiver->media()), false);
+}
+
+bool nts_dom_MediaQueryListEvent_get_matches(NtsDomMediaQueryListEvent* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::MediaQueryListEvent>(self);
+  return static_cast<bool>(receiver->matches());
+}
+
+bool nts_dom_MediaQueryListEvent_get_isTrusted(NtsDomMediaQueryListEvent* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::MediaQueryListEvent>(self);
+  return static_cast<bool>(receiver->isTrusted());
+}
+
 const NtsStringView* nts_dom_Location_get_href(NtsDomLocation* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Location>(self);
@@ -42268,6 +42365,16 @@ void nts_dom_HTMLVideoElement_set_playsInline(NtsDomHTMLVideoElement* self, bool
 NtsDomHTMLAudioElement* nts_dom_as_HTMLAudioElement(NtsDomNode* node) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomHTMLAudioElement>(nts_dom_is(node, NTS_DOM_HTMLAudioElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomHTMLAudioElement* nts_dom_new_Audio_1(const NtsBorrowedString* src) {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomHTMLAudioElement>(HTMLAudioElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext()), NtsText(context, src)));
+}
+
+NtsDomHTMLAudioElement* nts_dom_new_Audio_0() {
+  NtsDomContext& context = nts_dom::Current();
+  return HandleOf<NtsDomHTMLAudioElement>(HTMLAudioElement::CreateForJSConstructor(bindings::ToDocumentFromExecutionContext(*context.document->GetExecutionContext())));
 }
 
 double nts_dom_TimeRanges_get_length(NtsDomTimeRanges* self) {

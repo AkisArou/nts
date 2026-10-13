@@ -50,6 +50,7 @@
     "Window",
     "Performance",
     "MediaQueryList",
+    "MediaQueryListEvent",
     "Location",
     "History",
     "Screen",

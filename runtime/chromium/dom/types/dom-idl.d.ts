@@ -64,6 +64,7 @@ declare module "nts:dom" {
   export type ImportNodeOptions = Struct<{ selfOnly: CBool<Uint8> }, "NtsDomImportNodeOptions">;
   export type InputEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; data: StringView; dataTransfer: DataTransfer | null; inputType: StringView; isComposing: CBool<Uint8> }, "NtsDomInputEventInit">;
   export type KeyboardEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; charCode: Float64; code: StringView; isComposing: CBool<Uint8>; key: StringView; keyCode: Float64; location: Float64; repeat: CBool<Uint8> }, "NtsDomKeyboardEventInit">;
+  export type MediaQueryListEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; matches: CBool<Uint8>; media: StringView }, "NtsDomMediaQueryListEventInit">;
   export type MouseEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64 }, "NtsDomMouseEventInit">;
   export type MutationObserverInit = Struct<{ attributeOldValue: CBool<Uint8>; attributes: CBool<Uint8>; characterData: CBool<Uint8>; characterDataOldValue: CBool<Uint8>; childList: CBool<Uint8>; subtree: CBool<Uint8> }, "NtsDomMutationObserverInit">;
   export type OptionalEffectTiming = Struct<{ direction: StringView; easing: StringView; fill: StringView; iterationStart: Float64; iterations: Float64 }, "NtsDomOptionalEffectTiming">;
@@ -19781,6 +19782,36 @@ declare module "nts:dom" {
   export type HTMLOptionElement = HostClass<"NtsDomHTMLOptionElement", HTMLElement> & HTMLOptionElementMethods;
   /** @ntsSymbol nts_dom_as_HTMLOptionElement */
   export function asHTMLOptionElement(node: Node): HTMLOptionElement | null;
+  /**
+   * @ntsSymbol nts_dom_new_Option_4
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newOption(data: StringView, value: StringView, defaultSelected: boolean, selected: boolean, error?: Ptr<DOMException | null>): HTMLOptionElement;
+  /**
+   * @ntsSymbol nts_dom_new_Option_3
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newOption(data: StringView, value: StringView, defaultSelected: boolean, error?: Ptr<DOMException | null>): HTMLOptionElement;
+  /**
+   * @ntsSymbol nts_dom_new_Option_2
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newOption(data: StringView, value: StringView, error?: Ptr<DOMException | null>): HTMLOptionElement;
+  /**
+   * @ntsSymbol nts_dom_new_Option_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newOption(data: StringView, error?: Ptr<DOMException | null>): HTMLOptionElement;
+  /**
+   * @ntsSymbol nts_dom_new_Option_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newOption(error?: Ptr<DOMException | null>): HTMLOptionElement;
   export interface HTMLTextAreaElementOwnMethods {
     /**
      * @ntsSymbol nts_dom_HTMLTextAreaElement_get_autocomplete
@@ -20441,6 +20472,18 @@ declare module "nts:dom" {
   export type HTMLImageElement = HostClass<"NtsDomHTMLImageElement", HTMLElement> & HTMLImageElementMethods;
   /** @ntsSymbol nts_dom_as_HTMLImageElement */
   export function asHTMLImageElement(node: Node): HTMLImageElement | null;
+  /**
+   * @ntsSymbol nts_dom_new_Image_2
+   */
+  export function newImage(width: Float64, height: Float64): HTMLImageElement;
+  /**
+   * @ntsSymbol nts_dom_new_Image_1
+   */
+  export function newImage(width: Float64): HTMLImageElement;
+  /**
+   * @ntsSymbol nts_dom_new_Image_0
+   */
+  export function newImage(): HTMLImageElement;
   export interface HTMLCanvasElementOwnMethods {
     /**
      * @ntsSymbol nts_dom_HTMLCanvasElement_get_width
@@ -24409,6 +24452,44 @@ declare module "nts:dom" {
   export type MediaQueryList = HostClass<"NtsDomMediaQueryList", EventTarget> & MediaQueryListMethods;
   /** @ntsSymbol nts_dom_as_MediaQueryList */
   export function asMediaQueryList(target: EventTarget): MediaQueryList | null;
+  export interface MediaQueryListEventOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_MediaQueryListEvent_get_media
+     */
+    _get_media(this: MediaQueryListEvent): StringView;
+    /**
+     * @ntsGet _get_media
+     */
+    readonly media: StringView;
+    /**
+     * @ntsSymbol nts_dom_MediaQueryListEvent_get_matches
+     */
+    _get_matches(this: MediaQueryListEvent): boolean;
+    /**
+     * @ntsGet _get_matches
+     */
+    readonly matches: boolean;
+    /**
+     * @ntsSymbol nts_dom_MediaQueryListEvent_get_isTrusted
+     */
+    _get_isTrusted(this: MediaQueryListEvent): boolean;
+    /**
+     * @ntsGet _get_isTrusted
+     */
+    readonly isTrusted: boolean;
+  }
+  export type MediaQueryListEventMethods = MediaQueryListEventOwnMethods & EventMethods;
+  export type MediaQueryListEvent = HostClass<"NtsDomMediaQueryListEvent", Event> & MediaQueryListEventMethods;
+  /** @ntsSymbol nts_dom_as_MediaQueryListEvent */
+  export function asMediaQueryListEvent(event: Event): MediaQueryListEvent | null;
+  /**
+   * @ntsSymbol nts_dom_new_MediaQueryListEvent_2
+   */
+  export function newMediaQueryListEvent(type: StringView, eventInitDict: ByValue<MediaQueryListEventInit> | Fields<MediaQueryListEventInit>): MediaQueryListEvent;
+  /**
+   * @ntsSymbol nts_dom_new_MediaQueryListEvent_1
+   */
+  export function newMediaQueryListEvent(type: StringView): MediaQueryListEvent;
   export interface LocationOwnMethods {
     /**
      * @ntsSymbol nts_dom_Location_get_href
@@ -29604,6 +29685,14 @@ declare module "nts:dom" {
   export type HTMLAudioElement = HostClass<"NtsDomHTMLAudioElement", HTMLMediaElement> & HTMLAudioElementMethods;
   /** @ntsSymbol nts_dom_as_HTMLAudioElement */
   export function asHTMLAudioElement(node: Node): HTMLAudioElement | null;
+  /**
+   * @ntsSymbol nts_dom_new_Audio_1
+   */
+  export function newAudio(src: StringView): HTMLAudioElement;
+  /**
+   * @ntsSymbol nts_dom_new_Audio_0
+   */
+  export function newAudio(): HTMLAudioElement;
   export interface TimeRangesOwnMethods {
     /**
      * @ntsSymbol nts_dom_TimeRanges_get_length

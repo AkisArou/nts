@@ -1054,7 +1054,7 @@ interface MediaList {}
  */
 interface MediaQueryList {}
 /**
- * @ntsBoundBy "nts:dom" Event
+ * @ntsBoundBy "nts:dom" MediaQueryListEvent
  * @ntsIs nts_dom_is 296
  */
 interface MediaQueryListEvent {}

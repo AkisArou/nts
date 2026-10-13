@@ -1208,7 +1208,14 @@ class Generator:
         """`new URL(url, base)` as `newURL(url, base)`: each constructor
         overload at each arity, calling what V8's binding calls --
         `URL::Create(...)` -- through Blink's own generator, with the
-        constructed object as the result."""
+        constructed object as the result. And an interface's
+        [LegacyFactoryFunction]s -- `new Image(width, height)`, `new
+        Audio(src)`, `new Option(text, value)` -- as `newImage(...)`, named
+        for the factory, not the interface it makes: `new
+        HTMLImageElement()` is page script's TypeError, not an image.
+        V8's binding calls `HTMLImageElement::CreateForJSConstructor`."""
+        for group in interface.legacy_factory_function_groups:
+            self.construct(interface, group, group.identifier, is_legacy_factory_function=True)
         if not interface.constructor_groups:
             return
         group = interface.constructor_groups[0]
@@ -1218,20 +1225,28 @@ class Generator:
         if any("HTMLConstructor" in constructor.extended_attributes for constructor in group):
             self.skip(interface, "constructor", "[HTMLConstructor]: a custom element's constructor")
             return
+        self.construct(interface, group, identifier)
+
+    def construct(self, interface, group, name, is_legacy_factory_function=False):
+        """`new{name}`, one function per overload and arity of `group`."""
+        identifier = interface.identifier
+        label = "constructor" if name == identifier else f"factory {name}"
         made = Result(f"{self.handle_tag(identifier)}*", identifier, "node")
-        variants = self.variants(interface, "constructor", group, lambda constructor: made)
+        variants = self.variants(interface, label, group, lambda constructor: made)
         base = CodeGenContext(interface=interface, class_name="V8" + identifier)
         used = set()
         for constructor, params, result, truncate, filled, tail in variants:
-            symbol = self.symbol_for(f"nts_dom_new_{identifier}", self.several_arities(group), tail, params, used)
+            symbol = self.symbol_for(f"nts_dom_new_{name}", self.several_arities(group), tail, params, used)
             try:
-                context = base.make_copy(constructor_group=group, constructor=constructor)
+                context = base.make_copy(constructor_group=group, constructor=constructor,
+                                         is_legacy_factory_function=is_legacy_factory_function)
                 function = self.bind(interface, constructor, symbol, params, result, context, truncate, filled, tail)
             except Skip as why:
-                self.skip(interface, f"constructor/{len(params)}", str(why))
+                self.skip(interface, f"{label}/{len(params)}", str(why))
                 continue
             function.receiver = False
             function.constructs = interface
+            function.constructor_name = name
 
     VARIADIC_ARITIES = (0, 1, 2, 3)
 
@@ -1841,7 +1856,7 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
                 notes = [f"@ntsSymbol {made.symbol}"] + (list(THROWS) if made.throws else [])
                 params = [p.ts for p in made.params] + ([ERROR_TS] if made.throws else [])
                 types.append("  /**\n" + "".join(f"   * {note}\n" for note in notes) + "   */")
-                types.append(f"  export function new{identifier}({', '.join(params)}): {identifier};")
+                types.append(f"  export function new{made.constructor_name}({', '.join(params)}): {identifier};")
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{

@@ -63,6 +63,7 @@ typedef struct NtsDomDOMStringMap NtsDomDOMStringMap;
 typedef struct NtsDomWindow NtsDomWindow;
 typedef struct NtsDomPerformance NtsDomPerformance;
 typedef struct NtsDomMediaQueryList NtsDomMediaQueryList;
+typedef struct NtsDomMediaQueryListEvent NtsDomMediaQueryListEvent;
 typedef struct NtsDomLocation NtsDomLocation;
 typedef struct NtsDomHistory NtsDomHistory;
 typedef struct NtsDomScreen NtsDomScreen;
@@ -398,6 +399,13 @@ typedef struct NtsDomKeyboardEventInit {
   double location;
   uint8_t repeat;
 } NtsDomKeyboardEventInit;
+typedef struct NtsDomMediaQueryListEventInit {
+  uint8_t bubbles;
+  uint8_t cancelable;
+  uint8_t composed;
+  uint8_t matches;
+  const NtsBorrowedString* media;
+} NtsDomMediaQueryListEventInit;
 typedef struct NtsDomMouseEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
@@ -4367,6 +4375,11 @@ bool nts_dom_HTMLSelectElement_reportValidity(NtsDomHTMLSelectElement* self);
 void nts_dom_HTMLSelectElement_setCustomValidity(NtsDomHTMLSelectElement* self, const NtsBorrowedString* error_);
 void nts_dom_HTMLSelectElement_showPicker(NtsDomHTMLSelectElement* self, NtsDomException** error);
 NtsDomHTMLOptionElement* nts_dom_as_HTMLOptionElement(NtsDomNode* node);
+NtsDomHTMLOptionElement* nts_dom_new_Option_4(const NtsBorrowedString* data, const NtsBorrowedString* value, bool defaultSelected, bool selected, NtsDomException** error);
+NtsDomHTMLOptionElement* nts_dom_new_Option_3(const NtsBorrowedString* data, const NtsBorrowedString* value, bool defaultSelected, NtsDomException** error);
+NtsDomHTMLOptionElement* nts_dom_new_Option_2(const NtsBorrowedString* data, const NtsBorrowedString* value, NtsDomException** error);
+NtsDomHTMLOptionElement* nts_dom_new_Option_1(const NtsBorrowedString* data, NtsDomException** error);
+NtsDomHTMLOptionElement* nts_dom_new_Option_0(NtsDomException** error);
 bool nts_dom_HTMLOptionElement_get_disabled(NtsDomHTMLOptionElement* self);
 void nts_dom_HTMLOptionElement_set_disabled(NtsDomHTMLOptionElement* self, bool value);
 NtsDomHTMLElement* nts_dom_HTMLOptionElement_get_form(NtsDomHTMLOptionElement* self);
@@ -4433,6 +4446,9 @@ void nts_dom_HTMLTextAreaElement_setRangeText_3(NtsDomHTMLTextAreaElement* self,
 void nts_dom_HTMLTextAreaElement_setSelectionRange_3(NtsDomHTMLTextAreaElement* self, double start, double end, const NtsBorrowedString* direction);
 void nts_dom_HTMLTextAreaElement_setSelectionRange_2(NtsDomHTMLTextAreaElement* self, double start, double end);
 NtsDomHTMLImageElement* nts_dom_as_HTMLImageElement(NtsDomNode* node);
+NtsDomHTMLImageElement* nts_dom_new_Image_2(double width, double height);
+NtsDomHTMLImageElement* nts_dom_new_Image_1(double width);
+NtsDomHTMLImageElement* nts_dom_new_Image_0();
 const NtsStringView* nts_dom_HTMLImageElement_get_alt(NtsDomHTMLImageElement* self);
 void nts_dom_HTMLImageElement_set_alt(NtsDomHTMLImageElement* self, const NtsBorrowedString* value);
 const NtsStringView* nts_dom_HTMLImageElement_get_src(NtsDomHTMLImageElement* self);
@@ -5247,6 +5263,12 @@ struct NtsHeader* nts_dom_MediaQueryList_get_onchange(NtsDomMediaQueryList* self
 void nts_dom_MediaQueryList_set_onchange_void(NtsDomMediaQueryList* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*));
 void nts_dom_MediaQueryList_set_onchange_boolean(NtsDomMediaQueryList* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*));
 void nts_dom_MediaQueryList_set_onchange_null(NtsDomMediaQueryList* self);
+NtsDomMediaQueryListEvent* nts_dom_as_MediaQueryListEvent(NtsDomEvent* event);
+NtsDomMediaQueryListEvent* nts_dom_new_MediaQueryListEvent_2(const NtsBorrowedString* type, NtsDomMediaQueryListEventInit eventInitDict);
+NtsDomMediaQueryListEvent* nts_dom_new_MediaQueryListEvent_1(const NtsBorrowedString* type);
+const NtsStringView* nts_dom_MediaQueryListEvent_get_media(NtsDomMediaQueryListEvent* self);
+bool nts_dom_MediaQueryListEvent_get_matches(NtsDomMediaQueryListEvent* self);
+bool nts_dom_MediaQueryListEvent_get_isTrusted(NtsDomMediaQueryListEvent* self);
 const NtsStringView* nts_dom_Location_get_href(NtsDomLocation* self);
 void nts_dom_Location_set_href(NtsDomLocation* self, const NtsBorrowedString* value, NtsDomException** error);
 const NtsStringView* nts_dom_Location_get_origin(NtsDomLocation* self);
@@ -6051,6 +6073,8 @@ double nts_dom_HTMLVideoElement_get_webkitDroppedFrameCount(NtsDomHTMLVideoEleme
 bool nts_dom_HTMLVideoElement_get_playsInline(NtsDomHTMLVideoElement* self);
 void nts_dom_HTMLVideoElement_set_playsInline(NtsDomHTMLVideoElement* self, bool value);
 NtsDomHTMLAudioElement* nts_dom_as_HTMLAudioElement(NtsDomNode* node);
+NtsDomHTMLAudioElement* nts_dom_new_Audio_1(const NtsBorrowedString* src);
+NtsDomHTMLAudioElement* nts_dom_new_Audio_0();
 double nts_dom_TimeRanges_get_length(NtsDomTimeRanges* self);
 double nts_dom_TimeRanges_end(NtsDomTimeRanges* self, double index, NtsDomException** error);
 double nts_dom_TimeRanges_start(NtsDomTimeRanges* self, double index, NtsDomException** error);

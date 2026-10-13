@@ -1,7 +1,7 @@
 {
   "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 2322,
+    "bound": 2324,
     "skipped": 201,
     "absent: constant": 59,
     "absent: stringifier": 3,
@@ -2184,6 +2184,14 @@
         "addListener": "parameter type EventListener?",
         "removeListener": "parameter type EventListener?"
       },
+      "absent": {}
+    },
+    "MediaQueryListEvent": {
+      "bound": [
+        "matches",
+        "media"
+      ],
+      "skipped": {},
       "absent": {}
     },
     "Location": {

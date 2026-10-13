@@ -329,6 +329,14 @@ export function libDomTranscript(): string {
       params.has("\ufffd"));
   }
 
+  // A MediaQueryListEvent, made and read: what a `change` listener on
+  // matchMedia's list is given.
+  {
+    const event = new MediaQueryListEvent("change", { media: "(min-width: 1px)", matches: true });
+    log("mediaQueryListEvent", event.type + "|" + event.media + "|" + event.matches + "|" +
+      new MediaQueryListEvent("change").media.length);
+  }
+
   root.remove();
   return lines.join("\n");
 }
