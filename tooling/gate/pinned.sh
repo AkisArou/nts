@@ -31,15 +31,31 @@
 # small, and this week has been mostly about rules with nothing watching them.
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+# The checkout every worktree shares, wherever this script runs from: the
+# gitignored inputs linked below live there and nowhere else, and a worktree's
+# own copies (missing node_modules, a dangling submodule link) gated three steps
+# red for nothing the change did.
+root=$(dirname -- "$(git -C "$(dirname -- "$0")" rev-parse --path-format=absolute --git-common-dir)")
 commit=${1:-HEAD}
 # The rest are passed to all.sh (step names); the commit is not one.
 [ $# -gt 0 ] && shift
-sha=$(git -C "$root" rev-parse --short "$commit")
+# Resolved where the script runs, so `HEAD` is that tree's: object ids are
+# shared by every worktree, branch names and HEAD are not.
+sha=$(git -C "$(dirname -- "$0")" rev-parse --short "$commit")
 tree=${NTS_GATE_TREE:-$HOME/.cache/nts-gate/tree}
 target=${NTS_GATE_TARGET:-$HOME/.cache/nts-gate/target}
 
 mkdir -p "$(dirname "$tree")" "$target"
+
+# **Hold the tree before touching it.** Two runs against one tree each checked
+# out their commit and built over the other's; the runner's own lock comes
+# after both. The kernel releases this one when the last process holding it
+# exits, so it never goes stale, and every process the gate starts inherits it.
+exec 9>>"$tree.lock"
+if ! flock -n 9; then
+  echo "gate: $tree is in use; waiting"
+  flock 9
+fi
 
 if [ -e "$tree/.git" ]; then
   # `--force`, because a build in this tree dirties tracked files and a plain
@@ -54,6 +70,10 @@ if [ -e "$tree/.git" ]; then
   # commit while it is gated, nobody edits it, and anything in it that is not
   # the commit is something a previous gate left behind.
   git -C "$tree" checkout --detach -q --force "$sha"
+  # And what an earlier run left untracked is not part of this commit either:
+  # an untracked example directory is one more program to every step that
+  # globs examples/. The inputs linked below are re-made after this.
+  git -C "$tree" clean -fdq -e third_party -e node_modules -e '**/node_modules'
 else
   # `worktree add` writes to `.git/worktrees/`, not to the shared index, so it
   # is safe while another session is staging.
@@ -73,7 +93,13 @@ for shared in third_party/typescript-go third_party/test262 third_party/are-we-f
     # A submodule leaves an empty directory behind in the worktree; an empty
     # directory is not "not there", so remove it before linking.
     [ -d "$tree/$shared" ] && [ ! -L "$tree/$shared" ] && rmdir "$tree/$shared" 2>/dev/null || true
-    [ -e "$tree/$shared" ] || ln -s "$root/$shared" "$tree/$shared"
+    # Re-pointed every run: a link made once kept pointing wherever it first
+    # pointed after the shared checkout's copy moved.
+    # A real directory left (a checked-out submodule) is kept: `ln` would put
+    # the link inside it.
+    if [ -L "$tree/$shared" ] || [ ! -e "$tree/$shared" ]; then
+      ln -sfn "$root/$shared" "$tree/$shared"
+    fi
   fi
 done
 
@@ -148,6 +174,8 @@ for modules in node_modules runtime/node/node_modules $workspace_modules; do
 done
 
 echo "gate: $sha in $tree"
+# Set up and stop: what `lane doctor` and this script's own test ask.
+[ -n "${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
 cd "$tree"
 CARGO_TARGET_DIR="$target" cargo build --release -q
 NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} \
