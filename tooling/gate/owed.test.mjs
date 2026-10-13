@@ -71,6 +71,24 @@ test("a data file a step's tool reads beside itself owes that step", () => {
   assert.ok(stepsFor("tooling/gate/times.tsv").length < allSteps().length);
 });
 
+test("the Chromium lane's tooling owes only what every change owes", () => {
+  // As the gate's step times do: placed, and owing nothing of its own.
+  const always = [...stepsFor("tooling/gate/times.tsv")].sort();
+  assert.ok(always.includes("clippy") && !always.includes("blockers"), `every change owes ${always.join(" ")}`);
+  for (const p of ["tooling/chromium/bindgen/generate.py", "tooling/chromium/smoke.ts", "tooling/chromium/args.gn"]) {
+    assert.deepEqual([...stepsFor(p)].sort(), always, p);
+  }
+});
+
+test("what the bindings generator writes still owes its readers", () => {
+  // The rule above settles the generator, not its output: a regenerated
+  // declaration file is an input to the blockers fixtures' tsconfigs.
+  owes("runtime/chromium/dom/types/lib-dom-bindings.d.ts", ["blockers", "integrity"]);
+  owes("runtime/chromium/dom/types/dom-idl.d.ts", ["blockers", "integrity"]);
+  // And together, the generator's change owes what its output owes.
+  superset(stepsFor("tooling/chromium/bindgen/generate.py", "runtime/chromium/dom/types/dom-idl.d.ts"), ["blockers", "integrity"], "a regeneration");
+});
+
 test("documentation owes its two readers, not the gate", () => {
   owes("docs/primitives.md", ["primitives", "records"], { not: ["examples", "interop"] });
 });

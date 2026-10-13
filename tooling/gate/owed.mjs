@@ -446,6 +446,23 @@ export const RULES = [
     arms: [{ kind: "hygiene", asks: "were they taken on a healthy run", run: "NTS_GATE_RECORD_TIMES=1 on a full gate whose summary you have read" }],
   },
   {
+    // The Chromium lane's own tooling: the Blink build, its harnesses, and the
+    // bindings generator. No gate step runs any of it (a file a step does run
+    // still owes that step, through the step map). A gate step that starts
+    // reading a file here must enter the step map too, or this rule hides it:
+    // settling the path is a claim that nothing in the gate reaches it. What
+    // it produces is charged where it lands: a regenerated
+    // runtime/chromium/dom/types/*.d.ts is an input to the blockers fixtures'
+    // tsconfigs and owes `blockers` and `integrity` as its own path, and the
+    // rest is checked by the lane's verify-all (both stage builds, against the
+    // V8 oracle).
+    name: "the Chromium lane's tooling",
+    when: (p) => /^tooling\/chromium\//.test(p),
+    settled: true,
+    steps: [],
+    arms: [{ kind: "answers", asks: "does the lane still agree with V8 on both backends", run: "the Chromium lane's verify-all: program check, stage builds C and LLVM, smokes against the V8 oracle, compare.ts, standalone rows, app checks" }],
+  },
+  {
     name: "the gate's own tests",
     when: (p) => /^tooling\/gate\/([^/]+\.test\.mjs|owed\.mjs)$/.test(p),
     steps: ["tooling"],
