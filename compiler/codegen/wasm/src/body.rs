@@ -767,8 +767,23 @@ impl<'b, 'p> Body<'b, 'p> {
                 }
             }
             Callee::Native(function) => return Err(format!("native call {function:?}").into()),
-            Callee::Virtual { slot, .. } => {
-                crate::callables::call(self, result, *slot, args, crate::callables::Face::Virtual)?;
+            Callee::Virtual { slot, declared } => {
+                let through_face = args.first().is_some_and(|receiver| {
+                    matches!(self.func.value(*receiver).ty,
+                        HirType::Managed(nts_core::hir::ManagedType::Object(ty))
+                            if crate::demand::is_face(self.m.program, ty))
+                });
+                if through_face {
+                    crate::rows::call(self, result, *slot, declared, args)?;
+                } else {
+                    crate::callables::call(
+                        self,
+                        result,
+                        *slot,
+                        args,
+                        crate::callables::Face::Virtual,
+                    )?;
+                }
             }
             Callee::Closure { slot } => {
                 crate::callables::call(self, result, *slot, args, crate::callables::Face::Closure)?;

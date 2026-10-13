@@ -236,6 +236,60 @@ fn source_erased_integers_agree_with_node() {
     assert_eq!(output["cases"], 88, "{output}");
 }
 
+/// Calls through method-only interfaces read the receiver's row: unrelated
+/// classes, one class behind two interfaces, an extended interface, a void
+/// method, a string argument.
+#[test]
+fn source_interface_calls_through_rows_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/interface-rows");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "interface-rows",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 102, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
+/// An interface with fields is storage that every layout the core names as
+/// its prefix receiver extends: literals, a class with more fields, and a
+/// class through a base that holds the interface's fields.
+#[test]
+fn source_interface_fields_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/interface-fields");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "interface-fields",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 85, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
+/// A base shorter than an interface its subclass is held as a prefix of
+/// would need two parents for one struct: refused by name, the interface
+/// named, never resolved by guess. interface-fields is the control.
+#[test]
+fn a_base_shorter_than_its_interface_is_refused_by_name() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/interface-fields-shorter-base");
+    let error = nts_codegen_wasm::emit(&prepared_project(&fixture))
+        .map(|_| ())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains(
+            "class `Derived` extends `Base`, which is shorter than interface `Point` it is held as a prefix of"
+        ),
+        "{error}"
+    );
+}
+
 #[test]
 fn source_array_copying_agrees_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");

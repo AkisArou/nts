@@ -29,6 +29,18 @@ pub(crate) struct Demand {
     pub(crate) closure_calls: BTreeMap<(ClassId, u32), ObjectUse>,
     pub(crate) virtual_calls: BTreeMap<(ClassId, u32), ObjectUse>,
     pub(crate) virtual_declarations: BTreeMap<(ClassId, u32, String), ObjectUse>,
+    /// Calls whose receiver is typed as an interface, by slot, with the
+    /// declaration the call names. No one dispatch hierarchy holds such a
+    /// receiver, so these read its descriptor's row rather than a vtable.
+    pub(crate) row_calls: BTreeMap<u32, (String, ObjectUse)>,
+}
+
+/// Whether `ty` is an interface's type, as opposed to a class's or a literal's.
+pub(crate) fn is_face(program: &Program, ty: ClassId) -> bool {
+    program
+        .interface_identities
+        .iter()
+        .any(|identity| identity.types.contains(&ty))
 }
 
 fn record<K: Ord>(map: &mut BTreeMap<K, ObjectUse>, key: K, func: &Func, id: ValueId) {
@@ -43,7 +55,7 @@ pub(crate) fn build(program: &Program) -> Demand {
     for func in program.funcs.iter().filter(|f| !f.abstract_declaration) {
         for block in nts_codegen_common::block_order(func) {
             for &id in &func.blocks[block.0 as usize].ops {
-                operation(&mut demand, func, id);
+                operation(&mut demand, program, func, id);
             }
         }
     }
@@ -54,14 +66,14 @@ pub(crate) fn build(program: &Program) -> Demand {
 }
 
 /// Exhaustive, so a new operation kind is classified here before it compiles.
-fn operation(demand: &mut Demand, func: &Func, id: ValueId) {
+fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
     match &func.value(id).kind {
         OpKind::InstanceOf { classes, .. } => {
             for ty in classes {
                 record(&mut demand.referenced_objects, *ty, func, id);
             }
         }
-        OpKind::Call { callee, args, .. } => call(demand, func, id, callee, args),
+        OpKind::Call { callee, args, .. } => call(demand, program, func, id, callee, args),
         OpKind::NativeLoad { .. }
         | OpKind::NativeStore { .. }
         | OpKind::NativeLocal { .. }
@@ -120,7 +132,14 @@ fn operation(demand: &mut Demand, func: &Func, id: ValueId) {
     }
 }
 
-fn call(demand: &mut Demand, func: &Func, id: ValueId, target: &Callee, args: &[ValueId]) {
+fn call(
+    demand: &mut Demand,
+    program: &Program,
+    func: &Func,
+    id: ValueId,
+    target: &Callee,
+    args: &[ValueId],
+) {
     match target {
         Callee::External(name) => {
             if let Some(source) = crate::raising::external(name) {
@@ -136,6 +155,18 @@ fn call(demand: &mut Demand, func: &Func, id: ValueId, target: &Callee, args: &[
                 return;
             };
             if let Callee::Virtual { declared, .. } = target {
+                if is_face(program, ty) {
+                    demand.row_calls.entry(*slot).or_insert_with(|| {
+                        (
+                            declared.clone(),
+                            ObjectUse {
+                                function: func.name.clone(),
+                                origin: func.value(id).origin.clone(),
+                            },
+                        )
+                    });
+                    return;
+                }
                 record(
                     &mut demand.virtual_declarations,
                     (ty, *slot, declared.clone()),

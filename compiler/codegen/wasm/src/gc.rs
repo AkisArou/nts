@@ -82,12 +82,16 @@ pub(crate) struct RootTypes {
     pub(crate) ancestry: u32,
     pub(crate) descriptor: u32,
     pub(crate) object: u32,
+    /// The row array a descriptor holds when calls through an interface read
+    /// it: one entry per native column, a function or null.
+    pub(crate) rows: Option<u32>,
 }
 #[derive(Debug, Clone, Copy)]
 struct RootNodes {
     ancestry: NodeId,
     descriptor: NodeId,
     object: NodeId,
+    rows: Option<NodeId>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -139,7 +143,26 @@ pub(crate) struct Plan {
     /// storage extends it, so a call through any function value reads the
     /// entry here without a cast.
     pub(crate) uniform: Option<crate::callable_plan::Resolved>,
+    /// Each slot called through an interface, and the function type every
+    /// entry of its row column has: the receiver as the object root, then
+    /// the declaration's own parameters and result.
+    pub(crate) row_signatures: BTreeMap<u32, u32>,
+    /// What each row slot's entries take after the receiver and answer.
+    pub(crate) row_conventions: BTreeMap<u32, Convention>,
 }
+
+/// A row column's convention: the types its entries take after the receiver,
+/// and the type they answer. Read off the entries themselves, which the core
+/// builds to one convention per column; a call adapts to it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Convention {
+    pub(crate) params: Vec<HirType>,
+    pub(crate) result: HirType,
+}
+
+/// Where a descriptor's field holding its row sits, after identity, kind and
+/// ancestry.
+pub(crate) const ROWS_FIELD: u32 = 3;
 
 impl Plan {
     #[cfg(test)]
@@ -154,6 +177,18 @@ impl Plan {
         let callables = crate::callable_plan::Plan::build(program, &resources.closure_calls, true)?;
         let virtuals = crate::callable_plan::Plan::build(program, &resources.virtual_calls, false)?;
         let mut builder = Builder::new(program, callables, virtuals);
+        builder.rows = !resources.row_calls.is_empty();
+        builder
+            .plan_face_chains()
+            .map_err(|reason| crate::EmitError::UnsupportedSurface {
+                name: "managed type graph".into(),
+                reason,
+            })?;
+        for (&slot, (declared, use_)) in &resources.row_calls {
+            builder
+                .row_signature(slot, declared)
+                .map_err(|why| Failure::Unsupported(why).at(&use_.function, &use_.origin))?;
+        }
         // A raise carries an erased payload.
         if resources.raising {
             builder
@@ -195,6 +230,7 @@ impl Plan {
         }
         let plan = builder
             .complete()
+            .and_then(|()| builder.check_face_chains())
             .and_then(|()| builder.finish())
             .map_err(|reason| crate::EmitError::UnsupportedSurface {
                 name: "managed type graph".into(),
@@ -329,6 +365,14 @@ struct Builder<'a> {
     virtual_plan: crate::callable_plan::Plan,
     virtuals: BTreeMap<usize, CallableNodes>,
     callable_root: Option<CallableNodes>,
+    /// Whether descriptors hold rows, and each row slot's function type.
+    rows: bool,
+    row_signatures: BTreeMap<u32, NodeId>,
+    row_conventions: BTreeMap<u32, Convention>,
+    /// Each interface layout's interface parent, forced by the layouts that
+    /// hold both as prefixes: from the interface's layout to the parent's
+    /// layout and type.
+    face_chain: FxHashMap<usize, (usize, TypeId)>,
 }
 
 impl<'a> Builder<'a> {
@@ -353,6 +397,90 @@ impl<'a> Builder<'a> {
             virtual_plan,
             virtuals: BTreeMap::new(),
             callable_root: None,
+            rows: false,
+            row_signatures: BTreeMap::new(),
+            row_conventions: BTreeMap::new(),
+            face_chain: FxHashMap::default(),
+        }
+    }
+
+    /// The function type of `slot`'s row column, from the declaration a call
+    /// through an interface names: the receiver as the object root, so every
+    /// class's entry in the column has this one type.
+    fn row_signature(&mut self, slot: u32, declared: &str) -> Result<(), String> {
+        let convention = self.row_convention(slot, declared)?;
+        let object = self.root();
+        let mut params = vec![PendingSlot::Defined(object, true)];
+        for ty in &convention.params {
+            params.push(
+                self.request(ty)?
+                    .ok_or_else(|| format!("interface parameter {ty:?} has no storage"))?,
+            );
+        }
+        let result = self.request(&convention.result)?;
+        let signature = self.add(
+            format!("row<{slot}>"),
+            None,
+            true,
+            Shape::Function(params, result),
+        );
+        self.row_signatures.insert(slot, signature);
+        self.row_conventions.insert(slot, convention);
+        Ok(())
+    }
+
+    /// The convention of `slot`'s column: what the bodies the rows hold there
+    /// take and answer, which may be another declaration's than the one a
+    /// call names (one adapter can fill two interfaces' columns). Bodies that
+    /// disagree are refused by name; a column with none takes the call's own.
+    fn row_convention(&self, slot: u32, declared: &str) -> Result<Convention, String> {
+        let of = |name: &str| -> Result<Convention, String> {
+            let func = self
+                .program
+                .funcs
+                .iter()
+                .find(|f| f.name == name)
+                .ok_or_else(|| format!("unresolved interface body `{name}`"))?;
+            Ok(Convention {
+                params: func.params.iter().skip(1).map(|p| p.ty.clone()).collect(),
+                result: func.return_type.clone(),
+            })
+        };
+        let column = self
+            .program
+            .native_column(slot)
+            .ok_or_else(|| format!("interface slot {slot} has no native column"))?;
+        let mut found: Option<(String, Convention)> = None;
+        for layout in &self.program.layouts {
+            let methods = self.program.native_methods(layout)?;
+            let Some(Some(body)) = methods.get(column as usize) else {
+                continue;
+            };
+            // An interface's own row names its declaration, which no call
+            // reaches: only bodies set the column's convention.
+            let abstract_ = self
+                .program
+                .funcs
+                .iter()
+                .find(|f| &f.name == body)
+                .is_some_and(|f| f.abstract_declaration);
+            if abstract_ {
+                continue;
+            }
+            let convention = of(body)?;
+            match &found {
+                Some((first, known)) if *known != convention => {
+                    return Err(format!(
+                        "`{first}` and `{body}` fill one interface column with other types"
+                    ));
+                }
+                Some(_) => {}
+                None => found = Some(((*body).to_owned(), convention)),
+            }
+        }
+        match found {
+            Some((_, convention)) => Ok(convention),
+            None => of(declared),
         }
     }
 
@@ -377,16 +505,26 @@ impl<'a> Builder<'a> {
             true,
             Shape::Array(Field::value(PendingSlot::Scalar(Slot::I32), false)),
         );
-        let descriptor = self.add(
-            "descriptor".into(),
-            None,
-            false,
-            Shape::Struct(vec![
-                Field::value(PendingSlot::Scalar(Slot::I32), false), // semantic identity
-                Field::value(PendingSlot::Scalar(Slot::I32), false), // runtime kind
-                Field::value(PendingSlot::Defined(ancestry, true), false),
-            ]),
-        );
+        let mut header = vec![
+            Field::value(PendingSlot::Scalar(Slot::I32), false), // semantic identity
+            Field::value(PendingSlot::Scalar(Slot::I32), false), // runtime kind
+            Field::value(PendingSlot::Defined(ancestry, true), false),
+        ];
+        let rows = self.rows.then(|| {
+            self.add(
+                "rows".into(),
+                None,
+                true,
+                Shape::Array(Field::value(
+                    PendingSlot::Reference(RefType::FUNCREF),
+                    false,
+                )),
+            )
+        });
+        if let Some(rows) = rows {
+            header.push(Field::value(PendingSlot::Defined(rows, true), false));
+        }
+        let descriptor = self.add("descriptor".into(), None, false, Shape::Struct(header));
         let root = self.add(
             "object root".into(),
             None,
@@ -400,6 +538,7 @@ impl<'a> Builder<'a> {
             ancestry,
             descriptor,
             object: root,
+            rows,
         });
         root
     }
@@ -525,10 +664,35 @@ impl<'a> Builder<'a> {
             .iter()
             .find(|i| i.types.contains(&ty))
         {
-            return Err(format!(
-                "interface object storage `{}` outside M1b",
-                interface.name
-            ));
+            // An interface with no fields holds nothing a layout must agree
+            // on, so its values are any object: the root. Its calls read rows.
+            let fieldless = self
+                .program
+                .layout(ty)
+                .is_some_and(|layout| layout.fields.is_empty());
+            if fieldless {
+                // Registered, so a literal allocated at the interface and its
+                // descriptor (whose row holds the literal's methods) resolve.
+                let root = self.root();
+                if let Some(at) = self
+                    .program
+                    .layouts
+                    .iter()
+                    .position(|l| l.types.contains(&ty))
+                {
+                    self.objects.entry(at).or_insert(root);
+                }
+                return Ok(root);
+            }
+            // One with fields is storage of its own, which every layout it
+            // holds as a prefix extends. The core names those layouts; where
+            // it names none, nothing says which, and that is refused.
+            if self.program.interface_access.prefix_receivers(ty).is_none() {
+                return Err(format!(
+                    "interface `{}`, whose prefix receivers the plan does not name",
+                    interface.name
+                ));
+            }
         }
         let at = self
             .program
@@ -642,8 +806,180 @@ impl<'a> Builder<'a> {
                 })?,
             );
         }
+        let base = match (self.face_parent(at)?, self.face_chain.get(&at).copied()) {
+            (Some(parent), _) => parent,
+            (None, Some((_, parent))) => self.object(parent)?,
+            (None, None) => base,
+        };
         self.nodes[id.0].base = Some(base);
         self.nodes[id.0].shape = Shape::Struct(fields);
+        Ok(())
+    }
+
+    /// The interfaces whose prefix receivers include the layout at `at`, by
+    /// layout index, longest first.
+    fn faces_holding(&self, at: usize) -> Result<Vec<(usize, TypeId)>, String> {
+        let layout = &self.program.layouts[at];
+        let mut faces: Vec<(usize, TypeId)> = Vec::new();
+        for identity in &self.program.interface_identities {
+            for &face in &identity.types {
+                let Some(receivers) = self.program.interface_access.prefix_receivers(face) else {
+                    continue;
+                };
+                if !receivers.iter().any(|ty| layout.types.contains(ty)) {
+                    continue;
+                }
+                let face_at = self
+                    .program
+                    .layouts
+                    .iter()
+                    .position(|l| l.types.contains(&face))
+                    .ok_or_else(|| format!("interface type {face:?} has no layout"))?;
+                // An interface with no fields is the root, above every layout.
+                if self.program.layouts[face_at].fields.is_empty() {
+                    continue;
+                }
+                if face_at != at && !faces.iter().any(|(known, _)| *known == face_at) {
+                    faces.push((face_at, face));
+                }
+            }
+        }
+        faces.sort_by_key(|(face_at, _)| {
+            std::cmp::Reverse(self.program.layouts[*face_at].fields.len())
+        });
+        Ok(faces)
+    }
+
+    /// The interface parent each interface layout must have. A layout's
+    /// prefixes are ordered by length, so the interfaces holding one layout
+    /// form one chain, and each interface in it sits directly below the next
+    /// shorter one. That is a fact of the two storages, which a positional
+    /// read needs to validate, not a semantic relation. Two holding layouts
+    /// that disagree about an interface's parent are refused by name.
+    fn plan_face_chains(&mut self) -> Result<(), String> {
+        for at in 0..self.program.layouts.len() {
+            let faces = self.faces_holding(at)?;
+            for pair in faces.windows(2) {
+                let ((longer, _), (shorter, shorter_ty)) = (pair[0], pair[1]);
+                if self.program.layouts[longer].fields.len()
+                    == self.program.layouts[shorter].fields.len()
+                {
+                    continue; // refused, with names, where the layout is planned
+                }
+                match self.face_chain.insert(longer, (shorter, shorter_ty)) {
+                    Some((known, _)) if known != shorter => {
+                        return Err(format!(
+                            "interface storage `{}` is held below both `{}` and `{}`",
+                            self.program.layouts[longer].name,
+                            self.program.layouts[known].name,
+                            self.program.layouts[shorter].name
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The supertype a layout takes from the interfaces it is held as a prefix
+    /// of: the longest, where the layout declares no base. A declared base at
+    /// least as long keeps its place, and the chain check below proves the
+    /// interface is above it. A base shorter than the interface would need the
+    /// layout to have two parents, which is refused by name, as are two
+    /// interfaces of one length with two storages.
+    fn face_parent(&mut self, at: usize) -> Result<Option<NodeId>, String> {
+        let faces = self.faces_holding(at)?;
+        let Some(&(longest, face)) = faces.first() else {
+            return Ok(None);
+        };
+        let layouts = &self.program.layouts;
+        // A layout may be shared, so a refusal names the interface itself.
+        let named = |face: TypeId| {
+            self.program
+                .interface_identities
+                .iter()
+                .find(|identity| identity.types.contains(&face))
+                .map_or_else(|| format!("{face:?}"), |identity| identity.name.clone())
+        };
+        for pair in faces.windows(2) {
+            if layouts[pair[0].0].fields.len() == layouts[pair[1].0].fields.len() {
+                return Err(format!(
+                    "`{}` is held as a prefix of interfaces `{}` and `{}`, of one length and two storages",
+                    layouts[at].name,
+                    named(pair[0].1),
+                    named(pair[1].1)
+                ));
+            }
+        }
+        if let Some(base) = layouts[at].base {
+            let base_at = layouts
+                .iter()
+                .position(|l| l.types.contains(&base))
+                .ok_or_else(|| format!("base type {base:?} has no layout"))?;
+            if layouts[base_at].fields.len() < layouts[longest].fields.len() {
+                return Err(format!(
+                    "class `{}` extends `{}`, which is shorter than interface `{}` it is held as a prefix of",
+                    layouts[at].name,
+                    layouts[base_at].name,
+                    named(face)
+                ));
+            }
+            return Ok(None);
+        }
+        self.object(face).map(Some)
+    }
+
+    /// Every planned layout an interface holds as a prefix extends the
+    /// interface's storage, or the plan is refused by name: a positional read
+    /// through the interface is only valid on such storage.
+    fn check_face_chains(&self) -> Result<(), String> {
+        for identity in &self.program.interface_identities {
+            for &face in &identity.types {
+                let Some(receivers) = self.program.interface_access.prefix_receivers(face) else {
+                    continue;
+                };
+                let Some(face_at) = self
+                    .program
+                    .layouts
+                    .iter()
+                    .position(|l| l.types.contains(&face))
+                else {
+                    continue;
+                };
+                let Some(&face_node) = self.objects.get(&face_at) else {
+                    continue;
+                };
+                for receiver in receivers {
+                    let Some(at) = self
+                        .program
+                        .layouts
+                        .iter()
+                        .position(|l| l.types.contains(receiver))
+                    else {
+                        continue;
+                    };
+                    let Some(&node) = self.objects.get(&at) else {
+                        continue;
+                    };
+                    let mut current = Some(node);
+                    let mut found = false;
+                    while let Some(here) = current {
+                        if here == face_node {
+                            found = true;
+                            break;
+                        }
+                        current = self.nodes[here.0].base;
+                    }
+                    if !found {
+                        return Err(format!(
+                            "`{}` is held as a prefix of interface `{}`, but its storage does not extend the interface's",
+                            self.program.layouts[at].name, identity.name
+                        ));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -938,7 +1274,7 @@ impl<'a> Builder<'a> {
             &self.virtuals,
             &self.virtual_plan,
             indices,
-            DESCRIPTOR_HEADER,
+            DESCRIPTOR_HEADER + u32::from(self.rows),
         )
     }
 
@@ -1081,7 +1417,14 @@ impl<'a> Builder<'a> {
                 ancestry: indices[nodes.ancestry.0],
                 descriptor: indices[nodes.descriptor.0],
                 object: indices[nodes.object.0],
+                rows: nodes.rows.map(|rows| indices[rows.0]),
             }),
+            row_signatures: self
+                .row_signatures
+                .iter()
+                .map(|(&slot, node)| (slot, indices[node.0]))
+                .collect(),
+            row_conventions: self.row_conventions,
             objects,
             erased: self.erased.map(|nodes| ErasedTypes {
                 tagged: indices[nodes.tagged.0],

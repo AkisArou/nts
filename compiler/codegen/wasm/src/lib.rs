@@ -32,6 +32,7 @@ mod numeric;
 mod object_plan;
 mod objects;
 mod raising;
+mod rows;
 mod strings;
 mod support;
 mod transfer;
