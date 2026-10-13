@@ -21,51 +21,53 @@ says who owns which paths and which branch prefix each uses.
 - Report a compiler defect as a gated fixture (below), then a one-line pointer
   to the compiler lane, not as prose.
 
-## The shared checkout
+## Your tree, and the shared checkout
 
-`~/Projects/nts` is shared by every session, with one git index.
+Work in your lane's own worktree, `~/Projects/nts-lanes/<lane>`, on branches
+`<lane>/<topic>` (`docs/workflow.md`). `~/Projects/nts` is `main` and is
+landing-only: nobody edits there. It supplies the inputs no commit carries
+(`third_party/*`, `target/tsgo`), and every tree shares its object store.
 
-- Commit with `tooling/gate/commit-mine.sh -F <msg-file> -- <paths>`, never
-  `git add -A` or `git commit -a`: either sweeps a peer's uncommitted work into
-  your commit. `-m` with a multi-word message word-splits; use `-F`.
-- Never `git checkout --`, `git reset --hard` or `git stash` paths you did not
-  change; a peer's uncommitted work is there.
-- Sabotage and control experiments run in a worktree, never in the shared
-  checkout, and only after the fix is committed: restoring the "before" state
-  with `git checkout` has destroyed the fix itself.
+- `git stash` is shared by every worktree: commit work in progress as a `WIP:`
+  commit instead.
+- Sabotage and control experiments run only after the fix is committed:
+  restoring the "before" state with `git checkout` has destroyed the fix
+  itself. A control is usually a pin (`tooling/conformance/pin.ts`), not a tree.
 - Never `pkill -f` or `pgrep -f` a pattern: it matches other lanes' processes
   and your own shell. Kill exact PIDs you started.
+
+Until your lane has moved into its tree, you share the checkout's one git
+index with everyone still in it: commit with
+`tooling/gate/commit-mine.sh -F <msg-file> -- <paths>`, never `git add -A` or
+`git commit -a` (either sweeps a peer's uncommitted work into your commit),
+and never `git checkout --`, `git reset --hard` or `git stash` paths you did
+not change.
 
 ## Landing
 
 Nothing reaches `main` except a fast-forward to a commit that passed the gate
-steps it owes.
+steps it owes. `land` does the whole of it (see `docs/workflow.md`):
 
-1. `node tooling/gate/owed.mjs --since <main>`: the steps your change owes. Run
-   all of them; choosing steps by hand is how `main` went red.
-2. Before gating, run the gate's own commands, not look-alikes:
-   `cargo fmt --all`; `cargo clippy --workspace --all-targets -- -D warnings`;
-   `cargo test --no-fail-fast` over every crate you touched *and the backend
-   crates* (`-p nts-codegen-{c,llvm,jvm,wasm}`), with `NTS_TSGO=$PWD/target/tsgo`
-   set; and `clang-format --style=file --dry-run -Werror` on any `runtime/c`
-   file you edited. A core change that passes core's tests has broken a
-   backend's more than once; a test without `NTS_TSGO` skips itself and reports
-   ok; and without `--no-fail-fast` cargo stops at the first failing test binary
-   and silently skips the rest.
-   After committing, read `git show --name-status HEAD`: a new file left
-   untracked is a commit nobody can build.
-3. One gate runs at a time. Create
-   `~/.cache/nts-parallel-20261004/mainctl/GATE-RUNNING` with noclobber, naming
-   yourself and the sha; remove it when done; wait while it exists.
-4. Gate the commit, from the shared checkout (it supplies the gitignored inputs):
-   `NTS_GATE_STEPS="<owed>" sh tooling/gate/pinned.sh <sha>`. A worktree's own
-   gate gives false failures and false fixes.
-5. Compare the PASS step names with what you asked for: a log that stops early
-   is not green.
-6. Right before landing, check `main` has not moved since you gated; if it has,
-   rebase and gate again. Then `git merge --ff-only <sha>` in the shared
-   checkout, as its own step after reading the verdict, never chained after the
-   gate in one command.
+```sh
+node tooling/lanes/land.ts <commit> --dry-run   # the steps it owes
+node tooling/lanes/land.ts <commit>             # gate and land, ~30 min: run it in the background
+```
+
+Run it from your tree at that commit. It refuses a commit not on top of
+`main`, gates exactly what `owed.mjs` says the commits owe (choosing steps by
+hand is how `main` went red), one gate at a time, and lands only on a green
+summary with `main` unmoved. Never `git merge` onto `main` yourself.
+
+Before you land, run the gate's own commands, not look-alikes:
+`cargo fmt --all`; `cargo clippy --workspace --all-targets -- -D warnings`;
+`cargo test --no-fail-fast` over every crate you touched *and the backend
+crates* (`-p nts-codegen-{c,llvm,jvm,wasm}`), with `NTS_TSGO=$PWD/target/tsgo`
+set; and `clang-format --style=file --dry-run -Werror` on any `runtime/c` file
+you edited. A core change that passes core's tests has broken a backend's more
+than once; a test without `NTS_TSGO` skips itself and reports ok; and without
+`--no-fail-fast` cargo stops at the first failing test binary and silently
+skips the rest. After committing, read `git show --name-status HEAD`: a new
+file left untracked is a commit nobody can build.
 
 ## Fixtures
 

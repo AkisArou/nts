@@ -8,7 +8,7 @@ lane's own (under `runtime/<lane>/docs/`) or it should be added.
 - [`../AGENTS.md`](../AGENTS.md): the rules every contributor follows: landing, the gate, fixtures, the shared tree.
 - [`agents/lessons/`](agents/lessons): what working on nts has taught, one rule and its reason per line, by topic.
 - [`records/`](records): one file per decision, with the evidence. Claim a number with `tooling/gate/claim-record.sh`.
-- [`parallel-compiler-workflow.md`](parallel-compiler-workflow.md): how compiler work is split, validated and landed.
+- [`workflow.md`](workflow.md): how lanes work side by side, landing with `land`, and `lane status`.
 
 ## Status ledgers (where the numbers are)
 
