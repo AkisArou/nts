@@ -5142,7 +5142,7 @@ fn float_literal(number: f64) -> String {
 ///
 /// Bigint arithmetic is checked separately: its exact result must fit signed
 /// 128 bits, and overflow calls the runtime refusal rather than producing
-/// poison or a wrapped value. BigInt remains signed here because `binary`
+/// poison or a wrapped value. `BigInt` remains signed here because `binary`
 /// also uses this predicate to choose signed comparisons.
 fn wraps(ty: &HirType) -> bool {
     !matches!(ty, HirType::Int { signed: true, .. } | HirType::BigInt)
