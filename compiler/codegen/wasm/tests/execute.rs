@@ -208,6 +208,20 @@ fn source_array_sorts_agree_with_node() {
     assert_eq!(output["named_declines"], 1, "{output}");
 }
 
+/// A run-time refusal names its function and its cause.
+#[test]
+fn source_refusals_name_their_cause() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/refusal-causes");
+    let emitted = emit_project(&fixture);
+    let output = common::run(
+        "refusal-causes",
+        &emitted,
+        "tooling/wasm/check-refusal-causes.mjs",
+        &[],
+    );
+    assert_eq!(output["causes"], 4, "{output}");
+}
+
 #[test]
 fn source_array_copying_agrees_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");

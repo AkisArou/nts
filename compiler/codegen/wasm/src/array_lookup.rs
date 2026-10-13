@@ -140,9 +140,9 @@ fn inner(
     } else if !helper.indexed() && b.ty(args[1]) != &shape.element {
         return Err("lookup needle changes element storage".into());
     }
-    contract::nonnull(b, args[0])?;
+    contract::nonnull(b, args[0], "searching a null array")?;
     if !helper.indexed() && !helper.erased_needle() && !matches!(method.family, Family::Number) {
-        contract::nonnull(b, args[1])?;
+        contract::nonnull(b, args[1], "searching for a null element")?;
     }
     b.load(args[0])?;
     if helper.indexed() {
@@ -206,10 +206,14 @@ fn get(f: &mut Function, shape: &gc::Array, index: &[I<'static>]) -> Result<(), 
 }
 /// A helper consumes a validity condition and the caller's diagnostic name.
 fn require(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
-    let target = contract::decline(m)?;
-    f.instructions(&[I::I32Eqz, I::If(BlockType::Empty), I::LocalGet(2)]);
-    f.call(target);
-    f.instructions(&[I::Unreachable, I::End]);
+    f.instructions(&[I::I32Eqz, I::If(BlockType::Empty)]);
+    contract::refuse_in(
+        f,
+        m,
+        2,
+        "an index past the end, whose undefined this element type cannot hold",
+    )?;
+    f.instruction(&I::End);
     Ok(())
 }
 fn body(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {

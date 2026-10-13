@@ -161,7 +161,10 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Res
     b.instruction(&I::F64Const(f64::from(u32::MAX).into()));
     b.instruction(&I::F64Le);
     b.instruction(&I::I32And);
-    contract::require(b)?;
+    contract::require(
+        b,
+        "an array length that is not a whole number up to 2^32 - 1",
+    )?;
     let descriptor = objects::descriptor(b.m, array.descriptor)?;
     b.global_get(descriptor);
     index(b, length)?;
@@ -173,7 +176,7 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Res
 }
 pub(crate) fn length(b: &mut Body<'_, '_>, result: ValueId, array: ValueId) -> Result<(), Failure> {
     let ty = storage(b, array)?.wrapper;
-    contract::nonnull(b, array)?;
+    contract::nonnull(b, array, "the length of a null array")?;
     logical_length(b, array, ty)?;
     numeric::convert(b, &U32, &b.ty(result).clone())
 }
@@ -218,7 +221,7 @@ pub(crate) fn get(
     checked: bool,
 ) -> Result<(), Failure> {
     let shape = storage(b, array)?;
-    contract::nonnull(b, array)?;
+    contract::nonnull(b, array, "reading an element of a null array")?;
     valid_index(b, array, at, false)?;
     let absent = checked && shape.element == HirType::Erased;
     if absent {
@@ -229,7 +232,10 @@ pub(crate) fn get(
         }
         b.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
     } else {
-        contract::require(b)?;
+        contract::require(
+            b,
+            "an index past the end, whose undefined this element type cannot hold",
+        )?;
     }
     backing(b, array, shape.wrapper)?;
     index(b, at)?;
@@ -255,10 +261,13 @@ pub(crate) fn set(
         return Err(Failure::Invariant("non-void ArraySet result".into()));
     }
     let shape = storage(b, array)?;
-    contract::nonnull(b, array)?;
+    contract::nonnull(b, array, "writing an element of a null array")?;
     let append = checked && nts_core::hir::array_write_may_grow(b.func, array);
     valid_index(b, array, at, append)?;
-    contract::require(b)?;
+    contract::require(
+        b,
+        "a write past the end, which would leave holes this array cannot hold",
+    )?;
     if append {
         append_slot(b, array, at, shape.wrapper)?;
     }
@@ -283,7 +292,7 @@ fn append_slot(b: &mut Body<'_, '_>, array: ValueId, at: ValueId, ty: u32) -> Re
     logical_length(b, array, ty)?;
     b.instruction(&I::I32Const(-1));
     b.instruction(&I::I32LtU);
-    contract::require(b)?;
+    contract::require(b, "an array longer than 2^32 - 1 elements")?;
     b.load(array)?;
     logical_length(b, array, ty)?;
     b.instruction(&I::I32Const(1));

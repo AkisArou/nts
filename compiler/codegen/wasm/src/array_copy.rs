@@ -117,12 +117,12 @@ fn inner(
     } else if b.ty(result) != &shape.ty && b.ty(result) != &HirType::Void {
         return Err("copying result changes mutable array storage".into());
     }
-    contract::nonnull(b, args[0])?;
+    contract::nonnull(b, args[0], "copying from a null array")?;
     if matches!(method.helper, Helper::Concat | Helper::Extend) {
         if b.ty(args[1]) != &shape.ty {
             return Err("copying source changes mutable array storage".into());
         }
-        contract::nonnull(b, args[1])?;
+        contract::nonnull(b, args[1], "copying from a null array")?;
         arrays::logical_length(b, args[0], shape.wrapper)?;
         b.instruction(&I::F64ConvertI32U);
         arrays::logical_length(b, args[1], shape.wrapper)?;
@@ -130,7 +130,7 @@ fn inner(
         b.instruction(&I::F64Add);
         b.instruction(&I::F64Const(f64::from(u32::MAX).into()));
         b.instruction(&I::F64Le);
-        contract::require(b)?;
+        contract::require(b, "an array longer than 2^32 - 1 elements")?;
     }
     b.load(args[0])?;
     if matches!(method.helper, Helper::Slice | Helper::Splice) {

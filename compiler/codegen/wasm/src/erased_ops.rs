@@ -110,12 +110,18 @@ pub(crate) fn runtime(
             .types()
             .erased
             .ok_or_else(|| Failure::Invariant("unplanned erased projection".into()))?;
-        let cases = if helper == Helper::Number {
-            vec![HeapType::I31, HeapType::Concrete(types.number)]
+        let (cases, why) = if helper == Helper::Number {
+            (
+                vec![HeapType::I31, HeapType::Concrete(types.number)],
+                "an erased value read as a number, which it is not",
+            )
         } else {
-            vec![HeapType::Concrete(types.boolean)]
+            (
+                vec![HeapType::Concrete(types.boolean)],
+                "an erased value read as a boolean, which it is not",
+            )
         };
-        erased::projection_guard(b, args[0], &cases)?;
+        erased::projection_guard(b, args[0], &cases, why)?;
         b.load(args[0])?;
     }
     erased::call(b, helper)?;

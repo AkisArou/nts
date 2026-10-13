@@ -39,7 +39,7 @@ fn inner(b: &mut Body<'_, '_>, result: ValueId, args: &[ValueId]) -> Result<(), 
     if !strings::is_string(&shape.element) {
         return Err(format!("default sort over element {:?}", shape.element).into());
     }
-    contract::nonnull(b, *array)?;
+    contract::nonnull(b, *array, "sorting a null array")?;
     b.load(*array)?;
     strings::constant(b, &b.func.name.clone());
     let target = callee(b.m, shape)?;
@@ -213,7 +213,6 @@ fn min(f: &mut Function, width: u32, from: u32) {
     f.instructions(&[I::I32LtU, I::Select]);
 }
 fn no_null_slot(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Result<(), Failure> {
-    let decline = contract::decline(m)?;
     f.instructions(&[
         I::Block(BlockType::Empty),
         I::Loop(BlockType::Empty),
@@ -226,11 +225,14 @@ fn no_null_slot(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Res
         arrays::get_instruction(shape)?,
         I::RefIsNull,
         I::If(BlockType::Empty),
-        I::LocalGet(1),
     ]);
-    f.call(decline);
+    contract::refuse_in(
+        f,
+        m,
+        1,
+        "sorting a null slot: undefined sorts last and null as \"null\", and the slot does not say which",
+    )?;
     f.instructions(&[
-        I::Unreachable,
         I::End,
         I::LocalGet(AT),
         I::I32Const(1),

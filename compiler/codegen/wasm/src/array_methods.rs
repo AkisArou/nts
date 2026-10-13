@@ -136,7 +136,7 @@ fn call_inner(
     if !method.accepts(&shape.element) {
         return Err(format!("array helper {method:?} element {:?}", shape.element).into());
     }
-    contract::nonnull(b, array)?;
+    contract::nonnull(b, array, "a method of a null array")?;
     match method {
         Method::Element => element_value(b, result, shape, array, args[1]),
         Method::Push(_) => put(b, result, shape, args[0], args[1], End::Back),
@@ -179,7 +179,7 @@ fn put(
     length(b, shape, array)?;
     b.instruction(&I::I32Const(-1));
     b.instruction(&I::I32LtU);
-    contract::require(b)?;
+    contract::require(b, "an array longer than 2^32 - 1 elements")?;
     let grow = arrays::grow(b.m, shape)?;
     b.load(array)?;
     length(b, shape, array)?;
@@ -264,7 +264,7 @@ fn element_value(
     b.instruction(&arrays::get_instruction(shape)?);
     if present.is_some() {
         b.instruction(&I::BrOnNonNull(0));
-        contract::refuse(b)?;
+        contract::refuse(b, "a null slot, which may stand for undefined or for null")?;
         b.instruction(&I::End);
     }
     erased::erase_stack(b, &shape.element)?;
@@ -306,7 +306,10 @@ fn take(
         length(b, shape, array)?;
         b.instruction(&I::I32Const(0));
         b.instruction(&I::I32GtU);
-        contract::require(b)?;
+        contract::require(
+            b,
+            "taking from an empty number array, whose undefined a number cannot hold",
+        )?;
     } else {
         length(b, shape, array)?;
         b.instruction(&I::If(BlockType::Result(
@@ -389,7 +392,10 @@ fn truncate(
     b.instruction(&I::F64ConvertI32U);
     b.instruction(&I::F64Le);
     b.instruction(&I::I32And);
-    contract::require(b)?;
+    contract::require(
+        b,
+        "a length that is not a whole number up to the current one: growing leaves holes",
+    )?;
     backing(b, shape, array)?;
     arrays::index(b, count)?;
     objects::default(b, &shape.element)?;

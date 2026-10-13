@@ -314,7 +314,11 @@ fn erase_string(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Resu
         Absent::Undefined => Some(UNDEFINED),
     };
     if tag.is_none() {
-        contract::nonnull(body, value)?;
+        contract::nonnull(
+            body,
+            value,
+            "a null string where the type says none is absent",
+        )?;
     }
     if let Some(tag) = tag {
         body.load(value)?;
@@ -334,7 +338,11 @@ fn erase_string(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Resu
 fn erase_reference(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> Result<(), Failure> {
     match absent {
         Absent::Impossible => {
-            contract::nonnull(body, value)?;
+            contract::nonnull(
+                body,
+                value,
+                "a null reference where the type says none is absent",
+            )?;
             body.load(value)?;
         }
         Absent::Null | Absent::Undefined => {
@@ -366,7 +374,12 @@ pub(crate) fn unerase(
         HirType::Erased => {}
         HirType::Bool => {
             body.instruction(&I::Drop);
-            projection_guard(body, value, &[HeapType::Concrete(boxed.boolean)])?;
+            projection_guard(
+                body,
+                value,
+                &[HeapType::Concrete(boxed.boolean)],
+                "an erased value read as a boolean, which it is not",
+            )?;
             body.load(value)?;
             body.instruction(&I::RefCastNonNull(HeapType::Concrete(boxed.boolean)));
             body.instruction(&I::StructGet {
@@ -380,6 +393,7 @@ pub(crate) fn unerase(
                 body,
                 value,
                 &[HeapType::I31, HeapType::Concrete(boxed.number)],
+                "an erased value read as a number, which it is not",
             )?;
             body.load(value)?;
             call(body, Helper::Number)?;
@@ -403,7 +417,7 @@ pub(crate) fn unerase(
             call(body, Helper::Tag)?;
             body.instruction(&I::I32Const(STRING));
             body.instruction(&I::I32Eq);
-            contract::require(body)?;
+            contract::require(body, "an erased value read as a string, which it is not")?;
             body.load(value)?;
             string_payload(&mut body.code);
             body.instruction(&I::End);
@@ -440,7 +454,12 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
     body.instruction(&I::If(BlockType::Result(ValType::Ref(reference))));
     body.instruction(&I::RefNull(reference.heap_type));
     body.instruction(&I::Else);
-    projection_guard(body, value, &[reference.heap_type])?;
+    projection_guard(
+        body,
+        value,
+        &[reference.heap_type],
+        "an erased value read as an object of a type it is not",
+    )?;
     body.load(value)?;
     body.instruction(&I::RefCastNonNull(reference.heap_type));
     body.instruction(&I::End);
@@ -451,6 +470,7 @@ pub(crate) fn projection_guard(
     body: &mut Body<'_, '_>,
     value: ValueId,
     cases: &[HeapType],
+    why: &str,
 ) -> Result<(), Failure> {
     for (at, case) in cases.iter().enumerate() {
         body.load(value)?;
@@ -459,7 +479,7 @@ pub(crate) fn projection_guard(
             body.instruction(&I::I32Or);
         }
     }
-    contract::require(body)
+    contract::require(body, why)
 }
 
 /// The tag of an erased value. Of a typed one it is refused by name: a typed

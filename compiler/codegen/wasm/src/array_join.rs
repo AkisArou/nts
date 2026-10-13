@@ -63,8 +63,14 @@ fn inner(
     if !strings::is_string(b.ty(*separator)) {
         return Err(format!("join separator {:?}", b.ty(*separator)).into());
     }
-    contract::nonnull(b, *array)?;
-    contract::nonnull(b, *separator)?;
+    contract::nonnull(b, *array, "joining a null array")?;
+    // `undefined` joins with "," and `null` with "null", and a typed string's
+    // null does not say which it stands for.
+    contract::nonnull(
+        b,
+        *separator,
+        "a null separator, which may stand for undefined or for null",
+    )?;
     b.load(*array)?;
     b.load(*separator)?;
     let target = callee(b.m, join, shape)?;

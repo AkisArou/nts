@@ -107,8 +107,8 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
             captures.get("parseInt_", "Number.parseInt").into(),
         ),
         "inputDecline" => (
-            function(&[STRING], None),
-            "name => { throw new WasmInputDecline(name, 'internal typed value contract', 'operation in'); }".into(),
+            function(&[STRING, STRING], None),
+            "(name, reason) => { throw new WasmInputDecline(name, reason, 'operation in'); }".into(),
         ),
         "uncaughtDecline" => (
             function(&[STRING], None),

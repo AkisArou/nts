@@ -144,7 +144,7 @@ pub(crate) fn get(
 ) -> Result<(), Failure> {
     let storage = object(b, receiver)?;
     let field = field(storage, at)?;
-    contract::nonnull(b, receiver)?;
+    contract::nonnull(b, receiver, "reading a field of null")?;
     b.load(receiver)?;
     b.instruction(&get_instruction(
         &field.ty,
@@ -165,7 +165,7 @@ pub(crate) fn set(
     }
     let storage = object(b, receiver)?;
     let field = field(storage, at)?;
-    contract::nonnull(b, receiver)?;
+    contract::nonnull(b, receiver, "writing a field of null")?;
     b.load(receiver)?;
     b.load(value)?;
     adapt(b, &b.ty(value).clone(), &field.ty)?;

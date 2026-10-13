@@ -239,9 +239,11 @@ fn unfilled(m: &mut Builder<'_>, entry: &ResolvedEntry) -> Result<Func, Failure>
         entry.signature,
         |m| {
             let decline = crate::contract::decline(m)?;
-            let name = m.literal("a function value without this uniform entry");
+            let name = m.literal("a function value");
+            let why = m.literal("called through a signature it has no entry for");
             let mut f = Function::default();
             f.global_get(name);
+            f.global_get(why);
             f.call(decline);
             f.instructions(&[I::Unreachable, I::End]);
             Ok(f)
@@ -327,7 +329,7 @@ pub(crate) fn call(
         )
         .into());
     }
-    contract::nonnull(b, receiver)?;
+    contract::nonnull(b, receiver, "calling null")?;
     b.load(receiver)?;
     for (&arg, ty) in params.iter().zip(&entry.params) {
         b.load(arg)?;

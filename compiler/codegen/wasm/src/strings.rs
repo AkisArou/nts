@@ -207,7 +207,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
 }
 
 pub(crate) fn length(b: &mut Body<'_, '_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
-    crate::contract::nonnull(b, value)?;
+    crate::contract::nonnull(b, value, "the length of a null string")?;
     b.load(value)?;
     call(b, Helper::Length)?;
     numeric::convert(b, &UINT, &b.ty(result).clone())
@@ -226,7 +226,7 @@ pub(crate) fn unit(
     } else {
         Helper::Unit
     };
-    crate::contract::nonnull(b, string)?;
+    crate::contract::nonnull(b, string, "a character of a null string")?;
     if !checked {
         unit_index_contract(b, string, index)?;
     }
@@ -262,7 +262,7 @@ fn unit_index_contract(
     b.instruction(&I::F64ConvertI32U);
     b.instruction(&I::F64Lt);
     b.instruction(&I::I32And);
-    crate::contract::require(b)
+    crate::contract::require(b, "a character index outside the string")
 }
 
 pub(crate) fn binary(
@@ -276,8 +276,8 @@ pub(crate) fn binary(
     }
     let helper = binary_helper(op)?;
     if !matches!(op, BinOp::Eq | BinOp::Ne) {
-        crate::contract::nonnull(b, lhs)?;
-        crate::contract::nonnull(b, rhs)?;
+        crate::contract::nonnull(b, lhs, "a null string in a string operation")?;
+        crate::contract::nonnull(b, rhs, "a null string in a string operation")?;
     }
     b.load(lhs)?;
     b.load(rhs)?;
@@ -324,7 +324,7 @@ pub(crate) fn runtime(
     }
     for (&arg, expected) in args.iter().zip(params) {
         if expected == STRING && helper != Helper::Equal {
-            crate::contract::nonnull(b, arg)?;
+            crate::contract::nonnull(b, arg, "a null string in a string operation")?;
         }
         b.load(arg)?;
         match expected {
