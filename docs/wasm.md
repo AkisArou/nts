@@ -680,6 +680,40 @@ are read off the value, from what the core decides per layout:
   - rows: a-function-named-where-it-is-written (143 cases, none refused)
     and a-method-used-as-a-value (299).
 
+### Overrides, host exceptions, and what the checkers count (3l)
+
+- **An override declaring fewer parameters than its slot** is accepted. The
+  slot's thunk forwards exactly the target's own parameters, the prefix, and
+  JavaScript drops the rest.
+- **Every host method service is wrapped once at its import.** Whatever the
+  host's method throws (node's `Invalid string length` for
+  `"ab".repeat(2 ** 28)`) becomes a named refusal, never an exception
+  unwinding through compiled frames. The wrapper names each parameter, so a
+  call allocates nothing.
+- **`Array.isArray` of an open heterogeneous tuple** is true. A tuple is laid
+  out as a struct, so a helper tests the value's identity against the tuple
+  layouts, as C's `NTS_KIND_TUPLE` does.
+- **Bigints:**
+  - `bigint[]` elements are one `v128` each;
+  - a bigint already on the stack is boxed through a one-parameter helper,
+    since the box's tag goes first;
+  - an open Map or Set key hashes a bigint by value and compares it by
+    value, and hashes a symbol by its identity;
+  - `BigInt` of a non-finite number refuses as "not an integer";
+  - a bigint to an int truncates its low word, as C's cast does.
+- **DataView's bigint accessors** read and write one 64-bit word through the
+  same byte-order helpers as every width.
+- **`nts_no_arm_of`** refuses by name with the member, as C stops.
+- **The checkers ask node about every refusal.** In check-example and in the
+  census's check-corpus-example:
+  - a refusal where node throws too is `declined`;
+  - one where node answers is `refused`, tallied by reason, and every test
+    pins that tally.
+
+  The census now shows refusals that stood in for answers: the export
+  boundary's "parameter facts" refusals (mathops, literals), a typed read
+  past the end, and `s[i]` past the string.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
