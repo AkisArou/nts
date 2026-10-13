@@ -1238,13 +1238,9 @@ fn transfer_op(
             // the byte went `u8 -> f64 -> i32` after all -- which the
             // optimisation test asserts against, and which is the only place
             // that would have said so.
-            super::HirType::Managed(
-                super::ManagedType::Array(element) | super::ManagedType::View(element),
-            ) if matches!(**element, super::HirType::Int { .. }) => {
-                // The width *is* a range, whatever the stores say. A
-                // `Uint8Array`'s element is 0 to 255 by construction, and
-                // for a declared typed array that is the only fact there
-                // is: nothing narrowed it, so nothing recorded it.
+            super::HirType::Managed(super::ManagedType::Array(element))
+                if matches!(**element, super::HirType::Int { .. }) =>
+            {
                 let stored = context
                     .whole
                     .element_facts
@@ -1254,6 +1250,26 @@ fn transfer_op(
                 match held_by(element) {
                     Some(width) => stored.narrow(width),
                     None => stored,
+                }
+            }
+            // **A view's element knows its width and nothing else.** The
+            // width *is* a range: a `Uint8Array`'s element is 0 to 255 by
+            // construction. What was stored is not a fact about a view at
+            // all. `element_facts` joins stores into *arrays* by element
+            // type, and a view's bytes are written by other views over the
+            // same buffer, `DataView`, `set` and native code, none of which
+            // an `ArraySet` on this type records. Read from that table, an
+            // `Int32Array` borrowed the range of every `number[]` stored as
+            // `int32_t` -- `[1, 2]` anywhere in the program made its
+            // elements non-negative, and `x % 4093` of a negative element
+            // was computed unsigned
+            // (`tooling/conformance/outcomes/a-negative-int32-element-read-as-unsigned`).
+            super::HirType::Managed(super::ManagedType::View(element))
+                if matches!(**element, super::HirType::Int { .. }) =>
+            {
+                match held_by(element) {
+                    Some(width) => Facts::TOP.narrow(width),
+                    None => Facts::TOP,
                 }
             }
             _ => Facts::TOP,
