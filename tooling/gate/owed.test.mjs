@@ -262,3 +262,14 @@ test("without cargo, a path in a crate or compiled into one owes the full gate",
   assert.equal(got.toml, got.all);
   assert.ok(got.docs < got.all, "a path no crate holds is not escalated");
 });
+
+test("the landing tools owe what every change owes; the registry owes the gate's tests; the inputs owe everything", () => {
+  const always = [...stepsFor("tooling/gate/times.tsv")].sort();
+  for (const p of ["tooling/lanes/land.ts", "tooling/lanes/lane.ts"]) {
+    assert.deepEqual([...stepsFor(p)].sort(), always, p);
+  }
+  owes("tooling/lanes/lanes.json", ["tooling"]);
+  assert.ok(stepsFor("tooling/lanes/lanes.json").length < allSteps().length, "lanes.json owes the full gate");
+  // pinned.sh builds every gate tree through it.
+  assert.equal(stepsFor("tooling/lanes/inputs.sh").length, allSteps().length);
+});

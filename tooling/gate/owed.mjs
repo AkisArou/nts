@@ -464,6 +464,27 @@ export const RULES = [
     steps: ["tooling"],
     arms: [],
   },
+  {
+    // The landing and lane tools. No gate step runs `land.ts` or `lane.ts`:
+    // they run the gate rather than the other way round, so a change to one
+    // is checked by running it -- a dry run names what a range owes and
+    // touches nothing. `inputs.sh` is deliberately not here: `pinned.sh`
+    // builds every gate tree with it, so it owes the full gate, which is
+    // what a path no rule names owes.
+    name: "the landing tools",
+    when: (p) => /^tooling\/lanes\/(land|lane)\.ts$/.test(p),
+    settled: true,
+    steps: [],
+    arms: [{ kind: "answers", asks: "does a dry run still name what a range owes", run: "node tooling/lanes/land.ts HEAD --dry-run; node tooling/lanes/lane.ts status" }],
+  },
+  {
+    // Read by `land.ts` (a platform lane's `not_run`) and by the gate's own
+    // rules, so a change to it owes the gate's own tests.
+    name: "the lane registry",
+    when: (p) => p === "tooling/lanes/lanes.json",
+    steps: ["tooling"],
+    arms: [],
+  },
 ];
 
 /** Every change, whatever it touched: the gate's first two steps. */

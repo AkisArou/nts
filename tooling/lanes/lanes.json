@@ -1,5 +1,5 @@
 {
-  "//": "Who works on what. One entry per lane: the session that owns it, the paths it owns, and its branch prefix. A path belongs to the lane whose entry names it most specifically (a file beats its directory). Edit your own lane's entry; ask before editing another's. A path no entry names is shared: announce an edit to it before making it.",
+  "//": "Who works on what. One entry per lane: the session that owns it, the paths it owns, and its branch prefix. A path belongs to the lane whose entry names it most specifically (a file beats its directory). Edit your own lane's entry; ask before editing another's. A path no entry names is shared: announce an edit to it before making it. A platform lane whose programs run on a VM says, in `not_run`, which log lines mean they did not run; `land` refuses a change to its paths when the gate printed one.",
   "lanes": {
     "compiler": {
       "session": "MainClaude",
@@ -129,7 +129,8 @@
         "examples/interop/macos-*",
         "examples/interop/ios-*",
         "runtime/c/nts_cf_host.*"
-      ]
+      ],
+      "not_run": "\\bSKIP (macos|ios|interop-on-mac)"
     },
     "windows": {
       "session": "Windows",
@@ -148,7 +149,8 @@
         "examples/interop/windows-*",
         "examples/interop/winui-*",
         "runtime/c/nts_win_host.*"
-      ]
+      ],
+      "not_run": "\\bSKIP (windows|winui)-"
     },
     "node": {
       "session": "NodeJS",
@@ -163,12 +165,22 @@
         "tooling/conformance/c-tests.sh",
         "tooling/conformance/check.sh",
         "tooling/conformance/common.mjs",
+        "tooling/conformance/fixtures.mjs",
+        "tooling/conformance/hijackstdio.mjs",
         "tooling/conformance/honours-addon-out.mjs",
+        "tooling/conformance/instance-shape-diff.mjs",
         "tooling/conformance/missing-exports",
         "tooling/conformance/run-one.mjs",
         "tooling/conformance/run.mjs",
+        "tooling/conformance/same-shape-classes.mjs",
+        "tooling/conformance/shape-blindspot.mjs",
+        "tooling/conformance/shaped-surface.mjs",
         "tooling/conformance/tmpdir.mjs",
-        "tooling/conformance/unclaimed-reviewed"
+        "tooling/conformance/unclaimed-reviewed",
+        "tooling/conformance/web-platform-reach.mjs",
+        "tooling/conformance/web-platform/",
+        "tooling/conformance/wpt-url-setters.mjs",
+        "tooling/conformance/wpt-url.mjs"
       ]
     }
   }

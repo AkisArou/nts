@@ -12,10 +12,15 @@
 // 1. Waits for the landing lock (a kernel lock, so it never goes stale), and
 //    during the transition also for the old GATE-RUNNING marker, which it
 //    writes and removes like any lane.
-// 2. Requires the commit to sit on main: a commit built on an older main was
-//    measured against a program that is not the one it lands in. Rebase first.
-// 3. Asks `owed.mjs --range main..<commit>` which steps it owes: from the
-//    commits, never a working tree's state.
+// 2. Lands on main as it is now: a commit built on an older main has its
+//    commits replayed onto main (`git replay`, which touches no tree), and it
+//    is the replayed commit that is gated and landed. A landing queued behind
+//    another is therefore not refused because the one ahead of it landed -- the
+//    Wasm lane spent three gates on that. A replay that conflicts is refused:
+//    rebase by hand and land again.
+// 3. Asks `owed.mjs --range main..<commit>` which steps it owes, from the gate
+//    tree checked out at the commit being landed: the rules as that commit has
+//    them, and the commits, never a working tree's state.
 // 4. Gates exactly those, with `pinned.sh`, in the one shared gate tree.
 // 5. Reads the run's summary: green, every owed step PASS (a skip only where
 //    the gate accepts one), and the summary names this commit.
@@ -37,6 +42,9 @@ const MARKER = join(MAINCTL, "GATE-RUNNING");
 const GATE_TREE = join(MAINCTL, "gate-tree");
 const GATE_TARGET = join(MAINCTL, "gate-target");
 const ACCEPT_SKIP = ["on-device"];
+
+type Lane = { owns: string[]; owns_globs?: string[]; not_run?: string };
+const LANES: Record<string, Lane> = JSON.parse(readFileSync(new URL("./lanes.json", import.meta.url), "utf8")).lanes;
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");
@@ -71,6 +79,60 @@ function owedSteps(tree: string, range: string): string[] | "all" {
   if (line) return line[1].split(/\s+/).filter(Boolean);
   if (/^\s*sh tooling\/gate\/all\.sh\s+# the full gate/m.test(out)) return "all";
   fail(`owed.mjs named no steps for ${range}:\n${out}`);
+}
+
+/** Whether a lane's entry names a path: a directory it owns, a file, or a glob. */
+function owns(lane: Lane, path: string): boolean {
+  const literal = (text: string) => text.replace(/[.+?^$()|[\]\\{}]/g, "\\$&");
+  // `*` is one path segment's worth, and the match covers what is under it.
+  const glob = (g: string) => new RegExp(`^${g.split("*").map(literal).join("[^/]*")}(/|$)`);
+  return (
+    lane.owns.some((own) => (own.endsWith("/") ? path.startsWith(own) : path === own)) ||
+    (lane.owns_globs ?? []).some((g) => glob(g).test(path))
+  );
+}
+
+/**
+ * Lines in the gate's step logs saying a touched platform lane's programs
+ * never ran.
+ *
+ * A Windows or Apple example builds on this host and runs on a VM. With the VM
+ * down, or a toolchain or SDK missing, it prints a `SKIP` line and exits 0,
+ * so `interop` is PASS and a change to that platform lands having never run
+ * there. Each such lane says in `lanes.json` (`not_run`) which lines mean
+ * that; a range that touches its paths and finds one is not landed.
+ */
+function unrun(steps: { log?: string }[], touched: string[]): string[] {
+  const found: string[] = [];
+  for (const [name, lane] of Object.entries(LANES)) {
+    if (!lane.not_run || !touched.some((path) => owns(lane, path))) continue;
+    const pattern = new RegExp(lane.not_run);
+    for (const step of steps) {
+      if (!step.log || !existsSync(step.log)) continue;
+      for (const line of readFileSync(step.log, "utf8").split("\n")) {
+        if (pattern.test(line)) found.push(`${name}: ${line.trim()}`);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * The commit to land: `sha` itself when main is in its history, or else its
+ * commits since it left main replayed onto main. `null` when that replay
+ * conflicts. `--ref-action print` writes nothing: the replayed commits exist
+ * as objects, and become reachable when main moves to them.
+ */
+function onMain(root: string, base: string, sha: string): string | null {
+  if (spawnSync("git", ["merge-base", "--is-ancestor", base, sha], { cwd: root }).status === 0) return sha;
+  const from = git(["merge-base", base, sha], root);
+  const replay = spawnSync(
+    "git",
+    ["replay", "--onto", base, "--ref", "refs/land/replayed", "--ref-action", "print", `${from}..${sha}`],
+    { cwd: root, encoding: "utf8" },
+  );
+  const update = /^update \S+ ([0-9a-f]{40}) /m.exec(replay.stdout ?? "");
+  return replay.status === 0 && update ? update[1] : null;
 }
 
 /** Hold the landing lock for the rest of this process: re-run under flock. */
@@ -120,17 +182,36 @@ function main(): void {
 
   const base = git(["rev-parse", "main"], root);
   if (base === sha) fail(`${short} is main already`);
-  if (spawnSync("git", ["merge-base", "--is-ancestor", base, sha], { cwd: root }).status !== 0) {
-    fail(`${short} is not on main (${base.slice(0, 12)}): rebase onto main, then land`);
+  if (dryRun) {
+    // Without the lock the gate tree is someone else's: the rules are this
+    // tree's, over the commits since it left main.
+    const from = git(["merge-base", base, sha], root);
+    const owed = owedSteps(tree, `${from}..${sha}`);
+    const where = from === base ? `on ${base.slice(0, 12)}` : `(replayed onto ${base.slice(0, 12)} when it lands)`;
+    say(`${short} ${where} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
+    return;
   }
-  const owed = owedSteps(tree, `${base}..${sha}`);
-  say(`${short} on ${base.slice(0, 12)} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
-  if (dryRun) return;
+  const landing = onMain(root, base, sha);
+  if (!landing) {
+    fail(`${short} does not replay onto main (${base.slice(0, 12)}) without a conflict: rebase by hand, then land`);
+  }
+  const short_ = landing.slice(0, 12);
+  if (landing !== sha) say(`${short} replayed onto main ${base.slice(0, 12)} as ${short_}`);
+  // The gate tree is this landing's while the lock is held: check it out at
+  // the commit being landed, and ask its rules what the range owes.
+  const setup = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], {
+    cwd: root,
+    env: { ...process.env, NTS_GATE_TREE: GATE_TREE, NTS_GATE_TARGET: GATE_TARGET, NTS_GATE_SETUP_ONLY: "1" },
+    encoding: "utf8",
+  });
+  if (setup.status !== 0) fail(`could not check out ${short_} in the gate tree:\n${setup.stdout}${setup.stderr}`);
+  const owed = owedSteps(GATE_TREE, `${base}..${landing}`);
+  say(`${short_} on ${base.slice(0, 12)} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
 
-  claimMarker(short);
-  const run = join(STATE, "runs", `${short}-${Date.now()}`);
+  claimMarker(short_);
+  const run = join(STATE, "runs", `${short_}-${Date.now()}`);
   mkdirSync(run, { recursive: true });
-  status({ state: "gating", commit: sha, base, owed, run });
+  status({ state: "gating", commit: landing, base, owed, run });
   try {
     const env: Record<string, string | undefined> = { ...process.env };
     for (const k of Object.keys(env)) if (k.startsWith("NTS_GATE_")) delete env[k];
@@ -144,7 +225,7 @@ function main(): void {
       CARGO_INCREMENTAL: "0",
     });
     say(`gating; log ${join(run, "gate.log")}`);
-    const gate = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), sha], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
+    const gate = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
     writeFileSync(join(run, "gate.log"), `${gate.stdout ?? ""}${gate.stderr ?? ""}`);
 
     const summaryPath = join(run, "summary.json");
@@ -159,23 +240,30 @@ function main(): void {
       return !(v === "PASS" || (v === "SKIPPED" && ACCEPT_SKIP.includes(s)));
     });
     if (summary.verdict !== "green" || wrong.length > 0) {
-      status({ state: "red", commit: sha, base, owed, run, wrong });
+      status({ state: "red", commit: landing, base, owed, run, wrong });
       fail(`gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || summary.verdict}; see ${run}`);
     }
+    const touched = git(["diff", "--name-only", base, landing], root).split("\n").filter(Boolean);
+    const notRun = unrun(summary.steps ?? [], touched);
+    if (notRun.length > 0) {
+      status({ state: "unrun", commit: landing, base, owed, run, notRun });
+      fail(`green, but a platform this range touches never ran it:\n  ${notRun.slice(0, 5).join("\n  ")}\nbring its VM or toolchain up (the lane's vm.md) and land again`);
+    }
     const named = String(summary.identities?.commit ?? "");
-    if (named.length < 7 || !sha.startsWith(named)) fail(`the summary names ${named || "no commit"}, not ${short}`);
+    if (named.length < 7 || !landing.startsWith(named)) fail(`the summary names ${named || "no commit"}, not ${short_}`);
 
     if (git(["rev-parse", "main"], root) !== base) {
-      status({ state: "stale", commit: sha, base, owed, run });
+      status({ state: "stale", commit: landing, base, owed, run });
       fail("main moved while the gate ran: rebase onto it and land again");
     }
-    execFileSync("git", ["merge", "--ff-only", "-q", sha], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
+    execFileSync("git", ["merge", "--ff-only", "-q", landing], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
     const note = `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}`;
-    spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", note, sha], { cwd: root });
-    status({ state: "landed", commit: sha, base, owed, run });
-    say(`LANDED ${short}: main is ${short}`);
+    spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", note, landing], { cwd: root });
+    status({ state: "landed", commit: landing, base, owed, run });
+    say(`LANDED ${short_}: main is ${short_}`);
+    if (landing !== sha) say("the branch it came from: `git rebase main` drops the commits that landed");
   } finally {
-    if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short} `)) rmSync(MARKER);
+    if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short_} `)) rmSync(MARKER);
   }
 }
 
