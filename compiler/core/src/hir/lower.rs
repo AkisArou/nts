@@ -47016,6 +47016,32 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Err(self.unsupported(id, "an array length on something else"));
         };
+        // A length that may grow makes holes, and a hole in an array of
+        // `T | null` would read as `null` (`Self::null_only_element`). Emptying
+        // it makes none.
+        let emptied = matches!(
+            self.values[value.0 as usize].kind,
+            OpKind::ConstFloat(zero) if zero == 0.0
+        ) || matches!(self.values[value.0 as usize].kind, OpKind::ConstInt(0));
+        // `id` is the assignment or the `xs.length` it writes; the array is the
+        // access's object either way.
+        let access = if self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            Some(id)
+        } else {
+            self.children(id).first().copied()
+        };
+        if !emptied
+            && access
+                .and_then(|access| self.children(access).first().copied())
+                .and_then(|object| self.read_type(object))
+                .is_some_and(|ty| self.null_only_element(ty))
+        {
+            return Err(self.unsupported(
+                id,
+                "a length written to an array of `T | null`, which may leave holes that read \
+                 as `undefined` where a null slot of it reads as `null`",
+            ));
+        }
         let helper = match *element {
             ref counted if holds_counted(counted) => counted_helper(counted, Counts::SetLength),
             HirType::Erased => "nts_array_set_length_value",
@@ -54329,6 +54355,7 @@ impl<'a> FuncBuilder<'a> {
                 return self.lower_empty_array(id, ty);
             };
             let length = self.lower_expression(*count)?;
+            self.refuse_holes_that_read_as_null(id, &ty)?;
             // `new Uint8Array([1, 2, 3])` and `new Uint8Array(other)` copy from
             // what they are given rather than sizing to it. Refused, because
             // taking the argument as a length would allocate an array of
@@ -55984,9 +56011,10 @@ impl<'a> FuncBuilder<'a> {
         // takes.
         if self.erased_but_proven_an_array(id, array) {
             let origin = self.origin(id);
+            let null_slot = self.null_slot(self.children(id).first().copied(), &origin);
             return Ok(self.runtime_call(
                 "nts_array_element",
-                vec![array, index],
+                vec![array, index, null_slot],
                 HirType::Erased,
                 origin,
             ));
@@ -56096,9 +56124,10 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Erased,
                 origin.clone(),
             );
+            let null_slot = self.null_slot(self.children(id).first().copied(), &origin);
             let read = self.runtime_call(
                 "nts_array_element",
-                vec![erased, index],
+                vec![erased, index, null_slot],
                 HirType::Erased,
                 origin.clone(),
             );
@@ -60910,9 +60939,12 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Erased,
                 origin.clone(),
             );
+            // A JavaScript pattern, whose element type is inferred: no
+            // absence this could name, so a null slot stays `undefined`.
+            let null_slot = self.null_slot(None, &origin);
             return Ok(Some(self.runtime_call(
                 "nts_array_element",
-                vec![array, index],
+                vec![array, index, null_slot],
                 HirType::Erased,
                 origin,
             )));
@@ -74911,6 +74943,205 @@ impl<'a> FuncBuilder<'a> {
     /// `toSorted` is `sort` on a copy, composed from `slice` for the same
     /// reason `toReversed` is: no second place deciding what copying means, and
     /// no runtime surface for three backends to catch up with.
+    /// The tag a null reference slot of the array `array_node` names reads
+    /// as: the one absence its element type admits.
+    ///
+    /// A reference slot holds a null pointer for `null` or for `undefined` and
+    /// never for both -- an element type admitting both is stored erased -- so
+    /// the type answers what the pointer cannot, and every runtime reader that
+    /// may meet a null slot is told (`nts_array_element`,
+    /// `nts_array_sort_str`). Answering `undefined` for both read a stored
+    /// `null` wrong and sorted one as a dereference. An element with no
+    /// absence, or a type this cannot read, is `undefined`, which a slot of it
+    /// never holds.
+    fn null_slot(&mut self, array_node: Option<NodeId>, origin: &Origin) -> ValueId {
+        let only_null = array_node
+            .and_then(|node| self.read_type(node))
+            .is_some_and(|ty| self.null_only_element(ty));
+        let tag = if only_null {
+            super::tags::NULL
+        } else {
+            super::tags::UNDEFINED
+        };
+        self.push(
+            OpKind::ConstInt(i128::from(tag)),
+            HirType::Int {
+                bits: 32,
+                signed: false,
+            },
+            origin.clone(),
+        )
+    }
+
+    /// Whether `array` is an array type whose element admits `null` and not
+    /// `undefined`: the one kind whose null slot reads as `null`.
+    ///
+    /// **Which is true only while the array has no holes.** A hole reads as
+    /// `undefined` whatever the element type says -- `new Array<T | null>(3)`
+    /// holds three -- and is the same null pointer as a stored `null`. So the
+    /// two ways a compiled program makes holes are refused for exactly this
+    /// kind ([`Self::refuse_holes_that_read_as_null`]), and for every other
+    /// kind a hole and the null slot's absence agree.
+    fn null_only_element(&self, array: TypeId) -> bool {
+        let Some(TypeKind::Array(element)) = self
+            .snapshot
+            .types
+            .get(array.0 as usize)
+            .map(|record| &record.kind)
+        else {
+            return false;
+        };
+        let members = match self.snapshot.types.get(element.0 as usize).map(|r| &r.kind) {
+            Some(TypeKind::Union(members)) => members.clone(),
+            _ => vec![*element],
+        };
+        let absences: Vec<Absence> = members
+            .iter()
+            .filter_map(|member| absence_of_member(self.snapshot, *member))
+            .collect();
+        absences.contains(&Absence::Null) && !absences.contains(&Absence::Undefined)
+    }
+
+    /// `new Array(n)` where the array's element admits `null` and not
+    /// `undefined`, and nothing fills it at once: holes a read would answer
+    /// `null` for, where JavaScript answers `undefined`. Refused rather than
+    /// guessed -- see [`Self::null_only_element`]. `new Array(3).fill(null)`,
+    /// which Are We Fast Yet's Towers writes, has no hole anyone can read.
+    ///
+    /// The element is the type arguments', or else that of what the array is
+    /// given to ([`Self::hole_context`]); where neither can be read, an array of
+    /// references is refused and any other kept, since only a reference slot's
+    /// null can be taken for one.
+    fn refuse_holes_that_read_as_null(
+        &self,
+        id: NodeId,
+        allocated: &HirType,
+    ) -> Result<(), Diagnostic> {
+        let parent = self.syntactic_parent(id);
+        let filled_at_once = parent.is_some_and(|access| {
+            self.kind_of(access) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+                && self
+                    .children(access)
+                    .get(1)
+                    .and_then(|name| self.node(*name).text.as_deref())
+                    == Some("fill")
+                && self.syntactic_parent(access).is_some_and(|call| {
+                    self.kind_of(call) == Some(syntax::CALL_EXPRESSION)
+                        && self.arguments_of(call).len() == 1
+                })
+        });
+        if filled_at_once {
+            return Ok(());
+        }
+        // The element written in the type arguments, or else the type of what
+        // the array is given to: `new Array(3)` alone is `any[]`.
+        let own = self
+            .snapshot
+            .node_types
+            .get(&id)
+            .copied()
+            .filter(|ty| !self.untyped_array(*ty));
+        let context = own.or_else(|| parent.and_then(|at| self.hole_context(id, at)));
+        let holed = match context {
+            Some(ty) => self.null_only_element(ty),
+            // Nowhere this can read: refused where a hole could be read as a
+            // null, an array of references, and kept where it cannot.
+            None => matches!(
+                allocated,
+                HirType::Managed(ManagedType::Array(element)) if element.is_managed()
+            ),
+        };
+        if holed {
+            return Err(self.unsupported(
+                id,
+                "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as \
+                 `undefined` where a null slot of it reads as `null`",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Whether `ty` is an array of `any` or `unknown`: what `new Array(n)`
+    /// with no type argument is, and which says nothing of the element.
+    fn untyped_array(&self, ty: TypeId) -> bool {
+        let Some(TypeKind::Array(element)) = self
+            .snapshot
+            .types
+            .get(ty.0 as usize)
+            .map(|record| &record.kind)
+        else {
+            return false;
+        };
+        matches!(
+            self.snapshot
+                .types
+                .get(element.0 as usize)
+                .map(|record| &record.kind),
+            Some(TypeKind::Any | TypeKind::Unknown)
+        )
+    }
+
+    /// The type an untyped `new Array(n)` (`id`) is given to, from its parent
+    /// `at`: a declaration's or an assignment's target, the enclosing
+    /// function's declared result for a `return`, the selected signature's
+    /// parameter for an argument. `None` where the context is none of these.
+    fn hole_context(&self, id: NodeId, at: NodeId) -> Option<TypeId> {
+        let typed = |node: NodeId| self.snapshot.node_types.get(&node).copied();
+        match self.kind_of(at) {
+            Some(
+                syntax::VARIABLE_DECLARATION
+                | syntax::PROPERTY_DECLARATION
+                | syntax::BINARY_EXPRESSION,
+            ) => self.children(at).first().copied().and_then(typed),
+            Some(syntax::RETURN_STATEMENT) => {
+                let mut function = self.syntactic_parent(at);
+                while let Some(node) = function {
+                    if matches!(
+                        self.snapshot
+                            .types
+                            .get(typed(node)?.0 as usize)
+                            .map(|record| &record.kind),
+                        Some(TypeKind::Function(_))
+                    ) && matches!(
+                        self.kind_of(node),
+                        Some(
+                            syntax::FUNCTION_DECLARATION
+                                | syntax::FUNCTION_EXPRESSION
+                                | syntax::ARROW_FUNCTION
+                                | syntax::METHOD_DECLARATION
+                        )
+                    ) {
+                        break;
+                    }
+                    function = self.syntactic_parent(node);
+                }
+                let TypeKind::Function(signature) =
+                    self.snapshot.types.get(typed(function?)?.0 as usize)?.kind
+                else {
+                    return None;
+                };
+                Some(
+                    self.snapshot
+                        .signatures
+                        .get(signature.0 as usize)?
+                        .return_type,
+                )
+            }
+            Some(syntax::CALL_EXPRESSION) => {
+                let position = self.arguments_of(at).iter().position(|arg| *arg == id)?;
+                let signature = self.snapshot.call_targets.get(&at)?.signature;
+                let parameter = self
+                    .snapshot
+                    .signatures
+                    .get(signature.0 as usize)?
+                    .parameters
+                    .get(position)?;
+                (!parameter.rest).then_some(parameter.ty)
+            }
+            _ => None,
+        }
+    }
+
     fn lower_sort(
         &mut self,
         id: NodeId,
@@ -74954,7 +75185,13 @@ impl<'a> FuncBuilder<'a> {
         } else {
             receiver
         };
-        Ok(self.call_runtime("nts_array_sort_str", vec![target], ty.clone(), &origin))
+        let null_slot = self.null_slot(self.children(member).first().copied(), &origin);
+        Ok(self.call_runtime(
+            "nts_array_sort_str",
+            vec![target, null_slot],
+            ty.clone(),
+            &origin,
+        ))
     }
 
     /// `sort(compare)` and `toSorted(compare)`: a stable bottom-up merge sort,

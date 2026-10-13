@@ -17,6 +17,10 @@
 //
 // Found writing `nts_array_element` for the Wasm lane, which refuses a null
 // slot by name rather than guess which absence it held.
+//
+// Fixed in the lowering: `nts_array_element` is told which absence a null
+// slot holds, read off the element type (`null_slot`). The record now pins
+// the agreement.
 class Point {
   constructor(readonly x: number) {}
 }

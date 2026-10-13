@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "agrees",
+  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | refused: NTS1001 a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | refused: NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | refused: NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | refused: NTS1003 `returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet",
+  "node": null,
+  "measured_with": "0949891e49dc05e3",
+  "source": "measured"
+}

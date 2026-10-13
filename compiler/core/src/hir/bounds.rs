@@ -391,9 +391,20 @@ pub fn answer_erased_reads(func: &mut Func) -> usize {
                 } else {
                     push(func, &mut ops, OpKind::Convert(index), HirType::NUMBER)
                 };
+                // An erased element is its own tag: there is no reference slot
+                // whose null says nothing, so the absence it names is moot.
+                let null_slot = push(
+                    func,
+                    &mut ops,
+                    OpKind::ConstInt(i128::from(super::tags::UNDEFINED)),
+                    HirType::Int {
+                        bits: 32,
+                        signed: false,
+                    },
+                );
                 func.values[id.0 as usize].kind = OpKind::Call {
                     callee: Callee::External("nts_array_element".to_owned()),
-                    args: vec![erased, index],
+                    args: vec![erased, index, null_slot],
                     frame: None,
                 };
                 answered += 1;

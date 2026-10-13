@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 43 of 87 cases; the rest were not reached (a pool value in a loop bound will do that) | Error: 2 case(s) disagree between the compiled program and node",
+  "category": "agrees",
+  "nts": "checked 43 of 87 cases; the rest were not reached (a pool value in a loop bound will do that) | agreed on every case",
   "node": null,
-  "measured_with": "72a8767836514a2c",
+  "measured_with": "cbf8982bc6dc781c",
   "source": "measured"
 }

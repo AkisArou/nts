@@ -52,10 +52,11 @@ impl Build {
     }
     fn element(&mut self, erased: ValueId) -> ValueId {
         let at = self.op(OpKind::Param(0), F64);
+        let null_slot = self.op(OpKind::ConstInt(0), U32);
         self.op(
             OpKind::Call {
                 callee: Callee::External("nts_array_element".into()),
-                args: vec![erased, at],
+                args: vec![erased, at, null_slot],
                 frame: None,
             },
             HirType::Erased,

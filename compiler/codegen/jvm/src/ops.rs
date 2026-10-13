@@ -201,7 +201,8 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
         // pushed a *different* reference array anywhere, because growability is
         // decided for reference arrays together. The JVM is the only backend
         // that names its methods, so it is the only one that could say so.
-        "sort_str" => ("sortStr", format!("(L{class};)L{class};")),
+        // The tag a null slot reads as rides along, as on the fixed path.
+        "sort_str" => ("sortStr", format!("(L{class};I)L{class};")),
         "slice" | "slice_ref" => ("slice", format!("(L{class};DD)L{class};")),
         // `_value` joins the two above rather than needing a third method:
         // the class comes from what the array *holds*, and an `NtsValue` is a
@@ -333,7 +334,7 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
         // other element type by name, because the default order converts each
         // element to a string first and that conversion is the identity only
         // here.
-        "nts_array_sort_str" => (RUNTIME, "arraySortStr", format!("({array}){result}")),
+        "nts_array_sort_str" => (RUNTIME, "arraySortStr", format!("({array}I){result}")),
         "nts_array_join_str" => (
             RUNTIME,
             "arrayJoinStr",
@@ -473,7 +474,7 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         "nts_array_element" => (
             types::VALUE,
             "arrayElement",
-            "(Lnts/rt/NtsValue;D)Lnts/rt/NtsValue;",
+            "(Lnts/rt/NtsValue;DI)Lnts/rt/NtsValue;",
         ),
         "nts_is_map" => (types::VALUE, "isMap", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_set" => (types::VALUE, "isSet", "(Lnts/rt/NtsValue;)Z"),

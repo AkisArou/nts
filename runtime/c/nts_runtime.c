@@ -2264,7 +2264,7 @@ uint32_t nts_array_length(NtsValue array) {
  * what the ownership pass assumes of a runtime call it has not been told
  * otherwise about, and being wrong in that direction leaks rather than
  * double-frees. */
-NtsValue nts_array_element(NtsValue array, double index) {
+NtsValue nts_array_element(NtsValue array, double index, uint32_t null_slot) {
   if (!nts_is_array(array)) {
     /* The lowering emits this only under a proof that the value is an array,
      * so reaching it means the proof was wrong rather than the program was. */
@@ -2302,8 +2302,12 @@ NtsValue nts_array_element(NtsValue array, double index) {
   }
   case NTS_ARRAY_REFERENCE: {
     NtsHeader *element = NTS_ITEMS(object, NtsHeader *)[at];
+    /* Which absence a null slot is, the element type says and the lowering
+     * passes: a `(T | null)[]` holds a null, and answering `undefined` read
+     * it wrong wherever the read could also be past the end. */
     if (!element) {
-      return nts_value_of_undefined();
+      return null_slot == NTS_TAG_NULL ? nts_value_of_null()
+                                       : nts_value_of_undefined();
     }
     nts_retain(element);
     return nts_value_of_reference(element, nts_tag_of_reference(element));
@@ -4058,7 +4062,9 @@ NtsString *nts_array_to_string(const NtsHeader *object) {
   uint32_t total = count > 1u ? count - 1u : 0u;
   int wide = 0;
   for (uint32_t at = 0; at < count; at++) {
-    NtsValue element = nts_array_element(array, (double)at);
+    /* Either absence joins as nothing, so which one a null slot is does not
+     * matter here. */
+    NtsValue element = nts_array_element(array, (double)at, NTS_TAG_UNDEFINED);
     uint32_t tag = nts_value_tag(element);
     parts[at] = tag == NTS_TAG_UNDEFINED || tag == NTS_TAG_NULL
                     ? NTS_TEXT("")
@@ -4199,14 +4205,18 @@ void nts_array_keep_first(NtsArray *a, double count) {
 /* One merge pass over `[from, mid)` and `[mid, to)`, writing into `into`.
  *
  * `<=` on the left-hand element rather than `<`, which is the whole of what
- * makes this stable: where two compare equal the earlier one is taken first. */
+ * makes this stable: where two compare equal the earlier one is taken first.
+ * A null slot compares as `absent`, the text a `null` element sorts by. */
 static void nts_merge_strings(NtsString **items, NtsString **into,
-                              uint32_t from, uint32_t mid, uint32_t to) {
+                              uint32_t from, uint32_t mid, uint32_t to,
+                              NtsString *absent) {
   uint32_t left = from;
   uint32_t right = mid;
   for (uint32_t at = from; at < to; at++) {
     if (left < mid &&
-        (right >= to || nts_string_cmp(items[left], items[right]) <= 0)) {
+        (right >= to ||
+         nts_string_cmp(items[left] ? items[left] : absent,
+                        items[right] ? items[right] : absent) <= 0)) {
       into[at] = items[left++];
     } else {
       into[at] = items[right++];
@@ -4214,12 +4224,31 @@ static void nts_merge_strings(NtsString **items, NtsString **into,
   }
 }
 
-NtsArray *nts_array_sort_str(NtsArray *a) {
+/* The default `sort` of an array of strings, where a null slot is the absence
+ * `null_slot` names -- what the element type admits, which the lowering knows
+ * and a null pointer does not say. `undefined` goes last, in order, without
+ * being compared, as `SortCompare` is never called for it; `null` is compared
+ * as the string "null", as `String(null)` is. Both were a dereference of the
+ * null pointer here. */
+NtsArray *nts_array_sort_str(NtsArray *a, uint32_t null_slot) {
   uint32_t length = a->header.length;
+  NtsString **items = NTS_ITEMS(a, NtsString *);
+  if (null_slot != NTS_TAG_NULL) {
+    uint32_t present = 0;
+    for (uint32_t at = 0; at < length; at++) {
+      if (items[at]) {
+        items[present++] = items[at];
+      }
+    }
+    for (uint32_t at = present; at < length; at++) {
+      items[at] = NULL;
+    }
+    length = present;
+  }
   if (length < 2u) {
     return nts_array_same(a);
   }
-  NtsString **items = NTS_ITEMS(a, NtsString *);
+  NtsString *absent = null_slot == NTS_TAG_NULL ? NTS_TEXT("null") : NULL;
   /* Aborts on failure, the way every other allocation here does. Returning the
    * array unsorted would be the permissive direction: a silent wrong answer in
    * the one situation where the program cannot notice. */
@@ -4239,7 +4268,7 @@ NtsArray *nts_array_sort_str(NtsArray *a) {
     for (uint32_t at = 0; at < length; at += width * 2u) {
       uint32_t mid = at + width < length ? at + width : length;
       uint32_t end = at + width * 2u < length ? at + width * 2u : length;
-      nts_merge_strings(from, into, at, mid, end);
+      nts_merge_strings(from, into, at, mid, end, absent);
     }
     NtsString **swap = from;
     from = into;
@@ -4251,6 +4280,9 @@ NtsArray *nts_array_sort_str(NtsArray *a) {
     }
   }
   free(scratch);
+  if (absent) {
+    nts_release((NtsHeader *)absent);
+  }
   return nts_array_same(a);
 }
 

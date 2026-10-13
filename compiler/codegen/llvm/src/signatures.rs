@@ -175,7 +175,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_array_element",
         returns: "{ i32, i64 }",
-        params: &["i32", "i64", "double"],
+        params: &["i32", "i64", "double", "i32"],
         attributes: &[],
     },
     Signature {
@@ -457,7 +457,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_array_sort_str",
         returns: "ptr",
-        params: &["ptr"],
+        params: &["ptr", "i32"],
         attributes: &[],
     },
     Signature {

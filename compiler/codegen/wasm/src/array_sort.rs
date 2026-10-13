@@ -32,7 +32,9 @@ pub(crate) fn call(
     })
 }
 fn inner(b: &mut Body<'_, '_>, result: ValueId, args: &[ValueId]) -> Result<(), Failure> {
-    let [array] = args else {
+    // The second argument is the tag a null slot reads as; a null slot is
+    // still refused by name (`no_null_slot`).
+    let [array, _null_slot] = args else {
         return Err("sort arity mismatch".into());
     };
     let shape = b.types().array(b.ty(*array))?;

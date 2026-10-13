@@ -652,7 +652,15 @@ public final class NtsValue {
             + ", which the array-shape guard should have refused");
     }
 
-    public static NtsValue arrayElement(NtsValue array, double index) {
+    /**
+     * `xs[i]` on an array the lowering proved without knowing what it holds,
+     * or read where the index may name no element.
+     *
+     * <p>`nullSlot` is the tag a null reference slot reads as -- `NULL` or
+     * `UNDEFINED`, the one absence the element type admits, which the lowering
+     * knows and a Java null does not say.
+     */
+    public static NtsValue arrayElement(NtsValue array, double index, int nullSlot) {
         Object ref = array == null ? null : array.ref;
         if (ref == null) {
             return UNDEFINED_VALUE;
@@ -675,7 +683,7 @@ public final class NtsValue {
         }
         if (ref instanceof NtsArrayL) {
             NtsArrayL xs = (NtsArrayL) ref;
-            return at < (int) NtsArrayL.length(xs) ? held(xs.items[at]) : UNDEFINED_VALUE;
+            return at < (int) NtsArrayL.length(xs) ? held(xs.items[at], nullSlot) : UNDEFINED_VALUE;
         }
         if (ref instanceof double[]) {
             double[] xs = (double[]) ref;
@@ -695,7 +703,7 @@ public final class NtsValue {
         }
         if (ref instanceof Object[]) {
             Object[] xs = (Object[]) ref;
-            return at < xs.length ? held(xs[at]) : UNDEFINED_VALUE;
+            return at < xs.length ? held(xs[at], nullSlot) : UNDEFINED_VALUE;
         }
         throw new NtsRefusal(
             "an indexed read of an erased array held as "
@@ -710,9 +718,9 @@ public final class NtsValue {
      * answer `"object"` for a string read out of an erased array. The three
      * cases are separated here rather than at each caller so they cannot drift.
      */
-    private static NtsValue held(Object element) {
+    private static NtsValue held(Object element, int nullSlot) {
         if (element == null) {
-            return UNDEFINED_VALUE;
+            return nullSlot == NULL ? NULL_VALUE : UNDEFINED_VALUE;
         }
         if (element instanceof NtsValue) {
             return (NtsValue) element;

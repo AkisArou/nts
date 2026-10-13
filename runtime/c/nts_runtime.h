@@ -2859,7 +2859,7 @@ NtsArray *nts_array_reverse_ref(NtsArray *a);
  * differs between libcs -- so the same program would answer differently on two
  * machines, and the differential would find it on one of them. Sorts in place
  * and hands back the array it was given, as `reverse` does. */
-NtsArray *nts_array_sort_str(NtsArray *a);
+NtsArray *nts_array_sort_str(NtsArray *a, uint32_t null_slot);
 NTS_READS_ONLY double nts_array_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY double nts_array_last_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY bool nts_array_includes(const NtsArray *a, double needle);
@@ -3958,7 +3958,7 @@ uint32_t nts_tag_of_reference(const NtsHeader *object);
  * holds. Reads the slot through the descriptor's `element` kind and `size`,
  * answers `undefined` out of range as JavaScript does, and refuses rather than
  * guesses when the descriptor does not say. The result is owned. */
-NtsValue nts_array_element(NtsValue array, double index);
+NtsValue nts_array_element(NtsValue array, double index, uint32_t null_slot);
 
 /* The live count of actual array storage. Array identity alone includes tuples,
  * whose fields have no indexed storage count; those refuse by name. Borrows. */

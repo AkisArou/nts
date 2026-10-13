@@ -76,7 +76,8 @@ static void one_value(__int128 n, const char *plain, const char *inspected) {
   nts_value_retain(a);
   NTS_ITEMS(array, NtsHeader *)[0] = nts_value_reference(a);
   found = nts_array_element(
-      nts_value_of_reference((NtsHeader *)array, NTS_TAG_OBJECT), 0);
+      nts_value_of_reference((NtsHeader *)array, NTS_TAG_OBJECT), 0,
+      NTS_TAG_UNDEFINED);
   expect("reference array reader recovers bigint",
          nts_value_tag(found) == NTS_TAG_BIGINT &&
              nts_value_strict_eq(found, b));
@@ -89,7 +90,8 @@ static void one_value(__int128 n, const char *plain, const char *inspected) {
   array = nts_array_new(&wide, 1);
   NTS_ITEMS(array, __int128)[0] = n;
   found = nts_array_element(
-      nts_value_of_reference((NtsHeader *)array, NTS_TAG_OBJECT), 0);
+      nts_value_of_reference((NtsHeader *)array, NTS_TAG_OBJECT), 0,
+      NTS_TAG_UNDEFINED);
   expect("unboxed array reader preserves the complete integer",
          nts_value_tag(found) == NTS_TAG_BIGINT &&
              nts_value_strict_eq(found, b));
@@ -97,7 +99,8 @@ static void one_value(__int128 n, const char *plain, const char *inspected) {
          nts_value_reference(found) != nts_value_reference(a));
   nts_value_release(found);
   found = nts_array_element(
-      nts_value_of_reference((NtsHeader *)array, NTS_TAG_OBJECT), 1);
+      nts_value_of_reference((NtsHeader *)array, NTS_TAG_OBJECT), 1,
+      NTS_TAG_UNDEFINED);
   expect("out of range bigint element is undefined",
          nts_value_tag(found) == NTS_TAG_UNDEFINED);
   nts_release((NtsHeader *)array);

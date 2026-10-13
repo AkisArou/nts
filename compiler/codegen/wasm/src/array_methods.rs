@@ -119,10 +119,12 @@ fn call_inner(
     method: Method,
     args: &[ValueId],
 ) -> Result<(), Failure> {
-    let arity = if matches!(method, Method::Pop(_) | Method::Shift(_)) {
-        1
-    } else {
-        2
+    // An element read also takes the tag a null slot reads as
+    // (`nts_array_element`); a null slot is still refused by name below.
+    let arity = match method {
+        Method::Pop(_) | Method::Shift(_) => 1,
+        Method::Element => 3,
+        _ => 2,
     };
     if args.len() != arity {
         return Err(format!("array helper {method:?} arity mismatch").into());

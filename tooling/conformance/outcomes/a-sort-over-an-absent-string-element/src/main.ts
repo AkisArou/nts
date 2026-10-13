@@ -10,6 +10,10 @@
 // (a-stored-null-read-through-an-unchecked-index).
 //
 // The control differs in one thing: the same sort with every element present.
+//
+// Fixed: `nts_array_sort_str` is told which absence a null slot holds, read off
+// the element type, and moves `undefined` last uncompared. The record now pins
+// the agreement.
 export function sortWithUndefined(n: number): string {
   const xs: (string | undefined)[] = ["b", undefined, "a".repeat((n & 1) + 1)];
   xs.sort();

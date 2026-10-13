@@ -4172,6 +4172,9 @@ const KEEPS_FIELD_BORROWS: &[&str] = &[
     "nts_array_fill_bool",
     "nts_array_extend",
     "nts_array_extend_ref",
+    // Reorders the element storage of the array it is given, comparing strings
+    // and nothing else: no element is released and no other code runs.
+    "nts_array_sort_str",
 ];
 
 /// Whether any array in this program can change length.
@@ -7703,6 +7706,7 @@ mod tests {
             "nts_array_fill_value",
             "nts_array_reverse",
             "nts_array_sort",
+            "nts_array_sort_str",
             "nts_array_set",
             "nts_array_get",
             "nts_array_copy_within",

@@ -1657,18 +1657,57 @@ public final class NtsRuntime {
      * the order among equal elements to the libc.
      *
      * Elements are `String` because only a string array reaches this — the
-     * lowering refuses every other element type by name. Were it ever widened,
-     * `undefined` would need partitioning to the end *without being compared*,
-     * which is what JavaScript does and what would make `compareTo` throw. */
-    public static Object[] arraySortStr(Object[] a) {
-        /* Natural ordering, which for `String` is `compareTo`. A comparator
-         * would have been a lambda, and a lambda is `invokedynamic` through
-         * `LambdaMetafactory` — which `runtime_jar.rs` rejects outright, because
-         * at the Android floor the bootstrap runs at first execution and one
-         * instance is not promised. The test said so before the jar shipped. */
-        Arrays.sort(a);
+     * lowering refuses every other element type by name. A null slot is the
+     * absence `nullSlot` names, which the element type decides: `undefined`
+     * goes to the end in order *without being compared*, as JavaScript does,
+     * and `null` is compared as the string "null", as `String(null)` is. Both
+     * were a `compareTo` on null. */
+    public static Object[] arraySortStr(Object[] a, int nullSlot) {
+        sortStrings(a, a.length, nullSlot);
         return a;
     }
+
+    /**
+     * The default sort of the first `length` strings of `items`, a null slot
+     * being the absence `nullSlot` names -- shared by the fixed array above and
+     * the growable one (`NtsArrayL.sortStr`), so the two cannot answer
+     * differently.
+     */
+    static void sortStrings(Object[] items, int length, int nullSlot) {
+        /* Natural ordering, which for `String` is `compareTo`. A comparator
+         * written as a lambda is `invokedynamic` through `LambdaMetafactory` —
+         * which `runtime_jar.rs` rejects outright, because at the Android floor
+         * the bootstrap runs at first execution and one instance is not
+         * promised -- so the one comparator needed is a named class. */
+        if (nullSlot == NtsValue.NULL) {
+            Arrays.sort(items, 0, length, NULL_AS_TEXT);
+            return;
+        }
+        int present = 0;
+        for (int at = 0; at < length; at++) {
+            if (items[at] != null) {
+                items[present++] = items[at];
+            }
+        }
+        for (int at = present; at < length; at++) {
+            items[at] = null;
+        }
+        Arrays.sort(items, 0, present);
+    }
+
+    /** `null` compared as the string "null", every other element as itself. */
+    private static final class NullAsText implements java.util.Comparator<Object> {
+        @Override
+        public int compare(Object x, Object y) {
+            return text(x).compareTo(text(y));
+        }
+
+        private static String text(Object element) {
+            return element == null ? "null" : (String) element;
+        }
+    }
+
+    private static final NullAsText NULL_AS_TEXT = new NullAsText();
     public static String arrayJoinStr(double[] a, String separator) {
         StringBuilder out = new StringBuilder(NtsArrays.joinCapacity(a.length, separator, 3));
         for (int i = 0; i < a.length; ++i) { if (i != 0) { out.append(separator); } appendNumber(out, a[i]); }

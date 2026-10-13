@@ -153,7 +153,7 @@ public final class RuntimeRegression {
         check(!NtsTable.has(map, zero), "0n is a different key");
         NtsArrayL held = NtsArrayL.of(0);
         NtsArrayL.push(held, five);
-        check(NtsValue.arrayElement(NtsValue.ofObject(held), 0).tag == NtsValue.BIGINT, "an NtsBigInt element reads back tag 16");
+        check(NtsValue.arrayElement(NtsValue.ofObject(held), 0, NtsValue.UNDEFINED).tag == NtsValue.BIGINT, "an NtsBigInt element reads back tag 16");
     }
 
     /** `compareString` against ECMA-262 StringToBigInt, and exact past 2^53 and past 128 bits. */

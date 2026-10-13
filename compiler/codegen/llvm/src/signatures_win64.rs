@@ -163,6 +163,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
             "ptr dead_on_unwind writable sret({ i32, i64 }) align 8",
             "ptr align 8 dead_on_return",
             "double",
+            "i32",
         ],
         attributes: &[],
     },
@@ -451,7 +452,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature {
         name: "nts_array_sort_str",
         returns: "ptr",
-        params: &["ptr"],
+        params: &["ptr", "i32"],
         attributes: &[],
     },
     Signature {

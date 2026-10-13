@@ -73,7 +73,14 @@ static SIGNATURES: &[Declared] = &[
     ("nts_array_concat_value", &[None, None], None),
     (
         "nts_array_element",
-        &[None, Some(HirType::Float { bits: 64 })],
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
         None,
     ),
     ("nts_array_extend", &[None, None], None),
@@ -223,6 +230,17 @@ static SIGNATURES: &[Declared] = &[
             None,
             Some(HirType::Float { bits: 64 }),
             Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
+        "nts_array_sort_str",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
         ],
         None,
     ),

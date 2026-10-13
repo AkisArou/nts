@@ -285,9 +285,11 @@ public final class NtsArrayL {
      * exactly as it is there.
      *
      * Elements are `String` because only a string array reaches this — the
-     * lowering refuses every other element type by name. */
-    public static NtsArrayL sortStr(NtsArrayL a) {
-        java.util.Arrays.sort(a.items, 0, a.length);
+     * lowering refuses every other element type by name. A null slot is the
+     * absence `nullSlot` names, and the live elements are sorted by the one
+     * routine the fixed array uses (`NtsRuntime.sortStrings`). */
+    public static NtsArrayL sortStr(NtsArrayL a, int nullSlot) {
+        NtsRuntime.sortStrings(a.items, a.length, nullSlot);
         return a;
     }
 

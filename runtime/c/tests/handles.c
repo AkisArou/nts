@@ -196,7 +196,7 @@ int main(void) {
   NtsValue read = nts_array_element(
       nts_value_of_reference((NtsHeader *)both,
                              nts_tag_of_reference((NtsHeader *)both)),
-      1.0);
+      1.0, NTS_TAG_UNDEFINED);
   expect("an element read from an erased array owns a reference",
          read.as.native == &object_a && retained == 4);
   nts_value_release(read);

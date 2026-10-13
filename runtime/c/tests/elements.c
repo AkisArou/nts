@@ -153,7 +153,7 @@ static bool tuple_storage_refuses(bool length) {
     if (length) {
       nts_array_length(erased);
     } else {
-      nts_array_element(erased, 0);
+      nts_array_element(erased, 0, NTS_TAG_UNDEFINED);
     }
     _exit(0);
   }
@@ -191,7 +191,7 @@ int main(void) {
   NTS_ITEMS(wide, int64_t)[2] = 4503599627370495;
   check("erased length reads the live count",
         nts_array_length(as_value(wide)) == 3);
-  NtsValue got = nts_array_element(as_value(wide), 1);
+  NtsValue got = nts_array_element(as_value(wide), 1, NTS_TAG_UNDEFINED);
   check("an int64 element reads as the integer it is",
         nts_value_tag(got) == NTS_TAG_NUMBER &&
             nts_value_number(got) == 8589934592.0);
@@ -200,8 +200,8 @@ int main(void) {
   check("and not as the subnormal double those bits spell",
         nts_value_number(got) > 1.0);
   check("the largest safe integer survives the round trip",
-        nts_value_number(nts_array_element(as_value(wide), 2)) ==
-            4503599627370495.0);
+        nts_value_number(nts_array_element(
+            as_value(wide), 2, NTS_TAG_UNDEFINED)) == 4503599627370495.0);
   nts_release(&wide->header);
 
   NtsArray *doubles = nts_array_new(&desc_double, 3);
@@ -209,28 +209,31 @@ int main(void) {
   NTS_ITEMS(doubles, double)[1] = -2.25;
   NTS_ITEMS(doubles, double)[2] = 0.0;
   check("a double element keeps its fraction",
-        nts_value_number(nts_array_element(as_value(doubles), 1)) == -2.25);
+        nts_value_number(nts_array_element(as_value(doubles), 1,
+                                           NTS_TAG_UNDEFINED)) == -2.25);
 
   /* Out of range is `undefined`, which is what JavaScript says and what the
    * static read -- producing a `double` -- has no way to express. */
   check("past the end is undefined rather than a trap",
-        nts_value_tag(nts_array_element(as_value(doubles), 9)) ==
-            NTS_TAG_UNDEFINED);
+        nts_value_tag(nts_array_element(
+            as_value(doubles), 9, NTS_TAG_UNDEFINED)) == NTS_TAG_UNDEFINED);
   check("a negative index is undefined too",
-        nts_value_tag(nts_array_element(as_value(doubles), -1.0)) ==
-            NTS_TAG_UNDEFINED);
+        nts_value_tag(nts_array_element(
+            as_value(doubles), -1.0, NTS_TAG_UNDEFINED)) == NTS_TAG_UNDEFINED);
   check("a fractional index is undefined rather than truncated",
-        nts_value_tag(nts_array_element(as_value(doubles), 0.5)) ==
-            NTS_TAG_UNDEFINED);
+        nts_value_tag(nts_array_element(
+            as_value(doubles), 0.5, NTS_TAG_UNDEFINED)) == NTS_TAG_UNDEFINED);
   nts_release(&doubles->header);
 
   NtsArray *narrow = nts_array_new(&desc_i32, 2);
   NTS_ITEMS(narrow, int32_t)[0] = -7;
   NTS_ITEMS(narrow, int32_t)[1] = 2147483647;
   check("a signed 32-bit element keeps its sign",
-        nts_value_number(nts_array_element(as_value(narrow), 0)) == -7.0);
-  check("and its top of range", nts_value_number(nts_array_element(
-                                    as_value(narrow), 1)) == 2147483647.0);
+        nts_value_number(
+            nts_array_element(as_value(narrow), 0, NTS_TAG_UNDEFINED)) == -7.0);
+  check("and its top of range",
+        nts_value_number(nts_array_element(as_value(narrow), 1,
+                                           NTS_TAG_UNDEFINED)) == 2147483647.0);
   nts_release(&narrow->header);
 
   /* The same four bytes, read the other way. `-7` as an `int32_t` and
@@ -239,20 +242,21 @@ int main(void) {
   NtsArray *unsigned_ = nts_array_new(&desc_u32, 1);
   NTS_ITEMS(unsigned_, uint32_t)[0] = 4294967289u;
   check("an unsigned 32-bit element is not read as a negative",
-        nts_value_number(nts_array_element(as_value(unsigned_), 0)) ==
-            4294967289.0);
+        nts_value_number(nts_array_element(as_value(unsigned_), 0,
+                                           NTS_TAG_UNDEFINED)) == 4294967289.0);
   nts_release(&unsigned_->header);
 
   NtsArray *flags = nts_array_new(&desc_bool, 2);
   NTS_ITEMS(flags, bool)[0] = true;
   NTS_ITEMS(flags, bool)[1] = false;
-  NtsValue flag = nts_array_element(as_value(flags), 0);
+  NtsValue flag = nts_array_element(as_value(flags), 0, NTS_TAG_UNDEFINED);
   check("a bool element arrives as a boolean and not as a number",
         nts_value_tag(flag) == NTS_TAG_BOOLEAN && nts_value_boolean(flag));
   check("and false is false rather than absent",
-        nts_value_tag(nts_array_element(as_value(flags), 1)) ==
-                NTS_TAG_BOOLEAN &&
-            !nts_value_boolean(nts_array_element(as_value(flags), 1)));
+        nts_value_tag(nts_array_element(
+            as_value(flags), 1, NTS_TAG_UNDEFINED)) == NTS_TAG_BOOLEAN &&
+            !nts_value_boolean(
+                nts_array_element(as_value(flags), 1, NTS_TAG_UNDEFINED)));
   nts_release(&flags->header);
 
   /* An erased slot is handed back as it was stored, and the reference in it
@@ -264,8 +268,9 @@ int main(void) {
   NTS_ITEMS(slots, NtsValue)[0] = nts_value_of_number(11.0);
   NTS_ITEMS(slots, NtsValue)[1] = nts_value_of_reference(held, NTS_TAG_STRING);
   check("a number in an erased slot reads back as that number",
-        nts_value_number(nts_array_element(as_value(slots), 0)) == 11.0);
-  NtsValue reference = nts_array_element(as_value(slots), 1);
+        nts_value_number(
+            nts_array_element(as_value(slots), 0, NTS_TAG_UNDEFINED)) == 11.0);
+  NtsValue reference = nts_array_element(as_value(slots), 1, NTS_TAG_UNDEFINED);
   check("a reference in an erased slot keeps its tag",
         nts_value_tag(reference) == NTS_TAG_STRING);
   check("and the read owns it, so releasing it does not free the slot",
