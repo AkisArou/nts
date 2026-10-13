@@ -42786,7 +42786,7 @@ impl<'a> FuncBuilder<'a> {
         class: TypeId,
         key: &str,
     ) -> Result<Option<u32>, Diagnostic> {
-        self.layout_of(at, class)?;
+        self.candidate_layout(at, class)?;
         match self.presence_of_key(class, key) {
             Some(super::presence::Presence::Bit(bit)) => Ok(Some(bit)),
             Some(super::presence::Presence::TooMany { optional }) => {
@@ -42807,6 +42807,50 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => Ok(None),
         }
+    }
+
+    /// A candidate's layout, built as the one context that can lay it out
+    /// builds it.
+    ///
+    /// **An open type is laid out by an erased copy and by nothing else.** A
+    /// typed copy materialises the instantiation it makes of every template it
+    /// contains (`Substitution::instance_of`): `make<bool>` allocates
+    /// `Box<boolean>`, never `Box<T>`. So a layout keyed by an open type is the
+    /// one a copy binding its parameters to erased values gives it -- and asked
+    /// from anywhere else, which binds none of them, it failed: `"reason" in
+    /// settled` in a plain function was refused over `Box<T>`'s `value?: T`
+    /// (`tooling/conformance/outcomes/an-in-beside-a-generic-interface-of-the-same-shape`,
+    /// which React's `trackUsedThenable<erased>` was refused with).
+    ///
+    /// **Built, not skipped.** Skipping it would answer from lowering order: an
+    /// erased copy lowered first lays the type out and a value of it is a
+    /// candidate, one lowered after is not. Built with its unbound parameters
+    /// erased, it is the layout that copy finds already made, so the bit and
+    /// the class test agree with any value that has the type -- and a type no
+    /// value has costs a comparison that never matches.
+    fn candidate_layout(&mut self, at: NodeId, class: TypeId) -> Result<(), Diagnostic> {
+        let Err(refused) = self.layout_of(at, class) else {
+            return Ok(());
+        };
+        let unbound: Vec<TypeId> = (0..self.snapshot.types.len())
+            .filter_map(|at| u32::try_from(at).ok().map(TypeId))
+            .filter(|ty| {
+                matches!(
+                    self.snapshot.types[ty.0 as usize].kind,
+                    TypeKind::TypeParameter { .. }
+                ) && !self.substitution.contains_key(ty)
+            })
+            .collect();
+        if unbound.is_empty() {
+            return Err(refused);
+        }
+        let bound = self.substitution.clone();
+        for parameter in unbound {
+            self.substitution.insert(parameter, HirType::Erased);
+        }
+        let erased = self.layout_of(at, class);
+        self.substitution = bound;
+        erased.map(|_| ()).map_err(|_| refused)
     }
 
     /// A private name used as an `in` key, which is a key this compiler can see
