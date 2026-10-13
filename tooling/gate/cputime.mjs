@@ -108,8 +108,19 @@ let probed;
 /** Whether `perf stat -p` can count a process of ours here; the reason when not. */
 export function instructionsWork() {
   if (probed !== undefined) return probed;
-  const r = spawnSync("sh", ["-c", `sleep 0.5 & p=$!; perf ${PERF_ARGS.join(" ")} -p "$p" 2>&1 >/dev/null; wait`], { encoding: "utf8" });
-  probed = r.error ? `no perf (${r.error.message})` : parsePerf(r.stdout + r.stderr) === null ? `perf stat -p counted nothing: ${(r.stdout + r.stderr).trim().split("\n").pop()}` : null;
+  // The target spins until perf is done with it: perf's own `-- sleep` is the
+  // window. A target that ended on its own (`sleep 0.5`, until 2026-10-14)
+  // could be gone before perf attached on a loaded machine, and perf's usage
+  // error then read as "cannot count here": a SKIP that turned a gate red with
+  // every other step green. And it spins so the count proves counting works,
+  // which a sleeping target's `<not counted>` would not.
+  const r = spawnSync(
+    "sh",
+    ["-c", `sh -c 'while :; do :; done' & p=$!; perf ${PERF_ARGS.join(" ")} -p "$p" -- sleep 0.3 2>&1 >/dev/null; kill "$p"; wait`],
+    { encoding: "utf8" },
+  );
+  const counted = r.error ? null : parsePerf(r.stdout + r.stderr);
+  probed = r.error ? `no perf (${r.error.message})` : !counted ? `perf stat -p counted nothing: ${(r.stdout + r.stderr).trim().split("\n").pop()}` : null;
   return probed;
 }
 
