@@ -909,10 +909,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("string helper not yet implemented"),
     ),
     ("nts_str_append", Support::Intrinsic),
-    (
-        "nts_str_at",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_str_at", Support::Intrinsic),
     (
         "nts_str_at_into",
         Support::Decline("native frame-storage helper"),

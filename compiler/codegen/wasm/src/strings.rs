@@ -42,6 +42,8 @@ pub(crate) enum Helper {
     Substring,
     Slice,
     FromCharCode,
+    /// `s[i]`: C's `nts_str_at`, code at its site over the builtins.
+    At,
 }
 
 impl Helper {
@@ -59,6 +61,7 @@ impl Helper {
             Self::Substring => "string.substring",
             Self::Slice => "string.slice",
             Self::FromCharCode => "string.fromCharCode",
+            Self::At => "string.at",
         }
     }
     pub(crate) const fn builtin(self) -> bool {
@@ -69,7 +72,8 @@ impl Helper {
             | Self::Compare
             | Self::Concat
             | Self::SubstringBuiltin
-            | Self::FromCharCodeBuiltin => true,
+            | Self::FromCharCodeBuiltin
+            | Self::At => true,
             Self::CharCodeAt
             | Self::CharAt
             | Self::Substring
@@ -86,7 +90,7 @@ impl Helper {
             Self::SubstringBuiltin => (vec![STRING, I32, I32], NONNULL_STRING),
             Self::FromCharCodeBuiltin => (vec![I32], NONNULL_STRING),
             Self::CharCodeAt => (vec![STRING, F64], F64),
-            Self::CharAt => (vec![STRING, F64], STRING),
+            Self::CharAt | Self::At => (vec![STRING, F64], STRING),
             Self::Substring | Self::Slice => (vec![STRING, F64, F64], STRING),
             Self::FromCharCode => (vec![F64], STRING),
         }
@@ -100,7 +104,8 @@ impl Helper {
             | Self::Compare
             | Self::Concat
             | Self::SubstringBuiltin
-            | Self::FromCharCodeBuiltin => Err(Failure::Invariant(format!(
+            | Self::FromCharCodeBuiltin
+            | Self::At => Err(Failure::Invariant(format!(
                 "string builtin {self:?} has no module body"
             ))),
             Self::CharCodeAt | Self::CharAt => indexed(self, m),
@@ -130,6 +135,7 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
         | "nts_str_char_code_at_int"
         | "nts_str_char_code_at_int_fn" => Some(Helper::CharCodeAt),
         "nts_str_char_at" => Some(Helper::CharAt),
+        "nts_str_at" => Some(Helper::At),
         "nts_str_substring" => Some(Helper::Substring),
         "nts_str_slice" => Some(Helper::Slice),
         "nts_string_from_char_code" => Some(Helper::FromCharCode),
@@ -312,6 +318,39 @@ pub(crate) fn binary(
     Ok(())
 }
 
+/// `s[i]` with an index the lowering did not prove: C's `nts_str_at`, which
+/// stops by name unless `i` is a whole number inside the string. node answers
+/// undefined for `s[1.7]` or `s[NaN]`, so neither is read as a character.
+fn at(b: &mut Body<'_, '_>, string: ValueId, index: ValueId) -> Result<(), Failure> {
+    if !is_string(b.ty(string)) {
+        return Err(format!("an index into a {:?}", b.ty(string)).into());
+    }
+    crate::contract::nonnull(b, string, "a null string in a string operation")?;
+    let number = |b: &mut Body<'_, '_>| -> Result<(), Failure> {
+        b.load(index)?;
+        numeric::convert(b, &b.ty(index).clone(), &HirType::NUMBER)
+    };
+    number(b)?;
+    b.instructions(&[I::F64Const(0.0.into()), I::F64Ge]);
+    number(b)?;
+    number(b)?;
+    b.instructions(&[I::F64Trunc, I::F64Eq, I::I32And]);
+    number(b)?;
+    b.load(string)?;
+    call(b, Helper::Length)?;
+    b.instructions(&[I::F64ConvertI32U, I::F64Lt, I::I32And]);
+    crate::contract::require(
+        b,
+        "a string index outside the string, or not a whole number",
+    )?;
+    b.load(string)?;
+    number(b)?;
+    b.instruction(&I::I32TruncSatF64U);
+    number(b)?;
+    b.instructions(&[I::I32TruncSatF64U, I::I32Const(1), I::I32Add]);
+    call(b, Helper::SubstringBuiltin)
+}
+
 pub(crate) fn runtime(
     b: &mut Body<'_, '_>,
     result: ValueId,
@@ -321,6 +360,9 @@ pub(crate) fn runtime(
     let (params, output) = helper.signature();
     if args.len() != params.len() {
         return Err(format!("string helper {helper:?} arity mismatch").into());
+    }
+    if helper == Helper::At {
+        return at(b, args[0], args[1]);
     }
     for (&arg, expected) in args.iter().zip(params) {
         if expected == STRING && helper != Helper::Equal {
