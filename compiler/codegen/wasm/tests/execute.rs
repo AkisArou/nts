@@ -223,6 +223,20 @@ fn source_refusals_name_their_cause() {
 }
 
 #[test]
+fn source_erased_integers_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/erased-integers");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "erased-integers-source",
+        &emitted,
+        "tooling/wasm/check-erased-integers-source.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 88, "{output}");
+}
+
+#[test]
 fn source_array_copying_agrees_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");
     let emitted = emit_project(&fixture);

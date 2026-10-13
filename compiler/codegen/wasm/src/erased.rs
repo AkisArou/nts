@@ -15,7 +15,7 @@ use crate::{
     numeric,
     types::Physical,
 };
-use nts_core::hir::{Absent, HirType, ManagedType, ValueId, tags};
+use nts_core::hir::{Absent, BinOp, HirType, ManagedType, OpKind, ValueId, tags};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 pub(crate) const UNDEFINED: i32 = tags::UNDEFINED.cast_signed();
@@ -270,11 +270,107 @@ pub(crate) fn erase(
             erase_reference(body, value, absent)?;
         }
         ty => {
-            body.load(value)?;
-            erase_stack(body, &ty)?;
+            if !erase_integer(body, value)? {
+                body.load(value)?;
+                erase_stack(body, &ty)?;
+            }
         }
     }
     Ok(())
+}
+
+/// Erases a number that an integer of at most 32 bits produced, from the
+/// integer itself: an i31 where it fits, the form `boxNumber` gives that value
+/// too, and otherwise the boxed double. False, emitting nothing, for a value
+/// with no such source. An integer is never `-0`, so the range is the whole
+/// test, and none is needed where the integer's own definition bounds it.
+fn erase_integer(body: &mut Body<'_, '_>, value: ValueId) -> Result<bool, Failure> {
+    let source = match (body.ty(value), &body.func.value(value).kind) {
+        (
+            HirType::Int {
+                bits: 8 | 16 | 32, ..
+            },
+            _,
+        ) => value,
+        (HirType::Float { bits: 64 }, OpKind::Convert(from))
+            if matches!(
+                body.ty(*from),
+                HirType::Int {
+                    bits: 8 | 16 | 32,
+                    ..
+                }
+            ) =>
+        {
+            *from
+        }
+        _ => return Ok(false),
+    };
+    let HirType::Int { signed, .. } = *body.ty(source) else {
+        return Ok(false);
+    };
+    if body.local(source).is_err() {
+        return Ok(false);
+    }
+    if fits_i31(body.func, source) {
+        body.load(source)?;
+        body.instruction(&I::RefI31);
+        return Ok(true);
+    }
+    body.load(source)?;
+    if signed {
+        // Fits where dropping the top bit and extending the sign gives it back.
+        body.instruction(&I::I32Const(1));
+        body.instruction(&I::I32Shl);
+        body.instruction(&I::I32Const(1));
+        body.instruction(&I::I32ShrS);
+        body.load(source)?;
+        body.instruction(&I::I32Eq);
+    } else {
+        body.instruction(&I::I32Const(0x3fff_ffff));
+        body.instruction(&I::I32LeU);
+    }
+    body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+    body.load(source)?;
+    body.instruction(&I::RefI31);
+    body.instruction(&I::Else);
+    body.load(source)?;
+    body.instruction(&if signed {
+        I::F64ConvertI32S
+    } else {
+        I::F64ConvertI32U
+    });
+    call(body, Helper::BoxNumber)?;
+    body.instruction(&I::End);
+    Ok(true)
+}
+
+/// Whether an integer's own definition puts it inside i31's range: a type of
+/// at most 16 bits, a constant, or an `and` with a mask that fits. An 8- or
+/// 16-bit value is in range by the core's width contract; see
+/// `numeric::arithmetic`.
+fn fits_i31(func: &nts_core::hir::Func, id: ValueId) -> bool {
+    const LOW: i128 = -(1 << 30);
+    const HIGH: i128 = (1 << 30) - 1;
+    let constant = |id: ValueId| match func.value(id).kind {
+        OpKind::ConstInt(c) => Some(c),
+        _ => None,
+    };
+    match (&func.value(id).ty, &func.value(id).kind) {
+        (HirType::Int { bits: 8 | 16, .. }, _) => true,
+        (_, OpKind::ConstInt(c)) => (LOW..=HIGH).contains(c),
+        (
+            HirType::Int { bits: 32, .. },
+            OpKind::Binary {
+                op: BinOp::BitAnd,
+                lhs,
+                rhs,
+            },
+        ) => [*lhs, *rhs]
+            .into_iter()
+            .filter_map(constant)
+            .any(|mask| (0..=HIGH).contains(&mask)),
+        _ => false,
+    }
 }
 
 /// Erases the value on the stack, held in storage of type `ty`. A string or a

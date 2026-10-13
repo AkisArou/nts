@@ -45,11 +45,26 @@ function widen(value: unknown): unknown {
 }
 
 // Numbers only, as erasure-unknown carries them: no string is erased, so this
-// prices what the string representation adds to every other tag test.
+// prices what the string representation adds to every other tag test. Once
+// the core forwards `widen` and folds the round trip, this loop has no
+// erasure left; storedNumbers keeps one.
 export function eraseNumbers(n: number): number {
   let total = 0;
   for (let i = 0; i < n; i++) {
     const value = widen(i & 1023);
+    if (typeof value === 'number') total += value;
+  }
+  return total;
+}
+
+// Numbers whose erasure escapes into an `unknown[]`, so no fold can remove it:
+// each is erased once, stored, and read back through `typeof`.
+export function storedNumbers(n: number): number {
+  const pool: unknown[] = [0, 0, 0, 0, 0, 0, 0, 0];
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    pool[i & 7] = i & 1023;
+    const value = pool[(i + 3) & 7];
     if (typeof value === 'number') total += value;
   }
   return total;
