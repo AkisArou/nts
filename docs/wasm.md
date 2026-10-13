@@ -365,6 +365,16 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
     dispatch, interface, erased and collections kernels did not move
     measurably (exploratory, load ~24-33). object-keys pins it, and with the
     hash not kept the fixture fails.
+- **A typed get.** The core passes a get's result erased; where every user
+  of it only tests its tag or reads it as the stored type (a Map or a
+  table of numbers or booleans), the get answers its entry in an `i32`
+  local (`Helper::Entry`) and the users read the entry: nothing is boxed to
+  be unboxed (`collections::typed_gets`). Exploratory, paired, load 62, ns
+  per iteration, node / before / after: countWords 22.6 / 44.0 / 27.8,
+  recordReads 8.3 / 21.0 / 15.4; numbersSeen, which gets nothing, moved
+  only by noise. collection-tables pins it (`typedReads`: hits and misses,
+  booleans and numbers, a record, and a get that is also printed and stays
+  boxed).
 - **`instanceof Map` and `instanceof Set` of an open value** are one type
   test per storage of that kind. A record's storage is laid out as a Map's
   and is neither, as C tells them apart by descriptor, so a record has a

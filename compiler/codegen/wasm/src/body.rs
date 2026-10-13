@@ -79,6 +79,9 @@ pub(crate) struct Body<'b, 'p> {
     pub(crate) code: ir::Function,
     pub(crate) m: &'b mut Builder<'p>,
     values: Vec<Option<u32>>,
+    /// The collection gets whose value is their entry, by the collection
+    /// read (`collections::typed_gets`).
+    typed_gets: BTreeMap<ValueId, ValueId>,
     scratch: BTreeMap<(u32, Physical), u32>,
     pc: Option<u32>,
     cases: BTreeMap<BlockId, u32>,
@@ -150,6 +153,7 @@ impl<'b, 'p> Body<'b, 'p> {
                 values[id] = Some(at);
             }
         }
+        let typed_gets = crate::collections::typed_gets(func, types);
         let mut live = std::collections::BTreeSet::new();
         for block in &plan.order {
             let b = &func.blocks[block.0 as usize];
@@ -157,9 +161,13 @@ impl<'b, 'p> Body<'b, 'p> {
         }
         for value in live {
             let op = func.value(value);
-            let slot = types
-                .slot(&op.ty)
-                .map_err(|failure| failure.at(&func.name, &op.origin))?;
+            let slot = if typed_gets.contains_key(&value) {
+                Some(Physical::Scalar(Slot::I32))
+            } else {
+                types
+                    .slot(&op.ty)
+                    .map_err(|failure| failure.at(&func.name, &op.origin))?
+            };
             if !matches!(op.kind, OpKind::Param(_))
                 && let Some(slot) = slot
             {
@@ -206,6 +214,7 @@ impl<'b, 'p> Body<'b, 'p> {
             code: ir::Function::new(locals),
             m,
             values,
+            typed_gets,
             scratch,
             pc,
             cases,
@@ -229,6 +238,10 @@ impl<'b, 'p> Body<'b, 'p> {
     /// The whole-program type plan, which outlives this body.
     pub(crate) fn types(&self) -> &'p gc::Plan {
         self.m.types
+    }
+    /// The collection a get reads, where its value is the entry it found.
+    pub(crate) fn typed_get(&self, value: ValueId) -> Option<ValueId> {
+        self.typed_gets.get(&value).copied()
     }
     pub(crate) fn local(&self, value: ValueId) -> Result<u32, Failure> {
         self.values[value.0 as usize]

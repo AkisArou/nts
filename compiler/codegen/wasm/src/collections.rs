@@ -29,13 +29,14 @@ use crate::{
     contract,
     erased::{self, Singleton},
     error::Failure,
-    gc::{Collection, KeyKind},
+    gc::{self, Collection, KeyKind},
     ir::Function,
     module::{Builder, Func, FuncKey},
     numeric, objects, strings,
     types::{Physical, Slot},
 };
-use nts_core::hir::{Absent, HirType, ManagedType, OpKind, ValueId};
+use nts_core::hir::{Absent, Callee, HirType, ManagedType, OpKind, ValueId};
+use std::collections::{BTreeMap, BTreeSet};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 const EMPTY: i32 = 0;
@@ -84,6 +85,9 @@ impl Op {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
     Find,
+    /// `get` as the entry it found, or -1: for a get whose users read the
+    /// value typed (`typed_gets`), so nothing is boxed.
+    Entry,
     Grow,
     Put,
     Get,
@@ -335,6 +339,12 @@ fn entry(
         (Op::Add, Some(_)) => return Err("`add` on a Map".into()),
         _ => {}
     }
+    // A get whose users read its value typed answers the entry instead.
+    let helper = if op == Op::Get && b.typed_get(result).is_some() {
+        Helper::Entry
+    } else {
+        helper
+    };
     let target = callee(b.m, c, helper)?;
     b.load(args[0])?;
     key_operand(b, c, args[1])?;
@@ -347,6 +357,132 @@ fn entry(
     if matches!(op, Op::Set | Op::Add) && b.types().slot(&b.ty(result).clone())?.is_some() {
         b.load(args[0])?;
     }
+    Ok(())
+}
+
+/// The `get`s of a Map or a table holding numbers or booleans typed whose
+/// every user reads the value typed: a tag test, or a read as the stored type
+/// itself. Each answers its entry (`Helper::Entry`) in an `i32` local, and
+/// its users read the entry: nothing is boxed to be unboxed. Mapped to the
+/// collection the get reads.
+pub(crate) fn typed_gets(
+    func: &nts_core::hir::Func,
+    plan: &gc::Plan,
+) -> BTreeMap<ValueId, ValueId> {
+    let mut candidates = BTreeMap::new();
+    for (at, op) in func.values.iter().enumerate() {
+        let OpKind::Call {
+            callee: Callee::External(name),
+            args,
+            ..
+        } = &op.kind
+        else {
+            continue;
+        };
+        let (Some(Op::Get), [map, _]) = (external(name), args.as_slice()) else {
+            continue;
+        };
+        let Ok(c) = plan.collection(&func.value(*map).ty) else {
+            continue;
+        };
+        if let Some(stored @ (HirType::Float { bits: 64 } | HirType::Bool)) = &c.value {
+            let id = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+            candidates.insert(id, (*map, stored.clone()));
+        }
+    }
+    if candidates.is_empty() {
+        return BTreeMap::new();
+    }
+    let mut boxed = BTreeSet::new();
+    for block in &func.blocks {
+        for &id in &block.ops {
+            let op = func.value(id);
+            for operand in nts_core::hir::operands_of(&op.kind) {
+                let Some((_, stored)) = candidates.get(&operand) else {
+                    continue;
+                };
+                let read_typed = match &op.kind {
+                    OpKind::TagOf { .. } => true,
+                    OpKind::Unerase { .. } => &op.ty == stored,
+                    _ => false,
+                };
+                if !read_typed {
+                    boxed.insert(operand);
+                }
+            }
+        }
+        boxed.extend(
+            nts_core::hir::operands_of_terminator(&block.terminator)
+                .into_iter()
+                .filter(|operand| candidates.contains_key(operand)),
+        );
+    }
+    candidates
+        .into_iter()
+        .filter(|(id, _)| !boxed.contains(id))
+        .map(|(id, (map, _))| (id, map))
+        .collect()
+}
+
+/// The tag of a typed get's value: its stored type's, or `undefined`.
+pub(crate) fn typed_tag(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    entry: ValueId,
+    map: ValueId,
+) -> Result<(), Failure> {
+    let c = b.types().collection(b.ty(map))?;
+    let present = if c.value == Some(HirType::Bool) {
+        erased::BOOLEAN
+    } else {
+        erased::NUMBER
+    };
+    b.load(entry)?;
+    b.instructions(&[
+        I::I32Const(0),
+        I::I32GeS,
+        I::If(BlockType::Result(ValType::I32)),
+        I::I32Const(present),
+        I::Else,
+        I::I32Const(erased::UNDEFINED),
+        I::End,
+    ]);
+    numeric::convert(
+        b,
+        &HirType::Int {
+            bits: 32,
+            signed: false,
+        },
+        &b.ty(result).clone(),
+    )
+}
+
+/// A typed get's value as its stored type, refused where there is none, as
+/// reading `undefined` as a number or a boolean is.
+pub(crate) fn typed_value(
+    b: &mut Body<'_, '_>,
+    entry: ValueId,
+    map: ValueId,
+) -> Result<(), Failure> {
+    let c = b.types().collection(b.ty(map))?.clone();
+    let values = c
+        .values
+        .ok_or_else(|| Failure::Invariant("a typed get of a Set".into()))?;
+    let what = if c.value == Some(HirType::Bool) {
+        "a boolean"
+    } else {
+        "a number"
+    };
+    b.load(entry)?;
+    b.instructions(&[I::I32Const(0), I::I32GeS]);
+    contract::require(
+        b,
+        &format!("an erased value read as {what}, which it is not"),
+    )?;
+    b.load(map)?;
+    b.instruction(&field(&c, c.value_field()));
+    b.load(entry)?;
+    b.instruction(&I::ArrayGet(values));
     Ok(())
 }
 
@@ -542,7 +678,9 @@ pub(crate) fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Res
             vec![map, key, strings::STRING],
             Some(Physical::Reference(RefType::ANYREF)),
         ),
-        Helper::Has | Helper::Delete => (vec![map, key, strings::STRING], Some(i32)),
+        Helper::Has | Helper::Delete | Helper::Entry => {
+            (vec![map, key, strings::STRING], Some(i32))
+        }
         Helper::Set => {
             let mut params = vec![map, key];
             params.extend(value);
@@ -569,7 +707,9 @@ pub(crate) fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Res
             Helper::Find => find(m, &collection),
             Helper::Grow => Ok(grow(&collection)),
             Helper::Put => put(m, &collection),
-            Helper::Get | Helper::Has | Helper::Delete => lookup(m, &collection, helper),
+            Helper::Get | Helper::Has | Helper::Delete | Helper::Entry => {
+                lookup(m, &collection, helper)
+            }
             Helper::Set => set(m, &collection),
             Helper::Clear => Ok(clear(&collection)),
             Helper::Next => Ok(next(&collection)),
@@ -982,6 +1122,18 @@ fn lookup(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Result<Functio
     ]);
     match helper {
         Helper::Has => f.instructions(&[I::LocalGet(entry), I::I32Const(0), I::I32GtS]),
+        // The entry's number, or -1: the index holds it plus one, and 0 or -1
+        // where there is none.
+        Helper::Entry => f.instructions(&[
+            I::LocalGet(entry),
+            I::I32Const(1),
+            I::I32Sub,
+            I::I32Const(-1),
+            I::LocalGet(entry),
+            I::I32Const(0),
+            I::I32GtS,
+            I::Select,
+        ]),
         Helper::Get => {
             let values = c
                 .values

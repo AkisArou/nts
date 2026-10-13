@@ -513,6 +513,9 @@ pub(crate) fn unerase(
     result: ValueId,
     value: ValueId,
 ) -> Result<(), Failure> {
+    if let Some(map) = body.typed_get(value) {
+        return crate::collections::typed_value(body, value, map);
+    }
     let ty = body.ty(result).clone();
     unerase_to(body, value, &ty)
 }
@@ -659,6 +662,9 @@ pub(crate) fn projection_guard(
 /// The tag of an erased value. Of a typed one it is refused by name: a typed
 /// reference's null does not say which absence it stands for.
 pub(crate) fn tag(body: &mut Body<'_, '_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
+    if let Some(map) = body.typed_get(value) {
+        return crate::collections::typed_tag(body, result, value, map);
+    }
     if body.ty(value) != &HirType::Erased {
         return Err(format!("the tag of a typed {:?} value", body.ty(value)).into());
     }

@@ -88,3 +88,26 @@ export function whichCollection(n: number): string {
   const value = opened(n);
   return `${value instanceof Map}|${value instanceof Set}`;
 }
+
+/** A get whose users only test its tag and read it as the stored type is
+ * read as its entry, never boxed: booleans and numbers, hits and misses, a
+ * record's reads, and beside them a get that is also printed, which stays
+ * boxed. */
+export function typedReads(n: number): number {
+  const flags = new Map<string, boolean>();
+  const nums = new Map<number, number>();
+  const record: Record<string, number> = {};
+  for (let i = 0; i < 8; i++) {
+    flags.set("f" + i, i % 3 === 0);
+    nums.set(i * 1.5, i - 4);
+    record["r" + i] = i * i;
+  }
+  let total = 0;
+  for (let i = 0; i < 12; i++) {
+    const k = (i + n + 12) % 12;
+    total += (flags.get("f" + k) ?? false) ? 100 : 1;
+    total += nums.get(k * 1.5) ?? -1000;
+    total += record["r" + (k % 8)];
+  }
+  return total + String(nums.get(n * 1.5)).length;
+}

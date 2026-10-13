@@ -338,7 +338,7 @@ fn source_collection_tables_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 84, "{output}");
+    assert_eq!(output["cases"], 96, "{output}");
 }
 
 /// Objects as collection keys compare by identity: same-shaped objects are two
