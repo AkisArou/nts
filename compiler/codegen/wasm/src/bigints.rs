@@ -630,6 +630,7 @@ fn mul(m: &mut Builder<'_>) -> Result<Function, Failure> {
     ]);
     split(&mut f, 0, alo, ahi);
     split(&mut f, 1, blo, bhi);
+    small_product(&mut f, [alo, ahi, blo, bhi, word, top]);
     f.instructions(&[
         I::LocalGet(ahi),
         I::LocalGet(bhi),
@@ -812,7 +813,7 @@ fn divide(m: &mut Builder<'_>, remainder: bool) -> Result<Function, Failure> {
         I::LocalSet(qneg),
     ]);
     magnitudes(&mut f, [(alo, ahi), (blo, bhi)]);
-    long_division(&mut f, [alo, ahi, blo, bhi, qlo, qhi, rlo, rhi, bit]);
+    divide_magnitudes(&mut f, [alo, ahi, blo, bhi, qlo, qhi, rlo, rhi, bit]);
     let (lo, hi, negative) = if remainder {
         (rlo, rhi, aneg)
     } else {
@@ -824,6 +825,106 @@ fn divide(m: &mut Builder<'_>, remainder: bool) -> Result<Function, Failure> {
     join(&mut f, lo, hi);
     f.instruction(&I::End);
     Ok(f)
+}
+
+/// Return the product at once when both operands are within 32 bits, signed:
+/// then it is exact in one word.
+fn small_product(f: &mut Function, locals: [u32; 6]) {
+    let [alo, ahi, blo, bhi, word, top] = locals;
+    small(f, alo, ahi);
+    small(f, blo, bhi);
+    f.instructions(&[
+        I::I32And,
+        I::If(BlockType::Empty),
+        I::LocalGet(alo),
+        I::LocalGet(blo),
+        I::I64Mul,
+        I::LocalTee(word),
+        I::I64Const(63),
+        I::I64ShrS,
+        I::LocalSet(top),
+    ]);
+    join(f, word, top);
+    f.instructions(&[I::Return, I::End]);
+}
+
+/// Quotient and remainder of two magnitudes: by 32-bit limbs when the divisor
+/// is below 2^32 (four steps), else bit by bit.
+fn divide_magnitudes(f: &mut Function, locals: [u32; 9]) {
+    let [alo, ahi, blo, bhi, qlo, qhi, rlo, _, _] = locals;
+    f.instructions(&[
+        I::LocalGet(bhi),
+        I::I64Eqz,
+        I::LocalGet(blo),
+        I::I64Const(1 << 32),
+        I::I64LtU,
+        I::I32And,
+        I::If(BlockType::Empty),
+    ]);
+    limb_division(f, [alo, ahi, blo, qlo, qhi, rlo]);
+    f.instruction(&I::Else);
+    long_division(f, locals);
+    f.instruction(&I::End);
+}
+
+/// Whether (lo, hi) is a signed 32-bit value: one word, within 2^31.
+fn small(f: &mut Function, lo: u32, hi: u32) {
+    f.instructions(&[
+        I::LocalGet(hi),
+        I::LocalGet(lo),
+        I::I64Const(63),
+        I::I64ShrS,
+        I::I64Eq,
+        I::LocalGet(lo),
+        I::I64Const(1 << 31),
+        I::I64Add,
+        I::I64Const(1 << 32),
+        I::I64LtU,
+        I::I32And,
+    ]);
+}
+
+/// Unsigned 128-bit magnitude by a divisor below 2^32, a 32-bit limb at a
+/// time from the top: each partial dividend `r << 32 | limb` is below 2^64,
+/// since the remainder is below the divisor. The remainder's high word is 0.
+fn limb_division(f: &mut Function, locals: [u32; 6]) {
+    let [alo, ahi, blo, qlo, qhi, rlo] = locals;
+    let limbs = [
+        (ahi, true, qhi),
+        (ahi, false, qhi),
+        (alo, true, qlo),
+        (alo, false, qlo),
+    ];
+    for (word, upper, quotient) in limbs {
+        // The partial dividend: the remainder shifted up, and the limb.
+        f.instructions(&[
+            I::LocalGet(rlo),
+            I::I64Const(32),
+            I::I64Shl,
+            I::LocalGet(word),
+        ]);
+        if upper {
+            f.instructions(&[I::I64Const(32), I::I64ShrU]);
+        } else {
+            f.instructions(&[I::I64Const(0xffff_ffff), I::I64And]);
+        }
+        f.instructions(&[
+            I::I64Or,
+            I::LocalTee(rlo),
+            I::LocalGet(blo),
+            I::I64DivU,
+            // Shift the quotient limb in below the ones before it.
+            I::LocalGet(quotient),
+            I::I64Const(32),
+            I::I64Shl,
+            I::I64Or,
+            I::LocalSet(quotient),
+            I::LocalGet(rlo),
+            I::LocalGet(blo),
+            I::I64RemU,
+            I::LocalSet(rlo),
+        ]);
+    }
 }
 
 /// Restoring division of unsigned 128-bit magnitudes, one bit of the
