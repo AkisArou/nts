@@ -44,6 +44,25 @@ function run(argv: string[], cwd = root, env = process.env): void {
   if (result.status !== 0) throw new Error(`${argv[0]} failed: ${result.signal ?? result.status}`);
 }
 
+// The machine's rule for a heavy phase (AGENTS.md): start one only with
+// 14 GiB available -- a link cannot pause once it has started, and a gate's
+// memory-checked steps want most of what is left -- and run it at the lowest
+// priority, so the lanes' gates and tests go first. One Chromium build at a
+// time is the writer lock's.
+const HEAVY_PHASE_GIB = 14;
+function availableGiB(): number {
+  const line = readFileSync("/proc/meminfo", "utf8").split("\n").find((entry) => entry.startsWith("MemAvailable:"));
+  return line === undefined ? 0 : Number(line.split(/\s+/)[1]) / (1024 * 1024);
+}
+function awaitMemory(): void {
+  let told = false;
+  while (availableGiB() < HEAVY_PHASE_GIB) {
+    if (!told) console.log(`Waiting for ${HEAVY_PHASE_GIB} GiB available before building (${availableGiB().toFixed(1)} GiB now)`);
+    told = true;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10_000);
+  }
+}
+
 function requirePins(): void {
   const lock = settings();
   for (const [name, path] of [["chromium", source], ["depot_tools", depot]] as const) {
@@ -146,7 +165,8 @@ function build(jobs: number): void {
   writeFileSync(resultFile, `${JSON.stringify({ state: "running", pid: process.pid, startedAt, jobs, target: target.name })}\n`);
   try {
     const targets = target.name === "nts_shell" ? ["nts_shell", "content_shell", ...(target.app ? ["nts_app", "nts_app_shell"] : [])] : [target.name];
-    run([resolve(depot, "autoninja"), "-C", relative(source, buildDir), "-j", String(jobs), ...targets], source, environment());
+    awaitMemory();
+    run(["nice", "-n", "19", resolve(depot, "autoninja"), "-C", relative(source, buildDir), "-j", String(jobs), ...targets], source, environment());
     const resources = execFileSync(resolve(depot, "gn"), ["desc", relative(source, buildDir), target.label, "runtime_deps"], { cwd: source, env: environment(), encoding: "utf8" });
     writeFileSync(resolve(evidence, "runtime-deps.txt"), resources);
     const manifest = resolve(source, "nts/manifest.json");
