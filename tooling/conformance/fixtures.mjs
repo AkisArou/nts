@@ -7,12 +7,15 @@
 // Real `fs` again -- reading a fixture to feed a test of ours must not depend
 // on ours.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve as resolvePath, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const HERE = dirname(new URL(import.meta.url).pathname);
-const fixturesDir = resolvePath(HERE, "../../third_party/node/test/fixtures");
+// The real path, as `run-one.mjs` takes node's test tree: a lane's tree links
+// `third_party/node`, and a test comparing `fixtures.path()` with what
+// `fs.realpath` answers (test-fs-realpath) failed on the link's spelling.
+const fixturesDir = realpathSync(resolvePath(HERE, "../../third_party/node/test/fixtures"));
 
 export function path(...args) {
   return join(fixturesDir, ...args);

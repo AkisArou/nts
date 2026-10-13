@@ -21,7 +21,7 @@ import tmpdir from "./tmpdir.mjs";
 import fixtures from "./fixtures.mjs";
 import * as hijackstdio from "./hijackstdio.mjs";
 
-const [, , moduleName, file, addon, ...fixtureArgs] = process.argv;
+const [, , moduleName, fileArgument, addon, ...fixtureArgs] = process.argv;
 
 // **A usage error must not be reported as a test result, and this reported one.**
 //
@@ -39,11 +39,11 @@ const [, , moduleName, file, addon, ...fixtureArgs] = process.argv;
 // file the harness actually attempted.
 if (
   moduleName === undefined || moduleName === "" ||
-  file === undefined || !isAbsolute(file) || !existsSync(file)
+  fileArgument === undefined || !isAbsolute(fileArgument) || !existsSync(fileArgument)
 ) {
-  const why = file === undefined ? "no fixture path given"
-    : !isAbsolute(file) ? `fixture path is not absolute: ${file}`
-    : !existsSync(file) ? `fixture does not exist: ${file}`
+  const why = fileArgument === undefined ? "no fixture path given"
+    : !isAbsolute(fileArgument) ? `fixture path is not absolute: ${fileArgument}`
+    : !existsSync(fileArgument) ? `fixture does not exist: ${fileArgument}`
     : "no module name given";
   process.stderr.write(
     `run-one.mjs: ${why}\n` +
@@ -52,6 +52,17 @@ if (
   );
   process.exit(2);
 }
+
+// **Every path here is the real one, because node's resolver only answers in real ones.**
+//
+// A lane's tree links `third_party/node` to the shared checkout's. `require("../common")`
+// from a test resolves through that link to the shared checkout, and the substitutions
+// below were keyed on the linked spelling, so none matched: every test run from a lane's
+// tree loaded node's real `test/common` -- its leak checker, its `mustCall`, its tmpdir,
+// which removes itself at exit -- and passed or failed against that rather than this
+// runner. Nothing said so. It showed as a test's tmpdir gone after a hand run, which only
+// node's helper removes.
+const file = realpathSync(fileArgument);
 const RESULT_PREFIX = "NTS_CONFORMANCE_RESULT ";
 const nestedConformanceChild = process.env.NTS_CONFORMANCE_NESTED_CHILD === "1";
 
@@ -724,7 +735,7 @@ try {
 }
 
 const realRequire = createRequire(import.meta.url);
-const nodeTestRoot = join(ROOT, "third_party/node/test");
+const nodeTestRoot = realpathSync(join(ROOT, "third_party/node/test"));
 const localTestRoot = join(moduleDir, "test");
 const hostNodeExecutable = realpathSync(hostProcess.execPath);
 const testModuleCache = new Map();
@@ -1107,7 +1118,7 @@ const workerThreadsInfrastructure = {
 // fixtures cannot silently fall back to Node's builtin implementation.
 const common = makeCommon(
   relative(hostProcess.cwd(), tmpdir.resolve(`node-test.${hostProcess.pid}.sock`)),
-  join(ROOT, "third_party/node/test/common"),
+  join(nodeTestRoot, "common"),
   spawnInfrastructure,
 );
 
