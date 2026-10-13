@@ -2834,13 +2834,16 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         // The class to allocate, which is the interface's `X$Object` where the
-        // layout is emitted as an interface; see `types::instance_class`.
+        // layout is emitted as an interface; see `types::instance_class`. A
+        // class with an identity allocates that, interface or not, or
+        // `instanceof` could not tell it from a literal of its layout.
         let class = match ty {
             HirType::Managed(ManagedType::Object(id))
-                if self
-                    .program
-                    .layout(*id)
-                    .is_some_and(|l| crate::hierarchy::is_interface(self.program, l)) =>
+                if crate::hierarchy::identity_of(self.program, *id).is_none()
+                    && self
+                        .program
+                        .layout(*id)
+                        .is_some_and(|l| crate::hierarchy::is_interface(self.program, l)) =>
             {
                 self.program
                     .layout(*id)

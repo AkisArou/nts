@@ -258,11 +258,22 @@ pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize
 /// and twelve classes across the twenty-two `runtime/node` modules. One class
 /// gets an identity too where a literal typed by it is laid out as it -- the
 /// core decides both cases, `Program::distinct_identities`.
+///
+/// **Every class of a layout emitted as a JVM interface** ([`is_interface`]),
+/// even a lone one, and its identity implements the interface rather than
+/// extending it. Every implementer is an instance of the interface, so the
+/// layout's own spelling answers `instanceof` for the class and for all of
+/// them: `net`'s field-less `BoundSocket` is laid out as `EventTargetLike`,
+/// and `instanceof BoundSocket` was true of a `{}` literal and of anything
+/// implementing `EventTargetLike`.
 #[must_use]
 pub fn identities<'a>(
     program: &'a Program,
     layout: &Layout,
 ) -> Vec<&'a nts_core::hir::ClassIdentity> {
+    if is_interface(program, layout) {
+        return program.classes_laid_out_as(layout);
+    }
     program.distinct_identities(layout)
 }
 
@@ -281,9 +292,12 @@ pub fn identity_of(program: &Program, id: TypeId) -> Option<&nts_core::hir::Clas
 pub fn extended(program: &Program, layout: &Layout) -> bool {
     // A layout whose classes have their own subclasses is extended by them, so
     // it cannot be `final`. Asked first because it is the cheaper question.
-    if !identities(program, layout).is_empty() {
-        return true;
-    }
+    !identities(program, layout).is_empty() || extended_by_a_base(program, layout)
+}
+
+/// Whether another layout's JVM superclass is this one. A layout not in the
+/// program answers yes, as `extended` always has: final is the claim to prove.
+fn extended_by_a_base(program: &Program, layout: &Layout) -> bool {
     let Some(mine) = program.layouts.iter().position(|c| std::ptr::eq(c, layout)) else {
         return true;
     };
@@ -461,7 +475,13 @@ pub fn is_interface(program: &Program, layout: &Layout) -> bool {
     // A dispatch root that carries state, or that something extends, is that
     // class. `Layout.base` already relates the two, and the assignability
     // check reports it when it does not.
-    declared(program, layout).is_empty() && !extended(program, layout)
+    //
+    // **Extended by a base, not by an identity.** The classes laid out as an
+    // interface implement it (`identities`), so they are no reason to make it
+    // a class. Asking `extended` here did: one literal beside `BoundSocket`
+    // in `EventTargetLike`'s layout gave it an identity, which made it a class
+    // that `dgram` and `net` returned other objects at -- "Bad return type".
+    declared(program, layout).is_empty() && !extended_by_a_base(program, layout)
 }
 
 /// A layout something claims to implement and does not extend.

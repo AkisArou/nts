@@ -341,7 +341,8 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
             &mut diagnostics,
             object_class(package, program, layout, &plan, &handed_to, &reactions),
         );
-        // One empty subclass per class sharing this layout; see
+        // One empty subclass per class sharing this layout, or one
+        // implementation of it where it is an interface; see
         // `hierarchy::identities`. The fields stay on the layout's own class,
         // so an object is not a byte larger and a parameter declared as either
         // class still takes the base -- only `new` and `instanceof` name these.
@@ -607,6 +608,10 @@ fn declare_presence(
 /// so that `instanceof` has something to distinguish. `final`, because nothing
 /// extends a class token, and the JVM resolves a superclass field statically so
 /// reaching `x` through it costs what reaching it through the base costs.
+///
+/// Of a layout emitted as an interface it is that interface's implementation
+/// instead, as `X$Object` is a literal's: an interface has no constructor to
+/// extend and no field to hold, so the class extends `Object`.
 fn identity_class(
     package: &str,
     program: &Program,
@@ -614,9 +619,17 @@ fn identity_class(
     class: &nts_core::hir::ClassIdentity,
 ) -> Result<Class, Diagnostic> {
     let mut pool = Pool::new();
-    let base = types::class_name(package, layout);
+    let interface = hierarchy::is_interface(program, layout);
+    let base = if interface {
+        "java/lang/Object".to_owned()
+    } else {
+        types::class_name(package, layout)
+    };
     let mut builder = ClassBuilder::new(types::identity_class_name(package, layout, class), base);
     builder.access = access::PUBLIC | access::SUPER | access::FINAL;
+    if interface {
+        builder.interfaces.push(types::class_name(package, layout));
+    }
     builder.source_file = Some("nts".to_owned());
     let origin = program_origin(program);
     builder
@@ -870,7 +883,8 @@ fn finish_classes(
 }
 
 /// Layouts this backend emits as interfaces that some operation allocates; see
-/// `types::instance_class`.
+/// `types::instance_class`. Not where every allocation is of a class with an
+/// identity, which allocates its own (`identity_class`).
 fn constructed_interfaces(program: &Program) -> Vec<&nts_core::hir::Layout> {
     program
         .layouts
@@ -879,7 +893,8 @@ fn constructed_interfaces(program: &Program) -> Vec<&nts_core::hir::Layout> {
         .filter(|layout| {
             program.funcs.iter().flat_map(|func| &func.values).any(|op| {
                 matches!(op.kind, nts_core::hir::OpKind::ObjectNew { .. })
-                    && matches!(&op.ty, nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) if layout.types.contains(id))
+                    && matches!(&op.ty, nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id))
+                        if layout.types.contains(id) && hierarchy::identity_of(program, *id).is_none())
             })
         })
         .collect()

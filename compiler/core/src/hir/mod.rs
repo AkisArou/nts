@@ -3326,14 +3326,7 @@ impl Program {
     /// about which objects answer to which class.
     #[must_use]
     pub fn distinct_identities(&self, layout: &Layout) -> Vec<&ClassIdentity> {
-        let mut found: Vec<&ClassIdentity> = Vec::new();
-        for class in &self.classes {
-            if class.types.iter().any(|ty| layout.types.contains(ty))
-                && !found.iter().any(|known| known.symbol == class.symbol)
-            {
-                found.push(class);
-            }
-        }
+        let found = self.classes_laid_out_as(layout);
         let plain = layout
             .types
             .iter()
@@ -3343,6 +3336,24 @@ impl Program {
         } else {
             Vec::new()
         }
+    }
+
+    /// Every class laid out as `layout`, one per declaration, in declaration
+    /// order. A backend whose spelling of a layout lets other objects answer
+    /// to it -- the JVM's interface, which every implementer is an instance
+    /// of -- gives each of these an identity, not only
+    /// [`Program::distinct_identities`]'.
+    #[must_use]
+    pub fn classes_laid_out_as(&self, layout: &Layout) -> Vec<&ClassIdentity> {
+        let mut found: Vec<&ClassIdentity> = Vec::new();
+        for class in &self.classes {
+            if class.types.iter().any(|ty| layout.types.contains(ty))
+                && !found.iter().any(|known| known.symbol == class.symbol)
+            {
+                found.push(class);
+            }
+        }
+        found
     }
 
     /// Whether a global's value is settled once and never moves again.
