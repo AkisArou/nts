@@ -581,24 +581,15 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_is_date",
         Support::Decline("bigint/symbol/date/promise family"),
     ),
-    (
-        "nts_is_finite",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_is_integer",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
+    ("nts_is_finite", Support::Intrinsic),
+    ("nts_is_integer", Support::Intrinsic),
     ("nts_is_map", Support::Decline("Map/Table/Set runtime")),
     (
         "nts_is_owner_thread",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
     ("nts_is_promise", Support::Intrinsic),
-    (
-        "nts_is_safe_integer",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
+    ("nts_is_safe_integer", Support::Intrinsic),
     ("nts_is_set", Support::Decline("Map/Table/Set runtime")),
     ("nts_is_view_kind", Support::Intrinsic),
     (

@@ -9,7 +9,7 @@ use crate::{
 use nts_core::hir::{BinOp, HirType, UnOp, ValueId};
 use wasm_encoder::Instruction as I;
 
-/// A runtime conversion answered at its call site.
+/// A runtime number conversion or test answered at its call site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Conversion {
     /// `ToInt32`'s bits, then this integer's width: `nts_to_uint8` and its
@@ -18,6 +18,12 @@ pub(crate) enum Conversion {
     Narrow { bits: u8, signed: bool },
     /// `nts_to_index`: zero for NaN and everything below one, else truncated.
     Index,
+    /// `Number.isFinite`: neither NaN nor an infinity.
+    IsFinite,
+    /// `Number.isInteger`: finite, and its own truncation (-0 included).
+    IsInteger,
+    /// `Number.isSafeInteger`: an integer whose magnitude is at most 2^53 - 1.
+    IsSafeInteger,
 }
 
 pub(crate) fn external(name: &str) -> Option<Conversion> {
@@ -30,6 +36,9 @@ pub(crate) fn external(name: &str) -> Option<Conversion> {
         "nts_to_int32" | "nts_to_int32_fn" => narrow(32, true),
         "nts_to_uint32" | "nts_to_uint32_fn" => narrow(32, false),
         "nts_to_index" => Conversion::Index,
+        "nts_is_finite" => Conversion::IsFinite,
+        "nts_is_integer" => Conversion::IsInteger,
+        "nts_is_safe_integer" => Conversion::IsSafeInteger,
         _ => return None,
     })
 }
@@ -64,6 +73,29 @@ pub(crate) fn call(
             push_as(b, value, &HirType::NUMBER)?;
             b.instructions(&[I::F64Const(1.0.into()), I::F64Ge, I::Select]);
             convert(b, &HirType::NUMBER, &to)
+        }
+        Conversion::IsFinite | Conversion::IsInteger | Conversion::IsSafeInteger => {
+            // `x - x` is 0 for every finite x, and NaN for NaN and both
+            // infinities.
+            push_as(b, value, &HirType::NUMBER)?;
+            push_as(b, value, &HirType::NUMBER)?;
+            b.instructions(&[I::F64Sub, I::F64Const(0.0.into()), I::F64Eq]);
+            if conversion != Conversion::IsFinite {
+                push_as(b, value, &HirType::NUMBER)?;
+                b.instruction(&I::F64Trunc);
+                push_as(b, value, &HirType::NUMBER)?;
+                b.instructions(&[I::F64Eq, I::I32And]);
+            }
+            if conversion == Conversion::IsSafeInteger {
+                push_as(b, value, &HirType::NUMBER)?;
+                b.instructions(&[
+                    I::F64Abs,
+                    I::F64Const(9_007_199_254_740_991.0.into()),
+                    I::F64Le,
+                    I::I32And,
+                ]);
+            }
+            convert(b, &HirType::Bool, &to)
         }
     }
 }

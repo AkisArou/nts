@@ -61,3 +61,14 @@ export function strings(v: number): string {
   const text = "Ünïcode ß " + (v | 0);
   return `${text.toUpperCase()}|${text.toLowerCase()}|${"ab".repeat((v | 0) & 3)}|${text.at(-1)}|${text.at(-100) ?? "none"}|${"😀x".codePointAt(0)}|${"😀x".codePointAt(9) ?? -1}`;
 }
+
+// Number.isFinite, isInteger and isSafeInteger over the edges: NaN, both
+// infinities, -0, a fraction, and either side of 2^53.
+export function numberTests(v: number): string {
+  const values = [v, v / 0, -v / 0, v * 0.5, -0 * v, 2 ** 53 + v, 2 ** 53 - 1 + v, 0.1 + v];
+  let text = "";
+  for (const x of values) {
+    text += `${Number.isFinite(x) ? 1 : 0}${Number.isInteger(x) ? 1 : 0}${Number.isSafeInteger(x) ? 1 : 0},`;
+  }
+  return text;
+}
