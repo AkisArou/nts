@@ -602,6 +602,14 @@ HIR value, with no allocation (`Slot::V128`).
   - bigints (149 cases, 38 refused, each one a value node keeps past 128
     bits or a throw);
   - seven bigint rows.
+- **A divisor written as a constant** within one word goes to a helper
+  holding it as an immediate (`DivBy`, `RemBy`): the engine turns a
+  division by a constant into a multiplication, and a division was most of
+  a small remainder's cost. Exploratory, paired, P-cores, load 39, ns per
+  iteration, node / before / after: `mulMod` 8.58 / 9.34 / 6.69 (now ahead
+  of node), `wideDivision` 62.4 / 22.7 / 12.7; `adds`, which divides
+  nothing, 2.75 / 2.73. bigints pins the constant divisors past 2^32, at
+  the word's extremes, over wide and narrow dividends of both signs.
 
 ### Conversions and host services (3i)
 

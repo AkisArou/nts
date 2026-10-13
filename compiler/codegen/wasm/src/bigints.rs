@@ -21,7 +21,7 @@ use crate::{
     numeric, strings,
     types::{Physical, Slot},
 };
-use nts_core::hir::{BinOp, HirType, ManagedType, UnOp, ValueId};
+use nts_core::hir::{BinOp, HirType, ManagedType, OpKind, UnOp, ValueId};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, ValType};
 
 /// The refusal every backend gives for a bigint past the width.
@@ -81,6 +81,12 @@ pub(crate) enum Helper {
     /// `(a, b, name) -> a / b`, truncated; zero refused by name.
     Div,
     Rem,
+    /// `Div` and `Rem` by a divisor the program writes as a constant within
+    /// one word, which the helper holds as an immediate: an engine turns a
+    /// division by a constant into a multiplication, and a division is most
+    /// of a small remainder's cost. `b` is passed and not read.
+    DivBy(i64),
+    RemBy(i64),
     /// `(value, count, name)`: a bigint count, negative reversing it.
     Shl,
     Shr,
@@ -115,10 +121,15 @@ const F64: Physical = Physical::Scalar(Slot::F64);
 pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failure> {
     let name = strings::STRING;
     let (params, result) = match helper {
-        Helper::Add | Helper::Sub | Helper::Mul | Helper::Div | Helper::Rem => {
-            (vec![V128, V128, name], Some(V128))
-        }
-        Helper::Shl | Helper::Shr => (vec![V128, V128, name], Some(V128)),
+        Helper::Add
+        | Helper::Sub
+        | Helper::Mul
+        | Helper::Div
+        | Helper::Rem
+        | Helper::DivBy(_)
+        | Helper::RemBy(_)
+        | Helper::Shl
+        | Helper::Shr => (vec![V128, V128, name], Some(V128)),
         Helper::Compare => (vec![V128, V128], Some(I32)),
         Helper::FromNumber => (vec![F64, name], Some(V128)),
         Helper::ToNumber => (vec![V128], Some(F64)),
@@ -152,8 +163,10 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
             Helper::Add => add_sub(m, false),
             Helper::Sub => add_sub(m, true),
             Helper::Mul => mul(m),
-            Helper::Div => divide(m, false),
-            Helper::Rem => divide(m, true),
+            Helper::Div => divide(m, false, None),
+            Helper::Rem => divide(m, true, None),
+            Helper::DivBy(divisor) => divide(m, false, Some(divisor)),
+            Helper::RemBy(divisor) => divide(m, true, Some(divisor)),
             Helper::Shl => shift(m, true),
             Helper::Shr => shift(m, false),
             Helper::Compare => Ok(compare()),
@@ -234,6 +247,11 @@ pub(crate) fn binary(
         _ => None,
     };
     if let Some(helper) = helper {
+        let helper = match (helper, constant_word(b, rhs)) {
+            (Helper::Div, Some(divisor)) => Helper::DivBy(divisor),
+            (Helper::Rem, Some(divisor)) => Helper::RemBy(divisor),
+            (helper, _) => helper,
+        };
         name(b);
         return call_helper(b, helper);
     }
@@ -256,6 +274,15 @@ pub(crate) fn binary(
         other => return Err(format!("bigint operator {other:?}").into()),
     }
     Ok(())
+}
+
+/// A bigint the program writes as a constant within one signed word, other
+/// than zero, whose division is the generic helper's refusal.
+fn constant_word(b: &Body<'_, '_>, value: ValueId) -> Option<i64> {
+    match b.func.value(value).kind {
+        OpKind::ConstInt(constant) => i64::try_from(constant).ok().filter(|&word| word != 0),
+        _ => None,
+    }
 }
 
 pub(crate) fn unary(b: &mut Body<'_, '_>, op: UnOp, operand: ValueId) -> Result<(), Failure> {
@@ -792,7 +819,9 @@ fn mul(m: &mut Builder<'_>) -> Result<Function, Failure> {
 ///
 /// Params: a, b, name. Locals: a lo, a hi, b lo, b hi, negative quotient,
 /// negative dividend, q lo, q hi, r lo, r hi, bit.
-fn divide(m: &mut Builder<'_>, remainder: bool) -> Result<Function, Failure> {
+/// `a / b` or `a % b`; with `divisor`, `b` is that constant, held as an
+/// immediate, and the parameter is not read.
+fn divide(m: &mut Builder<'_>, remainder: bool, divisor: Option<i64>) -> Result<Function, Failure> {
     let (alo, ahi, blo, bhi, qneg, aneg, qlo, qhi, rlo, rhi, bit) =
         (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
     let mut f = Function::new([
@@ -809,7 +838,7 @@ fn divide(m: &mut Builder<'_>, remainder: bool) -> Result<Function, Failure> {
         ValType::I32,
     ]);
     split(&mut f, 0, alo, ahi);
-    split(&mut f, 1, blo, bhi);
+    divisor_words(&mut f, divisor, blo, bhi);
     f.instructions(&[I::LocalGet(blo), I::LocalGet(bhi), I::I64Or, I::I64Eqz]);
     refuse_if(&mut f, m, 2, BY_ZERO)?;
     // One word each, and not the one quotient a word cannot hold.
@@ -890,6 +919,19 @@ fn divide(m: &mut Builder<'_>, remainder: bool) -> Result<Function, Failure> {
     join(&mut f, lo, hi);
     f.instruction(&I::End);
     Ok(f)
+}
+
+/// The divisor's words into their locals: the parameter's, or a constant's.
+fn divisor_words(f: &mut Function, divisor: Option<i64>, lo: u32, hi: u32) {
+    match divisor {
+        None => split(f, 1, lo, hi),
+        Some(word) => f.instructions(&[
+            I::I64Const(word),
+            I::LocalSet(lo),
+            I::I64Const(word >> 63),
+            I::LocalSet(hi),
+        ]),
+    }
 }
 
 /// Return the product at once when both operands are within 32 bits, signed:

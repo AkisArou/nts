@@ -164,3 +164,15 @@ export function openArrayOfBigints(v: number): string {
   const picked: unknown = values[(v | 0) & 1];
   return `${typeof picked}|${picked === 5n}|${String(picked)}`;
 }
+
+// Divisors the program writes as constants, which Wasm holds as immediates:
+// past 2^32 (bit by bit), the word's extremes, and over wide and narrow
+// dividends of both signs.
+export function constantDivisors(v: number): string {
+  const wide = (1n << 100n) + big(v) * 99991n;
+  const narrow = big(v) * 1000003n - 7n;
+  const past = `${wide / 4294967311n}|${wide % 4294967311n}|${-wide / 4294967311n}|${-wide % 4294967311n}`;
+  const extremes = `${wide / 9223372036854775807n}|${wide % 9223372036854775807n}|${wide / -9223372036854775808n}|${wide % -9223372036854775808n}`;
+  const small = `${narrow / 4294967296n}|${narrow % 4294967296n}|${narrow / -9223372036854775808n}|${narrow % -9223372036854775808n}`;
+  return `${past}|${extremes}|${small}|${narrow / 1n}|${narrow % 1n}|${TOP / 3n}|${BOTTOM % 1000000007n}`;
+}
