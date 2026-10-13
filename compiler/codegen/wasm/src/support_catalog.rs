@@ -126,10 +126,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_array_writable",
         Support::Decline("array helper not yet implemented"),
     ),
-    (
-        "nts_assertion_failed",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_assertion_failed", Support::Intrinsic),
     (
         "nts_bigint_as_intn",
         Support::Decline("bigint/symbol/date/promise family"),
@@ -174,10 +171,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_block_unlend",
         Support::Decline("foreign/native ABI or ownership"),
     ),
-    (
-        "nts_bool_to_string",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_bool_to_string", Support::Intrinsic),
     (
         "nts_bound_function_to_string",
         Support::Decline("value/control helper not yet implemented"),
@@ -1080,10 +1074,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_raise", Support::WasmHelper),
     ("nts_raise_take", Support::WasmHelper),
     ("nts_raising", Support::WasmHelper),
-    (
-        "nts_refused",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_refused", Support::Intrinsic),
     (
         "nts_register_holders",
         Support::Decline("native memory/provider contract"),
@@ -1373,10 +1364,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("bigint/symbol/date/promise family"),
     ),
     ("nts_table_new", Support::Decline("Map/Table/Set runtime")),
-    (
-        "nts_tag_name",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_tag_name", Support::WasmHelper),
     (
         "nts_tag_of_reference",
         Support::Decline("value/control helper not yet implemented"),
@@ -1537,10 +1525,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_value_to_number_explicit",
         Support::Decline("value/control helper not yet implemented"),
     ),
-    (
-        "nts_value_to_string",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_value_to_string", Support::WasmHelper),
     ("nts_value_truthy", Support::WasmHelper),
     ("nts_value_truthy_fn", Support::WasmHelper),
     (

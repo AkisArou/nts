@@ -316,6 +316,22 @@ fn source_interface_views_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// `String(v)` of every erased tag and of a boolean; an object is refused by
+/// name, since nothing here records how it prints.
+#[test]
+fn source_value_text_agrees_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/value-text");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "value-text",
+        &emitted,
+        "tooling/wasm/check-value-text.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 37, "{output}");
+}
+
 /// An owner of another field order whose storage is the same Wasm type as the
 /// interface's: the engine canonicalizes them into one type, so only the
 /// receiver's descriptor, never a type test, may decide how to read it.

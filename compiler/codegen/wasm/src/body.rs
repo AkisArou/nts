@@ -769,6 +769,8 @@ impl<'b, 'p> Body<'b, 'p> {
                     crate::array_join::call(self, result, name, join, args)?;
                 } else if crate::array_sort::external(name) {
                     crate::array_sort::call(self, result, name, args)?;
+                } else if let Some(helper) = crate::values::external(name) {
+                    crate::values::call(self, result, helper, args)?;
                 } else {
                     return Err(match crate::helper_support(name) {
                         Some(crate::Support::Decline(reason)) => format!("runtime/external helper `{name}`: {reason}").into(),

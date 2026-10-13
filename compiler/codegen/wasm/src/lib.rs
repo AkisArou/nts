@@ -37,6 +37,7 @@ mod strings;
 mod support;
 mod transfer;
 mod types;
+mod values;
 
 #[cfg(test)]
 #[path = "../tests/common/hir.rs"]

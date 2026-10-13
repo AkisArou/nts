@@ -57,6 +57,8 @@ pub(crate) enum FuncKey {
     UnfilledUniform(u32),
     Raising(crate::raising::Helper),
     DeclineInput,
+    ValueText,
+    TagName,
 }
 
 /// Every global the module can contain, named by what it means.
