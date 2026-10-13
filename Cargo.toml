@@ -5,8 +5,6 @@ members = [
     "compiler/semantic-schema",
     "compiler/frontend-ts",
     "compiler/core",
-    "compiler/memory-lowering",
-    "compiler/debug-lowering",
     "compiler/codegen/common",
     "compiler/codegen/c",
     "compiler/codegen/llvm",
@@ -48,11 +46,9 @@ nts-core = { path = "compiler/core" }
 nts-deps = { path = "tooling/deps" }
 nts-differential = { path = "tooling/differential" }
 nts-surfaces = { path = "tooling/surfaces" }
-nts-debug-lowering = { path = "compiler/debug-lowering" }
 nts-diagnostics = { path = "compiler/diagnostics" }
 nts-frontend-ts = { path = "compiler/frontend-ts" }
 nts-jvm-emitter = { path = "compiler/jvm-emitter" }
-nts-memory-lowering = { path = "compiler/memory-lowering" }
 nts-react = { path = "runtime/react/compiler/nts-react" }
 nts-semantic-schema = { path = "compiler/semantic-schema" }
 # The React Compiler, vendored at third_party/react-compiler.

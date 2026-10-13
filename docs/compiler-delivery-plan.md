@@ -12,8 +12,7 @@ and the compiler work; platform and runtime peers retain their lanes.
 The checked tsgo semantic snapshot lowers directly to typed SSA HIR. Preparation
 settles representations, specializes and simplifies code, analyzes escape and
 ownership, inserts reference counting where selected, and verifies HIR before C,
-LLVM or JVM emission. The memory-lowering and debug-lowering crates remain
-placeholders. The RFC is historical design material, not an implementation map.
+LLVM or JVM emission. The RFC is historical design material, not an implementation map.
 
 Closures use managed layouts, with typed and uniform erased call entries and a
 uniform raising entry. Closed class-union method calls already lower to ordinary

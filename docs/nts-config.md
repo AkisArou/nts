@@ -639,9 +639,9 @@ everything -- *nothing* reads `nts.config.ts*, not one field:
 | what | why | evidence |
 | --- | --- | --- |
 | `runtime.family` | derivable | `"native" \| "jvm"` is decided by `target.backend`. `family: "native"` beside `target.android()` typechecked |
-| `memory.mmtk()` | no mechanism | `compiler/memory-lowering/src/lib.rs`: "experimental, gated behind RFC §3.7. **Not in this crate yet**" |
+| `memory.mmtk()` | no mechanism | no MMTk code exists; the empty `memory-lowering` placeholder that promised it was removed |
 | `memory.hostGC()` | not a provider | `hir::Provider` is `NoGc \| ReferenceCounting`. The JVM lane reaches "no retains, no releases" by compiling under `NoGc`; there was never a third thing |
-| `cycleCollection: "deferred" \| "incremental"` | no mechanism | the word appears nowhere in `memory-lowering`, `hir/rc.rs` or `runtime/c` |
+| `cycleCollection: "deferred" \| "incremental"` | no mechanism | the word appears nowhere in `hir/rc.rs` or `runtime/c` |
 | the whole `memory` module, and `runtime` on products | not a product choice | the provider is a **`--rc` flag** (`tooling/cli/src/main.rs`), and `hir::Provider`'s own doc says `NoGc` is "never a silent default for an application". One value is the only shippable one, so it is a build mode, not configuration |
 | `runtimeLinkage` | no mechanism, borrowed vocabulary | nothing implements shading or relocation -- the three `relocat` hits are slot relocation and refusal text -- and there is **no jar target at all**. The only `--jar` is `nts bind` *reading* one. For a jar the words are "shaded" or "declared" anyway, not `bundled-private` |
 | `host` / `HostSpec` / `HostEnvironment` | untyped placeholder | five bare `string`s, so `host.android({ fetch: "banana" })` typechecked, and nothing read any of them. `ui` is a *rendering* choice rather than a host service, which is why it read oddly as a host property |

@@ -186,13 +186,11 @@ dependencies = [
  "nts-codegen-napi",
  "nts-codegen-wasm",
  "nts-core",
- "nts-debug-lowering",
  "nts-deps",
  "nts-diagnostics",
  "nts-differential",
  "nts-frontend-ts",
  "nts-jvm-emitter",
- "nts-memory-lowering",
  "nts-react",
  "nts-semantic-schema",
  "nts-surfaces",
@@ -210,10 +208,8 @@ dependencies = [
  "camino",
  "nts-codegen-common",
  "nts-core",
- "nts-debug-lowering",
  "nts-diagnostics",
  "nts-frontend-ts",
- "nts-memory-lowering",
  "nts-semantic-schema",
  "rustc-hash",
 ]
@@ -298,17 +294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nts-debug-lowering"
-version = "0.0.0"
-dependencies = [
- "indexmap",
- "nts-core",
- "nts-diagnostics",
- "nts-semantic-schema",
- "serde",
-]
-
-[[package]]
 name = "nts-deps"
 version = "0.0.0"
 dependencies = [
@@ -367,15 +352,6 @@ version = "0.0.0"
 dependencies = [
  "nts-diagnostics",
  "nts-semantic-schema",
- "rustc-hash",
-]
-
-[[package]]
-name = "nts-memory-lowering"
-version = "0.0.0"
-dependencies = [
- "nts-core",
- "nts-diagnostics",
  "rustc-hash",
 ]
 

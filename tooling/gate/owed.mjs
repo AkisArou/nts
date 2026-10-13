@@ -366,18 +366,6 @@ export const RULES = [
     arms: [],
   },
   {
-    name: "the memory lowering",
-    when: (p) => /^compiler\/memory-lowering\//.test(p),
-    steps: ["rc", "llvm-rc", "memory", "examples", "llvm", "addons"],
-    arms: [],
-  },
-  {
-    name: "the debug lowering",
-    when: (p) => /^compiler\/debug-lowering\//.test(p),
-    steps: ["examples", "rc", "llvm"],
-    arms: [],
-  },
-  {
     name: "the backends' common code",
     when: (p) => /^compiler\/codegen\/common\//.test(p),
     steps: ["examples", "llvm", "jvm", "rc", "llvm-rc", "assembles", "jvm-verifies", "dex", "bench-agree", "benches"],

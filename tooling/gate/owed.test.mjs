@@ -46,8 +46,8 @@ test("an input of a corpus's tsconfig owes that corpus's steps", () => {
 });
 
 test("a crate no rule names owes what the crates that use it owe", () => {
-  // memory-lowering has no rule; codegen-c and codegen-llvm depend on it.
-  owes("compiler/memory-lowering/src/lib.rs", ["examples", "rc", "llvm", "llvm-rc"]);
+  // semantic-schema has no rule; codegen-c and codegen-llvm depend on it.
+  owes("compiler/semantic-schema/src/lib.rs", ["examples", "rc", "llvm", "llvm-rc"]);
   // A crate's own rule adds to what the crates linking it owe; it never
   // stands in for them.
   owes("compiler/codegen/llvm/src/lib.rs", ["llvm", "llvm-rc", "assembles", "corpus", "bench-agree"]);
@@ -134,8 +134,7 @@ test("runtime/c is compiled into the C backend, so it owes at least what the C b
 test("a crate owes its own rule and every rule of the crates that depend on it", () => {
   superset(stepsFor("compiler/semantic-schema/src/lib.rs"), stepsFor("compiler/core/src/lib.rs"), "semantic-schema");
   superset(stepsFor("compiler/core/src/lib.rs"), stepsFor("compiler/codegen/c/src/lib.rs"), "core");
-  superset(stepsFor("compiler/memory-lowering/src/lib.rs"), [...stepsFor("compiler/codegen/c/src/lib.rs"), "corpus", "benches", "addons"], "memory-lowering");
-  for (const crate of ["compiler/codegen/common", "compiler/debug-lowering", "compiler/jvm-emitter", "build"]) {
+  for (const crate of ["compiler/codegen/common", "compiler/jvm-emitter", "build"]) {
     superset(stepsFor(`${crate}/src/lib.rs`), ["corpus", "benches", "bench-agree"], crate);
   }
 });

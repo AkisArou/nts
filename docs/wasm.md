@@ -922,8 +922,8 @@ Reject a browser/WASI fork of the backend: host choices are data at composition.
 ## Repository map and preparation contract
 
 The RFC's MIR/provider split describes the intended architecture. The executable
-pipeline today is snapshot → HIR preparation → backend; the memory-lowering
-crate is presently a scaffold. Wasm should plug into the executable pipeline,
+pipeline today is snapshot → HIR preparation → backend, with no separate
+memory-lowering stage. Wasm should plug into the executable pipeline,
 without claiming a MIR layer or a host-GC provider already exists.
 
 | Read surface | What wasm must take from it |
