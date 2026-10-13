@@ -10,9 +10,12 @@ function refuses(call, name, cause) {
   assert.throws(call, e => e instanceof WasmInputDecline && e.message === `NTS5001: wasm operation in ${name}: ${cause}`);
   causes++;
 }
-refuses(() => wasm.spliceUndefined(1), 'spliceUndefined', 'an erased value read as a number, which it is not');
-refuses(() => wasm.joinUndefined(1), 'joinUndefined', 'a null separator, which may stand for undefined or for null');
-refuses(() => wasm.optionalSeparator(1), 'joined', 'a null separator, which may stand for undefined or for null');
+// Three of the four now answer: the lowering reads an undefined splice count
+// as the method does and gives an absent `join` separator its comma, so
+// nothing reaches Wasm that it has to refuse. node's answers.
+assert.equal(wasm.spliceUndefined(1), 3);
+assert.equal(wasm.joinUndefined(1), 3);
+assert.equal(wasm.optionalSeparator(1), 3);
 assert.equal(wasm.optionalSeparator(0), 3);
 refuses(() => wasm.shiftNull(1), 'shiftNull', 'a null reference where the type says none is absent');
 console.log(JSON.stringify({ causes }));

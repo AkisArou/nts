@@ -219,7 +219,9 @@ fn source_refusals_name_their_cause() {
         "tooling/wasm/check-refusal-causes.mjs",
         &[],
     );
-    assert_eq!(output["causes"], 4, "{output}");
+    // One refusal left: the splice count and the join separator are answered
+    // by the lowering now, and only the stored-null shift still needs a name.
+    assert_eq!(output["causes"], 1, "{output}");
 }
 
 #[test]

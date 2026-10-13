@@ -1,6 +1,8 @@
-// Run-time refusals name their cause. Each of these is refused in Wasm today,
-// and each message says why, where all of them used to read "internal typed
-// value contract".
+// Run-time refusals name their cause, where all of them used to read
+// "internal typed value contract". The first three were refused in Wasm and
+// now answer: the lowering reads `splice(n, undefined)`'s count as the method
+// does and gives `join` its comma for an absent separator, so the values Wasm
+// refused never reach it. `shiftNull` is still refused by name.
 export function spliceUndefined(n: number): number {
   const xs = [1, 2, 3];
   return xs.splice(n, undefined).length * 10 + xs.length;

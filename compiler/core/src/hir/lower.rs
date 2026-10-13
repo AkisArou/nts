@@ -19785,6 +19785,57 @@ fn absent_argument(method: &str, position: usize, given: usize) -> Result<f64, &
     }
 }
 
+/// Whose built-in method a call is, where one name means two things:
+/// `lastIndexOf` is an array's and a string's, and they disagree about
+/// `undefined`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MethodsOf {
+    Array,
+    String,
+}
+
+/// What an explicit `undefined` is at an index argument of a built-in method,
+/// at `position` in the helper's arguments (the receiver is 0), as the number
+/// the runtime is handed. `None` where the argument is not an index.
+///
+/// Mostly what an omitted argument is, because the specification asks
+/// whether the *value* is undefined: `slice(1, undefined)` is `slice(1)`, an
+/// end at the length. Not where it asks whether the argument is *present*:
+/// `splice(1, undefined)` removes nothing where `splice(1)` removes the rest,
+/// `toSpliced` likewise, and an array's `lastIndexOf(x, undefined)` searches
+/// from `0` where `lastIndexOf(x)` searches from the end -- each is
+/// `ToIntegerOrInfinity(undefined)`, which is `0`. A string's `lastIndexOf`
+/// asks `ToNumber`, whose `NaN` is the end. `Infinity` is the end throughout,
+/// as [`absent_argument`] hands it.
+fn undefined_argument(receiver: MethodsOf, method: &str, position: usize) -> Option<f64> {
+    match (receiver, method, position) {
+        // The end, as an omitted end is: `slice(1, undefined)` is `slice(1)`,
+        // and a string's `lastIndexOf` reads `ToNumber(undefined)`, `NaN`.
+        (_, "slice", 2)
+        | (MethodsOf::String, "substring" | "substr" | "lastIndexOf" | "endsWith", 2)
+        | (MethodsOf::Array, "fill" | "copyWithin", 3) => Some(f64::INFINITY),
+        // `ToIntegerOrInfinity(undefined)`. As omitted for a start or a search
+        // position -- and *not* as omitted where the argument's presence is
+        // asked: `splice`'s and `toSpliced`'s count, an array's `lastIndexOf`
+        // start.
+        (_, "at" | "slice", 1)
+        | (MethodsOf::Array, "splice" | "toSpliced" | "with" | "copyWithin", 1)
+        | (
+            MethodsOf::Array,
+            "splice" | "toSpliced" | "lastIndexOf" | "fill" | "copyWithin" | "indexOf" | "includes",
+            2,
+        )
+        | (
+            MethodsOf::String,
+            "charAt" | "charCodeAt" | "codePointAt" | "substring" | "substr" | "repeat"
+            | "padStart" | "padEnd",
+            1,
+        )
+        | (MethodsOf::String, "indexOf" | "includes" | "startsWith", 2) => Some(0.0),
+        _ => None,
+    }
+}
+
 /// Which end of the array a walk starts from.
 ///
 /// `findLast`, `findLastIndex` and `reduceRight` are `find`, `findIndex` and
@@ -58416,6 +58467,10 @@ impl<'a> FuncBuilder<'a> {
                 Ok(value)
             }
             Branch::Present(value) => self.narrowed(id, value),
+            Branch::Unerased(value, ty) => {
+                let origin = self.origin(id);
+                Ok(self.push(OpKind::Unerase { value }, ty, origin))
+            }
             Branch::ObjcGetter(receiver, object, property) => {
                 self.send_objc_getter(id, object, &property, Some(receiver))
             }
@@ -62852,16 +62907,121 @@ impl<'a> FuncBuilder<'a> {
     /// numeric table's arity filling would supply -- so `join` is handled
     /// outside that table on all three receivers, and this is the one place
     /// that knows what the default is.
+    ///
+    /// **And a separator that may be `undefined` is the comma too**, decided
+    /// here where its type is known: `[1,2].join(undefined)` and a
+    /// `join(sep?: string)` called without one are `"1,2"`. Handed to the
+    /// runtime as it was, it was a null string, which C dereferenced -- and
+    /// the runtime cannot be the one to decide, because `null` joins as
+    /// `"null"` and a null pointer is both. TypeScript's `separator?: string`
+    /// admits `undefined` and never `null`, so a separator whose type admits
+    /// `null` came past the checker and is refused rather than guessed at.
     fn join_separator(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
-        if let Some(argument) = arguments.first() {
-            return self.lower_expression(*argument);
-        }
         let origin = self.origin(id);
-        Ok(self.push(
-            OpKind::ConstString(",".to_owned()),
-            HirType::Managed(ManagedType::String),
-            origin,
-        ))
+        let text = HirType::Managed(ManagedType::String);
+        let Some(argument) = arguments.first().copied() else {
+            return Ok(self.push(OpKind::ConstString(",".to_owned()), text, origin));
+        };
+        let separator = self.lower_expression(argument)?;
+        // The type and not the representation: every string is a pointer that
+        // may be null, and asking the value would test `","` too.
+        match self.absences_of(argument) {
+            Some(absences) if absences.is_empty() => return Ok(separator),
+            Some(absences) if !absences.contains(&super::tags::NULL) => {}
+            _ => {
+                return Err(self.unsupported(
+                    argument,
+                    "a `join` separator that may be null, which joins as \"null\" where an absent one is a comma",
+                ));
+            }
+        }
+        let Some(absent) = self.absence_of(argument, separator) else {
+            return Ok(separator);
+        };
+        let comma = self.push(OpKind::ConstString(",".to_owned()), text.clone(), origin);
+        self.lower_branching_value_at(
+            id,
+            text,
+            absent,
+            Branch::Value(comma),
+            Branch::Present(separator),
+        )
+    }
+
+    /// A built-in method's arguments, appended to `args` after its receiver,
+    /// each read the way the method reads it.
+    ///
+    /// **An index that may be `undefined` is what the method says `undefined`
+    /// is**, which is not one thing: `xs.slice(1, undefined)` runs to the end,
+    /// and `xs.splice(1, undefined)` removes nothing ([`undefined_argument`]).
+    /// Lowered as it was, the erased value met the helper's `double` through
+    /// an unerase nothing had tested, and C, LLVM, the JVM and RC all read an
+    /// undefined `end` as `0` -- an empty slice, and agreeing with node only
+    /// where `0` happened to be the answer, as `splice`'s count is.
+    fn lower_method_arguments(
+        &mut self,
+        (receiver, method): (MethodsOf, &str),
+        arguments: &[NodeId],
+        args: &mut Vec<ValueId>,
+    ) -> Result<(), Diagnostic> {
+        for argument in arguments {
+            let value = self.lower_expression(*argument)?;
+            let position = args.len();
+            let value = match undefined_argument(receiver, method, position) {
+                Some(meaning) => self.index_or_undefined(*argument, value, meaning)?,
+                None => value,
+            };
+            args.push(value);
+        }
+        Ok(())
+    }
+
+    /// An index argument, or `meaning` where it is `undefined`.
+    ///
+    /// Asked of the type, which says whether the value can be `undefined`; the
+    /// erased representation is what the test reads. The unerase is in the arm
+    /// the tag test chose, so nothing reads an `undefined` as a number. A `null` is refused: TypeScript's index parameters are
+    /// `number` or `number | undefined`, so one came past the checker, and
+    /// `null` is `0` where `undefined` may be the end.
+    fn index_or_undefined(
+        &mut self,
+        argument: NodeId,
+        value: ValueId,
+        meaning: f64,
+    ) -> Result<ValueId, Diagnostic> {
+        if self.values[value.0 as usize].ty != HirType::Erased {
+            return Ok(value);
+        }
+        let absences = self.absences_of(argument).unwrap_or_default();
+        if !absences.contains(&super::tags::UNDEFINED) {
+            return Ok(value);
+        }
+        if absences.contains(&super::tags::NULL) {
+            return Err(self.unsupported(
+                argument,
+                "an index that may be null, which a method reads as `0` where `undefined` may mean the end",
+            ));
+        }
+        let origin = self.origin(argument);
+        let undefined = self.push(OpKind::ConstFloat(meaning), HirType::NUMBER, origin);
+        if self
+            .snapshot
+            .node_types
+            .get(&argument)
+            .is_some_and(|ty| holds_only_absences(self.snapshot, *ty))
+        {
+            return Ok(undefined);
+        }
+        let Some(absent) = self.absence_of(argument, value) else {
+            return Ok(value);
+        };
+        self.lower_branching_value_at(
+            argument,
+            HirType::NUMBER,
+            absent,
+            Branch::Value(undefined),
+            Branch::Unerased(value, HirType::NUMBER),
+        )
     }
 
     /// A method call on a typed array.
@@ -74112,9 +74272,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        self.lower_method_arguments((MethodsOf::String, name.as_str()), arguments, &mut args)?;
         let origin = self.origin(id);
 
         if let Some(folded) = self.fold_string_call(helper, &args, &ty, &origin) {
@@ -74387,9 +74545,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        self.lower_method_arguments((MethodsOf::Array, &name), arguments, &mut args)?;
         let origin = self.origin(id);
         self.fill_array_arguments((id, &name), arity, &mut args, &origin)?;
         if args.len() != arity + 1 {
@@ -75384,9 +75540,7 @@ impl<'a> FuncBuilder<'a> {
         // Lowered before the helper is chosen, because the choice now depends
         // on the needle's type and not only on the array's.
         let mut args = vec![receiver];
-        for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
+        self.lower_method_arguments((MethodsOf::Array, name), arguments, &mut args)?;
         let needle_is_erased = args
             .get(1)
             .is_some_and(|value| self.values[value.0 as usize].ty == HirType::Erased);
@@ -80826,6 +80980,10 @@ enum Native {
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
+    /// An erased value the branch's test proved present, read at this type in
+    /// its arm -- here and not before the branch, because an unerase is a read
+    /// only a tag test licenses. See [`FuncBuilder::index_or_undefined`].
+    Unerased(ValueId, HirType),
     /// A parameter's default, in the arm where the argument a call passed for
     /// it is `undefined`: see [`FuncBuilder::lower_parameter_default`], whose
     /// arguments these are -- the call, the default, the callee, the arguments
