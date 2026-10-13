@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: a function-typed const initialized by a call=0;a bare call (control)=1;",
+  "node": "exit 1; nts: uncaught Observed: a function-typed const initialized by a call=1;a bare call (control)=2;",
+  "measured_with": "4dd1d9705fe78a2a",
+  "source": "measured"
+}
