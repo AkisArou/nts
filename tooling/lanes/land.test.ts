@@ -25,7 +25,7 @@ else
   git worktree add -q --detach "$NTS_GATE_TREE" "$sha"
 fi
 [ -n "\${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
-echo "$sha" >> "$LAND_TEST_GATES"
+echo "$sha \${NTS_INTEROP_PROJECTS:-}" >> "$LAND_TEST_GATES"
 verdict=green step=PASS
 if [ -e "$NTS_GATE_TREE/RED" ]; then verdict=red step=FAIL; fi
 printf '{"verdict":"%s","started":"t","wall_s":1,"steps":[{"name":"fake","verdict":"%s"}],"identities":{"commit":"%s"}}' \\
@@ -47,7 +47,11 @@ function scratch(): Scratch {
   mkdirSync(join(home, ".cache/nts-parallel-20261004/mainctl"), { recursive: true });
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
   writeFileSync(join(root, "tooling/gate/pinned.sh"), STAND_IN_GATE);
-  writeFileSync(join(root, "tooling/gate/owed.mjs"), `console.log('NTS_GATE_STEPS="fake"');\n`);
+  // Narrows interop to what a commit's INTEROP file names, as owed.mjs does.
+  writeFileSync(
+    join(root, "tooling/gate/owed.mjs"),
+    `import { existsSync, readFileSync } from "node:fs";\nconst p = existsSync("INTEROP") ? \` NTS_INTEROP_PROJECTS="\${readFileSync("INTEROP", "utf8").trim()}"\` : "";\nconsole.log(\`NTS_GATE_STEPS="fake"\${p} sh tooling/gate/all.sh\`);\n`,
+  );
   writeFileSync(join(root, "shared.txt"), "one\n");
   const env: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_") && !k.startsWith("NTS_")) env[k] = v;
@@ -197,4 +201,13 @@ test("a landing that repeats one ahead of it in a red train is not told it lande
   assert.equal(rr.status, 1, rr.out);
   assert.equal(ra.status, 1, ra.out);
   assert.ok(!onMain(s, "a.txt"));
+});
+
+test("the interop projects owed.mjs names reach the gate", async () => {
+  const s = scratch();
+  const a = lane(s, "a", { INTEROP: "java-from-ts ts-from-java\n" });
+  const [ra] = await landTogether(s, [a]);
+  assert.equal(ra.status, 0, ra.out);
+  assert.match(ra.out, /owes: fake \(interop: java-from-ts ts-from-java\)/);
+  assert.match(readFileSync(s.gates, "utf8"), / java-from-ts ts-from-java$/m);
 });

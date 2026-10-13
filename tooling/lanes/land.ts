@@ -86,15 +86,22 @@ function sharedCheckout(): string {
 }
 
 /**
- * The steps `owed.mjs` asks for a range, run from a tree at `sha`; `"all"` when
- * it asks for the full gate, which it says as a bare `all.sh` with no list.
+ * What `owed.mjs` asks of a range, run from a tree at `sha`: its steps, or
+ * `"all"` for the full gate (a bare `all.sh` with no list), and the interop
+ * projects when it could narrow them (`NTS_INTEROP_PROJECTS`), else null.
  */
-function owedSteps(tree: string, range: string): string[] | "all" {
+type Owed = { steps: string[] | "all"; interop: string | null };
+function owedSteps(tree: string, range: string): Owed {
   const out = execFileSync("node", ["tooling/gate/owed.mjs", "--range", range], { cwd: tree, encoding: "utf8" });
-  const line = out.match(/NTS_GATE_STEPS="([^"]*)"/);
-  if (line) return line[1].split(/\s+/).filter(Boolean);
-  if (/^\s*sh tooling\/gate\/all\.sh\s+# the full gate/m.test(out)) return "all";
+  const line = out.match(/NTS_GATE_STEPS="([^"]*)"(?: NTS_INTEROP_PROJECTS="([^"]*)")?/);
+  if (line) return { steps: line[1].split(/\s+/).filter(Boolean), interop: line[2] ?? null };
+  if (/^\s*sh tooling\/gate\/all\.sh\s+# the full gate/m.test(out)) return { steps: "all", interop: null };
   fail(`owed.mjs named no steps for ${range}:\n${out}`);
+}
+
+function describe(owed: Owed): string {
+  const steps = owed.steps === "all" ? "the full gate" : owed.steps.join(" ");
+  return owed.interop ? `${steps} (interop: ${owed.interop})` : steps;
 }
 
 /** Whether a lane's entry names a path: a directory it owns, a file, or a glob. */
@@ -322,7 +329,7 @@ function gate(root: string, base: string, landing: string, members: string[]): G
   });
   if (setup.status !== 0) fail(`could not check out ${short} in the gate tree:\n${setup.stdout}${setup.stderr}`);
   const owed = owedSteps(GATE_TREE, `${base}..${landing}`);
-  say(`${short} on ${base.slice(0, 12)} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
+  say(`${short} on ${base.slice(0, 12)} owes: ${describe(owed)}`);
 
   claimMarker(short);
   const run = join(STATE, "runs", `${short}-${Date.now()}`);
@@ -330,8 +337,9 @@ function gate(root: string, base: string, landing: string, members: string[]): G
   status({ state: "gating", commit: landing, base, owed, run, train: members });
   try {
     const env: Record<string, string | undefined> = { ...process.env };
-    for (const k of Object.keys(env)) if (k.startsWith("NTS_GATE_")) delete env[k];
-    if (owed !== "all") env.NTS_GATE_STEPS = owed.join(" ");
+    for (const k of Object.keys(env)) if (k.startsWith("NTS_GATE_") || k === "NTS_INTEROP_PROJECTS") delete env[k];
+    if (owed.steps !== "all") env.NTS_GATE_STEPS = owed.steps.join(" ");
+    if (owed.interop) env.NTS_INTEROP_PROJECTS = owed.interop;
     Object.assign(env, {
       NTS_GATE_TREE: GATE_TREE,
       NTS_GATE_TARGET: GATE_TARGET,
@@ -349,7 +357,7 @@ function gate(root: string, base: string, landing: string, members: string[]): G
     const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
     const byName = new Map<string, string>((summary.steps ?? []).map((s: { name: string; verdict: string }) => [s.name, s.verdict]));
     // The full gate is whatever the run requested: every step all.sh defines.
-    const steps: string[] = owed === "all" ? (summary.requested ?? []) : owed;
+    const steps: string[] = owed.steps === "all" ? (summary.requested ?? []) : owed.steps;
     if (steps.length === 0) return { ok: false, run, state: "red", message: `the summary requested no steps; see ${run}` };
     const wrong = steps.filter((s) => {
       const v = byName.get(s);
@@ -458,7 +466,7 @@ function main(): void {
     const from = git(["merge-base", base, sha], root);
     const owed = owedSteps(tree, `${from}..${sha}`);
     const where = from === base ? `on ${base.slice(0, 12)}` : `(replayed onto ${base.slice(0, 12)} when it lands)`;
-    say(`${short} ${where} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
+    say(`${short} ${where} owes: ${describe(owed)}`);
     return;
   }
 

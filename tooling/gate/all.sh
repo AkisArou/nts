@@ -2244,9 +2244,30 @@ interop() {
   printf '%s, pid %s, since %s\n' "$root" "$$" "$(date +%H:%M:%S)" > "$interop_lock.who"
   lanes=$(mktemp -d)
   local_lanes=${NTS_INTEROP_LOCAL_LANES:-${NTS_GATE_JOBS:-6}}
+  # **Only the projects the range owes**, when owed.mjs could name them
+  # (NTS_INTEROP_PROJECTS, which land.ts passes on): a JVM backend change owes
+  # the projects built on the JVM, a change inside one project that project.
+  # Unset, every project, as before. A range that touches nothing narrower
+  # than the compiler owes them all, so the floor below still holds there.
+  selected=${NTS_INTEROP_PROJECTS:-}
+  owed_project() {
+    [ -z "$selected" ] && return 0
+    case " $selected " in *" $1 "*) return 0 ;; esac
+    return 1
+  }
+  if [ -n "$selected" ]; then
+    for project in $selected; do
+      if [ ! -f "examples/interop/$project/build.sh" ]; then
+        echo "  NTS_INTEROP_PROJECTS names $project, which has no build.sh"
+        return 1
+      fi
+    done
+    echo "  the projects this range owes: $selected"
+  fi
   locals=""
   for script in examples/interop/*/build.sh; do
     project=$(basename "$(dirname "$script")")
+    owed_project "$project" || continue
     case $project in
       macos-*|ios-*) printf '%s\n' "$script" >> "$lanes/apple.list" ;;
       windows-*|winui-*) printf '%s\n' "$script" >> "$lanes/windows.list" ;;
@@ -2304,6 +2325,7 @@ interop() {
   failed=0
   for script in examples/interop/*/build.sh; do
     project=$(basename "$(dirname "$script")")
+    owed_project "$project" || continue
     output=$(cat "$lanes/$project.out" 2>/dev/null)
     case $(cat "$lanes/$project.status" 2>/dev/null) in
       ok)
@@ -2412,6 +2434,8 @@ interop() {
   #     is `gtk-gettext`, GJS's `gettext` module translating from a catalogue.
   #     It SKIPs without glib-2.0, msgfmt or an en_US.UTF-8 locale.
   interop_floor=60
+  # A narrowed run owes exactly the projects it named, each checked above.
+  [ -n "$selected" ] && interop_floor=$(printf '%s\n' $selected | wc -l)
   if [ "$((ran + skipped))" -lt "$interop_floor" ]; then
     printf '  expected %s interop project(s), saw %s\n' \
       "$interop_floor" "$((ran + skipped))"

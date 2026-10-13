@@ -242,13 +242,21 @@ export const RULES = [
   {
     name: "the LLVM backend",
     when: (p) => /^compiler\/codegen\/llvm\//.test(p),
-    steps: ["llvm", "llvm-rc", "assembles"],
+    // Every step that selects it through the CLI (see SELECTED_BY_THE_CLI):
+    // the differential runs, the IR check, benches.sh's emit-llvm, the interop
+    // projects built with `backend: "llvm"`, and outcomes marked `// backend: llvm`.
+    steps: ["llvm", "llvm-rc", "assembles", "benches", "interop", "outcomes"],
     arms: [{ kind: "answers", asks: "which code is emitted, on LLVM", run: "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..." }],
   },
   {
     name: "the JVM backend",
     when: (p) => /^compiler\/codegen\/jvm\//.test(p),
-    steps: ["jvm", "dex"],
+    // Every step that selects it through the CLI (see SELECTED_BY_THE_CLI):
+    // emit-jvm in the differential, d8, the verifier, bench-agree (JVM by
+    // default), benches.sh, the device, the JVM interop projects (java-from-ts,
+    // ts-from-java, android-shape), and outcomes marked `// backend: jvm`.
+    steps: ["jvm", "dex", "jvm-verifies", "bench-agree", "benches", "on-device", "interop", "outcomes"],
+    interop: () => interopBuiltWith("jvm"),
     arms: [
       { kind: "answers", asks: "which code is emitted, on the JVM", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" },
       { kind: "valid", asks: "does the runtime's JVM output pass the verifier -- the jvm step runs examples only", run: "NTS_BIN=<after> node tooling/conformance/jvm-verifies.ts" },
@@ -379,6 +387,7 @@ export const RULES = [
     name: "the JVM class writer",
     when: (p) => /^compiler\/jvm-emitter\//.test(p),
     steps: ["jvm", "dex", "jvm-verifies", "bench-agree", "on-device"],
+    interop: () => interopBuiltWith("jvm"),
     arms: [],
   },
   {
@@ -401,6 +410,7 @@ export const RULES = [
     name: "the refused.ts claim checker",
     when: (p) => p === "tooling/jvm/check-refusals.sh",
     steps: ["interop"],
+    interop: () => interopBuiltWith("jvm"),
     arms: [],
   },
   {
@@ -613,12 +623,42 @@ export function cargoDirOf(path) {
   return null;
 }
 
-/** `dir` and every crate that depends on it, directly or not. */
+/**
+ * **The CLI runs a backend only when a command selects it.** `nts` links every
+ * backend, and `emit-llvm`, `emit-jvm`, `emit-wasm`, `--napi`, a config's
+ * `backend` or NTS_BACKEND decide which one runs; every other command never
+ * enters it. So a change inside one of these backends changes what the CLI
+ * does on exactly the steps that select that backend -- which the backend's
+ * own rule lists -- and not on everything the CLI's rule owes. Through the
+ * crate graph alone, a Wasm-only change owed interop's GTK builds, the native
+ * examples, profile and test262, none of which runs the Wasm backend: each
+ * Wasm landing paid about 26 minutes of interop for nothing it could change
+ * (2026-10-14).
+ *
+ * The C backend is not here: it is what every one of those runs by default.
+ * The other crates that link a backend (the differential, the bench driver,
+ * the suite) call into it in their own code, and keep their reach.
+ */
+const SELECTED_BY_THE_CLI = new Set(["compiler/codegen/llvm", "compiler/codegen/jvm", "compiler/codegen/wasm", "compiler/codegen/napi", "compiler/jvm-emitter"]);
+
+/**
+ * `dir` and every crate that depends on it, directly or not -- except the CLI
+ * when `dir` is a backend it selects (SELECTED_BY_THE_CLI), by whichever
+ * crate the graph reaches it: the CLI also runs the differential, which runs
+ * the JVM and LLVM backends only for the commands that ask for them.
+ */
 export function dependents(dir) {
   const all = crates();
+  const selected = SELECTED_BY_THE_CLI.has(dir);
   const seen = new Set([dir]);
   const queue = [dir];
-  while (queue.length) for (const u of all.get(queue.shift())?.users ?? []) if (!seen.has(u)) { seen.add(u); queue.push(u); }
+  while (queue.length) {
+    for (const u of all.get(queue.shift())?.users ?? []) {
+      if (seen.has(u) || (selected && all.get(u)?.name === "nts-cli")) continue;
+      seen.add(u);
+      queue.push(u);
+    }
+  }
   return [...seen];
 }
 
@@ -714,6 +754,28 @@ export function tsconfigInputs(config, seen = new Set()) {
 }
 
 /** input (file or directory, repo-relative) -> Set of corpus names. */
+/**
+ * interop project -> what its build reads, as `corpusInputs` maps a corpus:
+ * its directory, its tsconfig's inputs and its config's target files, so a
+ * path owes the projects that read it and no other. A path no project reads
+ * maps to none, and owes every project.
+ */
+export function interopInputs() {
+  return once("interop-inputs", () => {
+    const map = new Map();
+    const add = (input, project) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(project); };
+    for (const dir of kids("examples/interop")) {
+      if (!existsSync(join(TREE, dir, "build.sh"))) continue;
+      const project = dir.split("/")[2];
+      add(dir, project);
+      const config = existsSync(join(TREE, dir, "tsconfig.json")) ? `${dir}/tsconfig.json` : null;
+      for (const input of config ? tsconfigInputs(config) : []) if (input !== "" && input !== ".") add(input, project);
+      for (const input of configTargetInputs(dir)) add(input, project);
+    }
+    return map;
+  });
+}
+
 export function corpusInputs() {
   return once("corpora", () => {
     const map = new Map();
@@ -905,11 +967,16 @@ export function embedded() {
  */
 export function owed(changes) {
   const out = [];
-  const add = (name, path, steps, extra = {}) => {
+  // `projects`: the interop projects these steps owe, when the source can
+  // say; otherwise every one (see `interopOwed`).
+  const add = (name, path, steps, extra = {}, projects = null) => {
     let r = out.find((x) => x.name === name);
     if (!r) { r = { name, paths: [], steps: [], arms: [], ...extra }; out.push(r); }
     if (!r.paths.includes(path)) r.paths.push(path);
     for (const st of steps) if (!r.steps.includes(st)) r.steps.push(st);
+    if (steps.includes("interop")) {
+      r.interop = !projects || r.interop === "all" ? "all" : [...new Set([...(r.interop ?? []), ...projects])];
+    }
     return r;
   };
   const full = [];
@@ -922,7 +989,7 @@ export function owed(changes) {
     let unplaced = null; // why the path owes the full gate, when it does
     let unrun = false; // an instrument no step's scripts were found to run
     for (const rule of rulesFor(path, added)) {
-      add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full });
+      add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full }, rule.interop?.());
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
@@ -949,25 +1016,29 @@ export function owed(changes) {
           continue;
         }
         for (const rule of rules) {
-          add(dir === root && rulesFor(path, added).includes(rule) ? rule.name : `${rule.name}, through the crate graph`, via, rule.steps, { full: rule.full });
+          add(dir === root && rulesFor(path, added).includes(rule) ? rule.name : `${rule.name}, through the crate graph`, via, rule.steps, { full: rule.full }, rule.interop?.());
           gave += rule.steps.length + (rule.full ? 1 : 0);
         }
       }
     }
 
     // The corpora, by membership and by their tsconfigs.
+    // The interop projects whose build reads this path, when any does: what
+    // it owes of `interop` (a change in one project builds that project).
+    const readers = [...covering(interopInputs(), path)];
+    const projects = readers.length > 0 ? readers : null;
     const corpora = new Set(CORPORA.filter((c) => c.member.test(path)).map((c) => c.name));
     for (const c of covering(corpusInputs(), path)) corpora.add(c);
     for (const name of corpora) {
       const c = CORPORA.find((x) => x.name === name);
-      add(`an input to ${name}`, path, c.steps);
+      add(`an input to ${name}`, path, c.steps, {}, projects);
       gave += c.steps.length;
     }
 
     // What the steps run.
     const steps = [...covering(stepInputs(), path)];
     if (steps.length) {
-      add("an input to what a gate step runs", path, steps);
+      add("an input to what a gate step runs", path, steps, {}, projects);
       gave += steps.length;
     }
 
@@ -988,6 +1059,38 @@ export function owed(changes) {
  * The gate steps a set of rules owes, deduplicated, `build` first and the
  * cheap always-owed ones next. A rule marked `full` owes every step.
  */
+/**
+ * The interop projects whose build reaches a backend: its build.sh or
+ * nts.config.ts names it. A broad match on purpose -- a project the match
+ * takes in needlessly costs a build, one it leaves out lands a change its
+ * project never ran.
+ */
+export function interopBuiltWith(backend) {
+  const words = { jvm: /jvm|android|\bdex\b|\bd8\b/i }[backend];
+  if (!words) throw new Error(`interopBuiltWith: no match written for ${backend}`);
+  return once(`interop-${backend}`, () => {
+    const dir = join(TREE, "examples/interop");
+    return readdirSync(dir).filter((name) => {
+      const read = (f) => (existsSync(join(dir, name, f)) ? readFileSync(join(dir, name, f), "utf8") : "");
+      return existsSync(join(dir, name, "build.sh")) && words.test(read("build.sh") + read("nts.config.ts"));
+    });
+  });
+}
+
+/**
+ * Which interop projects the rules owe: null when they owe no `interop`,
+ * "all" when any rule owing it could not narrow it (or the full gate is
+ * owed), else the projects named. all.sh's interop step reads the list from
+ * NTS_INTEROP_PROJECTS and builds only those.
+ */
+export function interopOwed(rules) {
+  if (!gateSteps(rules).includes("interop")) return null;
+  if (rules.some((r) => r.full)) return "all";
+  const owing = rules.filter((r) => r.steps.includes("interop"));
+  if (owing.some((r) => r.interop === "all" || !r.interop)) return "all";
+  return [...new Set(owing.flatMap((r) => r.interop))].sort();
+}
+
 export function gateSteps(rules) {
   if (rules.length === 0) return [];
   if (rules.some((r) => r.full)) {
@@ -1060,7 +1163,9 @@ function main() {
   }
   const rules = owed(changes);
   const steps = gateSteps(rules);
-  const gate = rules.some((r) => r.full) ? "sh tooling/gate/all.sh   # the full gate" : `NTS_GATE_STEPS="${steps.join(" ")}" sh tooling/gate/all.sh`;
+  const projects = interopOwed(rules);
+  const narrowed = Array.isArray(projects) ? ` NTS_INTEROP_PROJECTS="${projects.join(" ")}"` : "";
+  const gate = rules.some((r) => r.full) ? "sh tooling/gate/all.sh   # the full gate" : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed} sh tooling/gate/all.sh`;
   const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
   console.log(`  ${changes.length} path(s) changed in ${TREE}`);
   for (const r of rules) {
@@ -1082,7 +1187,10 @@ function main() {
   }
   if (argv.includes("--run")) {
     console.log(`\n  running them in ${TREE}\n`);
-    const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env: { ...process.env, NTS_GATE_STEPS: steps.join(" ") } });
+    const env = { ...process.env, NTS_GATE_STEPS: steps.join(" ") };
+    delete env.NTS_INTEROP_PROJECTS;
+    if (Array.isArray(projects)) env.NTS_INTEROP_PROJECTS = projects.join(" ");
+    const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env });
     const left = rules.flatMap((r) => r.arms).length;
     console.log(`\n  gate steps: ${run.status === 0 ? "green" : `FAILED (exit ${run.status ?? run.signal})`}; ${left} arm(s) above are still yours`);
     process.exit(run.status === 0 ? 0 : 1);

@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { allSteps, changedPaths, gateSteps, owed, parseNameStatus, targetFiles } from "./owed.mjs";
+import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, owed, parseNameStatus, targetFiles } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
@@ -54,6 +54,34 @@ test("a crate no rule names owes what the crates that use it owe", () => {
   // A crate's own rule adds to what the crates linking it owe; it never
   // stands in for them.
   owes("compiler/codegen/llvm/src/lib.rs", ["llvm", "llvm-rc", "assembles", "corpus", "bench-agree"]);
+});
+
+test("a backend the CLI selects owes the steps that select it, not everything the CLI owes", () => {
+  // No gate step runs the Wasm backend through the CLI: only its own tests.
+  owes("compiler/codegen/wasm/src/lib.rs", ["tests"], { not: ["interop", "examples", "profile", "test262-cases", "outcomes"] });
+  owes("compiler/codegen/napi/src/lib.rs", ["addons", "profile", "divergence"], { not: ["interop", "examples"] });
+  // The JVM and LLVM backends build interop projects and pinned outcomes
+  // through the CLI, so their own rules owe those.
+  owes("compiler/codegen/jvm/src/lib.rs", ["jvm", "dex", "jvm-verifies", "interop", "outcomes", "bench-agree", "on-device"]);
+  owes("compiler/jvm-emitter/src/lib.rs", ["jvm", "dex", "jvm-verifies", "interop", "outcomes"]);
+  owes("compiler/codegen/llvm/src/lib.rs", ["llvm", "llvm-rc", "assembles", "interop", "outcomes", "benches"]);
+  // The C backend is what the CLI runs by default: it keeps the CLI's reach.
+  superset(stepsFor("compiler/codegen/c/src/lib.rs"), ["interop", "addons", "profile", "config"], "the C backend");
+});
+
+test("interop builds only the projects a range reaches, when it can say which", () => {
+  const projects = (...paths) => interopOwed(owed(paths.map((path) => ({ path, added: false }))));
+  const jvm = interopBuiltWith("jvm");
+  assert.ok(jvm.includes("java-from-ts") && jvm.includes("android-shape") && !jvm.includes("gtk-hello"), jvm.join(" "));
+  assert.deepEqual(projects("compiler/codegen/jvm/src/lib.rs"), jvm);
+  assert.deepEqual(projects("examples/interop/gtk-hello/src/main.ts"), ["gtk-hello"]);
+  assert.deepEqual(projects("examples/interop/gtk-hello/src/main.ts", "examples/interop/native-fd/build.sh"), ["gtk-hello", "native-fd"]);
+  // Anything that cannot be narrowed owes every project.
+  assert.equal(projects("compiler/codegen/llvm/src/lib.rs"), "all");
+  assert.equal(projects("compiler/core/src/hir/lower.rs"), "all");
+  assert.equal(projects("compiler/codegen/jvm/src/lib.rs", "compiler/core/src/hir/lower.rs"), "all");
+  assert.equal(projects("tooling/gate/token.sh"), "all");
+  assert.equal(projects("compiler/codegen/wasm/src/lib.rs"), null);
 });
 
 test("what a step runs owes that step", () => {
@@ -172,8 +200,10 @@ test("the hand-written rules still decide what they name", () => {
   owes("runtime/node/path/index.ts", ["definitions", "integrity-runtime", "addons", "compile-time"]);
 });
 
-test("the WebAssembly backend owes its executable fixtures and downstream CLI checks", () => {
-  owes("compiler/codegen/wasm/src/body.rs", ["tests", "interop", "config"]);
+test("the WebAssembly backend owes its executable fixtures", () => {
+  // Not the CLI's interop and config: no interop project or config builds for
+  // Wasm, and the CLI runs this backend only for emit-wasm (SELECTED_BY_THE_CLI).
+  owes("compiler/codegen/wasm/src/body.rs", ["tests"], { not: ["interop", "config"] });
   // Native runtime inputs also reach Wasm through the workspace's crate
   // graph. An unplaced new backend must not turn that reach into everything.
   const rules = owed([{ path: "runtime/c/nts_runtime.h", added: false }]);

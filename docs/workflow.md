@@ -51,7 +51,10 @@ lock of your own). It:
    once, up to six, oldest first. Each one's commits since it left `main` are
    replayed onto `main`, the next onto the last; one that conflicts is
    refused (rebase by hand and land again), and the train goes on without it;
-3. asks `owed.mjs --range main..<tip>` which gate steps the train owes;
+3. asks `owed.mjs --range main..<tip>` which gate steps the train owes, and
+   which interop projects: a change inside one project builds that project,
+   a JVM backend change the projects built on the JVM, and anything it cannot
+   narrow every project (`interop` is half an hour of GTK builds);
 4. runs exactly those, with `pinned.sh`, in the one gate tree;
 5. lands the train only on a green summary that names its tip with every owed
    step PASS. A red train of more than one is halved, and its first half gated
