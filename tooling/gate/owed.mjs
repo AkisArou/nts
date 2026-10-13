@@ -37,10 +37,12 @@
 //   - **the crate graph** (`cargo metadata`): a change in a crate is a change
 //     in every crate that depends on it, so `compiler/semantic-schema` owes
 //     what `compiler/core` and every backend owe, through them;
-//   - **the corpora's tsconfigs**: a file a gated program's tsconfig includes
-//     (`files`, `include`, `extends`, `paths`) is an input to the steps that
-//     compile that corpus -- runtime/chromium/dom/types/*.d.ts is part of
-//     three blockers fixtures, so it owes `blockers`;
+//   - **the corpora's tsconfigs and targets**: a file a gated program's
+//     tsconfig includes (`files`, `include`, `extends`, `paths`), or that a
+//     target its nts.config.ts builds for brings in, is an input to the steps
+//     that compile that corpus -- runtime/chromium/dom/types/*.d.ts is part of
+//     three blockers fixtures, so it owes `blockers`, and `target.chromium()`
+//     brings it to an interop project, so it owes `interop`;
 //   - **what each step runs**: the files all.sh's step bodies name, and what
 //     those scripts name and import in turn, owe that step.
 //
@@ -436,18 +438,22 @@ export const RULES = [
     arms: [{ kind: "hygiene", asks: "were they taken on a healthy run", run: "NTS_GATE_RECORD_TIMES=1 on a full gate whose summary you have read" }],
   },
   {
-    // The Chromium lane's own tooling: the Blink build, its harnesses, and the
-    // bindings generator. No gate step runs any of it (a file a step does run
-    // still owes that step, through the step map). A gate step that starts
-    // reading a file here must enter the step map too, or this rule hides it:
-    // settling the path is a claim that nothing in the gate reaches it. What
-    // it produces is charged where it lands: a regenerated
-    // runtime/chromium/dom/types/*.d.ts is an input to the blockers fixtures'
-    // tsconfigs and owes `blockers` and `integrity` as its own path, and the
-    // rest is checked by the lane's verify-all (both stage builds, against the
-    // V8 oracle).
-    name: "the Chromium lane's tooling",
-    when: (p) => /^tooling\/chromium\//.test(p),
+    // The Chromium lane's own files: the Blink build, its harnesses and the
+    // bindings generator (tooling/chromium), and what only that build compiles
+    // -- the app host, the Blink adapter, the embedder probe, the apps, the
+    // tests and benchmarks, their docs (runtime/chromium). No gate step runs
+    // any of it (a file a step does run still owes that step, through the step
+    // map). A gate step that starts reading a file here must enter the step
+    // map too, or this rule hides it: settling the path is a claim that
+    // nothing in the gate reaches it. What a gated program does reach is
+    // charged as its own path, through the corpora: the DOM surface and its
+    // native half (runtime/chromium/dom) that `target.chromium()` brings to an
+    // interop project owe `interop`, and the declarations the blockers
+    // fixtures' tsconfigs name owe `blockers` and `integrity`. The rest is
+    // checked by the lane's verify-all (both stage builds, against the V8
+    // oracle).
+    name: "the Chromium lane",
+    when: (p) => /^(tooling|runtime)\/chromium\//.test(p),
     settled: true,
     steps: [],
     arms: [{ kind: "answers", asks: "does the lane still agree with V8 on both backends", run: "the Chromium lane's verify-all: program check, stage builds C and LLVM, smokes against the V8 oracle, compare.ts, standalone rows, app checks" }],
@@ -608,6 +614,37 @@ function readJsonc(path) {
   return JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
 }
 
+/**
+ * Target constructor name -> the files it brings into every program built for
+ * it, repo-relative: the `runtimeFile("...")` calls in that constructor in
+ * tooling/config/src/target.ts, its `surface` and `native`. A program reaches
+ * them through its nts.config.ts, and no tsconfig names them:
+ * examples/interop/chromium-surface builds on Chromium's DOM surface and links
+ * its native half with neither in its tsconfig.json.
+ */
+export function targetFiles() {
+  return once("targetFiles", () => {
+    const map = new Map();
+    let name = null;
+    for (const line of readFileSync(join(TREE, "tooling/config/src/target.ts"), "utf8").split("\n")) {
+      // The constructors are the members of `export const target = {`.
+      const head = /^  (\w+): \(/.exec(line);
+      if (head) map.set((name = head[1]), []);
+      else if (line.startsWith("}")) name = null;
+      for (const [, path] of line.matchAll(/runtimeFile\("([^"]+)"\)/g)) if (name) map.get(name).push(`runtime/${path}`);
+    }
+    return map;
+  });
+}
+
+/** What the targets a program's nts.config.ts builds for bring into it (`targetFiles`). */
+function configTargetInputs(dir) {
+  const config = join(TREE, dir, "nts.config.ts");
+  if (!existsSync(config)) return [];
+  const files = targetFiles();
+  return [...readFileSync(config, "utf8").matchAll(/\btarget\.(\w+)\(/g)].flatMap(([, name]) => files.get(name) ?? []);
+}
+
 /** The files and directories a tsconfig takes its program from, repo-relative. */
 export function tsconfigInputs(config, seen = new Set()) {
   const abs = resolve(TREE, config);
@@ -644,6 +681,7 @@ export function corpusInputs() {
           if (input === "" || input === "." || (!config && input === "")) continue;
           add(input, c.name);
         }
+        for (const input of configTargetInputs(dir)) add(input, c.name);
       }
     }
     return map;

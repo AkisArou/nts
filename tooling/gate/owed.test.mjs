@@ -8,7 +8,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { allSteps, changedPaths, gateSteps, owed, parseNameStatus } from "./owed.mjs";
+import { readFileSync } from "node:fs";
+import { relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { allSteps, changedPaths, gateSteps, owed, parseNameStatus, targetFiles } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
@@ -39,7 +42,7 @@ test("the runner owes the full gate", () => {
 
 test("an input of a corpus's tsconfig owes that corpus's steps", () => {
   // Named by three blockers fixtures' `files`, not by any rule.
-  owes("runtime/chromium/dom/types/dom-idl.d.ts", ["blockers", "integrity"], { not: ["interop", "definitions"] });
+  owes("runtime/chromium/dom/types/dom-idl.d.ts", ["blockers", "integrity"], { not: ["examples", "definitions"] });
   // Extended by every fixture config.
   owes("tsconfig.fixtures.json", ["examples", "blockers", "memory", "bench-agree"]);
   owes("tooling/memory/cases/closure-capture/src/main.ts", ["memory"], { not: ["examples"] });
@@ -71,13 +74,44 @@ test("a data file a step's tool reads beside itself owes that step", () => {
   assert.ok(stepsFor("tooling/gate/times.tsv").length < allSteps().length);
 });
 
-test("the Chromium lane's tooling owes only what every change owes", () => {
+test("the Chromium lane's own files owe only what every change owes", () => {
   // As the gate's step times do: placed, and owing nothing of its own.
   const always = [...stepsFor("tooling/gate/times.tsv")].sort();
   assert.ok(always.includes("clippy") && !always.includes("blockers"), `every change owes ${always.join(" ")}`);
-  for (const p of ["tooling/chromium/bindgen/generate.py", "tooling/chromium/smoke.ts", "tooling/chromium/args.gn"]) {
+  for (const p of [
+    "tooling/chromium/bindgen/generate.py", "tooling/chromium/smoke.ts", "tooling/chromium/args.gn",
+    "runtime/chromium/host/host.c", "runtime/chromium/adapter/dom_bridge.cc", "runtime/chromium/examples/todo/main.ts",
+    "runtime/chromium/embedder/program/check.ts", "runtime/chromium/docs/lib-dom.md", "runtime/chromium/dom/types/dom-testing.d.ts",
+  ]) {
     assert.deepEqual([...stepsFor(p)].sort(), always, p);
   }
+});
+
+test("what a target brings owes the corpora built for it", () => {
+  // examples/interop/chromium-surface reaches Chromium's DOM through
+  // `target.chromium()` in its nts.config.ts; its tsconfig names neither half.
+  owes("runtime/chromium/dom/types/lib-dom-bindings.d.ts", ["interop"]);
+  owes("runtime/chromium/dom/abi/dom_idl.h", ["interop"], { not: ["blockers"] });
+});
+
+test("the files a target brings are read from its constructor", async () => {
+  // targetFiles() reads target.ts's text; the constructors that need no
+  // argument say what they bring themselves.
+  const source = new URL("../config/src/target.ts", import.meta.url);
+  const { target } = await import(source.href);
+  const root = fileURLToPath(new URL("../..", import.meta.url));
+  const files = targetFiles();
+  assert.deepEqual([...files.keys()].sort(), Object.keys(target).sort());
+  for (const [name, make] of Object.entries(target)) {
+    let made;
+    try { made = make(); } catch { continue; } // android, ios and macos take a required argument
+    const brought = [...(made.surface ?? []), ...(made.native ?? [])].map((p) => relative(root, p));
+    assert.deepEqual(files.get(name), brought, `target.${name}`);
+  }
+  assert.ok(files.get("chromium").length > 0, "target.chromium() brings no files");
+  // And none is called outside a constructor, where no target would own it.
+  const calls = readFileSync(source, "utf8").match(/runtimeFile\("/g).length;
+  assert.equal([...files.values()].flat().length, calls);
 });
 
 test("what the bindings generator writes still owes its readers", () => {
