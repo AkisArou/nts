@@ -265,6 +265,36 @@ Stage B's facts decide everything here, not shapes.
 - **Calls, exploratory, ns per call:** row 2.00/2.05, typed vtable 1.75/1.83,
   node 0.53/1.17 (one class / four), from `tooling/wasm/bench/interface`.
 
+### Type identity: one rec group (2c)
+
+Every type the plan makes shares one rec group, except a function signature
+that names no other defined type. Do not split it into per-type or per-component
+groups. The engine canonicalizes types iso-recursively: two structurally equal
+types in separate rec groups are one type, so `ref.test` and `ref.cast` cannot
+tell them apart.
+- **The bug it closes.** `Swapped { b; a }` and an interface `Pair { a; b }`
+  are both "object root, f64, f64". In separate groups, a `ref.test (ref
+  $Pair)` passed for a `Swapped`, and a fast path for interface reads read its
+  fields in `Pair`'s order: -4000 where node answers 2000
+  (interface-same-shape-owner). The unerase projection guard had the same
+  hole: an `OrderYX` read as an `OrderXY` answered its `y`
+  (`reorderedAlias` in the objects test).
+- **In one group, types at different positions are distinct**, so every test
+  and cast between object types is nominal. Relations come only from the plan's
+  declared parents. `J2Wasm`, Kotlin/Wasm and dart2wasm emit their types the
+  same way.
+- **A leaf signature stays in a group of its own.** An import's type must equal
+  the engine's own for a builtin (`wasm:js-string`), which is a group of one.
+  Function types carry no identity of their own, so a structural match between
+  two of them is a true one.
+- **Cost, exploratory (load ~36):** module bytes over the 284 emitted examples
+  fell 0.4% (fewer group headers). Cold compile and instantiate of the largest
+  module (`callbacks`, 40 KB) is unchanged within noise: node 5.0 against 5.1 ms,
+  Chromium 12.8 against 10.9 ms (`tooling/wasm/bench/startup.mjs`). A
+  generated program of 400 classes, 408 types in one group where there were
+  408 groups, is unchanged too: node 118.2 against 118.5 ms, Chromium 174
+  against 175 ms at the minimum, and emit 0.47 s either way.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
