@@ -566,7 +566,11 @@ fn interface_projection(
 /// An interface's declaration already answers erased by now; a class chain's
 /// call through a narrower class names that class's own body, and is pointed at
 /// the slot's root -- whose parameters it must agree with, or it is left as it
-/// was. The call keeps its value id by moving: the call goes to a fresh id typed
+/// was. A root with a body of its own answers what the checker said, and it is
+/// its bridge, `{root}@erased`, that the root's table holds: the call names
+/// that. Naming the body left C calling the bridge through a pointer typed to
+/// return an object, and the JVM a method the class does not declare
+/// (`tooling/conformance/outcomes/an-override-called-through-an-interface-returning-unknown-*`). The call keeps its value id by moving: the call goes to a fresh id typed
 /// `Erased`, and the old id becomes the `Unerase` of it, so every use of the old
 /// id reads the value it always did.
 fn retarget(
@@ -589,7 +593,13 @@ fn retarget(
     let target = if erased_declaration(declared).is_some() {
         None
     } else {
-        let (Some(through), Some(root_func)) = (by_name(declared), erased_declaration(root)) else {
+        let bridge = format!("{root}{ERASED_SUFFIX}");
+        let (root, root_func) = match (erased_declaration(root), erased_declaration(&bridge)) {
+            (Some(func), _) => (root.to_owned(), func),
+            (None, Some(func)) => (bridge, func),
+            (None, None) => return,
+        };
+        let Some(through) = by_name(declared) else {
             return;
         };
         let agree = through.params.len() == root_func.params.len()
@@ -602,7 +612,7 @@ fn retarget(
         if !agree {
             return;
         }
-        Some(root.to_owned())
+        Some(root)
     };
     let func = &mut program.funcs[at];
     let op = &mut func.values[value.0 as usize];
