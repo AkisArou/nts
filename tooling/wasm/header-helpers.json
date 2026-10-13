@@ -75,6 +75,8 @@
     "nts_bigint_box",
     "nts_bigint_compare_string",
     "nts_bigint_from_number",
+    "nts_bigint_overflow",
+    "nts_bigint_pow",
     "nts_bigint_shl",
     "nts_bigint_shr",
     "nts_bigint_to_string",
