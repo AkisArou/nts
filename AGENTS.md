@@ -53,10 +53,20 @@ node tooling/lanes/land.ts <commit> --dry-run   # the steps it owes
 node tooling/lanes/land.ts <commit>             # gate and land, ~30 min: run it in the background
 ```
 
-Run it from your tree at that commit. It refuses a commit not on top of
-`main`, gates exactly what `owed.mjs` says the commits owe (choosing steps by
-hand is how `main` went red), one gate at a time, and lands only on a green
-summary with `main` unmoved. Never `git merge` onto `main` yourself.
+Run it from your tree at that commit, **bare**: never inside a `flock` or a
+lock of your own. It takes the landing lock itself; a wrapper holding it while
+`land` waited stopped every lane's landing for most of an hour, and `land` now
+refuses to run under one. Once it holds the lock, a commit `main` has moved
+past is replayed onto `main` (refused only on a conflict); it gates exactly
+what `owed.mjs` says the commits owe (choosing steps by hand is how `main` went
+red), one gate at a time, and lands only on a green summary with `main`
+unmoved. Never `git merge` onto `main` yourself.
+
+Before a lowering change goes to the gate, also run the five test262 records
+the gate checks (all.sh's `test262_cases`, `test262_builtins_cases`,
+`test262_rest_cases`: `conformance262.ts --under <dir> --recorded <tsv>`
+against a pin). They take minutes, and they caught seventeen regressions that
+fixtures, examples and blockers did not.
 
 Before you land, run the gate's own commands, not look-alikes:
 `cargo fmt --all`; `cargo clippy --workspace --all-targets -- -D warnings`;
@@ -119,6 +129,11 @@ then a guard once fixed), `tooling/memory/cases/`.
   `debug/incremental` after a test run and check `df -h /` before starting one.
 - A tsgo snapshot of a large program takes gigabytes: cap parallel frontends,
   and check `journalctl -k` for OOM kills before blaming a crash.
+- **Gates run back to back, so heavy work runs beside them:** `nice -n 19`, one
+  heavy job of yours at a time, a heavy phase started only when `MemAvailable`
+  (`/proc/meminfo`) is at least 14 GB, and paused when it drops under 12. A
+  gate step's memory pre-check is what a neighbour breaks, and a red gate costs
+  its lane a half-hour rerun.
 - Benchmark on the P-cores (CPUs 0–15) only, from a worktree pinned to a
   commit, and compare ratios within one run, never absolute times across runs.
   `nts-bench` links the compiler crates directly: run a plain

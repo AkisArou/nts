@@ -30,7 +30,7 @@
 // Pushing to origin is not its business: that stays a person's decision.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -136,8 +136,41 @@ function onMain(root: string, base: string, sha: string): string | null {
 }
 
 /** Hold the landing lock for the rest of this process: re-run under flock. */
+/**
+ * The process holding the landing lock, from the kernel's own table: a
+ * `FLOCK` line in `/proc/locks` on the lock file's inode (a waiter's line
+ * starts with `->`, and is not the holder).
+ */
+function lockHolder(): number | null {
+  if (!existsSync(LOCK) || !existsSync("/proc/locks")) return null;
+  const inode = statSync(LOCK).ino;
+  for (const line of readFileSync("/proc/locks", "utf8").split("\n")) {
+    const f = line.trim().split(/\s+/);
+    if (f[1] !== "FLOCK" || f[1] === "->") continue;
+    if (Number(f[5]?.split(":")[2]) === inode) return Number(f[4]);
+  }
+  return null;
+}
+
+/** Whether `pid` is this process or one of its ancestors. */
+function isAncestor(pid: number): boolean {
+  for (let at = process.pid; at > 1; ) {
+    if (at === pid) return true;
+    const stat = readFileSync(`/proc/${at}/stat`, "utf8");
+    at = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+  }
+  return false;
+}
+
 function underTheLock(): void {
   if (process.env.NTS_LAND_LOCKED === "1") return;
+  // **Run bare.** A wrapper that takes this lock and then runs land.ts holds
+  // it while land.ts waits for it: every lane's landing stopped for most of
+  // an hour on one on 2026-10-13. land.ts takes the lock itself.
+  const holder = lockHolder();
+  if (holder !== null && isAncestor(holder)) {
+    fail(`process ${holder}, which started this one, holds the landing lock: run land.ts bare, it takes the lock itself`);
+  }
   mkdirSync(dirname(LOCK), { recursive: true });
   const held = spawnSync("flock", ["-n", LOCK, "true"]);
   if (held.status !== 0) say("another landing holds the lock; waiting");
