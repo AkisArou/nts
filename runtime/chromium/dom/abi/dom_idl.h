@@ -5332,6 +5332,7 @@ const NtsStringView* nts_dom_URL_createObjectURL_1(NtsDomBlob* blob, NtsDomExcep
 NtsDomURL* nts_dom_URL_parse_2(const NtsBorrowedString* url, const NtsBorrowedString* base);
 NtsDomURL* nts_dom_URL_parse_1(const NtsBorrowedString* url);
 void nts_dom_URL_revokeObjectURL(const NtsBorrowedString* url);
+NtsDomURLSearchParams* nts_dom_new_URLSearchParams_1_string(const NtsBorrowedString* init, NtsDomException** error);
 NtsDomURLSearchParams* nts_dom_new_URLSearchParams_0(NtsDomException** error);
 double nts_dom_URLSearchParams_get_size(NtsDomURLSearchParams* self);
 void nts_dom_URLSearchParams_append(NtsDomURLSearchParams* self, const NtsBorrowedString* name, const NtsBorrowedString* value);

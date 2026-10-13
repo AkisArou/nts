@@ -319,6 +319,16 @@ export function libDomTranscript(): string {
     log("getAll", found.length + ":" + found.join(",") + ":" + found[2].length + "|" + params.getAll("none").length);
   }
 
+  // A URLSearchParams made from a string (its init's string arm): the
+  // leading "?" dropped, percent-decoding, a repeated name, and a lone
+  // surrogate, which the USVString conversion makes U+FFFD before parsing.
+  {
+    const params = new URLSearchParams("?a=1&b=%E2%82%AC&a=3&" + String.fromCharCode(0xd800) + "=z");
+    params.append("c", "x y");
+    log("urlSearchParams", params.toString() + "|" + params.getAll("a").join(",") + "|" + params.get("b") + "|" +
+      params.has("\ufffd"));
+  }
+
   root.remove();
   return lines.join("\n");
 }

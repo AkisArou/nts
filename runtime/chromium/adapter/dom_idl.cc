@@ -37541,6 +37541,12 @@ void nts_dom_URL_revokeObjectURL(const NtsBorrowedString* url) {
   URLFileAPI::revokeObjectURL(script_state, NtsText(context, url));
 }
 
+NtsDomURLSearchParams* nts_dom_new_URLSearchParams_1_string(const NtsBorrowedString* init, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomURLSearchParams>(URLSearchParams::Create(blink::MakeGarbageCollected<blink::V8UnionUSVStringOrUSVStringSequenceSequenceOrUSVStringUSVStringRecord>(NtsText(context, init, /*scalar_values=*/true)), exception_state));
+}
+
 NtsDomURLSearchParams* nts_dom_new_URLSearchParams_0(NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);

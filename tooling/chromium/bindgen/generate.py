@@ -623,11 +623,22 @@ class Generator:
         if not unwrapped.is_union:
             return None
         members = [t.unwrap(typedef=True) for t in unwrapped.flattened_member_types]
+        strings = [t for t in members if t.keyword_typename in STRINGS]
         if not all(t.is_interface or t.is_dictionary or t.keyword_typename == "boolean" for t in members):
-            return None
+            # A union one of whose members is a string, the rest containers
+            # no arm carries -- URLSearchParams' `(sequence<sequence<USVString>>
+            # or record<USVString, USVString> or USVString)` -- is offered by
+            # its string, and a caller passing a sequence or a record finds no
+            # overload. A string beside Trusted Types is the argument's own
+            # conversion's (parameter), not an arm.
+            containers = [t for t in members if t.is_sequence or t.is_record or t.is_frozen_array]
+            if len(strings) != 1 or len(strings) + len(containers) != len(members):
+                return None
         arms = sorted({t.type_definition_object.identifier for t in members if t.is_interface} & self.bound)
         arms += sorted(t.type_definition_object.identifier for t in members if t.is_dictionary)
         arms += ["boolean"] if any(t.keyword_typename == "boolean" for t in members) else []
+        arms += ["string"] if strings and not all(t.is_interface or t.is_dictionary or t.keyword_typename == "boolean"
+                                                  for t in members) else []
         if not arms:
             raise Skip(f"parameter type {idl_type.syntactic_form}: no member is bound")
         return arms
@@ -642,6 +653,7 @@ class Generator:
         union = blink_type_info(unwrapped).typename
         member = next((t for t in members_of(unwrapped)
                        if (t.unwrap(typedef=True).keyword_typename == "boolean" and arm == "boolean")
+                       or (t.unwrap(typedef=True).keyword_typename in STRINGS and arm == "string")
                        or (t.unwrap(typedef=True).is_dictionary
                            and t.unwrap(typedef=True).type_definition_object.identifier == arm)), None)
         if member is not None:

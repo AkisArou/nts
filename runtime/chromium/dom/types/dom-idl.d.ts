@@ -25025,6 +25025,12 @@ declare module "nts:dom" {
   export type URLSearchParamsMethods = URLSearchParamsOwnMethods;
   export type URLSearchParams = HostClass<"NtsDomURLSearchParams", null, "nts_dom_retain", "nts_dom_release"> & URLSearchParamsMethods;
   /**
+   * @ntsSymbol nts_dom_new_URLSearchParams_1_string
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newURLSearchParams(init: StringView, error?: Ptr<DOMException | null>): URLSearchParams;
+  /**
    * @ntsSymbol nts_dom_new_URLSearchParams_0
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
