@@ -530,7 +530,7 @@ impl<'b, 'p> Body<'b, 'p> {
             kind @ (OpKind::SharedFieldGet { .. }
             | OpKind::OpenFieldGet { .. }
             | OpKind::OpenFieldSet { .. }) => crate::objects::open_member(self, id, kind)?,
-            OpKind::InstanceOf { value, classes } => {
+            OpKind::InstanceOf { value, classes, .. } => {
                 crate::objects::instance(self, *value, classes)?;
             }
             kind @ (OpKind::ArrayNew { .. }

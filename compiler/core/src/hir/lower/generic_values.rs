@@ -726,7 +726,11 @@ fn emit_guard(
                 builder.layout_of(id, *class)?;
             }
             let actual = builder.push(
-                OpKind::InstanceOf { value, classes },
+                OpKind::InstanceOf {
+                    value,
+                    classes,
+                    by_layout: false,
+                },
                 HirType::Bool,
                 origin.clone(),
             );

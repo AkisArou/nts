@@ -1410,6 +1410,16 @@ pub enum OpKind {
         /// `C` and its subclasses, in a stable order so two runs of one
         /// compiler on one input emit the same program.
         classes: Vec<TypeId>,
+        /// Whether `classes` name **layouts**, not classes: the test a body
+        /// makes before reading an object at a type's storage -- a
+        /// `function`'s `this:` -- which every object laid out there passes,
+        /// whatever its identity. Two classes of one shape, or a literal typed
+        /// as a class, each have a descriptor of their own
+        /// (`Program::distinct_identities`), so a test naming one shape's
+        /// descriptor stopped the others. Lowering cannot list them: which
+        /// types share a layout is settled after it. `expand_layout_tests`
+        /// adds each identity once it is, so a backend reads an ordinary list.
+        by_layout: bool,
     },
     /// `object.field`, by index into the type's [`Layout`].
     ///

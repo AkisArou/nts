@@ -3490,6 +3490,7 @@ fn operation(
         OpKind::InstanceOf {
             value: operand,
             classes,
+            ..
         } => return Ok(instance_of(program, &out, *operand, classes, platform)),
         // Before the general binary arm, because it *is* a binary and the
         // general one would match it first -- and an `icmp` on a sixteen-byte

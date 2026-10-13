@@ -217,6 +217,7 @@ fn guard_func(
             OpKind::InstanceOf {
                 value: erased,
                 classes,
+                by_layout: false,
             },
             HirType::Bool,
         );

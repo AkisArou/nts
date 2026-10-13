@@ -156,6 +156,7 @@ fn nominal(name: &str, allocated: u32, tested: u32, erased: bool) -> Func {
         OpKind::InstanceOf {
             value: input,
             classes: vec![ClassId(tested)],
+            by_layout: false,
         },
         HirType::Bool,
     );
@@ -419,6 +420,7 @@ fn alias_identity(name: &str, allocated: u32, projected: u32, tested: u32) -> Fu
         OpKind::InstanceOf {
             value: read,
             classes: vec![ClassId(tested)],
+            by_layout: false,
         },
         HirType::Bool,
     );
@@ -513,6 +515,7 @@ fn primitive_instance(name: &str, ty: Option<HirType>, undefined: bool) -> Func 
         OpKind::InstanceOf {
             value: input,
             classes: vec![ClassId(1)],
+            by_layout: false,
         },
         HirType::Bool,
     );

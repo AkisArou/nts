@@ -15510,6 +15510,7 @@ pub fn lower_with_access(
     collect_declared_facts(&mut lowered.program, snapshot);
     super::interface_identities::collect(snapshot, &hierarchy.faces, &mut lowered.program);
     canonicalize_objects(&mut lowered.program);
+    expand_layout_tests(&mut lowered.program);
     printed::decide(snapshot, &hierarchy, &closures, &mut lowered.program);
     printed::devirtualize(snapshot, &hierarchy, &mut lowered.program);
     function_names::decide(snapshot, &closures, &mut lowered.program);
@@ -15819,6 +15820,85 @@ fn nominal_name(name: &str) -> bool {
 /// possible" and is why this belongs here rather than in a backend.
 fn is_foreign_name(name: &str) -> bool {
     super::runtime::is_foreign_layout_name(name)
+}
+
+/// Each layout test (`OpKind::InstanceOf::by_layout`), widened to every
+/// identity laid out where one of its types is.
+///
+/// A `this:` type is where the body reads its object, so every object laid
+/// out there passes: a literal and a class that shares its shape with no
+/// other answer with the shape's descriptor, and each class with an identity
+/// of its own (`Program::distinct_identities`) with its own. Lowering named
+/// the type and the classes under it; which other types share their layouts
+/// is settled only after `canonicalize_objects`. Before this, `new Box()`
+/// given to a `function (this: Valued)` stopped by name wherever a second
+/// class, or a literal typed as `Box`, shared `Box`'s shape
+/// (`examples/a-function-that-reads-its-own-this`).
+fn expand_layout_tests(program: &mut Program) {
+    let index = super::fields::LayoutIndex::build(program);
+    let mut widened: rustc_hash::FxHashMap<TypeId, Vec<TypeId>> = rustc_hash::FxHashMap::default();
+    for op in program.funcs.iter().flat_map(|func| &func.values) {
+        let OpKind::InstanceOf {
+            classes,
+            by_layout: true,
+            ..
+        } = &op.kind
+        else {
+            continue;
+        };
+        for class in classes {
+            if widened.contains_key(class) {
+                continue;
+            }
+            let Some(at) = index.of_class(*class) else {
+                continue;
+            };
+            let layout = &program.layouts[at];
+            // One type per descriptor: each identity's own, and one plain
+            // record for the shape's.
+            let mut sharing: Vec<TypeId> = program
+                .distinct_identities(layout)
+                .iter()
+                .filter_map(|identity| {
+                    identity
+                        .types
+                        .iter()
+                        .copied()
+                        .find(|ty| layout.types.contains(ty))
+                })
+                .collect();
+            sharing.extend(
+                layout
+                    .types
+                    .iter()
+                    .copied()
+                    .find(|ty| program.plain_records.contains(ty)),
+            );
+            widened.insert(*class, sharing);
+        }
+    }
+    if widened.is_empty() {
+        return;
+    }
+    for op in program.funcs.iter_mut().flat_map(|func| &mut func.values) {
+        let OpKind::InstanceOf {
+            classes,
+            by_layout: true,
+            ..
+        } = &mut op.kind
+        else {
+            continue;
+        };
+        let more: Vec<TypeId> = classes
+            .iter()
+            .filter_map(|class| widened.get(class))
+            .flatten()
+            .copied()
+            .collect();
+        classes.extend(more);
+        classes.sort_unstable_by_key(|ty| ty.0);
+        classes.dedup();
+    }
 }
 
 /// Every `InstanceOf` names classes this program has a layout for, and no
@@ -30268,6 +30348,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::InstanceOf {
                 value: this,
                 classes,
+                by_layout: true,
             },
             HirType::Bool,
             origin.clone(),
@@ -39214,6 +39295,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::InstanceOf {
                     value: erased,
                     classes,
+                    by_layout: false,
                 },
                 HirType::Bool,
                 origin.clone(),
@@ -42707,6 +42789,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::InstanceOf {
                     value,
                     classes: declaring,
+                    by_layout: false,
                 },
                 HirType::Bool,
                 origin.clone(),
@@ -42732,6 +42815,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::InstanceOf {
                     value,
                     classes: vec![class],
+                    by_layout: false,
                 },
                 HirType::Bool,
                 origin.clone(),
@@ -43355,6 +43439,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::InstanceOf {
                 value,
                 classes: declaring,
+                by_layout: false,
             },
             HirType::Bool,
             origin,
@@ -43783,7 +43868,15 @@ impl<'a> FuncBuilder<'a> {
         {
             self.tested_by_instanceof.insert(id, (symbol.0, class));
         }
-        Ok(self.push(OpKind::InstanceOf { value, classes }, HirType::Bool, origin))
+        Ok(self.push(
+            OpKind::InstanceOf {
+                value,
+                classes,
+                by_layout: false,
+            },
+            HirType::Bool,
+            origin,
+        ))
     }
 
     /// `e instanceof Array` and `e instanceof Object`.
@@ -77504,6 +77597,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::InstanceOf {
                     value: receiver,
                     classes,
+                    by_layout: false,
                 },
                 HirType::Bool,
                 origin.clone(),
@@ -80205,6 +80299,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::InstanceOf {
                 value: erased,
                 classes: declaring,
+                by_layout: false,
             },
             HirType::Bool,
             origin,

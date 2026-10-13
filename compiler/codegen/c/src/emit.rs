@@ -5548,7 +5548,9 @@ fn emit_op(
             value_name(*reaction),
             native_column(context.program, *slot, &op.origin)?
         ),
-        OpKind::InstanceOf { value: at, classes } => instance_of(&name, *at, classes, context),
+        OpKind::InstanceOf {
+            value: at, classes, ..
+        } => instance_of(&name, *at, classes, context),
         // The absent reference. Typed, because C distinguishes a null
         // `NtsString *` from a null `NtsObj_Point *` even though the address is
         // the same one.

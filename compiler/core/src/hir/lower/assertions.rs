@@ -182,6 +182,7 @@ pub(super) fn lower(
                 OpKind::InstanceOf {
                     value: erased,
                     classes: builder.classes_under(class),
+                    by_layout: false,
                 },
                 HirType::Bool,
                 origin.clone(),

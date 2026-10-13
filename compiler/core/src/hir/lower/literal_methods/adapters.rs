@@ -413,6 +413,7 @@ fn kind_test(
             OpKind::InstanceOf {
                 value,
                 classes: builder.classes_under(class),
+                by_layout: false,
             },
             HirType::Bool,
             origin,

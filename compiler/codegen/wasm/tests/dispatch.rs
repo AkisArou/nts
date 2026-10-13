@@ -147,6 +147,7 @@ fn nominal() -> Func {
         OpKind::InstanceOf {
             value: receiver,
             classes: vec![ClassId(ROOT)],
+            by_layout: false,
         },
         HirType::Bool,
     );
@@ -238,6 +239,7 @@ fn covariant_proof(name: &str, identity: bool) -> Func {
         OpKind::InstanceOf {
             value: returned,
             classes: vec![ClassId(CHILD)],
+            by_layout: false,
         }
     };
     let result = op(&mut f, &mut ops, kind, HirType::Bool);

@@ -120,7 +120,7 @@ impl Proof<'_> {
                 && then_target != else_target
                 && (*then_target == child || *else_target == child)
                 && entries[child.0 as usize] == 1
-                && let OpKind::InstanceOf { value, classes } = &func.value(*cond).kind
+                && let OpKind::InstanceOf { value, classes, .. } = &func.value(*cond).kind
                 && identity(func, *value) == subject
             {
                 let positive = *then_target == child;

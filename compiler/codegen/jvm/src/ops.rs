@@ -1738,10 +1738,10 @@ impl Emitter<'_> {
             OpKind::PromiseSubscribe {
                 promise, reaction, ..
             } => self.promise_subscribe(code, pool, *promise, *reaction, &origin)?,
-            OpKind::InstanceOf { value, classes } if classes.len() != 1 => {
+            OpKind::InstanceOf { value, classes, .. } if classes.len() != 1 => {
                 self.instance_of_any(code, pool, *value, classes, &origin)?
             }
-            OpKind::InstanceOf { value, classes } => {
+            OpKind::InstanceOf { value, classes, .. } => {
                 let [only] = classes.as_slice() else {
                     return Err(refuse(self.func, "an `instanceof` against no class at all"));
                 };

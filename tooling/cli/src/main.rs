@@ -3168,10 +3168,15 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic => render_constant(index, &ty, &op.kind),
-        OpKind::InstanceOf { value, classes } => format!(
-            "%{index} = instanceof %{} against {} class(es) : {ty}",
+        OpKind::InstanceOf {
+            value,
+            classes,
+            by_layout,
+        } => format!(
+            "%{index} = instanceof %{} against {} class(es){} : {ty}",
             value.0,
-            classes.len()
+            classes.len(),
+            if *by_layout { " by layout" } else { "" }
         ),
         OpKind::Erase { value, .. } | OpKind::TagOf { value } | OpKind::Unerase { value } => {
             render_erasure(index, &ty, &op.kind, *value)
