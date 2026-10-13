@@ -333,6 +333,11 @@ pub(super) struct Families {
 }
 
 impl Families {
+    /// The owners the source flow proves reach `face`, in no particular order.
+    pub(super) fn reaching(&self, face: TypeId) -> impl Iterator<Item = TypeId> + '_ {
+        self.flow.reaching(face)
+    }
+
     pub(super) fn changes_transport(&self, face: TypeId) -> bool {
         self.transport_faces.contains(&face)
     }
@@ -423,16 +428,9 @@ impl Families {
         // can hold any of them (`Self::structural_owners`).
         let literals = literal_owners(probe);
         let owners = Owners::collect(probe, hierarchy, &literals);
-        // The flow is asked of every face a field is read through, and of every
-        // object type a union names: a union's arm can hold the owners that
-        // flow into the union, and only those (`Self::structural_owners`).
-        let union_arms = union_arms(probe);
-        let flow = super::access_family_flow::Bound::collect(
-            probe,
-            &owners.all,
-            &literals,
-            used.keys().copied().chain(union_arms.iter().copied()),
-        );
+        // Asked of an interface whose field is read, of a union's arm, and of
+        // whatever storage a backend gives a face: every type is answered.
+        let flow = super::access_family_flow::Bound::collect(probe, &owners.all, &literals);
         if used.is_empty() {
             return Self {
                 flow,
@@ -671,35 +669,6 @@ impl Owners {
         candidates.sort_unstable();
         candidates
     }
-}
-
-/// Every object type a union names: the faces the flow is asked about for
-/// unions, beside the ones a field is read through.
-fn union_arms(probe: &FuncBuilder<'_>) -> Vec<TypeId> {
-    let mut arms: Vec<TypeId> = probe
-        .snapshot
-        .types
-        .iter()
-        .filter_map(|record| match &record.kind {
-            TypeKind::Union(members) => Some(members),
-            _ => None,
-        })
-        .flatten()
-        .copied()
-        .filter(|member| {
-            matches!(
-                probe
-                    .snapshot
-                    .types
-                    .get(member.0 as usize)
-                    .map(|record| &record.kind),
-                Some(TypeKind::Object { .. })
-            )
-        })
-        .collect();
-    arms.sort_unstable();
-    arms.dedup();
-    arms
 }
 
 fn properties<'a>(probe: &'a FuncBuilder<'_>, owner: TypeId) -> Option<&'a [PropertyRecord]> {

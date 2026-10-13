@@ -113,6 +113,56 @@ pub(super) fn declare(
         program.interface_access.push(plan);
     }
     program.funcs.extend(functions);
+    // Every type with a layout, each instantiation for itself: a value of
+    // `Box<number>` is typed by the instantiation and not by the declaration.
+    let faces: std::collections::BTreeSet<_> = program
+        .layouts
+        .iter()
+        .flat_map(|layout| layout.types.iter().copied())
+        .collect();
+    for face in faces {
+        let receivers = receivers(hierarchy, program, &layouts, face);
+        program.interface_access.note_receivers(face, receivers);
+    }
+}
+
+/// The layouts a value of `face` holds: the owners the flow proves reach it,
+/// split by whether their fields begin with the face's own -- `shares_storage`
+/// at its last field, which compares the whole prefix. One owner per layout,
+/// the smallest type id. See [`interface_access::Plan::prefix_receivers`].
+fn receivers(
+    hierarchy: &Hierarchy,
+    program: &Program,
+    layouts: &LayoutIndex,
+    face: super::TypeId,
+) -> interface_access::Receivers {
+    let mut receivers = interface_access::Receivers::default();
+    let Some(own) = layouts.of_class(face) else {
+        return receivers;
+    };
+    let face_layout = &program.layouts[own];
+    let last = face_layout.fields.len().checked_sub(1);
+    let mut reaching: Vec<_> = hierarchy.access_families.reaching(face).collect();
+    reaching.sort_unstable();
+    let mut seen = rustc_hash::FxHashSet::default();
+    for owner in reaching {
+        let Some(at) = layouts.of_class(owner) else {
+            continue;
+        };
+        if at == own || !seen.insert(at) {
+            continue;
+        }
+        let prefix = last.is_none_or(|last| {
+            u32::try_from(last)
+                .is_ok_and(|last| shares_storage(face_layout, &program.layouts[at], last))
+        });
+        if prefix {
+            receivers.prefix.push(owner);
+        } else {
+            receivers.other.push(owner);
+        }
+    }
+    receivers
 }
 
 fn used_selectors(program: &Program) -> rustc_hash::FxHashSet<u32> {

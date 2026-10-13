@@ -23,10 +23,14 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{FuncBuilder, NodeId, TypeId, TypeKind, interfaces, syntax};
 
+/// The owners that reach each source type, for every type: asking about one is
+/// a lookup, so no caller has to know in advance which types it will ask about
+/// -- an instantiation such as `Box<number>` is its own type and its own entry.
 #[derive(Debug, Clone, Default)]
 pub(super) struct Bound {
     actual: FxHashSet<TypeId>,
-    suppliers: FxHashMap<TypeId, FxHashSet<TypeId>>,
+    /// Indexed by [`Graph::index`]: the owners whose values reach that type.
+    suppliers: Vec<FxHashSet<TypeId>>,
 }
 
 impl Bound {
@@ -34,7 +38,6 @@ impl Bound {
         probe: &FuncBuilder<'_>,
         owners: &[TypeId],
         literals: &std::collections::BTreeMap<TypeId, Vec<NodeId>>,
-        faces: impl Iterator<Item = TypeId>,
     ) -> Self {
         let mut graph = Graph::new(probe);
         // A declaration-only reservation creates no object. It can reserve
@@ -59,7 +62,7 @@ impl Bound {
         }
         Self {
             actual,
-            suppliers: graph.finish(faces),
+            suppliers: graph.finish(),
         }
     }
 
@@ -67,19 +70,25 @@ impl Bound {
     /// [`Self::permits`], a declaration-only type reaches nothing: it is
     /// never an object a value can hold.
     pub(super) fn reaches(&self, owner: TypeId, face: TypeId) -> bool {
-        self.actual.contains(&owner)
-            && self
-                .suppliers
-                .get(&face)
-                .is_some_and(|suppliers| suppliers.contains(&owner))
+        self.actual.contains(&owner) && self.suppliers_of(face).contains(&owner)
     }
 
     pub(super) fn permits(&self, owner: TypeId, face: TypeId) -> bool {
-        !self.actual.contains(&owner)
-            || self
-                .suppliers
-                .get(&face)
-                .is_some_and(|suppliers| suppliers.contains(&owner))
+        !self.actual.contains(&owner) || self.suppliers_of(face).contains(&owner)
+    }
+
+    /// Every actual owner seen to reach `face`, in no particular order.
+    pub(super) fn reaching(&self, face: TypeId) -> impl Iterator<Item = TypeId> + '_ {
+        self.suppliers_of(face)
+            .iter()
+            .copied()
+            .filter(|owner| self.actual.contains(owner))
+    }
+
+    fn suppliers_of(&self, face: TypeId) -> &FxHashSet<TypeId> {
+        static NONE: std::sync::LazyLock<FxHashSet<TypeId>> =
+            std::sync::LazyLock::new(FxHashSet::default);
+        self.suppliers.get(Graph::index(face)).unwrap_or(&NONE)
     }
 }
 
@@ -541,10 +550,7 @@ impl<'p, 's> Graph<'p, 's> {
         None
     }
 
-    fn finish(
-        mut self,
-        faces: impl Iterator<Item = TypeId>,
-    ) -> FxHashMap<TypeId, FxHashSet<TypeId>> {
+    fn finish(mut self) -> Vec<FxHashSet<TypeId>> {
         let mut pending = VecDeque::new();
         for (at, owners) in self.facts.iter().enumerate() {
             pending.extend(owners.iter().map(|owner| (at, *owner)));
@@ -556,14 +562,7 @@ impl<'p, 's> Graph<'p, 's> {
                 }
             }
         }
-        let mut result = FxHashMap::default();
-        for id in faces {
-            let at = Self::index(id);
-            if !self.facts[at].is_empty() {
-                result.insert(id, self.facts[at].clone());
-            }
-        }
-        result
+        self.facts
     }
 }
 

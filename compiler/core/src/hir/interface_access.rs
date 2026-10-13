@@ -12,6 +12,15 @@ use super::{Callee, Func, HirType, ManagedType, OpKind, Program, TypeId};
 
 mod storage_proofs;
 
+/// The layouts other than its own that a value of one type can hold, split by
+/// whether they begin with its fields. See [`Plan::prefix_receivers`] and
+/// [`Plan::other_receivers`].
+#[derive(Debug, Clone, Default)]
+pub(super) struct Receivers {
+    pub(super) prefix: Vec<TypeId>,
+    pub(super) other: Vec<TypeId>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub slot: u32,
@@ -58,6 +67,9 @@ pub struct Plan {
     /// face's own positional storage, or a named stop where the face holds
     /// no field for the member. See [`Plan::default_for`].
     defaults: BTreeMap<u32, String>,
+    /// Per type with a layout, the other layouts its values hold: as a prefix,
+    /// and not. See [`Plan::prefix_receivers`].
+    receivers: BTreeMap<TypeId, Receivers>,
     by_field: FxHashMap<(TypeId, u32), usize>,
     by_selector: FxHashMap<u32, usize>,
     selectors: FxHashSet<u32>,
@@ -99,6 +111,53 @@ impl Plan {
     #[must_use]
     pub fn default_for(&self, slot: u32) -> Option<&str> {
         self.defaults.get(&slot).map(String::as_str)
+    }
+
+    /// The layouts, other than `face`'s own, that a value of `face` holds
+    /// with no conversion: the owners the source flow proves reach `face`
+    /// whose fields begin with the face's, in its order and at its types. One
+    /// type per layout.
+    ///
+    /// This is the rule lowering applies when it emits no operation for an
+    /// object-to-object coercion, asked of the owners that reach the face by
+    /// any route -- a narrowing out of a union passes no coercion at all. They
+    /// are exactly the receivers a positional read through the face, and a
+    /// family default, answers for; an owner that is not a prefix reaches the
+    /// face only through a licensed view, with a row.
+    ///
+    /// Every type with a layout is answered, and each instantiation for
+    /// itself -- a value of `Box<number>` is typed by the instantiation --
+    /// whether or not a family reads through it: a face only its own literals
+    /// reach answers an empty list. A class is answered too (its subclasses
+    /// are prefixes by base-first layout), which a backend that orders classes
+    /// itself can ignore. `None` is for a type with no layout, about which the
+    /// plan says nothing, and which a backend that needs the fact refuses
+    /// rather than guesses at. Reachability removes functions, never layouts,
+    /// so an owner whose last allocation was pruned is still listed and still a
+    /// prefix.
+    #[must_use]
+    pub fn prefix_receivers(&self, face: TypeId) -> Option<&[TypeId]> {
+        self.receivers
+            .get(&face)
+            .map(|receivers| receivers.prefix.as_slice())
+    }
+
+    /// The other half: the owners the source flow proves reach `face` whose
+    /// fields do **not** begin with the face's, one type per layout. They reach
+    /// it through a licensed view or a narrowing out of a union, and a read
+    /// through the face answers for them through their family row. Empty means
+    /// every value of `face` is its own or a prefix receiver, so its storage
+    /// can be read positionally with no row; answered for the same types as
+    /// [`Self::prefix_receivers`].
+    #[must_use]
+    pub fn other_receivers(&self, face: TypeId) -> Option<&[TypeId]> {
+        self.receivers
+            .get(&face)
+            .map(|receivers| receivers.other.as_slice())
+    }
+
+    pub(super) fn note_receivers(&mut self, face: TypeId, receivers: Receivers) {
+        self.receivers.insert(face, receivers);
     }
 
     pub(super) fn note_default(&mut self, slot: u32, body: String) {
