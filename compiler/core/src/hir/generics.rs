@@ -72,6 +72,13 @@ impl Substitution {
         self.instances.get(&template).copied()
     }
 
+    /// Every template this copy instantiates, with its instance.
+    pub fn instances(&self) -> impl Iterator<Item = (TypeId, TypeId)> + '_ {
+        self.instances
+            .iter()
+            .map(|(template, instance)| (*template, *instance))
+    }
+
     /// Whether it binds nothing.
     ///
     /// For `unify`'s union arm, which unifies each member on a copy and has to

@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "SIGSEGV",
+  "node": "exit 1; nts: uncaught Observed: the control, read through its own class=red;a class laid out otherwise=red;",
+  "measured_with": "ac71a1ef22c9a699",
+  "source": "measured"
+}

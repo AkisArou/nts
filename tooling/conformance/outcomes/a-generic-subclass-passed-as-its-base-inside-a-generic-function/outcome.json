@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: a Ctx<number> passed as its base inside read<T>=7 1 ctx 1;",
+  "node": "exit 1; nts: uncaught Observed: a Ctx<number> passed as its base inside read<T>=7 1 ctx 1;",
+  "measured_with": "500d7463e5cd1e37",
+  "source": "measured"
+}

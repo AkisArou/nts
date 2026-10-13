@@ -15,12 +15,23 @@ pub(super) fn collect(
             continue;
         };
         let at = NodeId(index);
-        let mut reads = reads(probe, at);
+        let mut reads: Vec<(TypeId, String)> = reads(probe, at)
+            .into_iter()
+            .flat_map(
+                |(face, member)| match hierarchy.template_instances.get(&face) {
+                    Some(instances) => instances
+                        .iter()
+                        .map(|instance| (*instance, member.clone()))
+                        .collect::<Vec<_>>(),
+                    None => vec![(face, member)],
+                },
+            )
+            .collect();
         reads.retain(|(face, member)| {
-            hierarchy.faces.contains(face)
+            hierarchy.is_field_face(*face)
                 && !hierarchy
                     .declares
-                    .get(face)
+                    .get(&hierarchy.declared_face(*face))
                     .is_some_and(|methods| methods.contains(member))
                 && interfaces::property(probe.snapshot, *face, member)
                     .is_some_and(|property| property.kind != MemberKind::Method)

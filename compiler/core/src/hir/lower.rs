@@ -423,6 +423,27 @@ struct Hierarchy {
     literal_methods: std::sync::Arc<literal_methods::Supplies>,
     /// A complete, shared contract for reads and writes through a field face.
     access_families: std::sync::Arc<access_families::Families>,
+    /// Each instantiation of a declared generic interface, to the
+    /// declaration's own type -- the one `faces` holds.
+    ///
+    /// **A field face too, but not a method face.** `faces` holds only the
+    /// type of each `interface` node, which for `interface Lazy<T, P>` is the
+    /// declaration: no value is ever typed by it. Its values are typed by
+    /// `Lazy<unknown, unknown>` and `Lazy<string, string>`, so a read through
+    /// one found no family and was the instance's own offset on whatever
+    /// object arrived -- a crash when a literal of the other instantiation
+    /// arrived through `unknown`. Kept apart from `faces`, which the method
+    /// slots read: an instantiation declares its methods on the declaration.
+    face_instances: rustc_hash::FxHashMap<TypeId, TypeId>,
+    /// Each type a generic body names, to every instance some copy of the body
+    /// makes of it (`Substitution::instance_of`).
+    ///
+    /// A read in `resolveLazy<T>(lazy: Lazy<T, unknown>)` is typed by the
+    /// checker as the open `Lazy<T, unknown>`, which no value ever has: the
+    /// copy for `T = unknown` holds `Lazy<unknown, unknown>`. A family is
+    /// keyed by what values have, so a site in a generic body names each
+    /// instance its copies make.
+    template_instances: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
     /// A preserving backend keeps the original stored layout geometry.
     /// Native-only accessor reservations must not split its merged records.
     preserve_field_layouts: bool,
@@ -572,6 +593,16 @@ enum Written {
 }
 
 impl Hierarchy {
+    /// A type a field family can be keyed by: a declared interface, or an
+    /// instantiation of one (`face_instances`).
+    fn is_field_face(&self, ty: TypeId) -> bool {
+        self.faces.contains(&ty) || self.face_instances.contains_key(&ty)
+    }
+    /// The declaration an instantiated face's methods are declared on, and any
+    /// other face itself.
+    fn declared_face(&self, ty: TypeId) -> TypeId {
+        self.face_instances.get(&ty).copied().unwrap_or(ty)
+    }
     /// Whether a type's method `member` is laid out as storage. See `stored`.
     fn stores(&self, ty: TypeId, member: &str) -> bool {
         self.stored
@@ -1485,7 +1516,12 @@ fn record_parents(
     parents
 }
 
-fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
+fn collect_interfaces(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    hierarchy: &mut Hierarchy,
+    instantiations: &rustc_hash::FxHashMap<SymbolId, Vec<super::generics::Instantiation>>,
+) {
     let carried = collect_carried_protocols(snapshot, hierarchy);
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::INTERFACE_DECLARATION) {
@@ -1519,6 +1555,24 @@ fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
             })
             .collect();
         hierarchy.faces.insert(ty);
+        if let Some(instances) = snapshot
+            .types
+            .get(ty.0 as usize)
+            .and_then(|record| record.symbol)
+            .and_then(|symbol| instantiations.get(&symbol))
+        {
+            let name = hierarchy.name.get(&ty).cloned();
+            for instance in instances {
+                if instance.ty != ty {
+                    hierarchy.face_instances.insert(instance.ty, ty);
+                    if let Some(name) = &name {
+                        hierarchy.name.entry(instance.ty).or_insert_with(|| {
+                            format!("{name}{}", instantiation_suffix(snapshot, instance.ty))
+                        });
+                    }
+                }
+            }
+        }
         if !declared.is_empty() {
             hierarchy.declares.entry(ty).or_insert(declared);
         }
@@ -2161,6 +2215,41 @@ fn receives_a_function_value(snapshot: &SemanticSnapshot) -> bool {
     })
 }
 
+/// Each type a generic body names, to every instance a copy of the body makes
+/// of it: what [`Hierarchy::template_instances`] holds. Read off every copy's
+/// `Substitution` -- generic functions, their value fallbacks, and class
+/// instantiations.
+fn template_instances(
+    snapshot: &SemanticSnapshot,
+    instantiations: &rustc_hash::FxHashMap<SymbolId, Vec<super::generics::Instantiation>>,
+) -> rustc_hash::FxHashMap<TypeId, Vec<TypeId>> {
+    let functions = super::generics::function_instantiations(snapshot);
+    let mut by_template: rustc_hash::FxHashMap<TypeId, Vec<TypeId>> =
+        rustc_hash::FxHashMap::default();
+    let substitutions = functions
+        .copies
+        .values()
+        .flatten()
+        .map(|copy| &copy.substitution)
+        .chain(
+            functions
+                .value_fallbacks
+                .values()
+                .map(|copy| &copy.substitution),
+        )
+        .chain(instantiations.values().flatten().map(|i| &i.substitution));
+    for substitution in substitutions {
+        for (template, instance) in substitution.instances() {
+            by_template.entry(template).or_default().push(instance);
+        }
+    }
+    for instances in by_template.values_mut() {
+        instances.sort_unstable();
+        instances.dedup();
+    }
+    by_template
+}
+
 fn collect_hierarchy(
     snapshot: &SemanticSnapshot,
     foreign: &super::runtime::ForeignTable,
@@ -2273,7 +2362,8 @@ fn collect_hierarchy(
         }
     }
 
-    collect_interfaces(snapshot, &probe, &mut hierarchy);
+    collect_interfaces(snapshot, &probe, &mut hierarchy, &instantiations);
+    hierarchy.template_instances = template_instances(snapshot, &instantiations);
     collect_anonymous_objects(snapshot, &probe, &mut hierarchy);
     // After both, because it edits `declares`: a member that becomes storage
     // must not also be numbered a slot. Before the slot loop for the same
@@ -10060,6 +10150,15 @@ fn copy_retype(
     actual: TypeId,
 ) -> Option<(HirType, String)> {
     if actual == declared {
+        return None;
+    }
+    // An open form -- `Ctx<T>` inside `read<T>` -- is no value's type in any
+    // copy: each copy holds its own instance of it. A copy of the callee made
+    // for the open form was laid out with no base (open forms are not
+    // instantiations), so `read<f64>` converted its `Ctx<number>` to it and
+    // was refused (`outcomes/a-generic-subclass-passed-as-its-base-inside-a-generic-function`).
+    // The callee itself takes the instance as its base, which is a prefix.
+    if super::instantiate::mentions_a_parameter(probe.snapshot, actual) {
         return None;
     }
     let (Some(HirType::Managed(ManagedType::Object(want))), Some(represented)) =

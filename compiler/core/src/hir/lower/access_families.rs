@@ -225,7 +225,15 @@ impl FuncBuilder<'_> {
     }
 
     pub(super) fn field_access_family(&self, at: NodeId) -> Option<&Family> {
-        self.hierarchy.access_families.at(at).next()
+        self.hierarchy
+            .access_families
+            .at(at)
+            .find(|family| {
+                self.substitution
+                    .instances()
+                    .any(|(_, instance)| instance == family.face)
+            })
+            .or_else(|| self.hierarchy.access_families.at(at).next())
     }
 
     pub(super) fn actual_field_read(&self, at: NodeId) -> Option<Read<'_>> {
@@ -241,12 +249,13 @@ impl FuncBuilder<'_> {
         }
         let (receiver, member) = self.member_access(at)?;
         let face = self.snapshot.node_types.get(&receiver).copied()?;
+        let face = self.substitution.instance_of(face).unwrap_or(face);
         if let Some(HirType::Managed(super::ManagedType::Object(actual))) =
             self.bound_type(receiver)
             && actual != face
             // An interface binding is its storage contract, not evidence of
             // a concrete supplier. Keep the checker's narrowed face instead.
-            && !self.hierarchy.faces.contains(&actual)
+            && !self.hierarchy.is_field_face(actual)
         {
             // A source copy reads this concrete storage directly. Its declared
             // field type describes the stored ABI; the source node still
@@ -577,7 +586,7 @@ impl Families {
                         // their independent legacy classification until D.
                         hierarchy
                             .declares
-                            .get(&family.face)
+                            .get(&hierarchy.declared_face(family.face))
                             .is_none_or(Vec::is_empty)
                             || hierarchy.descends_from(supply.owner, family.face)
                     })
@@ -646,7 +655,7 @@ fn fits_the_face(
     properties.iter().all(|wanted| {
         !hierarchy
             .declares
-            .get(&face)
+            .get(&hierarchy.declared_face(face))
             .is_some_and(|methods| methods.contains(&wanted.name))
             || interfaces::property(probe.snapshot, owner, &wanted.name)
                 .is_none_or(|found| interfaces::candidate(probe, found, wanted))

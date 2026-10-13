@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: an instantiation read through another=[lazy];not a lazy value=plain;the control, two declared interfaces=[declared];",
+  "node": "exit 1; nts: uncaught Observed: an instantiation read through another=[lazy];not a lazy value=plain;the control, two declared interfaces=[declared];",
+  "measured_with": "ac71a1ef22c9a699",
+  "source": "measured"
+}

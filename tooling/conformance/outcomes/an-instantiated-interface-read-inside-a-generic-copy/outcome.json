@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: read inside a generic copy=[lazy];not a lazy value=plain;the control, no type parameter=[lazy];",
+  "node": "exit 1; nts: uncaught Observed: read inside a generic copy=[lazy];not a lazy value=plain;the control, no type parameter=[lazy];",
+  "measured_with": "ac71a1ef22c9a699",
+  "source": "measured"
+}
