@@ -612,11 +612,25 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                     // evidence, and the fixpoint below carries it to whatever
                     // it holds -- so a container that does outlive the loop
                     // takes the value with it.
+                    //
+                    // **A value read out of this same container is not a new
+                    // object**, so the reuse cannot arise: `held = pair.a;
+                    // pair.a = pair.b; pair.b = held` in a loop moves what
+                    // `pair` already holds between its own slots. Refusing it
+                    // escaped the read, which now carries the container's
+                    // contents out with it (`reads_from_containers`), and sent
+                    // both of `swap`'s objects to the heap.
+                    let read_back = matches!(
+                        &func.values[stored.0 as usize].kind,
+                        OpKind::FieldGet { object, .. } | OpKind::ArrayGet { array: object, .. }
+                            if object == container
+                    );
                     let confinable = matches!(
                         func.values[container.0 as usize].kind,
                         OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
                     ) && (!repeated.contains(stored)
-                        || repeated.contains(container))
+                        || repeated.contains(container)
+                        || read_back)
                         && !buffers(&func.values[container.0 as usize].ty, of);
                     // A parameter stored into a parameter's field is published
                     // rather than escaped: see `stores_into`. The caller knows
