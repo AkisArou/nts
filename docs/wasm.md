@@ -361,6 +361,12 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
     dispatch, interface, erased and collections kernels did not move
     measurably (exploratory, load ~24-33). object-keys pins it, and with the
     hash not kept the fixture fails.
+- **`instanceof Map` and `instanceof Set` of an open value** are one type
+  test per storage of that kind. A record's storage is laid out as a Map's
+  and is neither, as C tells them apart by descriptor, so a record has a
+  type of its own (`gc::Collection::table`). collection-tables pins it
+  (`whichCollection`), and the census row in-on-an-object-a-native-answers-for
+  (110 cases) agrees.
 - **Refused by name:** a key the storage cannot hold, and `Date`.
 - **Measured, exploratory, ns per iteration** (tooling/wasm/bench/collections):
   - Map counting (get, then set): 27.5 against node's 13.5;
@@ -828,8 +834,7 @@ also why the failure's text was missing.
   BigInt into two i64s and refuse one past 128 bits by name.
 - **The small-operand bigint product inline at its site:** `x * 48271n % m`
   is 8% behind node through the helper call.
-- **`nts_value_inspect`, `nts_is_map` and `nts_is_set`:** the last two need
-  a Map told apart from a string-keyed table.
+- **`nts_value_inspect`** (console's formatting of an open value).
 
 ## Current M1a implementation and evidence
 
@@ -2537,11 +2542,11 @@ or native storage does not become supported because its name shares a prefix.
 | `nts_is_date` | Decline: bigint/symbol/date/promise family |
 | `nts_is_finite` | M1 numeric |
 | `nts_is_integer` | M1 numeric |
-| `nts_is_map` | Decline: Map/Table/Set runtime |
+| `nts_is_map` | M1 value/control |
 | `nts_is_owner_thread` | Decline: async/scheduler/host lifecycle (M5) |
 | `nts_is_promise` | Decline: bigint/symbol/date/promise family |
 | `nts_is_safe_integer` | M1 numeric |
-| `nts_is_set` | Decline: Map/Table/Set runtime |
+| `nts_is_set` | M1 value/control |
 | `nts_is_view_kind` | Decline: buffer/view/DataView representation |
 | `nts_landing_detail` | Decline: native setjmp landing state |
 | `nts_landing_pop` | Decline: native setjmp landing state |

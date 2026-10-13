@@ -253,6 +253,9 @@ pub(crate) struct Collection {
     pub(crate) key: KeyKind,
     /// The values' storage type; none for a Set.
     pub(crate) value: Option<HirType>,
+    /// A `Record` table rather than a `Map`: one storage, and a type of its
+    /// own, so `instanceof Map` tells them apart as C's descriptor does.
+    pub(crate) table: bool,
     pub(crate) wrapper: u32,
     pub(crate) keys: u32,
     pub(crate) values: Option<u32>,
@@ -297,6 +300,7 @@ type Metadata = (
 struct CollectionKey {
     key: KeyKind,
     value: Option<HirType>,
+    table: bool,
 }
 
 #[derive(Debug)]
@@ -1094,11 +1098,14 @@ impl<'a> Builder<'a> {
             HirType::Managed(ManagedType::Promise(_)) => {
                 PendingSlot::Defined(self.promise_types().promise, true)
             }
-            HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
-                PendingSlot::Defined(self.collection(key, Some(value))?, true)
+            HirType::Managed(ManagedType::Map(key, value)) => {
+                PendingSlot::Defined(self.collection(key, Some(value), false)?, true)
+            }
+            HirType::Managed(ManagedType::Table(key, value)) => {
+                PendingSlot::Defined(self.collection(key, Some(value), true)?, true)
             }
             HirType::Managed(ManagedType::Set(key)) => {
-                PendingSlot::Defined(self.collection(key, None)?, true)
+                PendingSlot::Defined(self.collection(key, None, false)?, true)
             }
             HirType::Managed(ManagedType::Date) => {
                 return Err(format!("collection/date storage outside M1b: {ty:?}"));
@@ -1725,17 +1732,28 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
-    fn collection(&mut self, key: &HirType, value: Option<&HirType>) -> Result<NodeId, String> {
+    fn collection(
+        &mut self,
+        key: &HirType,
+        value: Option<&HirType>,
+        table: bool,
+    ) -> Result<NodeId, String> {
         let shape = CollectionKey {
             key: collection_key(key)?,
             value: value.map(collection_value),
+            table,
         };
         if let Some(id) = self.collections.get(&shape) {
             return Ok(*id);
         }
         let root = self.root();
         let id = self.add(
-            format!("collection<{:?}, {:?}>", shape.key, shape.value),
+            format!(
+                "{}<{:?}, {:?}>",
+                if table { "table" } else { "collection" },
+                shape.key,
+                shape.value
+            ),
             Some(root),
             true,
             Shape::Struct(Vec::new()),
@@ -1967,6 +1985,7 @@ impl<'a> Builder<'a> {
                 Collection {
                     key: shape.key,
                     value: shape.value.clone(),
+                    table: shape.table,
                     wrapper: indices[id.0],
                     keys: indices[keys.0],
                     values: values.map(|values| indices[values.0]),

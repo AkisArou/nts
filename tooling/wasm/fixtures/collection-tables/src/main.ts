@@ -68,3 +68,23 @@ export function aRecordCopiedAndExtended(n: number): number {
   for (const key of Object.keys(target)) order = order * 7 + key.length + (target[key] ?? 0);
   return order;
 }
+
+function opened(n: number): unknown {
+  const at = ((n % 5) + 5) % 5;
+  if (at === 0) return new Map<string, number>([["k", n]]);
+  if (at === 1) {
+    const record: Record<string, number> = {};
+    record["k"] = n;
+    return record;
+  }
+  if (at === 2) return new Set<string>(["k"]);
+  if (at === 3) return new Map<number, number>([[n, 1]]);
+  return [n];
+}
+
+/** A record holds what a string-keyed Map holds, laid out alike, and is
+ * neither a Map nor a Set; a Set is not a Map. */
+export function whichCollection(n: number): string {
+  const value = opened(n);
+  return `${value instanceof Map}|${value instanceof Set}`;
+}

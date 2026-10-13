@@ -325,8 +325,8 @@ fn source_interface_views_agree_with_node() {
 }
 
 /// The table under a Map, a Set and a record: growth across rehashes,
-/// deleted slots reused, a clear during a walk, erased keys of every kind, and
-/// copies.
+/// deleted slots reused, a clear during a walk, erased keys of every kind,
+/// copies, and `instanceof Map` and `Set` of an open record, Map and Set.
 #[test]
 fn source_collection_tables_agree_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/collection-tables");
@@ -338,7 +338,7 @@ fn source_collection_tables_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 72, "{output}");
+    assert_eq!(output["cases"], 84, "{output}");
 }
 
 /// Objects as collection keys compare by identity: same-shaped objects are two

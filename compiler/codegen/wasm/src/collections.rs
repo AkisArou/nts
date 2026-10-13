@@ -21,6 +21,9 @@
 //!   which absence it held. The core passes keys and values erased (the C
 //!   ABI's `NtsValue`), and each call converts them, refusing by name what the
 //!   storage cannot hold.
+//! - **A `Record` table has a type of its own** although its storage is a
+//!   Map's, so `value instanceof Map` is one type test per Map storage and a
+//!   table is not one, as C tells them apart by descriptor.
 use crate::{
     body::Body,
     contract,
@@ -59,6 +62,10 @@ pub(crate) enum Op {
     Copy,
     Extend,
     KeysStr,
+    /// `value instanceof Map` of an open value.
+    IsMap,
+    /// `value instanceof Set` of an open value.
+    IsSet,
 }
 
 #[cfg(test)]
@@ -66,7 +73,10 @@ impl Op {
     /// Whether the call is code at its site rather than a module helper, which
     /// the support catalog's routing test checks against its rows.
     pub(crate) const fn inline(self) -> bool {
-        matches!(self, Self::New | Self::KeyAt | Self::ValueAt)
+        matches!(
+            self,
+            Self::New | Self::KeyAt | Self::ValueAt | Self::IsMap | Self::IsSet
+        )
     }
 }
 
@@ -112,6 +122,8 @@ pub(crate) fn external(name: &str) -> Option<Op> {
         "nts_map_copy" => Op::Copy,
         "nts_map_extend" => Op::Extend,
         "nts_map_keys_str" => Op::KeysStr,
+        "nts_is_map" => Op::IsMap,
+        "nts_is_set" => Op::IsSet,
         _ => return None,
     })
 }
@@ -189,6 +201,9 @@ pub(crate) fn call(
     op: Op,
     args: &[ValueId],
 ) -> Result<(), Failure> {
+    if matches!(op, Op::IsMap | Op::IsSet) {
+        return is_kind(b, result, op == Op::IsMap, args);
+    }
     let subject = if op == Op::New {
         result
     } else {
@@ -198,7 +213,7 @@ pub(crate) fn call(
     };
     let c = b.types().collection(b.ty(subject))?.clone();
     let arity = match op {
-        Op::New | Op::Clear | Op::Copy | Op::KeysStr => 1,
+        Op::New | Op::Clear | Op::Copy | Op::KeysStr | Op::IsMap | Op::IsSet => 1,
         Op::Get
         | Op::Has
         | Op::Add
@@ -257,6 +272,9 @@ pub(crate) fn call(
                 b.load(subject)?;
             }
         }
+        Op::IsMap | Op::IsSet => {
+            return Err(Failure::Invariant("a collection test routed".into()));
+        }
         Op::KeysStr => {
             if c.key != KeyKind::String {
                 return Err("`Object.keys` of a table whose keys are not strings".into());
@@ -267,6 +285,35 @@ pub(crate) fn call(
         }
     }
     Ok(())
+}
+
+/// Whether an open value is a Map (or a Set): one type test per storage of
+/// that kind, a table's excluded.
+fn is_kind(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    map: bool,
+    args: &[ValueId],
+) -> Result<(), Failure> {
+    let &[value] = args else {
+        return Err("collection test arity mismatch".into());
+    };
+    if !matches!(b.types().value_slot(b.ty(value))?, Physical::Reference(_)) {
+        return Err(format!("a collection test of a {:?}", b.ty(value)).into());
+    }
+    let wrappers: Vec<u32> = b
+        .types()
+        .collections
+        .values()
+        .filter(|c| !c.table && c.value.is_some() == map)
+        .map(|c| c.wrapper)
+        .collect();
+    b.instruction(&I::I32Const(0));
+    for wrapper in wrappers {
+        b.load(value)?;
+        b.instructions(&[I::RefTestNonNull(HeapType::Concrete(wrapper)), I::I32Or]);
+    }
+    numeric::convert(b, &HirType::Bool, &b.ty(result).clone())
 }
 
 /// A call that reads or writes one key's entry.
