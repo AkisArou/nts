@@ -723,6 +723,15 @@ are read off the value, from what the core decides per layout:
   The census now shows refusals that stood in for answers: the export
   boundary's "parameter facts" refusals (mathops, literals), a typed read
   past the end, and `s[i]` past the string.
+- **The census compares what each side prints.** check-corpus-example
+  records both sides' console lines per case (and the module initializer's)
+  and a case agrees only if they match, stream and order included. Before
+  this a row that printed was counted on its answers alone.
+- **`nts_value_inspect`**, what the console prints for an open value, as C
+  answers it: a bigint with its `n`, `-0` as itself, otherwise
+  `String(value)`; an object or a function, which `util.inspect` prints by
+  its properties, refuses by name. The census row console (39 cases)
+  agrees, its lines compared.
 
 ### Optional-property presence (3m)
 
@@ -878,7 +887,6 @@ also why the failure's text was missing.
   BigInt into two i64s and refuse one past 128 bits by name.
 - **The small-operand bigint product inline at its site:** `x * 48271n % m`
   is 8% behind node through the helper call.
-- **`nts_value_inspect`** (console's formatting of an open value).
 
 ## Current M1a implementation and evidence
 

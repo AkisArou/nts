@@ -1070,10 +1070,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_value_handle",
         Support::Decline("foreign/native ABI or ownership"),
     ),
-    (
-        "nts_value_inspect",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_value_inspect", Support::WasmHelper),
     ("nts_value_is_view", Support::Intrinsic),
     ("nts_value_number", Support::WasmHelper),
     ("nts_value_number_or", Support::WasmHelper),

@@ -5,7 +5,18 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Script } from 'node:vm';
+import { format } from 'node:util';
 import path from 'node:path';
+
+// What each side writes to the console, line by line, compared as its answers
+// are: a case agrees only if both sides wrote the same lines to the same
+// stream, in order. The generated glue takes `console.log` when it loads, so
+// the recorder goes in before anything is imported.
+const written = [];
+for (const [method, stream] of [['log', 'stdout'], ['info', 'stdout'], ['debug', 'stdout'], ['warn', 'stderr'], ['error', 'stderr']]) {
+  console[method] = (...args) => { written.push(`${stream}: ${format(...args)}`); };
+}
+const lines = () => written.splice(0).join('\n');
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -50,11 +61,12 @@ async function settle(outcome) {
 try {
   const manifest = JSON.parse(readFileSync(path.join(artifact, 'program.wasm.json'), 'utf8'));
   report.phase = 'wasm-load'; save();
-  let wasm, WasmInputDecline, instances;
+  let wasm, WasmInputDecline, instances, initialized = '';
   try {
     // Importing the generated module instantiates it and runs the module
     // initializer, as importing the source module does in node.
     await import(pathToFileURL(path.join(artifact, 'program.mjs')));
+    initialized = lines();
     instances = await import(pathToFileURL(path.join(artifact, 'program.instance.mjs')));
     WasmInputDecline = instances.WasmInputDecline;
     wasm = instances.instantiate();
@@ -92,6 +104,12 @@ try {
       namespaces.push(await import(pathToFileURL(file)));
     }
   }
+  // The module initializer's lines, written by the first instance and by the
+  // oracle's import; every later instance writes them again, unrecorded.
+  const imported = lines();
+  if (initialized !== imported) {
+    report.wrong.push({ name: '<module initialization console>', wasm: initialized, js: imported });
+  }
   function oracle(name) {
     const owners = namespaces.filter(namespace => Object.hasOwn(namespace, name));
     if (owners.length !== 1) return { found: false };
@@ -115,6 +133,7 @@ try {
   // timers start beside the oracle's: between now and a case only microtasks
   // run, so neither side's timers fire before the other's.
   wasm = instances.instantiate();
+  lines();
   checkGlobals();
   for (const entry of manifest.exports) {
     const reference = oracle(entry.name);
@@ -135,9 +154,12 @@ try {
     const base = pools.map(values => values.includes(3) ? 3 : values[0]);
     const tuples = pools.length ? pools.flatMap((values, at) => values.map(value => base.with(at, value))) : [[]];
     for (const args of tuples) {
+      lines();
       const actual = await settle(invoke(wasm[entry.name], args));
+      const printed = lines();
       if (['throw', 'reject'].includes(actual.kind) && actual.value instanceof WasmInputDecline) {
         const answered = await settle(invoke(reference.value, args));
+        lines();
         if (['throw', 'reject'].includes(answered.kind)) report.inputDeclines++;
         else {
           const why = reasonOf(actual.value);
@@ -147,6 +169,7 @@ try {
         continue;
       }
       const expected = await settle(invoke(reference.value, args));
+      const answeredLines = lines();
       if ([actual, expected].some(outcome => outcome.kind === 'throw' && outcome.value?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT')) {
         report.timeouts.push({ name: entry.name, args: args.map(display), wasm: actual.kind, js: expected.kind });
         save(); process.exit(2);
@@ -155,6 +178,8 @@ try {
         report.wrong.push({ name: entry.name, args: args.map(display),
           wasmKind: actual.kind, wasm: display(actual.value),
           jsKind: expected.kind, js: display(expected.value) });
+      } else if (printed !== answeredLines) {
+        report.wrong.push({ name: entry.name, args: args.map(display), console: true, wasm: printed, js: answeredLines });
       }
       report.thrownCases += Number(expected.kind === 'throw' || expected.kind === 'reject');
       report.cases++;

@@ -5,7 +5,8 @@
 //! a representation assertion. Both report through the host's named input
 //! refusal with the reason the lowering gave, never an answer node would not
 //! give. `nts_bool_to_string` and `nts_value_to_string` are `String(value)`
-//! for a boolean and for an erased value.
+//! for a boolean and for an erased value; `nts_value_inspect` is what the
+//! console prints for an erased value.
 use crate::{
     body::Body,
     contract, erased,
@@ -30,6 +31,8 @@ pub(crate) enum Helper {
     BoolText,
     /// `String(v)` of an erased value.
     ValueText,
+    /// `util.inspect(v)` of an erased value, as console prints it.
+    Inspect,
     /// `typeof`, spelled from a tag.
     TagName,
     /// One line to the console's stdout or stderr, through the host.
@@ -41,7 +44,10 @@ impl Helper {
     /// Whether the call is code at its site rather than a module helper, which
     /// the support catalog's routing test checks against its rows.
     pub(crate) const fn inline(self) -> bool {
-        !matches!(self, Self::ValueText | Self::TagName | Self::ConsoleWrite)
+        !matches!(
+            self,
+            Self::ValueText | Self::Inspect | Self::TagName | Self::ConsoleWrite
+        )
     }
 }
 
@@ -52,6 +58,7 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
         "nts_no_arm_of" => Some(Helper::NoArm),
         "nts_bool_to_string" => Some(Helper::BoolText),
         "nts_value_to_string" => Some(Helper::ValueText),
+        "nts_value_inspect" => Some(Helper::Inspect),
         "nts_tag_name" => Some(Helper::TagName),
         "nts_console_write" => Some(Helper::ConsoleWrite),
         _ => None,
@@ -76,7 +83,7 @@ pub(crate) fn call(
     let wanted = match helper {
         Helper::Refused | Helper::AssertionFailed => HirType::Managed(ManagedType::String),
         Helper::BoolText => HirType::Bool,
-        Helper::ValueText => HirType::Erased,
+        Helper::ValueText | Helper::Inspect => HirType::Erased,
         Helper::TagName => HirType::Int {
             bits: 32,
             signed: false,
@@ -110,11 +117,11 @@ pub(crate) fn call(
         Helper::ConsoleWrite | Helper::NoArm => {
             return Err(Failure::Invariant(format!("{helper:?} past its arm")));
         }
-        Helper::ValueText | Helper::TagName => {
-            let text = if helper == Helper::ValueText {
-                value_text(b.m)?
-            } else {
-                tag_name(b.m)?
+        Helper::ValueText | Helper::Inspect | Helper::TagName => {
+            let text = match helper {
+                Helper::ValueText => value_text(b.m)?,
+                Helper::Inspect => inspect(b.m)?,
+                _ => tag_name(b.m)?,
             };
             b.load(arg)?;
             strings::constant(b, &b.func.name.clone());
@@ -158,6 +165,90 @@ fn no_arm(b: &mut Body<'_, '_>, args: &[ValueId]) -> Result<(), Failure> {
 /// ([`crate::printed`]).
 ///
 /// Params: the value, and the calling function's name for the refusal.
+/// `(value, caller's name) -> text`, as C's `nts_value_inspect`: a bigint
+/// with its `n`, `-0` as itself, and otherwise `String(value)`, which is what
+/// `util.inspect` prints for every other primitive. An object or a function
+/// `util.inspect` prints by its properties, so that refuses by name rather
+/// than lend it `String()`'s text.
+fn inspect(m: &mut Builder<'_>) -> Result<Func, Failure> {
+    m.helper(
+        FuncKey::ValueInspect,
+        "value.inspect",
+        vec![
+            crate::types::Physical::Reference(RefType::ANYREF),
+            strings::STRING,
+        ],
+        Some(strings::STRING),
+        |m| {
+            let tag = erased::callee(m, erased::Helper::Tag)?;
+            let number = erased::callee(m, erased::Helper::Number)?;
+            let text = value_text(m)?;
+            let negative_zero = m.literal("-0");
+            // Params: value, name. Locals: its tag.
+            let mut f = Function::new([ValType::I32]);
+            f.instruction(&I::LocalGet(0));
+            f.call(tag);
+            f.instruction(&I::LocalSet(2));
+            let arm = |f: &mut Function, which: i32| {
+                f.instructions(&[
+                    I::LocalGet(2),
+                    I::I32Const(which),
+                    I::I32Eq,
+                    I::If(BlockType::Empty),
+                ]);
+            };
+            if m.types.erased.is_some_and(|erased| erased.bigint.is_some()) {
+                let concat = strings::callee(m, strings::Helper::Concat)?;
+                let suffix = m.literal("n");
+                arm(&mut f, erased::BIGINT);
+                crate::bigints::erased_text(m, &mut f, 0)?;
+                f.global_get(suffix);
+                f.call(concat);
+                f.instructions(&[I::Return, I::End]);
+            }
+            // -0, whose `String` is "0": zero, with its sign bit set.
+            arm(&mut f, erased::NUMBER);
+            f.instructions(&[I::F64Const(1.0.into()), I::LocalGet(0)]);
+            f.call(number);
+            f.instructions(&[
+                I::F64Copysign,
+                I::F64Const(0.0.into()),
+                I::F64Lt,
+                I::LocalGet(0),
+            ]);
+            f.call(number);
+            f.instructions(&[
+                I::F64Const(0.0.into()),
+                I::F64Eq,
+                I::I32And,
+                I::If(BlockType::Empty),
+            ]);
+            f.global_get(negative_zero);
+            f.instructions(&[I::Return, I::End, I::End]);
+            f.instructions(&[
+                I::LocalGet(2),
+                I::I32Const(erased::OBJECT),
+                I::I32Eq,
+                I::LocalGet(2),
+                I::I32Const(erased::FUNCTION),
+                I::I32Eq,
+                I::I32Or,
+                I::If(BlockType::Empty),
+            ]);
+            contract::refuse_in(
+                &mut f,
+                m,
+                1,
+                "inspecting an object or a function, which util.inspect prints by its properties",
+            )?;
+            f.instructions(&[I::End, I::LocalGet(0), I::LocalGet(1)]);
+            f.call(text);
+            f.instruction(&I::End);
+            Ok(f)
+        },
+    )
+}
+
 fn value_text(m: &mut Builder<'_>) -> Result<Func, Failure> {
     m.helper(
         FuncKey::ValueText,

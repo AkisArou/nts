@@ -58,6 +58,8 @@ pub(crate) enum FuncKey {
     Raising(crate::raising::Helper),
     DeclineInput,
     ValueText,
+    /// `util.inspect` of an open value, as console prints it.
+    ValueInspect,
     TagName,
     Collection(u32, crate::collections::Helper),
     /// `Object.keys` of a collection, into an array of strings.
