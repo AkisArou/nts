@@ -16,12 +16,18 @@
 export interface AppDrive {
   /** An expression's value in the page; a promise is awaited. */
   evaluate<T>(expression: string): Promise<T>;
-  /** Waits until an expression is truthy in the page. */
+  /** Waits until an expression is truthy in the page; one that throws is not, yet. */
   until(expression: string, label: string): Promise<void>;
   /** Focuses the element `selector` names and types `text` into it, as input events. */
   type(selector: string, text: string): Promise<void>;
   /** Presses and releases a key; `modifiers` as DevTools spells them (1 Alt, 2 Ctrl, 4 Meta, 8 Shift). */
   press(key: string, code: string, keyCode: number, modifiers?: number): Promise<void>;
+  /**
+   * The mouse's left button, at (x, y) in the page's CSS pixels: pressed,
+   * moved (while pressed, a drag) or released. The page sees it as a person's
+   * mouse, pointer events included.
+   */
+  mouse(action: "press" | "move" | "release", x: number, y: number): Promise<void>;
   /** Reloads the page: the app ends and starts again, its storage kept. */
   reload(): Promise<void>;
   /** Records a value under a label, as one line of the transcript. */

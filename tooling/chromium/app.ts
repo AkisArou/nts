@@ -200,13 +200,19 @@ async function driven(drive: (app: AppDrive) => Promise<void>, directory: string
   try {
     await drive({
       evaluate: (expression) => shown.evaluate(expression),
-      until: async (expression, label) => { await shown.until(() => shown.evaluate<boolean>(expression), label); },
+      // An expression that throws is not true yet: the page may still be
+      // loading, as it is right after a launch or a reload.
+      until: async (expression, label) => { await shown.until(() => shown.evaluate<boolean>(expression).catch(() => false), label); },
       type: async (selector, text) => {
         await shown.evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`);
         await shown.cdp("Input.insertText", { text });
       },
       press: async (key, code, keyCode, modifiers = 0) => {
         for (const type of ["keyDown", "keyUp"]) await shown.cdp("Input.dispatchKeyEvent", { type, key, code, windowsVirtualKeyCode: keyCode, modifiers });
+      },
+      mouse: async (action, x, y) => {
+        const type = { press: "mousePressed", move: "mouseMoved", release: "mouseReleased" }[action];
+        await shown.cdp("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons: action === "release" ? 0 : 1, clickCount: action === "move" ? 0 : 1 });
       },
       // Marked, so the wait is for the new document and not the one leaving.
       reload: async () => {

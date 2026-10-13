@@ -52,11 +52,12 @@ timer callbacks, and observers (mutation, resize, intersection). `unload()`
 runs when the document ends in a renderer that goes on (reload, navigation); closing the window may end the process without it, as
 with page script's `unload`. Keep the app's state in what `main` creates.
 Module-level state is not per document yet, and the build refuses it
-(contracts/compiler-requests.md, 10). [`examples/notes`](examples/notes) is
-written against lib.dom alone (localStorage, a debounced save, search,
-keyboard shortcuts); [`examples/todo`](examples/todo) is TodoMVC against
-`nts:dom`, the same app the TodoMVC benchmark measures; and
-[`examples/paint`](examples/paint) draws on the 2D canvas.
+(contracts/compiler-requests.md, 10). [`examples/notes`](examples/notes)
+(localStorage, a debounced save, search, keyboard shortcuts) and
+[`examples/paint`](examples/paint) (pointer events on the 2D canvas) are
+written against lib.dom alone, and each is checked against the same
+TypeScript run by V8; [`examples/todo`](examples/todo) is TodoMVC against
+`nts:dom`, the same app the TodoMVC benchmark measures.
 
 ```sh
 node tooling/chromium/app.ts build runtime/chromium/examples/todo [--backend c|llvm]
@@ -74,7 +75,7 @@ shell's own code, so there is no permission prompt: its origin is granted
 the clipboard, read and write, and every other permission is denied
 (`host/app_permissions.h`). `check` runs the lifecycle headless: start,
 render, the permissions and a clipboard round trip, reload, close. An app
-with a `drive.ts` beside its `main.ts` (`examples/notes` has one) is also
+with a `drive.ts` beside its `main.ts` (`notes` and `paint` have one) is also
 used as a person would use it, and `check` requires the compiled app to do
 exactly what the same TypeScript does as page script in V8
 (`tooling/chromium/app-drive.ts`).
