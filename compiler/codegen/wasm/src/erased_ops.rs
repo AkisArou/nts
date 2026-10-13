@@ -168,6 +168,15 @@ pub(crate) fn binary(
     if !matches!(op, BinOp::Eq | BinOp::Ne) {
         return Err(format!("erased binary {op:?}").into());
     }
+    let typed = |value| crate::objects::is_reference(b.ty(value));
+    if typed(lhs) || typed(rhs) {
+        let (erased, reference) = if typed(rhs) { (lhs, rhs) } else { (rhs, lhs) };
+        reference_equality(b, erased, reference)?;
+        if op == BinOp::Ne {
+            b.instruction(&I::I32Eqz);
+        }
+        return Ok(());
+    }
     let (helper, swap) = equality_helper(b.ty(lhs), b.ty(rhs))
         .ok_or_else(|| Failure::Unsupported("erased equality with this typed operand".into()))?;
     let args = if swap { [rhs, lhs] } else { [lhs, rhs] };
@@ -175,6 +184,36 @@ pub(crate) fn binary(
     if op == BinOp::Ne {
         b.instruction(&I::I32Eqz);
     }
+    Ok(())
+}
+/// An erased value `===` a typed reference: the same object or not. Every
+/// object, array, collection, promise and view is in `eq`, and nothing else an
+/// erased value holds is that object. A typed reference's null does not say
+/// whether it stands for undefined or for null, so comparing one is refused.
+fn reference_equality(
+    b: &mut Body<'_, '_>,
+    erased: ValueId,
+    reference: ValueId,
+) -> Result<(), Failure> {
+    if b.ty(erased) != &HirType::Erased {
+        return Err(Failure::Invariant(
+            "reference equality without an erased side".into(),
+        ));
+    }
+    crate::contract::nonnull(
+        b,
+        reference,
+        "an erased value compared with a null reference, which may stand for undefined or for null",
+    )?;
+    b.load(erased)?;
+    b.instructions(&[
+        I::RefTestNonNull(RefType::EQREF.heap_type),
+        I::If(BlockType::Result(ValType::I32)),
+    ]);
+    b.load(erased)?;
+    b.instruction(&I::RefCastNonNull(RefType::EQREF.heap_type));
+    b.load(reference)?;
+    b.instructions(&[I::RefEq, I::Else, I::I32Const(0), I::End]);
     Ok(())
 }
 pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(), Failure> {

@@ -371,6 +371,24 @@ fn source_buffer_views_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// A class used as a value is one immutable token per class: the same object
+/// wherever the name is written, `typeof` "function", compared by identity;
+/// and an open value compared with a typed object is that object or not.
+#[test]
+fn source_class_tokens_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/class-tokens");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "class-tokens",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 85, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// The order promise reactions and resumptions run in: each export's return
 /// is the checkpoint that drains them, and a second export reads the order,
 /// against node's order after a turn.

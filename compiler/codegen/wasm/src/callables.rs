@@ -385,12 +385,8 @@ pub(crate) fn static_value(b: &mut Body<'_, '_>, result: ValueId) -> Result<(), 
     };
     let types = b.types();
     let storage = types.objects.object(b.ty(result))?;
-    if !nts_core::hir::has_a_closure_body(class) || !storage.fields.is_empty() {
-        return Err(format!(
-            "static closure `{}` has captures or no closure body",
-            storage.name
-        )
-        .into());
+    if !storage.fields.is_empty() {
+        return Err(format!("static closure `{}` has captures", storage.name).into());
     }
     let global = b.m.global(GlobalKey::StaticClosure(class), |m| {
         let descriptor = objects::descriptor(m, storage.descriptor)?;
