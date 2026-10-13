@@ -372,6 +372,7 @@ pub(crate) fn static_value(b: &mut Body<'_, '_>, result: ValueId) -> Result<(), 
         let descriptor = objects::descriptor(m, storage.descriptor)?;
         let mut code = ir::Code::default();
         code.global_get(descriptor);
+        code.instruction(&objects::UNHASHED);
         for entry in entries(m, class, storage)? {
             code.ref_func(entry);
         }

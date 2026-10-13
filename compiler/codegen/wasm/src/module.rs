@@ -63,6 +63,7 @@ pub(crate) enum FuncKey {
     /// `Object.keys` of a collection, into an array of strings.
     CollectionKeys(u32, u32),
     Key(crate::collections::KeyHelper),
+    IdentityHash,
 }
 
 /// Every global the module can contain, named by what it means.
@@ -75,6 +76,8 @@ pub(crate) enum GlobalKey {
     StaticClosure(nts_core::hir::ClassId),
     Raising(crate::raising::Slot),
     Program(u32),
+    /// The last identity hash given out.
+    IdentityCounter,
 }
 
 #[derive(Debug)]

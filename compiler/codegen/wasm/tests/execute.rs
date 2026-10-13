@@ -333,6 +333,23 @@ fn source_collection_tables_agree_with_node() {
     assert_eq!(output["cases"], 72, "{output}");
 }
 
+/// Objects as collection keys compare by identity: same-shaped objects are two
+/// keys, an identity hash survives growth, and erased objects and functions
+/// hash the same way.
+#[test]
+fn source_object_keys_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/object-keys");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "object-keys",
+        &emitted,
+        "tooling/wasm/check-collection-tables.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 48, "{output}");
+}
+
 /// `String(v)` of every erased tag and of a boolean; an object is refused by
 /// name, since nothing here records how it prints.
 #[test]

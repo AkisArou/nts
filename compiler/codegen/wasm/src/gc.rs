@@ -119,6 +119,9 @@ pub(crate) enum KeyKind {
     Number,
     /// An erased value, hashed and compared by its tag.
     Erased,
+    /// An object, an array or a function, hashed by its identity hash and
+    /// compared by reference.
+    Reference,
 }
 
 /// The storage a collection's values take: a number or a boolean typed, and
@@ -137,10 +140,7 @@ pub(crate) fn collection_key(key: &HirType) -> Result<KeyKind, String> {
         HirType::Managed(ManagedType::String) => Ok(KeyKind::String),
         HirType::Float { bits: 64 } => Ok(KeyKind::Number),
         HirType::Erased => Ok(KeyKind::Erased),
-        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => Err(
-            "an object as a map or set key needs an identity hash, which Wasm objects do not have yet"
-                .into(),
-        ),
+        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => Ok(KeyKind::Reference),
         _ => Err(format!("a map or set key of type {key:?}")),
     }
 }
@@ -251,9 +251,13 @@ pub(crate) struct Convention {
     pub(crate) result: HirType,
 }
 
-/// How many fields the object root has: every object, array and collection
-/// struct starts with them, so a field after the root is numbered from here.
-pub(crate) const ROOT_FIELDS: u32 = 1;
+/// How many fields the object root has, its descriptor and its identity hash:
+/// every object, array and collection struct starts with them, so a field
+/// after the root is numbered from here.
+pub(crate) const ROOT_FIELDS: u32 = 2;
+/// The root's identity hash: zero until something hashes the object, then
+/// fixed, which is what an object as a Map or Set key needs.
+pub(crate) const IDENTITY_HASH: u32 = 1;
 /// An array wrapper's fields after the root: its length, then its backing.
 pub(crate) const ARRAY_LENGTH: u32 = ROOT_FIELDS;
 pub(crate) const ARRAY_BACKING: u32 = ROOT_FIELDS + 1;
@@ -669,10 +673,10 @@ impl<'a> Builder<'a> {
             "object root".into(),
             None,
             false,
-            Shape::Struct(vec![Field::value(
-                PendingSlot::Defined(descriptor, false),
-                false,
-            )]),
+            Shape::Struct(vec![
+                Field::value(PendingSlot::Defined(descriptor, false), false),
+                Field::value(PendingSlot::Scalar(Slot::I32), true),
+            ]),
         );
         self.root = Some(RootNodes {
             ancestry,
@@ -1379,7 +1383,7 @@ impl<'a> Builder<'a> {
         let key_storage = match shape.key {
             KeyKind::String => HirType::Managed(ManagedType::String),
             KeyKind::Number => HirType::NUMBER,
-            KeyKind::Erased => HirType::Erased,
+            KeyKind::Erased | KeyKind::Reference => HirType::Erased,
         };
         let keys = self.plain_array(&key_storage)?;
         let values = shape

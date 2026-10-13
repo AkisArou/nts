@@ -15,6 +15,78 @@ use nts_core::hir::{BinOp, ClassId, HirType, ManagedType, UnOp, ValueId};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 pub(crate) const INSTANCE: &str = "object.instanceOf";
+/// A new object's identity hash, after its descriptor: none given out yet.
+pub(crate) const UNHASHED: I<'static> = I::I32Const(0);
+
+/// An object's identity hash, given out on first use and fixed after: a
+/// Weyl sequence over the golden ratio, whose low bits a power-of-two mask
+/// spreads evenly, and never zero, which marks an unhashed object.
+///
+/// Params: the object, as the root.
+pub(crate) fn identity(m: &mut Builder<'_>) -> Result<Func, Failure> {
+    let root = m
+        .types
+        .root
+        .ok_or_else(|| Failure::Invariant("unplanned object root".into()))?;
+    let counter = m.global(GlobalKey::IdentityCounter, |_| {
+        let mut init = ir::Code::default();
+        init.instruction(&I::I32Const(0));
+        Ok((
+            wasm_encoder::GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            init,
+        ))
+    })?;
+    m.helper(
+        FuncKey::IdentityHash,
+        "object.identityHash",
+        vec![Physical::Reference(RefType {
+            nullable: true,
+            heap_type: HeapType::Concrete(root.object),
+        })],
+        Some(Physical::Scalar(Slot::I32)),
+        |_| {
+            let hash = 1;
+            let mut f = Function::new([ValType::I32]);
+            let field = I::StructGet {
+                struct_type_index: root.object,
+                field_index: crate::gc::IDENTITY_HASH,
+            };
+            f.instructions(&[
+                I::LocalGet(0),
+                field,
+                I::LocalTee(hash),
+                I::If(BlockType::Empty),
+                I::LocalGet(hash),
+                I::Return,
+                I::End,
+            ]);
+            f.global_get(counter);
+            f.instructions(&[I::I32Const(0x9e37_79b9_u32.cast_signed()), I::I32Add]);
+            f.global_set(counter);
+            f.global_get(counter);
+            f.instructions(&[
+                I::LocalTee(hash),
+                I::LocalGet(hash),
+                I::I32Eqz,
+                I::I32Or,
+                I::LocalSet(hash),
+                I::LocalGet(0),
+                I::LocalGet(hash),
+                I::StructSet {
+                    struct_type_index: root.object,
+                    field_index: crate::gc::IDENTITY_HASH,
+                },
+                I::LocalGet(hash),
+                I::End,
+            ]);
+            Ok(f)
+        },
+    )
+}
 /// A class or array descriptor: identity, runtime kind, ancestry and the
 /// class's dispatch entries. Built once, on the first allocation that needs it.
 pub(crate) fn descriptor(m: &mut Builder<'_>, at: u32) -> Result<Global, Failure> {
@@ -66,6 +138,7 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, frame: bool) -> Result<
     let storage = object(b, result)?;
     let descriptor = descriptor(b.m, storage.descriptor)?;
     b.global_get(descriptor);
+    b.instruction(&UNHASHED);
     for entry in crate::callables::entries(b.m, class, storage)? {
         b.code.ref_func(entry);
     }

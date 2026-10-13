@@ -1,4 +1,4 @@
-// The collection-tables fixture against node: every export over a range of
+// A collections fixture against node: every export over a range of
 // inputs, compared with Object.is.
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';

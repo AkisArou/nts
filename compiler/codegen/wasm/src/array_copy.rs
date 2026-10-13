@@ -202,6 +202,7 @@ fn wrap(
     let descriptor = objects::descriptor(m, shape.descriptor)?;
     f.global_get(descriptor);
     f.instructions(&[
+        objects::UNHASHED,
         I::LocalGet(count),
         I::LocalGet(local),
         I::RefAsNonNull,

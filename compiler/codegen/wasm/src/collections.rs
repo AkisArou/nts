@@ -127,15 +127,21 @@ fn key_storage(key: KeyKind) -> HirType {
     match key {
         KeyKind::String => HirType::Managed(ManagedType::String),
         KeyKind::Number => HirType::NUMBER,
-        KeyKind::Erased => HirType::Erased,
+        KeyKind::Erased | KeyKind::Reference => HirType::Erased,
     }
 }
 fn key_physical(key: KeyKind) -> Physical {
     match key {
         KeyKind::String => strings::STRING,
         KeyKind::Number => Physical::Scalar(Slot::F64),
-        KeyKind::Erased => Physical::Reference(RefType::ANYREF),
+        KeyKind::Erased | KeyKind::Reference => Physical::Reference(RefType::ANYREF),
     }
+}
+fn root_type(m: &Builder<'_>) -> Result<u32, Failure> {
+    m.types
+        .root
+        .map(|root| root.object)
+        .ok_or_else(|| Failure::Invariant("unplanned object root".into()))
 }
 fn concrete(index: u32) -> ValType {
     ValType::Ref(RefType {
@@ -344,6 +350,7 @@ pub(crate) fn size(b: &mut Body<'_, '_>, result: ValueId, subject: ValueId) -> R
 /// one empty slot, which the first insertion grows.
 fn empty(c: &Collection) -> Vec<I<'static>> {
     let mut code = vec![
+        objects::UNHASHED,
         I::I32Const(0),
         I::I32Const(0),
         I::ArrayNewFixed {
@@ -388,6 +395,29 @@ fn key_operand(b: &mut Body<'_, '_>, c: &Collection, key: ValueId) -> Result<(),
     if b.ty(key) != &HirType::Erased {
         return Err(format!("a collection key of type {:?}", b.ty(key)).into());
     }
+    if c.key == KeyKind::Reference {
+        // An object erases to itself; the key must be one.
+        if let OpKind::Erase {
+            value,
+            absent: Absent::Impossible,
+        } = b.func.value(key).kind
+            && matches!(
+                b.ty(value),
+                HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_))
+            )
+        {
+            contract::nonnull(b, value, "a null object as a collection key")?;
+            return b.load(value);
+        }
+        let root = root_type(b.m)?;
+        b.load(key)?;
+        b.instruction(&I::RefTestNonNull(HeapType::Concrete(root)));
+        contract::require(
+            b,
+            "a key that is not an object, for an object-keyed collection",
+        )?;
+        return b.load(key);
+    }
     if let Some(typed) = erased_from(b, key, &key_storage(c.key)) {
         if c.key == KeyKind::String {
             contract::nonnull(b, typed, "a null string as a collection key")?;
@@ -405,6 +435,7 @@ fn key_operand(b: &mut Body<'_, '_>, c: &Collection, key: ValueId) -> Result<(),
             let normal = key_callee(b.m, KeyHelper::Normal)?;
             b.call(normal);
         }
+        KeyKind::Reference => return Err(Failure::Invariant("object key past its arm".into())),
         KeyKind::String => {
             b.load(key)?;
             erased::call(b, erased::Helper::Tag)?;
@@ -1264,6 +1295,7 @@ fn keys_str(m: &mut Builder<'_>, c: &Collection, result: &HirType) -> Result<Fun
             }
             f.global_get(descriptor);
             f.instructions(&[
+                objects::UNHASHED,
                 I::LocalGet(written),
                 I::LocalGet(backing),
                 I::RefAsNonNull,
@@ -1433,6 +1465,7 @@ fn hash(m: &mut Builder<'_>, kind: KeyKind) -> Result<Function, Failure> {
         KeyKind::String => hash_string(m)?,
         KeyKind::Number => hash_number(),
         KeyKind::Erased => return hash_erased(m),
+        KeyKind::Reference => return hash_reference(m),
     };
     // Zero marks a hole, so a zero hash becomes one.
     let h = hash_local(kind);
@@ -1555,12 +1588,15 @@ fn hash_erased(m: &mut Builder<'_>) -> Result<Function, Failure> {
     f.instructions(&[I::I32Const(0x2001), I::Return, I::End]);
     arm(&mut f, erased::NULL);
     f.instructions(&[I::I32Const(0x3001), I::Return, I::End]);
-    contract::refuse_in(
-        &mut f,
-        m,
-        1,
-        "an object as a map or set key needs an identity hash, which Wasm objects do not have yet",
-    )?;
+    let root = root_type(m)?;
+    let identity = objects::identity(m)?;
+    for tag in [erased::OBJECT, erased::FUNCTION] {
+        arm(&mut f, tag);
+        f.instructions(&[I::LocalGet(0), I::RefCastNonNull(HeapType::Concrete(root))]);
+        f.call(identity);
+        f.instructions(&[I::Return, I::End]);
+    }
+    contract::refuse_in(&mut f, m, 1, "a key of a kind this collection cannot hash")?;
     f.instruction(&I::End);
     Ok(f)
 }
@@ -1569,8 +1605,21 @@ fn hash_erased(m: &mut Builder<'_>) -> Result<Function, Failure> {
 const fn hash_local(kind: KeyKind) -> u32 {
     match kind {
         KeyKind::String => 4,
-        KeyKind::Number | KeyKind::Erased => 3,
+        KeyKind::Number | KeyKind::Erased | KeyKind::Reference => 3,
     }
+}
+
+/// An object's identity hash, which is never zero.
+///
+/// Params: key, name.
+fn hash_reference(m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let root = root_type(m)?;
+    let identity = objects::identity(m)?;
+    let mut f = Function::default();
+    f.instructions(&[I::LocalGet(0), I::RefCastNonNull(HeapType::Concrete(root))]);
+    f.call(identity);
+    f.instruction(&I::End);
+    Ok(f)
 }
 
 /// Two keys equal by `SameValueZero`.
@@ -1596,6 +1645,13 @@ fn equal(m: &mut Builder<'_>, kind: KeyKind) -> Result<Function, Failure> {
             I::F64Ne,
             I::I32And,
             I::I32Or,
+        ]),
+        KeyKind::Reference => f.instructions(&[
+            I::LocalGet(0),
+            I::RefCastNullable(RefType::EQREF.heap_type),
+            I::LocalGet(1),
+            I::RefCastNullable(RefType::EQREF.heap_type),
+            I::RefEq,
         ]),
         KeyKind::Erased => {
             let tag = erased::callee(m, erased::Helper::Tag)?;

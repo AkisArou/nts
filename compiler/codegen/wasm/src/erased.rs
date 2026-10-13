@@ -23,6 +23,8 @@ pub(crate) const BOOLEAN: i32 = tags::BOOLEAN.cast_signed();
 pub(crate) const NUMBER: i32 = tags::NUMBER.cast_signed();
 pub(crate) const STRING: i32 = tags::STRING.cast_signed();
 pub(crate) const NULL: i32 = tags::NULL.cast_signed();
+pub(crate) const OBJECT: i32 = tags::OBJECT.cast_signed();
+pub(crate) const FUNCTION: i32 = tags::FUNCTION.cast_signed();
 
 /// The four immutable erased values with no payload of their own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

@@ -167,6 +167,7 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Res
     )?;
     let descriptor = objects::descriptor(b.m, array.descriptor)?;
     b.global_get(descriptor);
+    b.instruction(&objects::UNHASHED);
     index(b, length)?;
     objects::default(b, &array.element)?;
     index(b, length)?;
