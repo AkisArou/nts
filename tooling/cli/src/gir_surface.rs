@@ -304,9 +304,11 @@ fn install(tsconfig: &Utf8Path, platform: &GirPlatform, gi: bool) -> Result<Vec<
 
 /// The `c:` or `gi:` module a complaint says cannot be found -- TypeScript's
 /// `Cannot find module 'c:Gtk-4.0' or its corresponding type declarations.`
-/// (2307).
+/// (2307), or the same words for a side-effect import with no names,
+/// `import "gi:gtk"` (2882): GJS programs set versions that way, and the
+/// packages are no more installed for it until it is recognised here.
 fn missing_module(complaint: &Complaint) -> Option<&str> {
-    if complaint.code != 2307 {
+    if complaint.code != 2307 && complaint.code != 2882 {
         return None;
     }
     let module = complaint.text.split_once('\'')?.1.split('\'').next()?;
@@ -655,6 +657,36 @@ export function made(): number {
             !gobject_constants.contains("export const G_TYPE_GTYPE"),
             "a type defined as a call was declared a constant"
         );
+    }
+
+    /// A missing GIR module is recognised in both spellings TypeScript
+    /// gives it: named (2307) and side-effect (2882). The side-effect form
+    /// is how GJS sets a version, and unrecognised it installed nothing:
+    /// measured against a pin of main, `import "gi:gtk"` alone failed
+    /// TS2882 while the named form built.
+    #[test]
+    fn a_missing_gir_module_is_recognised_named_and_side_effect() {
+        let named = Complaint {
+            code: 2307,
+            text: "Cannot find module 'gi:gtk' or its corresponding type declarations.".into(),
+        };
+        let side_effect = Complaint {
+            code: 2882,
+            text: "Cannot find module or type declarations for side-effect import of 'gi:gtk'."
+                .into(),
+        };
+        let other = Complaint {
+            code: 2307,
+            text: "Cannot find module 'fs'".into(),
+        };
+        let wrong_code = Complaint {
+            code: 1005,
+            text: "Cannot find module 'gi:gtk' or its corresponding type declarations.".into(),
+        };
+        assert_eq!(missing_module(&named), Some("gi:gtk"));
+        assert_eq!(missing_module(&side_effect), Some("gi:gtk"));
+        assert_eq!(missing_module(&other), None);
+        assert_eq!(missing_module(&wrong_code), None);
     }
 
     /// Every source file the generator is made of is in `GENERATOR`: one left
