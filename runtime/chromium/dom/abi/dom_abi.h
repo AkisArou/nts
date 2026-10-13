@@ -164,6 +164,24 @@ NtsDomIntersectionObserver* nts_dom_new_intersection_observer(
                      void* closure),
     void* closure,
     void (*destroy)(void* closure));
+/* `new IntersectionObserver(callback, options)`: the options the struct the
+ * program writes as an object literal, a member left out its zero -- root
+ * NULL (the viewport), rootMargin NULL ("0px"), threshold 0 (one threshold,
+ * 0), as IntersectionObserverInit defaults them. A root must be an Element or
+ * a Document, and a rootMargin one Blink parses: otherwise the exception is
+ * the program's, as page script's binding throws it. One threshold only; a
+ * list is not carried. */
+typedef struct NtsDomIntersectionObserverOptions {
+  NtsDomNode* root;
+  const NtsBorrowedString* rootMargin;
+  double threshold;
+} NtsDomIntersectionObserverOptions;
+NtsDomIntersectionObserver* nts_dom_new_intersection_observer_options(
+    void (*callback)(NtsDomIntersectionObserverEntrySequence* entries,
+                     NtsDomIntersectionObserver* observer,
+                     void* closure),
+    void* closure, void (*destroy)(void* closure),
+    NtsDomIntersectionObserverOptions options, NtsDomException** error);
 
 /* `setTimeout(callback, timeout)` and `setInterval` for a compiled closure,
  * as HTML's timer initialization steps run them: the timeout is WebIDL's

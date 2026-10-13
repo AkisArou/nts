@@ -337,6 +337,21 @@ export function libDomTranscript(): string {
       new MediaQueryListEvent("change").media.length);
   }
 
+  // An IntersectionObserver's options refused: a rootMargin Blink does not
+  // parse is page script's SyntaxError. Compared by the message's last
+  // clause: page script's carries V8's context ("Failed to construct ...: "),
+  // the program's the name (workarounds.md, 27).
+  {
+    let refused = "none";
+    try {
+      new IntersectionObserver((): void => {}, { rootMargin: "1em" });
+    } catch (error) {
+      const message = (error as Error).message;
+      refused = message.slice(message.lastIndexOf(": ") + 2);
+    }
+    log("intersectionRootMargin", refused);
+  }
+
   root.remove();
   return lines.join("\n");
 }
@@ -370,12 +385,29 @@ function orderMicrotasks(label: string): void {
   });
 }
 
+// An IntersectionObserver made with options (`{ threshold, rootMargin }`):
+// a fixed box in the viewport is reported intersecting past the threshold,
+// and the observer reads its margin back as Blink normalizes it.
+function observeWithOptions(label: string): void {
+  const box = document.createElement("div");
+  box.setAttribute("style", "position: fixed; top: 0; left: 0; width: 10px; height: 10px");
+  document.body.appendChild(box);
+  const observer = new IntersectionObserver((entries: IntersectionObserverEntry[], self: IntersectionObserver): void => {
+    const entry = entries[0];
+    document.querySelector("#native-lib-dom")?.setAttribute("data-" + label,
+      entries.length + "|" + entry.isIntersecting + "|" + (entry.intersectionRatio >= 0.5) + "|" + self.rootMargin);
+    self.disconnect();
+    box.remove();
+  }, { threshold: 0.5, rootMargin: "10px" });
+  observer.observe(box);
+}
+
 export function startLibDomPromises(): void {
   setTimeout((): void => {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -396,6 +428,7 @@ export function startLibDomPromises(): void {
     settle("clipboard", (): Promise<void> => navigator.clipboard.writeText("copied"));
     settleFetch("fetched");
     orderMicrotasks("microtasks");
+    observeWithOptions("intersectionOptions");
     // RequestInit's method, a ByteString read from the dictionary before
     // the fetch starts: refused, the promise rejected.
     settle("fetchWide", async (): Promise<void> => {

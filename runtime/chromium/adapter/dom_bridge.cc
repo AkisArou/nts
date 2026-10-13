@@ -20,6 +20,8 @@
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
 #include "third_party/blink/renderer/core/dom/mutation_record.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_intersection_observer_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_document_element.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_double_doublesequence.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_delegate.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
@@ -1903,6 +1905,40 @@ NtsDomIntersectionObserver *nts_dom_new_intersection_observer(
   return HandleOf<NtsDomIntersectionObserver>(blink::IntersectionObserver::Create(
       blink::IntersectionObserverInit::Create(context.v8_isolate),
       *delegate, std::nullopt));
+}
+
+NtsDomIntersectionObserver *nts_dom_new_intersection_observer_options(
+    nts_dom::NtsIntersectionDelegate::Callback callback, void *closure,
+    NtsDomDestroy destroy, NtsDomIntersectionObserverOptions options,
+    NtsDomException **error) {
+  NtsDomContext &context = nts_dom::Current();
+  Throws exception_state(error);
+  auto *init = blink::IntersectionObserverInit::Create(context.v8_isolate);
+  if (options.root) {
+    // `(Element or Document)? root`, converted as page script's binding
+    // converts it: anything else is a TypeError.
+    blink::Node *root = NodeOf(options.root);
+    if (auto *element = blink::DynamicTo<blink::Element>(root)) {
+      init->setRoot(blink::MakeGarbageCollected<blink::V8UnionDocumentOrElement>(element));
+    } else if (auto *document = blink::DynamicTo<blink::Document>(root)) {
+      init->setRoot(blink::MakeGarbageCollected<blink::V8UnionDocumentOrElement>(document));
+    } else {
+      static_cast<blink::ExceptionState &>(exception_state).ThrowTypeError(
+          "Failed to read the 'root' property from 'IntersectionObserverInit': "
+          "The provided value is not of type '(Document or Element)'.");
+      return nullptr;
+    }
+  }
+  if (options.rootMargin)
+    init->setRootMargin(NtsText(context, options.rootMargin).Text());
+  init->setThreshold(
+      blink::MakeGarbageCollected<blink::V8UnionDoubleOrDoubleSequence>(options.threshold));
+  auto *delegate =
+      blink::MakeGarbageCollected<nts_dom::NtsIntersectionDelegate>(
+          Hold(context, reinterpret_cast<nts_dom::NtsHeldClosure::AnyCallback>(callback),
+               closure, destroy));
+  return HandleOf<NtsDomIntersectionObserver>(blink::IntersectionObserver::Create(
+      init, *delegate, std::nullopt, exception_state));
 }
 
 int32_t nts_dom_set_timeout(NtsDomTimerCallback callback, void *closure,

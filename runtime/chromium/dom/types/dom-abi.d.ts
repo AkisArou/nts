@@ -4,7 +4,7 @@
 // the document an entry runs in, and listening with a compiled closure.
 // Contract: abi/dom_abi.h.
 declare module "nts:dom" {
-  import type { Closure, HostClass, Ptr, ScopedClosure, StringView } from "c:types";
+  import type { ByValue, Closure, Fields, HostClass, Ptr, ScopedClosure, StringView, Struct } from "c:types";
   import type { Float64, Int32 } from "@nts/scalars";
   /**
    * `queueMicrotask(callback)`: once, as a microtask, in the queue page
@@ -86,6 +86,20 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_new_intersection_observer
    */
   export function newIntersectionObserver(callback: Closure<(entries: IntersectionObserverEntrySequence, observer: IntersectionObserver) => void>): IntersectionObserver;
+  /**
+   * `new IntersectionObserver(callback, { root, rootMargin, threshold })`,
+   * written as an object literal; a member left out is the default (the
+   * viewport, "0px", 0). The root is an Element or a Document. One
+   * threshold; a list is not carried.
+   */
+  export type IntersectionObserverOptions = Struct<{ root: Node | null; rootMargin: StringView; threshold: Float64 }, "NtsDomIntersectionObserverOptions">;
+  /**
+   * @ntsSymbol nts_dom_new_intersection_observer_options
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newIntersectionObserver(callback: Closure<(entries: IntersectionObserverEntrySequence, observer: IntersectionObserver) => void>,
+    options: ByValue<IntersectionObserverOptions> | Fields<IntersectionObserverOptions>, error?: Ptr<DOMException | null>): IntersectionObserver;
   /** The document the running code is part of. */
   /** @ntsSymbol nts_dom_document */
   export function document(): Document;
