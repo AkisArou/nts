@@ -371,6 +371,67 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   and `get`'s erased result is boxed and unboxed. Both are follow-ups: a
   bounded hash for long keys, and a typed `get` where the consumer unerases.
 
+### Promises and the checkpoint (3d)
+
+`promises.rs` mirrors the C runtime's `NtsPromise`, `NtsTask` and
+`nts_enter`/`nts_leave` (docs/async.md), with one queue per module.
+- **A promise** is an object holding:
+  - its state (pending, fulfilled, rejected) and one erased settlement;
+  - the pair of resolving functions that may resolve it now (`claim`);
+  - whether anything subscribed, and its reactions in subscription order.
+- **Settling and subscribing.** Settling twice is a no-op. Subscribing to a
+  settled promise queues the reaction; it never runs inline. An adoption takes
+  C's two ticks (subscribe, then forward). A rejection nothing listened to is a
+  candidate, and the outermost checkpoint throws one still unhandled uncaught,
+  as `nts_uncaught` does.
+- **A task** is `{ run, state }`, every `run` typed `(anyref) -> ()`:
+  - a resumption's thunk with its frame (`Suspend`);
+  - a closure's no-argument call thunk with the closure
+    (`PromiseSubscribe`, `nts_enqueue_job`);
+  - an adoption step.
+- **The checkpoint** is the export wrapper, `nts_enter`/`nts_leave` in Wasm.
+  - Every export of a module that plans promises counts depth, and the
+    outermost return drains ticks to empty, then microtasks to empty, while
+    ticks remain. Ticks are unreachable today; the shape keeps timers from
+    reordering.
+  - The drain runs however the export returns: an exception is caught
+    (`try_table`, `catch_all_ref`), the queues drained, and it is rethrown.
+  - An unbalanced leave is refused by name. Module initialization ends the
+    same way.
+  - The common return is inline and calls the drain only when a queue or the
+    candidate list is non-empty. Cost, exploratory, load ~30: 4.30 -> 4.67 ns
+    per call of a one-line export. A module without promises has no wrapper.
+  - `host_owned` is C's opt-out for a host that owns the microtask queue (a
+    Blink renderer), so adopting the browser's queue is a flag, not a redesign.
+- **The boundary.** An export answering a promise answers a JS promise.
+  - It resolves at once when the export's own checkpoint settled it.
+  - Otherwise it is watched: the program's task that sees the promise settle
+    calls the host's `promiseSettled`.
+  - A settlement converts by its tag. A compiled object or function as a value
+    or a reason is refused by name, since it needs an identity bridge.
+  - The census awaits both sides and compares what each settles with.
+- **Our queue is separate from the JS host's**, as C's is from libuv's. That is
+  right while no promise crosses into the program, and none can: a promise
+  parameter or global is refused by name.
+- **Timers (3d-c)** are tasks in a table under numeric ids from 1 (0 is never
+  live). The host's `setTimer` starts a JS timer whose callback calls
+  `$nts.timer.fire`, which runs the task inside the checkpoint. So the
+  microtasks a callback queues run before the next timer's callback, as node
+  runs them. A one-shot timer's slot empties as it fires; `clearTimer` empties
+  one and stops the host's timer. The glue gives each instance its own pair.
+- **Not yet:** `Promise.all` and `race` (3d-b).
+- **Tests:**
+  - promise-order (32 cases): interleaved awaits, `.then` beside `await`, an
+    async function returning a promise two ticks later, a rejection caught.
+    Each export's return is the checkpoint, against node's order after a turn.
+  - promise-boundary (14 cases): a promise settled at once, one watched until
+    a later export settles it, a string rejection, and a compiled Error
+    refused by name.
+  - timer-order (9 cases): microtasks between two timers' callbacks, an
+    interval that clears itself, a cleared timer that never fires.
+  - 15 of the 27 census rows the promise family blocked agree (timers is the
+    fifteenth), and the timers example.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
