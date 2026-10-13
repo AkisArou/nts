@@ -56,11 +56,14 @@ node tooling/lanes/land.ts <commit>             # gate and land, ~30 min: run it
 Run it from your tree at that commit, **bare**: never inside a `flock` or a
 lock of your own. It takes the landing lock itself; a wrapper holding it while
 `land` waited stopped every lane's landing for most of an hour, and `land` now
-refuses to run under one. Once it holds the lock, a commit `main` has moved
-past is replayed onto `main` (refused only on a conflict); it gates exactly
-what `owed.mjs` says the commits owe (choosing steps by hand is how `main` went
-red), one gate at a time, and lands only on a green summary with `main`
-unmoved. Never `git merge` onto `main` yourself.
+refuses to run under one. Landings queue, and whoever holds the lock next gates
+every queued one as **one train**: replayed onto `main` in turn, gated once
+for exactly what `owed.mjs` says the range owes (choosing steps by hand is how
+`main` went red), and landed together on a green summary. A red train is
+halved until the red landing is alone, and only it is refused. One gate is
+half an hour whether it carries one landing or six, so queue a change as soon
+as it is reviewed and ready; `lane status` lists the queue. Never `git merge`
+onto `main` yourself.
 
 Before a lowering change goes to the gate, also run the five test262 records
 the gate checks (all.sh's `test262_cases`, `test262_builtins_cases`,

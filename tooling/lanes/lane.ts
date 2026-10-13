@@ -12,7 +12,7 @@
 // the ones to ask about.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -80,6 +80,22 @@ function landing(): Record<string, unknown> | null {
   return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
 }
 
+/** The landings waiting for the lock, oldest first: land.ts's queue files. */
+function queue(): { sha: string; tree: string; waitingMin: number; train?: string }[] {
+  const dir = join(homedir(), ".cache/nts-land/queue");
+  if (!existsSync(dir)) return [];
+  const rows = [];
+  for (const name of readdirSync(dir)) {
+    try {
+      const e = JSON.parse(readFileSync(join(dir, name), "utf8"));
+      rows.push({ at: e.at, sha: String(e.sha).slice(0, 12), tree: e.tree, waitingMin: Math.round((Date.now() - e.at) / 60000) });
+    } catch {
+      // being written, or removed as it was read
+    }
+  }
+  return rows.sort((a, b) => a.at - b.at).map(({ at: _, ...r }) => r);
+}
+
 function marker(): string | null {
   const file = join(homedir(), ".cache/nts-parallel-20261004/mainctl/GATE-RUNNING");
   return existsSync(file) ? readFileSync(file, "utf8").trim() || "(empty)" : null;
@@ -90,13 +106,20 @@ function status(json: boolean): void {
   rows.sort((a, b) => a.lane.localeCompare(b.lane) || a.path.localeCompare(b.path));
   const main = git(["log", "-1", "--format=%h %s (%cr)", "main"], root);
   if (json) {
-    console.log(JSON.stringify({ main, gate: marker(), landing: landing(), trees: rows }, null, 2));
+    console.log(JSON.stringify({ main, gate: marker(), landing: landing(), queue: queue(), trees: rows }, null, 2));
     return;
   }
   console.log(`main: ${main}`);
   console.log(`gate: ${marker() ?? "free"}`);
   const l = landing();
   if (l) console.log(`last landing: ${l.state} ${String(l.commit ?? "").slice(0, 12)} at ${l.at}`);
+  const q = queue();
+  // Landings started by a land.ts older than the train wait without a queue
+  // file, and are not listed.
+  if (q.length > 0) {
+    console.log(`queued (the next to hold the lock gates up to six of them as one train):`);
+    for (const e of q) console.log(`  ${e.sha}  ${String(e.waitingMin).padStart(4)} min  ${e.tree}`);
+  }
   console.log("");
   const head = ["lane", "branch", "+ahead", "-behind", "dirty", "age", "tree", "last commit"];
   const cells = rows.map((r) => [r.lane, r.branch, `+${r.ahead}`, `-${r.behind}`, r.dirty ? String(r.dirty) : "", r.ageDays >= 0 ? `${r.ageDays}d` : "?", r.path, r.lastCommit]);

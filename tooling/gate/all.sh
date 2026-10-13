@@ -2432,10 +2432,11 @@ step "outcomes" outcomes
 step "integrity" integrity
 step "definitions" definitions
 step "compile-time" compile_time
-# The gate's own tools: the tokens (tokens.test.mjs) and what owed.mjs maps a
-# path to (owed.test.mjs, and its --self-test). Seconds.
+# The gate's own tools: the tokens (tokens.test.mjs), what owed.mjs maps a
+# path to (owed.test.mjs, and its --self-test), and land.ts's train
+# (land.test.ts). Seconds.
 tooling_tests() {
-  node --test tooling/gate/*.test.mjs > "${TMPDIR:-/tmp}/nts-gate-tooling.$$" 2>&1
+  node --test tooling/gate/*.test.mjs tooling/lanes/*.test.ts > "${TMPDIR:-/tmp}/nts-gate-tooling.$$" 2>&1
   status=$?
   awk '/^(✖|ℹ (tests|pass|fail))/ { print "  " $0 }' "${TMPDIR:-/tmp}/nts-gate-tooling.$$"
   [ $status -eq 0 ] || sed -n '/^✖ failing tests/,$p' "${TMPDIR:-/tmp}/nts-gate-tooling.$$" | head -40

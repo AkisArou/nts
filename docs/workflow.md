@@ -42,16 +42,27 @@ node tooling/lanes/land.ts <commit> --dry-run   # what it owes
 node tooling/lanes/land.ts <commit>             # gate and land; ~30 min, run it in the background
 ```
 
-Run it from your tree, at the commit you are landing. It:
+Run it from your tree, at the commit you are landing, bare (never inside a
+lock of your own). It:
 
-1. waits its turn (a kernel lock; it also honours the old `GATE-RUNNING`
-   marker while lanes move over);
-2. refuses a commit that is not on top of `main` (rebase first);
-3. asks `owed.mjs --range main..<commit>` which gate steps the commits owe;
+1. joins the queue and waits for the landing lock (a kernel lock; it also
+   honours the old `GATE-RUNNING` marker while lanes move over);
+2. **lands a train**: whoever holds the lock gates every queued landing at
+   once, up to six, oldest first. Each one's commits since it left `main` are
+   replayed onto `main`, the next onto the last; one that conflicts is
+   refused (rebase by hand and land again), and the train goes on without it;
+3. asks `owed.mjs --range main..<tip>` which gate steps the train owes;
 4. runs exactly those, with `pinned.sh`, in the one gate tree;
-5. lands only on a green summary that names your commit with every owed step
-   PASS, and only if `main` has not moved meanwhile;
-6. records the run as a git note on the commit (`git notes --ref=land show <commit>`).
+5. lands the train only on a green summary that names its tip with every owed
+   step PASS. A red train of more than one is halved, and its first half gated
+   next, down to the landing that is red on its own: that one is refused, the
+   rest land;
+6. records the run as a git note on the tip (`git notes --ref=land show <commit>`).
+
+Your landing's own process prints what became of it when its turn comes,
+whoever gated it. So queue a change as soon as it is ready: a gate costs the
+same for one landing as for six. `~/.cache/nts-land/trains.tsv` has a line per
+train: size, verdict, wall time.
 
 A change to `compiler/` or `runtime/c/` from another lane is reviewed by the
 compiler lane before it lands. `land` never pushes to `origin`.
@@ -63,7 +74,7 @@ node tooling/lanes/lane.ts status          # every tree: lane, branch, ahead/beh
 node tooling/lanes/lane.ts status --json   # the same, for an agent
 ```
 
-The last landing, and what holds the gate, are at the top. A tree on a branch
+The last landing, what holds the gate, and the landings queued are at the top. A tree on a branch
 no lane claims, or detached, is listed as such: those are the ones to ask about.
 
 ## Finishing a topic

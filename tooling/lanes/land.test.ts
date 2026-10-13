@@ -1,0 +1,200 @@
+// land.ts against a scratch repository and a stand-in gate: the train.
+//
+//   node --test tooling/lanes/land.test.ts
+//
+// Each test makes a repository whose `tooling/gate/pinned.sh` is a stand-in:
+// it checks the commit out in the gate tree and writes a summary that is red
+// when the commit has a file named RED, and it logs every commit it gates. The
+// lock is held while the landings queue, so whoever takes it next finds them
+// all waiting, as a lane does behind a half-hour gate.
+
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
+import assert from "node:assert/strict";
+
+const LAND = new URL("./land.ts", import.meta.url).pathname;
+
+const STAND_IN_GATE = `set -eu
+sha=$1
+if [ -e "$NTS_GATE_TREE/.git" ]; then
+  git -C "$NTS_GATE_TREE" checkout -q --detach --force "$sha"
+else
+  git worktree add -q --detach "$NTS_GATE_TREE" "$sha"
+fi
+[ -n "\${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
+echo "$sha" >> "$LAND_TEST_GATES"
+verdict=green step=PASS
+if [ -e "$NTS_GATE_TREE/RED" ]; then verdict=red step=FAIL; fi
+printf '{"verdict":"%s","started":"t","wall_s":1,"steps":[{"name":"fake","verdict":"%s"}],"identities":{"commit":"%s"}}' \\
+  "$verdict" "$step" "$sha" > "$NTS_GATE_RUN_DIR/summary.json"
+`;
+
+type Scratch = { root: string; home: string; gates: string; env: NodeJS.ProcessEnv };
+
+const made: string[] = [];
+after(() => {
+  for (const dir of made) rmSync(dir, { recursive: true, force: true });
+});
+
+function scratch(): Scratch {
+  const dir = mkdtempSync(join(tmpdir(), "land-test-"));
+  made.push(dir);
+  const root = join(dir, "repo");
+  const home = join(dir, "home");
+  mkdirSync(join(home, ".cache/nts-parallel-20261004/mainctl"), { recursive: true });
+  mkdirSync(join(root, "tooling/gate"), { recursive: true });
+  writeFileSync(join(root, "tooling/gate/pinned.sh"), STAND_IN_GATE);
+  writeFileSync(join(root, "tooling/gate/owed.mjs"), `console.log('NTS_GATE_STEPS="fake"');\n`);
+  writeFileSync(join(root, "shared.txt"), "one\n");
+  const env: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_") && !k.startsWith("NTS_")) env[k] = v;
+  Object.assign(env, {
+    NTS_LAND_HOME: home,
+    LAND_TEST_GATES: join(dir, "gates.log"),
+    GIT_AUTHOR_NAME: "t",
+    GIT_AUTHOR_EMAIL: "t@t",
+    GIT_COMMITTER_NAME: "t",
+    GIT_COMMITTER_EMAIL: "t@t",
+  });
+  const s = { root, home, gates: join(dir, "gates.log"), env };
+  run(s, root, ["init", "-q", "-b", "main"]);
+  run(s, root, ["add", "-A"]);
+  run(s, root, ["commit", "-q", "-m", "base"]);
+  return s;
+}
+
+function run(s: Scratch, cwd: string, args: string[]): string {
+  const r = spawnSync("git", args, { cwd, env: s.env, encoding: "utf8" });
+  assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+  return r.stdout.trim();
+}
+
+/** A lane's tree on its own branch from main, with one commit writing `files`. */
+function lane(s: Scratch, name: string, files: Record<string, string>): string {
+  const tree = join(s.root, "..", name);
+  run(s, s.root, ["worktree", "add", "-q", "-b", name, tree, "main"]);
+  for (const [path, text] of Object.entries(files)) writeFileSync(join(tree, path), text);
+  run(s, tree, ["add", "-A"]);
+  run(s, tree, ["commit", "-q", "-m", name]);
+  return tree;
+}
+
+type Landed = { status: number | null; out: string };
+
+function land(s: Scratch, tree: string): { child: ChildProcess; done: Promise<Landed> } {
+  const child = spawn(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env });
+  let out = "";
+  child.stdout?.on("data", (d) => (out += d));
+  child.stderr?.on("data", (d) => (out += d));
+  const done = new Promise<Landed>((resolve) => child.on("exit", (status) => resolve({ status, out })));
+  return { child, done };
+}
+
+async function until(what: string, ok: () => boolean): Promise<void> {
+  for (let i = 0; i < 200; i++) {
+    if (ok()) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.fail(`timed out waiting for ${what}`);
+}
+
+/** Land every tree at once: the lock is held until all of them are queued. */
+async function landTogether(s: Scratch, trees: string[]): Promise<Landed[]> {
+  const lock = join(s.home, ".cache/nts-land.lock");
+  writeFileSync(lock, "");
+  // Its own process group: `sleep` inherits the lock from `flock`, so both go.
+  const holder = spawn("flock", [lock, "sleep", "60"], { detached: true });
+  await until("the lock to be held", () => readFileSync("/proc/locks", "utf8").includes(`${holder.pid} `));
+  // One at a time, so the queue's order is the order given.
+  const queue = join(s.home, ".cache/nts-land/queue");
+  const landings = [];
+  for (const tree of trees) {
+    landings.push(land(s, tree));
+    await until(`${tree} to queue`, () => existsSync(queue) && readdirSync(queue).length === landings.length);
+  }
+  process.kill(-holder.pid!, "SIGTERM");
+  return Promise.all(landings.map((l) => l.done));
+}
+
+const gates = (s: Scratch) => (existsSync(s.gates) ? readFileSync(s.gates, "utf8").trim().split("\n").length : 0);
+const onMain = (s: Scratch, path: string) => spawnSync("git", ["cat-file", "-e", `main:${path}`], { cwd: s.root, env: s.env }).status === 0;
+
+test("one gate lands every landing queued behind the lock", async () => {
+  const s = scratch();
+  const a = lane(s, "a", { "a.txt": "a\n" });
+  const b = lane(s, "b", { "b.txt": "b\n" });
+  const c = lane(s, "c", { "c.txt": "c\n" });
+  const [ra, rb, rc] = await landTogether(s, [a, b, c]);
+  for (const r of [ra, rb, rc]) {
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /LANDED .* in a train of 3/);
+  }
+  assert.equal(gates(s), 1);
+  assert.ok(onMain(s, "a.txt") && onMain(s, "b.txt") && onMain(s, "c.txt"));
+  assert.match(readFileSync(join(s.home, ".cache/nts-land/trains.tsv"), "utf8"), /\t3\tlanded\t/);
+});
+
+test("a red train is halved until the red landing is alone, and only it is refused", async () => {
+  const s = scratch();
+  const a = lane(s, "a", { "a.txt": "a\n" });
+  const b = lane(s, "b", { "b.txt": "b\n" });
+  const red = lane(s, "red", { RED: "\n" });
+  const c = lane(s, "c", { "c.txt": "c\n" });
+  const [ra, rb, rr, rc] = await landTogether(s, [a, b, red, c]);
+  assert.equal(ra.status, 0, ra.out);
+  assert.equal(rb.status, 0, rb.out);
+  assert.equal(rc.status, 0, rc.out);
+  assert.equal(rr.status, 1, rr.out);
+  assert.match(rr.out, /gate not green: fake=FAIL/);
+  assert.ok(onMain(s, "a.txt") && onMain(s, "b.txt") && onMain(s, "c.txt"));
+  assert.ok(!onMain(s, "RED"));
+  // [a b red c] red, [a b] green, [red c] red, [red] red, [c] green.
+  assert.equal(gates(s), 5);
+});
+
+test("a landing that conflicts with one ahead of it is refused, and the train goes on", async () => {
+  const s = scratch();
+  const a = lane(s, "a", { "shared.txt": "from a\n" });
+  const b = lane(s, "b", { "shared.txt": "from b\n" });
+  const c = lane(s, "c", { "c.txt": "c\n" });
+  const [ra, rb, rc] = await landTogether(s, [a, b, c]);
+  assert.equal(ra.status, 0, ra.out);
+  assert.equal(rc.status, 0, rc.out);
+  assert.equal(rb.status, 1, rb.out);
+  assert.match(rb.out, /does not replay onto main \(\w+\) or the 1 landing\(s\) ahead of it/);
+  assert.equal(readFileSync(join(s.root, "..", "a", "shared.txt"), "utf8"), "from a\n");
+  assert.equal(run(s, s.root, ["show", "main:shared.txt"]), "from a");
+  assert.equal(gates(s), 1);
+});
+
+test("a landing alone still lands, and its changes already on main land as nothing", async () => {
+  const s = scratch();
+  const a = lane(s, "a", { "a.txt": "a\n" });
+  const [first] = await landTogether(s, [a]);
+  assert.equal(first.status, 0, first.out);
+  assert.doesNotMatch(first.out, /train of/);
+  // The same change again, made on another branch from the old main.
+  run(s, s.root, ["branch", "again", "main~1"]);
+  const again = join(s.root, "..", "again");
+  run(s, s.root, ["worktree", "add", "-q", again, "again"]);
+  writeFileSync(join(again, "a.txt"), "a\n");
+  run(s, again, ["add", "-A"]);
+  run(s, again, ["commit", "-q", "-m", "a again"]);
+  const [second] = await landTogether(s, [again]);
+  assert.equal(second.status, 0, second.out);
+  assert.match(second.out, /changes are on main already/);
+  assert.equal(gates(s), 1);
+});
+
+test("a landing that repeats one ahead of it in a red train is not told it landed", async () => {
+  const s = scratch();
+  const red = lane(s, "red", { RED: "\n", "a.txt": "a\n" });
+  const again = lane(s, "again", { RED: "\n", "a.txt": "a\n" });
+  const [rr, ra] = await landTogether(s, [red, again]);
+  assert.equal(rr.status, 1, rr.out);
+  assert.equal(ra.status, 1, ra.out);
+  assert.ok(!onMain(s, "a.txt"));
+});

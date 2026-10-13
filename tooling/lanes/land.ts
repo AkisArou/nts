@@ -9,34 +9,50 @@
 //
 // # What it does, in order
 //
-// 1. Waits for the landing lock (a kernel lock, so it never goes stale), and
-//    during the transition also for the old GATE-RUNNING marker, which it
-//    writes and removes like any lane.
-// 2. Lands on main as it is now: a commit built on an older main has its
-//    commits replayed onto main (`git replay`, which touches no tree), and it
-//    is the replayed commit that is gated and landed. A landing queued behind
-//    another is therefore not refused because the one ahead of it landed -- the
-//    Wasm lane spent three gates on that. A replay that conflicts is refused:
-//    rebase by hand and land again.
-// 3. Asks `owed.mjs --range main..<commit>` which steps it owes, from the gate
-//    tree checked out at the commit being landed: the rules as that commit has
-//    them, and the commits, never a working tree's state.
+// 1. Joins the landing queue (a file per waiting landing under
+//    ~/.cache/nts-land/queue) and waits for the landing lock (a kernel lock,
+//    so it never goes stale); during the transition also for the old
+//    GATE-RUNNING marker, which it writes and removes like any lane.
+// 2. **Lands a train.** Whoever holds the lock gates every queued landing at
+//    once (up to TRAIN_MAX, oldest first), not only its own: one gate is half
+//    an hour, and with a dozen landings queued one at a time a lane waited six
+//    hours (2026-10-13). Each landing's commits since it left main are
+//    replayed in turn onto main (`git replay`, which touches no tree), the
+//    next onto the last; one that conflicts with main or with a landing ahead
+//    of it is refused -- rebase by hand and land again -- and the train goes
+//    on without it.
+// 3. Asks `owed.mjs --range main..<tip>` which steps the train owes, from the
+//    gate tree checked out at its tip: the rules as that commit has them, and
+//    the commits, never a working tree's state.
 // 4. Gates exactly those, with `pinned.sh`, in the one shared gate tree.
 // 5. Reads the run's summary: green, every owed step PASS (a skip only where
-//    the gate accepts one), and the summary names this commit.
-// 6. Fast-forwards main only if main has not moved since step 2, records the
-//    run as a git note on the commit, and releases the locks.
+//    the gate accepts one), and the summary names the tip.
+// 6. Fast-forwards main to the tip only if main has not moved since step 2,
+//    records the run as a git note on it, and answers every landing in the
+//    train. A red train of more than one is halved: its first half is gated
+//    next, and so on down to the landing that is red on its own, which is
+//    refused; the rest stay queued. A landing whose turn comes after a train
+//    answered it reports that answer and exits.
+//
+// `~/.cache/nts-land/trains.tsv` has one line per train gated: its size, its
+// verdict and its wall time.
 //
 // Pushing to origin is not its business: that stays a person's decision.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-const HOME = homedir();
+// NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
+// repository and a stand-in gate.
+const HOME = process.env.NTS_LAND_HOME ?? homedir();
 const LOCK = join(HOME, ".cache/nts-land.lock");
 const STATE = join(HOME, ".cache/nts-land");
+const QUEUE = join(STATE, "queue");
+const RESULTS = join(STATE, "results");
+/** The most landings one gate carries: a red train is halved, so this bounds the gates a red one costs. */
+const TRAIN_MAX = Number(process.env.NTS_LAND_TRAIN_MAX ?? 6);
 const MAINCTL = join(HOME, ".cache/nts-parallel-20261004/mainctl");
 const MARKER = join(MAINCTL, "GATE-RUNNING");
 const GATE_TREE = join(MAINCTL, "gate-tree");
@@ -118,21 +134,86 @@ function unrun(steps: { log?: string }[], touched: string[]): string[] {
 }
 
 /**
- * The commit to land: `sha` itself when main is in its history, or else its
- * commits since it left main replayed onto main. `null` when that replay
- * conflicts. `--ref-action print` writes nothing: the replayed commits exist
- * as objects, and become reachable when main moves to them.
+ * `sha`'s commits since it left main (`base`), on top of `onto`: `sha` itself
+ * when `onto` is in its history, or else those commits replayed onto it.
+ * `null` when the replay conflicts. A commit whose change `onto` already has
+ * is dropped, so a landing that is wholly on main answers `onto` itself.
+ * `--ref-action print` writes nothing: the replayed commits exist as objects,
+ * and become reachable when main moves to them.
  */
-function onMain(root: string, base: string, sha: string): string | null {
-  if (spawnSync("git", ["merge-base", "--is-ancestor", base, sha], { cwd: root }).status === 0) return sha;
+function replayOnto(root: string, base: string, onto: string, sha: string): string | null {
+  if (spawnSync("git", ["merge-base", "--is-ancestor", onto, sha], { cwd: root }).status === 0) return sha;
   const from = git(["merge-base", base, sha], root);
   const replay = spawnSync(
     "git",
-    ["replay", "--onto", base, "--ref", "refs/land/replayed", "--ref-action", "print", `${from}..${sha}`],
+    ["replay", "--onto", onto, "--ref", "refs/land/replayed", "--ref-action", "print", `${from}..${sha}`],
     { cwd: root, encoding: "utf8" },
   );
   const update = /^update \S+ ([0-9a-f]{40}) /m.exec(replay.stdout ?? "");
   return replay.status === 0 && update ? update[1] : null;
+}
+
+/** A landing waiting for the lock: one file in QUEUE, named by its id. */
+type Entry = { id: string; sha: string; tree: string; pid: number; at: number };
+/** What became of a landing, written by whichever process gated it. */
+type Result = { state: "landed" | "red" | "conflict" | "unrun"; message: string; landing?: string; main?: string; run?: string };
+
+function enqueue(sha: string, tree: string): string {
+  mkdirSync(QUEUE, { recursive: true });
+  const at = Date.now();
+  const id = `${at}-${process.pid}`;
+  writeFileSync(join(QUEUE, `${id}.json`), JSON.stringify({ id, sha, tree, pid: process.pid, at }));
+  return id;
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resultOf(id: string): Result | null {
+  const path = join(RESULTS, `${id}.json`);
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
+}
+
+function answer(entry: Entry, result: Result): void {
+  mkdirSync(RESULTS, { recursive: true });
+  writeFileSync(join(RESULTS, `${entry.id}.json`), JSON.stringify(result));
+}
+
+/**
+ * The landings still waiting, oldest first. One whose process has gone (its
+ * lane stopped it, or the machine restarted) is dropped from the queue: no one
+ * is left to read its answer.
+ */
+function waiting(): Entry[] {
+  // Answers are read within moments of being written; a week-old one was
+  // read long ago, or by no one.
+  if (existsSync(RESULTS)) {
+    for (const name of readdirSync(RESULTS)) {
+      const path = join(RESULTS, name);
+      if (Date.now() - statSync(path).mtimeMs > 7 * 86400_000) rmSync(path, { force: true });
+    }
+  }
+  if (!existsSync(QUEUE)) return [];
+  const entries: Entry[] = [];
+  for (const name of readdirSync(QUEUE)) {
+    if (!name.endsWith(".json")) continue;
+    const path = join(QUEUE, name);
+    let entry: Entry;
+    try {
+      entry = JSON.parse(readFileSync(path, "utf8"));
+    } catch {
+      continue; // being written
+    }
+    if (!alive(entry.pid)) rmSync(path, { force: true });
+    else if (!resultOf(entry.id)) entries.push(entry);
+  }
+  return entries.sort((a, b) => a.at - b.at);
 }
 
 /** Hold the landing lock for the rest of this process: re-run under flock. */
@@ -162,7 +243,11 @@ function isAncestor(pid: number): boolean {
   return false;
 }
 
-function underTheLock(): void {
+/**
+ * Join the queue and hold the landing lock for the rest of this process:
+ * re-run under flock, telling the locked process which queue entry is its.
+ */
+function underTheLock(sha: string, tree: string): void {
   if (process.env.NTS_LAND_LOCKED === "1") return;
   // **Run bare.** A wrapper that takes this lock and then runs land.ts holds
   // it while land.ts waits for it: every lane's landing stopped for most of
@@ -172,12 +257,14 @@ function underTheLock(): void {
     fail(`process ${holder}, which started this one, holds the landing lock: run land.ts bare, it takes the lock itself`);
   }
   mkdirSync(dirname(LOCK), { recursive: true });
+  const id = enqueue(sha, tree);
   const held = spawnSync("flock", ["-n", LOCK, "true"]);
-  if (held.status !== 0) say("another landing holds the lock; waiting");
+  if (held.status !== 0) say("another landing holds the lock; waiting (whoever holds it next gates every landing queued)");
   const r = spawnSync("flock", [LOCK, process.execPath, ...process.argv.slice(1)], {
     stdio: "inherit",
-    env: { ...process.env, NTS_LAND_LOCKED: "1" },
+    env: { ...process.env, NTS_LAND_LOCKED: "1", NTS_LAND_ENTRY: id },
   });
+  rmSync(join(QUEUE, `${id}.json`), { force: true });
   process.exit(r.status ?? 1);
 }
 
@@ -201,35 +288,12 @@ function status(fields: Record<string, unknown>): void {
   writeFileSync(join(STATE, "status.json"), `${JSON.stringify({ at: new Date().toISOString(), ...fields }, null, 2)}\n`);
 }
 
-function main(): void {
-  if (!target) fail("which commit? `node tooling/lanes/land.ts <commit> [--dry-run]`");
-  const root = sharedCheckout();
-  const sha = git(["rev-parse", "--verify", `${target}^{commit}`]);
-  const short = sha.slice(0, 12);
-  const tree = process.cwd();
-  if (git(["rev-parse", "HEAD"], tree) !== sha) {
-    fail(`run from a tree whose HEAD is ${short}: owed.mjs answers with the rules as that commit has them`);
-  }
+/** How a gate of one commit ended: green, or why not. */
+type Gated = { ok: true; run: string; note: string } | { ok: false; run: string; state: "red" | "unrun"; message: string };
 
-  if (!dryRun) underTheLock();
-
-  const base = git(["rev-parse", "main"], root);
-  if (base === sha) fail(`${short} is main already`);
-  if (dryRun) {
-    // Without the lock the gate tree is someone else's: the rules are this
-    // tree's, over the commits since it left main.
-    const from = git(["merge-base", base, sha], root);
-    const owed = owedSteps(tree, `${from}..${sha}`);
-    const where = from === base ? `on ${base.slice(0, 12)}` : `(replayed onto ${base.slice(0, 12)} when it lands)`;
-    say(`${short} ${where} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
-    return;
-  }
-  const landing = onMain(root, base, sha);
-  if (!landing) {
-    fail(`${short} does not replay onto main (${base.slice(0, 12)}) without a conflict: rebase by hand, then land`);
-  }
-  const short_ = landing.slice(0, 12);
-  if (landing !== sha) say(`${short} replayed onto main ${base.slice(0, 12)} as ${short_}`);
+/** Gate `landing`, which is `base` plus the train, in the shared gate tree. */
+function gate(root: string, base: string, landing: string, members: string[]): Gated {
+  const short = landing.slice(0, 12);
   // The gate tree is this landing's while the lock is held: check it out at
   // the commit being landed, and ask its rules what the range owes.
   const setup = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], {
@@ -237,14 +301,14 @@ function main(): void {
     env: { ...process.env, NTS_GATE_TREE: GATE_TREE, NTS_GATE_TARGET: GATE_TARGET, NTS_GATE_SETUP_ONLY: "1" },
     encoding: "utf8",
   });
-  if (setup.status !== 0) fail(`could not check out ${short_} in the gate tree:\n${setup.stdout}${setup.stderr}`);
+  if (setup.status !== 0) fail(`could not check out ${short} in the gate tree:\n${setup.stdout}${setup.stderr}`);
   const owed = owedSteps(GATE_TREE, `${base}..${landing}`);
-  say(`${short_} on ${base.slice(0, 12)} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
+  say(`${short} on ${base.slice(0, 12)} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
 
-  claimMarker(short_);
-  const run = join(STATE, "runs", `${short_}-${Date.now()}`);
+  claimMarker(short);
+  const run = join(STATE, "runs", `${short}-${Date.now()}`);
   mkdirSync(run, { recursive: true });
-  status({ state: "gating", commit: landing, base, owed, run });
+  status({ state: "gating", commit: landing, base, owed, run, train: members });
   try {
     const env: Record<string, string | undefined> = { ...process.env };
     for (const k of Object.keys(env)) if (k.startsWith("NTS_GATE_")) delete env[k];
@@ -258,45 +322,143 @@ function main(): void {
       CARGO_INCREMENTAL: "0",
     });
     say(`gating; log ${join(run, "gate.log")}`);
-    const gate = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
-    writeFileSync(join(run, "gate.log"), `${gate.stdout ?? ""}${gate.stderr ?? ""}`);
+    const gated = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
+    writeFileSync(join(run, "gate.log"), `${gated.stdout ?? ""}${gated.stderr ?? ""}`);
 
     const summaryPath = join(run, "summary.json");
-    if (!existsSync(summaryPath)) fail(`the gate wrote no summary (exit ${gate.status}); see ${join(run, "gate.log")}`);
+    if (!existsSync(summaryPath)) return { ok: false, run, state: "red", message: `the gate wrote no summary (exit ${gated.status}); see ${join(run, "gate.log")}` };
     const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
     const byName = new Map<string, string>((summary.steps ?? []).map((s: { name: string; verdict: string }) => [s.name, s.verdict]));
     // The full gate is whatever the run requested: every step all.sh defines.
     const steps: string[] = owed === "all" ? (summary.requested ?? []) : owed;
-    if (steps.length === 0) fail(`the summary requested no steps; see ${run}`);
+    if (steps.length === 0) return { ok: false, run, state: "red", message: `the summary requested no steps; see ${run}` };
     const wrong = steps.filter((s) => {
       const v = byName.get(s);
       return !(v === "PASS" || (v === "SKIPPED" && ACCEPT_SKIP.includes(s)));
     });
     if (summary.verdict !== "green" || wrong.length > 0) {
-      status({ state: "red", commit: landing, base, owed, run, wrong });
-      fail(`gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || summary.verdict}; see ${run}`);
+      return { ok: false, run, state: "red", message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || summary.verdict}; see ${run}` };
     }
     const touched = git(["diff", "--name-only", base, landing], root).split("\n").filter(Boolean);
     const notRun = unrun(summary.steps ?? [], touched);
     if (notRun.length > 0) {
-      status({ state: "unrun", commit: landing, base, owed, run, notRun });
-      fail(`green, but a platform this range touches never ran it:\n  ${notRun.slice(0, 5).join("\n  ")}\nbring its VM or toolchain up (the lane's vm.md) and land again`);
+      return {
+        ok: false,
+        run,
+        state: "unrun",
+        message: `green, but a platform this range touches never ran it:\n  ${notRun.slice(0, 5).join("\n  ")}\nbring its VM or toolchain up (the lane's vm.md) and land again`,
+      };
     }
     const named = String(summary.identities?.commit ?? "");
-    if (named.length < 7 || !landing.startsWith(named)) fail(`the summary names ${named || "no commit"}, not ${short_}`);
-
-    if (git(["rev-parse", "main"], root) !== base) {
-      status({ state: "stale", commit: landing, base, owed, run });
-      fail("main moved while the gate ran: rebase onto it and land again");
-    }
-    execFileSync("git", ["merge", "--ff-only", "-q", landing], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
-    const note = `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}`;
-    spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", note, landing], { cwd: root });
-    status({ state: "landed", commit: landing, base, owed, run });
-    say(`LANDED ${short_}: main is ${short_}`);
-    if (landing !== sha) say("the branch it came from: `git rebase main` drops the commits that landed");
+    if (named.length < 7 || !landing.startsWith(named)) return { ok: false, run, state: "red", message: `the summary names ${named || "no commit"}, not ${short}` };
+    return { ok: true, run, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}` };
   } finally {
-    if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short_} `)) rmSync(MARKER);
+    if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short} `)) rmSync(MARKER);
+  }
+}
+
+/**
+ * Gate the landings in `train` as one, and answer each. `"halve"` when a train
+ * of more than one was red: the culprit is found by gating its first half
+ * next, and nothing is answered yet.
+ */
+function runTrain(root: string, train: Entry[]): "done" | "halve" {
+  const base = git(["rev-parse", "main"], root);
+  let tip = base;
+  const members: { entry: Entry; landing: string }[] = [];
+  for (const entry of train) {
+    const landing = replayOnto(root, base, tip, entry.sha);
+    const short = entry.sha.slice(0, 12);
+    if (!landing) {
+      const behind = members.length > 0 ? ` or the ${members.length} landing(s) ahead of it in this train` : "";
+      answer(entry, { state: "conflict", message: `${short} does not replay onto main (${base.slice(0, 12)})${behind} without a conflict: rebase onto main by hand, then land` });
+      continue;
+    }
+    if (landing === tip && tip === base) {
+      answer(entry, { state: "landed", message: `${short}'s changes are on main already`, landing: tip, main: base });
+      continue;
+    }
+    // A landing whose changes a landing ahead of it in this train already
+    // makes adds nothing, and lands or not with the train: it is answered
+    // after the gate, never before.
+    if (landing !== entry.sha) say(`${short} replayed onto ${tip.slice(0, 12)} as ${landing.slice(0, 12)}`);
+    members.push({ entry, landing });
+    tip = landing;
+  }
+  if (members.length === 0) return "done";
+  const shas = members.map((m) => m.entry.sha.slice(0, 12));
+  if (members.length > 1) say(`a train of ${members.length}: ${shas.join(" ")}`);
+
+  const started = Date.now();
+  const gated = gate(root, base, tip, shas);
+  const record = (verdict: string) => {
+    mkdirSync(STATE, { recursive: true });
+    appendFileSync(join(STATE, "trains.tsv"), `${new Date(started).toISOString()}\t${members.length}\t${verdict}\t${Math.round((Date.now() - started) / 1000)}\t${tip.slice(0, 12)}\t${shas.join(",")}\n`);
+  };
+  if (!gated.ok) {
+    record(gated.state);
+    status({ state: gated.state, commit: tip, base, run: gated.run, train: shas });
+    if (members.length > 1) {
+      say(`a train of ${members.length} was ${gated.state}: gating its first half on its own next`);
+      return "halve";
+    }
+    answer(members[0].entry, { state: gated.state, message: gated.message, run: gated.run });
+    return "done";
+  }
+  if (git(["rev-parse", "main"], root) !== base) {
+    // Every landing takes this lock, so this is a hand-made move of main.
+    fail("main moved while the gate ran, under the landing lock: someone moved it by hand");
+  }
+  execFileSync("git", ["merge", "--ff-only", "-q", tip], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
+  const note = members.length > 1 ? `${gated.note}\ntrain: ${shas.join(" ")}` : gated.note;
+  spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", note, tip], { cwd: root });
+  record("landed");
+  status({ state: "landed", commit: tip, base, run: gated.run, train: shas });
+  for (const { entry, landing } of members) {
+    const train = members.length > 1 ? ` in a train of ${members.length}` : "";
+    answer(entry, { state: "landed", message: `LANDED ${entry.sha.slice(0, 12)}${train} as ${landing.slice(0, 12)}: main is ${tip.slice(0, 12)}`, landing, main: tip, run: gated.run });
+  }
+  return "done";
+}
+
+function main(): void {
+  if (!target) fail("which commit? `node tooling/lanes/land.ts <commit> [--dry-run]`");
+  const root = sharedCheckout();
+  const sha = git(["rev-parse", "--verify", `${target}^{commit}`]);
+  const short = sha.slice(0, 12);
+  const tree = process.cwd();
+  if (git(["rev-parse", "HEAD"], tree) !== sha) {
+    fail(`run from a tree whose HEAD is ${short}: owed.mjs answers with the rules as that commit has them`);
+  }
+
+  if (dryRun) {
+    const base = git(["rev-parse", "main"], root);
+    if (base === sha) fail(`${short} is main already`);
+    // Without the lock the gate tree is someone else's: the rules are this
+    // tree's, over the commits since it left main.
+    const from = git(["merge-base", base, sha], root);
+    const owed = owedSteps(tree, `${from}..${sha}`);
+    const where = from === base ? `on ${base.slice(0, 12)}` : `(replayed onto ${base.slice(0, 12)} when it lands)`;
+    say(`${short} ${where} owes: ${owed === "all" ? "the full gate" : owed.join(" ")}`);
+    return;
+  }
+
+  underTheLock(sha, tree);
+  // Under the lock. A process started with the lock already held has no entry
+  // yet: it queues itself here, with this process as the one to answer.
+  const id = process.env.NTS_LAND_ENTRY ?? enqueue(sha, tree);
+  if (git(["rev-parse", "main"], root) === sha && !resultOf(id)) fail(`${short} is main already`);
+  for (let limit = TRAIN_MAX; ; ) {
+    const result = resultOf(id);
+    if (result) {
+      if (result.state !== "landed") fail(result.message);
+      say(result.message);
+      if (result.landing !== sha) say("the branch it came from: `git rebase main` drops the commits that landed");
+      return;
+    }
+    const train = waiting().slice(0, limit);
+    if (train.length === 0) fail(`this landing (${id}) is in no queue: run land.ts again`);
+    limit = runTrain(root, train) === "halve" ? Math.max(1, Math.floor(train.length / 2)) : TRAIN_MAX;
   }
 }
 
