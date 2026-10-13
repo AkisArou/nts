@@ -347,11 +347,21 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   can only make a call slower, never wrong.
 - **`Object.keys` of a record** lists array-index keys first, ascending, then
   the rest in insertion order, which is JavaScript's own-property order.
-- **Refused by name:**
-  - an object as a key, which needs an identity hash Wasm objects do not have
-    yet (its own slice);
-  - a key the storage cannot hold;
-  - `Date`.
+- **Objects as keys (3c)** compare by identity: the object root holds an
+  identity hash after its descriptor.
+  - It is zero until something hashes the object. Then it is given out from a
+    Weyl sequence over the golden ratio, whose low bits a power-of-two mask
+    spreads evenly, and fixed.
+  - An object, an array or a function value is a key this way, typed or
+    erased.
+  - Every object, array and collection struct starts with the root's fields,
+    and `gc::ROOT_FIELDS` numbers every field after them.
+  - The field costs 4 bytes per object. Over the 326 emitted examples, module
+    bytes grew 0.68%. Cold start (callbacks; 400 generated classes) and the
+    dispatch, interface, erased and collections kernels did not move
+    measurably (exploratory, load ~24-33). object-keys pins it, and with the
+    hash not kept the fixture fails.
+- **Refused by name:** a key the storage cannot hold, and `Date`.
 - **Measured, exploratory, ns per iteration** (tooling/wasm/bench/collections):
   - Map counting (get, then set): 27.5 against node's 13.5;
   - a Set of numbers: 17.8 against 16.5;
