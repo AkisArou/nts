@@ -40,6 +40,7 @@ mod objects;
 mod promises;
 mod raising;
 mod rows;
+mod string_split;
 mod strings;
 mod support;
 mod symbols;

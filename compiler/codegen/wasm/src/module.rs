@@ -85,6 +85,8 @@ pub(crate) enum FuncKey {
     BigIntHost(&'static str),
     /// An open value made a number; `true` for the explicit `Number(value)`.
     ToNumber(bool),
+    /// `split` into an array of strings, by the array's wrapper.
+    StringSplit(u32),
 }
 
 /// Every global the module can contain, named by what it means.

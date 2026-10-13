@@ -940,10 +940,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_str_slice_into",
         Support::Decline("native frame-storage helper"),
     ),
-    (
-        "nts_str_split",
-        Support::Decline("string helper not yet implemented"),
-    ),
+    ("nts_str_split", Support::WasmHelper),
     ("nts_str_starts_with", Support::HostImport),
     ("nts_str_substring", Support::WasmHelper),
     (

@@ -1,6 +1,6 @@
 // The string methods the host applies with node's own String.prototype:
 // searches, tests, trims, padding, replacement and its `$` patterns, well
-// formedness, code points, URIs, and a for-of over astral characters.
+// formedness, code points, URIs, a for-of over astral characters, and split.
 
 function text(v: number): string {
   return "  abc😀def abc " + (v | 0) + " ";
@@ -50,4 +50,12 @@ export function points(v: number): number {
     width += ch.length;
   }
   return count * 100 + width;
+}
+
+export function splits(v: number): string {
+  const n = (v | 0) & 3;
+  const s = ",a,,b😀," + "x".repeat(n);
+  const parts = s.split(",");
+  const units = ("😀" + n).split("");
+  return `${parts.length}:${parts.join("|")}|${"aaaa".split("aa").length}|${"".split("").length}|${"".split(",").length}|${"ab".split("abc").length}|${units.length}:${units[0].charCodeAt(0)}|${s.split(s).length}`;
 }

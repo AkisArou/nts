@@ -31,7 +31,7 @@ mod tests {
     use crate::{
         array_copy, array_join, array_lookup, array_methods, array_sort, bigints, buffer_methods,
         buffers, collections, conversions, dataviews, erased_ops, host, numeric, promises, raising,
-        strings, symbols, timers, values,
+        string_split, strings, symbols, timers, values,
     };
     use std::collections::BTreeSet;
 
@@ -56,7 +56,7 @@ mod tests {
             })
         } else if numeric::external(name).is_some() {
             Some(Support::Intrinsic)
-        } else if buffer_methods::external(name).is_some() {
+        } else if buffer_methods::external(name).is_some() || string_split::is_split(name) {
             Some(Support::WasmHelper)
         } else if let Some(op) = conversions::external(name) {
             Some(if op.inline() {
