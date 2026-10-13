@@ -462,6 +462,24 @@ fn source_conversions_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// An override declaring fewer parameters than its slot: through the base
+/// with two, one and none, with a covariant result down a chain, and a
+/// raising override caught at the call.
+#[test]
+fn source_narrower_overrides_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/narrower-overrides");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "narrower-overrides",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 51, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// A function's name and a value's text read off its identity: declarations,
 /// arrows, methods, bound (twice) functions, a class's own `toString`, a
 /// plain object and the error family.

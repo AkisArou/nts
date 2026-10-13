@@ -135,13 +135,18 @@ fn thunk(
         )));
     };
     let body = types.objects.object(&receiver.ty)?;
+    // An override may declare fewer parameters than its slot passes: it takes
+    // the prefix, and JavaScript drops the arguments it does not name. The
+    // thunk forwards exactly the target's own.
+    let declared = func.params.len() - 1;
     if !types.objects.subtype(storage.physical, body.physical)
+        || declared > entry.params.len()
         || !func
             .params
             .iter()
             .skip(1)
             .map(|p| &p.ty)
-            .eq(entry.params.iter())
+            .eq(entry.params.iter().take(declared))
         || !result_widens(types, &func.return_type, &entry.result)?
     {
         return Err(format!(
