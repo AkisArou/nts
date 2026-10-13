@@ -3857,8 +3857,8 @@ fn emit_layout_descriptors(
             layout.name
         ),
     );
-    let sharing = identities_sharing(program, layout);
-    if sharing.len() < 2 {
+    let sharing = program.distinct_identities(layout);
+    if sharing.is_empty() {
         return;
     }
     for class in &sharing {
@@ -3917,7 +3917,8 @@ fn published_descriptor(program: &Program, layout: &nts_core::hir::Layout) -> St
     // identifier`, and the reference and the definition disagreeing is the
     // third time tonight one fact had two derivations. This one I introduced
     // while fixing the second.
-    let ty = identities_sharing(program, layout)
+    let ty = program
+        .distinct_identities(layout)
         .iter()
         .find(|class| class.name == layout.name)
         .and_then(|class| class.types.first().copied());
@@ -3949,31 +3950,6 @@ fn identity_suffix(
     spelling
 }
 
-/// The classes that share one layout.
-///
-/// More than one means the layout is a *shape* several declarations have, which
-/// is required -- `readA(new B())` has to pass -- and which is why identity
-/// cannot be read off it. See `hir::Program::classes`.
-fn identities_sharing<'a>(
-    program: &'a Program,
-    layout: &nts_core::hir::Layout,
-) -> Vec<&'a nts_core::hir::ClassIdentity> {
-    let mut found: Vec<&nts_core::hir::ClassIdentity> = Vec::new();
-    for class in &program.classes {
-        if !class.types.iter().any(|ty| layout.types.contains(ty)) {
-            continue;
-        }
-        // One entry per class. A layout can be reached by more than one
-        // identity carrying the same symbol -- the same declaration laid out
-        // through two paths -- and emitting both is one C symbol defined twice.
-        if found.iter().any(|known| known.symbol == class.symbol) {
-            continue;
-        }
-        found.push(class);
-    }
-    found
-}
-
 /// The descriptor a value of this type carries.
 ///
 /// The layout's own when nothing shares it, which is almost everything and
@@ -3988,8 +3964,8 @@ fn descriptor_for(
     ty: Option<nts_core::hir::ClassId>,
 ) -> String {
     let shape = object_type_name(layout);
-    let sharing = identities_sharing(program, layout);
-    if sharing.len() < 2 {
+    let sharing = program.distinct_identities(layout);
+    if sharing.is_empty() {
         return format!("nts_desc_{shape}");
     }
     let Some(ty) = ty else {

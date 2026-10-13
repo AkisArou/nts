@@ -3106,6 +3106,11 @@ pub struct Program {
     /// only it needs no separate descriptor: the cost is one constant per class
     /// that actually shares.
     pub classes: Vec<ClassIdentity>,
+    /// Object types allocated in a class's layout without being the class: an
+    /// object literal typed by a field-only class, or by an interface whose
+    /// shape a class shares. Not instances of it, so where one is allocated the
+    /// class needs an identity of its own (see [`Program::distinct_identities`]).
+    pub plain_records: std::collections::BTreeSet<TypeId>,
     /// Semantic interface declarations over the layouts' shared storage.
     /// Neither layout merging nor backend field naming decides this identity.
     /// One declaration covers all of its used instantiations; their schema
@@ -3297,6 +3302,38 @@ pub struct Global {
 }
 
 impl Program {
+    /// The classes of `layout` that need an identity of their own -- a C
+    /// descriptor, a JVM class -- for `instanceof` to tell them apart: every
+    /// class sharing the layout where two or more do, or its one class where an
+    /// object that is not the class is allocated in it too
+    /// ([`Program::plain_records`]). Empty where the layout's own identity
+    /// answers for its one class, which is nearly always.
+    ///
+    /// One per declaration: a class laid out through two paths carries one
+    /// symbol in two entries, and two of them would be one constant defined
+    /// twice. The one derivation every backend asks, so they cannot disagree
+    /// about which objects answer to which class.
+    #[must_use]
+    pub fn distinct_identities(&self, layout: &Layout) -> Vec<&ClassIdentity> {
+        let mut found: Vec<&ClassIdentity> = Vec::new();
+        for class in &self.classes {
+            if class.types.iter().any(|ty| layout.types.contains(ty))
+                && !found.iter().any(|known| known.symbol == class.symbol)
+            {
+                found.push(class);
+            }
+        }
+        let plain = layout
+            .types
+            .iter()
+            .any(|ty| self.plain_records.contains(ty));
+        if found.len() >= 2 || (found.len() == 1 && plain) {
+            found
+        } else {
+            Vec::new()
+        }
+    }
+
     /// Whether a global's value is settled once and never moves again.
     ///
     /// The question a *value* export has to ask. `export const version =

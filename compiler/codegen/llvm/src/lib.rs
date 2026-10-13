@@ -742,8 +742,8 @@ fn class_descriptors(
     body: (&str, &str),
 ) {
     let (head, tail) = body;
-    let sharing = identities_sharing(program, layout);
-    if sharing.len() < 2 {
+    let sharing = program.distinct_identities(layout);
+    if sharing.is_empty() {
         return;
     }
     for class in &sharing {
@@ -2381,24 +2381,6 @@ fn instance_of(
     lines.join("\n  ")
 }
 
-/// The classes that share one layout. See `hir::Program::classes`.
-fn identities_sharing<'a>(
-    program: &'a Program,
-    layout: &nts_core::hir::Layout,
-) -> Vec<&'a nts_core::hir::ClassIdentity> {
-    let mut found: Vec<&nts_core::hir::ClassIdentity> = Vec::new();
-    for class in &program.classes {
-        if !class.types.iter().any(|ty| layout.types.contains(ty)) {
-            continue;
-        }
-        if found.iter().any(|known| known.symbol == class.symbol) {
-            continue;
-        }
-        found.push(class);
-    }
-    found
-}
-
 /// One class's spelling within its shape, with the symbol where two classes of
 /// one name share a layout.
 fn identity_suffix(
@@ -2434,8 +2416,8 @@ fn descriptor_for(
     ty: Option<nts_core::hir::ClassId>,
 ) -> String {
     let shape = descriptor_name(layout);
-    let sharing = identities_sharing(program, layout);
-    if sharing.len() < 2 {
+    let sharing = program.distinct_identities(layout);
+    if sharing.is_empty() {
         return shape;
     }
     let Some(ty) = ty else { return shape };

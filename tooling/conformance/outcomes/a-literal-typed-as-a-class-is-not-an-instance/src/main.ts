@@ -15,6 +15,10 @@
 // aConstructedError build the same value with `new`, and agree.
 //
 // Found planning class identities for the Wasm lane.
+//
+// Fixed: the literal is allocated as its own type laid out as the class
+// (`as_its_own_record`), and a class beside such a literal gets an identity of
+// its own (`Program::distinct_identities`). The record now pins the agreement.
 class Point {
   x = 0;
 }

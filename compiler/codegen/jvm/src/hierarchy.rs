@@ -255,22 +255,15 @@ pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize
 /// with the JVM's own spelling.
 ///
 /// Empty when one class owns the layout, which is nearly always: five groups
-/// and twelve classes across the twenty-two `runtime/node` modules.
+/// and twelve classes across the twenty-two `runtime/node` modules. One class
+/// gets an identity too where a literal typed by it is laid out as it -- the
+/// core decides both cases, `Program::distinct_identities`.
 #[must_use]
 pub fn identities<'a>(
     program: &'a Program,
     layout: &Layout,
 ) -> Vec<&'a nts_core::hir::ClassIdentity> {
-    let sharing: Vec<&nts_core::hir::ClassIdentity> = program
-        .classes
-        .iter()
-        .filter(|class| class.types.iter().any(|at| layout.types.contains(at)))
-        .collect();
-    if sharing.len() < 2 {
-        Vec::new()
-    } else {
-        sharing
-    }
+    program.distinct_identities(layout)
 }
 
 /// The class a type id names, when its layout is shared by more than one.

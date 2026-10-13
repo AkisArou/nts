@@ -15888,6 +15888,7 @@ fn prune_class_tests(program: &mut Program) {
 /// not products of the walk above.
 fn collect_declared_facts(program: &mut Program, snapshot: &SemanticSnapshot) {
     collect_class_identities(program, snapshot);
+    collect_plain_records(program);
     collect_native_headers(program, snapshot);
 }
 
@@ -16055,6 +16056,39 @@ fn collect_class_identities(program: &mut Program, snapshot: &SemanticSnapshot) 
         }
         program.classes.extend(here);
     }
+}
+
+/// The object types allocated in a class's layout that are not the class: what
+/// [`super::Program::plain_records`] holds. Read off the allocations once the
+/// layouts and the identities are both settled.
+fn collect_plain_records(program: &mut Program) {
+    let classed: rustc_hash::FxHashSet<TypeId> = program
+        .classes
+        .iter()
+        .flat_map(|class| class.types.iter().copied())
+        .collect();
+    let index = super::fields::LayoutIndex::build(program);
+    let mut plain = std::collections::BTreeSet::new();
+    for op in program.funcs.iter().flat_map(|func| &func.values) {
+        let (OpKind::ObjectNew { .. }, HirType::Managed(ManagedType::Object(ty))) =
+            (&op.kind, &op.ty)
+        else {
+            continue;
+        };
+        if classed.contains(ty) {
+            continue;
+        }
+        let shares_a_class = index.of_class(*ty).is_some_and(|at| {
+            program.layouts[at]
+                .types
+                .iter()
+                .any(|other| classed.contains(other))
+        });
+        if shares_a_class {
+            plain.insert(*ty);
+        }
+    }
+    program.plain_records = plain;
 }
 
 /// One [`super::ClassIdentity`], named for the declaration rather than for the
@@ -17728,8 +17762,9 @@ fn canonicalize_objects(program: &mut Program) {
     }
 }
 
-/// Class aliases first, then each interface contract, then anonymous storage.
-/// First entry wins, preserving the canonicalizer's declared-identity priority.
+/// Class aliases first, then each interface contract and each plain record,
+/// then anonymous storage. First entry wins, preserving the canonicalizer's
+/// declared-identity priority.
 fn object_representatives(program: &Program) -> rustc_hash::FxHashMap<TypeId, TypeId> {
     let mut representatives = rustc_hash::FxHashMap::default();
     for class in &program.classes {
@@ -17744,6 +17779,12 @@ fn object_representatives(program: &Program) -> rustc_hash::FxHashMap<TypeId, Ty
         .iter()
         .flat_map(|identity| &identity.types)
     {
+        representatives.entry(*ty).or_insert(*ty);
+    }
+    // A literal allocated in a class's layout keeps itself too: taking the
+    // layout's representative would make it the class again, which is the
+    // `instanceof` it must not answer (`Program::plain_records`).
+    for ty in &program.plain_records {
         representatives.entry(*ty).or_insert(*ty);
     }
     for layout in &program.layouts {
@@ -50200,6 +50241,57 @@ impl<'a> FuncBuilder<'a> {
     /// *value* is still an object. `options = {}` is node's sentinel for "no
     /// options were passed", and it is under `net.createServer` at 91 of 148
     /// failing files and `http.createServer` at 241 of 405.
+    /// The type a literal typed by a class is allocated as: its own, laid out as
+    /// the class's storage.
+    ///
+    /// **A literal typed as a class is not an instance of it.** A class with
+    /// only fields is a structural type, so `const p: Point = { x: 1 }` checks,
+    /// and node answers `p instanceof Point` false -- nothing constructed it.
+    /// Allocated as the class itself it was one: no backend could tell the two
+    /// objects apart (`outcomes/a-literal-typed-as-a-class-is-not-an-instance`).
+    /// Its own type in the class's layout keeps the storage -- the literal is
+    /// passed wherever a `Point` is wanted at no cost -- and makes it an object
+    /// the class's identity does not hold, which `Program::plain_records`
+    /// records and every backend's `instanceof` then tells apart
+    /// (`Program::distinct_identities`). The same for a provided error class.
+    ///
+    /// Not where the literal's type already has a layout of its own: two
+    /// layouts claiming one type would be a dispute, not an identity.
+    fn as_its_own_record(&mut self, id: NodeId, context: TypeId) -> Result<TypeId, Diagnostic> {
+        let names_a_class = class_symbol(self.snapshot, context).is_some()
+            || self.hierarchy.provided_errors.contains_key(&context);
+        let Some(own) = self.snapshot.node_types.get(&id).copied() else {
+            return Ok(context);
+        };
+        let an_object = matches!(
+            self.snapshot
+                .types
+                .get(own.0 as usize)
+                .map(|record| &record.kind),
+            Some(TypeKind::Object { .. })
+        );
+        if !names_a_class
+            || !an_object
+            || own == context
+            || self
+                .layouts
+                .iter()
+                .any(|layout| layout.types.contains(&own))
+        {
+            return Ok(context);
+        }
+        self.layout_of(id, context)?;
+        let class = self.class_behind(context);
+        if let Some(layout) = self
+            .layouts
+            .iter_mut()
+            .find(|layout| layout.types.contains(&class))
+        {
+            layout.types.push(own);
+        }
+        Ok(own)
+    }
+
     fn literal_object_type(
         &mut self,
         id: NodeId,
@@ -50310,6 +50402,7 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_table_literal(id, ty.clone(), &key);
         }
         let (type_id, erase_afterwards) = self.literal_object_type(id, ty)?;
+        let type_id = self.as_its_own_record(id, type_id)?;
         let ty = HirType::Managed(ManagedType::Object(type_id));
         let layout = self.layout_of(id, type_id)?;
         let origin = self.origin(id);
