@@ -1390,6 +1390,11 @@ fn frontend_for(tsconfig: &Utf8Path, tsgo_binary: String) -> Result<TsgoApi> {
 /// locating `tsgo` is a convenience and *this* is the invariant.
 fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     let Some(config) = nts_build::config::beside(tsconfig) else {
+        // Without a project config, use the same host OS the build derives
+        // its default ABI from. GIR bindings only add files for a GIR import.
+        if host_os() == "linux" {
+            source = source.with_generated(Box::new(gir_surface::GirBindings::default()));
+        }
         return Ok(source);
     };
     let resolved = nts_build::config::resolve(&config)?;

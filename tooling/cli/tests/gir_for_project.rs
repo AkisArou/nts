@@ -102,9 +102,10 @@ fn configless_commands_resolve_gir_imports() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             assert!(
                 output.status.success(),
-                "{command}, GIR import {gir}: {stderr}"
+                "{command}, GIR import {gir}: {stderr}\n{stdout}"
             );
-            assert!(!stderr.contains("TS2307"), "{stderr}");
+            assert!(!stdout.contains("Cannot find module"), "{stdout}");
+            assert!(!stderr.contains("Cannot find module"), "{stderr}");
             assert!(!stderr.contains("not compiled"), "{stderr}");
             assert!(stdout.contains("answer("), "{command}: {stdout}");
             assert_eq!(
