@@ -120,21 +120,7 @@ fn both_backends_with(
             Err(String::from_utf8_lossy(&result.stderr).into_owned())
         }
     };
-    let ll = dir.join("program.ll");
-    let object = dir.join("program.o");
-    let compiled_ir = std::process::Command::new("clang")
-        .args(["-x", "ir", "-c", "-w"])
-        .args(flags)
-        .arg(&ll)
-        .arg("-o")
-        .arg(&object)
-        .output()
-        .expect("clang should compile the emitted LLVM IR");
-    assert!(
-        compiled_ir.status.success(),
-        "clang rejected the emitted LLVM IR: {}",
-        String::from_utf8_lossy(&compiled_ir.stderr)
-    );
+    let object = compile_ir(&dir, flags);
     // The runtime links into *both*, which is the arrangement that ships: one
     // hand-written C library, two code generators calling it. It is also the
     // only place the C-to-LLVM ABI is exercised.
@@ -166,11 +152,26 @@ fn both_backends_with(
     Some((read("run_llvm"), read("run_c")))
 }
 
-/// Exercise the exact signed boundaries directly, including each abort in its
-/// own child process. UBSan also checks that valid min%-1 and shifts avoid C UB.
-#[test]
-fn bigints_keep_exact_boundaries_and_stop_overflow_by_name() {
-    let source = r"
+fn compile_ir(dir: &std::path::Path, flags: &[&str]) -> std::path::PathBuf {
+    let ll = dir.join("program.ll");
+    let object = dir.join("program.o");
+    let compiled_ir = std::process::Command::new("clang")
+        .args(["-x", "ir", "-c", "-w"])
+        .args(flags)
+        .arg(&ll)
+        .arg("-o")
+        .arg(&object)
+        .output()
+        .expect("clang should compile the emitted LLVM IR");
+    assert!(
+        compiled_ir.status.success(),
+        "clang rejected the emitted LLVM IR: {}",
+        String::from_utf8_lossy(&compiled_ir.stderr)
+    );
+    object
+}
+
+const BIGINT_BOUNDARY_SOURCE: &str = r"
 export function checkedAdd(a: bigint, b: bigint): bigint { return a + b; }
 export function checkedSub(a: bigint, b: bigint): bigint { return a - b; }
 export function checkedMul(a: bigint, b: bigint): bigint { return a * b; }
@@ -192,7 +193,8 @@ export function checkedUnentered(a: bigint, b: bigint): bigint {
   return result;
 }
 ";
-    let driver = r#"
+
+const BIGINT_BOUNDARY_DRIVER: &str = r#"
 #include "nts_runtime.h"
 #include <signal.h>
 #include <stdio.h>
@@ -297,10 +299,15 @@ int main(void) {
   return 0;
 }
 "#;
+
+/// Exercise the exact signed boundaries directly, including each abort in its
+/// own child process. `UBSan` also checks that valid min%-1 and shifts avoid C UB.
+#[test]
+fn bigints_keep_exact_boundaries_and_stop_overflow_by_name() {
     let Some((llvm, c)) = both_backends_with(
         "bigint_overflow",
-        source,
-        driver,
+        BIGINT_BOUNDARY_SOURCE,
+        BIGINT_BOUNDARY_DRIVER,
         &["-O3", "-fsanitize=undefined", "-fno-sanitize-recover=all"],
     ) else {
         return;
