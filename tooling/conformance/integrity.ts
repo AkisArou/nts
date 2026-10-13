@@ -427,6 +427,13 @@ export function resemblance(cause, hir, refused) {
 }
 
 /**
+ * An element read through the runtime: its array is the first operand. The
+ * third, when present, is the absence tag a null slot reads as. One pattern for
+ * every reader -- two copies of it went stale apart when the tag was added.
+ */
+const ARRAY_ELEMENT = /^call\.extern nts_array_element\((%\d+), %\d+(?:, %\d+)?\)$/;
+
+/**
  * `unerase` sites whose object layout nothing in the program builds, and no
  * built class descends from, and no `instanceof` of the same value guards:
  * `{ fn, target }` each. See `unerase-is-built`.
@@ -477,7 +484,7 @@ export function unbuiltUnerases(prepared, { byName, byId }) {
     const op = f.values.get(value)?.op ?? "";
     const direct = /^array\.get (%\d+)\[%\d+\]$/.exec(op)?.[1];
     if (direct !== undefined) return direct;
-    const erased = /^call\.extern nts_array_element\((%\d+), %\d+\)$/.exec(op)?.[1];
+    const erased = ARRAY_ELEMENT.exec(op)?.[1];
     return /^erase (%\d+)$/.exec(f.values.get(erased)?.op ?? "")?.[1];
   };
   const boundary = (f, value, left = 6, seen = new Set()) => {
@@ -509,7 +516,7 @@ export function unbuiltUnerases(prepared, { byName, byId }) {
     return sites.every((c) => arrayCarries(c.f, c.args[index], layout, left - 1, new Set([...seen, f.name])));
   };
   const arrayElement = (f, value, layout) => {
-    const erasedArray = /^call\.extern nts_array_element\((%\d+), %\d+\)$/.exec(f.values.get(value)?.op ?? "")?.[1];
+    const erasedArray = ARRAY_ELEMENT.exec(f.values.get(value)?.op ?? "")?.[1];
     const source = /^erase (%\d+)$/.exec(f.values.get(erasedArray)?.op ?? "")?.[1];
     return source !== undefined && arrayCarries(f, source, layout);
   };
