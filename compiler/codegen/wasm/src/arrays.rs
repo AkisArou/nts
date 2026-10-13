@@ -228,13 +228,13 @@ pub(crate) fn get_instruction(array: &gc::Array) -> Result<I<'static>, Failure> 
         HirType::Bool
         | HirType::Int { bits: 32 | 64, .. }
         | HirType::Float { bits: 32 | 64 }
+        | HirType::BigInt
         | HirType::Erased
         | HirType::Managed(_) => I::ArrayGet(array.backing),
         HirType::Void
         | HirType::Never
         | HirType::Int { .. }
         | HirType::Float { .. }
-        | HirType::BigInt
         | HirType::NativePointer(_) => {
             return Err(format!("array element read of {:?}", array.element).into());
         }

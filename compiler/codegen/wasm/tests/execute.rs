@@ -450,7 +450,7 @@ fn source_bigints_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 200, "{output}");
+    assert_eq!(output["cases"], 217, "{output}");
     assert_eq!(output["declined"], 39, "{output}");
     assert_eq!(
         output["refused"],

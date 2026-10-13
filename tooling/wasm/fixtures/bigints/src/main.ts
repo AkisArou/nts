@@ -132,3 +132,13 @@ export function dividedByZero(v: number): string {
 export function infinityToBigint(v: number): string {
   return `${BigInt(v / 0 + 0 * v)}`;
 }
+
+// An array of bigints: one v128 per element, read, written and walked.
+export function anArrayOfBigints(v: number): string {
+  const k = BigInt(v | 0);
+  const values: bigint[] = [2n ** 70n, k + 2n ** 70n, 2n * k - 2n ** 100n, 3n * k, -k];
+  let total = 0n;
+  for (const value of values) total += value;
+  values[2] = values[(v | 0) & 3]! - 1n;
+  return `${total}|${values.length}|${values[2]}|${values[0]! < values[4]! ? 1 : 0}`;
+}
