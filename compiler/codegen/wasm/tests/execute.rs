@@ -453,6 +453,25 @@ fn source_presence_agrees_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// Tagged templates: the cooked pieces, one object per source site across
+/// calls and generic copies, held in a global, an array and a Map, and read
+/// through an open value.
+#[test]
+fn source_templates_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/templates");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "templates",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 102, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// A bigint in 128 bits: arithmetic and its signs, the edges at -2^127 and
 /// 2^127 - 1, shifts by negative and huge counts, conversion both ways,
 /// asIntN/asUintN and an erased bigint. Where node's answer passes 128 bits

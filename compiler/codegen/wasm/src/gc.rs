@@ -24,6 +24,9 @@ struct NodeId(usize);
 enum ArrayKey {
     Storage(NodeId),
     Element(HirType),
+    /// The cooked strings of a tagged template: a `string[]`'s layout, and a
+    /// type of its own, so no value of it is ever taken for a writable array.
+    Template,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -237,9 +240,12 @@ pub(crate) fn collection_key(key: &HirType) -> Result<KeyKind, String> {
         HirType::Managed(ManagedType::String) => Ok(KeyKind::String),
         HirType::Float { bits: 64 } => Ok(KeyKind::Number),
         HirType::Erased => Ok(KeyKind::Erased),
-        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_) | ManagedType::Symbol) => {
-            Ok(KeyKind::Reference)
-        }
+        HirType::Managed(
+            ManagedType::Object(_)
+            | ManagedType::Array(_)
+            | ManagedType::Symbol
+            | ManagedType::Template,
+        ) => Ok(KeyKind::Reference),
         _ => Err(format!("a map or set key of type {key:?}")),
     }
 }
@@ -506,7 +512,10 @@ impl Plan {
     }
 
     pub(crate) fn array(&self, ty: &HirType) -> Result<&Array, Failure> {
-        if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
+        if !matches!(
+            ty,
+            HirType::Managed(ManagedType::Array(_) | ManagedType::Template)
+        ) {
             return Err(format!("array storage for {ty:?}").into());
         }
         let Physical::Reference(RefType {
@@ -1092,9 +1101,7 @@ impl<'a> Builder<'a> {
             HirType::Managed(ManagedType::BoxedBigInt) => {
                 PendingSlot::Defined(self.bigint_box(), true)
             }
-            HirType::Managed(ManagedType::Template) => {
-                return Err("tagged-template storage outside M1b".into());
-            }
+            HirType::Managed(ManagedType::Template) => PendingSlot::Defined(self.template(), true),
             HirType::Managed(ManagedType::Promise(_)) => {
                 PendingSlot::Defined(self.promise_types().promise, true)
             }
@@ -1713,6 +1720,25 @@ impl<'a> Builder<'a> {
         Ok(id)
     }
 
+    /// The storage of every tagged template's cooked strings.
+    fn template(&mut self) -> NodeId {
+        if let Some(id) = self.arrays.get(&ArrayKey::Template) {
+            return *id;
+        }
+        let root = self.root();
+        let id = self.add(
+            "template".into(),
+            Some(root),
+            true,
+            Shape::Struct(Vec::new()),
+        );
+        let element = HirType::Managed(ManagedType::String);
+        self.arrays.insert(ArrayKey::Template, id);
+        self.array_elements.insert(id, element.clone());
+        self.work.push(Work::Array(element, id));
+        id
+    }
+
     fn complete_array(&mut self, element: &HirType, id: NodeId) -> Result<(), String> {
         let root = self.root();
         let field = self.field(element)?;
@@ -1856,7 +1882,11 @@ impl<'a> Builder<'a> {
                 (
                     indices[id.0],
                     Array {
-                        ty: HirType::Managed(ManagedType::Array(Box::new(element.clone()))),
+                        ty: if self.arrays.get(&ArrayKey::Template) == Some(id) {
+                            HirType::Managed(ManagedType::Template)
+                        } else {
+                            HirType::Managed(ManagedType::Array(Box::new(element.clone())))
+                        },
                         element: element.clone(),
                         wrapper: indices[id.0],
                         backing: indices[self.backings[id].0],

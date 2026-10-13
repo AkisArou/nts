@@ -520,19 +520,13 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::InstanceOf { value, classes } => {
                 crate::objects::instance(self, *value, classes)?;
             }
-            kind
-            @ (OpKind::ArrayNew { .. } | OpKind::ArrayGet { .. } | OpKind::ArraySet { .. }) => {
+            kind @ (OpKind::ArrayNew { .. }
+            | OpKind::ArrayGet { .. }
+            | OpKind::ArraySet { .. }
+            | OpKind::ConstTemplate { .. }) => {
                 crate::arrays::operation(self, id, kind)?;
             }
-            OpKind::Length(value) if crate::strings::is_string(self.ty(*value)) => {
-                crate::strings::length(self, id, *value)?;
-            }
-            OpKind::Length(value) if crate::arrays::is_array(self.ty(*value)) => {
-                crate::arrays::length(self, id, *value)?;
-            }
-            OpKind::Length(value) if crate::collections::is_collection(self.ty(*value)) => {
-                crate::collections::size(self, id, *value)?;
-            }
+            OpKind::Length(value) => self.length(id, *value)?,
             OpKind::StringUnitAt {
                 string,
                 index,
@@ -580,11 +574,7 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::DispatchSlot(_) | OpKind::Suspend { .. } | OpKind::PromiseSubscribe { .. } => {
                 crate::promises::operation(self, &op.kind)?;
             }
-            OpKind::ConstTemplate { .. }
-            | OpKind::Length(_)
-            | OpKind::CellReady { .. }
-            | OpKind::Await { .. }
-            | OpKind::Yield { .. } => {
+            OpKind::CellReady { .. } | OpKind::Await { .. } | OpKind::Yield { .. } => {
                 return Err(format!("operation outside M1a: {:?}", op.kind).into());
             }
         }
@@ -592,6 +582,19 @@ impl<'b, 'p> Body<'b, 'p> {
             self.instruction(&I::LocalSet(self.local(id)?));
         }
         Ok(())
+    }
+    /// A string's, an array's or a collection's length.
+    fn length(&mut self, result: ValueId, value: ValueId) -> Result<(), Failure> {
+        let ty = self.ty(value);
+        if crate::strings::is_string(ty) {
+            crate::strings::length(self, result, value)
+        } else if crate::arrays::is_array(ty) {
+            crate::arrays::length(self, result, value)
+        } else if crate::collections::is_collection(ty) {
+            crate::collections::size(self, result, value)
+        } else {
+            Err(format!("the length of a {ty:?}").into())
+        }
     }
     /// A program global's read, or its write of `stored`, transferring
     /// between the global's declared type and the value's.
@@ -714,6 +717,22 @@ impl<'b, 'p> Body<'b, 'p> {
         let to = self.ty(id).clone();
         if crate::bigints::is_bigint(&from) || crate::bigints::is_bigint(&to) {
             return crate::bigints::convert(self, value, &to);
+        }
+        // A template's strings are immutable: made writable array storage, a
+        // template refuses at run time, as C's `nts_array_writable` does.
+        if from == nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Template)
+            && matches!(
+                to,
+                nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Array(_))
+            )
+        {
+            self.load(value)?;
+            self.instruction(&I::RefIsNull);
+            crate::contract::require(
+                self,
+                "converting an immutable template object to writable array storage",
+            )?;
+            return crate::objects::default(self, &to);
         }
         if crate::objects::is_reference(&from) {
             if to == nts_core::hir::HirType::Bool {

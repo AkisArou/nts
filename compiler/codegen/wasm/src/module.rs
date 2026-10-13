@@ -113,6 +113,8 @@ pub(crate) enum GlobalKey {
     Timer(crate::timers::State),
     /// `Symbol.for`'s registry.
     SymbolRegistry,
+    /// A tagged template's cooked strings, by source site.
+    Template(u32),
 }
 
 #[derive(Debug)]

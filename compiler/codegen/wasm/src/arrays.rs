@@ -4,9 +4,9 @@ use crate::{
     body::Body,
     contract, erased,
     error::Failure,
-    gc,
+    gc, ir,
     ir::Function,
-    module::{Builder, Func, FuncKey},
+    module::{Builder, Func, FuncKey, GlobalKey},
     numeric, objects,
     types::{Physical, Slot},
 };
@@ -27,6 +27,7 @@ pub(crate) fn operation(
     // A view's element is the same operation over a buffer's bytes.
     match kind {
         OpKind::ArrayNew { length, .. } => new(b, result, *length),
+        OpKind::ConstTemplate { site, cooked } => template(b, result, *site, cooked),
         OpKind::ArrayGet {
             array,
             index,
@@ -59,8 +60,12 @@ pub(crate) fn operation(
     }
 }
 
+/// An array, or a tagged template's cooked strings, which are read as one.
 pub(crate) fn is_array(ty: &HirType) -> bool {
-    matches!(ty, HirType::Managed(ManagedType::Array(_)))
+    matches!(
+        ty,
+        HirType::Managed(ManagedType::Array(_) | ManagedType::Template)
+    )
 }
 fn storage<'p>(b: &Body<'_, 'p>, array: ValueId) -> Result<&'p gc::Array, Failure> {
     b.types().array(b.ty(array))
@@ -201,6 +206,40 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Res
     b.instruction(&I::StructNew(array.wrapper));
     Ok(())
 }
+/// A tagged template's cooked strings: one immortal object per source site,
+/// shared by every copy of the containing function, as the core asks, and
+/// built once as a constant.
+fn template(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    site: u32,
+    cooked: &[String],
+) -> Result<(), Failure> {
+    let shape = storage(b, result)?;
+    let (wrapper, backing, descriptor) = (shape.wrapper, shape.backing, shape.descriptor);
+    let global = b.m.global(GlobalKey::Template(site), |m| {
+        let descriptor = objects::descriptor(m, descriptor)?;
+        let pieces: Vec<_> = cooked.iter().map(|text| m.literal(text)).collect();
+        let length =
+            u32::try_from(pieces.len()).map_err(|_| Failure::from("too many template pieces"))?;
+        let mut code = ir::Code::default();
+        code.global_get(descriptor);
+        code.instructions(&[objects::UNHASHED, I::I32Const(length.cast_signed())]);
+        for piece in pieces {
+            code.global_get(piece);
+        }
+        code.instructions(&[
+            I::ArrayNewFixed {
+                array_type_index: backing,
+                array_size: length,
+            },
+            I::StructNew(wrapper),
+        ]);
+        Ok((crate::module::constant_type(wrapper), code))
+    })?;
+    b.global_get(global);
+    Ok(())
+}
 pub(crate) fn length(b: &mut Body<'_, '_>, result: ValueId, array: ValueId) -> Result<(), Failure> {
     let ty = storage(b, array)?.wrapper;
     contract::nonnull(b, array, "the length of a null array")?;
@@ -286,6 +325,9 @@ pub(crate) fn set(
 ) -> Result<(), Failure> {
     if b.ty(result) != &HirType::Void {
         return Err(Failure::Invariant("non-void ArraySet result".into()));
+    }
+    if b.ty(array) == &HirType::Managed(ManagedType::Template) {
+        return Err("a write into a template object, whose strings are immutable".into());
     }
     let shape = storage(b, array)?;
     contract::nonnull(b, array, "writing an element of a null array")?;

@@ -750,6 +750,25 @@ the bits in the header word every object has.
   stop on an object literal's class test (`Opts`), which waits on the core's
   test by layout.
 
+### Tagged templates (3n)
+
+A tagged template passes its tag one immutable object per source site, the
+cooked strings, shared by every call and every copy of the function.
+
+- **Storage:** a type of its own with a `string[]`'s layout (length, then
+  backing), registered with the arrays, so `Array.isArray` is true and reads
+  are array reads. Being a different type, no value of it is ever taken for
+  a writable array, even through an open value.
+- **Each site** is one immutable global built as a constant: its descriptor,
+  its length and the literal pieces in one `array.new_fixed`.
+- **Made writable array storage** (a cast to `string[]`), a template refuses
+  at run time with C's message; a null passes. A write into a template
+  object refuses by name.
+- Fixture `templates` (102 cases). The census row a-tagged-template (55
+  cases) agrees; a-template-object-keeps-its-identity stops only on an
+  element read of an open array (`nts_array_element` over a value whose
+  storage the read cannot see), which is not template-specific.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;

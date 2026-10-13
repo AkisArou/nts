@@ -415,6 +415,7 @@ pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), F
             | ManagedType::AnyView
             | ManagedType::DataView
             | ManagedType::Symbol
+            | ManagedType::Template
             | ManagedType::BoxedBigInt,
         ) => {}
         HirType::Bool => {
@@ -581,6 +582,7 @@ pub(crate) fn unerase_to(
             | ManagedType::AnyView
             | ManagedType::DataView
             | ManagedType::Symbol
+            | ManagedType::Template
             | ManagedType::BoxedBigInt,
         ) => {
             body.instruction(&I::Drop);

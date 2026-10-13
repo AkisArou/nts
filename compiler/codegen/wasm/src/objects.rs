@@ -491,6 +491,7 @@ pub(crate) fn is_reference(ty: &HirType) -> bool {
                 | ManagedType::AnyView
                 | ManagedType::DataView
                 | ManagedType::Symbol
+                | ManagedType::Template
         )
     )
 }
