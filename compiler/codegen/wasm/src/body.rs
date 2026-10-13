@@ -524,6 +524,9 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::Length(value) if crate::arrays::is_array(self.ty(*value)) => {
                 crate::arrays::length(self, id, *value)?;
             }
+            OpKind::Length(value) if crate::collections::is_collection(self.ty(*value)) => {
+                crate::collections::size(self, id, *value)?;
+            }
             OpKind::StringUnitAt {
                 string,
                 index,
@@ -771,6 +774,8 @@ impl<'b, 'p> Body<'b, 'p> {
                     crate::array_sort::call(self, result, name, args)?;
                 } else if let Some(helper) = crate::values::external(name) {
                     crate::values::call(self, result, helper, args)?;
+                } else if let Some(op) = crate::collections::external(name) {
+                    crate::collections::call(self, result, op, args)?;
                 } else {
                     return Err(match crate::helper_support(name) {
                         Some(crate::Support::Decline(reason)) => format!("runtime/external helper `{name}`: {reason}").into(),

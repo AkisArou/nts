@@ -59,6 +59,10 @@ pub(crate) enum FuncKey {
     DeclineInput,
     ValueText,
     TagName,
+    Collection(u32, crate::collections::Helper),
+    /// `Object.keys` of a collection, into an array of strings.
+    CollectionKeys(u32, u32),
+    Key(crate::collections::KeyHelper),
 }
 
 /// Every global the module can contain, named by what it means.

@@ -377,7 +377,14 @@ fn fits_i31(func: &nts_core::hir::Func, id: ValueId) -> bool {
 /// reference arrives non-null: what a null one means is the caller's to say.
 pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), Failure> {
     match ty {
-        HirType::Erased | HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {}
+        HirType::Erased
+        | HirType::Managed(
+            ManagedType::Object(_)
+            | ManagedType::Array(_)
+            | ManagedType::Map(..)
+            | ManagedType::Table(..)
+            | ManagedType::Set(_),
+        ) => {}
         HirType::Bool => {
             body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
             get_singleton(body, Singleton::True)?;
@@ -464,9 +471,20 @@ pub(crate) fn unerase(
     result: ValueId,
     value: ValueId,
 ) -> Result<(), Failure> {
+    let ty = body.ty(result).clone();
+    unerase_to(body, value, &ty)
+}
+
+/// `value`, erased, read as `ty` and left on the stack; a value it is not is
+/// refused by name.
+pub(crate) fn unerase_to(
+    body: &mut Body<'_, '_>,
+    value: ValueId,
+    ty: &HirType,
+) -> Result<(), Failure> {
     let boxed = types(body.m)?;
     body.load(value)?;
-    match body.ty(result).clone() {
+    match ty.clone() {
         HirType::Erased => {}
         HirType::Bool => {
             body.instruction(&I::Drop);
@@ -518,7 +536,13 @@ pub(crate) fn unerase(
             string_payload(&mut body.code);
             body.instruction(&I::End);
         }
-        ty @ HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
+        ty @ HirType::Managed(
+            ManagedType::Object(_)
+            | ManagedType::Array(_)
+            | ManagedType::Map(..)
+            | ManagedType::Table(..)
+            | ManagedType::Set(_),
+        ) => {
             body.instruction(&I::Drop);
             unerase_reference(body, value, &ty)?;
         }

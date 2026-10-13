@@ -110,6 +110,96 @@ pub(crate) struct Array {
     pub(crate) descriptor: u32,
 }
 
+/// How a collection's keys are stored, hashed and compared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub(crate) enum KeyKind {
+    /// A JS string, hashed over its code units and compared by content.
+    String,
+    /// A number, compared by `SameValueZero`: one NaN, and -0 stored as +0.
+    Number,
+    /// An erased value, hashed and compared by its tag.
+    Erased,
+}
+
+/// The storage a collection's values take: a number or a boolean typed, and
+/// anything else erased, because a null reference slot cannot say which
+/// absence it held.
+pub(crate) fn collection_value(value: &HirType) -> HirType {
+    match value {
+        HirType::Float { bits: 64 } | HirType::Bool => value.clone(),
+        _ => HirType::Erased,
+    }
+}
+
+/// What a collection type's keys are, or why they are refused.
+pub(crate) fn collection_key(key: &HirType) -> Result<KeyKind, String> {
+    match key {
+        HirType::Managed(ManagedType::String) => Ok(KeyKind::String),
+        HirType::Float { bits: 64 } => Ok(KeyKind::Number),
+        HirType::Erased => Ok(KeyKind::Erased),
+        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => Err(
+            "an object as a map or set key needs an identity hash, which Wasm objects do not have yet"
+                .into(),
+        ),
+        _ => Err(format!("a map or set key of type {key:?}")),
+    }
+}
+
+/// A Map, Set or Table: an insertion-ordered table, as the C runtime's
+/// `NtsMap`. Its fields follow the object root's: the live count (`size`),
+/// the entries written (holes included), the keys, each entry's hash (zero
+/// for a hole), the probe index, and for a Map or Table the values.
+#[derive(Debug, Clone)]
+pub(crate) struct Collection {
+    pub(crate) key: KeyKind,
+    /// The values' storage type; none for a Set.
+    pub(crate) value: Option<HirType>,
+    pub(crate) wrapper: u32,
+    pub(crate) keys: u32,
+    pub(crate) values: Option<u32>,
+    /// `(array (mut i32))`, for the hashes and the index.
+    pub(crate) ints: u32,
+    /// The first field after the object root's.
+    pub(crate) base: u32,
+    pub(crate) descriptor: u32,
+}
+
+impl Collection {
+    pub(crate) const fn live(&self) -> u32 {
+        self.base
+    }
+    pub(crate) const fn used(&self) -> u32 {
+        self.base + 1
+    }
+    pub(crate) const fn key_field(&self) -> u32 {
+        self.base + 2
+    }
+    pub(crate) const fn hashes(&self) -> u32 {
+        self.base + 3
+    }
+    pub(crate) const fn index(&self) -> u32 {
+        self.base + 4
+    }
+    pub(crate) const fn value_field(&self) -> u32 {
+        self.base + 5
+    }
+}
+
+/// A collection's keys, values and ints arrays, once completed.
+type CollectionArrays = (NodeId, Option<NodeId>, NodeId);
+
+type Metadata = (
+    crate::object_plan::Plan,
+    BTreeMap<u32, Array>,
+    BTreeMap<u32, Collection>,
+);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CollectionKey {
+    key: KeyKind,
+    value: Option<HirType>,
+}
+
 #[derive(Debug)]
 struct CallableNodes {
     base: NodeId,
@@ -137,6 +227,7 @@ pub(crate) struct Plan {
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
+    pub(crate) collections: BTreeMap<u32, Collection>,
     pub(crate) callables: BTreeMap<usize, crate::callable_plan::Resolved>,
     pub(crate) virtuals: BTreeMap<usize, crate::callable_plan::Resolved>,
     /// The callable root and its uniform entries: every function value's
@@ -272,6 +363,25 @@ impl Plan {
             .ok_or_else(|| Failure::Invariant(format!("unplanned array wrapper {wrapper}")))
     }
 
+    pub(crate) fn collection(&self, ty: &HirType) -> Result<&Collection, Failure> {
+        if !matches!(
+            ty,
+            HirType::Managed(ManagedType::Map(..) | ManagedType::Table(..) | ManagedType::Set(_))
+        ) {
+            return Err(format!("collection storage for {ty:?}").into());
+        }
+        let Physical::Reference(RefType {
+            heap_type: HeapType::Concrete(wrapper),
+            ..
+        }) = self.value_slot(ty)?
+        else {
+            return Err(Failure::Invariant("non-concrete collection storage".into()));
+        };
+        self.collections
+            .get(&wrapper)
+            .ok_or_else(|| Failure::Invariant(format!("unplanned collection wrapper {wrapper}")))
+    }
+
     pub(crate) fn encode(&self) -> TypeSection {
         let mut section = TypeSection::new();
         for group in &self.groups {
@@ -346,6 +456,7 @@ impl Plan {
 enum Work {
     Object(usize, NodeId),
     Array(HirType, NodeId),
+    Collection(NodeId),
 }
 
 struct Builder<'a> {
@@ -357,6 +468,12 @@ struct Builder<'a> {
     /// Each array node's element type: the first that keyed it.
     array_elements: FxHashMap<NodeId, HirType>,
     backings: FxHashMap<NodeId, NodeId>,
+    collections: FxHashMap<CollectionKey, NodeId>,
+    /// Each collection node's key and value storage, and its arrays once
+    /// completed: keys, values, ints.
+    collection_shapes: FxHashMap<NodeId, (CollectionKey, Option<CollectionArrays>)>,
+    /// One array type per element storage, shared by every collection.
+    plain_arrays: FxHashMap<HirType, NodeId>,
     root: Option<RootNodes>,
     work: Vec<Work>,
     erased: Option<ErasedNodes>,
@@ -393,6 +510,9 @@ impl<'a> Builder<'a> {
             arrays: FxHashMap::default(),
             array_elements: FxHashMap::default(),
             backings: FxHashMap::default(),
+            collections: FxHashMap::default(),
+            collection_shapes: FxHashMap::default(),
+            plain_arrays: FxHashMap::default(),
             root: None,
             work: Vec::new(),
             erased: None,
@@ -636,12 +756,15 @@ impl<'a> Builder<'a> {
             HirType::Managed(ManagedType::Promise(_)) => {
                 return Err("promise/scheduler storage outside M1b".into());
             }
-            HirType::Managed(
-                ManagedType::Map(_, _)
-                | ManagedType::Table(_, _)
-                | ManagedType::Set(_)
-                | ManagedType::Date,
-            ) => return Err(format!("collection/date storage outside M1b: {ty:?}")),
+            HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
+                PendingSlot::Defined(self.collection(key, Some(value))?, true)
+            }
+            HirType::Managed(ManagedType::Set(key)) => {
+                PendingSlot::Defined(self.collection(key, None)?, true)
+            }
+            HirType::Managed(ManagedType::Date) => {
+                return Err(format!("collection/date storage outside M1b: {ty:?}"));
+            }
             HirType::Managed(
                 ManagedType::Buffer
                 | ManagedType::View(_)
@@ -757,6 +880,7 @@ impl<'a> Builder<'a> {
             match work {
                 Work::Object(at, id) => self.complete_object(at, id)?,
                 Work::Array(element, id) => self.complete_array(&element, id)?,
+                Work::Collection(id) => self.complete_collection(id)?,
             }
         }
         Ok(())
@@ -1204,6 +1328,79 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
+    fn collection(&mut self, key: &HirType, value: Option<&HirType>) -> Result<NodeId, String> {
+        let shape = CollectionKey {
+            key: collection_key(key)?,
+            value: value.map(collection_value),
+        };
+        if let Some(id) = self.collections.get(&shape) {
+            return Ok(*id);
+        }
+        let root = self.root();
+        let id = self.add(
+            format!("collection<{:?}, {:?}>", shape.key, shape.value),
+            Some(root),
+            true,
+            Shape::Struct(Vec::new()),
+        );
+        self.collections.insert(shape.clone(), id);
+        self.collection_shapes.insert(id, (shape, None));
+        self.work.push(Work::Collection(id));
+        Ok(id)
+    }
+
+    /// An array type for one element storage, shared by every collection.
+    fn plain_array(&mut self, element: &HirType) -> Result<NodeId, String> {
+        if let Some(id) = self.plain_arrays.get(element) {
+            return Ok(*id);
+        }
+        let mut field = self.field(element)?;
+        field.packed = None;
+        let id = self.add(
+            format!("entries<{element:?}>"),
+            None,
+            true,
+            Shape::Array(field),
+        );
+        self.plain_arrays.insert(element.clone(), id);
+        Ok(id)
+    }
+
+    fn complete_collection(&mut self, id: NodeId) -> Result<(), String> {
+        let root = self.root();
+        let (shape, _) = self.collection_shapes[&id].clone();
+        let key_storage = match shape.key {
+            KeyKind::String => HirType::Managed(ManagedType::String),
+            KeyKind::Number => HirType::NUMBER,
+            KeyKind::Erased => HirType::Erased,
+        };
+        let keys = self.plain_array(&key_storage)?;
+        let values = shape
+            .value
+            .as_ref()
+            .map(|value| self.plain_array(value))
+            .transpose()?;
+        let ints = self.plain_array(&HirType::Int {
+            bits: 32,
+            signed: true,
+        })?;
+        let Shape::Struct(mut fields) = self.nodes[root.0].shape.clone() else {
+            return Err("object root is not a struct".into());
+        };
+        fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
+        fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
+        fields.push(Field::value(PendingSlot::Defined(keys, false), true));
+        fields.push(Field::value(PendingSlot::Defined(ints, false), true));
+        fields.push(Field::value(PendingSlot::Defined(ints, false), true));
+        if let Some(values) = values {
+            fields.push(Field::value(PendingSlot::Defined(values, false), true));
+        }
+        self.nodes[id.0].shape = Shape::Struct(fields);
+        self.collection_shapes
+            .insert(id, (shape, Some((keys, values, ints))));
+        Ok(())
+    }
+
     fn dependencies(&self) -> Vec<Vec<usize>> {
         self.nodes
             .iter()
@@ -1228,10 +1425,7 @@ impl<'a> Builder<'a> {
             })
             .collect()
     }
-    fn metadata(
-        &self,
-        indices: &[u32],
-    ) -> Result<(crate::object_plan::Plan, BTreeMap<u32, Array>), String> {
+    fn metadata(&self, indices: &[u32]) -> Result<Metadata, String> {
         let mut objects = crate::object_plan::Plan::build(
             self.program,
             &self
@@ -1300,7 +1494,53 @@ impl<'a> Builder<'a> {
                 class: None,
             });
         }
-        Ok((objects, arrays))
+        let collections = self.collection_metadata(indices, identity, &mut objects)?;
+        Ok((objects, arrays, collections))
+    }
+
+    /// Each collection's storage and descriptor: an object, as `typeof`
+    /// answers for a Map, a Set or a table.
+    fn collection_metadata(
+        &self,
+        indices: &[u32],
+        identity: u32,
+        objects: &mut crate::object_plan::Plan,
+    ) -> Result<BTreeMap<u32, Collection>, String> {
+        let base = self
+            .root
+            .map_or(Ok(0), |root| match &self.nodes[root.object.0].shape {
+                Shape::Struct(fields) => {
+                    u32::try_from(fields.len()).map_err(|_| "too many root fields".to_owned())
+                }
+                _ => Err("object root is not a struct".to_owned()),
+            })?;
+        let mut collections = BTreeMap::new();
+        for (id, (shape, arrays)) in &self.collection_shapes {
+            let (keys, values, ints) =
+                arrays.ok_or_else(|| format!("incomplete collection {}", self.nodes[id.0].name))?;
+            let descriptor = u32::try_from(objects.descriptors.len())
+                .map_err(|_| "too many collection descriptors")?;
+            objects.descriptors.push(crate::object_plan::Descriptor {
+                identity,
+                kind: nts_core::hir::tags::OBJECT,
+                ancestry: Vec::new(),
+                class: None,
+            });
+            collections.insert(
+                indices[id.0],
+                Collection {
+                    key: shape.key,
+                    value: shape.value.clone(),
+                    wrapper: indices[id.0],
+                    keys: indices[keys.0],
+                    values: values.map(|values| indices[values.0]),
+                    ints: indices[ints.0],
+                    base,
+                    descriptor,
+                },
+            );
+        }
+        Ok(collections)
     }
     fn resolved_callables(
         &self,
@@ -1397,64 +1637,11 @@ impl<'a> Builder<'a> {
             }
         }
         let supers = self.supers(&ordered, &indices);
-        let resolve = |slot| -> Physical {
-            match slot {
-                PendingSlot::Scalar(slot) => Physical::Scalar(slot),
-                PendingSlot::Reference(reference) => Physical::Reference(reference),
-                PendingSlot::Defined(id, nullable) => Physical::Reference(RefType {
-                    nullable,
-                    heap_type: HeapType::Concrete(indices[id.0]),
-                }),
-            }
-        };
-        let encode_field = |field: &Field| FieldType {
-            element_type: field
-                .packed
-                .unwrap_or_else(|| StorageType::Val(resolve(field.slot).wasm())),
-            mutable: field.mutable,
-        };
-        let groups = ordered
-            .iter()
-            .map(|group| {
-                group
-                    .iter()
-                    .map(|&id| {
-                        let node = &self.nodes[id];
-                        let inner = match &node.shape {
-                            Shape::Struct(fields) => CompositeInnerType::Struct(StructType {
-                                fields: fields.iter().map(encode_field).collect(),
-                            }),
-                            Shape::Array(field) => {
-                                CompositeInnerType::Array(ArrayType(encode_field(field)))
-                            }
-                            Shape::Function(params, result) => {
-                                CompositeInnerType::Func(wasm_encoder::FuncType::new(
-                                    params.iter().map(|slot| resolve(*slot).wasm()),
-                                    result.map(|slot| resolve(slot).wasm()),
-                                ))
-                            }
-                        };
-                        SubType {
-                            is_final: node.final_,
-                            supertype_idxs: node
-                                .base
-                                .map(|base| indices[base.0])
-                                .into_iter()
-                                .collect(),
-                            composite_type: CompositeType {
-                                inner,
-                                shared: false,
-                                descriptor: None,
-                                describes: None,
-                            },
-                        }
-                    })
-                    .collect()
-            })
-            .collect();
-        let (objects, arrays) = self.metadata(&indices)?;
+        let groups = self.encode(&ordered, &indices);
+        let (objects, arrays, collections) = self.metadata(&indices)?;
         Ok(Plan {
             arrays,
+            collections,
             callables: self.resolved_callables(&indices),
             uniform: self.resolved_uniform(&indices),
             virtuals: self.resolved_virtuals(&indices),
@@ -1479,12 +1666,60 @@ impl<'a> Builder<'a> {
             slots: self
                 .slots
                 .into_iter()
-                .map(|(ty, slot)| (ty, resolve(slot)))
+                .map(|(ty, slot)| (ty, resolve(&indices, slot)))
                 .collect(),
             groups,
             supers,
             count,
         })
+    }
+    /// The type section's rec groups, each type with its declared supertype.
+    fn encode(&self, ordered: &[Vec<usize>], indices: &[u32]) -> Vec<Vec<SubType>> {
+        let encode_field = |field: &Field| FieldType {
+            element_type: field
+                .packed
+                .unwrap_or_else(|| StorageType::Val(resolve(indices, field.slot).wasm())),
+            mutable: field.mutable,
+        };
+        ordered
+            .iter()
+            .map(|group| {
+                group
+                    .iter()
+                    .map(|&id| {
+                        let node = &self.nodes[id];
+                        let inner = match &node.shape {
+                            Shape::Struct(fields) => CompositeInnerType::Struct(StructType {
+                                fields: fields.iter().map(encode_field).collect(),
+                            }),
+                            Shape::Array(field) => {
+                                CompositeInnerType::Array(ArrayType(encode_field(field)))
+                            }
+                            Shape::Function(params, result) => {
+                                CompositeInnerType::Func(wasm_encoder::FuncType::new(
+                                    params.iter().map(|slot| resolve(indices, *slot).wasm()),
+                                    result.map(|slot| resolve(indices, slot).wasm()),
+                                ))
+                            }
+                        };
+                        SubType {
+                            is_final: node.final_,
+                            supertype_idxs: node
+                                .base
+                                .map(|base| indices[base.0])
+                                .into_iter()
+                                .collect(),
+                            composite_type: CompositeType {
+                                inner,
+                                shared: false,
+                                descriptor: None,
+                                describes: None,
+                            },
+                        }
+                    })
+                    .collect()
+            })
+            .collect()
     }
     /// Each type's declared supertype and kind, in type-index order.
     fn supers(&self, ordered: &[Vec<usize>], indices: &[u32]) -> Vec<(Option<u32>, Kind)> {
@@ -1567,6 +1802,18 @@ impl<'a> Builder<'a> {
 
 /// Iterative Kosaraju, with dependency components first. No graph recursion can
 /// exhaust the compiler stack on a large mutually recursive object family.
+/// A planned slot's physical type, once every node has its index.
+fn resolve(indices: &[u32], slot: PendingSlot) -> Physical {
+    match slot {
+        PendingSlot::Scalar(slot) => Physical::Scalar(slot),
+        PendingSlot::Reference(reference) => Physical::Reference(reference),
+        PendingSlot::Defined(id, nullable) => Physical::Reference(RefType {
+            nullable,
+            heap_type: HeapType::Concrete(indices[id.0]),
+        }),
+    }
+}
+
 fn components(graph: &[Vec<usize>]) -> Vec<Vec<usize>> {
     let mut seen = vec![false; graph.len()];
     let mut order = Vec::new();

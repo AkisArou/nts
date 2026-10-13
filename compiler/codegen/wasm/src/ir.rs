@@ -192,6 +192,7 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::I64RemU
             | I::I64And
             | I::I64Or
+            | I::I64Xor
             | I::I64Shl
             | I::I64ShrU
             | I::F32Abs
@@ -260,6 +261,7 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::StructGetU { .. }
             | I::StructSet { .. }
             | I::ArrayNew(_)
+            | I::ArrayNewDefault(_)
             | I::ArrayNewFixed { .. }
             | I::ArrayGet(_)
             | I::ArrayGetS(_)

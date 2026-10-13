@@ -29,8 +29,8 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::{Support, catalog, helper_support};
     use crate::{
-        array_copy, array_join, array_lookup, array_methods, array_sort, erased_ops, host, raising,
-        strings, values,
+        array_copy, array_join, array_lookup, array_methods, array_sort, collections, erased_ops,
+        host, raising, strings, values,
     };
     use std::collections::BTreeSet;
 
@@ -41,6 +41,12 @@ mod tests {
             Some(Support::Intrinsic)
         } else if let Some(helper) = strings::external(name) {
             Some(if helper.builtin() {
+                Support::Intrinsic
+            } else {
+                Support::WasmHelper
+            })
+        } else if let Some(op) = collections::external(name) {
+            Some(if op.inline() {
                 Support::Intrinsic
             } else {
                 Support::WasmHelper

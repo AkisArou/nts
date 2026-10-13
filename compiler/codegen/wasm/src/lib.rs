@@ -16,6 +16,7 @@ mod body;
 mod callable_plan;
 mod callables;
 mod cfg;
+mod collections;
 mod contract;
 mod demand;
 mod erased;

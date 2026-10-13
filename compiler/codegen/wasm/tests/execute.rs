@@ -316,6 +316,23 @@ fn source_interface_views_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// The table under a Map, a Set and a record: growth across rehashes,
+/// deleted slots reused, a clear during a walk, erased keys of every kind, and
+/// copies.
+#[test]
+fn source_collection_tables_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/collection-tables");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "collection-tables",
+        &emitted,
+        "tooling/wasm/check-collection-tables.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 72, "{output}");
+}
+
 /// `String(v)` of every erased tag and of a boolean; an object is refused by
 /// name, since nothing here records how it prints.
 #[test]
