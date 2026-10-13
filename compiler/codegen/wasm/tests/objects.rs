@@ -74,12 +74,28 @@ fn layouts(p: &mut Program) {
         ],
         None,
     ));
+    // One Wasm shape, two field orders: only the type's identity tells them
+    // apart.
+    p.layouts.push(layout(
+        &[12],
+        "OrderXY",
+        vec![field("x", F64), field("y", F64)],
+        None,
+    ));
+    p.layouts.push(layout(
+        &[13],
+        "OrderYX",
+        vec![field("y", F64), field("x", F64)],
+        None,
+    ));
     for (id, name) in [
         (1, "A"),
         (2, "B"),
         (3, "Child"),
         (10, "EqualStorageA"),
         (11, "EqualStorageB"),
+        (12, "OrderXY"),
+        (13, "OrderYX"),
     ] {
         p.classes.push(ClassIdentity {
             symbol: id + 100,
@@ -408,6 +424,35 @@ fn alias_identity(name: &str, allocated: u32, projected: u32, tested: u32) -> Fu
     );
     finish(f, ops, result)
 }
+/// An `OrderYX` holding y = 10 and x = 20, projected as an `OrderXY` and read
+/// at `x`. Its storage is the same Wasm shape, so only a nominal test refuses
+/// it; a structural one passes it and answers its `y`, 10.
+fn reordered_alias() -> Func {
+    let mut f = function("reorderedAlias", &[], F64);
+    let mut ops = Vec::new();
+    let input = allocate(&mut f, &mut ops, 13);
+    let ten = emit_value(&mut f, &mut ops, OpKind::ConstFloat(10.0), F64);
+    let twenty = emit_value(&mut f, &mut ops, OpKind::ConstFloat(20.0), F64);
+    set(&mut f, &mut ops, input, 0, ten);
+    set(&mut f, &mut ops, input, 1, twenty);
+    let erased = erase(&mut f, &mut ops, input);
+    let read = emit_value(
+        &mut f,
+        &mut ops,
+        OpKind::Unerase { value: erased },
+        object(12),
+    );
+    let x = emit_value(
+        &mut f,
+        &mut ops,
+        OpKind::FieldGet {
+            object: read,
+            field: 0,
+        },
+        F64,
+    );
+    finish(f, ops, x)
+}
 fn absent_projection(name: &str, undefined: bool) -> Func {
     let mut f = function(name, &[], U32);
     let mut ops = Vec::new();
@@ -495,32 +540,13 @@ fn bad_projection() -> Func {
     );
     finish(f, ops, result)
 }
-#[test]
-fn class_identity_inheritance_fields_and_erasure_execute_exactly() {
+/// Which class an object is, and which projections keep it: every class
+/// tested against every class, and aliases of merged and equal storage.
+fn class_identities() -> Vec<Func> {
     let mut funcs = vec![
-        projection(),
-        next(),
-        erased_field(),
-        swap(),
-        erased_inspection("objectTag", true),
-        erased_inspection("objectTruthy", false),
-        null_field(),
-        defaults("defaultNumber", 0, F64, false),
-        defaults("defaultErased", 1, HirType::Erased, true),
         alias_identity("mergedAlias", 2, 1, 1),
         alias_identity("canonicalAlias", 11, 10, 10),
-        absent_projection("nullProjection", false),
-        absent_projection("undefinedProjection", true),
-        primitive_instance("numberIsA", Some(F64), false),
-        primitive_instance("booleanIsA", Some(HirType::Bool), false),
-        primitive_instance(
-            "stringIsA",
-            Some(HirType::Managed(ManagedType::String)),
-            false,
-        ),
-        primitive_instance("nullIsA", None, false),
-        primitive_instance("undefinedIsA", None, true),
-        bad_projection(),
+        reordered_alias(),
     ];
     for created in [1, 2, 3, 10, 11] {
         for tested in [1, 2, 3, 10, 11] {
@@ -534,6 +560,34 @@ fn class_identity_inheritance_fields_and_erasure_execute_exactly() {
             }
         }
     }
+    funcs
+}
+#[test]
+fn class_identity_inheritance_fields_and_erasure_execute_exactly() {
+    let mut funcs = vec![
+        projection(),
+        next(),
+        erased_field(),
+        swap(),
+        erased_inspection("objectTag", true),
+        erased_inspection("objectTruthy", false),
+        null_field(),
+        defaults("defaultNumber", 0, F64, false),
+        defaults("defaultErased", 1, HirType::Erased, true),
+        absent_projection("nullProjection", false),
+        absent_projection("undefinedProjection", true),
+        primitive_instance("numberIsA", Some(F64), false),
+        primitive_instance("booleanIsA", Some(HirType::Bool), false),
+        primitive_instance(
+            "stringIsA",
+            Some(HirType::Managed(ManagedType::String)),
+            false,
+        ),
+        primitive_instance("nullIsA", None, false),
+        primitive_instance("undefinedIsA", None, true),
+        bad_projection(),
+    ];
+    funcs.extend(class_identities());
     for erased in [false, true] {
         for same in [false, true] {
             funcs.push(identity(

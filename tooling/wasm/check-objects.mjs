@@ -23,7 +23,13 @@ same(wasm.projection(), true, 'subtype projection'); same(wasm.objectTag(), 6, '
 same(wasm.objectTruthy(), true, 'object truthiness'); same(wasm.defaultNumber(), 0, 'number default');
 same(wasm.defaultErased(), 0, 'erased default is undefined'); same(wasm.global(), 17, 'global offset');
 same(wasm.mergedAlias(), false, 'merged layout cast preserves B identity');
-same(wasm.canonicalAlias(), false, 'canonical physical cast preserves B identity');
+// Two layouts of equal storage are two types: every object type shares one rec
+// group, so projecting a B as an A is refused by name. In separate groups the
+// engine made them one type and the cast passed silently.
+assert.throws(() => wasm.canonicalAlias(), e => e instanceof WasmInputDecline && e.message.includes('an erased value read as an object of a type it is not'));
+cases++;
+assert.throws(() => wasm.reorderedAlias(), e => e instanceof WasmInputDecline && e.message.includes('an erased value read as an object of a type it is not'));
+cases++;
 same(wasm.nullProjection(), 7, 'projected null retains absence');
 same(wasm.undefinedProjection(), 0, 'projected undefined retains absence');
 for (const n of numbers) same(wasm.numberIsA(n), false, 'numeric instanceof');

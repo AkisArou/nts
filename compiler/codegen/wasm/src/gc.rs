@@ -1386,7 +1386,7 @@ impl<'a> Builder<'a> {
     }
     fn finish(self) -> Result<Plan, String> {
         let graph = self.dependencies();
-        let components = components(&graph);
+        let components = self.one_group(components(&graph), &graph);
         let ordered = self.order_bases(components)?;
         let mut indices = vec![0; self.nodes.len()];
         let mut count = 0_u32;
@@ -1502,6 +1502,32 @@ impl<'a> Builder<'a> {
             })
             .collect()
     }
+    /// Every type shares one rec group, except a function signature that names
+    /// no other defined type.
+    ///
+    /// The engine canonicalizes types iso-recursively: two structurally equal
+    /// types in separate rec groups are one type, so a `ref.test` or
+    /// `ref.cast` between them cannot tell them apart. `Swapped { b; a }` and
+    /// `Pair { a; b }`, both two f64s on the object root, were one type, and a
+    /// test for `Pair` passed a `Swapped` and read its fields in the wrong
+    /// order (interface-same-shape-owner). In one group, types at different
+    /// positions are distinct, so every test and cast on object types is
+    /// nominal. `J2Wasm`, `Kotlin/Wasm` and `dart2wasm` emit their types the same
+    /// way. A leaf signature stays apart because an import's type must equal
+    /// the engine's own for a builtin, which is a group of one.
+    fn one_group(&self, components: Vec<Vec<usize>>, graph: &[Vec<usize>]) -> Vec<Vec<usize>> {
+        let (leaves, rest): (Vec<_>, Vec<_>) = components.into_iter().partition(|component| {
+            matches!(component.as_slice(), [id]
+                if graph[*id].is_empty() && matches!(self.nodes[*id].shape, Shape::Function(..)))
+        });
+        let mut groups = leaves;
+        let shared: Vec<usize> = rest.into_iter().flatten().collect();
+        if !shared.is_empty() {
+            groups.push(shared);
+        }
+        groups
+    }
+
     fn order_bases(&self, components: Vec<Vec<usize>>) -> Result<Vec<Vec<usize>>, String> {
         let mut ordered = Vec::new();
         for component in components {
@@ -1729,7 +1755,8 @@ mod tests {
         ];
         let plan = Plan::build(&p).unwrap();
         assert_eq!(plan.count(), 5);
-        assert_eq!(plan.groups.iter().map(Vec::len).max(), Some(2));
+        // Every type but a leaf signature shares one rec group.
+        assert_eq!(plan.groups.iter().map(Vec::len).max(), Some(5));
         let encoded = bytes(&plan);
         crate::validate(&encoded).unwrap();
         assert_eq!(encoded, bytes(&Plan::build(&p).unwrap()));
@@ -1824,7 +1851,8 @@ mod tests {
         ));
         let plan = Plan::build(&p).unwrap();
         assert_eq!(plan.count(), 515);
-        assert_eq!(plan.groups.iter().map(Vec::len).max(), Some(512));
+        // Every type but a leaf signature shares one rec group.
+        assert_eq!(plan.groups.iter().map(Vec::len).max(), Some(515));
         crate::validate(&bytes(&plan)).unwrap();
         let scalar = Plan::build(&typed_program(&[test_common::F64])).unwrap();
         assert_eq!(scalar.count(), 0);
