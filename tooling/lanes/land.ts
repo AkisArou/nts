@@ -6,6 +6,8 @@
 //
 // A gate takes half an hour, longer than an agent's command limit: run it in
 // the background and read the outcome with `lane status`, or the log it names.
+// The commit is resolved when it is queued: the tree is free to move on while
+// it waits.
 //
 // # What it does, in order
 //
@@ -267,7 +269,11 @@ function underTheLock(sha: string, tree: string): void {
   const id = enqueue(sha, tree);
   const held = spawnSync("flock", ["-n", LOCK, "true"]);
   if (held.status !== 0) say("another landing holds the lock; waiting (whoever holds it next gates every landing queued)");
-  const r = spawnSync("flock", [LOCK, process.execPath, ...process.argv.slice(1)], {
+  // The commit resolved now, not the argument again: `HEAD` re-read under the
+  // lock, hours later, is whatever the lane has committed since -- so a lane
+  // could not work in its tree while its landing waited.
+  const flags = process.argv.slice(2).filter((a) => a.startsWith("--"));
+  const r = spawnSync("flock", [LOCK, process.execPath, process.argv[1], sha, ...flags], {
     stdio: "inherit",
     env: { ...process.env, NTS_LAND_LOCKED: "1", NTS_LAND_ENTRY: id },
   });
@@ -454,7 +460,8 @@ function main(): void {
   const sha = git(["rev-parse", "--verify", `${target}^{commit}`]);
   const short = sha.slice(0, 12);
   const tree = process.cwd();
-  if (git(["rev-parse", "HEAD"], tree) !== sha) {
+  // Asked when the landing is queued; under the lock the tree may have moved on.
+  if (process.env.NTS_LAND_LOCKED !== "1" && git(["rev-parse", "HEAD"], tree) !== sha) {
     fail(`run from a tree whose HEAD is ${short}: owed.mjs answers with the rules as that commit has them`);
   }
 

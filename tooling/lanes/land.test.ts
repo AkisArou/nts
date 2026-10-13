@@ -211,3 +211,23 @@ test("the interop projects owed.mjs names reach the gate", async () => {
   assert.match(ra.out, /owes: fake \(interop: java-from-ts ts-from-java\)/);
   assert.match(readFileSync(s.gates, "utf8"), / java-from-ts ts-from-java$/m);
 });
+
+test("a landing lands the commit it was queued with, though its tree moves on while it waits", async () => {
+  const s = scratch();
+  const a = lane(s, "a", { "a.txt": "a\n" });
+  const lock = join(s.home, ".cache/nts-land.lock");
+  writeFileSync(lock, "");
+  const holder = spawn("flock", [lock, "sleep", "60"], { detached: true });
+  await until("the lock to be held", () => readFileSync("/proc/locks", "utf8").includes(`${holder.pid} `));
+  const landing = land(s, a);
+  const queue = join(s.home, ".cache/nts-land/queue");
+  await until("it to queue", () => existsSync(queue) && readdirSync(queue).length === 1);
+  writeFileSync(join(a, "later.txt"), "later\n");
+  run(s, a, ["add", "-A"]);
+  run(s, a, ["commit", "-q", "-m", "later"]);
+  process.kill(-holder.pid!, "SIGTERM");
+  const r = await landing.done;
+  assert.equal(r.status, 0, r.out);
+  assert.ok(onMain(s, "a.txt"));
+  assert.ok(!onMain(s, "later.txt"));
+});
