@@ -2,13 +2,17 @@
 //! generated prototype agreeing with itself is not evidence of C ABI agreement.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+use scratch::ScratchDir;
+
+use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::fmt::Write;
 use std::process::Command;
 
-fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
+fn prepare(name: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
     prepare_with_types(name, source, true)
 }
 
@@ -24,17 +28,13 @@ fn prepare_with_binding(
     name: &str,
     binding: &str,
     source: &str,
-) -> Option<(Utf8PathBuf, hir::Prepared)> {
+) -> Option<(ScratchDir, hir::Prepared)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = root.join(format!(
-        "target/native-c-tests/{}-{name}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/native-c-tests"), name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(
@@ -59,7 +59,7 @@ fn prepare_with_types(
     name: &str,
     source: &str,
     include_types: bool,
-) -> Option<(Utf8PathBuf, hir::Prepared)> {
+) -> Option<(ScratchDir, hir::Prepared)> {
     let (dir, snapshot) = snapshot_with_types(name, source, include_types)?;
     Some((
         dir,
@@ -72,17 +72,13 @@ fn snapshot_with_types(
     name: &str,
     source: &str,
     include_types: bool,
-) -> Option<(Utf8PathBuf, nts_semantic_schema::SemanticSnapshot)> {
+) -> Option<(ScratchDir, nts_semantic_schema::SemanticSnapshot)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = root.join(format!(
-        "target/native-c-tests/{}-{name}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/native-c-tests"), name);
     // Keep isolated-brand controls free of unrelated ambient declarations.
     // `libc.d.ts` brings `@nts/scalars` with it.
     let declarations =
@@ -855,7 +851,7 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
     // witness with nothing in it means the generator stopped working. Reading
     // the two as one condition is how this test passed for its first three runs
     // while never executing a line of what it exists to check.
-    let witness_of = |name: &str, field: &str, count: &str| -> Option<(Utf8PathBuf, String)> {
+    let witness_of = |name: &str, field: &str, count: &str| -> Option<(ScratchDir, String)> {
         let (dir, prepared) = prepare_with_binding(name, &binding(field, count), PROGRAM)?;
         let emitted =
             nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
@@ -1685,11 +1681,10 @@ export function handedOn(n: number): number {
             .join("../../..")
             .canonicalize_utf8()
             .unwrap();
-        let dir = root.join(format!(
-            "target/native-c-tests/{}-held-record-{provider:?}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = ScratchDir::new(
+            &root.join("target/native-c-tests"),
+            &format!("held-record-{provider:?}"),
+        );
         std::fs::write(
             dir.join("tsconfig.json"),
             format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts"]}}"#),

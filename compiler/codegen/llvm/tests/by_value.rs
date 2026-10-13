@@ -14,23 +14,23 @@
 //! program in C, and `examples/interop/macos-geometry`'s on the lane's Mac.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+use scratch::ScratchDir;
+
+use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::process::Command;
 
 /// A program whose binding is an ambient declaration file of its own.
-fn prepare(name: &str, binding: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
+fn prepare(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = root.join(format!(
-        "target/by-value-tests/{}-{name}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/by-value-tests"), name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(

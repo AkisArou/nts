@@ -2,9 +2,51 @@
 //! or the representation of arbitrary object intersections.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+#[path = "../../test-support/scratch.rs"]
+mod scratch;
+use scratch::ScratchDir;
+
+use camino::Utf8Path;
 use nts_core::hir::{self, HirType};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
+
+#[test]
+fn test_scratch_is_removed_when_its_owner_returns() {
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch-tests");
+    let parent = ScratchDir::new(&root, "return");
+    let dir = ScratchDir::new(&parent, "artifacts");
+    let path = dir.to_path_buf();
+    std::fs::write(dir.join("result"), "partial compiler output").unwrap();
+    drop(dir);
+    let keep = std::env::var_os("NTS_KEEP_TEST_SCRATCH").is_some_and(|value| value == "1");
+    assert_eq!(path.exists(), keep);
+}
+
+#[test]
+fn test_scratch_is_removed_when_its_owner_unwinds() {
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch-tests");
+    let parent = ScratchDir::new(&root, "unwind");
+    let dir = ScratchDir::new(&parent, "artifacts");
+    let path = dir.to_path_buf();
+    let result = std::panic::catch_unwind(move || {
+        std::fs::write(dir.join("result"), "partial compiler output").unwrap();
+        panic!("a failed compiler test still owns its artifacts");
+    });
+    assert!(result.is_err());
+    let keep = std::env::var_os("NTS_KEEP_TEST_SCRATCH").is_some_and(|value| value == "1");
+    assert_eq!(path.exists(), keep);
+}
+
+#[test]
+fn test_scratch_with_the_same_label_has_independent_owners() {
+    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch-tests");
+    let parent = ScratchDir::new(&root, "separate");
+    let first = ScratchDir::new(&parent, "same");
+    let second = ScratchDir::new(&parent, "same");
+    assert_ne!(first.as_ref(), second.as_ref());
+    drop(first);
+    assert!(second.exists());
+}
 
 fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSnapshot> {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
@@ -15,11 +57,7 @@ fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSna
         .join("../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir: Utf8PathBuf = root.join(format!(
-        "target/native-scalar-tests/{}-{name}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/native-scalar-tests"), name);
     std::fs::write(dir.join("tsconfig.json"), format!(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
     )).unwrap();
@@ -1088,11 +1126,7 @@ fn snapshot_allowing_errors(
         .join("../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir: Utf8PathBuf = root.join(format!(
-        "target/native-scalar-tests/{}-{name}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/native-scalar-tests"), name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(

@@ -2,6 +2,10 @@
 //! that must fail at compile time instead of reaching the linker with a wrong ABI.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+use scratch::ScratchDir;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
@@ -16,13 +20,12 @@ fn toolchain() -> Option<Utf8PathBuf> {
     tsgo
 }
 
-fn emit(tsgo: &Utf8Path, name: &str, source: &str) -> (Utf8PathBuf, nts_codegen_c::Emitted) {
+fn emit(tsgo: &Utf8Path, name: &str, source: &str) -> (ScratchDir, nts_codegen_c::Emitted) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = root.join(format!("target/header-tests/{}-{name}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/header-tests"), name);
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),

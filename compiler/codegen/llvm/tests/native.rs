@@ -1,7 +1,11 @@
 //! Native ABI agreement against a separately compiled C implementation.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+#[path = "../../../test-support/scratch.rs"]
+mod scratch;
+use scratch::ScratchDir;
+
+use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::{fmt::Write, process::Command};
@@ -13,7 +17,7 @@ mod dispatch;
 mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
 
-fn prepare(name: &str, source: &str) -> Option<(Utf8PathBuf, hir::Prepared)> {
+fn prepare(name: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
     prepare_with_provider(name, source, hir::Provider::NoGc)
 }
 
@@ -21,7 +25,7 @@ fn prepare_with_provider(
     name: &str,
     source: &str,
     provider: hir::Provider,
-) -> Option<(Utf8PathBuf, hir::Prepared)> {
+) -> Option<(ScratchDir, hir::Prepared)> {
     prepare_with_files(name, source, provider, &[])
 }
 
@@ -30,7 +34,7 @@ fn prepare_with_files(
     source: &str,
     provider: hir::Provider,
     declarations: &[(&str, &str)],
-) -> Option<(Utf8PathBuf, hir::Prepared)> {
+) -> Option<(ScratchDir, hir::Prepared)> {
     let (dir, snapshot) = snapshot_of(name, source, declarations)?;
     let prepared = hir::prepare_with(
         &snapshot,
@@ -51,17 +55,13 @@ fn snapshot_of(
     name: &str,
     source: &str,
     declarations: &[(&str, &str)],
-) -> Option<(Utf8PathBuf, nts_semantic_schema::SemanticSnapshot)> {
+) -> Option<(ScratchDir, nts_semantic_schema::SemanticSnapshot)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = root.join(format!(
-        "target/native-llvm-tests/{}-{name}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/native-llvm-tests"), name);
     let mut files = String::new();
     for (name, contents) in declarations {
         std::fs::write(dir.join(name), contents).unwrap();
@@ -92,11 +92,7 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = root.join(format!(
-        "target/native-llvm-tests/{}-async-callback",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/native-llvm-tests"), "async-callback");
     std::fs::write(
         dir.join("closures.d.ts"),
         include_str!("../../../../examples/interop/native-closure/types/closures.d.ts"),
@@ -147,11 +143,7 @@ fn checker_messages(name: &str, source: &str) -> Option<Vec<String>> {
         .join("../../..")
         .canonicalize_utf8()
         .unwrap();
-    let dir = root.join(format!(
-        "target/native-llvm-tests/{}-{name}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = ScratchDir::new(&root.join("target/native-llvm-tests"), name);
     std::fs::write(dir.join("tsconfig.json"), format!(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
     )).unwrap();
