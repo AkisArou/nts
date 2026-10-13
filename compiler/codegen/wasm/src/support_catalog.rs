@@ -393,14 +393,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_dataview_buffer", Support::Intrinsic),
     ("nts_dataview_byte_length", Support::Intrinsic),
     ("nts_dataview_byte_offset", Support::Intrinsic),
-    (
-        "nts_dataview_get_bigint64",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_dataview_get_biguint64",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
+    ("nts_dataview_get_bigint64", Support::WasmHelper),
+    ("nts_dataview_get_biguint64", Support::WasmHelper),
     ("nts_dataview_get_float32", Support::WasmHelper),
     ("nts_dataview_get_float64", Support::WasmHelper),
     ("nts_dataview_get_int16", Support::WasmHelper),
@@ -411,14 +405,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_dataview_get_uint8", Support::WasmHelper),
     ("nts_dataview_over", Support::WasmHelper),
     ("nts_dataview_part", Support::WasmHelper),
-    (
-        "nts_dataview_set_bigint64",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_dataview_set_biguint64",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
+    ("nts_dataview_set_bigint64", Support::WasmHelper),
+    ("nts_dataview_set_biguint64", Support::WasmHelper),
     ("nts_dataview_set_float32", Support::WasmHelper),
     ("nts_dataview_set_float64", Support::WasmHelper),
     ("nts_dataview_set_int16", Support::WasmHelper),
@@ -671,10 +659,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_no_arm",
         Support::Decline("value/control helper not yet implemented"),
     ),
-    (
-        "nts_no_arm_of",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_no_arm_of", Support::Intrinsic),
     (
         "nts_nsarray_of_objects",
         Support::Decline("foreign/native ABI or ownership"),

@@ -101,6 +101,10 @@ pub(crate) enum Helper {
     ShiftRight,
     /// `(value, count 0..127) -> value >>> count`.
     ShiftRightLogical,
+    /// `(value) -> its erased box`, for a bigint already on the stack.
+    Box,
+    /// `(word) -> bigint`: a signed 64-bit word, its sign spread above it.
+    WidenSigned,
 }
 
 const V128: Physical = Physical::Scalar(Slot::V128);
@@ -122,6 +126,21 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
         Helper::MulHigh => (vec![I64, I64], Some(I64)),
         Helper::ShiftLeft | Helper::ShiftRight | Helper::ShiftRightLogical => {
             (vec![V128, I32], Some(V128))
+        }
+        Helper::WidenSigned => (vec![I64], Some(V128)),
+        Helper::Box => {
+            let boxed = m
+                .types
+                .erased
+                .and_then(|erased| erased.bigint)
+                .ok_or_else(|| Failure::Invariant("unplanned erased bigint box".into()))?;
+            (
+                vec![V128],
+                Some(Physical::Reference(wasm_encoder::RefType {
+                    nullable: false,
+                    heap_type: HeapType::Concrete(boxed),
+                })),
+            )
         }
     };
     m.helper(
@@ -146,6 +165,34 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
             Helper::ShiftLeft => Ok(shift_left()),
             Helper::ShiftRight => Ok(shift_right(true)),
             Helper::ShiftRightLogical => Ok(shift_right(false)),
+            Helper::WidenSigned => {
+                let mut f = Function::new([]);
+                f.instructions(&[
+                    I::LocalGet(0),
+                    I::I64x2Splat,
+                    I::LocalGet(0),
+                    I::I64Const(63),
+                    I::I64ShrS,
+                    I::I64x2ReplaceLane(1),
+                    I::End,
+                ]);
+                Ok(f)
+            }
+            Helper::Box => {
+                let boxed = m
+                    .types
+                    .erased
+                    .and_then(|erased| erased.bigint)
+                    .ok_or_else(|| Failure::Invariant("unplanned erased bigint box".into()))?;
+                let mut f = Function::new([]);
+                f.instructions(&[
+                    I::I32Const(erased::BIGINT),
+                    I::LocalGet(0),
+                    I::StructNew(boxed),
+                    I::End,
+                ]);
+                Ok(f)
+            }
         },
     )
 }

@@ -373,7 +373,7 @@ fn source_buffer_views_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 340, "{output}");
+    assert_eq!(output["cases"], 357, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
@@ -450,7 +450,7 @@ fn source_bigints_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 234, "{output}");
+    assert_eq!(output["cases"], 251, "{output}");
     assert_eq!(output["declined"], 39, "{output}");
     assert_eq!(
         output["refused"],

@@ -39,6 +39,9 @@ pub(crate) enum Access {
     Uint32,
     Float32,
     Float64,
+    /// `getBigInt64` and `getBigUint64`: eight bytes as a bigint.
+    BigInt64,
+    BigUint64,
 }
 
 impl Access {
@@ -47,7 +50,7 @@ impl Access {
             Self::Int8 | Self::Uint8 => 1,
             Self::Int16 | Self::Uint16 => 2,
             Self::Int32 | Self::Uint32 | Self::Float32 => 4,
-            Self::Float64 => 8,
+            Self::Float64 | Self::BigInt64 | Self::BigUint64 => 8,
         }
     }
 }
@@ -77,6 +80,8 @@ pub(crate) fn external(name: &str) -> Option<Op> {
             "uint32" => Access::Uint32,
             "float32" => Access::Float32,
             "float64" => Access::Float64,
+            "bigint64" => Access::BigInt64,
+            "biguint64" => Access::BigUint64,
             _ => return None,
         })
     };
@@ -179,6 +184,8 @@ pub(crate) fn call(
             b.instruction(&field(t, BUFFER));
             Ok(())
         }
+        Op::Get(Access::BigInt64 | Access::BigUint64)
+        | Op::Set(Access::BigInt64 | Access::BigUint64) => bigint_access(b, op, args),
         Op::Get(access) => {
             let read = callee(b.m, Helper::Read)?;
             place(b, access, args)?;
@@ -192,6 +199,9 @@ pub(crate) fn call(
                 }
                 Access::Float32 => vec![I::I32WrapI64, I::F32ReinterpretI32, I::F64PromoteF32],
                 Access::Float64 => vec![I::F64ReinterpretI64],
+                Access::BigInt64 | Access::BigUint64 => {
+                    return Err(Failure::Invariant("a bigint access past its arm".into()));
+                }
             });
             numeric::convert(b, &HirType::NUMBER, &b.ty(result).clone())
         }
@@ -213,6 +223,43 @@ pub(crate) fn call(
             b.call(write);
             Ok(())
         }
+    }
+}
+
+/// `getBigInt64`, `getBigUint64` and their setters: eight bytes through the
+/// same read and write as every width, as one 64-bit word of a bigint.
+fn bigint_access(b: &mut Body<'_, '_>, op: Op, args: &[ValueId]) -> Result<(), Failure> {
+    match op {
+        Op::Get(access) => {
+            let read = callee(b.m, Helper::Read)?;
+            place(b, access, args)?;
+            b.call(read);
+            if access == Access::BigInt64 {
+                let widen = crate::bigints::callee(b.m, crate::bigints::Helper::WidenSigned)?;
+                b.call(widen);
+            } else {
+                // The word in the low lane, and nothing above it.
+                b.instructions(&[
+                    I::I64x2Splat,
+                    I::V128Const(i128::from(u64::MAX)),
+                    I::V128And,
+                ]);
+            }
+            Ok(())
+        }
+        Op::Set(access) => {
+            let write = callee(b.m, Helper::Write)?;
+            place(b, access, args)?;
+            // Its low 64 bits, as `BigInt.asIntN(64)` and `asUintN(64)` keep.
+            if b.ty(args[2]) != &HirType::BigInt {
+                return Err(format!("a {:?} stored as a bigint", b.ty(args[2])).into());
+            }
+            b.load(args[2])?;
+            b.instruction(&I::I64x2ExtractLane(0));
+            b.call(write);
+            Ok(())
+        }
+        other => Err(Failure::Invariant(format!("a bigint access {other:?}"))),
     }
 }
 

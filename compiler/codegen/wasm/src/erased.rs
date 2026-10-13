@@ -429,11 +429,12 @@ pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), F
             call(body, Helper::BoxNumber)?;
         }
         HirType::Managed(ManagedType::String) => body.instruction(&I::AnyConvertExtern),
-        HirType::Void
-        | HirType::Managed(_)
-        | HirType::BigInt
-        | HirType::NativePointer(_)
-        | HirType::Never => {
+        // A bigint is boxed with its tag, which goes before it in the box.
+        HirType::BigInt => {
+            let boxing = crate::bigints::callee(body.m, crate::bigints::Helper::Box)?;
+            body.call(boxing);
+        }
+        HirType::Void | HirType::Managed(_) | HirType::NativePointer(_) | HirType::Never => {
             return Err(
                 format!("erasing {ty:?} is outside the current primitive implementation").into(),
             );

@@ -274,3 +274,15 @@ export function dataViewLengths(v: number): number {
   return tracking.byteLength * 100 + fixed.byteLength * 10 + fixed.byteOffset
     + (fixed.buffer === buffer ? 0.5 : 0);
 }
+
+// DataView's 64-bit bigint accessors: both byte orders, a negative value, the
+// top bit set (signed and unsigned reads disagree there), and the low 64 bits
+// of a value wider than a word kept on the way in.
+export function bigint64(v: number): string {
+  const view = new DataView(new ArrayBuffer(24));
+  const k = BigInt(v | 0);
+  view.setBigInt64(0, k * 1000003n - 7n, (v | 0) % 2 === 0);
+  view.setBigUint64(8, (1n << 63n) + k * 3n, true);
+  view.setBigInt64(16, (1n << 70n) + k, false);
+  return `${view.getBigInt64(0, (v | 0) % 2 === 0)}|${view.getBigUint64(0, false)}|${view.getBigInt64(8, true)}|${view.getBigUint64(8, true)}|${view.getBigInt64(16, false)}|${view.getUint8(15)}`;
+}

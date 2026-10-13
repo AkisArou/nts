@@ -154,3 +154,13 @@ export function bigintKeys(v: number): string {
   const seen = new Set<unknown>([k, k + 0n, 2n ** 70n, 2n ** 70n * 1n]);
   return `${table.get((k * 2n ** 69n) * 2n)}|${table.get(k + 0n)}|${table.get(Number(k))}|${table.size}|${seen.size}`;
 }
+
+// A bigint read from an array known only as an Array: the typed bigint[]
+// element is boxed with its tag on the way out (nts_array_element), so its
+// typeof and value survive.
+export function openArrayOfBigints(v: number): string {
+  const values: unknown = (v | 0) > 0 ? [BigInt(v | 0) * 2n ** 70n, 5n] : [-(2n ** 64n), 7n];
+  if (!Array.isArray(values)) return "not an array";
+  const picked: unknown = values[(v | 0) & 1];
+  return `${typeof picked}|${picked === 5n}|${String(picked)}`;
+}

@@ -24,6 +24,8 @@ pub(crate) enum Helper {
     Refused,
     /// An input that fails a representation assertion.
     AssertionFailed,
+    /// A member called on a value no arm of its dispatch chain recognised.
+    NoArm,
     /// `String(b)` of a boolean.
     BoolText,
     /// `String(v)` of an erased value.
@@ -47,6 +49,7 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
     match name {
         "nts_refused" => Some(Helper::Refused),
         "nts_assertion_failed" => Some(Helper::AssertionFailed),
+        "nts_no_arm_of" => Some(Helper::NoArm),
         "nts_bool_to_string" => Some(Helper::BoolText),
         "nts_value_to_string" => Some(Helper::ValueText),
         "nts_tag_name" => Some(Helper::TagName),
@@ -64,6 +67,9 @@ pub(crate) fn call(
     if helper == Helper::ConsoleWrite {
         return console_write(b, args);
     }
+    if helper == Helper::NoArm {
+        return no_arm(b, args);
+    }
     let &[arg] = args else {
         return Err(format!("value helper {helper:?} arity mismatch").into());
     };
@@ -75,8 +81,8 @@ pub(crate) fn call(
             bits: 32,
             signed: false,
         },
-        Helper::ConsoleWrite => {
-            return Err(Failure::Invariant("console write past its arm".into()));
+        Helper::ConsoleWrite | Helper::NoArm => {
+            return Err(Failure::Invariant(format!("{helper:?} past its arm")));
         }
     };
     if b.ty(arg) != &wanted {
@@ -101,8 +107,8 @@ pub(crate) fn call(
             b.global_get(no);
             b.instruction(&I::End);
         }
-        Helper::ConsoleWrite => {
-            return Err(Failure::Invariant("console write past its arm".into()));
+        Helper::ConsoleWrite | Helper::NoArm => {
+            return Err(Failure::Invariant(format!("{helper:?} past its arm")));
         }
         Helper::ValueText | Helper::TagName => {
             let text = if helper == Helper::ValueText {
@@ -118,6 +124,31 @@ pub(crate) fn call(
     if !strings::is_string(b.ty(result)) {
         return Err(format!("value helper {helper:?} result {:?}", b.ty(result)).into());
     }
+    Ok(())
+}
+
+/// `nts_no_arm_of(subject, member)`: a member called on a value that no arm
+/// of its dispatch chain recognised, which the core's arms make unreachable.
+/// Refused by name with the member, as C stops.
+fn no_arm(b: &mut Body<'_, '_>, args: &[ValueId]) -> Result<(), Failure> {
+    let &[_, member] = args else {
+        return Err("no-arm arity mismatch".into());
+    };
+    if !strings::is_string(b.ty(member)) {
+        return Err(format!("a no-arm member of {:?}", b.ty(member)).into());
+    }
+    let target = contract::decline(b.m)?;
+    let concat = strings::callee(b.m, strings::Helper::Concat)?;
+    let head = b.m.literal("calling `");
+    let tail = b.m.literal("` on a value no arm of its chain recognised");
+    strings::constant(b, &b.func.name.clone());
+    b.global_get(head);
+    b.load(member)?;
+    b.call(concat);
+    b.global_get(tail);
+    b.call(concat);
+    b.call(target);
+    b.instruction(&I::Unreachable);
     Ok(())
 }
 
