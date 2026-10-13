@@ -6762,6 +6762,118 @@ fn retire_unavailable_fields(
     }
 }
 
+/// A call to a function that only hands back one of its parameters is that
+/// argument.
+///
+/// Not inlining: no body is copied, so the whole-function facts `0027` keeps
+/// small functions for are untouched -- the callee stays, for every caller this
+/// does not reach. What it buys is what a C compiler finds on its own and the
+/// backends that have none do not: `widen(value: unknown) { return value }`
+/// called on an erased number left the erasure, its tag read and its unerase
+/// behind a call, and the Wasm lane's `eraseNumbers` kernel ran 7.5x behind
+/// node. With the argument in its place, the tag read and the unerase see the
+/// erasure and fold.
+///
+/// Only an exact forwarder: one block, nothing in it but parameters, returning
+/// an ordinary parameter at the type it declared it, called directly with no
+/// frame -- so the answer is the argument and nothing else happens.
+///
+/// A forwarder whose every call was answered has no caller left, and is pruned
+/// here as reachability would have: left in place it is a `static` function
+/// nothing calls, which C's `-Wunused-function` refuses. Answers how many calls
+/// were forwarded and how many functions that left unreachable.
+fn forward_identities(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, usize) {
+    let forwards: rustc_hash::FxHashMap<String, usize> = program
+        .funcs
+        .iter()
+        .filter_map(|func| {
+            let [block] = func.blocks.as_slice() else {
+                return None;
+            };
+            let Terminator::Return(Some(value)) = block.terminator else {
+                return None;
+            };
+            let OpKind::Param(at) = func.value(value).kind else {
+                return None;
+            };
+            let param = func.params.get(at as usize)?;
+            (block
+                .ops
+                .iter()
+                .all(|op| matches!(func.value(*op).kind, OpKind::Param(_)))
+                && param.shape == ParamShape::Ordinary
+                && param.ty == func.return_type)
+                .then(|| (func.name.clone(), at as usize))
+        })
+        .collect();
+    if forwards.is_empty() {
+        return (0, 0);
+    }
+    let mut forwarded = 0;
+    for func in &mut program.funcs {
+        let mut answer: rustc_hash::FxHashMap<ValueId, ValueId> = rustc_hash::FxHashMap::default();
+        for block in &func.blocks {
+            for value in &block.ops {
+                let op = func.value(*value);
+                let OpKind::Call {
+                    callee: Callee::Direct(name),
+                    args,
+                    frame: None,
+                } = &op.kind
+                else {
+                    continue;
+                };
+                if let Some(&at) = forwards.get(name)
+                    && let Some(&argument) = args.get(at)
+                    && func.value(argument).ty == op.ty
+                {
+                    answer.insert(*value, argument);
+                }
+            }
+        }
+        if answer.is_empty() {
+            continue;
+        }
+        forwarded += answer.len();
+        let of = |value: ValueId| answer.get(&value).copied().unwrap_or(value);
+        for block in &mut func.blocks {
+            block.ops.retain(|value| !answer.contains_key(value));
+            simplify::substitute_terminator(&mut block.terminator, of);
+        }
+        for op in &mut func.values {
+            simplify::substitute(&mut op.kind, of);
+        }
+        // The call is gone from its block but not from the arena, which is what
+        // reachability walks: left as a call it would keep the forwarder alive.
+        // It is its argument, so it says so.
+        for (call, argument) in &answer {
+            func.values[call.0 as usize].kind = OpKind::Convert(*argument);
+        }
+    }
+    let orphaned = if forwarded > 0 {
+        reachable::prune(program, roots)
+    } else {
+        0
+    };
+    (forwarded, orphaned)
+}
+
+/// `simplify` over every function, then the branches the tags it decided
+/// leave: a comparison of two constants and the branch on it.
+///
+/// Deciding one can leave the arm it ruled out with nothing jumping to it,
+/// which the verifier refuses as `Unreachable`, so the blocks go too -- the
+/// same pair lowering runs, for the same reason (`fold::decided_branches`).
+/// `collect_orphans` takes their values.
+fn simplify_and_decide(program: &mut Program) -> usize {
+    let simplified = simplify_all(program);
+    let decided = fold::decided_branches(program);
+    if decided > 0 {
+        dce::prune_unreachable_blocks(program);
+    }
+    simplified + decided
+}
+
 fn simplify_all(program: &mut Program) -> usize {
     program.funcs.iter_mut().map(simplify::simplify).sum()
 }
@@ -6941,7 +7053,8 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let devirtualized = devirtualize_closures(&mut program);
 
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
-    let pruned = pruned + dropped;
+    let (forwarded, orphaned) = forward_identities(&mut program, options.roots);
+    let pruned = pruned + dropped + orphaned;
     let unions_split = split_unions(&mut program);
     interface_access::materialize(&mut program, options.interface_access);
     // After the copies that give a call its class, so that only an access
@@ -6962,7 +7075,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // tracking values that are copies of other values.
     let narrowed = narrow_widths(&mut program) + shed_erasure(&mut program) + unions_split;
 
-    let mut simplified = simplify_all(&mut program);
+    let mut simplified = simplify_and_decide(&mut program) + forwarded;
 
     // Reconcile *after* the passes that rewrite operands, not before.
     //

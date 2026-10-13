@@ -46,7 +46,7 @@ pub fn simplify(func: &mut Func) -> usize {
             replacement.insert(id, target);
         }
     }
-    let folded = fold_conversions(func) + forward_stores(func);
+    let folded = fold_conversions(func) + forward_stores(func) + erased_tags(func);
     if replacement.is_empty() {
         return folded;
     }
@@ -103,6 +103,54 @@ fn fold_conversions(func: &mut Func) -> usize {
     folded
 }
 
+/// Whether an erased value read back at `ty` is always the value erased.
+fn erasure_round_trips(ty: &HirType) -> bool {
+    match ty {
+        HirType::BigInt | HirType::Bool | HirType::Float { bits: 64 } | HirType::Managed(_) => true,
+        HirType::Int { bits, .. } => *bits <= 32,
+        _ => false,
+    }
+}
+
+/// The tag of an erased number or boolean, which its type already decides.
+///
+/// `typeof value === "number"` on a value erased from a `double` was a tag
+/// read the backend had to perform: the Wasm lane's `eraseNumbers` kernel kept
+/// one per iteration once nothing stood between the erasure and its read. A
+/// reference's tag is not decided by its type -- a null pointer is `null` or
+/// `undefined` by the erasure's `absent` -- so only scalars fold.
+///
+/// And an erased 32-bit integer read back as a `double` is that integer
+/// widened: the erasure converted it to the double it reads back as.
+fn erased_tags(func: &mut Func) -> usize {
+    let mut folded = 0;
+    for index in 0..func.values.len() {
+        if let OpKind::Unerase { value } = func.values[index].kind
+            && let OpKind::Erase { value: source, .. } = func.values[value.0 as usize].kind
+            && matches!(func.values[source.0 as usize].ty, HirType::Int { bits, .. } if bits <= 32)
+            && func.values[index].ty == (HirType::Float { bits: 64 })
+        {
+            func.values[index].kind = OpKind::Convert(source);
+            folded += 1;
+            continue;
+        }
+        let OpKind::TagOf { value } = func.values[index].kind else {
+            continue;
+        };
+        let OpKind::Erase { value: source, .. } = func.values[value.0 as usize].kind else {
+            continue;
+        };
+        let tag = match func.values[source.0 as usize].ty {
+            HirType::Float { .. } | HirType::Int { .. } => super::tags::NUMBER,
+            HirType::Bool => super::tags::BOOLEAN,
+            _ => continue,
+        };
+        func.values[index].kind = OpKind::ConstInt(i128::from(tag));
+        folded += 1;
+    }
+    folded
+}
+
 /// Whether every value of `from` survives a trip through `detour` unchanged.
 fn exact_through(from: &HirType, detour: &HirType) -> bool {
     matches!(detour, HirType::Float { bits: 64 })
@@ -143,15 +191,15 @@ fn identity(func: &Func, value: ValueId) -> Option<ValueId> {
         // where it does not yet know whether a coercion is needed, and finding
         // out is this pass's job rather than the emitter's.
         OpKind::Convert(operand) if func.values[operand.0 as usize].ty == op.ty => Some(*operand),
-        // A BigInt erasure preserves every bit. Removing its immediate read
-        // before late boxing avoids allocating storage for a scalar roundtrip.
-        // Numeric Int erasure is deliberately excluded: it converts to double
-        // and can round a wide native integer.
-        OpKind::Unerase { value } if op.ty == HirType::BigInt => {
+        // An erasure read straight back at the type it erased, where the trip
+        // preserves every value. A BigInt keeps every bit; a double, a boolean,
+        // a reference and a 32-bit integer survive the double an erased number
+        // is. A wider native integer does not -- it can round -- so it stays.
+        OpKind::Unerase { value } => {
             let OpKind::Erase { value: source, .. } = func.value(*value).kind else {
                 return None;
             };
-            (func.value(source).ty == HirType::BigInt).then_some(source)
+            (func.value(source).ty == op.ty && erasure_round_trips(&op.ty)).then_some(source)
         }
         OpKind::Binary { op: bin, lhs, rhs } => {
             let integral = matches!(op.ty, HirType::Int { .. });

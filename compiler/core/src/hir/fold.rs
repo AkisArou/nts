@@ -103,12 +103,13 @@ fn exactly_one_value(facts: Facts) -> bool {
 /// declaration, where `S` may perfectly well be a number. The fact only exists
 /// once a copy has substituted, which is after lowering.
 ///
-/// # Strings only
+/// # Strings and tags only
 ///
 /// A float comparison has `NaN` and two zeroes in it, and the reasoning for those
 /// is [`exactly_one_value`]'s, over intervals the analysis proved. Nothing here
 /// needs it: the shape that produces invalid HIR is `typeof`, whose operands are
-/// string literals the lowering wrote itself. See [`same_constant`].
+/// string literals the lowering wrote itself, and the shape run again after
+/// `simplify` is a tag it decided. See [`same_constant`].
 ///
 /// # Why here, before `dce::prune_unreachable_blocks`
 ///
@@ -179,11 +180,13 @@ fn decide(func: &mut Func) -> usize {
     decided
 }
 
-/// Whether two values are string constants, and whether they are equal.
+/// Whether two values are string or same-typed integer constants, and whether
+/// they are equal.
 ///
-/// **Strings and nothing else**, because `typeof` is the only thing that makes a
-/// decidable comparison this pass has to answer, and its operands are string
-/// literals the lowering wrote itself. A float comparison belongs to
+/// **Strings and integers and nothing else**, because `typeof` is the only
+/// thing that makes a decidable comparison this pass has to answer: before
+/// preparation its operands are string literals the lowering wrote itself, and
+/// after `simplify` decides the tag of an erased scalar they are two tags. A float comparison belongs to
 /// [`exactly_one_value`]'s interval reasoning, which has `NaN` and the two zeroes
 /// in it. A boolean one would be exact and is left out for want of a program that
 /// reaches it -- `lower::statically_decided` already folds every `=== true` the
@@ -198,6 +201,15 @@ fn same_constant(func: &Func, lhs: ValueId, rhs: ValueId) -> Option<bool> {
         &func.values[rhs.0 as usize].kind,
     ) {
         (OpKind::ConstString(a), OpKind::ConstString(b)) => Some(a == b),
+        // Two integers of one type compare exactly. A tag read the erasure
+        // decided is one: `typeof value === "number"` on an erased number
+        // becomes `eq 2, 2` once `simplify` folds the tag, and the branch is
+        // then as decided as a `typeof` of a generic copy's literal.
+        (OpKind::ConstInt(a), OpKind::ConstInt(b))
+            if func.values[lhs.0 as usize].ty == func.values[rhs.0 as usize].ty =>
+        {
+            Some(a == b)
+        }
         _ => None,
     }
 }

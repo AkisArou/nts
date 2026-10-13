@@ -436,10 +436,13 @@ fn recovering_array_storage_requires_initialized_reads() {
 /// a number, so its parameter becomes a `double` and the tag it read becomes a
 /// constant.
 ///
-/// `kind` in the same file must *not*: it is called both with a number and with
-/// the result of `keeps`, which is erased and carries a tag chosen elsewhere.
-/// Two callers disagreeing is the case that would be wrong rather than missed,
-/// and it is the reason this pass surveys every call site before deciding.
+/// `kind` in the same file is called with a number and with `keeps(n)`, and
+/// `keeps` only hands back its argument: a call to it is that argument
+/// (`forward_identities`), so both callers pass a number and `kind` narrows
+/// too. Two callers *disagreeing* -- one passing an erased value whose tag was
+/// chosen elsewhere -- is the case that would be wrong rather than missed, and
+/// it is the reason this pass surveys every call site before deciding; it is
+/// `tests/identity_forwarding.rs`, through an identity with an effect.
 #[test]
 fn a_parameter_with_one_kind_of_caller_is_not_erased() {
     let Some(prepared) = prepared_at("../../examples/unknown") else {
@@ -463,8 +466,8 @@ fn a_parameter_with_one_kind_of_caller_is_not_erased() {
     );
     assert_eq!(
         parameter("kind"),
-        nts_core::hir::HirType::Erased,
-        "a number and an already-erased value reach this one",
+        nts_core::hir::HirType::Float { bits: 64 },
+        "a number and a number through an identity reach this one",
     );
 }
 
@@ -642,25 +645,22 @@ fn recovered_signature_faces_keep_their_runtime_callable_tag() {
         !hir::is_closure_type(face),
         "a signature face is not a closure instance"
     );
-    for name in ["describe", "returned", "array"] {
+    // The tag test is decided, and the arm kept is the function's: a recovered
+    // callable tagged as an object would keep the other constant.
+    for (name, function, object) in [("describe", 1, 0), ("returned", 3, 4), ("array", 5, 6)] {
         let func = named(name);
-        let equality = func
+        let constants: Vec<i128> = func
             .blocks
             .iter()
             .flat_map(|block| &block.ops)
-            .find_map(|value| match func.value(*value).kind {
-                OpKind::Binary {
-                    op: hir::BinOp::Eq,
-                    lhs,
-                    rhs,
-                } => Some((lhs, rhs)),
+            .filter_map(|value| match func.value(*value).kind {
+                OpKind::ConstInt(constant) => Some(constant),
                 _ => None,
             })
-            .unwrap_or_else(|| panic!("no callable test in {name}"));
+            .collect();
         assert!(
-            matches!(func.value(equality.0).kind,
-            OpKind::ConstInt(tag) if tag == i128::from(hir::tags::FUNCTION)),
-            "{name}'s recovered callable is still a function at runtime"
+            constants.contains(&function) && !constants.contains(&object),
+            "{name}'s recovered callable is still a function at runtime: {constants:?}"
         );
     }
     assert_eq!(

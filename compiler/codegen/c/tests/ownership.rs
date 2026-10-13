@@ -84,6 +84,11 @@ fn body(text: &str, name: &str) -> String {
 ///
 /// Both call sites are then right without either knowing which body ran: the
 /// callee retains, and neither caller does.
+///
+/// `self` tests its receiver before handing it back so that it is not an exact
+/// identity: a bare `return this` is now forwarded at a direct call site
+/// (`forward_identities`), which leaves `attachDirect` no call to own a result
+/// of -- its one retain is then the store's, which is right but not this test.
 #[test]
 fn a_method_returning_its_receiver_is_owned_when_a_table_holds_it() {
     let Some(text) = counted(
@@ -91,7 +96,7 @@ fn a_method_returning_its_receiver_is_owned_when_a_table_holds_it() {
         r"
 class Holder { child: Leaf | null = null; }
 abstract class Base { abstract self(): Leaf | null; }
-class Leaf extends Base { label = 'leaf'; override self(): Leaf | null { return this; } }
+class Leaf extends Base { label = 'leaf'; override self(): Leaf | null { return this.label === '' ? null : this; } }
 class Other extends Base { override self(): Leaf | null { return null; } }
 
 function attachVirtual(holder: Holder, node: Base): void {
