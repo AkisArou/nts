@@ -1547,16 +1547,18 @@ fn hash_number() -> Function {
     f
 }
 
-/// An erased key by its tag, its hash already nonzero; an object needs an
-/// identity hash, which is refused by name.
+/// An erased key by its tag, its hash already nonzero: a string or a number
+/// by its content, a bigint by its value, a boolean or an absence by a
+/// constant, and an object, a function or a symbol by its identity hash.
 fn hash_erased(m: &mut Builder<'_>) -> Result<Function, Failure> {
     let tag = erased::callee(m, erased::Helper::Tag)?;
     let number = erased::callee(m, erased::Helper::Number)?;
     let boolean = erased::callee(m, erased::Helper::Boolean)?;
     let text = key_callee(m, KeyHelper::Hash(KeyKind::String))?;
     let numeric = key_callee(m, KeyHelper::Hash(KeyKind::Number))?;
-    let which = 2;
-    let mut f = Function::new([ValType::I32]);
+    // Locals: the tag, a bigint's value, and its two words folded.
+    let (which, value, folded) = (2, 3, 4);
+    let mut f = Function::new([ValType::I32, ValType::V128, ValType::I64]);
     f.instruction(&I::LocalGet(0));
     f.call(tag);
     f.instruction(&I::LocalSet(which));
@@ -1588,9 +1590,42 @@ fn hash_erased(m: &mut Builder<'_>) -> Result<Function, Failure> {
     f.instructions(&[I::I32Const(0x2001), I::Return, I::End]);
     arm(&mut f, erased::NULL);
     f.instructions(&[I::I32Const(0x3001), I::Return, I::End]);
+    if let Some(boxed) = m.types.erased.and_then(|erased| erased.bigint) {
+        // SameValueZero compares bigints by value, so the hash reads it.
+        arm(&mut f, erased::BIGINT);
+        f.instructions(&[
+            I::LocalGet(0),
+            I::RefCastNonNull(HeapType::Concrete(boxed)),
+            I::StructGet {
+                struct_type_index: boxed,
+                field_index: 1,
+            },
+            I::LocalTee(value),
+            I::I64x2ExtractLane(0),
+            I::LocalGet(value),
+            I::I64x2ExtractLane(1),
+            I::I64Xor,
+            I::LocalTee(folded),
+            I::LocalGet(folded),
+            I::I64Const(32),
+            I::I64ShrU,
+            I::I64Xor,
+            I::I32WrapI64,
+            I::I32Const(SPREAD),
+            I::I32Mul,
+            I::I32Const(1),
+            I::I32Or,
+            I::Return,
+            I::End,
+        ]);
+    }
     let root = root_type(m)?;
     let identity = objects::identity(m)?;
-    for tag in [erased::OBJECT, erased::FUNCTION] {
+    let mut referenced = vec![erased::OBJECT, erased::FUNCTION];
+    if m.types.symbol.is_some() {
+        referenced.push(erased::SYMBOL);
+    }
+    for tag in referenced {
         arm(&mut f, tag);
         f.instructions(&[I::LocalGet(0), I::RefCastNonNull(HeapType::Concrete(root))]);
         f.call(identity);
@@ -1653,59 +1688,87 @@ fn equal(m: &mut Builder<'_>, kind: KeyKind) -> Result<Function, Failure> {
             I::RefCastNullable(RefType::EQREF.heap_type),
             I::RefEq,
         ]),
-        KeyKind::Erased => {
-            let tag = erased::callee(m, erased::Helper::Tag)?;
-            let number = erased::callee(m, erased::Helper::Number)?;
-            let text = key_callee(m, KeyHelper::Equal(KeyKind::String))?;
-            let numeric = key_callee(m, KeyHelper::Equal(KeyKind::Number))?;
-            let which = 2;
-            f = Function::new([ValType::I32]);
-            f.instruction(&I::LocalGet(0));
-            f.call(tag);
-            f.instruction(&I::LocalTee(which));
-            f.instruction(&I::LocalGet(1));
-            f.call(tag);
-            f.instructions(&[
-                I::I32Ne,
-                I::If(BlockType::Empty),
-                I::I32Const(0),
-                I::Return,
-                I::End,
-                I::LocalGet(which),
-                I::I32Const(erased::STRING),
-                I::I32Eq,
-                I::If(BlockType::Empty),
-                I::LocalGet(0),
-            ]);
-            erased::string_payload(&mut f);
-            f.instruction(&I::LocalGet(1));
-            erased::string_payload(&mut f);
-            f.call(text);
-            f.instructions(&[
-                I::Return,
-                I::End,
-                I::LocalGet(which),
-                I::I32Const(erased::NUMBER),
-                I::I32Eq,
-                I::If(BlockType::Empty),
-                I::LocalGet(0),
-            ]);
-            f.call(number);
-            f.instruction(&I::LocalGet(1));
-            f.call(number);
-            f.call(numeric);
-            f.instructions(&[
-                I::Return,
-                I::End,
-                // A boolean, an absence or an object: the same reference.
-                I::LocalGet(0),
-                I::RefCastNullable(RefType::EQREF.heap_type),
-                I::LocalGet(1),
-                I::RefCastNullable(RefType::EQREF.heap_type),
-                I::RefEq,
-            ]);
-        }
+        KeyKind::Erased => return equal_erased(m),
     }
+    f.instruction(&I::End);
+    Ok(f)
+}
+
+/// Two erased keys by `SameValueZero`: the same tag, then a string or a number
+/// by content, a bigint by value, and anything else by reference.
+fn equal_erased(m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let tag = erased::callee(m, erased::Helper::Tag)?;
+    let number = erased::callee(m, erased::Helper::Number)?;
+    let text = key_callee(m, KeyHelper::Equal(KeyKind::String))?;
+    let numeric = key_callee(m, KeyHelper::Equal(KeyKind::Number))?;
+    let which = 2;
+    let mut f = Function::new([ValType::I32]);
+    f.instruction(&I::LocalGet(0));
+    f.call(tag);
+    f.instruction(&I::LocalTee(which));
+    f.instruction(&I::LocalGet(1));
+    f.call(tag);
+    f.instructions(&[
+        I::I32Ne,
+        I::If(BlockType::Empty),
+        I::I32Const(0),
+        I::Return,
+        I::End,
+        I::LocalGet(which),
+        I::I32Const(erased::STRING),
+        I::I32Eq,
+        I::If(BlockType::Empty),
+        I::LocalGet(0),
+    ]);
+    erased::string_payload(&mut f);
+    f.instruction(&I::LocalGet(1));
+    erased::string_payload(&mut f);
+    f.call(text);
+    f.instructions(&[
+        I::Return,
+        I::End,
+        I::LocalGet(which),
+        I::I32Const(erased::NUMBER),
+        I::I32Eq,
+        I::If(BlockType::Empty),
+        I::LocalGet(0),
+    ]);
+    f.call(number);
+    f.instruction(&I::LocalGet(1));
+    f.call(number);
+    f.call(numeric);
+    f.instructions(&[I::Return, I::End]);
+    if let Some(boxed) = m.types.erased.and_then(|erased| erased.bigint) {
+        // Two bigints are one key by value, whichever box holds it.
+        let payload = |f: &mut Function, key: u32| {
+            f.instructions(&[
+                I::LocalGet(key),
+                I::RefCastNonNull(HeapType::Concrete(boxed)),
+                I::StructGet {
+                    struct_type_index: boxed,
+                    field_index: 1,
+                },
+            ]);
+        };
+        f.instructions(&[
+            I::LocalGet(which),
+            I::I32Const(erased::BIGINT),
+            I::I32Eq,
+            I::If(BlockType::Empty),
+        ]);
+        payload(&mut f, 0);
+        payload(&mut f, 1);
+        f.instructions(&[I::I64x2Eq, I::I64x2AllTrue, I::Return, I::End]);
+    }
+    f.instructions(&[
+        // A boolean, an absence, an object or a symbol: the same
+        // reference.
+        I::LocalGet(0),
+        I::RefCastNullable(RefType::EQREF.heap_type),
+        I::LocalGet(1),
+        I::RefCastNullable(RefType::EQREF.heap_type),
+        I::RefEq,
+    ]);
     f.instruction(&I::End);
     Ok(f)
 }

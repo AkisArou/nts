@@ -49,3 +49,14 @@ export function mapKeys(v: number): number {
   counts.set(shared, (counts.get(shared) ?? 0) + (v | 0));
   return counts.size * 1000 + (counts.get(a) ?? -1) * 100 + (counts.get(b) ?? -1) * 10 + (counts.get(shared) ?? -1);
 }
+
+// Symbols as keys of a Map whose keys are open, beside strings: hashed by
+// identity, so a registered symbol is found again and a fresh one is not.
+export function openKeys(v: number): string {
+  const table = new Map<unknown, number>();
+  const key = Symbol.for(`k${(v | 0) & 3}`);
+  table.set(key, 1);
+  table.set(`k${(v | 0) & 3}`, 2);
+  table.set(Symbol("fresh"), 3);
+  return `${table.get(Symbol.for(`k${(v | 0) & 3}`))}|${table.get(`k${(v | 0) & 3}`)}|${table.get(Symbol("fresh"))}|${table.size}|${table.has(key)}`;
+}

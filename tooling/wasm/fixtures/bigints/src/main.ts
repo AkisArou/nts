@@ -142,3 +142,15 @@ export function anArrayOfBigints(v: number): string {
   values[2] = values[(v | 0) & 3]! - 1n;
   return `${total}|${values.length}|${values[2]}|${values[0]! < values[4]! ? 1 : 0}`;
 }
+
+// Bigints as keys of a Map whose keys are open: one key by value, whichever
+// computation made it, and apart from the number of the same magnitude.
+export function bigintKeys(v: number): string {
+  const table = new Map<unknown, string>();
+  const k = BigInt(v | 0);
+  table.set(k * 2n ** 70n, "wide");
+  table.set(k, "small");
+  table.set(Number(k), "number");
+  const seen = new Set<unknown>([k, k + 0n, 2n ** 70n, 2n ** 70n * 1n]);
+  return `${table.get((k * 2n ** 69n) * 2n)}|${table.get(k + 0n)}|${table.get(Number(k))}|${table.size}|${seen.size}`;
+}
