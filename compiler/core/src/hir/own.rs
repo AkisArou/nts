@@ -94,6 +94,9 @@ pub struct Summaries {
     stack_returns: rustc_hash::FxHashSet<String>,
     /// Parameter slots each function takes ownership of, by function name.
     consumes: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+    /// `(what, into)` parameter slots each function stores, by function name.
+    /// See [`Summaries::stores_of`].
+    stores: rustc_hash::FxHashMap<String, Vec<(u32, u32)>>,
     /// Parameter fields every caller has already zeroed, by function name. See
     /// [`zeroed_parameters`].
     zeroed: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<(u32, u32)>>,
@@ -119,6 +122,18 @@ impl Summaries {
     #[must_use]
     pub fn consumes(&self, name: &str) -> Option<&rustc_hash::FxHashSet<u32>> {
         self.consumes.get(name)
+    }
+
+    /// What a call's callee stores of its arguments into the others, for
+    /// liveness to name a frame object by the argument it went into
+    /// (`liveness::analyze_with`). Known for a direct call; `None` for a
+    /// dispatch, whose bodies need not agree.
+    #[must_use]
+    pub fn stores_of(&self, callee: &super::Callee) -> Option<Vec<(u32, u32)>> {
+        match callee {
+            super::Callee::Direct(name) => Some(self.stores.get(name).cloned().unwrap_or_default()),
+            _ => None,
+        }
     }
 
     /// Whether a function returns a stack-rooted handle with no count: its
@@ -246,6 +261,12 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
             .filter(|name| !lent.contains(name.as_str()))
             .collect(),
         stack_returns: returning_from_the_stack(program, &lent),
+        stores: program
+            .funcs
+            .iter()
+            .map(|func| (func.name.clone(), super::escape::stores_into(func)))
+            .filter(|(_, pairs)| !pairs.is_empty())
+            .collect(),
         consumes: {
             // A function takes over a parameter it stores only if every way
             // into it hands one over, and only a `Direct` call does
@@ -420,6 +441,23 @@ fn handing_over(
                 // cannot see, and they need not agree about what they keep.
                 super::Callee::Virtual { .. } | super::Callee::Closure { .. } => Vec::new(),
             };
+            // **Never a frame object.** A callee that keeps its argument keeps
+            // a pointer, and retaining an immortal header is a no-op, so
+            // handing the frame's reference over handed over nothing -- except
+            // the duty its death carries, the walk giving back its fields,
+            // which then no one ran. `new Holder(new Item(n))` with both in the
+            // frame leaked the item's string once per call. The object dies
+            // with the frame, and the frame keeps the walk; liveness keeps it
+            // alive for as long as the callee's container names it.
+            let taken: Vec<ValueId> = taken
+                .into_iter()
+                .filter(|arg| {
+                    !matches!(
+                        func.values[arg.0 as usize].kind,
+                        OpKind::ObjectNew { frame: true }
+                    )
+                })
+                .collect();
             if !taken.is_empty() {
                 over.insert(*value, taken);
             }

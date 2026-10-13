@@ -34,7 +34,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{BlockId, Func, OpKind, Terminator, ValueId};
+use super::{BlockId, Callee, Func, OpKind, Terminator, ValueId};
 
 /// A hard bound on the fixpoint. Liveness converges in at most one pass per
 /// block over a reducible graph; reaching this means a bug, and looping forever
@@ -127,6 +127,20 @@ impl Liveness {
 /// Compute liveness for a function.
 #[must_use]
 pub fn analyze(func: &Func) -> Liveness {
+    analyze_with(func, &|_| None)
+}
+
+/// What a call's callee stores of its arguments into its other arguments, as
+/// `(what, into)` argument slots -- `escape::stores_into`, read off the body
+/// -- or `None` where that is not known here, which [`object_names_with`] answers
+/// by assuming any argument may go into any other.
+pub(super) type CalleeStores<'a> = dyn Fn(&Callee) -> Option<Vec<(u32, u32)>> + 'a;
+
+/// [`analyze`], told what each callee stores where, so a frame object passed
+/// to a call is named by the argument it goes into rather than by all of them.
+/// See [`object_names_with`].
+#[must_use]
+pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Liveness {
     let count = func.blocks.len();
     let mut live_in: Vec<FxHashSet<ValueId>> = vec![FxHashSet::default(); count];
     let mut live_out: Vec<FxHashSet<ValueId>> = vec![FxHashSet::default(); count];
@@ -138,7 +152,7 @@ pub fn analyze(func: &Func) -> Liveness {
     // immortal header has no count to raise, so a name cannot keep one alive
     // and the frame has to. See `super::undominated_names` for the objects this
     // cannot be done for, which `place_allocations` keeps off the frame.
-    let names = object_names(func);
+    let names = object_names_with(func, stores);
     // A counted handle converted to a type nothing counts -- a `GObject *`
     // passed where C takes a `GTypeInstance *` or a `void *` -- is read through
     // the conversion afterwards, which holds no reference: the handle is live
@@ -272,31 +286,21 @@ fn reads(func: &Func, index: usize) -> FxHashSet<ValueId> {
 /// Following stores here makes that obligation cross block boundaries; the
 /// counting pass's block-local store walk alone cannot keep it live on an edge.
 ///
+/// A store a callee makes is one too: `new Holder(item)` stores `item` into
+/// the holder inside the constructor. `stores` says which argument a callee
+/// stores into which; where it cannot, every argument names every other.
+///
 /// Two callers, asking opposite questions of the same relation.
 /// [`analyze`] uses it to keep a *frame* object live for as long as anything
 /// can still reach it; [`super::undominated_names`] uses it to find the objects
 /// for which that is impossible.
-pub(super) fn object_names(func: &Func) -> FxHashMap<ValueId, Vec<ValueId>> {
+pub(super) fn object_names_with(
+    func: &Func,
+    callee_stores: &CalleeStores<'_>,
+) -> FxHashMap<ValueId, Vec<ValueId>> {
     let mut named: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
     let note = |named: &mut FxHashMap<ValueId, Vec<ValueId>>, alias: ValueId, of: ValueId| {
-        let mut roots = named.get(&of).cloned().unwrap_or_default();
-        if matches!(func.values[of.0 as usize].kind, OpKind::ObjectNew { .. })
-            && !roots.contains(&of)
-        {
-            roots.push(of);
-        }
-        if roots.is_empty() {
-            return false;
-        }
-        let here = named.entry(alias).or_default();
-        let mut grew = false;
-        for root in roots {
-            if !here.contains(&root) {
-                here.push(root);
-                grew = true;
-            }
-        }
-        grew
+        note_name(func, named, alias, of)
     };
 
     for _ in 0..ROUND_CAP {
@@ -331,6 +335,18 @@ pub(super) fn object_names(func: &Func) -> FxHashMap<ValueId, Vec<ValueId>> {
                     } if op.ty.may_hold_a_reference() => {
                         changed |= note(&mut named, *value, *container);
                     }
+                    // **A store a callee makes is a store too.** See
+                    // [`names_through_a_call`].
+                    OpKind::Call { callee, args, .. }
+                        if !matches!(callee, Callee::External(_) | Callee::Native(_)) =>
+                    {
+                        changed |= names_through_a_call(
+                            func,
+                            &mut named,
+                            (*value, callee, args),
+                            callee_stores,
+                        );
+                    }
                     _ => {}
                 }
             }
@@ -361,6 +377,78 @@ pub(super) fn object_names(func: &Func) -> FxHashMap<ValueId, Vec<ValueId>> {
         }
     }
     named
+}
+
+/// Record that `alias` names whatever `of` is or names. Whether it grew.
+fn note_name(
+    func: &Func,
+    named: &mut FxHashMap<ValueId, Vec<ValueId>>,
+    alias: ValueId,
+    of: ValueId,
+) -> bool {
+    let mut roots = named.get(&of).cloned().unwrap_or_default();
+    if matches!(func.values[of.0 as usize].kind, OpKind::ObjectNew { .. }) && !roots.contains(&of) {
+        roots.push(of);
+    }
+    if roots.is_empty() {
+        return false;
+    }
+    let here = named.entry(alias).or_default();
+    let mut grew = false;
+    for root in roots {
+        if !here.contains(&root) {
+            here.push(root);
+            grew = true;
+        }
+    }
+    grew
+}
+
+/// The names a call into a body this program has makes. Whether any grew.
+///
+/// **A store a callee makes is a store too.** `new Holder(item)` runs
+/// `this.value = item` inside the constructor, so the holder names the item
+/// exactly as a `FieldSet` here would -- and `holder.value.name` read after the
+/// item's last direct use was a read of a frame object whose fields had already
+/// been given back. The argument a callee stores another into names it
+/// (`callee_stores`); where that is not known, every argument that can hold a
+/// reference names what the others name. A result that can hold one names
+/// every argument -- a result is made at the call, after all of them, so this
+/// only lengthens a life and never names an object before it exists.
+///
+/// Only a call into a body this program has: a runtime helper or a native
+/// function says which arguments it keeps (`escape::kept_slots`), and what it
+/// keeps escapes, so is never in the frame for this to protect.
+fn names_through_a_call(
+    func: &Func,
+    named: &mut FxHashMap<ValueId, Vec<ValueId>>,
+    (result, callee, args): (ValueId, &Callee, &[ValueId]),
+    callee_stores: &CalleeStores<'_>,
+) -> bool {
+    let pairs: Vec<(usize, usize)> = match callee_stores(callee) {
+        Some(pairs) => pairs
+            .into_iter()
+            .map(|(what, into)| (what as usize, into as usize))
+            .collect(),
+        None => (0..args.len())
+            .flat_map(|what| (0..args.len()).map(move |into| (what, into)))
+            .filter(|(what, into)| what != into)
+            .collect(),
+    };
+    let mut changed = false;
+    for (what, into) in pairs {
+        if let (Some(kept), Some(container)) = (args.get(what), args.get(into))
+            && func.values[container.0 as usize].ty.may_hold_a_reference()
+        {
+            changed |= note_name(func, named, *container, *kept);
+        }
+    }
+    if func.values[result.0 as usize].ty.may_hold_a_reference() {
+        for kept in args {
+            changed |= note_name(func, named, result, *kept);
+        }
+    }
+    changed
 }
 
 /// Values a block defines: its operations and its own parameters.
@@ -553,7 +641,7 @@ pub(in crate::hir) mod tests {
 
     #[test]
     fn an_erased_value_names_the_object_inside_it() {
-        let named = object_names(&joining());
+        let named = object_names_with(&joining(), &|_| None);
         assert_eq!(
             named.get(&ValueId(2)).map(Vec::as_slice),
             Some(&[ValueId(1)][..])
@@ -568,7 +656,7 @@ pub(in crate::hir) mod tests {
     /// parameter, and the parameter names whatever every edge hands it.
     #[test]
     fn a_block_parameter_names_both_objects_that_reach_it() {
-        let named = object_names(&joining());
+        let named = object_names_with(&joining(), &|_| None);
         let mut roots = named.get(&ValueId(6)).cloned().unwrap_or_default();
         roots.sort_unstable();
         assert_eq!(roots, vec![ValueId(1), ValueId(4)]);
@@ -577,6 +665,61 @@ pub(in crate::hir) mod tests {
         let mut through = named.get(&ValueId(7)).cloned().unwrap_or_default();
         through.sort_unstable();
         assert_eq!(through, vec![ValueId(1), ValueId(4)]);
+    }
+
+    /// `const h = new Holder(item); h.value` with both in the frame: the
+    /// constructor stores `item` into `h`, so `h`, and what is read out of it,
+    /// names `item` -- and `item` is live, its fields kept, until that read is
+    /// done. The control differs in one thing: a callee that stores nothing.
+    #[test]
+    fn a_store_a_callee_makes_names_what_it_stored() {
+        let object = HirType::Managed(crate::hir::ManagedType::Object(
+            nts_semantic_schema::TypeId(1),
+        ));
+        let typed = |kind: OpKind, ty: &HirType| Op {
+            kind,
+            ty: ty.clone(),
+            origin: origin(),
+        };
+        let mut func = joining();
+        func.params = Vec::new();
+        func.values = vec![
+            typed(OpKind::ObjectNew { frame: true }, &object), // %0  the holder
+            typed(OpKind::ObjectNew { frame: true }, &object), // %1  the item
+            typed(
+                OpKind::Call {
+                    callee: crate::hir::Callee::Direct("Holder#constructor".to_owned()),
+                    args: vec![ValueId(0), ValueId(1)],
+                    frame: None,
+                },
+                &HirType::Void,
+            ), // %2
+            typed(
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 0,
+                },
+                &object,
+            ), // %3  `h.value`
+        ];
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+            terminator: Terminator::Return(Some(ValueId(3))),
+        }];
+        let names_item = |stores: &CalleeStores<'_>, at: ValueId| {
+            object_names_with(&func, stores)
+                .get(&at)
+                .is_some_and(|roots| roots.contains(&ValueId(1)))
+        };
+        let into_the_receiver = |_: &crate::hir::Callee| Some(vec![(1, 0)]);
+        assert!(names_item(&into_the_receiver, ValueId(0)), "the holder");
+        assert!(names_item(&into_the_receiver, ValueId(3)), "the read");
+        let nothing = |_: &crate::hir::Callee| Some(Vec::new());
+        assert!(
+            !names_item(&nothing, ValueId(3)),
+            "a callee that keeps nothing"
+        );
     }
 
     /// A frame object stays live for as long as anything names it. Without

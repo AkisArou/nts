@@ -159,7 +159,7 @@ impl Escapes {
 /// So the pair is published and the caller adds the edge, which is the same
 /// "if the container escapes, so does what is in it" the stores already use --
 /// one call further out.
-fn stores_into(func: &Func) -> Vec<(u32, u32)> {
+pub(super) fn stores_into(func: &Func) -> Vec<(u32, u32)> {
     let mut pairs = Vec::new();
     for block in &func.blocks {
         for value in &block.ops {

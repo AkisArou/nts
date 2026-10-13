@@ -230,10 +230,11 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
         .iter()
         .map(|block| block.params.clone())
         .collect();
-    let mut live = liveness::analyze(func);
+    let stores = |callee: &super::Callee| summaries.stores_of(callee);
+    let mut live = liveness::analyze_with(func, &stores);
     let map = own::analyze(func, layouts, summaries, &mut live);
     let arriving = arriving(func);
-    let frame_names = frame_names(func);
+    let frame_names = frame_names(func, &stores);
     let blocks = std::mem::take(&mut func.blocks);
     let mut rebuilt = Vec::with_capacity(blocks.len());
     // Blocks created to hold an edge's releases. Appended after the originals,
@@ -465,7 +466,7 @@ struct Block<'a> {
 
 /// The frame objects each value is another name for -- through a block
 /// parameter, an erasure -- as liveness keeps them live
-/// (`liveness::object_names`).
+/// (`liveness::object_names_with`).
 ///
 /// **A read of a name is a read of the object, inside a block too.** Liveness
 /// keeps a frame object live into every block a name for it reaches, and
@@ -474,8 +475,11 @@ struct Block<'a> {
 /// through a later loop's block parameters had its string released at the
 /// walk's exit, before the read through the parameter that concatenated it
 /// (the Chromium lane's live-list vectors, 2026-10-07).
-fn frame_names(func: &Func) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
-    liveness::object_names(func)
+fn frame_names(
+    func: &Func,
+    stores: &liveness::CalleeStores<'_>,
+) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
+    liveness::object_names_with(func, stores)
         .into_iter()
         .filter_map(|(name, roots)| {
             let framed: Vec<ValueId> = roots
@@ -1457,7 +1461,7 @@ mod tests {
     /// `forEach` callback is a frame cell, the inlined walk carries it through
     /// block parameters, and `visited + " left "` after it read freed bytes
     /// from another literal (2026-10-07). Liveness kept the cell
-    /// live into the block through its name (`object_names`); the release
+    /// live into the block through its name (`object_names_with`); the release
     /// inside the block looked for a read of the cell itself, found none, and
     /// gave its fields back on entry.
     #[test]

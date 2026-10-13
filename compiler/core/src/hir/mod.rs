@@ -7384,8 +7384,12 @@ fn split_unions(program: &mut Program) -> usize {
 /// question is the runtime's. It costs an allocation on a path that merges two
 /// thrown objects and reads a field off the survivor; it buys back the
 /// invariant that a frame object is released exactly where it is still named.
-fn undominated_names(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<ValueId> {
-    let names = liveness::object_names(func);
+fn undominated_names(
+    func: &Func,
+    layouts: &[Layout],
+    stores: &liveness::CalleeStores<'_>,
+) -> rustc_hash::FxHashSet<ValueId> {
+    let names = liveness::object_names_with(func, stores);
     if names.is_empty() {
         return rustc_hash::FxHashSet::default();
     }
@@ -7441,9 +7445,21 @@ fn place_allocations(program: &mut Program) -> usize {
     let escapes = escape::analyze_program(program);
     let layouts = program.layouts.clone();
     let mut framed = 0;
+    // What each body stores of its parameters into the others, so a frame
+    // object passed to a call is named by the argument it goes into -- the
+    // same table `rc` reads (`own::Summaries::stores_of`).
+    let by_name: rustc_hash::FxHashMap<String, Vec<(u32, u32)>> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.clone(), escape::stores_into(func)))
+        .collect();
+    let stores = |callee: &Callee| match callee {
+        Callee::Direct(name) => Some(by_name.get(name).cloned().unwrap_or_default()),
+        _ => None,
+    };
 
     for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
-        let refused = undominated_names(func, &layouts);
+        let refused = undominated_names(func, &layouts, &stores);
         for index in 0..func.values.len() {
             let value = ValueId(u32::try_from(index).unwrap_or(0));
             if !escapes.is_frame_local(value) || refused.contains(&value) {
@@ -7824,7 +7840,7 @@ mod tests {
         for value in [ValueId(1), ValueId(4)] {
             func.values[value.0 as usize].ty = HirType::Managed(ManagedType::Object(TypeId(7)));
         }
-        let refused = undominated_names(&func, std::slice::from_ref(&holder));
+        let refused = undominated_names(&func, std::slice::from_ref(&holder), &|_| None);
         assert!(refused.contains(&ValueId(1)));
         assert!(refused.contains(&ValueId(4)));
     }
@@ -7850,7 +7866,7 @@ mod tests {
         for value in [ValueId(1), ValueId(4)] {
             func.values[value.0 as usize].ty = HirType::Managed(ManagedType::Object(TypeId(7)));
         }
-        assert!(undominated_names(&func, std::slice::from_ref(&holder)).is_empty());
+        assert!(undominated_names(&func, std::slice::from_ref(&holder), &|_| None).is_empty());
     }
 
     /// Two types that differ only in what they extend are two classes.
