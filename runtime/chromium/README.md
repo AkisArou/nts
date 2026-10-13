@@ -73,7 +73,11 @@ its stylesheets, images and `fetch()` of its own files). The app is the
 shell's own code, so there is no permission prompt: its origin is granted
 the clipboard, read and write, and every other permission is denied
 (`host/app_permissions.h`). `check` runs the lifecycle headless: start,
-render, the permissions and a clipboard round trip, reload, close.
+render, the permissions and a clipboard round trip, reload, close. An app
+with a `drive.ts` beside its `main.ts` (`examples/notes` has one) is also
+used as a person would use it, and `check` requires the compiled app to do
+exactly what the same TypeScript does as page script in V8
+(`tooling/chromium/app-drive.ts`).
 
 ### Common tasks
 
@@ -131,6 +135,16 @@ What differs from page script, in short:
 ## Working on it
 
 ```sh
+# Everything, in order, stopping at the first failure: the bindings current,
+# the checks without Chromium, both backends staged, built and smoked, the V8
+# oracle and the comparison, and every example app built and checked.
+NTS_BIN=<compiler> node tooling/chromium/verify.ts
+```
+
+`tooling/gate/owed.mjs` asks no gate step of the lane's own files: this is
+their check. Its steps, one at a time, while working:
+
+```sh
 # Regenerate the DOM bindings after changing the allowlist or the generator.
 python3 tooling/chromium/bindgen/generate.py
 
@@ -142,14 +156,20 @@ node runtime/chromium/benchmarks/standalone/check.ts
 node tooling/chromium/probe.ts c --profile perf
 node tooling/chromium/chromium.ts build --profile perf
 
-# Smoke: the DOM witness natively and through V8, then compare the two.
+# Smoke: the DOM witness natively, and as page script on unmodified
+# content_shell; compare.ts wants both backends' and the oracle's, for dom and
+# microtasks.
 node tooling/chromium/smoke.ts third_party/chromium/src/out/NtsPerf/nts_shell target/chromium/perf/native-dom-c-smoke c dom
-node tooling/chromium/smoke.ts third_party/chromium/src/out/NtsPerf/nts_shell target/chromium/perf/native-dom-oracle-smoke v8 dom
-node tooling/chromium/compare.ts
+node tooling/chromium/smoke.ts third_party/chromium/src/out/NtsPerf/content_shell target/chromium/perf/native-dom-oracle-smoke v8 dom
+node tooling/chromium/compare.ts target/chromium/perf
 
 # Benchmarks against page script on an unmodified content_shell.
 node tooling/chromium/benchmark.ts third_party/chromium/src/out/NtsPerf/nts_shell target/chromium/perf/rows-c c --workload rows
 ```
+
+Chromium's source and its `out/` are the shared checkout's
+(`tooling/chromium/checkout.ts`): from a lane's own tree, the shells above
+are under `~/Projects/nts/third_party/chromium/src/out/NtsPerf`.
 
 `benchmark.ts` takes `--workload binding|rows|kernels|todo`, and
 `--trace` / `--profile-renderer` for diagnostics whose timings are not

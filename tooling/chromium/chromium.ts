@@ -9,7 +9,8 @@ import { activeChromiumBuild, buildProfile } from "./profiles.ts";
 import { chromiumState, chromiumVendor } from "./checkout.ts";
 
 const root = resolve(import.meta.dirname, "../..");
-// The gclient root: the shared checkout's (checkout.ts); the lock is the tree's.
+// The gclient root, the writer lock and the build records: the shared
+// checkout's (checkout.ts), since there is one Chromium source to build.
 const vendor = chromiumVendor(root);
 const source = resolve(vendor, "src");
 const depot = resolve(vendor, "depot_tools");

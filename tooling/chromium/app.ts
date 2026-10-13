@@ -23,14 +23,21 @@
  * `--expect` names, ends cleanly on reload and starts again, and the shell
  * exits when its window closes, with no renderer check failing on the way.
  *
+ * An app may have a `drive.ts` beside `main.ts`, its own test and no part of
+ * its program (app-drive.ts). `check` then also drives the app, and the same
+ * TypeScript run as page script by V8, and requires the two to agree.
+ *
  * `unload()` runs whenever the document ends in a renderer that goes on --
  * reload, navigation. Closing the window may end the renderer process without
  * unloading, as Chromium does for a page with no unload handlers ("fast
  * shutdown"), which is what page script's `unload` gets too.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, relative, resolve } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
+import { basename, dirname, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import type { AppDrive } from "./app-drive.ts";
 import { archiveProgram, chromiumToolchain } from "./archive.ts";
 import { openPage } from "./browser.ts";
 import { buildProfile } from "./profiles.ts";
@@ -56,8 +63,10 @@ const profile = buildProfile(root, ["--profile", option("--profile", "perf")]);
 const app = resolve(directory);
 const page = resolve(app, "index.html");
 const entry = resolve(app, "main.ts");
+const driver = resolve(app, "drive.ts");
 if (!existsSync(page) || !existsSync(entry)) throw new Error(`${app} needs index.html and main.ts`);
-if (!/<meta\s+name="nts-app"/.test(readFileSync(page, "utf8"))) {
+const optIn = /<meta\s+name="nts-app"\s*\/?>/;
+if (!optIn.test(readFileSync(page, "utf8"))) {
   throw new Error(`${relative(root, page)} does not opt in: add <meta name="nts-app">`);
 }
 const name = basename(app);
@@ -78,7 +87,7 @@ function build(): void {
   // The build's configuration, so the app directory needs none: every
   // TypeScript file in it. target.chromium() supplies the rest: the DOM
   // surface (nts:dom, and lib.dom bound to it) and the DOM's native half.
-  const sources = typescriptFiles(app);
+  const sources = typescriptFiles(app).filter((path) => path !== driver);
   writeFileSync(resolve(work, "tsconfig.json"), `${JSON.stringify({
     extends: resolve(root, "tsconfig.fixtures.json"),
     files: sources,
@@ -168,6 +177,91 @@ async function check(): Promise<void> {
   }
   writeFileSync(resolve(work, "check.log"), page.log());
   console.log(`PASS: ${name} started, rendered${expected === "" ? "" : ` ${expected}`}, held the clipboard and no other permission, ended cleanly and restarted on reload, and closed`);
+  if (existsSync(driver)) await driveBoth();
+}
+
+/** The app's drive on the compiled app and on page script; the transcripts must agree. */
+async function driveBoth(): Promise<void> {
+  const { drive } = await import(pathToFileURL(driver).href) as { drive: (app: AppDrive) => Promise<void> };
+  const compiled = await driven(drive, app, "compiled");
+  const script = await driven(drive, pageScript(), "page-script");
+  const first = compiled.findIndex((line, index) => line !== script[index]);
+  if (first >= 0 || compiled.length !== script.length) {
+    const at = first >= 0 ? first : Math.min(compiled.length, script.length);
+    throw new Error(`The compiled app and its page script differ at step ${at + 1}:\n  compiled:    ${compiled[at]}\n  page script: ${script[at]}`);
+  }
+  console.log(`PASS: ${name}'s drive (${compiled.length} steps) agrees with the same TypeScript run by V8`);
+}
+
+/** One run of the drive, in a fresh profile, serving the app from `directory`; its transcript. */
+async function driven(drive: (app: AppDrive) => Promise<void>, directory: string, arm: string): Promise<string[]> {
+  const shown = await openPage(shell, appUrl, { temporary: work, args: ["--enable-logging=stderr", `--nts-app-dir=${directory}`, ...shellFlags] });
+  const transcript: string[] = [];
+  try {
+    await drive({
+      evaluate: (expression) => shown.evaluate(expression),
+      until: async (expression, label) => { await shown.until(() => shown.evaluate<boolean>(expression), label); },
+      type: async (selector, text) => {
+        await shown.evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`);
+        await shown.cdp("Input.insertText", { text });
+      },
+      press: async (key, code, keyCode, modifiers = 0) => {
+        for (const type of ["keyDown", "keyUp"]) await shown.cdp("Input.dispatchKeyEvent", { type, key, code, windowsVirtualKeyCode: keyCode, modifiers });
+      },
+      // Marked, so the wait is for the new document and not the one leaving.
+      reload: async () => {
+        await shown.evaluate("window.ntsDriveReloading = true");
+        await shown.cdp("Page.reload");
+        await shown.until(() => shown.evaluate<boolean>(`!window.ntsDriveReloading && document.readyState === "complete"`), "the reload");
+      },
+      record: (label, value) => { transcript.push(`${label}: ${JSON.stringify(value)}`); },
+    });
+  } finally {
+    await shown.close();
+  }
+  writeFileSync(resolve(work, `drive-${arm}.txt`), `${transcript.join("\n")}\n`);
+  return transcript;
+}
+
+/**
+ * The app as page script: the same TypeScript with its types stripped, served
+ * from the same origin, run by V8 in the same shell. The page loses its
+ * opt-in, so the host leaves it alone, and gains a module script that calls
+ * main(document) at DOMContentLoaded, where the host calls the compiled
+ * `main` (host/app_observer.cc), and `unload()` at pagehide. An import map
+ * points each `./x.ts` the sources import at the stripped `./x.js`, so no
+ * source is rewritten.
+ */
+function pageScript(): string {
+  const directory = resolve(work, "page-script");
+  rmSync(directory, { recursive: true, force: true });
+  const imports: Record<string, string> = {};
+  const copy = (from: string): void => {
+    for (const item of readdirSync(from, { withFileTypes: true })) {
+      if (item.name === "node_modules" || item.name.startsWith(".")) continue;
+      const path = resolve(from, item.name);
+      const target = resolve(directory, relative(app, path));
+      if (item.isDirectory()) { copy(path); continue; }
+      if (path === driver) continue;
+      mkdirSync(dirname(target), { recursive: true });
+      if (item.name.endsWith(".ts")) {
+        const specifier = `./${relative(app, path)}`;
+        imports[specifier] = specifier.replace(/\.ts$/, ".js");
+        writeFileSync(target.replace(/\.ts$/, ".js"), stripTypeScriptTypes(readFileSync(path, "utf8"), { mode: "strip" }));
+      } else {
+        copyFileSync(path, target);
+      }
+    }
+  };
+  copy(app);
+  const bootstrap = `<script type="importmap">${JSON.stringify({ imports })}</script>
+<script type="module">
+import * as app from "./main.js";
+document.addEventListener("DOMContentLoaded", () => app.main(document));
+if (app.unload) addEventListener("pagehide", () => app.unload());
+</script>`;
+  writeFileSync(resolve(directory, "index.html"), readFileSync(page, "utf8").replace(optIn, bootstrap));
+  return directory;
 }
 
 /** Every TypeScript file of the app, but not its dependencies or output. */
