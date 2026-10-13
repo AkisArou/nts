@@ -60733,10 +60733,7 @@ impl<'a> FuncBuilder<'a> {
                 .get(&symbol.0)
                 .cloned()
                 .or_else(|| self.type_of(name));
-            let value = match declared {
-                Some(declared) => self.coerce(value, &declared, declaration)?,
-                None => value,
-            };
+            let value = self.coerce_declared(value, declared, declaration, initializer)?;
             // A name some closure writes to lives in a cell from here on, and
             // the binding is the cell. Every read and write below goes through
             // it, in this function and in the closure.
@@ -60744,6 +60741,33 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(symbol.0, value);
         }
         Ok(())
+    }
+
+    /// A declaration's value at the type it declares, where it declares one.
+    ///
+    /// **Asked of the initializer, not the declaration.** Which absence a null
+    /// pointer is, erasing into a wider declaration, is the *value's* question:
+    /// `const v: string | null | undefined = n < 10 ? null : "x"` holds a
+    /// `string | null` pointer, and asked of the declaration -- both absences --
+    /// it said neither, so a null `v` was erased with no tag to read (C
+    /// answered `null` by its default, Wasm refused by name). See
+    /// `coerce_from`.
+    fn coerce_declared(
+        &mut self,
+        value: ValueId,
+        declared: Option<HirType>,
+        declaration: NodeId,
+        initializer: Option<NodeId>,
+    ) -> Result<ValueId, Diagnostic> {
+        match declared {
+            Some(declared) => self.coerce_from(
+                value,
+                &declared,
+                declaration,
+                initializer.unwrap_or(declaration),
+            ),
+            None => Ok(value),
+        }
     }
 
     /// The binding a `var` declaration writes when it is not a new one -- its
