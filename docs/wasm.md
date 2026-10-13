@@ -432,6 +432,101 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   - 15 of the 27 census rows the promise family blocked agree (timers is the
     fifteenth), and the timers example.
 
+### Buffers and typed arrays (3e)
+
+`buffers.rs` mirrors the C runtime's `NtsBuffer` and `NtsView`.
+- **One byte array per buffer.** An `ArrayBuffer` is an object holding a GC
+  `(array (mut i8))` sized to what it reserved: its maximum for a resizable
+  buffer, else its length. It also records the length it reports, and
+  whether it is resizable. A detached buffer's array is null, and detaching
+  zeroes its lengths, as C's transfer does.
+- **A view is a window, not a copy.** A typed array holds its buffer, byte
+  offset, element count, kind, width and whether it tracks the buffer. Every
+  view over one buffer reads and writes the same bytes, so two widths alias
+  exactly, little-endian, as in node.
+  - An 8-bit element is one `array.get_s`/`get_u`.
+  - A wider one is assembled from its bytes by a module helper, and a store
+    takes it apart.
+  - Floats go through their bits; a float32 store rounds by `f32.demote`.
+- **Why bytes, and the measured cost** (wasm-evidence/buffers):
+  - A typed backing holds one element type, which is wrong for a buffer
+    viewed at two widths.
+  - Linear memory would need a manual allocator.
+  - Host typed arrays cross the boundary on every access.
+  - So bytes are the representation, and a typed backing for a buffer only
+    ever viewed at one width is the follow-up, from a core fact.
+- **The length is computed on every read**, as C's `nts_view_length`. A
+  tracking view follows its buffer through a resize. A fixed window reads 0
+  while it does not fit, and is back when the buffer grows: a test, not a
+  latch. At an element access the width is static, so the test is inline,
+  with both cases chosen by `select` and no call. A checked index outside the
+  view is refused by name, as C's `nts_bounds` stops the program.
+- **Allocation past `MAX_BYTES`** (2^30 - 64; V8's largest byte array is
+  1,073,741,799, measured) answers null. The lowering turns that into node's
+  "Array buffer allocation failed" `RangeError`, the contract of C's failed
+  `calloc`.
+- **Run-time tests** (`instanceof Uint8Array`, `ArrayBuffer.isView`, and the
+  rest on an open value) test the struct type. All three types sit in the one
+  rec group, so they are distinct. Unerasing to a typed array also checks
+  the kind, since one struct type holds every element kind.
+- **Narrowing on store** (`nts_to_uint8` and its siblings) is `ToInt32`'s
+  bits narrowed. An int of 32 bits or fewer converted to a number is narrowed
+  from the int directly.
+- **The methods (3e-2)**, in `buffer_methods.rs`, mirror C's contracts:
+  - `subarray` is a window on the same bytes at the same kind, untracked.
+  - `slice` and a buffer's `slice` copy into a fresh buffer.
+  - `copyWithin` and a same-kind `set` are one `array.copy`, which moves as
+    `memmove` does, so overlapping ranges are right.
+  - A `set` across kinds converts values through the run-time kind. It reads
+    a snapshot when both views share a buffer, since a wider destination
+    would overwrite elements not yet read.
+  - `fill` of a one-byte integer kind is one `array.fill`.
+  - `join` formats each element as a number.
+  - `transfer` detaches the old buffer and zeroes its lengths, so it and
+    every view over it read 0.
+
+  Endpoints clamp relative to the length now, as `nts_str_clamp`.
+- **`DataView` (3e-3)**, in `dataviews.rs`, mirrors C's `nts_dataview_*`:
+  - A view holds its buffer, offset, byte length and whether it tracks.
+  - Every access is assembled a byte at a time in either order, so every
+    offset is legal. The lowering has bounds-tested it; a detached buffer
+    reads 0.
+  - A fixed view whose buffer shrank below it has its `byteLength` refused
+    by name, as C refuses (node throws a `TypeError`).
+- **Not yet:**
+  - `BigInt64Array` and the BigInt `DataView` accesses, with bigint.
+  - 3e-4: a typed backing for every kind whose views own their buffers,
+    from MainClaude's per-kind fact `hir::views::owned_view_kinds`.
+- **Measured, exploratory** (load ~23-31; tooling/wasm/bench/typed-arrays),
+  ns per element, node beside:
+  - byte reads 0.69 (0.59);
+  - byte writes 0.55 (0.35);
+  - `Int32Array` reads 1.25 (0.37);
+  - `Float64Array` reads 3.35 (0.40);
+  - `Float64Array` writes 3.29 (0.60).
+
+  The bounds test made inline took byte reads from 1.91 to 0.71. Narrowing
+  the int directly took byte writes from 2.74 to 0.55.
+- **Tests:** buffer-views (340 cases against node):
+  - one buffer through every width, from unaligned offsets;
+  - float32 rounding read as bits;
+  - views across a resize;
+  - what an open value is;
+  - int32 counters stored past the width;
+  - each method, overlapping and across kinds; with `set`'s snapshot
+    disabled, it fails;
+  - `DataView` in both byte orders at unaligned offsets, and tracking and
+    fixed lengths across a resize.
+
+  The census at 9ee4dea7b, against 3d's at 015b51ff0, is the same in node
+  and in Chromium: 524 rows, 355 agree where 345 did, 0 wrong, 0 lost, 0
+  unmeasured. The ten rows it opened are typed arrays, ArrayBufferView, a
+  typed-array subclass and its methods, `super` on one, `in` on a native
+  receiver, a fixed view over a resizable buffer, a SharedArrayBuffer in a
+  union, a typed array from an array, and array-join. The fixture's first
+  version found a core defect:
+  outcomes/a-negative-int32-element-read-as-unsigned.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
