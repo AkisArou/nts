@@ -21984,6 +21984,7 @@ impl<'a> FuncBuilder<'a> {
     fn type_of(&self, id: NodeId) -> Option<HirType> {
         if let Some(read) = self.actual_field_read(id)
             && read.representation(self) == Some(HirType::Erased)
+            && !self.narrowing_holds(id, &read)
         {
             return Some(HirType::Erased);
         }

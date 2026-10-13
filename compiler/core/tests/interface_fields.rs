@@ -1081,3 +1081,28 @@ fn a_prefix_class_without_a_row_reads_through_the_default() {
         );
     }
 }
+
+#[test]
+fn a_family_read_narrowed_by_a_test_over_stored_fields_is_the_narrowed_type() {
+    let Some(program) = prepared_fixture("accessor-narrowed-family") else {
+        return;
+    };
+    let refused = |name: &str| {
+        program.uncompiled.iter().any(|(refused, reason)| {
+            refused == name && reason.contains("an erased value where a concrete")
+        })
+    };
+    let name_of = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "nameOf")
+        .expect("a read narrowed by `typeof` over stored fields compiles");
+    assert!(name_of.values.iter().any(|op| {
+        matches!(op.kind, OpKind::Unerase { .. })
+            && op.ty == hir::HirType::Managed(hir::ManagedType::String)
+    }));
+    // The controls: the same read asserted rather than tested, and the same
+    // test over a family with a getter, both keep the family's erased value.
+    assert!(refused("assertedName"), "{:?}", program.uncompiled);
+    assert!(refused("labelOf"), "{:?}", program.uncompiled);
+}

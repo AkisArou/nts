@@ -264,6 +264,47 @@ impl FuncBuilder<'_> {
             .map(Read::Family)
     }
 
+    /// Whether the checker's narrowing of a read the family keeps erased is a
+    /// fact about the value it reads.
+    ///
+    /// A family is erased when its suppliers disagree, and keeping the read
+    /// erased is right where the node's type is the face's *declaration*: a
+    /// cast can put a supplier behind a face whose type it does not keep
+    /// (`assertedRead`, a getter returning `null` behind `boolean`). It is
+    /// wrong where the checker narrowed the read past the declaration by a
+    /// test this program ran: `typeof named.displayName === "string"` made the
+    /// read a `string`, and holding it erased refused `return
+    /// named.displayName` once a class held the field as a `string`
+    /// (`tooling/conformance/blockers/a-narrowed-read-of-an-unknown-field-a-class-holds-as-a-string`).
+    ///
+    /// **Stored suppliers only.** A stored field reads back what the test read,
+    /// which is the trust a class field's narrowed read already takes; a getter
+    /// runs again and answers what it answers (see `read_type`). And the read
+    /// itself, not an assertion around it: `x as string` is the program's
+    /// claim, not its check.
+    pub(super) fn narrowing_holds(&self, at: NodeId, read: &Read<'_>) -> bool {
+        let Read::Family(family) = read else {
+            return false;
+        };
+        if !matches!(
+            self.kind_of(at),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::IDENTIFIER)
+        ) || !family
+            .supplies
+            .iter()
+            .all(|supply| matches!(supply.reader, Reader::Stored | Reader::Undefined))
+        {
+            return false;
+        }
+        let (Some(narrowed), Some(declared)) = (
+            self.snapshot.node_types.get(&at).copied(),
+            interfaces::property(self.snapshot, family.face, &family.member),
+        ) else {
+            return false;
+        };
+        read_members(self, narrowed, false) != read_members(self, declared.ty, declared.optional)
+    }
+
     fn field_read_site(&self, mut at: NodeId) -> Option<NodeId> {
         for _ in 0..32 {
             if self.member_access(at).is_some() {
@@ -1091,6 +1132,32 @@ fn absence_tags(
 
 fn type_absences(probe: &FuncBuilder<'_>, ty: TypeId) -> Option<Vec<u32>> {
     type_absences_at(probe, ty, 0)
+}
+
+/// A read type's members, with every absence as one `undefined`, sorted: what
+/// [`FuncBuilder::narrowing_holds`] compares to tell a narrowed read from the
+/// declaration, which may or may not spell an optional's `undefined`.
+fn read_members(probe: &FuncBuilder<'_>, ty: TypeId, optional: bool) -> Vec<Option<TypeId>> {
+    let undefined = |member: TypeId| {
+        matches!(
+            probe.snapshot.types.get(member.0 as usize).map(|r| &r.kind),
+            Some(TypeKind::Undefined | TypeKind::Void)
+        )
+    };
+    let mut members: Vec<Option<TypeId>> =
+        match probe.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
+            Some(TypeKind::Union(members)) => members.clone(),
+            _ => vec![ty],
+        }
+        .into_iter()
+        .map(|member| (!undefined(member)).then_some(member))
+        .collect();
+    if optional {
+        members.push(None);
+    }
+    members.sort_unstable();
+    members.dedup();
+    members
 }
 
 fn property_absences(probe: &FuncBuilder<'_>, property: &PropertyRecord) -> Option<Vec<u32>> {
