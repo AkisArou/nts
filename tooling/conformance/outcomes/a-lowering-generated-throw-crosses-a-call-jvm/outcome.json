@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "agrees",
+  "nts": "checked 1160 cases across 40 function(s) | agreed on every case",
+  "node": null,
+  "measured_with": "9cc14110708de594",
+  "source": "measured"
+}

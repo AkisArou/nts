@@ -3,19 +3,34 @@ package nts.rt;
 import java.math.BigInteger;
 
 /**
- * Signed, wrapping 128-bit arithmetic, preserving the existing compiler ABI.
+ * Signed 128-bit arithmetic, preserving the existing compiler ABI.
  * This is the runtime's fixed-width bigint, NOT an arbitrary-precision JS BigInt.
  * Arithmetic, width conversions, decimal formatting and numeric conversions do
  * not allocate BigInteger temporaries. Public BigInteger adapters remain available.
+ *
+ * <p>**An arithmetic result past 128 bits stops by name** ({@link #overflow}),
+ * as C's and LLVM's checked operations call {@code nts_bigint_overflow}: node's
+ * bigint grows there, and a wrapped answer would be a wrong one. Only
+ * {@code asIntN}/{@code asUintN} wrap, because wrapping is what they ask for.
  */
 public final class NtsBigInt {
     public final long hi;
     public final long lo;
     private NtsBigInt(long hi, long lo) { this.hi = hi; this.lo = lo; }
     public static final NtsBigInt ZERO = new NtsBigInt(0L, 0L);
+    private static final NtsBigInt ONE = new NtsBigInt(0L, 1L);
     private static final NtsBigInt MINUS_ONE = new NtsBigInt(-1L, -1L);
     private static final NtsBigInt MINUS_128 = new NtsBigInt(-1L, -128L);
     private static final NtsBigInt ONE_TWENTY_EIGHT = new NtsBigInt(0L, 128L);
+
+    /** The one text a result past 128 bits stops with: C's {@code nts_bigint_overflow}. */
+    static final String PAST_128_BITS = "a bigint past 128 bits, which this runtime does not hold";
+
+    /** C's {@code nts_bigint_overflow}, for a call the emitter writes. */
+    public static void overflow() { throw pastBits(); }
+
+    /** The refusal itself, so a method here can {@code throw} it and stay definite. */
+    private static NtsRefusal pastBits() { return NtsRefusal.missing(PAST_128_BITS); }
 
     public static NtsBigInt of(long hi, long lo) {
         return hi == 0L && lo == 0L ? ZERO : new NtsBigInt(hi, lo);
@@ -23,17 +38,74 @@ public final class NtsBigInt {
     public static NtsBigInt fromLong(long value) { return of(value >> 63, value); }
     public static NtsBigInt add(NtsBigInt a, NtsBigInt b) {
         long low = a.lo + b.lo;
-        return of(a.hi + b.hi + (Long.compareUnsigned(low, a.lo) < 0 ? 1L : 0L), low);
+        long high = a.hi + b.hi + (Long.compareUnsigned(low, a.lo) < 0 ? 1L : 0L);
+        // Past 128 bits exactly when both operands' sign differs from the result's.
+        if (((a.hi ^ high) & (b.hi ^ high)) < 0L) { throw pastBits(); }
+        return of(high, low);
     }
     public static NtsBigInt sub(NtsBigInt a, NtsBigInt b) {
-        return of(a.hi - b.hi - (Long.compareUnsigned(a.lo, b.lo) < 0 ? 1L : 0L), a.lo - b.lo);
+        long high = a.hi - b.hi - (Long.compareUnsigned(a.lo, b.lo) < 0 ? 1L : 0L);
+        // Past 128 bits exactly when the operands' signs differ and the result's is b's.
+        if (((a.hi ^ b.hi) & (a.hi ^ high)) < 0L) { throw pastBits(); }
+        return of(high, a.lo - b.lo);
     }
     public static NtsBigInt neg(NtsBigInt a) {
+        // The one value whose negation does not fit: -2^127.
+        if (a.hi == Long.MIN_VALUE && a.lo == 0L) { throw pastBits(); }
         long low = -a.lo;
         return of(~a.hi + (low == 0 ? 1L : 0L), low);
     }
+    /**
+     * The product of the two magnitudes, which fits only if one of them is
+     * under 2^64; then the sign, where -2^127 is the one magnitude of 2^127
+     * that fits.
+     */
     public static NtsBigInt mul(NtsBigInt a, NtsBigInt b) {
-        return of(unsignedMultiplyHigh(a.lo, b.lo) + a.hi * b.lo + a.lo * b.hi, a.lo * b.lo);
+        boolean negative = (a.hi ^ b.hi) < 0L;
+        long ah = a.hi, al = a.lo, bh = b.hi, bl = b.lo;
+        if (ah < 0L) { al = -al; ah = ~ah + (al == 0 ? 1L : 0L); }
+        if (bh < 0L) { bl = -bl; bh = ~bh + (bl == 0 ? 1L : 0L); }
+        if (ah != 0L && bh != 0L) { throw pastBits(); }
+        if (ah != 0L) {
+            long h = ah, l = al;
+            ah = bh; al = bl; bh = h; bl = l;
+        }
+        // Now a < 2^64: a * b = a*bl + (a*bh) * 2^64.
+        if (bh != 0L && unsignedMultiplyHigh(al, bh) != 0L) { throw pastBits(); }
+        long cross = al * bh;
+        long low = al * bl;
+        long high = unsignedMultiplyHigh(al, bl) + cross;
+        if (Long.compareUnsigned(high, cross) < 0) { throw pastBits(); }
+        if (high < 0L) {
+            if (negative && high == Long.MIN_VALUE && low == 0L) { return of(Long.MIN_VALUE, 0L); }
+            throw pastBits();
+        }
+        if (negative) { low = -low; high = ~high + (low == 0 ? 1L : 0L); }
+        return of(high, low);
+    }
+    /**
+     * {@code base ** exponent} by squaring, each step checked. The exponent is
+     * never negative here: lowering throws node's RangeError first. No square
+     * is taken that no later bit uses, so a result that fits never stops on a
+     * square that would not have.
+     */
+    public static NtsBigInt pow(NtsBigInt base, NtsBigInt exponent) {
+        if (exponent.hi != 0L || Long.compareUnsigned(exponent.lo, 128L) >= 0) {
+            // Only 0, 1 and -1 stay inside 128 bits past the 127th power.
+            if ((base.hi | base.lo) == 0L) { return ZERO; }
+            if (base.hi == 0L && base.lo == 1L) { return ONE; }
+            if (base.hi == -1L && base.lo == -1L) { return (exponent.lo & 1L) == 0L ? ONE : MINUS_ONE; }
+            throw pastBits();
+        }
+        int e = (int) exponent.lo;
+        NtsBigInt result = ONE;
+        NtsBigInt square = base;
+        while (e != 0) {
+            if ((e & 1) != 0) { result = mul(result, square); }
+            e >>>= 1;
+            if (e != 0) { square = mul(square, square); }
+        }
+        return result;
     }
     private static long unsignedMultiplyHigh(long x, long y) {
         long x0 = x & 0xffffffffL, x1 = x >>> 32;
@@ -48,6 +120,10 @@ public final class NtsBigInt {
     /** Unsigned magnitude division followed by the signed quotient/remainder rule. */
     private static NtsBigInt divide(NtsBigInt a, NtsBigInt b, boolean remainder) {
         if ((b.hi | b.lo) == 0L) { throw new ArithmeticException("BigInteger divide by zero"); }
+        // -2^127 / -1 is 2^127, the one quotient past 128 bits; its remainder is 0.
+        if (!remainder && a.hi == Long.MIN_VALUE && a.lo == 0L && b.hi == -1L && b.lo == -1L) {
+            throw pastBits();
+        }
         if (a.hi == (a.lo >> 63) && b.hi == (b.lo >> 63)) {
             if (a.lo == Long.MIN_VALUE && b.lo == -1L) {
                 return remainder ? ZERO : of(0L, Long.MIN_VALUE);
@@ -116,13 +192,26 @@ public final class NtsBigInt {
         if (count.hi < 0L) {
             return compare(count, MINUS_128) <= 0 ? (a.hi < 0 ? MINUS_ONE : ZERO) : down(a, (int) -count.lo);
         }
-        return compare(count, ONE_TWENTY_EIGHT) >= 0 ? ZERO : up(a, (int) count.lo);
+        return compare(count, ONE_TWENTY_EIGHT) >= 0 ? beyond(a) : checkedUp(a, (int) count.lo);
     }
+    /** A negative count shifts left, and is checked as a left shift is. */
     public static NtsBigInt shr(NtsBigInt a, NtsBigInt count) {
         if (count.hi < 0L) {
-            return compare(count, MINUS_128) <= 0 ? ZERO : up(a, (int) -count.lo);
+            return compare(count, MINUS_128) <= 0 ? beyond(a) : checkedUp(a, (int) -count.lo);
         }
         return compare(count, ONE_TWENTY_EIGHT) >= 0 ? (a.hi < 0 ? MINUS_ONE : ZERO) : down(a, (int) count.lo);
+    }
+    /** A left shift by 128 or more: only zero still fits. */
+    private static NtsBigInt beyond(NtsBigInt a) {
+        if ((a.hi | a.lo) != 0L) { throw pastBits(); }
+        return ZERO;
+    }
+    /** A left shift that fits exactly when shifting back gives the value again. */
+    private static NtsBigInt checkedUp(NtsBigInt a, int n) {
+        NtsBigInt shifted = up(a, n);
+        NtsBigInt back = down(shifted, n);
+        if (back.hi != a.hi || back.lo != a.lo) { throw pastBits(); }
+        return shifted;
     }
     private static NtsBigInt up(NtsBigInt a, int n) {
         if (n == 0) { return a; }

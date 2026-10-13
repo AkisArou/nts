@@ -38,6 +38,21 @@ public final class RuntimeRegression {
     private static void bigint(NtsBigInt a, BigInteger expected, String operation) {
         equal(wide(a), wrap(expected), operation);
     }
+    private static final BigInteger MIN128 = BigInteger.ONE.shiftLeft(127).negate();
+    private static final BigInteger MAX128 = BigInteger.ONE.shiftLeft(127).subtract(BigInteger.ONE);
+    /** A checked operation: the exact result where it fits in 128 bits, C's refusal by name where it does not. */
+    private static void exact(java.util.function.Supplier<NtsBigInt> run, BigInteger expected, String operation) {
+        boolean fits = expected.compareTo(MIN128) >= 0 && expected.compareTo(MAX128) <= 0;
+        try {
+            NtsBigInt got = run.get();
+            check(fits, operation + ": " + wide(got) + " where " + expected + " should stop");
+            equal(wide(got), expected, operation);
+        } catch (NtsRefusal stopped) {
+            check(!fits, operation + " stopped though " + expected + " fits");
+            equal(stopped.getMessage(), "nts: refused at run time: a bigint past 128 bits, which this runtime does not hold",
+                operation + " stops by name");
+        }
+    }
     /**
      * The two refusal lines are C's and tell a decline from a defect by prefix: `nts: refused: ` is the
      * program declining its input, `nts: refused at run time: ` the missing-feature abort.
@@ -189,6 +204,46 @@ public final class RuntimeRegression {
         }
     }
 
+    /**
+     * The boundaries C's checked operations stop at, each beside one that fits:
+     * the quotient and negation of -2^127, a left shift into the sign bit, and a
+     * power on either side of 128 bits. A power never stops on a square that no
+     * later bit uses.
+     */
+    private static void testBigIntPastBits() {
+        BigInteger two = BigInteger.valueOf(2);
+        NtsBigInt min = NtsBigInt.fromBigInteger(MIN128), max = NtsBigInt.fromBigInteger(MAX128);
+        NtsBigInt one = NtsBigInt.fromLong(1), minusOne = NtsBigInt.fromLong(-1);
+        exact(() -> NtsBigInt.div(min, minusOne), MIN128.negate(), "-2^127 / -1");
+        exact(() -> NtsBigInt.rem(min, minusOne), BigInteger.ZERO, "-2^127 % -1");
+        exact(() -> NtsBigInt.div(min, one), MIN128, "-2^127 / 1");
+        exact(() -> NtsBigInt.neg(min), MIN128.negate(), "-(-2^127)");
+        exact(() -> NtsBigInt.neg(max), MAX128.negate(), "-(2^127 - 1)");
+        exact(() -> NtsBigInt.add(max, one), MAX128.add(BigInteger.ONE), "2^127 - 1 + 1");
+        exact(() -> NtsBigInt.sub(min, one), MIN128.subtract(BigInteger.ONE), "-2^127 - 1");
+        exact(() -> NtsBigInt.mul(NtsBigInt.fromBigInteger(two.pow(63)), NtsBigInt.fromBigInteger(two.pow(64).negate())),
+            two.pow(127).negate(), "2^63 * -2^64");
+        exact(() -> NtsBigInt.mul(NtsBigInt.fromBigInteger(two.pow(63)), NtsBigInt.fromBigInteger(two.pow(64))),
+            two.pow(127), "2^63 * 2^64");
+        exact(() -> NtsBigInt.shl(one, NtsBigInt.fromLong(126)), two.pow(126), "1 << 126");
+        exact(() -> NtsBigInt.shl(one, NtsBigInt.fromLong(127)), two.pow(127), "1 << 127");
+        exact(() -> NtsBigInt.shl(minusOne, NtsBigInt.fromLong(127)), MIN128, "-1 << 127");
+        exact(() -> NtsBigInt.shl(NtsBigInt.ZERO, NtsBigInt.fromLong(500)), BigInteger.ZERO, "0 << 500");
+        exact(() -> NtsBigInt.shr(one, NtsBigInt.fromLong(-127)), two.pow(127), "1 >> -127");
+        exact(() -> NtsBigInt.shr(one, NtsBigInt.fromLong(-126)), two.pow(126), "1 >> -126");
+        int[][] powers = {{2, 126}, {2, 127}, {-2, 127}, {-2, 128}, {3, 80}, {3, 81}, {0, 200}, {1, 999}, {-1, 201}, {-1, 200}, {7, 0}, {0, 0}};
+        for (int[] p : powers) {
+            exact(() -> NtsBigInt.pow(NtsBigInt.fromLong(p[0]), NtsBigInt.fromLong(p[1])), BigInteger.valueOf(p[0]).pow(p[1]),
+                p[0] + " ** " + p[1]);
+        }
+        exact(() -> NtsBigInt.pow(NtsBigInt.fromLong(2), NtsBigInt.fromBigInteger(two.pow(100))), two.pow(200), "2 ** 2^100");
+        exact(() -> NtsBigInt.pow(minusOne, NtsBigInt.fromBigInteger(two.pow(100).add(BigInteger.ONE))), BigInteger.ONE.negate(),
+            "-1 ** (2^100 + 1)");
+        String said = null;
+        try { NtsBigInt.overflow(); } catch (NtsRefusal stopped) { said = stopped.getMessage(); }
+        equal(said, "nts: refused at run time: a bigint past 128 bits, which this runtime does not hold", "overflow() is C's nts_bigint_overflow");
+    }
+
     private static void testBigInt() {
         Random random = new Random(0x1234ABCD);
         long[] edges = {0, 1, -1, Long.MIN_VALUE, Long.MAX_VALUE, 0xffffffffL, 0x100000000L};
@@ -199,18 +254,18 @@ public final class RuntimeRegression {
             NtsBigInt b = round % 5 == 0 ? NtsBigInt.fromLong(random.nextInt())
                 : NtsBigInt.of(random.nextLong(), random.nextLong());
             BigInteger aa = wide(a), bb = wide(b);
-            bigint(NtsBigInt.add(a, b), aa.add(bb), "add");
-            bigint(NtsBigInt.sub(a, b), aa.subtract(bb), "sub");
-            bigint(NtsBigInt.neg(a), aa.negate(), "neg");
-            bigint(NtsBigInt.mul(a, b), aa.multiply(bb), "mul");
+            exact(() -> NtsBigInt.add(a, b), aa.add(bb), "add");
+            exact(() -> NtsBigInt.sub(a, b), aa.subtract(bb), "sub");
+            exact(() -> NtsBigInt.neg(a), aa.negate(), "neg");
+            exact(() -> NtsBigInt.mul(a, b), aa.multiply(bb), "mul");
             bigint(NtsBigInt.and(a, b), aa.and(bb), "and");
             bigint(NtsBigInt.or(a, b), aa.or(bb), "or");
             bigint(NtsBigInt.xor(a, b), aa.xor(bb), "xor");
             check(Integer.signum(NtsBigInt.compare(a, b)) == aa.compareTo(bb), "compare");
             check(NtsBigInt.eq(a, b) == aa.equals(bb), "eq");
             if (bb.signum() != 0) {
-                bigint(NtsBigInt.div(a, b), aa.divide(bb), "div");
-                bigint(NtsBigInt.rem(a, b), aa.remainder(bb), "rem");
+                exact(() -> NtsBigInt.div(a, b), aa.divide(bb), "div");
+                exact(() -> NtsBigInt.rem(a, b), aa.remainder(bb), "rem");
             }
             equal(NtsBigInt.toText(a), aa.toString(), "decimal bigint");
             equal(NtsBigInt.toBigInteger(a), aa, "BigInteger adapter");
@@ -221,8 +276,8 @@ public final class RuntimeRegression {
                 bigint(NtsBigInt.fromNumber(converted), new BigDecimal(converted).toBigInteger(), "double -> bigint");
             }
             int shift = random.nextInt(401) - 200;
-            bigint(NtsBigInt.shl(a, NtsBigInt.fromLong(shift)), aa.shiftLeft(shift), "shl");
-            bigint(NtsBigInt.shr(a, NtsBigInt.fromLong(shift)), aa.shiftRight(shift), "shr");
+            exact(() -> NtsBigInt.shl(a, NtsBigInt.fromLong(shift)), aa.shiftLeft(shift), "shl");
+            exact(() -> NtsBigInt.shr(a, NtsBigInt.fromLong(shift)), aa.shiftRight(shift), "shr");
             int first = round < 150 ? 0 : random.nextInt(129);
             int last = round < 150 ? 128 : first;
             for (int n = first; n <= last; ++n) {
@@ -260,8 +315,8 @@ public final class RuntimeRegression {
                 }
             }
         }
-        bigint(NtsBigInt.div(NtsBigInt.fromLong(Long.MIN_VALUE), NtsBigInt.fromLong(-1)), TWO64.shiftRight(1), "long overflow divide");
-        bigint(NtsBigInt.div(NtsBigInt.of(Long.MIN_VALUE, 0), NtsBigInt.fromLong(-1)), TWO128.shiftRight(1), "128 overflow divide");
+        exact(() -> NtsBigInt.div(NtsBigInt.fromLong(Long.MIN_VALUE), NtsBigInt.fromLong(-1)), TWO64.shiftRight(1), "long overflow divide");
+        exact(() -> NtsBigInt.div(NtsBigInt.of(Long.MIN_VALUE, 0), NtsBigInt.fromLong(-1)), TWO128.shiftRight(1), "128 overflow divide stops");
         bigint(NtsBigInt.fromNumber(-0x1p127), BigInteger.ONE.shiftLeft(127).negate(), "minimum fromNumber");
         for (double bad : new double[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, 0.5, 0x1p127, -0x1.0000000000001p127}) {
             boolean refused = false;
@@ -999,6 +1054,7 @@ public final class RuntimeRegression {
 
     public static void main(String[] args) throws Exception {
         testBigInt();
+        testBigIntPastBits(); System.out.println("bigint past 128 bits stops passed");
         testBigIntCompareString();
         testRefusalLines();
         testArrayLength(); System.out.println("erased array length passed");

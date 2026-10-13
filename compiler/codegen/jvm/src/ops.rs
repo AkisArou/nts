@@ -947,6 +947,10 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         ),
         "nts_bigint_shl" => (types::BIGINT, "shl", BIGINT_BINARY),
         "nts_bigint_shr" => (types::BIGINT, "shr", BIGINT_BINARY),
+        // Checked, as C's are: a result past 128 bits stops by name in the
+        // method itself, so `overflow` is only for a call the IR writes.
+        "nts_bigint_pow" => (types::BIGINT, "pow", BIGINT_BINARY),
+        "nts_bigint_overflow" => (types::BIGINT, "overflow", "()V"),
         "nts_bigint_as_intn" => (types::BIGINT, "asIntN", BIGINT_BITS),
         "nts_bigint_as_uintn" => (types::BIGINT, "asUintN", BIGINT_BITS),
         "nts_string_from_char_code" => (RUNTIME, "stringFromCharCode", "(D)Ljava/lang/String;"),
