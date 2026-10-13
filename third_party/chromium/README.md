@@ -109,17 +109,18 @@ selects `nts_shell` for that profile and `content_shell` for the baseline.
 Staged files have a manifest and
 manual edits are refused. The smoke checks native execution, reload/navigation
 disposal, and survival of the browser after verified abrupt renderer termination.
-E1 passed through both backends; the [bring-up record](../../runtime/chromium/experiments/bringup.md)
+E1 passed through both backends; the [bring-up record](../../runtime/chromium/docs/bringup.md)
 captures the observations and limits.
 
 The direct DOM experiment additionally stages an owned GN target at
-`src/third_party/blink/renderer/nts`. Its implementation sources remain under
-`runtime/chromium/experiments/native-bootstrap/native`, staged below `src/nts`;
+`src/third_party/blink/renderer/nts`. Its implementation sources live in
+`runtime/chromium` (the embedder, the Blink adapter, the benchmark harnesses,
+the DOM's C ABI and the app host), staged flat below `src/nts`;
 only the target label lives within Blink to satisfy its internal layering.
 Staging hashes both locations and refuses manual modifications. There are
 still zero tracked Chromium source changes. These internal APIs require review
 at each source bump even without a patch set. The
-[DOM/scheduling record](../../runtime/chromium/experiments/dom-and-microtasks.md)
+[DOM/scheduling record](../../runtime/chromium/docs/dom-and-microtasks.md)
 documents the passing C/LLVM/V8 comparisons and reproduction commands.
 
 The architecture benchmark also builds unmodified `content_shell` alongside
@@ -127,7 +128,7 @@ The architecture benchmark also builds unmodified `content_shell` alongside
 records include both executable hashes, GN arguments and staging identity.
 The runner rejects stale build inputs and never performs measured application
 work through debugger evaluation. See the
-[architecture/cost record](../../runtime/chromium/experiments/architecture-and-costs.md).
+[architecture/cost record](../../runtime/chromium/docs/costs.md).
 
 A separate optimized component profile is available without changing the
 debug output directory:
@@ -154,5 +155,5 @@ sandboxed runtime acceptance. The baseline needs a real rendered fixture,
 separate browser/renderer processes, and observed sandbox state. It must not
 require `--no-sandbox`. Results and launch logs belong under
 `target/chromium/`; the experiment's
-[validation record](../../runtime/chromium/experiments/bringup.md) describes
+[validation record](../../runtime/chromium/docs/bringup.md) describes
 what executed and at which source/toolchain revisions.
