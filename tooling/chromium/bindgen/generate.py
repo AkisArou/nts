@@ -233,7 +233,9 @@ def runtime_feature_status():
     embedder may set is "overridable" whatever its status: one marked
     `public` (WebRuntimeFeatures), one with an origin trial or `depends_on`,
     and one content/child/runtime_features.cc sets at startup
-    (TouchEventFeatureDetection, TopicsAPI, LegacyAbstractRange...)."""
+    (TouchEventFeatureDetection, TopicsAPI, LegacyAbstractRange...) --
+    though one it sets to another's inverse can still bind
+    (Generator.complemented)."""
     path = os.path.join(SRC, "third_party", "blink", "renderer", "platform",
                         "runtime_enabled_features.json5")
     text = re.sub(r"//[^\n]*", "", open(path).read())
@@ -248,6 +250,17 @@ def runtime_feature_status():
             value = "overridable"
         status[name] = value
     return status
+
+
+def runtime_feature_complements():
+    """The features content sets at startup to the inverse of another
+    (content/child/runtime_features.cc), each to the one it inverts:
+    `EnableFeatureFromString("LegacyAbstractRange",
+    !WebRuntimeFeatures::IsOpaqueRangeEnabled())` makes exactly one of the
+    two on in every renderer (Generator.complemented)."""
+    content = open(os.path.join(SRC, "content", "child", "runtime_features.cc")).read()
+    pattern = r'EnableFeatureFromString\(\s*"(\w+)",\s*!WebRuntimeFeatures::Is(\w+)Enabled\(\)\s*\)'
+    return dict(re.findall(pattern, content))
 
 
 class Generator:
@@ -265,6 +278,7 @@ class Generator:
         self.lib_dom_void = libdom.void_methods(open(libdom.LIB_DOM).read())
         self.skipped = []
         self.feature_status = runtime_feature_status()
+        self.feature_complements = runtime_feature_complements()
         self.functions = []
         self.members = {}  # interface identifier -> TypeScript member lines
         # What bind_gen's expressions name beyond each interface's own header:
@@ -883,12 +897,46 @@ class Generator:
             return None
         return "[RuntimeEnabled=" + "|".join(features) + "] " + " ".join(statuses)
 
+    def complemented(self, member):
+        """Whether an attribute behind runtime features is page script's
+        whatever their state, on every bound interface that has it: each
+        feature is one content sets to the inverse of another
+        (runtime_feature_complements), and an interface deriving from the
+        attribute's declares it again, of the same type, behind that other
+        feature -- every bound interface below the attribute's deriving from
+        one that does. AbstractRange's `startContainer` is behind
+        LegacyAbstractRange, NodeRange's behind OpaqueRange, its inverse, and
+        Range and StaticRange are NodeRanges: `range.startContainer` is page
+        script's in every renderer, from one prototype or the other, and is
+        the same virtual C++ getter. lib.dom declares it on AbstractRange,
+        so it binds there."""
+        owner = getattr(member, "owner", None)
+        ext = member.extended_attributes
+        if owner is None or "RuntimeEnabled" not in ext or member not in owner.attributes:
+            return False
+        below = [i for i in self.interfaces if owner.identifier in self.ancestors(i)]
+        if not below:
+            return False
+        for feature in ext.values_of("RuntimeEnabled"):
+            other = self.feature_complements.get(feature)
+            if other is None:
+                return False
+            bearers = {d.identifier for d in self.database.interfaces
+                       if owner.identifier in self.ancestors(d)
+                       and any(a.identifier == member.identifier
+                               and a.idl_type.syntactic_form == member.idl_type.syntactic_form
+                               and tuple(a.extended_attributes.values_of("RuntimeEnabled")) == (other,)
+                               for a in d.attributes)}
+            if not all(i.identifier in bearers or bearers.intersection(self.ancestors(i)) for i in below):
+                return False
+        return True
+
     def check_member(self, member):
         if from_testing(member):
             raise Skip("defined in Blink's testing IDL (web tests' internals)")
         ext = member.extended_attributes
         unshipped = self.unshipped(ext)
-        if unshipped:
+        if unshipped and not self.complemented(member):
             raise Skip(unshipped)
         if web_idl.Component("modules") in member.components and not self.from_modules(member):
             raise Skip("defined in Blink's modules component, on an interface the allowlist does not take from there")

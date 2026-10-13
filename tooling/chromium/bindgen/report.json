@@ -1,5 +1,5 @@
 {
-  "bound": 5317,
+  "bound": 5837,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -2617,16 +2617,6 @@
       "why": "[HTMLConstructor]: a custom element's constructor"
     },
     {
-      "interface": "AbstractRange",
-      "member": "get startContainer",
-      "why": "[RuntimeEnabled=LegacyAbstractRange] overridable"
-    },
-    {
-      "interface": "AbstractRange",
-      "member": "get endContainer",
-      "why": "[RuntimeEnabled=LegacyAbstractRange] overridable"
-    },
-    {
       "interface": "StaticRange",
       "member": "constructor/1",
       "why": "dictionary StaticRangeInit's required member endContainer (dictionary member of type Node)"
@@ -3910,6 +3900,471 @@
       "interface": "Clipboard",
       "member": "write/1",
       "why": "parameter type sequence<ClipboardItem>"
+    },
+    {
+      "interface": "HTMLAreaElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLAreaElement",
+      "member": "get hreflang",
+      "why": "[RuntimeEnabled=HTMLAreaHreflangType] test"
+    },
+    {
+      "interface": "HTMLAreaElement",
+      "member": "set hreflang",
+      "why": "[RuntimeEnabled=HTMLAreaHreflangType] test"
+    },
+    {
+      "interface": "HTMLAreaElement",
+      "member": "get type",
+      "why": "[RuntimeEnabled=HTMLAreaHreflangType] test"
+    },
+    {
+      "interface": "HTMLAreaElement",
+      "member": "set type",
+      "why": "[RuntimeEnabled=HTMLAreaHreflangType] test"
+    },
+    {
+      "interface": "HTMLBaseElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "get onerror",
+      "why": "result type OnErrorEventHandler"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "set onerror",
+      "why": "parameter type OnErrorEventHandler"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "get onorientationchange",
+      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "set onorientationchange",
+      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "get onbeforeunload",
+      "why": "result type OnBeforeUnloadEventHandler"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "set onbeforeunload",
+      "why": "parameter type OnBeforeUnloadEventHandler"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "get onmove",
+      "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "set onmove",
+      "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "get ontimezonechange",
+      "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "set ontimezonechange",
+      "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "get ongamepadconnected",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "set ongamepadconnected",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "get ongamepaddisconnected",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "set ongamepaddisconnected",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "get ongamepadrawinputchanged",
+      "why": "[RuntimeEnabled=GamepadRawInputChangeEvent] overridable"
+    },
+    {
+      "interface": "HTMLBodyElement",
+      "member": "set ongamepadrawinputchanged",
+      "why": "[RuntimeEnabled=GamepadRawInputChangeEvent] overridable"
+    },
+    {
+      "interface": "HTMLBRElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLDataElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLDirectoryElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLDListElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLEmbedElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLEmbedElement",
+      "member": "named get",
+      "why": "result type any"
+    },
+    {
+      "interface": "HTMLEmbedElement",
+      "member": "named set",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "HTMLFontElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLFrameElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "get onerror",
+      "why": "result type OnErrorEventHandler"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "set onerror",
+      "why": "parameter type OnErrorEventHandler"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "get onorientationchange",
+      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "set onorientationchange",
+      "why": "[RuntimeEnabled=OrientationEvent] per-platform"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "get onbeforeunload",
+      "why": "result type OnBeforeUnloadEventHandler"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "set onbeforeunload",
+      "why": "parameter type OnBeforeUnloadEventHandler"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "get onmove",
+      "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "set onmove",
+      "why": "[RuntimeEnabled=DesktopPWAsAdditionalWindowingControlsOnMove] experimental"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "get ontimezonechange",
+      "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "set ontimezonechange",
+      "why": "[RuntimeEnabled=TimeZoneChangeEvent] experimental"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "get ongamepadconnected",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "set ongamepadconnected",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "get ongamepaddisconnected",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "set ongamepaddisconnected",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "get ongamepadrawinputchanged",
+      "why": "[RuntimeEnabled=GamepadRawInputChangeEvent] overridable"
+    },
+    {
+      "interface": "HTMLFrameSetElement",
+      "member": "set ongamepadrawinputchanged",
+      "why": "[RuntimeEnabled=GamepadRawInputChangeEvent] overridable"
+    },
+    {
+      "interface": "HTMLHeadingElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLHRElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLHtmlElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLMapElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLMarqueeElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLMenuElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLMetaElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLModElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLObjectElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLObjectElement",
+      "member": "named get",
+      "why": "result type any"
+    },
+    {
+      "interface": "HTMLObjectElement",
+      "member": "named set",
+      "why": "parameter type any"
+    },
+    {
+      "interface": "HTMLOptGroupElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLParamElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLPictureElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLPreElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLQuoteElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLSourceElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTableColElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTimeElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTitleElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTrackElement",
+      "member": "constructor",
+      "why": "[HTMLConstructor]: a custom element's constructor"
+    },
+    {
+      "interface": "HTMLTrackElement",
+      "member": "get track",
+      "why": "interface TextTrack is not bound"
+    },
+    {
+      "interface": "FormDataEvent",
+      "member": "constructor/2",
+      "why": "dictionary FormDataEventInit's required member formData (dictionary member of type FormData)"
+    },
+    {
+      "interface": "MessageEventInit",
+      "member": "data",
+      "why": "dictionary member of type optional any"
+    },
+    {
+      "interface": "MessageEventInit",
+      "member": "ports",
+      "why": "dictionary member of type optional sequence<MessagePort>"
+    },
+    {
+      "interface": "MessageEventInit",
+      "member": "userActivation",
+      "why": "dictionary member of type optional UserActivation?"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "get data",
+      "why": "result type any"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "get ports",
+      "why": "interface MessagePort is not bound"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "get userActivation",
+      "why": "interface UserActivation is not bound"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "initMessageEvent/8",
+      "why": "parameter type optional any"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "initMessageEvent/7",
+      "why": "default `[]` of argument ports"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "initMessageEvent/6",
+      "why": "default `[]` of argument ports"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "initMessageEvent/5",
+      "why": "default `[]` of argument ports"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "initMessageEvent/4",
+      "why": "default `[]` of argument ports"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "initMessageEvent/3",
+      "why": "default `[]` of argument ports"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "initMessageEvent/2",
+      "why": "default `[]` of argument ports"
+    },
+    {
+      "interface": "MessageEvent",
+      "member": "initMessageEvent/1",
+      "why": "default `[]` of argument ports"
+    },
+    {
+      "interface": "PopStateEventInit",
+      "member": "state",
+      "why": "dictionary member of type optional any"
+    },
+    {
+      "interface": "PopStateEvent",
+      "member": "get state",
+      "why": "result type any"
+    },
+    {
+      "interface": "PromiseRejectionEvent",
+      "member": "constructor/2",
+      "why": "dictionary PromiseRejectionEventInit's required member promise (dictionary member of type Promise<any>)"
+    },
+    {
+      "interface": "PromiseRejectionEvent",
+      "member": "get promise",
+      "why": "result type object"
+    },
+    {
+      "interface": "PromiseRejectionEvent",
+      "member": "get reason",
+      "why": "result type any"
+    },
+    {
+      "interface": "SecurityPolicyViolationEvent",
+      "member": "get evalHash",
+      "why": "[RuntimeEnabled=CSPHashesV1] overridable"
+    },
+    {
+      "interface": "SecurityPolicyViolationEvent",
+      "member": "get urlHash",
+      "why": "[RuntimeEnabled=CSPHashesV1] overridable"
     },
     {
       "interface": "ChildNode",

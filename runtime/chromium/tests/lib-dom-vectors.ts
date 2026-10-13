@@ -352,6 +352,161 @@ export function libDomTranscript(): string {
     log("intersectionRootMargin", refused);
   }
 
+  // The rest of HTML's elements, each by its own interface: what a setter
+  // reflects, read back as Blink normalizes it -- an attribute's renamed
+  // content name (httpEquiv), an invalid enumerated value's default (kind),
+  // a clamp (span), a URL split by its parts, a collection of the map's
+  // areas -- and the defaults of members of their own.
+  {
+    const heading = document.createElement("h2");
+    heading.align = "left";
+    const hr = document.createElement("hr");
+    hr.noShade = true;
+    hr.size = "3";
+    const pre = document.createElement("pre");
+    pre.width = -5;
+    const br = document.createElement("br");
+    br.clear = "all";
+    const title = document.createElement("title");
+    title.text = "a & b";
+    log("htmlText", heading.outerHTML + "|" + hr.outerHTML + "|" + pre.width + "|" + br.clear + "|" + title.innerHTML);
+
+    const meta = document.createElement("meta");
+    meta.httpEquiv = "refresh";
+    meta.content = "5";
+    meta.name = "viewport";
+    const time = document.createElement("time");
+    time.dateTime = "2024-01-02";
+    const data = document.createElement("data");
+    data.value = "42";
+    const quote = document.createElement("q");
+    quote.cite = "https://example.com/q";
+    const del = document.createElement("del");
+    del.dateTime = "2020";
+    del.cite = "https://example.com/d";
+    const group = document.createElement("optgroup");
+    group.label = "g";
+    group.disabled = true;
+    log("htmlMeta", meta.getAttribute("http-equiv") + ":" + meta.content + ":" + meta.name + "|" + time.dateTime + "|" +
+      data.value + "|" + quote.cite + "|" + del.dateTime + "@" + del.cite + "|" + group.outerHTML);
+
+    const area = document.createElement("area");
+    area.href = "https://user@example.com:8080/p/q?x=1#h";
+    area.shape = "circle";
+    area.coords = "1,2,3";
+    area.rel = "next help";
+    const map = document.createElement("map");
+    map.name = "m";
+    map.appendChild(area);
+    map.appendChild(document.createElement("area"));
+    const base = document.createElement("base");
+    base.href = "https://example.com/b/";
+    base.target = "_top";
+    log("htmlLinks", area.protocol + "|" + area.username + "|" + area.host + "|" + area.pathname + "|" + area.search + "|" +
+      area.hash + "|" + area.shape + ":" + area.coords + "|" + area.relList.length + "|" + map.areas.length + "|" +
+      base.href + ":" + base.target);
+
+    const track = document.createElement("track");
+    track.kind = "bogus";
+    track.srclang = "en";
+    track.label = "English";
+    const col = document.createElement("col");
+    col.span = 2000;
+    const source = document.createElement("source");
+    source.srcset = "a.png 1x, b.png 2x";
+    source.media = "(min-width: 1px)";
+    source.type = "image/png";
+    const picture = document.createElement("picture");
+    picture.appendChild(source);
+    const marquee = document.createElement("marquee");
+    log("htmlMedia", track.kind + "|" + track.srclang + ":" + track.label + "|" + track.readyState + "|" + track.default + "|" +
+      col.span + "|" + source.srcset + "|" + source.media + "|" + source.type + "|" + picture.childElementCount + "|" +
+      marquee.scrollAmount + ":" + marquee.direction + ":" + marquee.loop);
+
+    const object = document.createElement("object");
+    object.data = "https://example.com/x.bin";
+    object.type = "application/x-nts";
+    object.width = "10";
+    const embed = document.createElement("embed");
+    embed.src = "https://example.com/e.bin";
+    embed.height = "4";
+    const param = document.createElement("param");
+    param.name = "p";
+    param.value = "v";
+    log("htmlEmbedded", object.data + "|" + object.type + "|" + object.width + "|" + object.willValidate + "|" +
+      object.checkValidity() + "|" + (object.form === null) + "|" + (object.contentDocument === null) + "|" + embed.src + ":" +
+      embed.height + "|" + param.name + "=" + param.value);
+
+    const body = document.createElement("body");
+    body.link = "red";
+    body.bgColor = "#fff";
+    const html = document.createElement("html");
+    html.version = "5";
+    const font = document.createElement("font");
+    font.color = "blue";
+    font.face = "serif";
+    font.size = "+1";
+    const list = document.createElement("dl");
+    list.compact = true;
+    const menu = document.createElement("menu");
+    const frameset = document.createElement("frameset");
+    frameset.cols = "50%,*";
+    const frame = document.createElement("frame");
+    frame.noResize = true;
+    frame.scrolling = "no";
+    log("htmlLegacy", body.outerHTML + "|" + html.version + "|" + font.outerHTML + "|" + list.compact + ":" + menu.compact + "|" +
+      frameset.cols + "|" + frame.noResize + ":" + frame.scrolling);
+  }
+
+  // A range's containers, which this Blink declares on NodeRange (behind
+  // OpaqueRange) or on AbstractRange (behind its inverse): page script's
+  // either way, read through lib.dom's AbstractRange.
+  {
+    const paragraph = document.createElement("p");
+    paragraph.append("ab", document.createElement("b"));
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const whole = range.startContainer.nodeName + ":" + range.startOffset + "-" + range.endContainer.nodeName + ":" + range.endOffset;
+    const text = paragraph.firstChild;
+    if (text !== null) range.setStart(text, 1);
+    log("rangeContainers", whole + "|" + range.startContainer.nodeName + ":" + range.startOffset + "-" +
+      (range.endContainer === paragraph) + ":" + range.endOffset + "|" + range.collapsed);
+  }
+
+  // Events of the types lib.dom's event maps name, made and read: their own
+  // members, a nullable string a dictionary leaves out (null) against one it
+  // gives as empty, and a handle member compared by identity.
+  {
+    const toggle = new ToggleEvent("toggle", { oldState: "closed", newState: "open" });
+    const pop = new PopStateEvent("popstate", { hasUAVisualTransition: true });
+    const message = new MessageEvent("message", { origin: "https://example.com", lastEventId: "7" });
+    const storage = new StorageEvent("storage", { key: "k", newValue: "v", oldValue: "", url: "https://example.com/", storageArea: localStorage });
+    const bare = new StorageEvent("storage");
+    log("eventTypes", toggle.oldState + ">" + toggle.newState + "|" + pop.hasUAVisualTransition + "|" + message.origin + "#" +
+      message.lastEventId + "|" + storage.key + "=" + storage.newValue + "<" +
+      storage.oldValue + ">@" + storage.url + "|" + (storage.storageArea === localStorage) + "|" + bare.key + "," +
+      bare.oldValue + "," + bare.url.length + "," + (bare.storageArea === null));
+  }
+
+  // A form's `formdata` event, dispatched while `new FormData(form)` runs:
+  // the listener sees the form's entries and adds one the result holds. Once:
+  // a listener left on the form would outlive the program with what it
+  // captures.
+  {
+    const form = document.createElement("form");
+    const field = document.createElement("input");
+    field.name = "a";
+    field.value = "1";
+    form.appendChild(field);
+    const seen = { text: "none" };
+    form.addEventListener("formdata", (event: FormDataEvent): void => {
+      seen.text = event.type + ":" + event.formData.has("a") + ":" + event.bubbles;
+      event.formData.append("b", "2");
+    }, { once: true });
+    const entries = new FormData(form);
+    log("formdata", seen.text + "|" + entries.has("b"));
+  }
+
   root.remove();
   return lines.join("\n");
 }

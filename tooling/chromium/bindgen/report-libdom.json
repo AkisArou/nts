@@ -1,17 +1,17 @@
 {
   "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 2324,
-    "skipped": 201,
-    "absent: constant": 59,
-    "absent: stringifier": 3,
+    "bound": 2523,
+    "skipped": 212,
+    "absent: constant": 63,
+    "absent: stringifier": 4,
     "absent: iterable": 20,
-    "absent: other": 4
+    "absent: other": 8
   },
   "skippedBy": {
-    "result type": 59,
-    "defined in": 56,
-    "parameter type": 15,
+    "result type": 65,
+    "defined in": 60,
+    "parameter type": 16,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 12,
     "interface CustomElementRegistry": 4,
     "interface ReadableStream": 3,
@@ -20,8 +20,8 @@
     "[RuntimeEnabled=OrientationEvent] per-platform": 2,
     "variadic any...": 2,
     "[RuntimeEnabled=ExtendedTextMetrics] overridable": 2,
-    "[RuntimeEnabled=LegacyAbstractRange] overridable": 2,
     "an attribute": 2,
+    "interface TextTrack": 2,
     "[RuntimeEnabled=RemotePlayback] overridable": 2,
     "[RuntimeEnabled=AudioOutputDevices] overridable": 2,
     "[RuntimeEnabled=AOMAriaRelationshipPropertiesAriaOwns] overridable": 1,
@@ -53,11 +53,11 @@
     "[RuntimeEnabled=NavigatorContentUtils] per-platform": 1,
     "interface UserActivation": 1,
     "interface MediaList": 1,
-    "interface TextTrack": 1,
     "interface TextTrackList": 1,
     "interface XMLDocument": 1,
     "[RuntimeEnabled=CSSAnimationIterationComposite] experimental": 1,
-    "interface SubtleCrypto": 1
+    "interface SubtleCrypto": 1,
+    "interface MessagePort": 1
   },
   "literals": {
     "proven": 2022,
@@ -2620,13 +2620,12 @@
     "AbstractRange": {
       "bound": [
         "collapsed",
+        "endContainer",
         "endOffset",
+        "startContainer",
         "startOffset"
       ],
-      "skipped": {
-        "endContainer": "[RuntimeEnabled=LegacyAbstractRange] overridable",
-        "startContainer": "[RuntimeEnabled=LegacyAbstractRange] overridable"
-      },
+      "skipped": {},
       "absent": {}
     },
     "StaticRange": {
@@ -3690,6 +3689,474 @@
     "CanvasPattern": {
       "bound": [
         "setTransform"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLAreaElement": {
+      "bound": [
+        "alt",
+        "coords",
+        "download",
+        "hash",
+        "host",
+        "hostname",
+        "href",
+        "noHref",
+        "origin",
+        "password",
+        "pathname",
+        "ping",
+        "port",
+        "protocol",
+        "referrerPolicy",
+        "rel",
+        "relList",
+        "search",
+        "shape",
+        "target",
+        "username"
+      ],
+      "skipped": {},
+      "absent": {
+        "stringifier": [
+          "toString"
+        ]
+      }
+    },
+    "HTMLBaseElement": {
+      "bound": [
+        "href",
+        "target"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLBodyElement": {
+      "bound": [
+        "aLink",
+        "background",
+        "bgColor",
+        "link",
+        "onafterprint",
+        "onbeforeprint",
+        "onhashchange",
+        "onlanguagechange",
+        "onmessage",
+        "onmessageerror",
+        "onoffline",
+        "ononline",
+        "onpagehide",
+        "onpageshow",
+        "onpopstate",
+        "onrejectionhandled",
+        "onstorage",
+        "onunhandledrejection",
+        "onunload",
+        "text",
+        "vLink"
+      ],
+      "skipped": {
+        "onbeforeunload": "result type OnBeforeUnloadEventHandler",
+        "ongamepadconnected": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "ongamepaddisconnected": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+      },
+      "absent": {
+        "other": [
+          "onpagereveal",
+          "onpageswap"
+        ]
+      }
+    },
+    "HTMLBRElement": {
+      "bound": [
+        "clear"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLDataElement": {
+      "bound": [
+        "value"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLDirectoryElement": {
+      "bound": [
+        "compact"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLDListElement": {
+      "bound": [
+        "compact"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLEmbedElement": {
+      "bound": [
+        "align",
+        "getSVGDocument",
+        "height",
+        "name",
+        "src",
+        "type",
+        "width"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLFontElement": {
+      "bound": [
+        "color",
+        "face",
+        "size"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLFrameElement": {
+      "bound": [
+        "contentDocument",
+        "contentWindow",
+        "frameBorder",
+        "longDesc",
+        "marginHeight",
+        "marginWidth",
+        "name",
+        "noResize",
+        "scrolling",
+        "src"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLFrameSetElement": {
+      "bound": [
+        "cols",
+        "onafterprint",
+        "onbeforeprint",
+        "onhashchange",
+        "onlanguagechange",
+        "onmessage",
+        "onmessageerror",
+        "onoffline",
+        "ononline",
+        "onpagehide",
+        "onpageshow",
+        "onpopstate",
+        "onrejectionhandled",
+        "onstorage",
+        "onunhandledrejection",
+        "onunload",
+        "rows"
+      ],
+      "skipped": {
+        "onbeforeunload": "result type OnBeforeUnloadEventHandler",
+        "ongamepadconnected": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "ongamepaddisconnected": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+      },
+      "absent": {
+        "other": [
+          "onpagereveal",
+          "onpageswap"
+        ]
+      }
+    },
+    "HTMLHeadingElement": {
+      "bound": [
+        "align"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLHRElement": {
+      "bound": [
+        "align",
+        "color",
+        "noShade",
+        "size",
+        "width"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLHtmlElement": {
+      "bound": [
+        "version"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLMapElement": {
+      "bound": [
+        "areas",
+        "name"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLMarqueeElement": {
+      "bound": [
+        "behavior",
+        "bgColor",
+        "direction",
+        "height",
+        "hspace",
+        "loop",
+        "scrollAmount",
+        "scrollDelay",
+        "start",
+        "stop",
+        "trueSpeed",
+        "vspace",
+        "width"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLMenuElement": {
+      "bound": [
+        "compact"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLMetaElement": {
+      "bound": [
+        "content",
+        "httpEquiv",
+        "media",
+        "name",
+        "scheme"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLModElement": {
+      "bound": [
+        "cite",
+        "dateTime"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLObjectElement": {
+      "bound": [
+        "align",
+        "archive",
+        "border",
+        "checkValidity",
+        "code",
+        "codeBase",
+        "codeType",
+        "contentDocument",
+        "contentWindow",
+        "data",
+        "declare",
+        "form",
+        "getSVGDocument",
+        "height",
+        "hspace",
+        "name",
+        "reportValidity",
+        "setCustomValidity",
+        "standby",
+        "type",
+        "useMap",
+        "validationMessage",
+        "validity",
+        "vspace",
+        "width",
+        "willValidate"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLOptGroupElement": {
+      "bound": [
+        "disabled",
+        "label"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLParamElement": {
+      "bound": [
+        "name",
+        "type",
+        "value",
+        "valueType"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLPictureElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLPreElement": {
+      "bound": [
+        "width"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLQuoteElement": {
+      "bound": [
+        "cite"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLSourceElement": {
+      "bound": [
+        "height",
+        "media",
+        "sizes",
+        "src",
+        "srcset",
+        "type",
+        "width"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLTableColElement": {
+      "bound": [
+        "align",
+        "ch",
+        "chOff",
+        "span",
+        "vAlign",
+        "width"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLTimeElement": {
+      "bound": [
+        "dateTime"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLTitleElement": {
+      "bound": [
+        "text"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLTrackElement": {
+      "bound": [
+        "default",
+        "kind",
+        "label",
+        "readyState",
+        "src",
+        "srclang"
+      ],
+      "skipped": {
+        "track": "interface TextTrack is not bound"
+      },
+      "absent": {
+        "constant": [
+          "ERROR",
+          "LOADED",
+          "LOADING",
+          "NONE"
+        ]
+      }
+    },
+    "HTMLUnknownElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "BeforeUnloadEvent": {
+      "bound": [
+        "returnValue"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "FormDataEvent": {
+      "bound": [
+        "formData"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "MessageEvent": {
+      "bound": [
+        "lastEventId",
+        "origin",
+        "source"
+      ],
+      "skipped": {
+        "data": "result type any",
+        "initMessageEvent": "parameter type optional any",
+        "ports": "interface MessagePort is not bound"
+      },
+      "absent": {}
+    },
+    "PopStateEvent": {
+      "bound": [
+        "hasUAVisualTransition"
+      ],
+      "skipped": {
+        "state": "result type any"
+      },
+      "absent": {}
+    },
+    "PromiseRejectionEvent": {
+      "bound": [],
+      "skipped": {
+        "promise": "result type object",
+        "reason": "result type any"
+      },
+      "absent": {}
+    },
+    "SecurityPolicyViolationEvent": {
+      "bound": [
+        "blockedURI",
+        "columnNumber",
+        "disposition",
+        "documentURI",
+        "effectiveDirective",
+        "lineNumber",
+        "originalPolicy",
+        "referrer",
+        "sample",
+        "sourceFile",
+        "statusCode",
+        "violatedDirective"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "ToggleEvent": {
+      "bound": [
+        "newState",
+        "oldState",
+        "source"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "StorageEvent": {
+      "bound": [
+        "initStorageEvent",
+        "key",
+        "newValue",
+        "oldValue",
+        "storageArea",
+        "url"
       ],
       "skipped": {},
       "absent": {}
