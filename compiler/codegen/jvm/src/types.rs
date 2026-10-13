@@ -433,11 +433,16 @@ pub fn wrapper(element: &HirType) -> Option<&'static str> {
 /// A boolean is its own, not widened into the `double` one: `true` and `1` are
 /// different answers, and an array is the one place this backend cannot let the
 /// operand stack's `int` stand in for both.
+///
+/// A bigint is a reference on this backend (`NtsBigInt`, see [`descriptor`]),
+/// so its array is a reference array like a string's. Without the arm every
+/// `bigint[]` was declined as "a return type with no representation" in any
+/// program that grows an array, while C agreed.
 fn descriptor_of_element(element: &HirType) -> Option<&'static str> {
     Some(match element {
         HirType::Float { bits: 64 } | HirType::Int { .. } => "D",
         HirType::Bool => "Z",
-        HirType::Erased | HirType::Managed(_) => "L",
+        HirType::Erased | HirType::BigInt | HirType::Managed(_) => "L",
         _ => return None,
     })
 }
@@ -1240,6 +1245,20 @@ mod tests {
         assert_eq!(
             vtype(Shape::of(&empty()), &HirType::BigInt),
             Some(VType::Object(BIGINT.to_owned()))
+        );
+    }
+
+    /// And so its array is a reference array, bare or growable: without the
+    /// `HirType::BigInt` arm in `descriptor_of_element` every `bigint[]` in a
+    /// program that grows an array was "a return type with no
+    /// representation" (`examples/an-array-of-bigints`).
+    #[test]
+    fn an_array_of_bigints_is_a_reference_array() {
+        let array = HirType::Managed(ManagedType::Array(Box::new(HirType::BigInt)));
+        assert_eq!(wrapper(&HirType::BigInt), Some("nts/rt/NtsArrayL"));
+        assert_eq!(
+            descriptor(Shape::of(&empty()), &array).as_deref(),
+            Some("[Lnts/rt/NtsBigInt;")
         );
     }
 }
